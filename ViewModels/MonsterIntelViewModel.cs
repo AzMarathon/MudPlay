@@ -928,7 +928,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         foreach (KnownSpell s in _ownedOffenseBuffs)
         {
             var row = new SpellPickRow(s.Short, s.Name,
-                FormatBuffSummary(BuffOffenseCalculator.Fold(new[] { s }, _stats?.Level ?? 1)),
+                FormatBuffSummary(
+                    BuffOffenseCalculator.Fold(new[] { s }, _stats?.Level ?? 1, lowest: true),
+                    BuffOffenseCalculator.Fold(new[] { s }, _stats?.Level ?? 1)),
                 applied: _appliedBuffKeys.Contains(s.Short));
             row.PropertyChanged += OnBuffOptionChanged;
             BuffOptions.Add(row);
@@ -953,7 +955,16 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     // Folded fresh on each use rather than cached: whether a buff is up right now
     // (so its Stealth is already in the live stats) changes as it's cast and fades.
+    //
+    // At the bottom of each buff's roll: the game rolls a buff's value as it's cast,
+    // and every verdict here ("sure one-stab kill", rounds to kill) has to hold
+    // whatever was rolled. Folding the top of the roll called kills sure that a low
+    // roll misses (report paradigm-20261002-142319).
     private BuffOffense CurrentSelfBuff()
+        => BuffOffenseCalculator.Fold(AppliedBuffs(), _stats?.Level ?? 1, _isBuffUp, lowest: true);
+
+    // The same buffs at the top of their roll, for showing how far a good roll reaches.
+    private BuffOffense BestSelfBuff()
         => BuffOffenseCalculator.Fold(AppliedBuffs(), _stats?.Level ?? 1, _isBuffUp);
 
     private void RecomputeBuffSummary()
@@ -972,15 +983,19 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         _resolver.WriteAt(SettingsTier.Character, "Other", dto);
     }
 
-    private static string FormatBuffSummary(BuffOffense b)
+    // low / high: the buff at the bottom and the top of its roll. A value the cast
+    // rolls reads as its range ("+5–10"), a flat one as itself.
+    private static string FormatBuffSummary(BuffOffense low, BuffOffense high)
     {
+        static string Roll(int lo, int hi) => lo == hi ? $"+{hi}" : $"+{lo}–{hi}";
         List<string> parts = new();
-        if (b.Stealth != 0) parts.Add($"+{b.Stealth} Stealth");
-        if (b.Accuracy != 0) parts.Add($"+{b.Accuracy} Accuracy");
-        if (b.BsAccuracy != 0) parts.Add($"+{b.BsAccuracy} BS accuracy");
-        if (b.BsMin != 0 || b.BsMax != 0) parts.Add($"+{b.BsMin}/+{b.BsMax} BS min/max");
-        if (b.MaxDamage != 0) parts.Add($"+{b.MaxDamage} max dmg");
-        if (b.Crits != 0) parts.Add($"+{b.Crits} crits");
+        if (high.Stealth != 0) parts.Add($"{Roll(low.Stealth, high.Stealth)} Stealth");
+        if (high.Accuracy != 0) parts.Add($"{Roll(low.Accuracy, high.Accuracy)} Accuracy");
+        if (high.BsAccuracy != 0) parts.Add($"{Roll(low.BsAccuracy, high.BsAccuracy)} BS accuracy");
+        if (high.BsMin != 0 || high.BsMax != 0)
+            parts.Add($"{Roll(low.BsMin, high.BsMin)}/{Roll(low.BsMax, high.BsMax)} BS min/max");
+        if (high.MaxDamage != 0) parts.Add($"{Roll(low.MaxDamage, high.MaxDamage)} max dmg");
+        if (high.Crits != 0) parts.Add($"{Roll(low.Crits, high.Crits)} crits");
         return parts.Count == 0 ? "no offense effect" : string.Join(" · ", parts);
     }
 
@@ -1009,8 +1024,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
     // The backstab's Your Matchup line: a one-stab verdict judged on the min stab
     // after DR, with the working (range, DR, to-hit vs backstab defence) beneath.
+    // best: the same stab with the applied buffs at the top of their roll, when that
+    // differs — shown beside the figures the verdict is judged on.
     private MatchupAttackLine BackstabLine(
-        PlayerMatchupProfile bs, MonsterCatalogEntry m, MonsterMatchupProfile target, bool basis)
+        PlayerMatchupProfile bs, MonsterCatalogEntry m, MonsterMatchupProfile target, bool basis,
+        PlayerMatchupProfile? best = null)
     {
         BackstabMatchup r = EvaluateBackstab(bs, m, target);
         int hp = target.Hp;
@@ -1029,6 +1047,9 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         string detail = $"{r.MinDamage}–{r.MaxDamage} dmg after {r.DamageResist} DR ({bs.BackstabMin}–{bs.BackstabMax} before) · "
             + $"{r.HitPercent}% to land vs backstab defence {m.BsDefense} (a sure kill needs the {r.HitCap}% ceiling)"
             + (setWeapon is null ? "" : $" · with {setWeapon}");
+        if (best is { } top && EvaluateBackstab(top, m, target) is var hi
+            && (hi.MinDamage != r.MinDamage || hi.MaxDamage != r.MaxDamage))
+            detail += $" · your buffs at their lowest roll; {hi.MinDamage}–{hi.MaxDamage} at their highest";
         return new MatchupAttackLine(text, detail, basis);
     }
 
@@ -1393,21 +1414,33 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
         // monster (rounds to kill, hit%, dmg/hit), folding in any applied debuff
         // so the numbers reflect the softened target.
         BuffOffense buff = CurrentSelfBuff();
+        BuffOffense bestBuff = BestSelfBuff();
+        bool rolled = bestBuff != buff;
         foreach (MudAttackType mt in _usableMelee)
         {
             if (_hiddenAttackKeys.Contains(MeleeKey(mt))) continue;
             bool basis = MeleeKey(mt) == _roundsAttackKey;
             if (mt == MudAttackType.Backstab)
             {
-                MatchupMeleeLines.Add(BackstabLine(BackstabProfile(worn, encum, buff), m, debuffed, basis));
+                MatchupMeleeLines.Add(BackstabLine(BackstabProfile(worn, encum, buff), m, debuffed, basis,
+                    rolled ? BackstabProfile(worn, encum, bestBuff) : null));
                 continue;
             }
             MonsterMatchupResult res = MonsterMatchupCalculator.Compute(
                 CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData, buff),
                 debuffed);
+            string? reach = null;
+            if (rolled && res.HasWeapon && res.RoundsToKill > 0)
+            {
+                MonsterMatchupResult top = MonsterMatchupCalculator.Compute(
+                    CharacterCalculator.BuildMeleeAttackProfile(mt, _stats!, worn, encum, _gameData, bestBuff),
+                    debuffed);
+                if (top.PlayerDps != res.PlayerDps || top.RoundsToKill != res.RoundsToKill)
+                    reach = $"Your buffs at their lowest roll; at their highest, {FormatRounds(top.RoundsToKill)} · ~{top.PlayerDps:0}/round";
+            }
             MatchupMeleeLines.Add(new MatchupAttackLine(res.HasWeapon && res.RoundsToKill > 0
                 ? $"{MeleeLabel(mt)}: {FormatRounds(res.RoundsToKill)} to kill · ~{res.PlayerDps:0}/round · {res.PlayerHitPercent}% hit · {res.PlayerDamagePerHit} dmg/hit · {res.PlayerSwingsPerRound:0.0} swings"
-                : $"{MeleeLabel(mt)}: can't out-damage it", null, basis));
+                : $"{MeleeLabel(mt)}: can't out-damage it", reach, basis));
         }
 
         // Attack spells, ranked by mana efficiency (damage per mana), split

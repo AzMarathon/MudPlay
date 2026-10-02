@@ -4721,6 +4721,7 @@ There is no room to drop amethyst pendant here.
 - Only unlimited items are safe to feed a buff-recast loop.
 - The Spell Book renders `<= 0` as the word "Unlimited" (never a raw "-1 uses").
 - `ItemChargeTracker` (Paradigm) never looks at a one-charge non-recharging item, and reports it as 1 (`ItemChargeMeta.IsSingleUseConsumable`).
+- `ItemChargeTracker` (Paradigm) reads a held item's count once with `look`, then counts each use down on the item's use line (`AppServices.BuildItemUseLinePredicate`) instead of looking again (report `paradigm-20261002-140153`). A use answered `You have already cast a spell this round!` is left uncounted (*Deck of cards (Gypsy)*). A use with neither answer, and the last charge, are settled by a `look`.
 
 ### Equip → use → restore swap for a readied buff item
 *Status: CONFIRMED 2026-08-06 (user); 2H-weapon + off-hand-buff exception CONFIRMED 2026-08-26 (user)*
@@ -4732,6 +4733,12 @@ There is no room to drop amethyst pendant here.
   - a weapon (`ItemType` 1) with no wear slot must be the readied weapon: `You must have that item readied to use it!`;
   - any other item with no wear slot is used straight from the inventory;
   - a spent item answers `There are no more uses in %s.`.
+- **A use that fails before the spell is cast spends no charge (Stock)** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_use` / `_cast_no_target`; the already-cast case [CONFIRMED] by the user 2026-10-02 on Paradigm)*. The charge is taken only when the cast routine reports success. It reports failure, after printing the line, for:
+  - `You have already cast a spell this round!` (`You have already invoked a power this round!` for kai);
+  - `You do not have enough mana to cast that spell.` and `This spell is too powerful for you to control.`;
+  - `You attempt to cast %s, but fail.`, `Your spell fails!`, `Your power fails!`;
+  - `Your spell has no effect in this room!` and `You must specify a target for that spell!`.
+  - Once the cast is under way it reports success whatever the spell's textblock then does, so a refusal printed by the textblock (*Deck of cards (Gypsy)*: `Nothing happens.`) does spend one.
 - **A buff item can live in ANY equip slot, not just weapon / off-hand.** A warhorn is off-hand, a charged amulet is neck, etc.
 - **Restore is slot-specific.** `eq <item>` puts the item into **its own** slot and displaces only what was there.
 - **1H weapon buff:** displaces the **weapon hand**, so restore the weapon.
@@ -4764,6 +4771,16 @@ There is no room to drop amethyst pendant here.
   - `The gaze of luck is upon you.`
   - the card as ANSI art naming it (`The` / `Priest`), then a quoted line about the card.
   - `look deck of cards` read `Uses remaining: 9999` before and `9998` after: a use takes a charge although the item is kept.
+- **How the card is painted (Paradigm)** *([OBSERVED] wire capture, reports `paradigm-20261002-140153`, `paradigm-20261002-140334`)*: after `The gaze of luck is upon you.` the game clears the screen (`ESC[2J`) and addresses every row of the picture and the quote by cursor position (`ESC[<row>;1H`). No row but the last ends in a line break, and that one ends on a cut-short `ESC[` before its CR LF.
+- **A `use` refused with `You have already cast a spell this round!` spends no charge** *([CONFIRMED] 2026-10-02, user; Realm: Paradigm)*.
+- **Ability 15 marks a fortune in effect** *([OBSERVED] imported game data, both realms)*. Every card spell carries it with value 0 (the deck's 965–976 and 983, and the fortune teller's 490–502), and nothing else does. It gives no bonus; textblocks test it:
+  - the fortune teller (textblock 934): `failability 15 1475` → `The gypsy woman says "You have already recieved your fortune. Go now."` (to the room: `The gypsy woman tells %s to come back later.`);
+  - the deck: `failability 15 1114` → `Nothing happens.` Paradigm's textblock 9821 runs it after `cast 5145` (`card shuffle`), which has just removed the eight deck cards, so a redraw passes. Stock's 9365 has no shuffle before it.
+- **Stock's deck cannot be drawn again while a card is up** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p; Realm: Stock)*.
+  - The textblock handler's `failability <ability> <message>` step calls `_user_has_ability`. When it is true the step prints the message and stops the chain; when false the chain carries on. So with a card up, `use deck` prints `You grab your deck of cards and draw...`, then `Nothing happens.`, and the `random 9264` table never runs.
+  - `_user_has_ability` looks through the ten active-spell slots, then race, class, the character's own ability list and worn items. For the spell in active slot *i* it only compares that spell's abilities when the spell's own ability slot *i* is non-zero. A card has three to six abilities, so a card sitting in a later active-spell slot is not seen. [NEEDS CONFIRMATION] In play, does Stock's deck draw again when four or more spell effects were already up before the card landed?
+  - **That refused use still spends a charge.** `_cmd_use` calls `_deduct_item_charge` only when the use routine reports success, and for a cast item that is `_cast_no_target`'s result. The textblock runs inside the cast as one of the spell's abilities and its outcome is discarded: once the cast has got that far the routine returns success. So `Nothing happens.` costs one of the Stock deck's 100 uses.
+  - [NEEDS CONFIRMATION] On Paradigm, does `use deck` answer `Nothing happens.` while a fortune teller's reading (490–502, not removed by the shuffle) is up?
 - **A use takes the between-round cast slot, the same as a buff spell, and it can be used cycle after cycle** *([CONFIRMED] 2026-10-02, user)*.
 - **Only one card buff is up at a time, and a new draw can deal the card you already had** *([CONFIRMED] 2026-10-02, user)*. Every use restarts the buff's timer, the same card twice in a row included.
 - **How the old card goes (Paradigm)** *([OBSERVED] imported game data)*: the use-spell's textblock 9821 casts `card shuffle` (5145) before the draw, and that spell removes each of the eight card spells (`RemovesSpell`, ability 122, once per card). Stock's textblock 9365 has no shuffle step.
@@ -4780,6 +4797,9 @@ There is no room to drop amethyst pendant here.
 - **Client use:**
   - The message seeds key each card record on its own quote, and the shared `The gaze of luck is upon you` line sits on the deck's own record (`card deck draw` / `card-draw`). With all thirteen records on the shared line, one draw latched every card and the void's Confused flag held navigation (report `paradigm-20261002-120516`).
   - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*.
+  - `SpellEffectFormatter` leaves ability 15 out of a spell's effect text: it is a marker, not an effect.
+  - `TerminalEmulator.CompleteRowBeforeLeaving` completes a written row when the cursor is moved off it, so the row naming the card reaches `ConditionTracker`. Before that only LF-ended rows were emitted, no card was ever recognised, and the Buff Watchdog drew again over a wanted card (report `paradigm-20261002-140334`). `MessageCandidateWatcher` drops the picture's rows.
+  - **A deck that can't redraw gets no card choice** (**Client policy**, user 2026-10-02). `KnownSpellCatalog.CanRedraw` reads it off the use textblock: a `failability` on an ability the outcomes carry, with no earlier `cast` that removes them. For such an item (`ClassCastItem.CanRedraw` false) the Add/Edit buff dialog shows no tick boxes and limits Recast to 0 or below, and `CastingDirector` keeps whatever card lands, waits for it to wear off (no recast lead), and after a use that shows no card waits three minutes before the next, since that refused use spent a charge.
   - **Buff Watchdog draw slot** (**Client policy**, user 2026-10-02): the deck can be slotted as a buff with one tick box per card (`BuffSlot.RejectedOutcomes`). `CastingDirector` sends `use deck of cards` in the between-round slot (`ItemCastSequencer`, no equip), reads the card off its applied line, keeps a ticked card for that card's duration, and draws again on the next cycle for an unticked one. Each draw first releases the card records' applied latch (`ConditionTracker.ReleaseApplied`), so the same card landing again is seen and its timer restarts. The cards come from the data (`KnownSpellCatalog.RandomOutcomes`: the use-spell's textblock → its `random` table → the spells that table casts), so each realm's deck lists its own.
 
 ### Chests and chest loot tables

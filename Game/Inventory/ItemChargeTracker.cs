@@ -16,10 +16,12 @@ namespace MudPlay.Game.Inventory;
 //     ItemCharges) so it survives between sessions;
 //   • auto-looks a held charged item (carried or worn) whose count we don't know yet,
 //     so the readout fills itself in without the user thinking to look;
-//   • re-looks an item after a use OR a stack removal (drop / sell / give / put), so a
-//     manual or remote use reconciles to the game's true count and a dropped top-of-stack
-//     copy hands off to the next copy's charges — a blocked / failed use never mis-
-//     decrements, because the look reply is the source of truth (tokens work this way too).
+//   • counts a use down by one once the count is known, on the item's own use line —
+//     no look. A use the game turns away prints no such line and spends nothing. The
+//     look comes back only when a use can't be confirmed either way, so the count
+//     never drifts on a guess;
+//   • re-looks an item after a stack removal (drop / sell / give / put), so a dropped
+//     top-of-stack copy hands off to the next copy's charges (tokens work this way too).
 //     When no copy is left, its count is forgotten instead: a look then would read the
 //     one on the floor;
 //   • treats a RECHARGEABLE item (Retain After Uses) as restocked to its game-data max
@@ -38,6 +40,8 @@ public sealed class ItemChargeTracker : IDisposable
     // Let a use + its result resolve before the reconciling re-look; coalesces a rapid
     // burst of uses (a combat wand fired several rounds running) into one look.
     private const int RelookDelayMs = 1500;
+    // How long a use has to show its line before it is settled by a look instead.
+    private const int UseConfirmWindowMs = 5000;
     // Directions are 1-2 chars; require a longer arg so "look ne" can't match an item.
     private const int MinLookArgLength = 3;
 
@@ -49,6 +53,7 @@ public sealed class ItemChargeTracker : IDisposable
     private readonly Func<string, int> _itemNumberOf;
     private readonly Func<bool> _onParadigm;
     private readonly Func<BossCleanupConfig?> _cleanupConfig;
+    private readonly Func<int, Func<string, bool>?> _useConfirmLine;
     private readonly Action<string> _sendLook;
     private readonly Action<int, Action> _schedule;
     private readonly Func<DateTimeOffset> _now;
@@ -64,6 +69,11 @@ public sealed class ItemChargeTracker : IDisposable
     private bool _autoDispatching;
 
     private readonly Dictionary<int, int> _relookGen = new();   // per-item re-look debounce
+
+    private string? _useItem;            // item whose sent `use` awaits its line
+    private int _useNumber;
+    private Func<string, bool>? _useConfirm;
+    private int _useGen;
     private bool _disposed;
 
     // Fired after a charge count changes, so the Character Info panel refreshes.
@@ -76,6 +86,7 @@ public sealed class ItemChargeTracker : IDisposable
         Func<string, int> itemNumberOf,
         Func<bool> onParadigm,
         Func<BossCleanupConfig?> cleanupConfig,
+        Func<int, Func<string, bool>?> useConfirmLine,
         Action<string> sendLook,
         Action<int, Action> schedule,
         Func<DateTimeOffset>? now = null,
@@ -87,6 +98,7 @@ public sealed class ItemChargeTracker : IDisposable
         _itemNumberOf = itemNumberOf ?? throw new ArgumentNullException(nameof(itemNumberOf));
         _onParadigm = onParadigm ?? throw new ArgumentNullException(nameof(onParadigm));
         _cleanupConfig = cleanupConfig ?? throw new ArgumentNullException(nameof(cleanupConfig));
+        _useConfirmLine = useConfirmLine ?? throw new ArgumentNullException(nameof(useConfirmLine));
         _sendLook = sendLook ?? throw new ArgumentNullException(nameof(sendLook));
         _schedule = schedule ?? throw new ArgumentNullException(nameof(schedule));
         _now = now ?? (() => DateTimeOffset.UtcNow);
@@ -166,16 +178,17 @@ public sealed class ItemChargeTracker : IDisposable
         _schedule(AutoLookPaceMs, DispatchNextAutoLook);
     }
 
-    // Verbs that change which copy of a stacked item is "on top": using it spends the
-    // top copy's charge, and removing a copy (drop / sell / give / put) surfaces the next
-    // one — which carries its OWN charge count. Each triggers a reconciling re-look so
-    // the stored count follows the current top, matching how `look` only ever reports the
-    // top-of-stack (last-obtained) copy on Paradigm.
-    private static readonly string[] RelookVerbs = { "use ", "drop ", "sell ", "give ", "put " };
+    private const string UseVerb = "use ";
 
-    // Outbound `look <item>` (arm capture) or a stack-changing verb (schedule a
-    // reconciling re-look). Tokens' login looks ride this path too, so their charges
-    // persist here.
+    // Verbs that change which copy of a stacked item is "on top": removing a copy (drop /
+    // sell / give / put) surfaces the next one — which carries its OWN charge count. Each
+    // triggers a reconciling re-look so the stored count follows the current top, matching
+    // how `look` only ever reports the top-of-stack (last-obtained) copy on Paradigm.
+    private static readonly string[] RelookVerbs = { "drop ", "sell ", "give ", "put " };
+
+    // Outbound `look <item>` (arm capture), a `use` (count it down on its line), or a
+    // stack-changing verb (schedule a reconciling re-look). Tokens' login looks ride
+    // this path too, so their charges persist here.
     public void ObserveOutbound(byte[] data)
     {
         if (_disposed || !_onParadigm() || data is null || data.Length == 0) return;
@@ -191,6 +204,12 @@ public sealed class ItemChargeTracker : IDisposable
                 _schedule(LookReplyWindowMs, () => { if (gen == _pendingGen) _pendingItem = null; });
                 continue;
             }
+            if (line.StartsWith(UseVerb, StringComparison.OrdinalIgnoreCase)
+                && ResolveHeld(line[UseVerb.Length..].Trim()) is { } used)
+            {
+                NoteUseSent(used);
+                continue;
+            }
             foreach (string verb in RelookVerbs)
                 if (line.StartsWith(verb, StringComparison.OrdinalIgnoreCase)
                     && ResolveHeld(line[verb.Length..].Trim()) is { } name)
@@ -201,9 +220,64 @@ public sealed class ItemChargeTracker : IDisposable
         }
     }
 
-    // A use or a stack removal is reconciled by re-looking (the reply is the truth), so a
-    // blocked use never mis-decrements and a dropped top copy hands off to the next one's
-    // count. Debounced per item.
+    // Looking after every use was a line of traffic per use for a count the client can
+    // keep itself (report paradigm-20261002-140153: a deck of cards drawn every round).
+    // With the count known, the item's use line counts it down. The look stays for the
+    // first read, for an item with no use line on record, and for the last charge, where
+    // it also notices the item gone.
+    private void NoteUseSent(string name)
+    {
+        if (TokenCatalog.PlaceOf(name) is not null) return;   // TokenTracker owns token re-looks
+        int number = _itemNumberOf(name);
+        if (number > 0 && RemainingFor(number) is > 1
+            && ItemChargeMeta.Read(_gameData, number) is { IsLimitedUse: true, IsSingleUseConsumable: false }
+            && _useConfirmLine(number) is { } confirm)
+        {
+            _useItem = name;
+            _useNumber = number;
+            _useConfirm = confirm;
+            int gen = ++_useGen;
+            _schedule(UseConfirmWindowMs, () =>
+            {
+                if (gen != _useGen || _useItem is null) return;
+                // Neither its line nor a refusal we know: let the game say.
+                _log?.Debug("Items", $"charges: use of '{name}' not confirmed — looking");
+                ClearUse();
+                ScheduleRelook(name);
+            });
+            return;
+        }
+        ScheduleRelook(name);
+    }
+
+    private void ClearUse()
+    {
+        _useItem = null;
+        _useConfirm = null;
+        _useGen++;
+    }
+
+    // The use line showed, or the game turned the use away. "You have already cast a
+    // spell this round!" is the one refusal confirmed to spend no charge (user,
+    // 2026-10-02): a use takes the round's between-round cast slot.
+    private void SettleUse(string text)
+    {
+        if (_useItem is not { } name || _useConfirm is not { } confirm) return;
+        if (text.StartsWith("You have already cast a spell this round", StringComparison.Ordinal))
+        {
+            _log?.Debug("Items", $"charges: use of '{name}' refused (already cast this round) — no charge spent");
+            ClearUse();
+            return;
+        }
+        if (!confirm(text)) return;
+        int number = _useNumber;
+        ClearUse();
+        if (RemainingFor(number) is { } remaining) Record(number, name, remaining - 1);
+    }
+
+    // A stack removal (or a use that can't be counted) is reconciled by re-looking: the
+    // reply is the truth, so a dropped top copy hands off to the next one's count.
+    // Debounced per item.
     private void ScheduleRelook(string name)
     {
         // TokenTracker owns token re-looks (its own ObserveOutbound re-looks on use), so
@@ -251,7 +325,9 @@ public sealed class ItemChargeTracker : IDisposable
     // Split out so tests can drive a line without standing up a LineExtractor.
     internal void HandleLine(string text)
     {
-        if (_disposed || _pendingItem is null) return;
+        if (_disposed) return;
+        SettleUse(text);
+        if (_pendingItem is null) return;
         int uses = TokenCatalog.ParseUsesRemaining(text);
         if (uses < 0) return;
 
@@ -292,6 +368,7 @@ public sealed class ItemChargeTracker : IDisposable
         _autoAttempted.Clear();
         _autoDispatching = false;
         _relookGen.Clear();
+        ClearUse();
     }
 
     // The item argument of a look/examine verb, or null when the line isn't one (or the

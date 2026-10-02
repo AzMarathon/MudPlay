@@ -841,7 +841,8 @@ public static class BugReportBuilder
             {
                 string target = string.IsNullOrEmpty(b.Target) ? "self" : b.Target;
                 System.TimeSpan remaining = b.Until - System.DateTime.UtcNow;
-                sb.Append($"- {b.Short} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s)\n");
+                string what = b.Outcome is { Length: > 0 } drawn ? $"{b.Short} ({drawn})" : b.Short;
+                sb.Append($"- {what} on {target}: {(remaining > System.TimeSpan.Zero ? $"{remaining.TotalSeconds:F0}s remaining" : "expired, not yet cleared")} (of {b.TotalSec}s)\n");
             }
         }
         sb.Append('\n');

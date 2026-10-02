@@ -22,12 +22,17 @@ public sealed class TerminalEmulator
     // Fires once per Feed() call after all bytes are processed.
     public event Action? ScreenUpdated;
 
-    // Fires every time LineFeed moves the cursor off a row — the canonical
-    // "this line just finished" signal. Used by LineExtractor so chat /
-    // automation see every completed line, regardless of whether the row
-    // eventually scrolls off-screen. ScrollbackBuffer.RowAdded remains the
-    // "row left the visible screen" signal (only ScrollUp fires it).
+    // Fires every time the cursor leaves a finished row — the canonical "this
+    // line just finished" signal. LineFeed is the usual way; a row painted by
+    // cursor positioning finishes when the cursor is moved off it instead (see
+    // CompleteRowBeforeLeaving). Used by LineExtractor so chat / automation see
+    // every completed line, regardless of whether the row eventually scrolls
+    // off-screen. ScrollbackBuffer.RowAdded remains the "row left the visible
+    // screen" signal (only ScrollUp fires it).
     public event Action<ScrollbackBuffer.Row>? LineCompleted;
+
+    // The cursor row has taken a glyph since it was last completed.
+    private bool _rowWritten;
 
     // Current SGR state (foreground/background/flags) used for new writes.
     private CellAttributes _attr = CellAttributes.Default;
@@ -177,6 +182,7 @@ public sealed class TerminalEmulator
         // place it under the cursor with the current attributes.
         char ch = Cp437.ToUnicode(b);
         Screen.Put(Screen.CursorX, Screen.CursorY, new Cell(ch, _attr));
+        _rowWritten = true;
 
         // Advance, or flag that the next char needs to wrap.
         if (Screen.CursorX + 1 >= Screen.Cols)
@@ -199,6 +205,7 @@ public sealed class TerminalEmulator
         // path (when not).
         ReadOnlySpan<Cell> cells = Screen.Row(Screen.CursorY);
         LineCompleted?.Invoke(new ScrollbackBuffer.Row(DateTimeOffset.Now, cells.ToArray(), softWrap));
+        _rowWritten = false;
 
         if (Screen.CursorY == _scrollBottom)
         {
@@ -210,6 +217,23 @@ public sealed class TerminalEmulator
         {
             Screen.CursorY++;
         }
+    }
+
+    // MajorMUD paints its pictures (a drawn card, a sign) by clearing the screen
+    // and addressing each row with CUP, text rows included: the row naming the
+    // card never gets an LF. Leaving a written row by a vertical move is that
+    // row's only "done" signal, so it completes here. Blank rows are skipped —
+    // a positioned row that was only erased says nothing.
+    private void CompleteRowBeforeLeaving(int newRow)
+    {
+        if (!_rowWritten || newRow == Screen.CursorY) return;
+        _rowWritten = false;
+        ReadOnlySpan<Cell> cells = Screen.Row(Screen.CursorY);
+        bool blank = true;
+        foreach (Cell cell in cells)
+            if (cell.Char != ' ') { blank = false; break; }
+        if (blank) return;
+        LineCompleted?.Invoke(new ScrollbackBuffer.Row(DateTimeOffset.Now, cells.ToArray(), false));
     }
 
     private void BeginEsc()
@@ -252,7 +276,10 @@ public sealed class TerminalEmulator
                 if (Screen.CursorY == _scrollTop)
                     Screen.ScrollDown(_scrollTop, _scrollBottom, 1, _attr);
                 else if (Screen.CursorY > 0)
+                {
+                    CompleteRowBeforeLeaving(Screen.CursorY - 1);
                     Screen.CursorY--;
+                }
                 _state = State.Ground;
                 return;
             case (byte)'E':                    // NEL — newline (CR + LF).
@@ -276,6 +303,24 @@ public sealed class TerminalEmulator
     // Handle a byte while inside a CSI sequence (after ESC [).
     private void ProcessCsi(byte b)
     {
+        // An ESC inside a sequence abandons it and starts the next one. MajorMUD ends
+        // some textblocks on a bare "ESC [" followed by CR LF and the prompt's
+        // "ESC [ 79 D"; ignoring those bytes glued the prompt onto the text row and
+        // printed "79D" as text.
+        if (b == 0x1B)
+        {
+            BeginEsc();
+            return;
+        }
+        // A line end inside a sequence means the sequence was cut short. A real VT
+        // would execute it and keep collecting, which here eats the first letter of
+        // the next line as the final byte; end the sequence instead.
+        if (b is 0x0A or 0x0B or 0x0C or 0x0D)
+        {
+            _state = State.Ground;
+            ProcessGround(b);
+            return;
+        }
         // A leading '?' marks a DEC private-mode sequence (e.g. ?25h).
         if (b == (byte)'?' && _params.Count == 0 && !_hasCurParam)
         {
@@ -340,8 +385,12 @@ public sealed class TerminalEmulator
                 _wrapPending = false;
                 break;
             case 'd':
-                Screen.CursorY = Math.Clamp(Param(0, 1) - 1, 0, Screen.Rows - 1);
-                _wrapPending = false;
+                {
+                    int row = Math.Clamp(Param(0, 1) - 1, 0, Screen.Rows - 1);
+                    CompleteRowBeforeLeaving(row);
+                    Screen.CursorY = row;
+                    _wrapPending = false;
+                }
                 break;
             // Cursor position (CUP / HVP). Coordinates are 1-based on the wire.
             case 'H':
@@ -358,6 +407,7 @@ public sealed class TerminalEmulator
                     {
                         row = Math.Clamp(row, 0, Screen.Rows - 1);
                     }
+                    CompleteRowBeforeLeaving(row);
                     Screen.CursorY = row;
                     Screen.CursorX = Math.Clamp(col, 0, Screen.Cols - 1);
                     _wrapPending = false;
@@ -389,6 +439,7 @@ public sealed class TerminalEmulator
                         _scrollTop = top;
                         _scrollBottom = bottom;
                         // DECSTBM: cursor moves to home (or origin home in DECOM).
+                        CompleteRowBeforeLeaving(_originMode ? _scrollTop : 0);
                         Screen.CursorY = _originMode ? _scrollTop : 0;
                         Screen.CursorX = 0;
                         _wrapPending = false;
@@ -411,8 +462,10 @@ public sealed class TerminalEmulator
     // Move the cursor by a (dx, dy) offset, clamped to the screen.
     private void MoveRel(int dx, int dy)
     {
+        int row = Math.Clamp(Screen.CursorY + dy, 0, Screen.Rows - 1);
+        CompleteRowBeforeLeaving(row);
         Screen.CursorX = Math.Clamp(Screen.CursorX + dx, 0, Screen.Cols - 1);
-        Screen.CursorY = Math.Clamp(Screen.CursorY + dy, 0, Screen.Rows - 1);
+        Screen.CursorY = row;
         _wrapPending = false;
     }
 
@@ -434,6 +487,8 @@ public sealed class TerminalEmulator
             case 2:
             case 3:  // Whole screen (3 also clears scrollback in real terms).
                 Screen.ClearAll(_attr);
+                // The row under the cursor went with the rest: nothing left to complete.
+                _rowWritten = false;
                 // ANSI.SYS / SyncTERM behavior: ED 2 also homes the cursor.
                 // BBS games (e.g. MajorMUD) rely on this — they emit \x1b[2J
                 // and immediately start drawing absolute-positioned art with
@@ -577,6 +632,7 @@ public sealed class TerminalEmulator
 
     private void RestoreCursor()
     {
+        CompleteRowBeforeLeaving(_savedCy);
         Screen.CursorX = _savedCx;
         Screen.CursorY = _savedCy;
         _attr = _savedAttr;
@@ -638,6 +694,7 @@ public sealed class TerminalEmulator
         Screen.CursorY = 0;
         Screen.CursorVisible = true;
         Screen.ClearAll(_attr);
+        _rowWritten = false;
         _wrapPending = false;
         _scrollTop = 0;
         _scrollBottom = Screen.Rows - 1;

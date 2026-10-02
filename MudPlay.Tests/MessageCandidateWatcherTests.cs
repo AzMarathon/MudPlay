@@ -183,6 +183,22 @@ public sealed class MessageCandidateWatcherTests
             h.Candidates.Candidates.Select(c => c.RawText));
     }
 
+    // The rows of a drawn card reach the parsers now that positioned rows are
+    // emitted; the picture itself is not a message.
+    [Fact]
+    public void RowsOfPaintedArt_AreNotStaged()
+    {
+        Harness h = new();
+        h.Feed(" \u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\u2584");
+        h.Feed(" \u2502\u2588\u2588The\u2588\u2588\u2588\u2502\u2588");
+        h.Feed(" \u2502\u2588Knight\u2588\u2502\u2588");
+        h.Feed("A line that is not art.");
+
+        Assert.Equal(
+            new[] { "A line that is not art." },
+            h.Candidates.Candidates.Select(c => c.RawText));
+    }
+
     [Fact]
     public void AnOpenQuote_EndsAtThePrompt()
     {

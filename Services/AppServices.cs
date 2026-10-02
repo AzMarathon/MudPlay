@@ -1253,6 +1253,14 @@ public sealed class AppServices
         return StashTransfer.Start(stash, bank.Key, bank.Name);
     }
 
+    // The map menu's Stop Stash Transfer. Cancel alone ends the transfer and leaves
+    // the walker to finish the leg it was on (report paradigm-20261002-142509).
+    public void StopStashTransfer()
+    {
+        StashTransfer.Cancel("stopped from the map menu");
+        MovementControl.Stop();
+    }
+
     // The members a stash transfer shares the carrying with: the rest of the party,
     // when Settings → Cash has the option on and we lead it. Only a leader's moves
     // bring the others along to the stash and the bank.
@@ -1300,6 +1308,27 @@ public sealed class AppServices
         using (Movement.SuspendAcquirableGates())
             distances = Bfs.ComputeDistancesFrom(from, Movement, viaBoats: true);
         return Game.GameData.BankCatalog.ByDistance(Game.GameData.BankCatalog.Enumerate(GameData), distances);
+    }
+
+    // The other way round, for a bank room's menu: the character's stash rooms,
+    // nearest that bank first and counted the way BanksNearestFirst counts, with the
+    // coin each is believed to hold.
+    public IReadOnlyList<(Game.Map.RoomKey Stash, int? Steps, long Copper)> StashesNearestFirst(Game.Map.RoomKey bank)
+    {
+        IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
+        using (Movement.SuspendAcquirableGates())
+            distances = Bfs.ComputeDistancesFrom(bank, Movement, viaBoats: true);
+        var rows = new List<(Game.Map.RoomKey Stash, int? Steps, long Copper)>();
+        foreach (Game.Map.RoomKey stash in Movement.Stash)
+            rows.Add((stash, distances.TryGetValue(stash, out int steps) ? steps : null, StashBalances.Believed(stash)));
+        rows.Sort((a, b) =>
+        {
+            int byReach = (a.Steps ?? int.MaxValue).CompareTo(b.Steps ?? int.MaxValue);
+            if (byReach != 0) return byReach;
+            int byMap = a.Stash.Map.CompareTo(b.Stash.Map);
+            return byMap != 0 ? byMap : a.Stash.Room.CompareTo(b.Stash.Room);
+        });
+        return rows;
     }
 
     // In-memory force of cash COLLECTION while an auto-train funding errand runs.
@@ -5428,7 +5457,8 @@ public sealed class AppServices
 
         // Paradigm limited-use item charges from look replies ("Uses remaining: N"),
         // persisted per-character (CharacterProfile.ItemCharges): auto-looks an unknown
-        // charged item, and re-looks after a `use` to reconcile. Rechargeables restock
+        // charged item, then counts each use down on the item's own use line (a look
+        // only when a use can't be confirmed). Rechargeables restock
         // at the BBS cleanup time. The look sender is SendGameCommand (rides the same
         // outbound tap so its looks re-arm capture); the line feed + outbound tap are
         // wired in MainWindowViewModel alongside Tokens.
@@ -5439,6 +5469,7 @@ public sealed class AppServices
             itemNumberOf: ItemNumberByName,
             onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             cleanupConfig: ResolveBossCleanupConfig,
+            useConfirmLine: BuildItemUseLinePredicate,
             sendLook: cmd => SendGameCommand(cmd),
             schedule: (ms, action) =>
             {
@@ -5588,7 +5619,7 @@ public sealed class AppServices
             wornLoadoutKnown: () => Inventory.IsLoaded);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
-        CastDirector.SetItemDrawSource(ItemDrawOutcomesOf);
+        CastDirector.SetItemDrawSource(ItemDrawOutcomesOf, ItemDrawCanRedraw);
 
         // Auto-train. Drives the `train stats` screen to apply the CP
         // plan (Workshop CP Allocation tab) when armed + a level-up enables it.
@@ -8867,6 +8898,12 @@ public sealed class AppServices
                 (long)System.Math.Round(o.DurationRounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock)))
             .ToList();
     }
+
+    // Whether using the draw item named by token again replaces the card that is up
+    // (ClassCastItem.CanRedraw). True for anything that doesn't resolve.
+    private bool ItemDrawCanRedraw(string token)
+        => !Game.Spells.ItemCastToken.TryResolve(token, Spellbook.GetCastItems(),
+               out Game.Spells.ClassCastItem item) || item.CanRedraw;
 
     // Mana the item-cast buff named by token draws on use —
     // the cast spell's Spells.ManaCost, surfaced on the resolved

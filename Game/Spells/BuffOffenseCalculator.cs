@@ -44,7 +44,12 @@ public static class BuffOffenseCalculator
 
     // Sum the selected buffs. isUp says whether a buff (by spell name) is on the
     // character right now, so its Stealth is already in the live stats.
-    public static BuffOffense Fold(IReadOnlyList<KnownSpell>? buffs, int level, Func<string, bool>? isUp = null)
+    //
+    // lowest: each level-scaled value at the bottom of its roll instead of the top.
+    // The game rolls a buff's value as it's cast, so the two folds bracket what a
+    // cast can give, and only the lowest is what a cast is sure to give.
+    public static BuffOffense Fold(IReadOnlyList<KnownSpell>? buffs, int level, Func<string, bool>? isUp = null,
+        bool lowest = false)
     {
         if (buffs is null || buffs.Count == 0) return default;
 
@@ -52,10 +57,10 @@ public static class BuffOffenseCalculator
         foreach (KnownSpell spell in buffs)
         {
             bool up = isUp?.Invoke(spell.Name) ?? false;
-            (long _, long affMax) = SpellCalculator.AffectMagnitude(spell.Formula, level);
+            (long affMin, long affMax) = SpellCalculator.AffectMagnitude(spell.Formula, level);
             foreach (SpellAbility a in spell.Formula.Abilities)
             {
-                int mag = a.Value != 0 ? a.Value : (int)affMax;
+                int mag = a.Value != 0 ? a.Value : (int)(lowest ? affMin : affMax);
                 switch (a.Code)
                 {
                     case StealthCode: if (!up) stealth += mag; break;

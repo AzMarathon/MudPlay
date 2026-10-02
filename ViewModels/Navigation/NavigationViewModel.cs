@@ -2379,18 +2379,24 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     public bool ContextIsFavorite => ContextRoomKey is { } k && _services.Favorites.IsFavorite(k);
 
     // "Transfer Stash to Bank" on a stash room's menu: every bank in the game data,
-    // nearest to the player first; picking one starts the stash → bank trips. While a
-    // transfer runs the entry is "Stop Stash Transfer" instead, on any room.
-    public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextTransferBanks { get; } = new();
+    // nearest to the player first; picking one starts the stash → bank trips. On a
+    // bank room it reads "Transfer Stash to This Bank" and lists the stash rooms
+    // instead, nearest that bank first. While a transfer runs the entry is "Stop
+    // Stash Transfer", on any room.
+    public ObservableCollection<MudPlay.ViewModels.FavoriteMenuItem> ContextTransferChoices { get; } = new();
     public bool ContextCanTransferStash =>
-        ContextIsStash && !_services.StashTransfer.IsBusy && ContextTransferBanks.Count > 0;
+        !_services.StashTransfer.IsBusy && ContextTransferChoices.Count > 0;
     public bool ContextStashTransferRunning => _services.StashTransfer.IsBusy;
+    public string ContextTransferHeader =>
+        ContextIsStash || !ContextIsBank ? "Transfer Stash to Bank" : "Transfer Stash to This Bank";
+    private bool ContextIsBank =>
+        ContextRoomKey is { } k && Game.GameData.BankCatalog.IsBankRoom(_services.GameData, k);
 
     // Called on every right-click, not only when the room changes: the order depends
     // on where the player stands, and re-clicking the same room keeps the same key.
-    public void RefreshContextTransferBanks()
+    public void RefreshContextTransferChoices()
     {
-        ContextTransferBanks.Clear();
+        ContextTransferChoices.Clear();
         if (ContextRoomKey is { } stash && _services.Movement.IsStash(stash))
         {
             RoomKey from = _services.RoomTracker.State.CurrentRoom?.Key ?? stash;
@@ -2399,11 +2405,25 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             {
                 Game.GameData.BankShop target = bank;
                 string reach = steps is { } n ? $"{n} step{(n == 1 ? "" : "s")}" : "no route found";
-                ContextTransferBanks.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                ContextTransferChoices.Add(new MudPlay.ViewModels.FavoriteMenuItem(
                     $"{++number})", $"{bank.Name} {bank.Map}/{bank.Room} — {reach}", GotoWalkBrush,
                     new RelayCommand(() => StartStashTransfer(stash, target))));
             }
         }
+        else if (ContextRoomKey is { } room && BankAt(room) is { } here)
+        {
+            int number = 0;
+            foreach ((RoomKey from, int? steps, long copper) in _services.StashesNearestFirst(room))
+            {
+                RoomKey source = from;
+                string reach = steps is { } n ? $"{n} step{(n == 1 ? "" : "s")}" : "no route found";
+                string holds = copper > 0 ? $"{Game.Cash.CurrencyFormat.Full(copper)} believed" : "nothing recorded";
+                ContextTransferChoices.Add(new MudPlay.ViewModels.FavoriteMenuItem(
+                    $"{++number})", $"Stash {from.Map}/{from.Room} — {reach} — {holds}", GotoWalkBrush,
+                    new RelayCommand(() => StartStashTransfer(source, here))));
+            }
+        }
+        OnPropertyChanged(nameof(ContextTransferHeader));
         OnPropertyChanged(nameof(ContextCanTransferStash));
         OnPropertyChanged(nameof(ContextStashTransferRunning));
     }
@@ -2414,8 +2434,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.WriteTerminalNotice($"[Stash Transfer Not Started: {refused}]");
     }
 
+    private Game.GameData.BankShop? BankAt(RoomKey room)
+    {
+        foreach (Game.GameData.BankShop bank in Game.GameData.BankCatalog.Enumerate(_services.GameData))
+            if (bank.Key == room) return bank;
+        return null;
+    }
+
     [RelayCommand]
-    private void StopStashTransfer() => _services.StashTransfer.Cancel("stopped from the map menu");
+    private void StopStashTransfer() => _services.StopStashTransfer();
 
     // The runner reports from walker events and timers; the chips and menu state
     // are read on the UI thread.
@@ -2713,7 +2740,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Log?.Info("Navigation",
             $"stash toggled key={k} {(wasStash ? "unmarked" : "marked")} profile-loaded={_services.Profile.Current is not null}");
         OnPropertyChanged(nameof(ContextIsStash));
-        RefreshContextTransferBanks();
+        RefreshContextTransferChoices();
     }
 
     // Window listens and forwards to MapControl.RecenterOnPlayer(). The VM
