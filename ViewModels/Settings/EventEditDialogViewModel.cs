@@ -5,6 +5,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game.Map;
+using MudPlay.Game.Sounds;
 using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -73,6 +74,17 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
 
         Name = existing.Name;
         DisabledFlag = existing.Disabled;
+
+        SoundOptions = new[] { NoSoundLabel }
+            .Concat(SoundTones.All.Select(static t => t.Label)).Append(SoundFileLabel).ToArray();
+        string? tone = SoundTones.All.FirstOrDefault(t => t.Id == existing.Sound).Label;
+        if (string.IsNullOrWhiteSpace(existing.Sound)) SelectedSound = NoSoundLabel;
+        else if (tone is not null) SelectedSound = tone;
+        else
+        {
+            SelectedSound = SoundFileLabel;
+            SoundFile = existing.Sound;
+        }
 
         switch (existing.TriggerType)
         {
@@ -148,6 +160,40 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
 
     [ObservableProperty] private string _name = string.Empty;
     [ObservableProperty] private bool _disabledFlag;
+
+    // ----- Sound -----------------------------------------------------
+
+    // The sound this event plays when it fires: none, a built-in tone, or the
+    // user's own file. Settings → Sounds → Event sounds decides whether event
+    // sounds play at all, and how loud.
+    public const string NoSoundLabel = "(no sound)";
+    public const string SoundFileLabel = "Custom file…";
+
+    public IReadOnlyList<string> SoundOptions { get; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSoundFile), nameof(HasSound))]
+    private string _selectedSound = NoSoundLabel;
+
+    [ObservableProperty] private string _soundFile = string.Empty;
+
+    public bool IsSoundFile => SelectedSound == SoundFileLabel;
+    public bool HasSound => SelectedSound != NoSoundLabel;
+
+    // The sound as it is stored: a tone id, a file path, or null for none.
+    internal string? SelectedSoundValue()
+    {
+        if (IsSoundFile) return string.IsNullOrWhiteSpace(SoundFile) ? null : SoundFile.Trim();
+        return SoundTones.All.FirstOrDefault(t => t.Label == SelectedSound).Id;
+    }
+
+    [RelayCommand]
+    private void TestSound()
+    {
+        if (SelectedSoundValue() is not { } sound) return;
+        try { AppServices.Current.Sounds.Preview(SoundCues.EventFired, sound); }
+        catch (InvalidOperationException) { /* AppServices uninitialized — tests */ }
+    }
 
     // ----- WHEN (trigger) — mutually-exclusive flags managed by XAML radios -----
 
@@ -335,6 +381,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         {
             Name = Name?.Trim() ?? string.Empty,
             Disabled = DisabledFlag,
+            Sound = SelectedSoundValue(),
             TriggerType = SelectedTriggerType(),
             ActionType = SelectedActionType(),
             Then = SelectedThen(),

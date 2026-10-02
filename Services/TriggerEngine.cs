@@ -44,6 +44,10 @@ public sealed class TriggerEngine
     private readonly ProfileService? _profile;
     private readonly ChatRouter? _chat;
     private readonly LogService? _log;
+
+    // Plays a trigger's sound file. Bound by AppServices to the sound engine's
+    // trigger cue; unbound (tests), a trigger's sound is only logged.
+    public Action<string>? PlaySound { get; set; }
     private LineExtractor? _lines;
     private Action<byte[]>? _sender;
     // The set whose per-set triggers (TriggerLocation.GameData) are currently in
@@ -312,10 +316,14 @@ public sealed class TriggerEngine
         if (!TryInterpolate(t.Response, t.Name, out string responseOut)) return;
         SendResponse(responseOut);
 
-        // Optional sound sidecar — stubbed; playback isn't wired yet.
-        // No OS / toast notifications anywhere in the app, ever.
+        // Optional sound sidecar, played through the Sounds tab's "Trigger sounds"
+        // cue (its switch and volume). No OS / toast notifications anywhere in the
+        // app, ever.
         if (!string.IsNullOrWhiteSpace(t.SoundFile))
-            _log?.Log(LogSeverity.Debug, LogSource, $"'{t.Name}' fired — would play sound: {t.SoundFile}");
+        {
+            _log?.Log(LogSeverity.Debug, LogSource, $"'{t.Name}' fired — sound: {t.SoundFile}");
+            PlaySound?.Invoke(t.SoundFile);
+        }
     }
 
     private void SendResponse(string substituted)

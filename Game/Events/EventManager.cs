@@ -67,6 +67,9 @@ public sealed class EventManager : IDisposable
     // refresh listens for this; here so the engine surface stays observable.
     public event Action? AutoDisabledChanged;
 
+    // An event passed its gates and is about to run.
+    public event Action<ScheduledEvent>? Fired;
+
     public EventManager(
         ProfileService profile,
         LoopManager loops,
@@ -266,6 +269,7 @@ public sealed class EventManager : IDisposable
         // worry about it and tests using the parameterless ctor (no
         // profile) keep firing.
         if (_profile?.Current?.EventsGloballyDisabled == true) return;
+        Fired?.Invoke(e);
 
         if (e.ActionType == EventActionType.Command && e.ResolvedThen == EventThenType.Nothing)
         {

@@ -637,6 +637,10 @@ public partial class MainWindowViewModel : ObservableObject
     // since most BBSes behave similarly on this dimension.
     private static readonly TimeSpan ConnectAttemptTimeout = TimeSpan.FromSeconds(30);
 
+    // Set by an involuntary drop; the next successful connect plays the Reconnected
+    // sound and clears it.
+    private bool _soundOwesReconnect;
+
     // Why the most recent connection ended. Drives the reactive reconnect
     // decision (BbsProfile.ReconnectOnFailedConnect /
     // BbsProfile.ReconnectOnCarrierLost) and is reset on every successful new
@@ -3126,6 +3130,11 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Info("Telnet", $"Connected to {Host}:{Port}");
             Dispatcher.UIThread.Post(() =>
             {
+                if (_soundOwesReconnect)
+                {
+                    _soundOwesReconnect = false;
+                    AppServices.Current.Sounds.Fire(Game.Sounds.SoundCues.Reconnected);
+                }
                 if (ShowSplash) ShowSplash = false;   // session started — dismiss the splash
                 IsConnected = true;
                 // Fresh session — drop any cleanup-watcher state carried
@@ -3285,6 +3294,13 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.CastDirector.PauseBuffTimers();
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
+                // A drop we didn't ask for plays the Disconnected sound, and arms the
+                // Reconnected one for when the link comes back.
+                if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)
+                {
+                    _soundOwesReconnect = true;
+                    AppServices.Current.Sounds.Fire(Game.Sounds.SoundCues.Disconnected);
+                }
 
                 // A remote @relog forces the dial-back unconditionally —
                 // the sender explicitly asked to relog, so we bypass the

@@ -229,6 +229,9 @@ public sealed partial class AllyDroppedHandler : IDisposable
 
     // ----- Drop / aid / gone observers -----------------------------------
 
+    // One of our own (not us) dropped to the ground. Carries the given name.
+    public event Action<string>? AllyDown;
+
     private void OnDropped(MatchResult result)
     {
         if (result.Groups.Count == 0) return;
@@ -252,7 +255,6 @@ public sealed partial class AllyDroppedHandler : IDisposable
         if (string.IsNullOrEmpty(name)) return;
         string given = GivenName(name);
         if (given.Length == 0) return;
-        if (!_isEnabled()) return;
 
         // Never react to our OWN drop line (the dropper sees their own name) — the
         // self-drop path is owned by PlayerDroppedGate.
@@ -262,6 +264,11 @@ public sealed partial class AllyDroppedHandler : IDisposable
             return;
 
         if (!IsRecognisedAlly(given, name)) return;
+
+        // Raised whether or not the rescue is switched on: a listener only wants to
+        // know one of ours went down.
+        AllyDown?.Invoke(given);
+        if (!_isEnabled()) return;
 
         // Deliberately NOT scoped to a party-heal loadout. `aid <name>` is a
         // universal command and, per the confirmed drop mechanics, aid alone

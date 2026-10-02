@@ -13,8 +13,8 @@ namespace MudPlay.Models.GameData;
 // regex; Pattern is in the syntax MatchType indicates. Response is sent to
 // the game on match — wildcard substitution via {name} is applied first,
 // multi-step via ^M or ; (same syntax as macros); a blank string is valid
-// and sends a bare carriage return. SoundFile is an optional path fired on
-// match (currently a no-op + log until sound playback lands).
+// and sends a bare carriage return. SoundFile is an optional sound file
+// played on match, gated and levelled by the Trigger cue on Settings → Sounds.
 //
 // Location is where this trigger persists on disk:
 //   GameData (default) — saved into Data/game data/{set}/triggers.json next

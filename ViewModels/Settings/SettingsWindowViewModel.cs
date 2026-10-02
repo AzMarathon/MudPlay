@@ -249,7 +249,6 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
     }
 
     // Populate the sidebar with a section VM per tab, in UI-design-spec order.
-    // Tabs not yet wired render as stub placeholders (see StubSectionViewModel).
     private void SeedSections()
     {
         Sections.Add(new GeneralSectionViewModel(_profile));

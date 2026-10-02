@@ -71,6 +71,10 @@ public static class AppPaths
     // copied image files. Shared across characters/BBSes and exportable as a package.
     public static string EmotesDir { get; }
 
+    // The built-in sound tones, written here as WAV files when each is first played
+    // in a run. Generated, never user data: deleting the folder just regenerates it.
+    public static string SoundsDir { get; }
+
     // App-shipped fallback defaults, alongside the executable. Read-only at
     // runtime; populated by the build pipeline.
     public static string DefaultsDir { get; }
@@ -146,6 +150,7 @@ public static class AppPaths
         BbsDir             = Path.Combine(DataRoot, "BBS");
         LogsDir            = Path.Combine(DataRoot, "Logs");
         EmotesDir          = Path.Combine(DataRoot, "Emotes");
+        SoundsDir          = Path.Combine(DataRoot, "Sounds");
 
         string exeDir = AppContext.BaseDirectory;
         DefaultsDir = Path.Combine(exeDir, "Defaults");
