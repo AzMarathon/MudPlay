@@ -638,6 +638,10 @@ public sealed class CastingDirector : IDisposable
     // waiting draw as already due.
     private readonly Dictionary<string, DateTime> _drawPendingUntil = new(StringComparer.OrdinalIgnoreCase);
 
+    // The card each draw item's running timer is for, by token: the timer row names
+    // it, since a slot that keeps several cards doesn't say which one is up.
+    private readonly Dictionary<string, string> _drawnOutcome = new(StringComparer.OrdinalIgnoreCase);
+
     public void SetItemDrawSource(Func<string, IReadOnlyList<(int SpellNumber, string Name, long DurationSec)>?> outcomesOf)
     {
         ArgumentNullException.ThrowIfNull(outcomesOf);
@@ -656,6 +660,7 @@ public sealed class CastingDirector : IDisposable
             _conditions?.ReleaseApplied(r => outcomes.Any(o => IsOutcomeRecord(r, o.SpellNumber, o.Name)));
         // The slot's timer is set when the card lands (NoteDrawOutcome).
         _activeUntil.Remove(("", token));
+        _drawnOutcome.Remove(token);
         _drawPendingUntil[token] = _now().AddSeconds(DrawSettleSec);
         _log?.Info(LogCategory, $"draw item used token={token} — waiting for the card.");
         CastFired?.Invoke();
@@ -696,6 +701,7 @@ public sealed class CastingDirector : IDisposable
         }
         long seconds = Math.Max(1, drawn.Outcome.DurationSec);
         _activeUntil[("", token)] = (_now().AddSeconds(seconds), drawn.Slot.RecastMarginSec, (int)seconds);
+        _drawnOutcome[token] = drawn.Outcome.Name;
         _log?.Info(LogCategory, $"draw item {token}: drew {drawn.Outcome.Name} — keeping it for {seconds}s.");
     }
 
@@ -703,6 +709,7 @@ public sealed class CastingDirector : IDisposable
     internal void NoteDrawEnded(MessageRecord r)
     {
         if (DrawOutcomeOf(r) is not { } ended) return;
+        _drawnOutcome.Remove(ended.Slot.Spell!);
         if (_activeUntil.Remove(("", ended.Slot.Spell!)))
             _log?.Info(LogCategory, $"draw item {ended.Slot.Spell}: {ended.Outcome.Name} wore off.");
     }
@@ -1044,7 +1051,8 @@ public sealed class CastingDirector : IDisposable
         List<ActiveBuffTimer> list = new(_activeUntil.Count);
         foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
             list.Add(new ActiveBuffTimer(kv.Key.Target, kv.Key.Short, kv.Value.Until,
-                EffectiveMargin(kv.Key.Target, kv.Key.Short, kv.Value.MarginSec), kv.Value.TotalSec));
+                EffectiveMargin(kv.Key.Target, kv.Key.Short, kv.Value.MarginSec), kv.Value.TotalSec,
+                kv.Key.Target.Length == 0 && _drawnOutcome.TryGetValue(kv.Key.Short, out string? card) ? card : null));
         return list;
     }
 

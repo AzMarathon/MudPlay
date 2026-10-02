@@ -213,7 +213,7 @@ public partial class NavigationWindow : Window
         _suppressRoomMenu = false;
         if (DataContext is not NavigationViewModel vm) return;
         vm.ContextRoomKey = key;   // rebuilds the up/down/teleport context synchronously
-        vm.RefreshContextTransferBanks();
+        vm.RefreshContextTransferChoices();
         // Shift held on a room whose sole jump is an up-only / down-only / lone
         // teleport → do it now and skip the menu.
         if (key is not null && (modifiers & KeyModifiers.Shift) != 0)

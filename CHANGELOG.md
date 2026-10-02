@@ -1,13 +1,18 @@
 # Version history
 
-## 3.141.2
+## 3.141.7
 
 - Deck of cards: the card drawn is now recognised, so the Buff Watchdog keeps a ticked card instead of drawing again
+- Buff Watchdog timer shows the card that landed (Knight, Priest) instead of the deck
+- Card tooltips no longer list GypsyFortune, a marker with no effect
 - Item charges (Paradigm): after the first look, each use counts the charge down instead of looking at the item again
 - A use refused because you had already cast that round no longer triggers a look, and spends no charge
+- Monster Intel counts an applied buff at the bottom of its roll, so a "sure" kill is sure; the top of the roll is shown beside it
+- Stop Stash Transfer on the map menu now stops the walk too
+- Right-click a bank room to start a stash transfer into it: the menu lists your stash rooms
 - Text painted by cursor positioning (card art and its reading) now reaches triggers and the message matcher
 - A stray "79D" no longer appears before the prompt after a card is drawn
-- bug reports addressed: paradigm-20261002-140153, paradigm-20261002-140334
+- bug reports addressed: paradigm-20261002-140153, paradigm-20261002-140334, paradigm-20261002-142319, paradigm-20261002-142509, paradigm-20261002-142547
 
 ## 3.141.0
 

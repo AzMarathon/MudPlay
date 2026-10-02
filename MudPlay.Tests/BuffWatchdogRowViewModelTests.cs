@@ -15,6 +15,20 @@ public sealed class BuffWatchdogRowViewModelTests
     private static BuffWatchdogRowViewModel NewRow() =>
         new("mshi", isParty: false, "mageshield", "self", isLearned: true);
 
+    // A draw item's row is named for the card that is up, and for the item again
+    // once it isn't.
+    [Fact]
+    public void Update_ADrawItemsRow_ShowsTheCardThatLanded()
+    {
+        BuffWatchdogRowViewModel row = new("#deck of cards", isParty: false, "deck of cards", "self", isLearned: true);
+
+        row.Update(new ActiveBuffTimer("", "#deck of cards", T0.AddSeconds(700), 15, 720, "card-knight"), T0);
+        Assert.Equal("Knight", row.Name);
+
+        row.Update(null, T0);
+        Assert.Equal("deck of cards", row.Name);
+    }
+
     [Fact]
     public void Update_ActiveMidLife_FillsAndPlacesMarker_NotYetDue()
     {

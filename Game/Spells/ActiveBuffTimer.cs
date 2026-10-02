@@ -6,9 +6,11 @@ namespace MudPlay.Game.Spells;
 // token). Until is the wear-off instant (UTC); the buff enters its recast window
 // at Until - MarginSec. TotalSec is the buff's full duration, so a progress bar
 // can render 0..TotalSec with the recast marker at (TotalSec - MarginSec).
+// Outcome names what a draw item dealt (the deck's "card-knight"); null otherwise.
 public readonly record struct ActiveBuffTimer(
     string Target,
     string Short,
     System.DateTime Until,
     int MarginSec,
-    int TotalSec);
+    int TotalSec,
+    string? Outcome = null);

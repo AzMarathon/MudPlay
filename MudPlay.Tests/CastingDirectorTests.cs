@@ -2623,6 +2623,24 @@ public sealed class CastingDirectorTests
         Assert.Equal(2, uses());
     }
 
+    // A slot that keeps several cards doesn't say which one is up: the timer carries
+    // the card's name for the Buff Watchdog row.
+    [Fact]
+    public void DrawItem_TheTimerNamesTheCardThatLanded_UntilItWearsOffOrIsDrawnOver()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> _);
+        h.Director.Evaluate();
+        h.Director.NoteDrawOutcome(CardRecord("card-priest", 966));
+
+        Assert.Equal("card-priest", Assert.Single(h.Director.SnapshotActiveBuffs()).Outcome);
+
+        h.Director.NoteDrawEnded(CardRecord("card-priest", 966));
+        NextRound(h);                                     // draws again
+        h.Director.NoteDrawOutcome(CardRecord("card-wizard", 965));
+
+        Assert.Equal("card-wizard", Assert.Single(h.Director.SnapshotActiveBuffs()).Outcome);
+    }
+
     // A re-draw can deal the card that was already up (user, 2026-10-02). The line
     // tracker latches a record as applied until its wear-off, so without a release at
     // each draw the same card would land unseen and the slot would draw for ever.

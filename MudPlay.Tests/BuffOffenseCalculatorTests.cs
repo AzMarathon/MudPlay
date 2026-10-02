@@ -32,6 +32,26 @@ public sealed class BuffOffenseCalculatorTests
         Assert.Equal(7, b.BsMax);
     }
 
+    // Report paradigm-20261002-142319: the game rolls a buff's value as it's cast
+    // (shadowform at level 15 gives 5 to 10), and Monster Intel judged a sure kill on
+    // the top of the roll. The lowest fold is what a cast is certain to give; a flat
+    // value (BS accuracy 5) is the same in both.
+    [Fact]
+    public void Lowest_FoldsTheBottomOfTheRoll_AndLeavesFlatValuesAlone()
+    {
+        BuffOffense low = BuffOffenseCalculator.Fold(new[] { Shadowform() }, level: 15, lowest: true);
+        BuffOffense high = BuffOffenseCalculator.Fold(new[] { Shadowform() }, level: 15);
+
+        Assert.Equal(5, low.BsMin);
+        Assert.Equal(5, low.BsMax);
+        Assert.Equal(5, low.Stealth);
+        Assert.Equal(10, high.BsMin);
+        Assert.Equal(10, high.BsMax);
+        Assert.Equal(10, high.Stealth);
+        Assert.Equal(5, low.BsAccuracy);
+        Assert.Equal(5, high.BsAccuracy);
+    }
+
     // Stealth shows in `stat` while the buff is up, so an active buff's Stealth
     // isn't added again — its backstab bonuses still are.
     [Fact]

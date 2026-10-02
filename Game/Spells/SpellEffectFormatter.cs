@@ -134,7 +134,9 @@ public static class SpellEffectFormatter
     //   by name separately (see BuildRemoves).
     // - Display-only message slots the game hides by default — ConfuseMsg (101),
     //   DescMsg (115), StartMsg (120), ShockMsg (137).
-    private static readonly int[] _affectSkip = { 1, 8, 17, 18, 122, 101, 115, 120, 137, 151, 164 };
+    // - A marker with no effect of its own — GypsyFortune (15), which every fortune
+    //   card carries so the fortune teller and the deck can test for one being up.
+    private static readonly int[] _affectSkip = { 1, 8, 15, 17, 18, 122, 101, 115, 120, 137, 151, 164 };
 
     // Summon ability code (Abil 12) — its AbilVal is the summoned monster
     // number, resolved to a name when a resolver is supplied.

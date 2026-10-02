@@ -121,8 +121,21 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
         MemberKey = memberKey;
         WholePartyCovered = wholePartyCovered;
         _name = name;
+        _configuredName = name;
         _targetText = targetText;
         _isLearned = isLearned;
+    }
+
+    // The slot's own name, shown whenever no card is up.
+    private readonly string _configuredName;
+
+    // A draw item's row names the card that is up ("Knight") rather than the item: a
+    // slot that keeps several cards doesn't otherwise say which one landed. The deck's
+    // cards are "card-knight" in the game data.
+    private static string OutcomeLabel(string outcome)
+    {
+        string card = outcome.StartsWith("card-", System.StringComparison.OrdinalIgnoreCase) ? outcome[5..] : outcome;
+        return card.Length == 0 ? outcome : char.ToUpperInvariant(card[0]) + card[1..];
     }
 
     // Recompute the bar from a live timer (null ⇒ the buff isn't up). now is UTC to
@@ -130,6 +143,9 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // coveredBy (self rows) names a party buff that supersedes this self-buff.
     public void Update(ActiveBuffTimer? entry, System.DateTime now, string? memberName = null, string? coveredBy = null, bool hidden = false, bool conflicted = false)
     {
+        Name = entry is { Outcome: { Length: > 0 } card } && entry.Value.Until > now
+            ? OutcomeLabel(card)
+            : _configuredName;
         IsConflicted = false;
         if (hidden)
         {
