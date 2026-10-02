@@ -193,8 +193,8 @@ public sealed class PartyRestSyncTests
         Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
     }
 
-    // Health covers two pools: its HP note comes from HealthManager, and a mana wait
-    // has none (MegaMUD sends nothing for one).
+    // Health covers two pools, so its note comes from HealthManager, which knows
+    // which one tripped.
     [Fact]
     public void RequestWait_Health_IsBareUnlessTheCallerNamesThePool()
     {
@@ -205,14 +205,16 @@ public sealed class PartyRestSyncTests
         Assert.Equal("/Leader @wait\r", LastWire(wire));
     }
 
-    [Fact]
-    public void RequestWait_Health_WithThePoolNote_SendsIt()
+    [Theory]
+    [InlineData("(HP's too low)")]
+    [InlineData("(mana's too low)")]
+    public void RequestWait_Health_WithAPoolNote_SendsIt(string note)
     {
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
-        sync.RequestWait(WaitReason.Health, note: PartyRestSync.HpNote);
-        Assert.Equal("/Leader @wait (HP's too low)\r", LastWire(wire));
+        sync.RequestWait(WaitReason.Health, note: note);
+        Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
     }
 
     [Fact]

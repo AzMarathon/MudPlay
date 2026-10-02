@@ -1922,11 +1922,10 @@ public sealed class HealthManagerTests
         Assert.Equal(1, waits);           // and @wait never re-fired mid-recovery
     }
 
-    // Health is one wait reason for both pools, so HealthManager says which: an HP
-    // wait is named in MegaMUD's words; a mana wait carries no note, since MegaMUD
-    // sends nothing for one.
+    // Health is one wait reason for both pools, so HealthManager says which pool
+    // tripped; HP is named when both are short.
     [Fact]
-    public void Follower_PartyWaitNote_NamesHp_AndLeavesAManaWaitBare()
+    public void Follower_PartyWaitNote_NamesThePoolThatTripped()
     {
         using Harness h = new();          // percentage mode: trigger 30 %, rest-max 95 %
         List<string?> notes = new();
@@ -1940,13 +1939,13 @@ public sealed class HealthManagerTests
         Assert.Null(h.Health.PartyWaitNote);
 
         h.State.Ma = 20;                                          // mana alone
-        Assert.Equal(new string?[] { null }, notes);
+        Assert.Equal(new string?[] { PartyRestSync.ManaNote }, notes);
 
         h.State.Ma = 95;
         h.SettleOk();
 
         h.State.Hp = 20;                                          // HP alone
-        Assert.Equal(new string?[] { null, PartyRestSync.HpNote }, notes);
+        Assert.Equal(new string?[] { PartyRestSync.ManaNote, PartyRestSync.HpNote }, notes);
 
         h.State.Ma = 20;                                          // both: HP is named
         Assert.Equal(PartyRestSync.HpNote, h.Health.PartyWaitNote);

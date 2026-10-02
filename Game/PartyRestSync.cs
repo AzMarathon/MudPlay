@@ -56,14 +56,16 @@ public sealed class PartyRestSync : IDisposable
     // token alone (PartyEssentialHandlers.OnWait), so the note changes nothing it
     // does. Only strings MegaMUD has been seen to send are used (GAME_MECHANICS
     // "`@wait` / `@ok` party pause"). ConditionNote is its blanket for a condition
-    // with no wording of its own, which is what poison and disease get. A mana wait
-    // goes out bare: MegaMUD sends nothing for one.
+    // with no wording of its own, which is what poison and disease get.
     public const string HpNote        = "(HP's too low)";
     public const string ConditionNote = "(waiting on message condition)";
     public const string BlindNote     = "(blinded)";
     public const string ConfusedNote  = "(confused)";
     public const string HeldNote      = "(can't move)";
     public const string TooHeavyNote  = "(too heavy to move)";
+
+    // MudPlay's own wording, in the same shape: MegaMUD sends nothing for a mana wait.
+    public const string ManaNote      = "(mana's too low)";
 
     // The note a reason carries unless the caller passes one. Health has none here:
     // it covers both pools, and only HealthManager knows which one tripped.
