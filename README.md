@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.136.0**
-> - Settings → BBS + Display → Status bar: choose what the bar under the terminal shows, on its left, centre and right
-> - Up to four status bar rows, any of which can crawl as a marquee
-> - New status bar items: profile, combat profile, gear set, HP and mana, encumbrance, room, loop and lap, party, Session Stats tallies, next event, auto engines, cash, clock and more, plus your own text with live values
-> - Location, exp rate and time to next level are separate status bar items
-> - A preview in Settings shows the bar before you accept it
+> **Version 3.136.1**
+> - Settings → Other: the "Show monster HP lookup" checkbox is gone; the target HP readout is a status bar item you can remove, and the terminal line always prints
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

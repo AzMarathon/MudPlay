@@ -1,5 +1,9 @@
 # Version history
 
+## 3.136.1
+
+- Settings → Other: the "Show monster HP lookup" checkbox is gone; the target HP readout is a status bar item you can remove, and the terminal line always prints
+
 ## 3.136.0
 
 - Settings → BBS + Display → Status bar: choose what the bar under the terminal shows, on its left, centre and right

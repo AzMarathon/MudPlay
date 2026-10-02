@@ -104,11 +104,6 @@ public sealed class OtherSettings
     public bool RunStopRestoresCombat { get; set; }
     public bool SprintStopEndsSprint { get; set; }
 
-    // When true (default) a look at a monster surfaces its estimated remaining
-    // hit points — both in the status-bar "TGT HP:" slot and as a yellow line in
-    // the terminal scrollback. Off suppresses both. Char-tier; Settings → Other.
-    public bool ShowMonsterHpLookup { get; set; } = true;
-
     // Ceiling for Monster Intel's "Est. Rounds to Kill" column — a monster
     // whose projected rounds exceed this shows "<cap>+" instead of the raw
     // number (a superboss can otherwise project into the millions, which

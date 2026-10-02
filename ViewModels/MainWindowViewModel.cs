@@ -2002,17 +2002,13 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnMonsterLookTarget(Game.MonsterLookObserved obs)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            // The band always sharpens the running estimate, shown or not.
             Game.Combat.MonsterHpRead? read = AppServices.Current.MonsterHpEstimates.OnLook(obs.Name, obs.Estimate);
-            // Gated by Settings → Other "Show monster HP lookup" (default on).
-            if (!AppServices.Current.Resolver
-                    .Resolve<Models.Profile.OtherSettings>("Other").ShowMonsterHpLookup)
-                return;
             _lookedMonster = obs.Name;
             _lookedBand = obs.Estimate.Describe();
             TargetHpText = read is { } r ? $"TGT HP: {_lookedBand} [~{r.BestGuess}]" : $"TGT HP: {_lookedBand}";
             // Also drop a yellow line into the terminal scrollback so the estimate
-            // is logged, not only shown in the transient status slot: max HP, the wound
+            // is logged, not only shown in the status bar's target item (which the
+            // user may have taken off the bar): max HP, the wound
             // band's shorthand and range, and the best guess from the damage seen and
             // regen — "[large orc: 100 HP, Crit: 20-29, ~24]".
             string wound = $"{Game.MonsterLookParser.WoundShorthand(obs.Wound)}: {_lookedBand}";
