@@ -117,19 +117,10 @@ public sealed class HealthManager : IDisposable
     private Func<bool>? _isPartyFollower;       // in a party AND not the leader
     private Action? _requestPartyWait;          // ping leader to halt (PartyRestSync)
 
-    // WHICH POOL is holding the party, for the @wait note MegaMUD sends —
-    // "@wait (HP's too low)". Read by the requestPartyWait wiring at send time
-    // (AppServices), which is why this is a property rather than an argument on
-    // the delegate: widening that delegate would have rewritten every
-    // SetPartyRoleSync call site in the tests for no behavioural gain.
-    //
-    // Both gates can be asserted at once; HP leads because it is the pool that
-    // gets somebody killed. Null when neither is asserted, so PartyRestSync
-    // falls back to a bare @wait rather than claiming a reason that is not true.
-    public string? PartyWaitNote =>
-        _hpGateAsserted ? PartyRestSync.HpNote
-        : _maGateAsserted ? PartyRestSync.ManaNote
-        : null;
+    // The note for our @wait: HP and mana share one wait reason, and only the gates
+    // here say which pool is short. Null when it isn't HP — MegaMUD's wording for a
+    // mana wait isn't known, so that one goes out bare (PartyRestSync).
+    public string? PartyWaitNote => _hpGateAsserted ? PartyRestSync.HpNote : null;
     private Action? _requestPartyOk;            // release leader
     private Func<bool>? _isLeaderResting;       // follower + leader is resting/meditating
     private Func<bool>? _isLeaderWaited;        // WE lead + a member has @wait-held us

@@ -95,14 +95,13 @@ public sealed class PartyRestSyncTests
         Assert.Empty(wire);
     }
 
-    // ===== @ok outcome and the held-reason set =====
-    // The one way this protocol fails is a reason that never clears: the set
-    // never empties, every later @ok is suppressed, and the party stays stopped.
-    // RequestOk reports whether it actually sent, and HeldReasons names what is
-    // still holding, so that state is visible instead of silent.
+    // ===== The held-reason set =====
+    // The one way this protocol fails is a reason that never clears: the set never
+    // empties and every later @ok is suppressed. HeldReasons names what is still
+    // holding (the bug report shows it).
 
     [Fact]
-    public void RequestOk_ReturnsTrueOnlyWhenItReachesTheWire()
+    public void Ok_GoesOutOnlyWhenTheLastReasonClears()
     {
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
@@ -111,27 +110,25 @@ public sealed class PartyRestSyncTests
         sync.RequestWait(WaitReason.Health);
         sync.RequestWait(WaitReason.Poison);
 
-        Assert.False(sync.RequestOk(WaitReason.Health));   // Poison still holds
+        sync.RequestOk(WaitReason.Health);                 // Poison still holds
         Assert.Single(wire);                               // nothing new on the wire
-        Assert.True(sync.RequestOk(WaitReason.Poison));    // last one out
+        sync.RequestOk(WaitReason.Poison);                 // last one out
         Assert.Equal("/Leader @ok\r", LastWire(wire));
     }
 
     [Fact]
-    public void RequestOk_ForAReasonNeverPlaced_ReturnsFalse()
+    public void RequestOk_ForAReasonNeverPlaced_SendsNothing()
     {
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
-        Assert.False(sync.RequestOk(WaitReason.Held));
+        sync.RequestOk(WaitReason.Held);
         Assert.Empty(wire);
     }
 
     [Fact]
     public void HeldReasons_NamesWhatIsKeepingTheLeaderPaused()
     {
-        // This is the diagnosis a wedged party needs: @wait went out, no @ok
-        // followed, and this says which reason is the one that never cleared.
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
@@ -139,8 +136,7 @@ public sealed class PartyRestSyncTests
         Assert.Empty(sync.HeldReasons);
         sync.RequestWait(WaitReason.Blindness);
         sync.RequestWait(WaitReason.Poison);
-        // OrderBy on the enum is DECLARATION order, so Poison (1) precedes
-        // Blindness (2) — not alphabetical.
+        // Enum order, not alphabetical: Poison is declared before Blindness.
         Assert.Equal(new[] { WaitReason.Poison, WaitReason.Blindness },
                      sync.HeldReasons.OrderBy(r => r).ToArray());
 
@@ -153,14 +149,12 @@ public sealed class PartyRestSyncTests
         Assert.False(sync.IsHoldingWait);
     }
 
+    // A reason that never clears means a later wait/release cycle sends nothing and
+    // the leader stays paused. Nothing auto-releases it: that would send the leader
+    // on while the follower still can't move.
     [Fact]
-    public void AStuckReason_SuppressesEveryLaterOk_WhichIsTheWedge()
+    public void AStuckReason_SuppressesEveryLaterOk()
     {
-        // Documents the failure mode rather than papering over it. A reason that
-        // never clears (here: Held, whose condition flag never went away) means a
-        // later Health wait/release cycle sends NOTHING, and the leader is paused
-        // indefinitely. No auto-release: it would tell the leader to move off
-        // while the follower genuinely still cannot.
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
@@ -171,24 +165,20 @@ public sealed class PartyRestSyncTests
         for (int i = 0; i < 3; i++)
         {
             sync.RequestWait(WaitReason.Health);
-            Assert.False(sync.RequestOk(WaitReason.Health));
+            sync.RequestOk(WaitReason.Health);
         }
         Assert.Single(wire);                       // not one @ok in three cycles
         Assert.Equal(new[] { WaitReason.Held }, sync.HeldReasons.ToArray());
 
-        Assert.True(sync.RequestOk(WaitReason.Held));   // ...and it recovers at once
+        sync.RequestOk(WaitReason.Held);           // and it recovers at once
         Assert.Equal("/Leader @ok\r", LastWire(wire));
     }
 
-    // ===== MegaMUD wait reasons on the wire =====
-    // MegaMUD telepaths a parenthetical reason after the token — "@wait (HP's
-    // too low)" — and MudPlay used to send one for TooHeavy only. These pin the
-    // string each reason carries, because the leader DISPLAYS it and a wedged
-    // wait is diagnosed from it.
+    // ===== Wait reasons on the wire =====
+    // The note after the token is MegaMUD's wording for the reason. Only wording
+    // MegaMUD has been seen to send is used; the rest go out bare.
 
     [Theory]
-    [InlineData(WaitReason.Poison,    "(waiting on message condition)")]
-    [InlineData(WaitReason.Disease,   "(waiting on message condition)")]
     [InlineData(WaitReason.Blindness, "(blinded)")]
     [InlineData(WaitReason.Confusion, "(confused)")]
     [InlineData(WaitReason.Held,      "(can't move)")]
@@ -202,30 +192,28 @@ public sealed class PartyRestSyncTests
         Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
     }
 
-    [Fact]
-    public void RequestWait_Health_IsBareUnlessTheCallerSaysWhichPool()
+    // No MegaMUD wording is known for these, and Health covers two pools.
+    [Theory]
+    [InlineData(WaitReason.Poison)]
+    [InlineData(WaitReason.Disease)]
+    [InlineData(WaitReason.Health)]
+    public void RequestWait_WithNoKnownWording_IsBare(WaitReason reason)
     {
-        // Health covers BOTH pools, so PartyRestSync cannot know which tripped
-        // and deliberately has no default for it — HealthManager passes
-        // HpNote / ManaNote from its own gate flags (HealthManager.PartyWaitNote).
-        // A bare Health wait is correct, not a regression.
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
-        sync.RequestWait(WaitReason.Health);
+        sync.RequestWait(reason);
         Assert.Equal("/Leader @wait\r", LastWire(wire));
     }
 
-    [Theory]
-    [InlineData("(HP's too low)")]
-    [InlineData("(mana's too low)")]
-    public void RequestWait_Health_WithAPoolNote_SendsIt(string note)
+    [Fact]
+    public void RequestWait_Health_WithThePoolNote_SendsIt()
     {
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
-        sync.RequestWait(WaitReason.Health, note: note);
-        Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
+        sync.RequestWait(WaitReason.Health, note: PartyRestSync.HpNote);
+        Assert.Equal("/Leader @wait (HP's too low)\r", LastWire(wire));
     }
 
     [Fact]
@@ -238,38 +226,17 @@ public sealed class PartyRestSyncTests
         Assert.Equal("/Leader @wait (pinned down)\r", LastWire(wire));
     }
 
+    // Only the first reason telepaths, so its note is the one the leader sees.
     [Fact]
     public void SecondReason_IsDedupedSoItsNoteNeverReachesTheWire()
     {
-        // Only the 0→non-empty transition telepaths, so the FIRST reason's note
-        // is the one the leader sees. A second reason arriving is silent, which
-        // is why the leader can be told "(blinded)" while a poison is also held.
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
         sync.RequestWait(WaitReason.Blindness);
-        sync.RequestWait(WaitReason.Poison);
+        sync.RequestWait(WaitReason.Held);
         Assert.Single(wire);
         Assert.Equal($"/Leader @wait {PartyRestSync.BlindNote}\r", LastWire(wire));
-    }
-
-    [Fact]
-    public void EveryReasonExceptHealth_HasANote()
-    {
-        // A reason added to the enum without a note would silently go out bare,
-        // which is the state this change exists to end. Health is the one
-        // deliberate exception (see above).
-        foreach (WaitReason r in Enum.GetValues<WaitReason>())
-        {
-            var (sync, party, wire) = Setup();
-            party.IsInParty = true;
-            party.LeaderName = "Leader";
-            sync.RequestWait(r);
-            string sent = LastWire(wire);
-            if (r == WaitReason.Health) continue;
-            Assert.True(sent.Contains('('),
-                $"{r} telepathed a bare @wait: give it a note in PartyRestSync.DefaultNote");
-        }
     }
 
     [Fact]

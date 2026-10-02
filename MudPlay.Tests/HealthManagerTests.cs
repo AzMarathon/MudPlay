@@ -1922,12 +1922,11 @@ public sealed class HealthManagerTests
         Assert.Equal(1, waits);           // and @wait never re-fired mid-recovery
     }
 
-    // MegaMUD names the pool in the wait it telepaths — "@wait (HP's too low)".
-    // HealthManager is the only thing that knows WHICH pool tripped (Health is one
-    // WaitReason covering both), so it exposes PartyWaitNote and the wait-sender
-    // reads it. Without this the leader was told to stop with no reason given.
+    // Health is one wait reason for both pools, so HealthManager says which: an HP
+    // wait is named in MegaMUD's words; a mana wait, whose MegaMUD wording isn't
+    // known, carries no note.
     [Fact]
-    public void Follower_PartyWaitNote_NamesThePoolThatTripped()
+    public void Follower_PartyWaitNote_NamesHp_AndLeavesAManaWaitBare()
     {
         using Harness h = new();          // percentage mode: trigger 30 %, rest-max 95 %
         List<string?> notes = new();
@@ -1938,22 +1937,18 @@ public sealed class HealthManagerTests
 
         h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);   // rested
         Assert.Empty(notes);
-        Assert.Null(h.Health.PartyWaitNote);                      // nothing asserted
+        Assert.Null(h.Health.PartyWaitNote);
 
-        // mana alone trips -> the mana string, not the HP one
-        h.State.Ma = 20;
-        Assert.Equal(new string?[] { PartyRestSync.ManaNote }, notes);
+        h.State.Ma = 20;                                          // mana alone
+        Assert.Equal(new string?[] { null }, notes);
 
-        // recover and release, so the next drop is a fresh wait
         h.State.Ma = 95;
         h.SettleOk();
 
-        // HP alone trips -> the captured MegaMUD string
-        h.State.Hp = 20;
-        Assert.Equal(new string?[] { PartyRestSync.ManaNote, PartyRestSync.HpNote }, notes);
+        h.State.Hp = 20;                                          // HP alone
+        Assert.Equal(new string?[] { null, PartyRestSync.HpNote }, notes);
 
-        // ...and with BOTH low, HP leads: it is the pool that gets you killed
-        h.State.Ma = 20;
+        h.State.Ma = 20;                                          // both: HP is named
         Assert.Equal(PartyRestSync.HpNote, h.Health.PartyWaitNote);
     }
 

@@ -37,9 +37,9 @@ public sealed class PartyRestSync : IDisposable
         _log    = log;
     }
 
-    // The reasons currently holding the wait, for diagnostics and bug reports.
-    // An @ok goes out only when this empties, so a reason that is listed here
-    // long after it should have cleared is the thing keeping a party stopped.
+    // The reasons holding the wait. An @ok goes out only when this empties, so one
+    // listed here long after it should have cleared is what keeps a party stopped;
+    // the bug report shows it.
     public IReadOnlyCollection<WaitReason> HeldReasons => _waitReasons;
 
     // Bind the wire-sender. Without it, RequestWait / RequestOk calls are silent
@@ -51,44 +51,22 @@ public sealed class PartyRestSync : IDisposable
         _wireSender = sender;
     }
 
-    // MEGAMUD'S OWN WAIT REASONS, so a leader can see WHY the party stopped.
-    //
-    // MegaMUD telepaths a bare token plus a parenthetical reason —
-    // "@wait (HP's too low)". MudPlay already had the `note` parameter and the
-    // wire format for it, but only ONE of its seven wait reasons ever passed one
-    // (TooHeavy). Everything else went out bare, so a leader was told to stop
-    // with no reason given, and a wait that got stuck left no evidence of which
-    // reason was holding it.
-    //
-    // PROVENANCE — these are MegaMUD's strings, not invented ones. Four were
-    // captured from a MegaMUD client telepathing a MudPlay leader (user logs,
-    // 2026-09-11): "(blinded)", "(confused)", "(HP's too low)" and "(waiting on
-    // message condition)". "(can't move)" for a hold is already recorded in
-    // GAME_MECHANICS.md from an earlier report, and "(too heavy to move)" was
-    // already in use here.
-    //
-    // ADDITIVE ON THE WIRE. The receiving leader keys only on the token
-    // (PartyEssentialHandlers), so a note cannot change how any receiver
-    // behaves — MudPlay's or MegaMUD's.
-    public const string HpNote        = "(HP's too low)";
-    public const string ConditionNote = "(waiting on message condition)";
-    public const string BlindNote     = "(blinded)";
-    public const string ConfusedNote  = "(confused)";
-    public const string HeldNote      = "(can't move)";
-    public const string TooHeavyNote  = "(too heavy to move)";
+    // The reason a wait names after the token, in MegaMUD's wording, so a leader
+    // sees why the party stopped ("@wait (HP's too low)"). A receiver keys on the
+    // token alone (PartyEssentialHandlers.OnWait), so the note changes nothing it
+    // does. Only strings MegaMUD has been seen to send are used (GAME_MECHANICS
+    // "`@wait` / `@ok` party pause"); a reason with no known wording — low mana,
+    // poison, disease — goes out as a bare @wait.
+    public const string HpNote       = "(HP's too low)";
+    public const string BlindNote    = "(blinded)";
+    public const string ConfusedNote = "(confused)";
+    public const string HeldNote     = "(can't move)";
+    public const string TooHeavyNote = "(too heavy to move)";
 
-    // NOT CAPTURED. No MegaMUD mana wait has been observed, so this is MudPlay's
-    // own string in MegaMUD's shape, parallel to the captured HP one. If a real
-    // MegaMUD mana wait is ever seen, prefer whatever it says over this.
-    public const string ManaNote      = "(mana's too low)";
-
-    // The reason a wait carries when its caller does not override it. Health is
-    // deliberately absent: HP and mana share that reason and only HealthManager
-    // knows which pool tripped, so it passes HpNote / ManaNote itself.
+    // The note a reason carries unless the caller passes one. Health has none here:
+    // it covers both pools, and only HealthManager knows which one tripped.
     internal static string? DefaultNote(WaitReason reason) => reason switch
     {
-        WaitReason.Poison    => ConditionNote,
-        WaitReason.Disease   => ConditionNote,
         WaitReason.Blindness => BlindNote,
         WaitReason.Confusion => ConfusedNote,
         WaitReason.Held      => HeldNote,
@@ -112,9 +90,7 @@ public sealed class PartyRestSync : IDisposable
     // while still recovering) re-asks. A duplicate @wait is harmless — the leader
     // dedupes waiting members.
     //
-    // note: an optional reason shown after the token ("@wait (too heavy to move)"),
-    // the same shape MegaMUD uses for "@wait (can't move)"; the leader keys only on
-    // the token.
+    // note: the reason shown after the token, overriding the reason's DefaultNote.
     public void RequestWait(WaitReason reason, bool resend = false, string? note = null)
     {
         bool wasEmpty = _waitReasons.Count == 0;
@@ -123,49 +99,32 @@ public sealed class PartyRestSync : IDisposable
         if (!CanSignal()) return;
         string? why = note ?? DefaultNote(reason);
         Telepath(_party.LeaderName!, why is null ? "@wait" : $"@wait {why}");
+        _log?.Info(LogCategory, $"sent @wait for {reason}" + (why is null ? "" : $" {why}"));
     }
 
     // Engine-callable entry point — clear a wait reason and telepath @ok to the
     // party leader only on the non-empty→0 transition (the LAST reason
     // clearing). While other reasons still hold the wait, this records the
     // release and sends nothing. Same wire gates as RequestWait.
-    // Returns true only when an @ok actually reached the wire. Callers do not
-    // have to check it — nothing re-sends on false, because a suppressed @ok is
-    // usually CORRECT: another reason still holds the wait and the party should
-    // still be stopped. When the last reason does clear, ITS RequestOk empties
-    // the set and the @ok goes out then.
     //
-    // WHY THIS LOGS. The one way the protocol fails is a reason that never
-    // clears: the set never empties, every later @ok is suppressed, and the
-    // party is stopped for good. That used to happen in total silence — a
-    // follower's own log showed the @wait and simply no @ok, with nothing
-    // saying what was holding it. The line below names the reasons still held,
-    // which is what turns an invisible wedge into a one-line diagnosis.
-    //
-    // It deliberately does NOT auto-release a long-held reason. A blind timeout
-    // would tell the leader to walk off while a follower is genuinely still
-    // poisoned or held, which is worse than stopping; identifying the stuck
-    // reason has to come first.
-    public bool RequestOk(WaitReason reason)
+    // A released reason that leaves others held is logged with what still holds: a
+    // reason that never clears suppresses every later @ok, and without that line a
+    // stopped party shows only an @wait and then nothing. Nothing auto-releases a
+    // long-held reason — a timeout would send the leader on while a follower still
+    // can't move. A release of a reason that wasn't held is routine (the ailment
+    // engine releases unconditionally) and isn't logged.
+    public void RequestOk(WaitReason reason)
     {
-        if (!_waitReasons.Remove(reason))
-        {
-            _log?.Info(LogCategory,
-                $"@ok for {reason} ignored — that reason was not holding the wait");
-            return false;
-        }
+        if (!_waitReasons.Remove(reason)) return;
         if (_waitReasons.Count > 0)
         {
             _log?.Info(LogCategory,
-                $"{reason} released but NO @ok sent — still held by " +
-                $"{string.Join(", ", _waitReasons)}. The leader stays paused until " +
-                "these clear; a reason that never clears keeps it paused for good.");
-            return false;
+                $"{reason} released, no @ok sent — still held by {string.Join(", ", _waitReasons)}");
+            return;
         }
-        if (!CanSignal()) return false;
+        if (!CanSignal()) return;
         Telepath(_party.LeaderName!, "@ok");
         _log?.Info(LogCategory, $"last wait reason ({reason}) cleared — sent @ok");
-        return true;
     }
 
     // True while any wait reason (a rest, a hold, a blinding…) still stands.

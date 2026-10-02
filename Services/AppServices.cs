@@ -4185,10 +4185,8 @@ public sealed class AppServices
             isPartyFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader,
             // HealthManager decides when to (re-)ask; resend so a wait the leader has
             // timed out on is re-sent rather than deduped as already held.
-            // note: HealthManager says which pool tripped, so the leader is told
-            // "(HP's too low)" / "(mana's too low)" rather than a bare @wait. Read
-            // at send time — this runs inside HealthManager's own evaluate, so the
-            // gate flags behind it are current.
+            // The note names the pool when it's HP; read as the wait is sent, inside
+            // HealthManager's own evaluate, so its gate flags are current.
             requestPartyWait: () => PartyRest.RequestWait(
                 Game.WaitReason.Health, resend: true, note: Health.PartyWaitNote),
             requestPartyOk: () => PartyRest.RequestOk(Game.WaitReason.Health),

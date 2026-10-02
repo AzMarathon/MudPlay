@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.138.4**
-> - Events can run a stash → bank transfer: a new Stash transfer action with a stash room and a bank to pick
-> - Settings → Cash: stash transfers can have party members carry a load too, with a new @get-stash command (search, then take coin up to your weight limits) and @deposit-all at the bank
-> - Stash transfer picks up coin on the way back to the stash, and each deposit banks everything gained since it started
+> **Version 3.138.6**
+> - `@wait` to your leader names the reason where MegaMUD's wording is known: `(HP's too low)`, `(blinded)`, `(confused)`, `(can't move)`
+> - A wait reason that keeps your `@ok` from going out is logged, and the bug report lists the reasons held
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

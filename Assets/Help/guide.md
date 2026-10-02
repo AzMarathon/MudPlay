@@ -902,7 +902,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 
 ### Party coordination — any active party member, no grant needed
 
-- `@wait` — hold: automation pauses until you `@ok` (which releases it).
+- `@wait` — hold: automation pauses until you `@ok` (which releases it). When your own client sends it to your leader it adds the reason where MegaMUD's wording for it is known — `@wait (HP's too low)`, `(blinded)`, `(confused)`, `(can't move)`, `(too heavy to move)`; other waits go out as a plain `@wait`. The reason is for the leader to read: it doesn't change what their client does.
 - `@waiting` — sent by your leader after going back for you: it's holding for your `@ok`, which your client sends once nothing holds you.
 - `@comeback` (optionally `<map/room>`) — a stranded member asks the party to come recover them; `@forget` calls that recovery off.
 - `@share` — splits your held coin evenly across the party.

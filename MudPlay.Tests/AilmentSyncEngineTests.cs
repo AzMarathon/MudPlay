@@ -109,7 +109,7 @@ public sealed class AilmentSyncEngineTests
         // Poison is NOT announced verbosely — an observer reads it from the par
         // `P` flag. It still telepaths its @wait to the leader.
         Assert.Empty(h.Say);
-        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
     }
 
     [Theory]
@@ -151,7 +151,7 @@ public sealed class AilmentSyncEngineTests
         h.Feed("The poison wears off.");
 
         // @wait then @ok on the telepath channel.
-        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.ConditionNote}\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
         // Poison is not announced on say (observers read the par `P` flag) — so
         // nothing lands on the say wire on apply or clear.
         Assert.Empty(h.Say);
@@ -189,7 +189,7 @@ public sealed class AilmentSyncEngineTests
         Assert.Single(h.Telepath);   // blind still holds
 
         h.Feed("Your vision returns.");
-        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.ConditionNote}\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public sealed class AilmentSyncEngineTests
         // We can clear it ourselves, so no broadcast — but the @wait still
         // pauses the leader while we cast (the cure gate is say-only).
         Assert.Empty(h.Say);
-        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
     }
 
     [Fact]
@@ -353,14 +353,14 @@ public sealed class AilmentSyncEngineTests
         SeedAll(h);
 
         h.Feed("You have been poisoned!");
-        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
 
         // Flip IgnorePoison ON while still poisoned. Without the reconcile the
         // already-telepathed @wait stands and the leader is stuck.
         h.Spells.IgnorePoison = true;
         h.Engine.ReevaluateWaits();
 
-        Assert.Equal(new[] { $"/Leader @wait {PartyRestSync.ConditionNote}\r", "/Leader @ok\r" }, h.Telepath);
+        Assert.Equal(new[] { "/Leader @wait\r", "/Leader @ok\r" }, h.Telepath);
     }
 
     [Fact]
@@ -377,7 +377,7 @@ public sealed class AilmentSyncEngineTests
         h.Spells.IgnorePoison = false;
         h.Engine.ReevaluateWaits();
 
-        Assert.Equal($"/Leader @wait {PartyRestSync.ConditionNote}\r", Assert.Single(h.Telepath));
+        Assert.Equal("/Leader @wait\r", Assert.Single(h.Telepath));
     }
 
     [Fact]
