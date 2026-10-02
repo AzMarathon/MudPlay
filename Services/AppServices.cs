@@ -7369,7 +7369,8 @@ public sealed class AppServices
                     ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
                 return (long)cash.KeepOnHandWealth
                        * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
-            });
+            },
+            coinLoad: () => Cash.CoinLoad());
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
         // A member's {reply} to @get-stash / @deposit-all says that member is done.
         Chat.EntryClassified += e =>

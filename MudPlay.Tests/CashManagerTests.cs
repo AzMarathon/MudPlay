@@ -831,6 +831,22 @@ public sealed class CashManagerTests
         Assert.StartsWith("get 50 silver", Assert.Single(Gets(h)));
     }
 
+    // A stash transfer reads this to tell a purse that should be banked first.
+    [Fact]
+    public void CoinLoad_IsTheCoinsHeldAndTheRoomTheWeightLimitsLeave()
+    {
+        using Harness h = new();
+        Assert.Null(h.Cash.CoinLoad());                   // capacity unknown
+
+        // 6,977 coins weigh 2,325; with 1,035 of gear that is the 3,360 maximum.
+        h.Snapshot = Snap(0, 6955, 22, 0, 0, currentWeight: 3360, maxWeight: 3360);
+        Assert.Equal((6977L, 0L), h.Cash.CoinLoad());
+
+        // 300 coins weigh 100; 2,260 of weight is free, room for 6,780 more coins.
+        h.Snapshot = Snap(0, 300, 0, 0, 0, currentWeight: 1100, maxWeight: 3360);
+        Assert.Equal((300L, 6780L), h.Cash.CoinLoad());
+    }
+
     [Fact]
     public void CollectLimit_Lifted_CollectsEverythingAgain()
     {

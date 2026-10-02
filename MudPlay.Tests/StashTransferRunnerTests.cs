@@ -22,6 +22,8 @@ public sealed class StashTransferRunnerTests
         public long Purse;
         // Settings → Cash keep-on-hand, in copper.
         public long Keep;
+        // Coins carried and the room left for more; null = capacity unknown.
+        public (long Held, long Room)? Load;
         public long StashHolds;
         // The most one trip can carry (the weight limits, in copper for the test).
         public long CarryPerTrip = long.MaxValue;
@@ -88,7 +90,8 @@ public sealed class StashTransferRunnerTests
                 reconcileStash: (k, c) => Reconciled.Add((k, c)),
                 notice: Notices.Add,
                 partyMembers: () => Party,
-                keepOnHandCopper: () => Keep);
+                keepOnHandCopper: () => Keep,
+                coinLoad: () => Load);
         }
 
         public void Arrive()
@@ -321,6 +324,65 @@ public sealed class StashTransferRunnerTests
         Assert.Equal("dep 20100", h.Sent[^1]);
         h.FireTimers();
         Assert.Equal(1_000, h.Purse);
+    }
+
+    // Report paradigm-20261002-114620: a transfer cut off on its way to the bank was
+    // started again with the purse still full, and walked back to the stash for coin
+    // it had no room for. A loaded purse is banked first, then the stash is read.
+    [Fact]
+    public void StartedWithALoadedPurse_BanksItFirst_ThenGoesToTheStash()
+    {
+        Harness h = new() { Purse = 71_750, Load = (6_977, 0), StashHolds = 20_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+
+        Assert.Equal(BankRoom, Assert.Single(h.Walked));
+        h.Arrive();
+        Assert.Equal("dep 71750", h.Sent[^1]);
+        h.FireTimers();
+
+        Assert.True(h.Runner.IsBusy);                     // the stash hasn't been read yet
+        Assert.Equal(StashRoom, h.Walked[^1]);
+
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+        h.FireTimers();
+        Assert.False(h.Runner.IsBusy);
+        Assert.Equal(91_750, h.BankHolds);
+        Assert.Equal("[Stash Transfer Done: 9 platinum 17 gold 5 silver moved to First Bank in 2 trips]", h.Notices[^1]);
+    }
+
+    // Pocket change with plenty of room left isn't worth a bank trip of its own.
+    [Fact]
+    public void StartedWithRoomToSpare_GoesToTheStashFirst()
+    {
+        Harness h = new() { Purse = 1_100, Load = (11, 9_000), StashHolds = 20_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+
+        Assert.Equal(StashRoom, Assert.Single(h.Walked));
+    }
+
+    // The weight estimate said there was room, but nothing could be taken: with coin
+    // in the purse it is banked and the stash tried again, instead of giving up.
+    [Fact]
+    public void NothingTakenWithCoinStillCarried_BanksItAndComesBack()
+    {
+        Harness h = new() { Purse = 5_000, StashHolds = 8_000, CarryPerTrip = 0 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+
+        Assert.True(h.Runner.IsBusy);
+        Assert.Equal(BankRoom, h.Walked[^1]);
+        h.Arrive();
+        Assert.Equal("dep 5000", h.Sent[^1]);
+        h.FireTimers();
+        Assert.Equal(StashRoom, h.Walked[^1]);
+
+        h.Arrive();
+        h.SearchAndCollect();                             // still nothing, and nothing left to bank
+        Assert.False(h.Runner.IsBusy);
+        Assert.Contains("nothing could be picked up", h.Notices[^1]);
     }
 
     // A purse under the keep-on-hand amount is topped up from the stash first; a trip

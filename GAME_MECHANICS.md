@@ -4939,7 +4939,9 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   (report `paradigm-20261002-101410`: it was held off on the walk back), and each `dep <copper>` is
   everything carried above the Settings → Cash keep-on-hand amount, as every other deposit is (report
   `paradigm-20261002-111650`: holding back the purse as it stood at the start left earlier pickups
-  unbanked). The stash ledger is
+  unbanked). A purse already holding more coin than it has room left for (`CashManager.CoinLoad`) is
+  banked before the first walk to the stash (report `paradigm-20261002-114620`: restarted with a full
+  purse, it walked to the stash for coin it couldn't carry). The stash ledger is
   set to what the search showed less what was taken.
   - **Party share** (`CashSettings.StashTransferPartyShare`; **Client policy**, user 2026-10-02): a
     search shows the pile only to the searcher, so a leader telepaths each member one command,

@@ -1,10 +1,11 @@
 # Version history
 
-## 3.138.8
+## 3.138.9
 
 - Stash transfer deposits all your cash above the keep-on-hand amount each trip, including what you were already carrying
-- Spell Book lists class cast-on-use items used from your pack, such as the Gypsy's deck of cards
-- bug reports addressed: paradigm-20261002-111650, paradigm-20261002-114043
+- Spell Book lists class cast-on-use items that are carried rather than worn, such as the Gypsy's deck of cards
+- Stash transfer started with a full purse goes to the bank first instead of back to the stash
+- bug reports addressed: paradigm-20261002-111650, paradigm-20261002-114043, paradigm-20261002-114620
 
 ## 3.138.6
 
