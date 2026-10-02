@@ -468,6 +468,29 @@ public sealed class KnownSpellCatalog
         return inPlay != 0 ? inPlay : outOfPlay;
     }
 
+    // Every in-play teaching item the class may use, as (item, spell taught) pairs —
+    // the candidate list for buying a spell from a shop. One full Items scan.
+    public IReadOnlyList<TeachingItem> GetTeachingItems(int classNumber)
+    {
+        List<TeachingItem> results = new();
+        JsonDocument? items = _cache.GetRawTable("Items");
+        if (items is null) return results;
+
+        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        {
+            if (InGameFlag.IsOutOfPlay(row) || !ItemUsableByClass(row, classNumber)) continue;
+            string name = ReadString(row, "Name")?.Trim() ?? string.Empty;
+            if (name.Length == 0) continue;
+            for (int i = 0; i < ItemAbilSlots; i++)
+            {
+                if (ReadInt(row, $"Abil-{i}") != LearnSpAbilityCode) continue;
+                int spell = ReadInt(row, $"AbilVal-{i}");
+                if (spell > 0) results.Add(new TeachingItem(ReadInt(row, "Number"), name, spell));
+            }
+        }
+        return results;
+    }
+
     private static bool TeachesSpell(JsonElement item, int spellNumber)
     {
         for (int i = 0; i < ItemAbilSlots; i++)

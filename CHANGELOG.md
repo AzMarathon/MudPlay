@@ -1,5 +1,12 @@
 # Version history
 
+## 3.140.0
+
+- Auto-train can go on to buy and learn the spell scrolls your new level unlocks (Settings → Auto-Trainer → Spells from shops)
+- Per-spell Get? list picks which shop-sold spells a trip goes after
+- Train funding fetches the scroll money with the training fee, and trains anyway when it can't cover both
+- Deck of cards: drawing the same card twice in a row is recognised and restarts its timer
+
 ## 3.139.0
 
 - Buff Watchdog can keep the Gypsy's deck of cards up: tick the cards you want, and it re-draws each round until one of them lands

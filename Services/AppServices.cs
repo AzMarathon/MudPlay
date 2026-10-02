@@ -1351,6 +1351,105 @@ public sealed class AppServices
     private Models.Profile.AutoTrainerSettings ReadAutoTrainerSettings() =>
         ReadSection<Models.Profile.AutoTrainerSettings>(Profile.Current, "AutoTrainer");
 
+    // The shop leg of a train trip: buys and reads the scrolls for spells the
+    // character can now learn.
+    public Game.Train.ShopSpellErrand ShopSpells { get; private set; } = null!;
+
+    // What ShopSpellOffers was last built from. The build is an Items scan, a Shops
+    // read per selling shop and a pass over the room graph, and both the planner and
+    // the Auto-Trainer tab ask for it repeatedly.
+    private (string? Set, int Class, int Align, int Charm, int Rooms) _shopSpellOffersKey;
+    private IReadOnlyList<Game.Train.ShopSpellOffer> _shopSpellOffers = Array.Empty<Game.Train.ShopSpellOffer>();
+
+    // Every spell the loaded character's class can learn from a scroll some shop
+    // restocks, with the rooms that sell it and their price at the character's Charm.
+    public IReadOnlyList<Game.Train.ShopSpellOffer> ShopSpellOffers()
+    {
+        (string?, int, int, int, int) key = (GameData.ActiveSet, Spellbook.ClassNumber, Spellbook.CharAlign,
+            PlayerStats.Charm, RoomGraph.Rooms.Count());
+        if (key == _shopSpellOffersKey) return _shopSpellOffers;
+
+        Dictionary<int, List<Game.Map.RoomKey>> roomsByShop = new();
+        foreach (Game.Map.Room room in RoomGraph.Rooms)
+        {
+            if (room.Shop == 0) continue;
+            if (!roomsByShop.TryGetValue(room.Shop, out List<Game.Map.RoomKey>? rooms))
+                roomsByShop[room.Shop] = rooms = new();
+            rooms.Add(room.Key);
+        }
+
+        _shopSpellOffers = Game.Train.ShopSpellCatalog.Build(
+            GameData, Spellbook.Available, SpellCatalog.GetTeachingItems(Spellbook.ClassNumber),
+            Spellbook.ClassNumber, PlayerStats.Charm,
+            ShopStock.ShopsSelling,
+            shop => roomsByShop.TryGetValue(shop, out List<Game.Map.RoomKey>? rooms)
+                ? rooms
+                : Array.Empty<Game.Map.RoomKey>());
+        _shopSpellOffersKey = key;
+        return _shopSpellOffers;
+    }
+
+    // budgetCopper null prices the whole wish list (the funding estimate); the trip
+    // itself passes what the purse holds above keep-on-hand.
+    private Game.Train.ShopSpellPlan PlanShopSpells(
+        Game.Map.RoomKey from, Game.Map.RoomKey returnTo, int level, long? budgetCopper,
+        IReadOnlyCollection<Game.Map.RoomKey>? visited = null, IReadOnlyCollection<int>? gaveUp = null) =>
+        Game.Train.ShopSpellPlanner.Plan(
+            ShopSpellOffers(), level,
+            spell => Spellbook.IsObtained(spell) || gaveUp?.Contains(spell) == true,
+            SkippedShopSpells(),
+            from, returnTo, (a, b) => Bfs.DistanceBetween(a, b, Movement), budgetCopper, visited);
+
+    // What a spell trip starting where the character stands would go for, for the
+    // bug report: the stops with their scrolls, and what was left out and why.
+    public string DescribeShopSpellTripFromHere()
+    {
+        if (RoomTracker.State.CurrentRoom is not { } cur) return "(current room unknown)";
+        if (PlayerStats.Level <= 0) return "(level unknown)";
+        Game.Train.ShopSpellPlan plan = PlanShopSpells(cur.Key, cur.Key, PlayerStats.Level, SpendableCopper());
+        List<string> parts = new();
+        foreach (Game.Train.ShopSpellStop stop in plan.Stops)
+            parts.Add($"{stop.ShopName} ({stop.Room.Map}/{stop.Room.Room}): "
+                + string.Join(", ", stop.Purchases.Select(p => $"{p.SpellName} {p.PriceCopper:N0}c")));
+        if (plan.Unaffordable.Count > 0) parts.Add("can't afford: " + string.Join(", ", plan.Unaffordable));
+        if (plan.Unreachable.Count > 0) parts.Add("no route: " + string.Join(", ", plan.Unreachable));
+        return parts.Count == 0
+            ? $"nothing to buy at level {PlayerStats.Level} ({ShopSpellOffers().Count} shop-sold spell(s) for the class)"
+            : string.Join("; ", parts);
+    }
+
+    private IReadOnlyCollection<string> SkippedShopSpells() =>
+        ReadAutoTrainerSettings().SkippedShopSpells is { } skipped ? skipped : Array.Empty<string>();
+
+    // Scrolls already in the pack for spells the character can learn now, hasn't,
+    // and wants — bought on an earlier trip and never read.
+    private IReadOnlyList<Game.Train.ShopSpellPurchase> CarriedSpellScrolls(int level)
+    {
+        HashSet<string> skipped = new(SkippedShopSpells(), StringComparer.OrdinalIgnoreCase);
+        List<Game.Train.ShopSpellPurchase> carried = new();
+        foreach (Game.Train.ShopSpellOffer offer in ShopSpellOffers())
+        {
+            if (offer.ReqLevel > level || Spellbook.IsObtained(offer.SpellNumber) || skipped.Contains(offer.SpellName))
+                continue;
+            foreach (Game.Train.ShopSpellSource source in offer.Sources)
+            {
+                if (CountItemCarried(source.ItemNumber) <= 0) continue;
+                carried.Add(new(offer.SpellNumber, offer.SpellName, offer.ReqLevel,
+                    source.ItemNumber, source.ItemName, 0));
+                break;
+            }
+        }
+        return carried;
+    }
+
+    private long SpendableCopper()
+    {
+        Models.Profile.CashSettings cash = ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+        long keep = (long)cash.KeepOnHandWealth
+                    * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+        return Math.Max(0, Inventory.Snapshot.Currency.TotalCopperValue - Math.Max(0, keep));
+    }
+
     // Observes the "You have been slain by..."
     // line and emits Game.Combat.DeathLineWatcher.PlayerDied.
     // DeathRecoveryManager is the primary consumer; other
@@ -7401,6 +7500,40 @@ public sealed class AppServices
         TrainerWalk.EstimateWaitToAfford = shortfall =>
             Game.Train.TrainFundingForecast.TimeToAfford(
                 shortfall, SessionActivity.Snapshot().CurrencyPerHour);
+
+        ShopSpells = new Game.Train.ShopSpellErrand(
+            currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
+            plan: (from, returnTo, level, visited, gaveUp) =>
+                PlanShopSpells(from, returnTo, level, SpendableCopper(), visited, gaveUp),
+            carriedScrolls: CarriedSpellScrolls,
+            carriedCount: CountItemCarried,
+            isObtained: spell => Spellbook.IsObtained(spell),
+            walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
+            send: cmd => SendGameCommand(cmd),
+            armTimer: (delay, action) => _ = System.Threading.Tasks.Task.Delay(delay)
+                .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+                    System.Threading.Tasks.TaskScheduler.Default),
+            log: Log,
+            // A toll on the way to a shop is taken only when the scrolls can still
+            // be paid for after it.
+            reserve: copper => Movement.ReservedCopper = copper);
+        Walker.Event += e => ShopSpells.OnWalkEvent(e);
+        AutoBuy.StockListed += stock => ShopSpells.OnShopListed(stock);
+        Inventory.Changed += () => ShopSpells.OnInventoryChanged();
+        Spellbook.Changed += () => ShopSpells.OnSpellbookChanged();
+        Router.Subscribe(Services.Patterns.KnownPatterns.UserBuyFailed, m =>
+        {
+            if (m.Groups.Count > 0) ShopSpells.OnBuyRefused(m.Groups[0]);
+        });
+        // The line names no spell, so it can only be tied to one while a read of
+        // ours is out. The spell goes into the book: the game has just said it's known.
+        Router.Subscribe(Services.Patterns.KnownPatterns.LearnSpellAlreadyKnown, _ =>
+        {
+            if (ShopSpells.OnScrollAlreadyKnown() is { } spell) Spellbook.MarkObtainedByName(spell);
+        });
+        TrainerWalk.SetSpellErrand(ShopSpells);
+        TrainerWalk.PlanShopSpells = (from, returnTo, level) =>
+            PlanShopSpells(from, returnTo, level, budgetCopper: null);
 
         // @train remote: trains in place (no walk) via the coordinator.
         TrainRemote = new Game.Remote.TrainHandler(RemoteCommands, TrainerWalk);

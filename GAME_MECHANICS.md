@@ -2512,20 +2512,28 @@ How one damage spell cast against a monster is worked out.
   - Our own single-target manual cast IS tracked: `CastingDirector.NoteManualBuffCast` arms a pending confirm for a targeted hand cast (`gbls fuj`) and resolves the member off the success line.
 
 ### Learning a spell from a teaching item
-*Status: CONFIRMED 2026-08-15 (user + wire capture)*
+*Status: CONFIRMED 2026-08-15 (user + wire capture); the command and the Stock refusal lines [OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p; same command on both realms CONFIRMED 2026-10-02 (user) · Realm: both (the success wording differs)*
 
-- **A teaching item is used with `read <code>` — the SAME 4-letter cast-code the spell is otherwise cast by.** A teaching item is a spellbook / tome carrying the `LearnSp` ability, code **42**, whose value is the `Spells.Number` it teaches.
-- **On success the game confirms with the full spell name**, even though the command speaks the short code:
+- **A teaching item is a scroll / spellbook / tome carrying the `LearnSp` ability, code 42**, whose value is the `Spells.Number` it teaches.
+- **It is learned with `read <item>`, and `use <item>` is the same command.** *([OBSERVED] 2026-10-02, `_cmd_use` @0x460d5c)* One handler serves both verbs (its usage lines are `Syntax: Read {Item}` and `Syntax: USE {Item to use} [{target}]`). It looks the argument up as an item in the inventory (`_find_item_in_inventory`), by the usual partial name match. Same on Stock and Paradigm *([CONFIRMED] 2026-10-02, user)*.
+  - **`read agon` matches the item's name, not the spell's cast code**: `agon` is part of `scroll of agony`. A cast code that isn't part of the item's name (`site` for `scroll of cure blindness`) doesn't find the scroll. (An earlier note said the argument was the SAME 4-letter cast-code the spell is otherwise cast by; superseded 2026-10-02.)
+- **On success Paradigm confirms with the full spell name**:
 
   ```
   :read agon
   You add agony to your spellbook!
   ```
 
-  The command uses `agon`; the confirmation names `agony`.
-- **This wording is distinct from the classic learn-scroll line** ("You read <scroll> and learn the spell <name>.").
+  The command says `agon`; the confirmation names `agony`.
+- **Stock's success line is the classic learn-scroll line**, distinct from that wording: `You read <scroll> and learn the spell <name>.` *([OBSERVED] 2026-10-02: `You read %s and learn the spell %s.`)*
+- **Stock refusals** *([OBSERVED] 2026-10-02, `_use_no_target` @0x44a630, the ability-42 branch)*:
+  - `You don't know what to do with this!` — the character can't use the spell (`_user_can_use_spell`: the class's magery type and level, the character's level, alignment), or the spellbook wouldn't take it (`_add_spell_to_spellbook` failed).
+  - `You realize that you already know this scroll!` — the spell is already in the spellbook. The line names neither the scroll nor the spell.
+  - `You may not use that item!` — the item itself is barred to the character (`_user_can_use`, checked in `_cmd_use` before the abilities run).
+  - Paradigm's wording for these refusals `[NEEDS CONFIRMATION]`: is it the same text as Stock's?
 - **Client use:**
-  - The client recognises both (`KnownPatterns.LearnSpell` + `LearnSpellFromItem`) and marks the spell obtained (`SpellbookState.MarkObtainedByName`, keyed on the name), so the learned-spell set updates the instant a spell is learned mid-session rather than waiting for the next `spells` poll.
+  - The client recognises both success lines (`KnownPatterns.LearnSpell` + `LearnSpellFromItem`) and marks the spell obtained (`SpellbookState.MarkObtainedByName`, keyed on the name), so the learned-spell set updates the instant a spell is learned mid-session rather than waiting for the next `spells` poll.
+  - `ShopSpellErrand` (the *Auto-obtain spells from shops* leg of a train trip) sends `read <full item name>`, and waits for the spellbook to gain the spell or for a timeout, so an unrecorded refusal line costs a few seconds and nothing else. `KnownPatterns.LearnSpellAlreadyKnown` ends that wait early and puts the spell in the spellbook.
 
 ### Self-buff recast tracking — keyed on the 4-letter cast code
 *Status: CONFIRMED 2026-08-16 (user + report `paradigm-20260816-101702`)*
@@ -4757,7 +4765,8 @@ There is no room to drop amethyst pendant here.
   - the card as ANSI art naming it (`The` / `Priest`), then a quoted line about the card.
   - `look deck of cards` read `Uses remaining: 9999` before and `9998` after: a use takes a charge although the item is kept.
 - **A use takes the between-round cast slot, the same as a buff spell, and it can be used cycle after cycle** *([CONFIRMED] 2026-10-02, user)*.
-- **A new draw replaces the card already up (Paradigm)** *([OBSERVED] imported game data)*: the use-spell's textblock 9821 casts `card shuffle` (5145) before the draw, and that spell removes each of the eight card spells (`RemovesSpell`, ability 122, once per card). Stock's textblock 9365 has no shuffle step.
+- **Only one card buff is up at a time, and a new draw can deal the card you already had** *([CONFIRMED] 2026-10-02, user)*. Every use restarts the buff's timer, the same card twice in a row included.
+- **How the old card goes (Paradigm)** *([OBSERVED] imported game data)*: the use-spell's textblock 9821 casts `card shuffle` (5145) before the draw, and that spell removes each of the eight card spells (`RemovesSpell`, ability 122, once per card). Stock's textblock 9365 has no shuffle step.
 - **Every card shares the same applied and wear-off lines** *([OBSERVED] Stock message 2763; applied line confirmed on Paradigm by the user 2026-10-02)*: `The gaze of luck is upon you.` and `The gaze of luck is no longer upon you!`. Only the art and the quote say which card was drawn.
 - **The draw line has a room form** *([OBSERVED] Stock message 2780)*: `You grab your deck of cards and draw...` to the user, `%s grabs their deck of cards and draws...` to the room. What the room sees for the Paradigm shuffle line is not recorded.
 - **What can be drawn** *([OBSERVED] textblocks)*:
@@ -4771,7 +4780,7 @@ There is no room to drop amethyst pendant here.
 - **Client use:**
   - The message seeds key each card record on its own quote, and the shared `The gaze of luck is upon you` line sits on the deck's own record (`card deck draw` / `card-draw`). With all thirteen records on the shared line, one draw latched every card and the void's Confused flag held navigation (report `paradigm-20261002-120516`).
   - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*.
-  - **Buff Watchdog draw slot** (**Client policy**, user 2026-10-02): the deck can be slotted as a buff with one tick box per card (`BuffSlot.RejectedOutcomes`). `CastingDirector` sends `use deck of cards` in the between-round slot (`ItemCastSequencer`, no equip), reads the card off its applied line, keeps a ticked card for that card's duration, and draws again on the next cycle for an unticked one. The cards come from the data (`KnownSpellCatalog.RandomOutcomes`: the use-spell's textblock → its `random` table → the spells that table casts), so each realm's deck lists its own.
+  - **Buff Watchdog draw slot** (**Client policy**, user 2026-10-02): the deck can be slotted as a buff with one tick box per card (`BuffSlot.RejectedOutcomes`). `CastingDirector` sends `use deck of cards` in the between-round slot (`ItemCastSequencer`, no equip), reads the card off its applied line, keeps a ticked card for that card's duration, and draws again on the next cycle for an unticked one. Each draw first releases the card records' applied latch (`ConditionTracker.ReleaseApplied`), so the same card landing again is seen and its timer restarts. The cards come from the data (`KnownSpellCatalog.RandomOutcomes`: the use-spell's textblock → its `random` table → the spells that table casts), so each realm's deck lists its own.
 
 ### Chests and chest loot tables
 *Status: CONFIRMED (chest behaviour); CONFIRMED — verified against the 1.11p / Paradigm / Euphoria data, 2026-07-10 (loot-table chain)*

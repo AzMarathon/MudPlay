@@ -72,6 +72,10 @@ public sealed class AutoBuyManager : IDisposable
     private Action<byte[]>? _wireSender;
     private bool _disposed;
 
+    // A shop's `list` readout, parsed — raised for every readout, whether or not
+    // Auto-buy is on, so an errand that sent the `list` itself can read the stock.
+    public event Action<IReadOnlyList<ShopListParser.StockRow>>? StockListed;
+
     public AutoBuyManager(
         MessageRouter router,
         Func<string, ResolvedBuy?> resolve,
@@ -122,7 +126,7 @@ public sealed class AutoBuyManager : IDisposable
 
         if (!_capturing)
         {
-            if (text == ShopHeader && _isEnabled())
+            if (text == ShopHeader)
             {
                 _capturing = true;
                 _body.Clear();
@@ -143,6 +147,7 @@ public sealed class AutoBuyManager : IDisposable
         _capturing = false;
         IReadOnlyList<ShopListParser.StockRow> stock = ShopListParser.Parse(_body);
         _body.Clear();
+        StockListed?.Invoke(stock);
 
         if (!_isEnabled() || _wireSender is null) return;
 

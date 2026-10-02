@@ -47,7 +47,9 @@ public sealed class TrainerWalkManager : IDisposable
     // is stopped and snapshotted here) while PartyTrainCoordinator drives the walk
     // and the members' trains; the leader's own train runs inside it and returns to
     // PartyTrip rather than resuming the engine.
-    private enum Phase { Idle, Funding, Walking, Training, RefreshingStats, ApplyingCp, PartyTrip }
+    // Spells: the levels are trained and the run has gone on to the shops for the
+    // scrolls they unlocked (ShopSpellErrand drives the walker).
+    private enum Phase { Idle, Funding, Walking, Training, RefreshingStats, ApplyingCp, Spells, PartyTrip }
     private enum ResumeKind { None, Loop, Lair }
 
     // Why a (looping) train run stopped — shapes the @train reply.
@@ -92,6 +94,10 @@ public sealed class TrainerWalkManager : IDisposable
     private Action<string>? _reply;   // @train deferred reply sink (null for local runs)
     private TrainerShop? _target;
     private ResumeTarget _resume;
+    private bool _walkRun;            // the run walked to its trainer (Train Now / armed), not @train in place
+    private RoomKey _runFrom;         // where a walk run started — the shop leg plans its way back here
+    private bool _spellTripTried;     // the shop leg has had its one go this run
+    private bool _fundingWithSpells;  // the funding errand in flight is collecting scroll money too
 
     // Party-train run shaping. _ceilingCap tightens DoNotTrainAbove for this run only
     // (the level-11 party rule, or the leader's target for a member); _noChain stops a
@@ -168,6 +174,21 @@ public sealed class TrainerWalkManager : IDisposable
         _funding = router;
         _funding.Finished += OnFundingFinished;
     }
+
+    // The shop leg after the training: buys and reads the scrolls for spells the
+    // character can now learn. Optional, like the funding errand. Set from AppServices.
+    private Game.Train.ShopSpellErrand? _spellErrand;
+
+    public void SetSpellErrand(Game.Train.ShopSpellErrand errand)
+    {
+        ArgumentNullException.ThrowIfNull(errand);
+        _spellErrand = errand;
+        _spellErrand.Finished += OnSpellErrandFinished;
+    }
+
+    // What the shop leg would buy for a character at a level, walking from a room and
+    // then on to a second — unbudgeted, so funding can price the scrolls into the trip.
+    public Func<RoomKey, RoomKey, int, Game.Train.ShopSpellPlan>? PlanShopSpells { get; set; }
 
     // Renders "you're short N, here's when that stops being true" from the live
     // session earn rate. A delegate because the rate and the lap time live in the
@@ -467,6 +488,8 @@ public sealed class TrainerWalkManager : IDisposable
         _keepLevels = keepLevels;
         _target = t;
         _startLevel = _stats.Level;
+        _walkRun = true;
+        _runFrom = cur.Key;
         _resume = SnapshotEngine();
         StopEngine();   // free the wire for the detour (no-op when nothing's running)
 
@@ -524,10 +547,12 @@ public sealed class TrainerWalkManager : IDisposable
     // takes a toll only when it can pay it on top of the training (0 releases it).
     public Action<long>? ReserveForTraining { get; set; }
 
-    private Game.Train.TrainTripTolls? TripTolls(IReadOnlyList<Game.Train.TrainSegment> itinerary, RoomKey runFrom)
+    private Game.Train.TrainTripTolls? TripTolls(
+        IReadOnlyList<Game.Train.TrainSegment> itinerary, RoomKey runFrom, Game.Train.ShopSpellPlan? spells)
     {
         if (RouteTolls is not { } tolls || HasTollFreeRoute is not { } tollFree) return null;
         List<RoomKey> stops = itinerary.Select(s => new RoomKey(s.Trainer.Map, s.Trainer.Room)).ToList();
+        if (spells is not null) stops.AddRange(spells.Stops.Select(s => s.Room));
         stops.Add(runFrom);
         return new Game.Train.TrainTripTolls(
             here =>
@@ -545,7 +570,11 @@ public sealed class TrainerWalkManager : IDisposable
             });
     }
 
-    private bool BeginFunding(RoomKey from, TrainerShop first)
+    //
+    // withSpells adds the scrolls the shop leg would buy (and the tolls out to those
+    // shops) to the bill. That is the first ask only: when it can't be met the run is
+    // priced again for the training alone, so a scroll never holds a level back.
+    private bool BeginFunding(RoomKey from, TrainerShop first, bool withSpells = true)
     {
         if (_funding is null || _cpOnlyRun) return false;
 
@@ -559,8 +588,13 @@ public sealed class TrainerWalkManager : IDisposable
         if (cost <= 0) return false;
         ReserveForTraining?.Invoke(cost);
 
+        Game.Train.ShopSpellPlan? spells = withSpells ? ShopSpellsFor(itinerary, levels) : null;
+        long scrolls = spells?.CostCopper ?? 0;
+        _fundingWithSpells = scrolls > 0;
+        if (scrolls <= 0) spells = null;
+
         var trainerRoom = new RoomKey(first.Map, first.Room);
-        switch (_funding.Begin(cost, trainerRoom, TripTolls(itinerary, from)))
+        switch (_funding.Begin(cost + scrolls, trainerRoom, TripTolls(itinerary, from, spells)))
         {
             case Game.Train.TrainFundingStart.Funded:
                 _fundingRetryAt = DateTimeOffset.MinValue;
@@ -569,7 +603,8 @@ public sealed class TrainerWalkManager : IDisposable
             case Game.Train.TrainFundingStart.Collecting:
                 _phase = Phase.Funding;
                 _log?.Info("AutoTrain",
-                    $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper — "
+                    $"Training {levels} level(s) across {itinerary.Count} trainer(s) costs {cost:N0} copper"
+                    + (scrolls > 0 ? $", plus {scrolls:N0} for spell scrolls — " : " — ")
                     + (_funding.IsCheckingFunds
                         ? "checking the purse and bank before deciding."
                         : "collecting the difference first."));
@@ -577,6 +612,8 @@ public sealed class TrainerWalkManager : IDisposable
                 return true;
 
             default:
+                if (_fundingWithSpells) return FundTrainingAlone(from, first);
+
                 // Nothing reachable covers it. Stay armed and say when that changes,
                 // rather than walking somewhere pointless or disarming. The router
                 // reports the exact gap on its Finished event, which has already
@@ -590,6 +627,25 @@ public sealed class TrainerWalkManager : IDisposable
         }
     }
 
+    // The scrolls the shop leg would buy once this run's levels are trained, walking
+    // on from the last trainer. Null when the shop leg won't run.
+    private Game.Train.ShopSpellPlan? ShopSpellsFor(IReadOnlyList<Game.Train.TrainSegment> itinerary, int levels)
+    {
+        if (!_walkRun || itinerary.Count == 0 || PlanShopSpells is not { } plan) return null;
+        if (!ReadSettings().AutoObtainShopSpells) return null;
+        TrainerShop last = itinerary[^1].Trainer;
+        return plan(new RoomKey(last.Map, last.Room), _runFrom, RunLevel + levels);
+    }
+
+    // The scrolls couldn't be paid for on top of the training: price the run again
+    // without them. The shop leg still goes, and buys what the purse then stretches to.
+    private bool FundTrainingAlone(RoomKey from, TrainerShop first)
+    {
+        _fundingWithSpells = false;
+        _log?.Info("AutoTrain", "Can't cover the spell scrolls as well — funding the training alone.");
+        return BeginFunding(from, first, withSpells: false);
+    }
+
     // Recorded on every result, acted on only while we're waiting. Begin's Short
     // branch fires this synchronously before _phase is Funding, so the gap has to be
     // captured unconditionally or that branch has nothing to report.
@@ -599,6 +655,20 @@ public sealed class TrainerWalkManager : IDisposable
     {
         _lastFundingShortfall = result.ShortfallCopper;
         if (_phase != Phase.Funding) return;
+
+        if (!result.Funded && _fundingWithSpells && _target is { } unfunded
+            && _tracker.State.CurrentRoom is { } at)
+        {
+            // Idle first: pricing again can settle as short on the spot, and that
+            // answer comes back through this handler before BeginFunding returns.
+            _phase = Phase.Idle;
+            if (!FundTrainingAlone(at.Key, unfunded))
+            {
+                _target = SelectNearest(at.Key) ?? unfunded;
+                WalkToTrainer(_target.Value, at.Key);
+            }
+            return;
+        }
 
         if (!result.Funded)
         {
@@ -705,6 +775,9 @@ public sealed class TrainerWalkManager : IDisposable
         _cpTargetLevel = 0;
         _cpApplied = false;
         _stopReason = StopReason.None;
+        _walkRun = false;
+        _spellTripTried = false;
+        _fundingWithSpells = false;
     }
 
     private void OnWalkEvent(WalkEvent e)
@@ -1044,6 +1117,8 @@ public sealed class TrainerWalkManager : IDisposable
     // Train Now / armed path) it goes to the log so the user still sees the outcome.
     private void FinishWithReport()
     {
+        if (TryBeginSpellTrip()) return;
+
         string report = BuildReport(_levelsTrained, _stopReason, _cpApplied, _cpTargetLevel,
                                     _attainedLevel > 0 ? _attainedLevel : _startLevel);
         Action<string>? reply = _reply;
@@ -1060,11 +1135,40 @@ public sealed class TrainerWalkManager : IDisposable
         else _log?.Info("AutoTrain", report);
     }
 
+    // With the levels trained, go on to the shops for the scrolls they unlocked. Only
+    // a solo run that walked to its trainer: a party would be left standing, and an
+    // @train in place is a parked character someone else is steering.
+    private bool TryBeginSpellTrip()
+    {
+        if (_spellErrand is null || _spellTripTried || !_walkRun || _levelsTrained == 0) return false;
+        if (_partyTrip || _partyDone is not null) return false;
+        _spellTripTried = true;
+        if (!ReadSettings().AutoObtainShopSpells) return false;
+
+        int level = _attainedLevel > 0 ? _attainedLevel : _stats.Level;
+        if (!_spellErrand.Begin(level, _runFrom)) return false;
+
+        _phase = Phase.Spells;
+        _log?.Info("AutoTrain", $"Trained to level {level} — checking the spell shops before heading back.");
+        StateChanged?.Invoke();
+        return true;
+    }
+
+    private void OnSpellErrandFinished(Game.Train.ShopSpellResult result)
+    {
+        if (_phase != Phase.Spells) return;
+        // Someone took the walker over mid-trip: leave the engine stopped under
+        // them, as a stopped trainer walk does.
+        if (result.Aborted) _resume = default;
+        FinishWithReport();
+    }
+
     // Reset States: end any run or party trip where it stands — nothing resumed,
     // no report and no post-train deposit offer.
     public void Cancel(string reason)
     {
         if (_phase == Phase.Idle && !_partyTrip) return;
+        _spellErrand?.Cancel(reason);
         _partyTrip = false;
         _partyTripTrained = false;
         _resume = default;
@@ -1099,6 +1203,9 @@ public sealed class TrainerWalkManager : IDisposable
         _attainedLevel = 0;
         _cpTargetLevel = 0;
         _stopReason = StopReason.None;
+        _walkRun = false;
+        _spellTripTried = false;
+        _fundingWithSpells = false;
 
         // Inside a party trip the engine stays down: the trip goes on (more stops,
         // the re-form) and EndPartyTrip resumes it.
@@ -1308,6 +1415,7 @@ public sealed class TrainerWalkManager : IDisposable
         _autoTrain.StateChanged -= OnAutoTrainStateChanged;
         _autoTrain.PlanCommitted -= OnCpPlanCommitted;
         if (_funding is not null) _funding.Finished -= OnFundingFinished;
+        if (_spellErrand is not null) _spellErrand.Finished -= OnSpellErrandFinished;
     }
 
     // Believed shortfall from the last funding attempt, and when the armed run will

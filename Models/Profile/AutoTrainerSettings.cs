@@ -91,4 +91,14 @@ public sealed class AutoTrainerSettings
 
     // Only collect from this flagged stash room. null = any stash room.
     public RoomRef? FundingStash { get; set; }
+
+    // After a train trip, go on to the shops that sell the scrolls for spells the
+    // character can now learn and hasn't, buy them and read them. The trip's
+    // funding errand fetches the scroll money along with the training fee.
+    public bool AutoObtainShopSpells { get; set; }
+
+    // Spells the user has switched OFF for that shop trip, by Spells.Name. Names
+    // rather than numbers because a data-set swap renumbers the rows; the skipped
+    // set (rather than the wanted one) so a newly listed spell defaults to wanted.
+    public List<string>? SkippedShopSpells { get; set; }
 }

@@ -2623,6 +2623,48 @@ public sealed class CastingDirectorTests
         Assert.Equal(2, uses());
     }
 
+    // A re-draw can deal the card that was already up (user, 2026-10-02). The line
+    // tracker latches a record as applied until its wear-off, so without a release at
+    // each draw the same card would land unseen and the slot would draw for ever.
+    [Fact]
+    public void DrawItem_TheSameCardAgain_IsStillRecognised()
+    {
+        using CureHarness h = new();
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: "card-priest-id", Name: "card-priest", Flags: MessageFlags.None, RawFlagsHex: 0,
+            CasterMessage: string.Empty, TargetMessage: string.Empty, WitnessMessage: string.Empty,
+            AppliedMessage: "When the Priest is played",
+            AppliedEndsWith: "The gaze of luck is no longer upon you",
+            Links: new[] { new GameDataLink("Spells", 966) }));
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = Deck, CastOnSelf = true, RecastMarginSec = 15 });
+        h.Health.BlessIfAboveMa = 50;
+        h.State.MaxMa = 100;
+        h.State.Ma = 80;
+        h.State.InCombat = false;
+        h.State.Position = PlayerPosition.Standing;
+        int uses = 0;
+        h.Director.SetItemCastSource(durationOf: _ => null, execute: _ => { uses++; return true; });
+        h.Director.SetItemDrawSource(token => token == Deck ? new[] { (966, "card-priest", 720L) } : null);
+        const string priest = "\"When the Priest is played, wisdom and insight are paramount. Faith and";
+
+        h.Director.Evaluate();
+        h.FeedLine(priest);
+        Assert.Equal(1, uses);
+
+        // The card runs out by the clock with no wear-off line seen: draw again.
+        h.Now = h.Now.AddSeconds(730);
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Equal(2, uses);
+
+        // The priest again. It has to count, or the slot is due once the wait ends.
+        h.FeedLine(priest);
+        h.Now = h.Now.AddSeconds(20);
+        h.Cast.OnCombatTick();
+        h.Director.Evaluate();
+        Assert.Equal(2, uses);
+    }
+
     // ----- Item-cast buffs (PR 10.18 #token Bless slot) --------------
 
     [Fact]
