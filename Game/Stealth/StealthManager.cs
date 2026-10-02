@@ -428,7 +428,11 @@ public sealed class StealthManager : IDisposable
     // is re-taken where we stand, a beat later: a gear swap is a burst of commands,
     // and an `sn` sent into the middle of one would be broken again by the next.
     private static readonly TimeSpan InPlaceReSneakDelay = TimeSpan.FromMilliseconds(700);
+    private static readonly TimeSpan InPlaceRestRecheck = TimeSpan.FromSeconds(2);
     private Func<bool>? _isEngineDriving;
+    private Func<bool>? _restUnderWay;
+    private Func<bool>? _sneakThenRest;
+    private bool _waitingOnRestLogged;
     private Avalonia.Threading.DispatcherTimer? _inPlaceTimer;
 
     // True while a walk, loop or auto-lair is driving the moves. Unwired, nothing is
@@ -437,6 +441,18 @@ public sealed class StealthManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isEngineDriving);
         _isEngineDriving = isEngineDriving;
+    }
+
+    // How a rest and a sneak share the spot we stand on (GAME_MECHANICS "Sneaking and
+    // resting in place"). restUnderWay: resting or meditating, by the engine or by
+    // hand, with a pool still short of rest-max. sneakThenRest: a ShadowRest character
+    // whose rest the health engine sends again once the sneak is up.
+    public void SetIdleRestChecks(Func<bool> restUnderWay, Func<bool> sneakThenRest)
+    {
+        ArgumentNullException.ThrowIfNull(restUnderWay);
+        ArgumentNullException.ThrowIfNull(sneakThenRest);
+        _restUnderWay = restUnderWay;
+        _sneakThenRest = sneakThenRest;
     }
 
     // Auto-Sneak was just switched on: sneak now rather than at the next clear room.
@@ -455,8 +471,13 @@ public sealed class StealthManager : IDisposable
     {
         if (_isEngineDriving?.Invoke() != false) return;
         if (_isAutoSneakEnabled?.Invoke() != true) return;
+        ArmInPlaceTimer(InPlaceReSneakDelay);
+    }
+
+    private void ArmInPlaceTimer(TimeSpan delay)
+    {
         _inPlaceTimer?.Stop();
-        _inPlaceTimer = new Avalonia.Threading.DispatcherTimer(InPlaceReSneakDelay,
+        _inPlaceTimer = new Avalonia.Threading.DispatcherTimer(delay,
             Avalonia.Threading.DispatcherPriority.Background, (_, _) => ReSneakInPlace());
         _inPlaceTimer.Start();
     }
@@ -467,10 +488,28 @@ public sealed class StealthManager : IDisposable
     {
         _inPlaceTimer?.Stop();
         _inPlaceTimer = null;
-        // An engine started in the meantime owns it from here; a rest would end a
-        // fresh sneak, so the next move's re-sneak does the job instead.
-        if (_isEngineDriving?.Invoke() != false) return;
-        if (_skipReSneakForRest?.Invoke() == true) return;
+        // An engine started in the meantime owns it from here.
+        if (_isEngineDriving?.Invoke() != false || _isAutoSneakEnabled?.Invoke() != true)
+        {
+            _waitingOnRestLogged = false;
+            return;
+        }
+        // `sn` stands a resting character up and `rest` ends a sneak, so a rest still
+        // short of rest-max is left to finish — one the player typed as much as the
+        // engine's own — and this looks again. Once it has topped off, the sneak goes
+        // out. A ShadowRest rest keeps a sneak, so there the sneak goes first and the
+        // health engine sends its rest again.
+        bool restWins = _skipReSneakForRest?.Invoke() == true
+            || (_restUnderWay?.Invoke() == true && _sneakThenRest?.Invoke() != true);
+        if (restWins)
+        {
+            if (!_waitingOnRestLogged)
+                _log?.Info(LogCategory, "re-sneak in place waits — a sneak would break the rest; sneaking once it reaches rest-max");
+            _waitingOnRestLogged = true;
+            ArmInPlaceTimer(InPlaceRestRecheck);
+            return;
+        }
+        _waitingOnRestLogged = false;
         TryBeginAutoSneak("in place — nothing is driving the moves");
     }
 

@@ -388,6 +388,32 @@ public sealed class HealthManagerTests
         Assert.True(h.HealthGateHeld);
     }
 
+    // A rest typed by hand above the rest trigger asserts no gate, but it is still a
+    // rest under way until HP reaches rest-max — the in-place re-sneak reads this.
+    [Fact]
+    public void RestingShortOfRestMax_TracksPostureAndRestMax()
+    {
+        HealthSettings s = new()
+        {
+            HpThresholdMode = ThresholdMode.Absolute,
+            RestIfBelowHp   = 60,
+            RestMaxHp       = 195,
+        };
+        using Harness h = new(s);
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 150;
+
+        Assert.False(h.Health.RestingShortOfRestMax);     // standing
+
+        h.State.Position = PlayerPosition.Resting;
+        Assert.False(h.HealthGateHeld);
+        Assert.True(h.Health.RestingShortOfRestMax);
+
+        h.State.Hp = 195;
+        Assert.False(h.Health.RestingShortOfRestMax);     // topped off
+    }
+
     [Fact]
     public void ManaTriggerZero_AtZeroMana_DoesNotAssert()
     {

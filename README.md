@@ -5,7 +5,7 @@
 > - Auto-train funding reads a stash before taking from it: only what the train is short, in the largest coins, and nothing at all if stash plus bank still fall short
 > - A buff that removes another only clears it on the same target, so smite on one party member and greater smite on another both stay up
 > - The Witchunter quest is no longer announced as available to other classes
-> - Auto-Sneak keeps you sneaking when you walk by hand: it re-sneaks ahead of a move you type, after a command that breaks it, and when a fight ends
+> - Auto-Sneak keeps you sneaking when you walk by hand: it re-sneaks ahead of a move you type, after a command that breaks it, and when a fight ends, and waits out a rest instead of breaking it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

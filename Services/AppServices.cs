@@ -4719,6 +4719,11 @@ public sealed class AppServices
         // With no walk, loop or auto-lair driving the moves (walking by hand), a
         // broken sneak is re-taken in place; an engine re-takes it at its pre-move hook.
         Stealth.SetEngineDrivingCheck(() => ResolveActiveMovementEngine() is not null);
+        // In place, a rest short of rest-max isn't broken for a sneak. With ShadowRest
+        // the sneak goes first, but only for a rest the health engine will send again.
+        Stealth.SetIdleRestChecks(
+            restUnderWay: () => Health.RestingShortOfRestMax,
+            sneakThenRest: () => Health.UsesShadowRest && Health.IsRecoveringRest);
         // A refused move never left the room — Stealth drops its arrival-confirm wait.
         RoomTracker.MoveBlocked += Stealth.NoteMoveBlocked;
         // Auto-hide is suppressed in a party — a hidden member falls off the

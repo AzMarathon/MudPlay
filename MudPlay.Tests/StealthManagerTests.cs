@@ -466,6 +466,35 @@ public sealed class StealthManagerTests
         Assert.True(h.Stealth.IsSneaking);
     }
 
+    // Stock (user, 2026-10-02): a rest typed by hand isn't broken to sneak. The sneak
+    // waits for the rest to reach rest-max and goes out then.
+    [Fact]
+    public void ManualPlay_RestShortOfRestMax_IsNotBrokenToSneak()
+    {
+        using AutoHarness h = ManualPlay();
+        bool resting = true;
+        h.Stealth.SetIdleRestChecks(restUnderWay: () => resting, sneakThenRest: () => false);
+
+        h.Stealth.ReSneakInPlaceForTests();
+        Assert.Empty(h.Sent);
+
+        resting = false;                          // topped off
+        h.Stealth.ReSneakInPlaceForTests();
+        Assert.Equal("sn", h.LastSent());
+    }
+
+    // Paradigm ShadowRest (user, 2026-10-02): sneak, then rest. The sneak goes out
+    // over a rest the health engine will send again.
+    [Fact]
+    public void ManualPlay_ShadowRest_SneaksOverItsOwnRest()
+    {
+        using AutoHarness h = ManualPlay();
+        h.Stealth.SetIdleRestChecks(restUnderWay: () => true, sneakThenRest: () => true);
+
+        h.Stealth.ReSneakInPlaceForTests();
+        Assert.Equal("sn", h.LastSent());
+    }
+
     [Fact]
     public void ManualPlay_SwitchingAutoSneakOn_SneaksWhereWeStand()
     {

@@ -3254,6 +3254,10 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **Being spotted:** by a monster with see-hidden, or by a Gaunt One player who has finished their level-15 race quest *([CONFIRMED] 2026-09-28, user)*.
   - **Other:** `quit`, `suicide`; `sneak` itself resets the flag before it re-tries.
   - Not on the list: `get` / `drop`, `look`, telepaths, gossip and other channels, `use` — none of these clear it in the DLL.
+- **Sneaking and resting in place** *([CONFIRMED] 2026-10-02, user)*:
+  - **Stock: a sneak and a rest don't share a spot.** `rest` ends the sneak (see *What ends a sneak* in this topic), and sending `sn` while resting breaks the rest (user: "if i manually typed rest, it shouldnt break the rest to sneak unless we were above our rest max hp").
+  - **Paradigm with ShadowRest: sneak, then rest.** The rest keeps the sneak, so that order is fine (user: "its fine to send a sneak then rest because of shadowrest") — see *Health, resting & recovery → ShadowRest*.
+  - Whether `sn` stands a ShadowRest character up out of a rest already under way is not recorded *([NEEDS CONFIRMATION]: does `sn` typed while ShadowResting end the rest on Paradigm?)*. A Paradigm race or class without ShadowRest is treated as Stock (**Client policy**).
 
 **Client use:**
 - The backstab loadout is applied in the walker's pre-move step, ahead of the `sn`, rather than raced at room-clear (because of the equip-before-sneak rule).
@@ -3284,6 +3288,13 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     at combat end (`NoteCombatEndedStealthReset`), and when Auto-Sneak is switched on. A hand-typed move
     also sends `sn` ahead of itself (`NoteTypedMove`, off `OutboundMovementObserver.MoveSent`), since the
     report shows `sea` typed about a second before the next step.
+  - **The in-place re-sneak yields to a rest** (*Sneaking and resting in place* in this topic; **Client
+    policy**, user 2026-10-02): while the character is resting or meditating with a pool short of rest-max
+    (`HealthManager.RestingShortOfRestMax` — the engine's rest or one typed by hand), no `sn` goes out;
+    `StealthManager.ReSneakInPlace` looks again every 2 s and sneaks once the rest has topped off. With
+    ShadowRest utilized the `sn` goes out over a rest the health engine is running (`IsRecoveringRest`),
+    which then sends its rest again (`SneakBeforeRest`); a hand-typed rest the engine wouldn't re-send is
+    left to finish like any other.
   - **An `sn` answered after a later sneak-ending command** (same report): `sn` then `sea` leaves the
     character not sneaking, but the `Attempting to sneak...` for that `sn` arrives after the `sea` was
     noted. `StealthManager` ignores that answer instead of reading it as sneaking.
