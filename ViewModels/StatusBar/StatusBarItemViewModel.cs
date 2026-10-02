@@ -20,8 +20,8 @@ public sealed partial class StatusBarItemViewModel : ObservableObject
     public bool IsConnectionLight => Def.Kind == StatusBarItemKind.ConnectionLight;
     public bool IsMono => Def.Mono;
 
-    // The item's plain-text reading: what a text item shows, and what any item
-    // contributes to a marquee row.
+    // The item's plain-text reading: what a text item shows (and so what it adds
+    // to a marquee row's crawl).
     [ObservableProperty] private string _text = string.Empty;
 
     // False hides the item and closes the gap it would leave: an empty text, or

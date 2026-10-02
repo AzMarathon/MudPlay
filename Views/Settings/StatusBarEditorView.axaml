@@ -114,7 +114,7 @@
                                            Foreground="{StaticResource ChromeFgSecBrush}"/>
                                 <CheckBox Grid.Column="1" Content="Scroll as a marquee"
                                           IsChecked="{Binding Marquee, Mode=TwoWay}" VerticalAlignment="Center"
-                                          ToolTip.Tip="Show this row as one line of text crawling sideways (left items, then centre, then right), so it can carry more than fits the window. The chip, warning and light show as their text."/>
+                                          ToolTip.Tip="Crawl this row's text sideways as one line (left items, then centre, then right), so it can carry more than fits the window. The engine chip, statline warning and connection light don't crawl: they stay at the ends of the row."/>
                                 <Button Grid.Column="3" Content="Remove row" Command="{Binding RemoveCommand}"
                                         IsVisible="{Binding CanRemove}" VerticalAlignment="Center"/>
                             </Grid>

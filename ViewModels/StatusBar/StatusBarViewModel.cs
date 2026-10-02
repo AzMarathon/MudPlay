@@ -147,7 +147,7 @@ public sealed class StatusBarViewModel : IDisposable
         foreach (StatusBarRowViewModel row in Rows)
         {
             if (!row.IsMarquee) continue;
-            string line = string.Join(MarqueeSeparator, row.Items.Where(i => i.IsShown).Select(i => i.Text));
+            string line = string.Join(MarqueeSeparator, row.Items.Where(i => i.IsText && i.IsShown).Select(i => i.Text));
             row.MarqueeText = StatusBarMarquee.Frame(line, _frame);
         }
     }

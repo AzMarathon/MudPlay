@@ -149,13 +149,25 @@
                                           ItemsPanel="{StaticResource StatusZone}"/>
                         </Grid>
 
-                        <!-- Marquee: the whole row as one crawling line. Fixed-width
-                             type, so each step moves the text by the same amount. -->
-                        <TextBlock Classes="StatusSlot StatusMono"
-                                   IsVisible="{Binding IsMarquee}"
-                                   Text="{Binding MarqueeText}"
-                                   TextWrapping="NoWrap"
-                                   ClipToBounds="True"/>
+                        <!-- Marquee: the row's text as one crawling line, in
+                             fixed-width type so each step moves it by the same
+                             amount. The chip, warning and light don't crawl: they
+                             hold their ends of the row. -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding IsMarquee}">
+                            <ItemsControl Grid.Column="0" Classes="Zone" ItemsSource="{Binding PinnedLeft}"
+                                          ItemTemplate="{StaticResource StatusItem}"
+                                          ItemsPanel="{StaticResource StatusZone}"/>
+                            <TextBlock Grid.Column="1" Classes="StatusSlot StatusMono"
+                                       Text="{Binding MarqueeText}"
+                                       TextWrapping="NoWrap"
+                                       ClipToBounds="True"/>
+                            <ItemsControl Grid.Column="2" Classes="Zone" ItemsSource="{Binding PinnedRight}"
+                                          HorizontalAlignment="Right"
+                                          ItemTemplate="{StaticResource StatusItem}"
+                                          ItemsPanel="{StaticResource StatusZone}"/>
+                        </Grid>
                     </Panel>
                 </Border>
             </DataTemplate>

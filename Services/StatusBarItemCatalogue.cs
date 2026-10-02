@@ -2,8 +2,8 @@ using System.Text;
 
 namespace MudPlay.Services;
 
-// How a status-bar item draws. Every kind also has a plain-text reading, used in a
-// marquee row and inside a custom text.
+// How a status-bar item draws. Every kind also has a plain-text reading, which a
+// custom text shows when it names the item in braces.
 public enum StatusBarItemKind
 {
     Text,

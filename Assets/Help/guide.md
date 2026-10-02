@@ -2640,7 +2640,7 @@ Each row is drawn as three boxes — **Left**, **Centre**, **Right** — laid ou
 
 - **+ Add** (under each side) — opens a menu of everything the bar can show, grouped by kind (Standard bar, Character, Vitals, …). Point at a group, click an item, and it goes on the end of that side. Hover an item for what it shows.
 - **Click a placed item** — opens its menu: **Move earlier** / **Move later** within its side, **Move to** another side (or a side of another row), and **Remove**.
-- **Scroll as a marquee** — shows the row as one line of text crawling sideways (left items, then centre, then right), like the "update available" crawl in the title bar. Use it when you want more on a row than fits the window. In a marquee row the chip, the statline warning and the connection light show as their text.
+- **Scroll as a marquee** — shows the row as one line of text crawling sideways (left items, then centre, then right), like the "update available" crawl in the title bar. Use it when you want more on a row than fits the window. Only text crawls: the engine chip, the statline warning and the connection light stay where they are, at the left end (if they sit on the left or centre) or the right end (if they sit on the right).
 - **Remove row** — on every row when there is more than one; the bar always keeps at least one.
 - **Add a status bar row** — up to four. A new row goes under the others, and the window grows by the height of the row so the terminal keeps its size (and shrinks back when a row is removed).
 - **Reset to default** — back to the single original row.
