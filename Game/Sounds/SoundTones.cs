@@ -32,10 +32,10 @@ public static class SoundTones
     // One note: when it starts, its pitch, how long it rings and how hard. Decay is
     // how fast it dies away (higher = shorter, more bell-like). Attack and Release
     // are the fade in and out, in seconds: the defaults are a struck note, longer
-    // ones a swell. GlideTo, when set, slides the pitch there over the note's length.
+    // ones a swell.
     private readonly record struct Note(
         double Start, double Hz, double Length, double Level, double Decay,
-        double Attack = 0.004, double Release = 0.01, double GlideTo = 0);
+        double Attack = 0.004, double Release = 0.01);
 
     // The tone as a 16-bit mono WAV file, or null for a name that isn't a tone.
     public static byte[]? Render(string tone)
@@ -63,28 +63,52 @@ public static class SoundTones
         return notes is null ? null : ToWav(Mix(notes));
     }
 
-    // A level-up "ding": a rising swell that opens into a bright, slowly fading D
-    // major chord with a few high sparkles on top. The slightly detuned copies of
-    // three chord notes beat against them, which is what makes it shimmer.
-    private static readonly Note[] LevelUpDing =
+    // A level-up "ding", about four seconds: a deep boom that swells twice and dies
+    // away slowly, a short strike at the start, and a bright shimmer that rises in
+    // over the first half second and hangs above it. Built in layers; each layer is
+    // one loudness curve shared by a handful of pitches.
+    private static readonly Note[] LevelUpDing = new[]
     {
-        new(0, 293.7, 0.50, 0.20, 0, Attack: 0.32, Release: 0.16, GlideTo: 1174.7),
-        new(0.05, 587.3, 0.45, 0.10, 0, Attack: 0.30, Release: 0.14, GlideTo: 2349.3),
+        // The boom. Every layer sits on the same 43 Hz so they add rather than cancel:
+        // the opening swell, the larger second surge, and the long tail under it.
+        Layer(0.00, 0.06, 0, 1.25, 0.30, 0.41, (43, 1), (86, 0.45), (89, 0.35)),
+        Layer(1.00, 0.25, 0, 1.20, 0.45, 0.24, (43, 1), (86, 0.45), (145, 0.4)),
+        Layer(1.00, 0.40, 0.55, 2.70, 1.20, 0.54, (43, 1), (86, 0.45)),
 
-        new(0.36, 146.8, 1.4, 0.22, 3.0, Attack: 0.02, Release: 0.15),
-        new(0.36, 293.7, 1.4, 0.30, 2.0, Attack: 0.03, Release: 0.15),
-        new(0.36, 587.3, 1.4, 0.34, 2.2, Attack: 0.03, Release: 0.15),
-        new(0.36, 880.0, 1.4, 0.26, 2.4, Attack: 0.03, Release: 0.15),
-        new(0.36, 1174.7, 1.4, 0.30, 2.6, Attack: 0.03, Release: 0.15),
-        new(0.36, 1480.0, 1.4, 0.20, 3.0, Attack: 0.03, Release: 0.15),
-        new(0.36, 1760.0, 1.4, 0.14, 3.4, Attack: 0.03, Release: 0.15),
-        new(0.36, 589.6, 1.4, 0.15, 2.2, Attack: 0.03, Release: 0.15),
-        new(0.36, 884.4, 1.4, 0.10, 2.4, Attack: 0.03, Release: 0.15),
-        new(0.36, 1170.0, 1.4, 0.14, 2.6, Attack: 0.03, Release: 0.15),
+        // The rumble over it. Neighbouring pitches a few Hz apart beat against each other.
+        Layer(0.00, 0.10, 1.6, 4.00, 0.80, 0.505, (145, 1), (161, 0.9), (243, 0.25)),
+        Layer(0.15, 0.10, 1.6, 4.00, 0.80, 0.406, (143.2, 1), (156, 0.7), (272, 0.3)),
+        Layer(0.45, 0.30, 1.2, 3.86, 0.80, 0.314, (146.5, 1), (162.6, 0.6), (218, 0.35)),
 
-        new(0.50, 2349.3, 0.5, 0.10, 7), new(0.62, 2960.0, 0.5, 0.08, 7),
-        new(0.74, 3520.0, 0.5, 0.07, 7), new(0.86, 4698.6, 0.5, 0.05, 8),
-    };
+        // The strike, then the mid swell behind it.
+        Layer(0.00, 0.006, 7, 1.00, 0.30, 0.21,
+            (312, 0.7), (377, 0.8), (415, 1), (441, 0.55), (560, 0.4), (614, 0.45), (716, 0.4), (775, 0.4)),
+        Layer(0.00, 0.006, 1, 1.00, 0.30, 0.06, (900, 1), (1150, 0.8), (1470, 0.7)),
+        Layer(0.00, 0.10, 1.6, 3.00, 0.80, 0.09, (350, 1), (382, 0.5), (431, 0.5)),
+        Layer(0.70, 0.30, 1.6, 3.30, 0.80, 0.19, (349, 1), (447, 0.7), (538, 0.4), (760, 0.5), (810, 0.45)),
+        Layer(0.45, 0.50, 2.2, 3.00, 0.80, 0.214, (813, 0.8), (1308, 0.7), (1470, 1), (1577, 0.6)),
+        Layer(1.00, 0.10, 1.6, 2.50, 0.80, 0.086, (1265, 1), (1954, 0.7)),
+
+        // The shimmer: high bell-like pitches that come in as three waves.
+        Layer(0.12, 0.45, 1.2, 4.10, 0.80, 0.24, (2939, 1), (3494, 0.8), (3305, 0.45), (4048, 0.45)),
+        Layer(0.80, 0.50, 2.2, 3.50, 0.80, 0.189, (2342, 0.8), (2573, 0.6), (4409, 0.8), (4592, 0.9), (4775, 1)),
+        Layer(0.60, 0.10, 1.6, 3.70, 0.80, 0.085, (3133, 1), (3623, 1)),
+        Layer(0.45, 0.30, 1.2, 3.86, 0.80, 0.119, (5329, 1), (6062, 0.6), (7935, 0.4)),
+        Layer(0.15, 0.60, 2.2, 4.10, 0.80, 0.19, (5146, 0.8), (5378, 0.7), (7100, 0.5), (8554, 0.5), (9593, 0.4)),
+    }.SelectMany(static layer => layer).ToArray();
+
+    // Several pitches sharing one loudness curve. Level is the layer's as a whole:
+    // it is split between the pitches by weight so their combined power matches a
+    // single note at that level.
+    private static Note[] Layer(
+        double start, double attack, double decay, double length, double release, double level,
+        params (double Hz, double Weight)[] pitches)
+    {
+        double norm = Math.Sqrt(pitches.Sum(static p => p.Weight * p.Weight));
+        return pitches
+            .Select(p => new Note(start, p.Hz, length, level * p.Weight / norm, decay, attack, release))
+            .ToArray();
+    }
 
     private static short[] Mix(Note[] notes)
     {
@@ -100,7 +124,7 @@ public static class SoundTones
                 // Even a struck note fades in and out over a few ms, so it never clicks.
                 double attack = Math.Min(1, t / n.Attack), release = Math.Min(1, (n.Length - t) / n.Release);
                 double envelope = attack * release * Math.Exp(-n.Decay * t);
-                double phase = 2 * Math.PI * Phase(n, t);
+                double phase = 2 * Math.PI * n.Hz * t;
                 double wave = Math.Sin(phase) + 0.25 * Math.Sin(2 * phase);
                 mix[first + i] += n.Level * envelope * wave / 1.25;
             }
@@ -116,15 +140,6 @@ public static class SoundTones
         for (int i = 0; i < mix.Length; i++)
             pcm[i] = (short)(Math.Clamp(mix[i] * scale, -1, 1) * short.MaxValue * 0.9);
         return pcm;
-    }
-
-    // Cycles elapsed t seconds into the note. A gliding note's pitch moves by equal
-    // musical steps, so its cycle count is the integral of that exponential curve.
-    private static double Phase(Note n, double t)
-    {
-        if (n.GlideTo <= 0 || n.GlideTo == n.Hz) return n.Hz * t;
-        double ratio = n.GlideTo / n.Hz;
-        return n.Hz * n.Length / Math.Log(ratio) * (Math.Pow(ratio, t / n.Length) - 1);
     }
 
     private static byte[] ToWav(short[] pcm)

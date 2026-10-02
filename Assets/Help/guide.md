@@ -3867,7 +3867,7 @@ A walk or trip that can't be finished (no path, a leg fails) still runs its Then
 
 **Progress**
 
-- **Level up** — you train a level. Its default sound is **Ding**: a rising swell that opens into a bright, slowly fading chord.
+- **Level up** — you train a level. Its default sound is **Ding**: about four seconds of deep, swelling boom under a bright shimmer that fades slowly.
 - **Loop milestone** *(every 100)* — every so many laps of the running loop. The count is the loop's own lap count: it carries on across a sell, train or bank detour and starts again when you start a loop.
 - **Kill milestone** *(every 300)* — every so many kills since this character was loaded.
 - **Walk finished** — a walk-to reaches its destination. A loop lap, and the legs of a sell / train / bank detour, don't count.
