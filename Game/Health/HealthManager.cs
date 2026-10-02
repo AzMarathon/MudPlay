@@ -130,6 +130,7 @@ public sealed class HealthManager : IDisposable
     private Action? _onRecoveryComplete;        // any rest gate topped off — resume a held neutral engage
     private bool _wasRecovering;                // falling-edge latch for _onRecoveryComplete
     private Func<bool>? _shouldSkipRestHere;    // running loop's current room is a "do not rest" waypoint
+    private Func<bool>? _isRestEnabled;         // the Auto-Rest switch; unset = resting follows the engine switch
     private Func<(bool Hp, bool Mana)>? _restHere;  // running loop's current room is a "rest up here" waypoint
     private Func<bool>? _equipmentApplying;     // a gear-set swap is streaming wear/rem — hold rest so we don't thrash it
     // Rest-target pool ceilings. _defaultSetMax* = the DEFAULT gear set's max HP/mana
@@ -515,9 +516,21 @@ public sealed class HealthManager : IDisposable
         return _hpGateAsserted || _maGateAsserted;
     }
 
-    // Do-not-rest wins over rest-up-here on the same room.
+    // Do-not-rest, and Auto-Rest being off, win over rest-up-here on the same room.
     private (bool Hp, bool Mana) RestHereNow() =>
-        _shouldSkipRestHere?.Invoke() == true ? default : _restHere?.Invoke() ?? default;
+        RestSwitchedOff() || _shouldSkipRestHere?.Invoke() == true ? default : _restHere?.Invoke() ?? default;
+
+    // Wire the Auto-Rest switch. The engine switch (isEnabled) turns the whole
+    // manager off; this one turns off only the resting — the recovery holds and the
+    // rest / meditate sends — and leaves the flee and the emergency hangup running,
+    // so a character healing by spell alone still runs and hangs up when it must.
+    public void SetRestEnabledGate(Func<bool> isRestEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(isRestEnabled);
+        _isRestEnabled = isRestEnabled;
+    }
+
+    private bool RestSwitchedOff() => _isRestEnabled?.Invoke() == false;
 
     public void SetDoNotRestSelector(Func<bool> shouldSkipRestHere)
     {
@@ -812,7 +825,7 @@ public sealed class HealthManager : IDisposable
     {
         if (!_isEnabled())
         {
-            // Engine off via Settings → General → Auto-Heal / Rest.
+            // Engine off: Auto-Heal and Auto-Rest are both off.
             // Defensive clear in case it was asserted just before the
             // user toggled off.
             if (_hpGateAsserted)
@@ -955,7 +968,10 @@ public sealed class HealthManager : IDisposable
         // hold — the loop stays running and advances out of it — and we release
         // the hold if it was already up. Only THIS room is protected; the moment
         // the loop steps into another room this re-evaluates and rests normally.
-        bool skipRest = _shouldSkipRestHere?.Invoke() ?? false;
+        // Auto-Rest off behaves like a do-not-rest room everywhere: no hold is raised
+        // and one already up is released.
+        bool restOff = RestSwitchedOff();
+        bool skipRest = restOff || (_shouldSkipRestHere?.Invoke() ?? false);
         (bool restHereHp, bool restHereMa) = RestHereNow();
 
         // Falling edge: combat was on as of the previous Evaluate call, off now.
@@ -1038,7 +1054,8 @@ public sealed class HealthManager : IDisposable
             _hpGateConfirmed = false;
             _coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate,
                 AsserterName,
-                skipRest
+                restOff ? "auto-rest is off"
+                    : skipRest
                     ? "do-not-rest room — advancing instead of resting"
                     : _restInFlight || wasActivelyResting
                         ? $"HP {_state.Hp}/{_state.MaxHp} >= clear-floor={hpClearFloor} (rest-target={hpRestTarget}{(hpBoost > 0 ? $" + pre-rest boost {hpBoost}" : "")})"
@@ -1076,7 +1093,8 @@ public sealed class HealthManager : IDisposable
             _maGateConfirmed = false;
             _coordinator.ClearGate(MovementCoordinator.ManaRecoveryGate,
                 AsserterName,
-                skipRest
+                restOff ? "auto-rest is off"
+                    : skipRest
                     ? "do-not-rest room — advancing instead of resting"
                     : ManaAtGameFull() && _state.Ma < maClearFloor
                         ? $"MA {_state.Ma}/{_state.MaxMa} — the game says mana is full"
@@ -1093,8 +1111,19 @@ public sealed class HealthManager : IDisposable
         // start, where do-not-rest eats it again: the reported "whole loop won't
         // rest"). Latch the deferred deficit here so NoteRoomChanged re-arms on the
         // next room change.
-        if (skipRest && (_state.Hp < hpRestTrigger || _state.Ma < maRestTrigger))
+        if (skipRest && !restOff && (_state.Hp < hpRestTrigger || _state.Ma < maRestTrigger))
             _skipRestDeferredRecovery = true;
+
+        // Auto-Rest switched off while a follower's @wait is out: the pools may never
+        // reach rest-max now, so release the leader rather than hold it for a rest
+        // that isn't coming.
+        if (restOff && _partyWaitSignaled)
+        {
+            _partyWaitSignaled = false;
+            _partyOkRestedSince = null;
+            _partyOkHeldSince = null;
+            _requestPartyOk?.Invoke();
+        }
 
         // ----- party-follower @wait / @ok --------------------------
         // @wait fires when a recovery gate first asserts (we dropped below a
@@ -1333,6 +1362,7 @@ public sealed class HealthManager : IDisposable
         // hit rest-max NeedsOpportunisticTopOff goes false and the post-rest
         // chain fires through the shared !shouldRest recovery branch.
         bool opportunistic = !anyGate
+            && !restOff
             && !selfPoisoned
             && (_isLeaderResting?.Invoke() ?? false)
             && NeedsOpportunisticTopOff(s);
@@ -1346,6 +1376,7 @@ public sealed class HealthManager : IDisposable
         // paradigm-20260827-132906). The movement gate keeps us sitting until the
         // @wait clears, at which point the resumed engine's next move stands us up.
         bool leaderWaitedRest = !anyGate
+            && !restOff
             && !selfPoisoned
             && (_isLeaderWaited?.Invoke() ?? false)
             && NeedsWaitDowntimeTopOff();

@@ -255,6 +255,8 @@
                 <MenuItem Header="Auto Combat"      ToggleType="CheckBox" IsChecked="{Binding IsAutoCombatActive,   Mode=TwoWay}"/>
                 <MenuItem Header="Auto Nuke"        ToggleType="CheckBox" IsChecked="{Binding IsAutoNukeActive,     Mode=TwoWay}"/>
                 <MenuItem Header="Auto Rest / Heal" ToggleType="CheckBox" IsChecked="{Binding IsAutoHealRestActive, Mode=TwoWay}"/>
+                <MenuItem Header="Auto Heal"        ToggleType="CheckBox" IsChecked="{Binding IsAutoHealActive,     Mode=TwoWay}"/>
+                <MenuItem Header="Auto Rest"        ToggleType="CheckBox" IsChecked="{Binding IsAutoRestActive,     Mode=TwoWay}"/>
                 <MenuItem Header="Auto Bless"       ToggleType="CheckBox" IsChecked="{Binding IsAutoBlessActive,    Mode=TwoWay}"/>
                 <MenuItem Header="Auto Light"       ToggleType="CheckBox" IsChecked="{Binding IsAutoLightActive,    Mode=TwoWay}"/>
                 <MenuItem Header="Auto Get Items"   ToggleType="CheckBox" IsChecked="{Binding IsAutoGetItemsActive, Mode=TwoWay}"/>

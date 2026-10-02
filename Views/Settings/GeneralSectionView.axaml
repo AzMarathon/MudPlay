@@ -260,10 +260,14 @@
                               IsEnabled="{Binding IsAutoNukeWired}"
                               Content="Auto-Nuke"
                               ToolTip.Tip="Master switch for combat damage spells (the attack-spell cascade)."/>
-                    <CheckBox IsChecked="{Binding AmAutoHealRest, Mode=TwoWay}"
-                              IsEnabled="{Binding IsAutoHealRestWired}"
-                              Content="Auto-Heal / Rest"
-                              ToolTip.Tip="Master switch for HP/MA management — the rest / stand cycle, heal thresholds, and flee."/>
+                    <CheckBox IsChecked="{Binding AmAutoHeal,     Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoHealWired}"
+                              Content="Auto-Heal"
+                              ToolTip.Tip="Master switch for healing: heal and cure casts on yourself and your party, between-round debuffs, and aiding a downed party member."/>
+                    <CheckBox IsChecked="{Binding AmAutoRest,     Mode=TwoWay}"
+                              IsEnabled="{Binding IsAutoRestWired}"
+                              Content="Auto-Rest"
+                              ToolTip.Tip="Master switch for resting: stopping to rest or meditate when HP or mana drops below your rest thresholds. Fleeing and the emergency hangup keep working while either Auto-Heal or Auto-Rest is on."/>
                     <CheckBox IsChecked="{Binding AmAutoBless,    Mode=TwoWay}"
                               IsEnabled="{Binding IsAutoBlessWired}"
                               Content="Auto-Bless"
@@ -326,8 +330,8 @@
                               Content="Auto-Nuke"
                               ToolTip.Tip="When checked: Auto-Nuke is re-enabled on reconnect if it was disabled during the session."/>
                     <CheckBox IsChecked="{Binding ReEnableAutoHealRestOnReconnect, Mode=TwoWay}"
-                              Content="Auto-Heal/Rest"
-                              ToolTip.Tip="When checked: Auto-Heal/Rest is re-enabled on reconnect if it was disabled during the session."/>
+                              Content="Auto-Heal and Auto-Rest"
+                              ToolTip.Tip="When checked: Auto-Heal and Auto-Rest are both re-enabled on reconnect if either was disabled during the session."/>
                     <CheckBox IsChecked="{Binding ReEnableAutoBlessOnReconnect, Mode=TwoWay}"
                               Content="Auto-Bless"
                               ToolTip.Tip="When checked: Auto-Bless is re-enabled on reconnect if it was disabled during the session."/>

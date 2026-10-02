@@ -1,5 +1,11 @@
 # Version history
 
+## 3.135.2
+
+- Auto Heal and Auto Rest are separate switches, each with its own toolbar button, Action-menu entry, base-mode checkbox and keybind; the combined Auto Rest / Heal button sets both
+- `@auto-heal` and `@auto-rest` now switch healing and resting separately
+- The Combat Profile (menu) toolbar button shows the active profile number
+
 ## 3.135.0
 
 - Settings → Sounds: per-event sounds, each with its own tone or file and volume, plus a master volume

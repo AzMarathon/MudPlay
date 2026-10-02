@@ -98,6 +98,10 @@
     <StreamGeometry x:Key="IconAutoNuke">M8.5 14.5 A2.5 2.5 0 0 0 11 12 C11 10.62 10.5 10 10 9 C8.928 6.857 9.776 4.946 12 3 C12.5 5.5 14 7.9 16 9.5 C18 11.1 19 13 19 15 A7 7 0 1 1 5 15 C5 13.847 5.433 12.706 6 12 A2.5 2.5 0 0 0 8.5 14.5 Z</StreamGeometry>
     <!-- Medical cross inside a circle — heal / rest. -->
     <StreamGeometry x:Key="IconAutoHeal">M12 5 A7 7 0 1 1 12 19 A7 7 0 1 1 12 5 Z M12 9 V15 M9 12 H15</StreamGeometry>
+    <!-- Bare medical cross — heal only. -->
+    <StreamGeometry x:Key="IconAutoHealOnly">M12 5 V19 M5 12 H19</StreamGeometry>
+    <!-- Crescent moon — rest only. -->
+    <StreamGeometry x:Key="IconAutoRest">M12 3 A6 6 0 0 0 21 12 A9 9 0 1 1 12 3 Z</StreamGeometry>
     <!-- Sparkle/asterisk — buffs & bless. -->
     <StreamGeometry x:Key="IconAutoBless">M12 4 V20 M4 12 H20 M6 6 L18 18 M6 18 L18 6</StreamGeometry>
     <!-- Lightbulb with base + filament. -->

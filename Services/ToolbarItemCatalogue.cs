@@ -149,14 +149,14 @@ public static class ToolbarItemCatalogue
 
         // Casting spell profiles. The cycle button shows "P<active#>" and swaps on
         // click (left = next, right = previous, handled in the toolbar code-behind).
-        // The menu button opens a fly-out of profiles (also code-behind), so it has
-        // no bound command.
+        // The menu button shows the same "P<active#>" and opens a fly-out of profiles
+        // (also code-behind), so it has no bound command.
         new("CycleCombatProfile", "Combat Profile (cycle)", "IconCombatProfile",
             "CycleCombatProfileCommand",
             Tooltip: "Combat spell profile — left-click next, right-click previous"),
         new("CombatProfileMenu",  "Combat Profile (menu)",  "IconCombatProfileMenu",
             "",
-            Tooltip: "Pick a combat spell profile"),
+            Tooltip: "Combat spell profile — click to pick one from the list"),
 
         // Sends the in-game "exp" command (experience-to-next readout).
         new("SendExp",            "Exp",                  "IconExp",
@@ -187,7 +187,13 @@ public static class ToolbarItemCatalogue
             Tooltip: "Toggle Auto Nuke on / off"),
         new("ToggleAutoHealRest", "Auto Rest / Heal",     "IconAutoHeal",
             "ToggleAutoHealRestCommand",
-            Tooltip: "Toggle Auto Rest / Heal on / off"),
+            Tooltip: "Toggle Auto Heal and Auto Rest together: both on, or both off"),
+        new("ToggleAutoHeal",     "Auto Heal",            "IconAutoHealOnly",
+            "ToggleAutoHealCommand",
+            Tooltip: "Toggle Auto Heal on / off: heal and cure casts, and aiding a downed party member"),
+        new("ToggleAutoRest",     "Auto Rest",            "IconAutoRest",
+            "ToggleAutoRestCommand",
+            Tooltip: "Toggle Auto Rest on / off: resting and meditating when HP or mana runs low"),
         new("ToggleAutoBless",    "Auto Bless",           "IconAutoBless",
             "ToggleAutoBlessCommand",
             Tooltip: "Toggle Auto Bless on / off"),

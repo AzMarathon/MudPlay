@@ -32,7 +32,7 @@ namespace MudPlay.Game;
 // timer running even when not in a party — DoParPoll short-circuits on
 // PartyState.IsInParty = false so we don't spam `par` at the wire while solo.
 // It also short-circuits on IsParPollEnabled so the poll obeys the
-// auto-heal/rest toggle (and, through it, the auto-all kill switch).
+// auto-heal toggle (and, through it, the auto-all kill switch).
 public sealed partial class PartyPoller : IDisposable
 {
     private readonly ChatRouter _chat;
@@ -53,9 +53,9 @@ public sealed partial class PartyPoller : IDisposable
     public TimeSpan ParCadence { get; private set; } = TimeSpan.FromSeconds(5);
 
     // Live gate for the timed `par` poll. `par`'s sole purpose is reading party
-    // health, so it rides the same auto-heal/rest toggle that governs every
-    // other automatic action — when that's off (and because AutoModeController's
-    // kill-all zeroes the heal/rest flag, when auto-all is off too) the timer
+    // health for the party heals, so it rides the auto-heal toggle — when that's
+    // off (and because AutoModeController's kill-all zeroes the heal flag, when
+    // auto-all is off too) the timer
     // must not put `par` on the wire. Null = ungated (test / pre-wire default),
     // matching the historical always-on behaviour.
     public Func<bool>? IsParPollEnabled { get; set; }

@@ -14,7 +14,8 @@ namespace MudPlay.Game.Remote;
 // reply echoes the resulting state. Any other arg is rejected with a "?" reply
 // (gated on WarnOnDenial).
 //
-// @auto-rest is an alias for @auto-heal — both drive AutoActionDefaults.AutoHealRest.
+// @auto-heal and @auto-rest are separate switches (AutoActionDefaults.AutoHeal /
+// AutoRest): healing casts and the rest engine turn on and off independently.
 //
 // @auto-all drives the shared AutoModeController master kill-switch (same session
 // snapshot as the toolbar / Action-menu "Auto-All" button). No arg toggles
@@ -34,8 +35,8 @@ public sealed class AutoModeRemoteHandler : IDisposable
     {
         ("@auto-combat", d => d.AutoCombat,   (d, v) => d.AutoCombat   = v),
         ("@auto-nuke",   d => d.AutoNuke,     (d, v) => d.AutoNuke     = v),
-        ("@auto-heal",   d => d.AutoHealRest, (d, v) => d.AutoHealRest = v),
-        ("@auto-rest",   d => d.AutoHealRest, (d, v) => d.AutoHealRest = v),
+        ("@auto-heal",   d => d.AutoHeal,     (d, v) => d.AutoHeal     = v),
+        ("@auto-rest",   d => d.AutoRest,     (d, v) => d.AutoRest     = v),
         ("@auto-bless",  d => d.AutoBless,    (d, v) => d.AutoBless    = v),
         ("@auto-light",  d => d.AutoLight,    (d, v) => d.AutoLight    = v),
         ("@auto-cash",   d => d.AutoGetCash,  (d, v) => d.AutoGetCash  = v),
@@ -163,11 +164,8 @@ public sealed class AutoModeRemoteHandler : IDisposable
         // (everything off) are the truthful report in that case.
         GeneralSettings general = _profile.Current is { } p ? ReadGeneral(p) : new GeneralSettings();
 
-        // One entry per engine, in Mapping order. Skip @auto-rest — it's
-        // an alias for @auto-heal (same AutoHealRest flag), so listing it
-        // would double-report the same engine.
+        // One entry per engine, in Mapping order.
         IEnumerable<string> parts = Mapping
-            .Where(m => m.Cmd != "@auto-rest")
             .Select(m => $"{Label(m.Cmd)}: {(m.Get(general.AutoMode) ? "On" : "Off")}");
         ctx.Reply(string.Join(", ", parts));
     }

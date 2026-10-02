@@ -25,6 +25,9 @@ public sealed class HealthManagerTests
         public HealthSettings Settings { get; set; } = new();
         public bool AutoHealRestEnabled { get; set; } = true;
 
+        // The Auto-Rest switch on its own; the engine switch above stays on.
+        public bool RestEnabled { get; set; } = true;
+
         /// <summary>Char-tier General settings. Default instance has
         /// AllowHangupInAllOffMode=false, so the all-off carve-out stays
         /// dormant unless a test opts in.</summary>
@@ -175,6 +178,7 @@ public sealed class HealthManagerTests
                 isStealthed: () => Stealthed,
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
+            Health.SetRestEnabledGate(() => RestEnabled);
             Health.SetDoNotRestSelector(() => SkipRestHere);
             Health.SetRestHereSelector(() => RestHere);
             Health.SetEquipmentApplyingProbe(() => EquipmentApplying);
@@ -299,6 +303,52 @@ public sealed class HealthManagerTests
         h.AutoHealRestEnabled = false;   // user flips Auto-Heal/Rest off
         h.Health.Evaluate();             // VM re-evaluates the engine on the flip
         Assert.False(h.HealthGateHeld);  // gate released → walker resumes
+    }
+
+    // ----- Auto-Rest off, engine on (Auto-Heal only) ------------------
+
+    [Fact]
+    public void RestOff_LowHp_RaisesNoHold_AndSendsNoRest()
+    {
+        using Harness h = new() { RestEnabled = false };
+        h.SetPrompt(hp: 50, maxHp: 200);   // well under the 60% rest trigger
+        Assert.False(h.HealthGateHeld);
+        Assert.DoesNotContain("rest", h.SentLines);
+    }
+
+    [Fact]
+    public void RestSwitchedOffMidRest_ReleasesTheHold_AndBackOnRestsAgain()
+    {
+        using Harness h = new();
+        h.SetPrompt(hp: 50, maxHp: 200);
+        Assert.True(h.HealthGateHeld);
+
+        h.RestEnabled = false;
+        h.Health.Evaluate();               // the view-model re-evaluates on the flip
+        Assert.False(h.HealthGateHeld);
+
+        h.RestEnabled = true;
+        h.Health.Evaluate();
+        Assert.True(h.HealthGateHeld);
+    }
+
+    [Fact]
+    public void RestOff_RestUpHereRoom_DoesNotRest()
+    {
+        using Harness h = new() { RestEnabled = false, RestHere = (true, true) };
+        h.SetPrompt(hp: 150, maxHp: 200);  // above the trigger, under rest-max
+        Assert.False(h.HealthGateHeld);
+        Assert.False(h.Health.HoldForRestHere());
+    }
+
+    [Fact]
+    public void RestOff_EmergencyHangupStillFires()
+    {
+        // Healing by spell alone still hangs up at the hang threshold: only the
+        // resting is switched off, not the engine.
+        using Harness h = new() { RestEnabled = false };
+        h.SetPrompt(hp: 5, maxHp: 200);
+        Assert.Equal(1, h.SentLines.Count(l => l == "=x"));
     }
 
     // ----- absolute threshold mode -----------------------------------

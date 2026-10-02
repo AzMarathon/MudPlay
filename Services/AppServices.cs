@@ -2561,10 +2561,11 @@ public sealed class AppServices
         // happens in MainWindowViewModel.
         PartyPoller = new Game.PartyPoller(Chat, PartyState, Party)
         {
-            // par reads party health, so it lives under the auto-heal/rest
-            // toggle like every other automatic action. AutoModeController's
-            // kill-all zeroes that flag, so auto-all off silences par too.
-            IsParPollEnabled = () => ReadAutoModeFlag(d => d.AutoHealRest),
+            // par reads party health for the party heals, so it lives under the
+            // auto-heal toggle like every other automatic action.
+            // AutoModeController's kill-all zeroes that flag, so auto-all off
+            // silences par too.
+            IsParPollEnabled = () => ReadAutoModeFlag(d => d.AutoHeal),
         };
         // Emit side of @wait/@ok. Observes our own
         // position transitions and telepaths the leader when we enter
@@ -3720,11 +3721,11 @@ public sealed class AppServices
         // positive HP can take (bounded by the realm's death floor), then polls their
         // off-roster vitals via @health and re-invites once they're up when we lead.
         // The heal-by-name is delegated to CastDirector via the downed-ally
-        // provider wired below. Gated on AutoHealRest (shared party-heal master).
+        // provider wired below. Gated on AutoHeal (shared party-heal master).
         AllyDropped = new Game.AllyDroppedHandler(
             Router, PartyState, Party, Chat, MovementCoordinator,
             readParty: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoHeal),
             log: Log,
             readDeathFloor: () => ResolveActiveRealm()?.Realm.PlayerDiesAtHp ?? -25);
 
@@ -3975,15 +3976,16 @@ public sealed class AppServices
             timer.Start();
         });
 
-        // HealthManager. Master on/off is
-        // GeneralSettings.AutoMode.AutoHealRest (shared with the
-        // Settings → General checkbox + toolbar Toggle button). When
-        // off, every threshold check + rest/stand emit short-circuits.
+        // HealthManager. It runs while either Auto-Heal or Auto-Rest is on
+        // (GeneralSettings.AutoMode): its flee and emergency hangup protect a
+        // character under either. The resting itself follows Auto-Rest alone
+        // (SetRestEnabledGate below). With both off, every threshold check +
+        // rest/stand emit short-circuits.
         Health = new Game.Health.HealthManager(
             PlayerState, MovementCoordinator,
             readSettings: () =>
                 ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health"),
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoHeal || d.AutoRest),
             readHangupCommand: () => GameCommands.ExitCommand,
             getActiveMovementEngine: ResolveActiveMovementEngine,
             getLastSentDirection: () =>
@@ -4130,6 +4132,7 @@ public sealed class AppServices
         // true while a loop is running and the room we're standing in is one of
         // its waypoints flagged DoNotRest. Matched by room key (per-room), so it
         // clears the instant the loop steps into any other room. Loops only.
+        Health.SetRestEnabledGate(() => ReadAutoModeFlag(d => d.AutoRest));
         Health.SetDoNotRestSelector(() =>
             ReadSprintMode()
             || (LoopRunner.State != Game.Map.LoopState.Idle
@@ -4335,14 +4338,14 @@ public sealed class AppServices
 
         // CastingDirector. Sits on top of Cast,
         // decides which heal / cure / buff (if any) to issue based on
-        // PlayerState + Spells/Health settings. AutoHealRest gates
-        // the engine (shared toggle with HealthManager's passive rest).
+        // PlayerState + Spells/Health settings. AutoHeal gates the heal /
+        // cure / debuff casts.
         CastDirector = new Game.Spells.CastingDirector(
             PlayerState, Cast, Conditions, PartyState,
             readSpells: () => ReadSection<Models.Profile.SpellsSettings>(Profile.Current, "Spells"),
             readHealth: () => ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health"),
             readPartySettings: () => ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party"),
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoHealRest),
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoHeal),
             log: Log);
         // Survival casts (heal / cure / buff / party heal) skip any spell the
         // player can't afford — the cost comes from the game-data Spells table

@@ -266,7 +266,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // surface-only.
     [ObservableProperty] private bool _amAutoCombat;
     [ObservableProperty] private bool _amAutoNuke;
-    [ObservableProperty] private bool _amAutoHealRest;
+    [ObservableProperty] private bool _amAutoHeal;
+    [ObservableProperty] private bool _amAutoRest;
     [ObservableProperty] private bool _amAutoBless;
     [ObservableProperty] private bool _amAutoLight;
     [ObservableProperty] private bool _amAutoGetItems;
@@ -307,7 +308,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // True when the matching engine is live. The view's CheckBox.IsEnabled binds
     // to these so users see at a glance which toggles do anything.
     public bool IsAutoCombatWired   => true;    // CombatManager
-    public bool IsAutoHealRestWired => true;    // HealthManager
+    public bool IsAutoHealWired     => true;    // CastingDirector heal / cure categories
+    public bool IsAutoRestWired     => true;    // HealthManager
     public bool IsAutoNukeWired     => true;    // CombatSpellChooser multi-attack + debuff gate
     public bool IsAutoBlessWired    => true;    // CastingDirector Buffing-category gate
     public bool IsAutoLightWired    => true;    // AutoLightManager
@@ -582,7 +584,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         AutoActionDefaults a = dto.AutoModeBase ?? dto.AutoMode;
         AmAutoCombat   = a.AutoCombat;
         AmAutoNuke     = a.AutoNuke;
-        AmAutoHealRest = a.AutoHealRest;
+        AmAutoHeal     = a.AutoHeal;
+        AmAutoRest     = a.AutoRest;
         AmAutoBless    = a.AutoBless;
         AmAutoLight    = a.AutoLight;
         AmAutoGetItems = a.AutoGetItems;
@@ -660,7 +663,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     {
         AutoCombat   = AmAutoCombat,
         AutoNuke     = AmAutoNuke,
-        AutoHealRest = AmAutoHealRest,
+        AutoHeal     = AmAutoHeal,
+        AutoRest     = AmAutoRest,
         AutoBless    = AmAutoBless,
         AutoLight    = AmAutoLight,
         AutoGetItems = AmAutoGetItems,
@@ -724,7 +728,8 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnSelectedNavTooltipFontSizeChanged(FontSizeOption? value)     => Dirty();
     partial void OnAmAutoCombatChanged(bool value)           => Dirty();
     partial void OnAmAutoNukeChanged(bool value)             => Dirty();
-    partial void OnAmAutoHealRestChanged(bool value)         => Dirty();
+    partial void OnAmAutoHealChanged(bool value)             => Dirty();
+    partial void OnAmAutoRestChanged(bool value)             => Dirty();
     partial void OnAmAutoBlessChanged(bool value)            => Dirty();
     partial void OnAmAutoLightChanged(bool value)            => Dirty();
     partial void OnAmAutoGetItemsChanged(bool value)         => Dirty();
