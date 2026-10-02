@@ -32,7 +32,7 @@ public static class StatusBarItemCatalogue
     public static IReadOnlyList<StatusBarItemDef> All { get; } = new StatusBarItemDef[]
     {
         new("engine", Bar, "Engine state chip", "IDLE / WALK / LOOP / LAIR, coloured, with the recovery-tier border.", "LOOP", StatusBarItemKind.EngineChip),
-        new("location", Bar, "Location", "Your map/room; the walk readout during a walk-to; the lap during a loop.", "1/297"),
+        new("location", Bar, "Location", "Your map/room; the walk readout during a walk-to; the lap and the step within it during a loop.", "1/297"),
         new("exprate", Bar, "Exp rate", "This session's exp per hour.", "1.2M/hr"),
         new("tnl", Bar, "Time to next level", "How long until the next level at this rate, and how many levels you have banked.", "TNL: 42m (+0.35 lvls)"),
         new("target", Bar, "Looked-at target HP", "The HP range of the monster you last looked at. Empty until you look.", "TGT HP: wounded [~340]", Mono: true),
@@ -67,6 +67,7 @@ public static class StatusBarItemCatalogue
         new("room", Where, "Room name", "The name of the room you are in.", "Town Square"),
         new("loop", Where, "Loop name", "The running loop; empty when none.", "Sewer circuit"),
         new("lap", Where, "Lap", "The lap of the running loop; empty when none.", "Lap 12"),
+        new("loopstep", Where, "Loop step", "Which step of its circle the running loop is on; empty when none.", "Step 36 of 60"),
         new("destination", Where, "Walk destination", "Where a walk-to is headed; empty when none.", "To 1/1376"),
 
         new("fighting", Fight, "Combat target", "The monster you are attacking; empty out of combat.", "orc chieftain"),

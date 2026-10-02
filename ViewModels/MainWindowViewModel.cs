@@ -2158,14 +2158,15 @@ public partial class MainWindowViewModel : ObservableObject
         // the runner is still walking to the loop's entry (Approaching), the slot
         // shows the same walk-to readout as a plain goto — current room,
         // destination, remaining steps — because we haven't begun the loop yet.
-        // Only once the circle is actually running does it collapse to the terse
-        // lap counter (the CURRENT NAV pane owns per-step detail).
+        // Only once the circle is actually running does it collapse to the lap and
+        // the step within it — "lap 12 · step 36 of 60", the step being the next to
+        // send, as the Navigation window counts it.
         Game.Map.LoopRunner runner = AppServices.Current.LoopRunner;
         if (runner.State != Game.Map.LoopState.Idle && runner.CurrentLoop is not null)
         {
-            return runner.State == Game.Map.LoopState.Approaching
-                ? BuildWalkLocationText()
-                : $"lap {runner.CompletedLaps + 1}";
+            if (runner.State == Game.Map.LoopState.Approaching) return BuildWalkLocationText();
+            string lap = $"lap {runner.CompletedLaps + 1}";
+            return LoopStepText(runner) is { Length: > 0 } step ? $"{lap} · {step}" : lap;
         }
 
         // A plain walk-to (goto / favourite) gets the same C/D/Steps readout as a
@@ -2196,6 +2197,14 @@ public partial class MainWindowViewModel : ObservableObject
             Game.Map.RoomConfidence.PendingRespawn => "Awaiting respawn…",
             _                                      => "Unknown location",
         };
+    }
+
+    // "step 36 of 60" — where the running loop is in its circle; empty while it
+    // has no steps laid out.
+    public static string LoopStepText(Game.Map.LoopRunner runner)
+    {
+        int total = runner.StepCount;
+        return total <= 0 ? string.Empty : $"step {Math.Min(total, runner.CurrentIndex + 1)} of {total}";
     }
 
     // "C: M/R  D: M/R  Steps: N" — the walk-to readout shared by a plain goto and a

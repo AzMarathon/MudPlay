@@ -3,6 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.137.0**
 > - Round Totals window (View → Round Totals, toolbar button, keybind): each round's damage table in a small window with its own row choices, sized steadily so it does not jump as the room changes
+> - Status bar: the Location item shows the loop step beside the lap, and Loop step is an item of its own
 > - Settings → Other: "Show monster HP lookup" is now "Print monster HP in the terminal when I look"; the status bar readout is a bar item you add or remove
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
