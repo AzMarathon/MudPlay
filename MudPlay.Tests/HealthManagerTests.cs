@@ -1922,6 +1922,41 @@ public sealed class HealthManagerTests
         Assert.Equal(1, waits);           // and @wait never re-fired mid-recovery
     }
 
+    // MegaMUD names the pool in the wait it telepaths — "@wait (HP's too low)".
+    // HealthManager is the only thing that knows WHICH pool tripped (Health is one
+    // WaitReason covering both), so it exposes PartyWaitNote and the wait-sender
+    // reads it. Without this the leader was told to stop with no reason given.
+    [Fact]
+    public void Follower_PartyWaitNote_NamesThePoolThatTripped()
+    {
+        using Harness h = new();          // percentage mode: trigger 30 %, rest-max 95 %
+        List<string?> notes = new();
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => notes.Add(h.Health.PartyWaitNote),
+            requestPartyOk: () => { });
+
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);   // rested
+        Assert.Empty(notes);
+        Assert.Null(h.Health.PartyWaitNote);                      // nothing asserted
+
+        // mana alone trips -> the mana string, not the HP one
+        h.State.Ma = 20;
+        Assert.Equal(new string?[] { PartyRestSync.ManaNote }, notes);
+
+        // recover and release, so the next drop is a fresh wait
+        h.State.Ma = 95;
+        h.SettleOk();
+
+        // HP alone trips -> the captured MegaMUD string
+        h.State.Hp = 20;
+        Assert.Equal(new string?[] { PartyRestSync.ManaNote, PartyRestSync.HpNote }, notes);
+
+        // ...and with BOTH low, HP leads: it is the pool that gets you killed
+        h.State.Ma = 20;
+        Assert.Equal(PartyRestSync.HpNote, h.Health.PartyWaitNote);
+    }
+
     // Report paradigm-20260929-233636: HP bounced 199→203→199 in one burst with the
     // floor at 201 and rest-max at 203. The blip at rest-max must not send @ok between
     // two @waits; the @ok goes out only once the pools hold at rest-max.

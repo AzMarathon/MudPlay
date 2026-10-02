@@ -95,6 +95,98 @@ public sealed class PartyRestSyncTests
         Assert.Empty(wire);
     }
 
+    // ===== MegaMUD wait reasons on the wire =====
+    // MegaMUD telepaths a parenthetical reason after the token — "@wait (HP's
+    // too low)" — and MudPlay used to send one for TooHeavy only. These pin the
+    // string each reason carries, because the leader DISPLAYS it and a wedged
+    // wait is diagnosed from it.
+
+    [Theory]
+    [InlineData(WaitReason.Poison,    "(waiting on message condition)")]
+    [InlineData(WaitReason.Disease,   "(waiting on message condition)")]
+    [InlineData(WaitReason.Blindness, "(blinded)")]
+    [InlineData(WaitReason.Confusion, "(confused)")]
+    [InlineData(WaitReason.Held,      "(can't move)")]
+    [InlineData(WaitReason.TooHeavy,  "(too heavy to move)")]
+    public void RequestWait_CarriesTheReason(WaitReason reason, string note)
+    {
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+        sync.RequestWait(reason);
+        Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
+    }
+
+    [Fact]
+    public void RequestWait_Health_IsBareUnlessTheCallerSaysWhichPool()
+    {
+        // Health covers BOTH pools, so PartyRestSync cannot know which tripped
+        // and deliberately has no default for it — HealthManager passes
+        // HpNote / ManaNote from its own gate flags (HealthManager.PartyWaitNote).
+        // A bare Health wait is correct, not a regression.
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+        sync.RequestWait(WaitReason.Health);
+        Assert.Equal("/Leader @wait\r", LastWire(wire));
+    }
+
+    [Theory]
+    [InlineData("(HP's too low)")]
+    [InlineData("(mana's too low)")]
+    public void RequestWait_Health_WithAPoolNote_SendsIt(string note)
+    {
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+        sync.RequestWait(WaitReason.Health, note: note);
+        Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
+    }
+
+    [Fact]
+    public void RequestWait_ExplicitNote_BeatsTheDefault()
+    {
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+        sync.RequestWait(WaitReason.Held, note: "(pinned down)");
+        Assert.Equal("/Leader @wait (pinned down)\r", LastWire(wire));
+    }
+
+    [Fact]
+    public void SecondReason_IsDedupedSoItsNoteNeverReachesTheWire()
+    {
+        // Only the 0→non-empty transition telepaths, so the FIRST reason's note
+        // is the one the leader sees. A second reason arriving is silent, which
+        // is why the leader can be told "(blinded)" while a poison is also held.
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+        sync.RequestWait(WaitReason.Blindness);
+        sync.RequestWait(WaitReason.Poison);
+        Assert.Single(wire);
+        Assert.Equal($"/Leader @wait {PartyRestSync.BlindNote}\r", LastWire(wire));
+    }
+
+    [Fact]
+    public void EveryReasonExceptHealth_HasANote()
+    {
+        // A reason added to the enum without a note would silently go out bare,
+        // which is the state this change exists to end. Health is the one
+        // deliberate exception (see above).
+        foreach (WaitReason r in Enum.GetValues<WaitReason>())
+        {
+            var (sync, party, wire) = Setup();
+            party.IsInParty = true;
+            party.LeaderName = "Leader";
+            sync.RequestWait(r);
+            string sent = LastWire(wire);
+            if (r == WaitReason.Health) continue;
+            Assert.True(sent.Contains('('),
+                $"{r} telepathed a bare @wait: give it a note in PartyRestSync.DefaultNote");
+        }
+    }
+
     [Fact]
     public void TwoReasons_SendOneWait_OkOnlyWhenLastClears()
     {

@@ -41,6 +41,51 @@ public sealed class PartyRestSync : IDisposable
         _wireSender = sender;
     }
 
+    // MEGAMUD'S OWN WAIT REASONS, so a leader can see WHY the party stopped.
+    //
+    // MegaMUD telepaths a bare token plus a parenthetical reason —
+    // "@wait (HP's too low)". MudPlay already had the `note` parameter and the
+    // wire format for it, but only ONE of its seven wait reasons ever passed one
+    // (TooHeavy). Everything else went out bare, so a leader was told to stop
+    // with no reason given, and a wait that got stuck left no evidence of which
+    // reason was holding it.
+    //
+    // PROVENANCE — these are MegaMUD's strings, not invented ones. Four were
+    // captured from a MegaMUD client telepathing a MudPlay leader (user logs,
+    // 2026-09-11): "(blinded)", "(confused)", "(HP's too low)" and "(waiting on
+    // message condition)". "(can't move)" for a hold is already recorded in
+    // GAME_MECHANICS.md from an earlier report, and "(too heavy to move)" was
+    // already in use here.
+    //
+    // ADDITIVE ON THE WIRE. The receiving leader keys only on the token
+    // (PartyEssentialHandlers), so a note cannot change how any receiver
+    // behaves — MudPlay's or MegaMUD's.
+    public const string HpNote        = "(HP's too low)";
+    public const string ConditionNote = "(waiting on message condition)";
+    public const string BlindNote     = "(blinded)";
+    public const string ConfusedNote  = "(confused)";
+    public const string HeldNote      = "(can't move)";
+    public const string TooHeavyNote  = "(too heavy to move)";
+
+    // NOT CAPTURED. No MegaMUD mana wait has been observed, so this is MudPlay's
+    // own string in MegaMUD's shape, parallel to the captured HP one. If a real
+    // MegaMUD mana wait is ever seen, prefer whatever it says over this.
+    public const string ManaNote      = "(mana's too low)";
+
+    // The reason a wait carries when its caller does not override it. Health is
+    // deliberately absent: HP and mana share that reason and only HealthManager
+    // knows which pool tripped, so it passes HpNote / ManaNote itself.
+    internal static string? DefaultNote(WaitReason reason) => reason switch
+    {
+        WaitReason.Poison    => ConditionNote,
+        WaitReason.Disease   => ConditionNote,
+        WaitReason.Blindness => BlindNote,
+        WaitReason.Confusion => ConfusedNote,
+        WaitReason.Held      => HeldNote,
+        WaitReason.TooHeavy  => TooHeavyNote,
+        _                    => null,
+    };
+
     // Engine-callable entry point — register a wait reason and telepath @wait to
     // the party leader on the 0→non-empty transition. If another reason already
     // holds the wait, this only records the new reason and sends nothing (the
@@ -66,7 +111,8 @@ public sealed class PartyRestSync : IDisposable
         bool added = _waitReasons.Add(reason);
         if (!resend && (!added || !wasEmpty)) return;
         if (!CanSignal()) return;
-        Telepath(_party.LeaderName!, note is null ? "@wait" : $"@wait {note}");
+        string? why = note ?? DefaultNote(reason);
+        Telepath(_party.LeaderName!, why is null ? "@wait" : $"@wait {why}");
     }
 
     // Engine-callable entry point — clear a wait reason and telepath @ok to the

@@ -5326,6 +5326,20 @@ This covers how a client learns which ailments afflict itself and its party memb
 - **An afflicted follower telepaths `@wait` to the leader and `@ok` when it clears (follower → leader, TELEPATH).**
   - A follower afflicted by poison / blind / confused / diseased / **held** telepaths **`@wait`** to the leader, unless that ailment's `Ignore<X>` is set.
   - It telepaths **`@ok`** when its last non-ignored ailment clears.
+- **A `@wait` carries the REASON in parentheses, MegaMUD-style.** MegaMUD telepaths `@wait (HP's too low)`; MudPlay now does the same for every wait reason, so a leader is told what the hold is rather than only that there is one. The leader keys on the token alone, so the note is additive and cannot change any receiver's behaviour.
+
+  | Reason | Note | Provenance |
+  |---|---|---|
+  | HP below its rest floor | `(HP's too low)` | MegaMUD, captured 2026-09-11 (user logs) |
+  | Mana below its rest floor | `(mana's too low)` | **MudPlay's own**, in MegaMUD's shape — no MegaMUD mana wait has been observed |
+  | Blinded | `(blinded)` | MegaMUD, captured 2026-09-11 |
+  | Confused | `(confused)` | MegaMUD, captured 2026-09-11 |
+  | Poisoned / diseased | `(waiting on message condition)` | MegaMUD string, captured 2026-09-11; the mapping to these two is inferred |
+  | Held | `(can't move)` | MegaMUD, earlier report |
+  | Over max encumbrance | `(too heavy to move)` | already in use |
+
+  - **Only the FIRST reason's note reaches the wire**, because only the 0→non-empty transition telepaths. A follower who is blinded and then poisoned tells the leader `(blinded)`; the poison is held silently and both must clear before `@ok`. So the note says what *started* the hold, not everything holding it.
+  - HP and mana share one wait reason, so `HealthManager.PartyWaitNote` decides which string to send from its own gate flags. **HP leads when both pools are low.**
 - **`@wait` / `@ok` is a leader-directed pause flag, not a momentary signal.** The leader stays paused until **either** the same member telepaths `@ok`, **or** the leader's own wait timer expires.
   - The timer is the "If leading, wait only (s)" cap (`PartySettings.IfLeadingWaitTotalSec`).
   - On expiry the leader gives up and resumes, so a dropped / AFK member can't strand the party forever.

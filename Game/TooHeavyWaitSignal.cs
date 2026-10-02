@@ -58,7 +58,9 @@ public sealed class TooHeavyWaitSignal : IDisposable
         }
         // Resend: the leader may already be waiting on us for another reason, and
         // this one is worth naming.
-        _restSync.RequestWait(WaitReason.TooHeavy, resend: true, note: "(too heavy to move)");
+        // The note comes from PartyRestSync.DefaultNote (TooHeavyNote) so the
+        // string lives in exactly one place.
+        _restSync.RequestWait(WaitReason.TooHeavy, resend: true);
         _awaitingFreshRead = true;
         Recheck();
         StartTimer();
