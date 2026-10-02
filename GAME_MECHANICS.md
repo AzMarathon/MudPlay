@@ -4855,7 +4855,7 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   `look` — *Re-surveying ground cash with `look`*).
 
 ### Hiding coin in a room (stashing)
-*Status: CONFIRMED 2026-08-29 (user; report `paradigm-20260829-212158`); CONFIRMED 2026-09-14 (user)*
+*Status: CONFIRMED 2026-08-29 (user; report `paradigm-20260829-212158`); CONFIRMED 2026-09-14 (user); partial-take rule CONFIRMED 2026-10-02 (user)*
 
 - **`hide <N> <coin>` is a stash, not a vault.** `hide <item>` is the full command and `hid <item>` its
   shorthand *([CONFIRMED] 2026-09-26, user)*. Hiding an object (or coin) is a different act from
@@ -4879,11 +4879,12 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   `N <coin> drop to the ground.`), which is fine to collect, and **search-revealed** coin (the pile we
   just stashed), which must **not** be re-grabbed.
 
-- **Coin a search surfaced but nobody took stays hidden** `[NEEDS CONFIRMATION]` — the client has always
-  relied on this (auto-search re-surfaces a stash pile on every pass and leaves it, and the pile still
-  needs a search next time), but it has not been stated outright. Question: after `sea` shows a stashed
-  pile and only part of it is taken, is the rest still hidden from a player who walks in without
-  searching?
+- **Coin a search surfaced but nobody took stays hidden** *([CONFIRMED] 2026-10-02, user)*. Search a
+  stash holding 50 runic, 50 platinum and 50 gold, take 25 of each, and the other 25 of each are still
+  hidden: a player who walks in without searching doesn't see them.
+- **A search of a stash does two jobs** *([CONFIRMED] 2026-10-02, user)*: it surfaces the hidden coin,
+  which always shows on the first search, and it verifies the amount — the pile isn't held by us or by
+  a bank, so any player can have come by and taken some.
 
 **Client use:**
 - In a stash room the client `hide`s excess coin.
