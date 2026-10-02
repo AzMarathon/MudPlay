@@ -4723,10 +4723,6 @@ There is no room to drop amethyst pendant here.
   - a weapon (`ItemType` 1) with no wear slot must be the readied weapon: `You must have that item readied to use it!`;
   - any other item with no wear slot is used straight from the inventory;
   - a spent item answers `There are no more uses in %s.`.
-- **The deck of cards (item 1441, Gypsy only) differs by realm** *([OBSERVED] 2026-10-02, imported game data)*.
-  - Stock: wearable (`Worn` 12), 100 uses, kept after use, level 35, casts spell 1139.
-  - Paradigm: `ItemType` 10 with **no wear slot**, `UseCount` 9999, kept after use, not droppable, level 15, casts spell 5144 `card deck draw`, which runs textblock 9821 (`cast 5145`, then `random 9822`).
-  - How the Paradigm deck is used is not recorded *([NEEDS CONFIRMATION]: the user expects it not to follow the normal `use` rules — what command works it, and does it need to be held?)*.
 - **A buff item can live in ANY equip slot, not just weapon / off-hand.** A warhorn is off-hand, a charged amulet is neck, etc.
 - **Restore is slot-specific.** `eq <item>` puts the item into **its own** slot and displaces only what was there.
 - **1H weapon buff:** displaces the **weapon hand**, so restore the weapon.
@@ -4745,7 +4741,33 @@ There is no room to drop amethyst pendant here.
 - **Whatever slot was empty simply isn't restored** (nothing to put back).
 - **Client use:**
   - `ItemCastSequencer` equips, uses and restores a readied cast item; its list (`SpellbookState.GetCastItems`) holds only items with a wear slot or weapons.
-  - The Spell Book also lists a cast item with no wear slot when the data marks it kept after use (`ClassCastItem.Carried`, `SpellbookState.GetSpellBookCastItems`; report `paradigm-20261002-114043`: the Paradigm deck of cards was missing). It labels it *carried, not worn* and nothing tries to equip or use it automatically.
+  - The Spell Book also lists a cast item with no wear slot when the data marks it kept after use (`ClassCastItem.Carried`, `SpellbookState.GetSpellBookCastItems`; report `paradigm-20261002-114043`: the Paradigm deck of cards was missing). It labels it *carried, not worn* and nothing tries to equip or use it automatically. See *Deck of cards (Gypsy)*.
+
+### Deck of cards (Gypsy)
+*Status: OBSERVED 2026-10-02 (imported game data; `wccmmud.dll` 1.11p message and textblock tables; report `paradigm-20261002-120516`); use confirmed by the user 2026-10-02 · Realm: differs*
+
+- **The item (1441, Gypsy only) differs by realm** *([OBSERVED] imported game data)*.
+  - Stock: wearable (`Worn` 12), 100 uses, kept after use, level 35, casts spell 1139 `card-draw`.
+  - Paradigm: `ItemType` 10 with **no wear slot**, `UseCount` 9999, kept after use, not droppable, level 15, casts spell 5144 `card deck draw`.
+- **On Paradigm it is used straight from the inventory: `use deck`** *([CONFIRMED] 2026-10-02, user; report `paradigm-20261002-120516`)*. It draws one card at random and applies that card's buff. The capture, in order:
+  - `You shuffle your deck of cards.`
+  - `You grab your deck of cards and draw...`
+  - `The gaze of luck is upon you.`
+  - the card as ANSI art naming it (`The` / `Priest`), then a quoted line about the card.
+  - `look deck of cards` read `Uses remaining: 9999` before and `9998` after: a use takes a charge although the item is kept.
+- **Every card shares the same applied and wear-off lines** *([OBSERVED] Stock message 2763; applied line confirmed on Paradigm by the user 2026-10-02)*: `The gaze of luck is upon you.` and `The gaze of luck is no longer upon you!`. Only the art and the quote say which card was drawn.
+- **The draw line has a room form** *([OBSERVED] Stock message 2780)*: `You grab your deck of cards and draw...` to the user, `%s grabs their deck of cards and draws...` to the room. What the room sees for the Paradigm shuffle line is not recorded.
+- **What can be drawn** *([OBSERVED] textblocks)*:
+  - Paradigm (textblock 9822, after `cast 5145` `card shuffle`): eight cards, spells 965–972, each lasting `Dur` 240 — wizard, priest, knight, chariot, grail, sun and angel at 12% each, wheel of fortune at 16%.
+  - Stock (textblock 9264): those eight plus death (973), fool (974), swamp (975), demon (983) and void (976). The void card confuses.
+  - The fortune teller's reading (textblock 935, spells 490–502) deals the same thirteen cards with the same texts.
+- **Each card's quote opens with** *([OBSERVED] Stock textblocks 9366–9378; the Priest's matches the Paradigm capture word for word)*:
+  - wizard `The Wizard symbolizes mystical power`; priest `When the Priest is played`; knight `The Knight is both protector and aggressor`; chariot `The Chariot symbolizes mastery over movement`;
+  - grail `The Grail! A most fortuitous card, the Grail symbolizes life itself.`; sun `The Sun is a boon to all those who search`; wheel of fortune `The Wheel of Fortune, when played in this instance`; angel `The Angel indicates that you are being watched over`;
+  - death `A deathly curse be upon you! The shadow of death hovers at your door`; fool `Fools often wander the land in ignorant bliss`; swamp `The Swamp swallows life and slows travel`; demon `as a Demon hovers about you`; void `Unending darkness is the hallmark of the Void`.
+- **Client use:**
+  - The message seeds key each card record on its own quote, and the shared `The gaze of luck is upon you` line sits on the deck's own record (`card deck draw` / `card-draw`). With all thirteen records on the shared line, one draw latched every card and the void's Confused flag held navigation (report `paradigm-20261002-120516`).
+  - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*; nothing uses it automatically.
 
 ### Chests and chest loot tables
 *Status: CONFIRMED (chest behaviour); CONFIRMED — verified against the 1.11p / Paradigm / Euphoria data, 2026-07-10 (loot-table chain)*
