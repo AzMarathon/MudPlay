@@ -55,18 +55,22 @@ public sealed class PartyRestSync : IDisposable
     // sees why the party stopped ("@wait (HP's too low)"). A receiver keys on the
     // token alone (PartyEssentialHandlers.OnWait), so the note changes nothing it
     // does. Only strings MegaMUD has been seen to send are used (GAME_MECHANICS
-    // "`@wait` / `@ok` party pause"). The rest go out as a bare @wait: MegaMUD sends
-    // nothing for a mana wait, and its wording for poison and disease isn't recorded.
-    public const string HpNote       = "(HP's too low)";
-    public const string BlindNote    = "(blinded)";
-    public const string ConfusedNote = "(confused)";
-    public const string HeldNote     = "(can't move)";
-    public const string TooHeavyNote = "(too heavy to move)";
+    // "`@wait` / `@ok` party pause"). ConditionNote is its blanket for a condition
+    // with no wording of its own, which is what poison and disease get. A mana wait
+    // goes out bare: MegaMUD sends nothing for one.
+    public const string HpNote        = "(HP's too low)";
+    public const string ConditionNote = "(waiting on message condition)";
+    public const string BlindNote     = "(blinded)";
+    public const string ConfusedNote  = "(confused)";
+    public const string HeldNote      = "(can't move)";
+    public const string TooHeavyNote  = "(too heavy to move)";
 
     // The note a reason carries unless the caller passes one. Health has none here:
     // it covers both pools, and only HealthManager knows which one tripped.
     internal static string? DefaultNote(WaitReason reason) => reason switch
     {
+        WaitReason.Poison    => ConditionNote,
+        WaitReason.Disease   => ConditionNote,
         WaitReason.Blindness => BlindNote,
         WaitReason.Confusion => ConfusedNote,
         WaitReason.Held      => HeldNote,

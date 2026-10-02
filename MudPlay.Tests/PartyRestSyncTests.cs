@@ -175,10 +175,11 @@ public sealed class PartyRestSyncTests
     }
 
     // ===== Wait reasons on the wire =====
-    // The note after the token is MegaMUD's wording for the reason. Only wording
-    // MegaMUD has been seen to send is used; the rest go out bare.
+    // The note after the token is MegaMUD's wording for the reason.
 
     [Theory]
+    [InlineData(WaitReason.Poison,    "(waiting on message condition)")]
+    [InlineData(WaitReason.Disease,   "(waiting on message condition)")]
     [InlineData(WaitReason.Blindness, "(blinded)")]
     [InlineData(WaitReason.Confusion, "(confused)")]
     [InlineData(WaitReason.Held,      "(can't move)")]
@@ -192,18 +193,15 @@ public sealed class PartyRestSyncTests
         Assert.Equal($"/Leader @wait {note}\r", LastWire(wire));
     }
 
-    // MegaMUD's wording for poison and disease isn't recorded, and Health covers two
-    // pools (its HP note comes from HealthManager; a mana wait has none).
-    [Theory]
-    [InlineData(WaitReason.Poison)]
-    [InlineData(WaitReason.Disease)]
-    [InlineData(WaitReason.Health)]
-    public void RequestWait_WithNoKnownWording_IsBare(WaitReason reason)
+    // Health covers two pools: its HP note comes from HealthManager, and a mana wait
+    // has none (MegaMUD sends nothing for one).
+    [Fact]
+    public void RequestWait_Health_IsBareUnlessTheCallerNamesThePool()
     {
         var (sync, party, wire) = Setup();
         party.IsInParty = true;
         party.LeaderName = "Leader";
-        sync.RequestWait(reason);
+        sync.RequestWait(WaitReason.Health);
         Assert.Equal("/Leader @wait\r", LastWire(wire));
     }
 

@@ -2,7 +2,7 @@
 
 ## 3.138.6
 
-- `@wait` to your leader names the reason where MegaMUD's wording is known: `(HP's too low)`, `(blinded)`, `(confused)`, `(can't move)`
+- `@wait` to your leader names the reason in MegaMUD's wording: `(HP's too low)`, `(blinded)`, `(confused)`, `(can't move)`, `(waiting on message condition)`
 - A wait reason that keeps your `@ok` from going out is logged, and the bug report lists the reasons held
 
 ## 3.138.4
