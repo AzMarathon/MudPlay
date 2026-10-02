@@ -17,6 +17,7 @@ public enum BuiltInAction
     OpenLogPane,
     OpenBackscroll,
     OpenSessionStats,
+    OpenRoundTotals,
     OpenSettings,
     OpenGameDataBrowser,
     OpenWireInspector,

@@ -104,10 +104,13 @@ public sealed class OtherSettings
     public bool RunStopRestoresCombat { get; set; }
     public bool SprintStopEndsSprint { get; set; }
 
-    // When true (default) a look at a monster surfaces its estimated remaining
-    // hit points — both in the status-bar "TGT HP:" slot and as a yellow line in
-    // the terminal scrollback. Off suppresses both. Char-tier; Settings → Other.
-    public bool ShowMonsterHpLookup { get; set; } = true;
+    // When true (default) a look at a monster prints its estimated remaining hit
+    // points as a yellow line in the terminal scrollback. The status bar's target
+    // item is separate: it follows the bar's layout. Saved under the name of the
+    // wider "show monster HP lookup" switch this replaced, so a character that had
+    // that off keeps the line off. Char-tier; Settings → Other.
+    [System.Text.Json.Serialization.JsonPropertyName("ShowMonsterHpLookup")]
+    public bool PrintMonsterHpOnLook { get; set; } = true;
 
     // Ceiling for Monster Intel's "Est. Rounds to Kill" column — a monster
     // whose projected rounds exceed this shows "<cap>+" instead of the raw

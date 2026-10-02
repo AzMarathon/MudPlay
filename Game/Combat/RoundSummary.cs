@@ -24,7 +24,12 @@ public readonly record struct RoundSummary(
     int HpAfter,
     int MaBefore,
     int MaAfter,
-    IReadOnlyList<CombatantDamage>? EachMonster = null)
+    IReadOnlyList<CombatantDamage>? EachMonster = null,
+    // Whether the tallies above were counted with "Cap at monster HP" on, and the
+    // unknown-dealt total under the opposite choice. Each row carries its own
+    // opposite numbers (CombatantDamage.DealtOther / TakenOther).
+    bool Capped = false,
+    int UnknownDealtOther = 0)
 {
     // The local player's own row.
     public int DamageDealt => Self.Dealt;

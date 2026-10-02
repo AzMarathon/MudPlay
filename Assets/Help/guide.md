@@ -128,7 +128,7 @@ The status bar along the bottom packs several live readouts. This is the default
 - The **connection light** — **red** idle · **yellow** connecting · **green** connected (a reconnect countdown shows beside it while reconnecting). It's just the dot; hover it for the state text.
 - An **engine-state badge** mirroring the Navigation one — **IDLE / WALKING / LOOPING / AUTO-LAIR** — whose border turns **yellow** then **red** as the engine-recovery gate escalates.
 - Your **location** (the map/room key), then the session's **exp/hr** rate, then **TNL:** — the estimated time to next level at that rate, followed by a bracketed **(+N.NN lvls)** ratio. TNL runs as a **countdown**: once estimated it ticks down second by second, and only resets when a fresh estimate differs by more than a little (a much better or worse stretch, a level gained), not on every kill. Under 10 minutes it shows minutes and seconds (`4m 12s`), under a minute just seconds. Session Stats and your own Party-window row read the **same** clock, so all three always agree. Because TNL counts to the next level you can still *earn* (banked-but-untrained levels are already skipped), that bracket says how far past your current trained level your exp already sits — e.g. `(+2.91 lvls)` means you've banked two full levels and you're 91% of the way to a third, so a large TNL time on a lower level reads clearly. It rounds down, so 99.6% of the way to a level still reads `0.99`, not `1.00`. It's the same figure a website toplist shows in brackets beside a player's level.
-- A **TGT HP:** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses), with a bracketed best guess from the damage it's taken since (see *Show monster HP lookup*). The same estimate is also printed as a yellow line in the terminal. A **Settings → Other → "Show monster HP lookup"** checkbox (default on) toggles both. The max HP is read from the monster record **placed or summoned in your current room**, so a display name shared across zones (an "orc lieutenant" in the barracks vs the slums) resolves to the one you're actually fighting.
+- A **TGT HP:** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses), with a bracketed best guess from the damage it's taken since (see *Print monster HP in the terminal when I look*). The same estimate is also printed as a yellow line in the terminal, which **Settings → Other** can switch off. To take the readout off the bar, remove the **Looked-at target HP** item under **Settings → BBS + Display → Status bar**. The max HP is read from the monster record **placed or summoned in your current room**, so a display name shared across zones (an "orc lieutenant" in the barracks vs the slums) resolves to the one you're actually fighting.
 - **Tick countdowns** — the combat round tick, the natural HP-regen tick, and the mana / meditate tick.
 
 ## The toolbar and menus
@@ -163,7 +163,7 @@ Each is modeless; pressing its key again brings it to the front if it's buried, 
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
 - **Buff Watchdog** (View → Buff Watchdog, or a toolbar button — no default hotkey) — the one place you configure every automated buff and watch each one's live recast timer. See the **Buff Watchdog** section for how to use it.
-- **Spell Book** (F2), **Monster Intel** (View menu, or the toolbar's *Monster Intel* button — no default hotkey), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, a monster reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Monster Intel under **Game Data**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
+- **Spell Book** (F2), **Monster Intel** (View menu, or the toolbar's *Monster Intel* button — no default hotkey), **Session Stats**, **Round Totals** (View menu — each round's damage table in a small window of its own) and **Wire Inspector** (F5) round out the set — a read-only spell reference, a monster reference, session counters, the round table, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Monster Intel under **Game Data**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
 
@@ -1919,6 +1919,19 @@ All of these reset with the rest of the session (connect, character switch, **Re
 - **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
 - **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered. In the Transaction history, coin you stash in a room is **one row per stash room** rather than a row per stash. It carries the time of the latest stash and three lines: **Last** (what you hid that time, each coin type) with **Total Stashes**, **Avg** (the average stash, in the highest coins), and **Total** (everything hidden there, per coin type, followed by what it all comes to in the highest coin, e.g. *(≈ 8.7 platinum)*). Rows from an older log are folded in the first time it loads, and **Clear** starts the count again. Items you hide still get a row each. **Selling and buying** are recorded too, one row per shop visit listing the items and what they came to (*Sold orc-head ×7, club for 16 gold, 5 silver*). Players in your party at the time don't count as seen; once someone leaves the party, seeing them counts again. In the transaction ledger, **stash** entries are tinted faint gold (the map's stash-marker colour) so they stand out from bank deposits, and **double-clicking any entry** opens the Navigation map centred on the room where that deposit or stash happened. Each row has a **Keep** checkbox, saved with the row so it's still ticked after a restart: check the entries you want to hold onto, and **Clear history** wipes everything *except* those — a way to prune a full ledger without losing the rows that matter (with nothing checked it clears the whole thing, as before). The clear updates the on-disk log too, so kept rows survive a reconnect and cleared ones don't come back.
 
+## Round Totals
+
+Open **Round Totals** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Toolbar + Shortcuts). It is a small window showing the last combat round's damage table: who **dealt** and **took** what, one row per combatant, with your own row picked out.
+
+- **Always on.** Every round lands in the window while it is open, whether or not **Settings → Combat → Show combat round totals** is ticked. That checkbox only decides whether the table is *also* printed in the terminal.
+- **Its own rows.** The **Rows** button in the window ticks which kinds of row it shows — **Me**, **Party**, **Other players**, **Monsters** — and **One row per monster** (off: same-named monsters share a row, `muckworm x3`; on: `muckworm #1`, `#2`, …). The same menu has **Cap at monster HP**: on, a monster's damage taken (and its attacker's damage dealt) counts only up to the HP it had left. These are saved for the character and are separate from the terminal table's boxes, so the terminal can print only your own row, uncapped, while the window shows the whole room capped, or the other way round. (Session Stats follows the Settings → Combat cap.)
+- **Steady size.** The window fits the table, but it doesn't jump around as the room changes: it grows at once for a bigger round and only shrinks after ten rounds in a row have been smaller, so stepping between a packed room and a near-empty one leaves it where it was.
+- **Out of your way.** It opens without taking the keyboard from the terminal, and it remembers where you put it. If it was open when you closed MudPlay, it comes back open.
+
+Before the first round of a session it reads *Waiting for a round of combat.* See *Show combat round totals* for how the numbers are counted.
+
+---
+
 ## Buff Watchdog
 
 Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) brings it forward if it's buried, or closes it if it's already in front.
@@ -2655,10 +2668,10 @@ Above the rows, **Preview** draws the bar as it would look with your edits so fa
 
 | Group | Items |
 |---|---|
-| Standard bar | Engine state chip · Location (map/room, the walk readout, or the lap) · Exp rate · Time to next level · Looked-at target HP · Statline warning · Combat tick · HP tick · Mana tick · Connection light |
+| Standard bar | Engine state chip · Location (map/room, the walk readout, or the lap and its step: `lap 12 · step 36 of 60`) · Exp rate · Time to next level · Looked-at target HP · Statline warning · Combat tick · HP tick · Mana tick · Connection light |
 | Character | Profile name · Character name · Level · Race and class · Lives · BBS · Game data set · Combat profile (number and name, number only, or name only) · Gear set |
 | Vitals | HP · HP percent · Mana · Mana percent · Posture (resting / meditating) · Stealth (sneaking / hidden) · Encumbrance (the word, weight carried out of your limit, and percent) |
-| Location and movement | Map / room number · Room name · Loop name · Lap · Walk destination |
+| Location and movement | Map / room number · Room name · Loop name · Lap · Loop step (`Step 36 of 60`) · Walk destination |
 | Combat | Combat target · Exp to next level · Party (size and leader) · Hit rate · Crit rate · Backstab rate · Average hit · Average round · Dodge rate · Hit-taken rate |
 | Session stats | Time online · Exp earned · Kills · Kills per hour · Cash collected · Cash per hour · Items collected · Items sold · Steps walked · Average step time · Sneak success |
 | Other | Auto engines (which are on) · Next event (the Event due soonest, and how long until it fires) · Cash carried · Clock · Custom text |
@@ -2951,6 +2964,7 @@ At **0 mana** a mana-costing action can't land (the server silently ignores it),
 ### Show combat round totals
 
 **Default:** Off
+**Terminal only:** this checkbox and the boxes under it control what prints **in the terminal**. The same table is always available in the **Round Totals** window (View → Round Totals), which has its own row choices and doesn't need this box ticked — see *Round Totals*.
 **What it does:** After each combat round, prints a small yellow table to the terminal: how much damage each combatant **dealt** and **took** that round, one row for **everyone in the room** — you, party members, other players and monsters:
 
 ```
@@ -3771,12 +3785,12 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **What it does:** The same for a **Sprint** start (Go in Sprint Mode). On, stopping it before it began ends Sprint Mode at once, turning back on the autos Sprint turned off. Off, Sprint Mode stays on until your next walk arrives.
 **Important notes:** Saved for this character.
 
-### Show monster HP lookup
+### Print monster HP in the terminal when I look
 
 **Default:** On
-**What it does:** When you `look <monster>`, MudPlay shows its estimated remaining hit points in two places. Turning this off suppresses both.
+**What it does:** When you `look <monster>`, MudPlay shows its estimated remaining hit points in two places. This checkbox switches the first, the terminal line. (It used to be "Show monster HP lookup" and switched both; a character that had that off keeps the line off.)
 - **The terminal** gets a yellow line with the monster's max HP, its wound band and that band's HP range, and a **best guess**: `[large orc: 100 HP, Sev: 30-49, ~41]`. The bands are **Full** (unwounded), **Slight**, **Mod** (moderately), **Hvy** (heavily), **Sev** (severely), **Crit** (critically) and **V.Crit** (very critically).
-- **The status bar's TGT HP:** slot shows the range with the best guess in brackets, `TGT HP: 35-48 [~41]`. The bracket follows the damage the monster takes after the look.
+- **The status bar's TGT HP:** slot shows the range with the best guess in brackets, `TGT HP: 35-48 [~41]`. The bracket follows the damage the monster takes after the look. This is the status bar's **Looked-at target HP** item, which the checkbox doesn't affect: remove it from the bar (or put it on another row) under **Settings → BBS + Display → Status bar**.
 
 **How the best guess works:** it starts from the monster's max HP and subtracts the damage the round totals credited to it (see *Show combat round totals*). It adds the monster's regen every 30 seconds while it's hurt, on both realms. Every `look` keeps it inside the wound band. When a look shows a regen tick fired (the band rose since the last look, or it held up despite the damage), it adds that tick to the best guess and re-times the regen from then. With two monsters of the same name in the room, attacks and looks go to the first one listed in *Also here:*, and so does the estimate.
 
@@ -4240,6 +4254,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Multi-attack 2 (enable + slot) | off, unset | bool + spell code + MaxCastsPerRoom(null/0-100) + MinManaPerCast (MinEnemies shared with slot 1) | `MultiAttack2Enabled`, `MultiAttack2Spell` | Models/Profile/CombatSettings.cs |
 | Drain (life-steal) spell + HP trigger + Drains override AOE | unset / 50% / off | spell code + MaxCastsPerRoom + MinManaPerCast; DrainHpTrigger(0-100); DrainsOverrideAoe(bool) | `DrainSpell`, `DrainHpTrigger`, `DrainsOverrideAoe` | Models/Profile/CombatSettings.cs |
 | Show combat round totals | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
+| Round Totals window options (set in the window) | all rows on / stacked monsters / cap off | bool × 6 | `RoundTotalsWindow.ShowSelf` / `ShowParty` / `ShowPlayers` / `ShowMonsters` / `EachMonster` / `CapAtMonsterHp` | Models/Profile/RoundTotalsWindowSettings.cs |
 | Round totals rows: Me / Party / Other players / Monsters | `false` each | bool | `ShowCombatRoundTotalsSelf` / `…Party` / `…Players` / `…Monsters` | Models/Profile/CombatSettings.cs |
 | Round totals: Cap at monster HP | `false` | bool | `CapRoundTotalsAtMonsterHp` | Models/Profile/CombatSettings.cs |
 

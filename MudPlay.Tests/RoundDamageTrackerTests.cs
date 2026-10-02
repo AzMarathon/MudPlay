@@ -296,6 +296,42 @@ public sealed class RoundDamageTrackerTests
         }
     }
 
+    // Each round keeps its tallies both ways, so a reader with its own cap choice (the
+    // Round Totals window) can show either without changing what the terminal prints.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Round_CarriesBothCapChoices_WhicheverTheSettingIs(bool capAtHp)
+    {
+        (Harness h, _) = MuckRoom(capAtHp);
+        using (h)
+        {
+            h.Feed("A hellish storm of fire and brimstone scorches your foes for 812 damage!");
+            RoundSummary r = h.CloseRound();
+            Assert.Equal(capAtHp, r.Capped);
+
+            static int Taken(IReadOnlyList<RoundTotalsRow> rows, string name) => rows.First(x => x.Name.StartsWith(name)).Taken;
+            static int Dealt(IReadOnlyList<RoundTotalsRow> rows, string name) => rows.First(x => x.Name.StartsWith(name)).Dealt;
+
+            IReadOnlyList<RoundTotalsRow> capped = RoundTotalsFormatter.Rows(r, Everyone, capAtHp: true);
+            Assert.Equal(3 * 540, Taken(capped, "muckworm"));
+            Assert.Equal(3 * 540 + 2 * 400, Dealt(capped, DamageLineAttributor.Self));
+
+            IReadOnlyList<RoundTotalsRow> full = RoundTotalsFormatter.Rows(r, Everyone, capAtHp: false);
+            Assert.Equal(3 * 812, Taken(full, "muckworm"));
+            Assert.Equal(5 * 812, Dealt(full, DamageLineAttributor.Self));
+
+            // Each monster's own row follows the same choice.
+            IReadOnlyList<RoundTotalsRow> eachFull = RoundTotalsFormatter.Rows(r, Everyone, eachMonster: true, capAtHp: false);
+            Assert.Equal(812, Taken(eachFull, "muckworm #1"));
+            IReadOnlyList<RoundTotalsRow> eachCapped = RoundTotalsFormatter.Rows(r, Everyone, eachMonster: true, capAtHp: true);
+            Assert.Equal(540, Taken(eachCapped, "muckworm #1"));
+
+            // Asked for nothing in particular, the rows are as the setting counted them.
+            Assert.Equal(capAtHp ? 3 * 540 : 3 * 812, Taken(RoundTotalsFormatter.Rows(r, Everyone), "muckworm"));
+        }
+    }
+
     // Stacked (the default): a shared row says how many there were.
     [Fact]
     public void Table_Stacked_LabelsSharedRowsWithTheCount()

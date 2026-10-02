@@ -1,0 +1,53 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        x:Class="MudPlay.Views.RoundTotalsWindow"
+        x:DataType="vm:RoundTotalsViewModel"
+        Title="Round Totals"
+        SizeToContent="WidthAndHeight"
+        CanResize="False"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.Line">
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.Line.Heading">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.Line.Self">
+            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+        </Style>
+    </Window.Styles>
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="12,8,12,10">
+        <StackPanel Spacing="2" MinWidth="230">
+            <!-- The round number, and the menu of this window's own row choices. -->
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,0,0,2">
+                <TextBlock Grid.Column="0" Text="{Binding RoundText}" FontWeight="SemiBold"
+                           VerticalAlignment="Center"
+                           FontSize="{StaticResource FontSizeSm}"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <Button Grid.Column="1" Content="Rows" Click="OnRowsClick"
+                        Padding="8,1" MinHeight="0" FontSize="{StaticResource FontSizeSm}"
+                        ToolTip.Tip="Choose which rows this window shows, whether each monster gets its own row, and whether a monster's damage is capped at the HP it had left. These are separate from the terminal's round table (Settings → Combat → Display)."/>
+            </Grid>
+
+            <TextBlock Classes="Line Heading" Text="Waiting for a round of combat."
+                       IsVisible="{Binding !HasRound}"/>
+
+            <TextBlock Classes="Line Heading" Text="{Binding Header}" IsVisible="{Binding HasRound}"/>
+            <ItemsControl ItemsSource="{Binding Lines}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RoundTotalsLineViewModel">
+                        <TextBlock Classes="Line" Classes.Self="{Binding IsSelf}" Text="{Binding Text}"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
+</Window>

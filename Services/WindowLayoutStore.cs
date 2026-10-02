@@ -81,6 +81,8 @@ public sealed class WindowLayoutStore
     // are toggled.
     private readonly HashSet<string> _autoHeightIds =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _autoSizeIds =
+        new(StringComparer.OrdinalIgnoreCase);
 
     // Edge-snapping / cluster-move for the panel windows. Registered per window in
     // AttachWindow; notified before a programmatic reposition so it doesn't read a
@@ -168,12 +170,14 @@ public sealed class WindowLayoutStore
     // Wire window's Opened / Closing / Closed handlers to the per-profile bounds
     // store. Handlers register once per Window instance. Pass autoHeight: true for
     // a SizeToContent="Height" window so its saved height is never re-applied (its
-    // content owns the height).
-    public void AttachWindow(Window window, string id, bool autoHeight = false)
+    // content owns the height), or autoSize: true for one whose content owns both
+    // its width and height, so only its position is restored.
+    public void AttachWindow(Window window, string id, bool autoHeight = false, bool autoSize = false)
     {
         ArgumentNullException.ThrowIfNull(window);
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (autoHeight) _autoHeightIds.Add(id);
+        if (autoSize) _autoSizeIds.Add(id);
         _snap?.Register(window, id);
 
         window.Opened += (_, _) =>
@@ -244,13 +248,15 @@ public sealed class WindowLayoutStore
     {
         if (!_bounds.TryGetValue(id, out WindowBounds? layout)) return;
 
-        // Content-auto-height windows restore width only — setting Height would
-        // clobber SizeToContent and freeze the window at its last size.
+        // Content-sized windows restore no size at all, and content-auto-height
+        // ones width only — setting a sized dimension would clobber SizeToContent
+        // and freeze the window at its last size.
         if (_autoHeightIds.Contains(id))
         {
             if (layout.Width >= MinPersistedWidth) window.Width = layout.Width;
         }
-        else if (layout.Width >= MinPersistedWidth && layout.Height >= MinPersistedHeight)
+        else if (!_autoSizeIds.Contains(id)
+                 && layout.Width >= MinPersistedWidth && layout.Height >= MinPersistedHeight)
         {
             window.Width = layout.Width;
             window.Height = layout.Height;

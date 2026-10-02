@@ -59,6 +59,8 @@
     <StreamGeometry x:Key="IconQuick">M12 2 L15 8 L21 9 L16.5 13.2 L18 20 L12 17 L6 20 L7.5 13.2 L3 9 L9 8 Z</StreamGeometry>
     <!-- Three ascending bars on a baseline — session stats / kills-per-hour sparkline. -->
     <StreamGeometry x:Key="IconStats">M4 20 H20 M7 20 V14 M12 20 V10 M17 20 V6</StreamGeometry>
+    <!-- A small table: two columns of rows — round totals. -->
+    <StreamGeometry x:Key="IconRoundTotals">M4 5 H20 V19 H4 Z M4 10 H20 M4 14.5 H20 M13 10 V19</StreamGeometry>
     <!-- Stacked-cylinders database glyph — game data browser. -->
     <StreamGeometry x:Key="IconDatabase">M5 6 A7 2 0 1 1 19 6 A7 2 0 1 1 5 6 Z M5 6 V12 A7 2 0 0 0 19 12 V6 M5 12 V18 A7 2 0 0 0 19 18 V12</StreamGeometry>
 

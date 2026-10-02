@@ -1060,6 +1060,7 @@ public partial class MainWindowViewModel : ObservableObject
         layouts.RegisterOpener("navigation", OpenNavigation);
         layouts.RegisterOpener("party", OpenParty);
         layouts.RegisterOpener("playersseen", OpenPlayersSeen);
+        layouts.RegisterOpener("round-totals", OpenRoundTotals);
         layouts.RegisterOpener("session-stats", OpenSessionStats);
         layouts.RegisterOpener("settings", OpenSettings);
         layouts.RegisterOpener("spellbook", OpenSpellBook);
@@ -2002,19 +2003,19 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnMonsterLookTarget(Game.MonsterLookObserved obs)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            // The band always sharpens the running estimate, shown or not.
             Game.Combat.MonsterHpRead? read = AppServices.Current.MonsterHpEstimates.OnLook(obs.Name, obs.Estimate);
-            // Gated by Settings → Other "Show monster HP lookup" (default on).
-            if (!AppServices.Current.Resolver
-                    .Resolve<Models.Profile.OtherSettings>("Other").ShowMonsterHpLookup)
-                return;
             _lookedMonster = obs.Name;
             _lookedBand = obs.Estimate.Describe();
             TargetHpText = read is { } r ? $"TGT HP: {_lookedBand} [~{r.BestGuess}]" : $"TGT HP: {_lookedBand}";
             // Also drop a yellow line into the terminal scrollback so the estimate
-            // is logged, not only shown in the transient status slot: max HP, the wound
+            // is logged, not only shown in the status bar's target item (which the
+            // user may have taken off the bar), unless Settings → Other has the
+            // line switched off: max HP, the wound
             // band's shorthand and range, and the best guess from the damage seen and
             // regen — "[large orc: 100 HP, Crit: 20-29, ~24]".
+            if (!AppServices.Current.Resolver
+                    .Resolve<Models.Profile.OtherSettings>("Other").PrintMonsterHpOnLook)
+                return;
             string wound = $"{Game.MonsterLookParser.WoundShorthand(obs.Wound)}: {_lookedBand}";
             string line = read is { } l
                 ? $"{obs.Name}: {l.MaxHp} HP, {wound}, ~{l.BestGuess}"
@@ -2157,14 +2158,15 @@ public partial class MainWindowViewModel : ObservableObject
         // the runner is still walking to the loop's entry (Approaching), the slot
         // shows the same walk-to readout as a plain goto — current room,
         // destination, remaining steps — because we haven't begun the loop yet.
-        // Only once the circle is actually running does it collapse to the terse
-        // lap counter (the CURRENT NAV pane owns per-step detail).
+        // Only once the circle is actually running does it collapse to the lap and
+        // the step within it — "lap 12 · step 36 of 60", the step being the next to
+        // send, as the Navigation window counts it.
         Game.Map.LoopRunner runner = AppServices.Current.LoopRunner;
         if (runner.State != Game.Map.LoopState.Idle && runner.CurrentLoop is not null)
         {
-            return runner.State == Game.Map.LoopState.Approaching
-                ? BuildWalkLocationText()
-                : $"lap {runner.CompletedLaps + 1}";
+            if (runner.State == Game.Map.LoopState.Approaching) return BuildWalkLocationText();
+            string lap = $"lap {runner.CompletedLaps + 1}";
+            return LoopStepText(runner) is { Length: > 0 } step ? $"{lap} · {step}" : lap;
         }
 
         // A plain walk-to (goto / favourite) gets the same C/D/Steps readout as a
@@ -2195,6 +2197,14 @@ public partial class MainWindowViewModel : ObservableObject
             Game.Map.RoomConfidence.PendingRespawn => "Awaiting respawn…",
             _                                      => "Unknown location",
         };
+    }
+
+    // "step 36 of 60" — where the running loop is in its circle; empty while it
+    // has no steps laid out.
+    public static string LoopStepText(Game.Map.LoopRunner runner)
+    {
+        int total = runner.StepCount;
+        return total <= 0 ? string.Empty : $"step {Math.Min(total, runner.CurrentIndex + 1)} of {total}";
     }
 
     // "C: M/R  D: M/R  Steps: N" — the walk-to readout shared by a plain goto and a
@@ -5345,6 +5355,26 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
+    // Singleton handle for the live RoundTotalsWindow (see RaiseOrClose).
+    private RoundTotalsWindow? _roundTotals;
+
+    [RelayCommand]
+    private void OpenRoundTotals()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_roundTotals is { } existing) { RaiseOrClose(existing); return; }
+
+        RoundTotalsWindow window = new()
+        {
+            DataContext = new RoundTotalsViewModel(AppServices.Current.RoundTotals, AppServices.Current.Profile),
+        };
+        window.Closed += (_, _) => _roundTotals = null;
+        _roundTotals = window;
+        window.Show(main);
+    }
+
     // Singleton handle for the live SessionStatsWindow (see RaiseOrClose).
     private SessionStatsWindow? _sessionStats;
 
@@ -5521,6 +5551,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string LogPaneGesture          => GetGesture(Models.Profile.BuiltInAction.OpenLogPane);
     public string BackscrollGesture       => GetGesture(Models.Profile.BuiltInAction.OpenBackscroll);
     public string SessionStatsGesture     => GetGesture(Models.Profile.BuiltInAction.OpenSessionStats);
+    public string RoundTotalsGesture      => GetGesture(Models.Profile.BuiltInAction.OpenRoundTotals);
     public string SettingsGesture         => GetGesture(Models.Profile.BuiltInAction.OpenSettings);
     public string GameDataBrowserGesture  => GetGesture(Models.Profile.BuiltInAction.OpenGameDataBrowser);
     public string ToggleConnectionGesture => GetGesture(Models.Profile.BuiltInAction.ToggleConnection);
@@ -5543,6 +5574,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LogPaneGesture));
         OnPropertyChanged(nameof(BackscrollGesture));
         OnPropertyChanged(nameof(SessionStatsGesture));
+        OnPropertyChanged(nameof(RoundTotalsGesture));
         OnPropertyChanged(nameof(SettingsGesture));
         OnPropertyChanged(nameof(GameDataBrowserGesture));
         OnPropertyChanged(nameof(ToggleConnectionGesture));

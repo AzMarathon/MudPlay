@@ -1,12 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.136.0**
-> - Settings → BBS + Display → Status bar: choose what the bar under the terminal shows, on its left, centre and right
-> - Up to four status bar rows, any of which can crawl as a marquee
-> - New status bar items: profile, combat profile, gear set, HP and mana, encumbrance, room, loop and lap, party, Session Stats tallies, next event, auto engines, cash, clock and more, plus your own text with live values
-> - Location, exp rate and time to next level are separate status bar items
-> - A preview in Settings shows the bar before you accept it
+> **Version 3.137.0**
+> - Round Totals window (View → Round Totals, toolbar button, keybind): each round's damage table in a small window with its own row choices, sized steadily so it does not jump as the room changes
+> - Status bar: the Location item shows the loop step beside the lap, and Loop step is an item of its own
+> - Settings → Other: "Show monster HP lookup" is now "Print monster HP in the terminal when I look"; the status bar readout is a bar item you add or remove
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -76,6 +76,7 @@ public static class StatusBarValues
             "room" => svc.RoomTracker.State.CurrentRoom?.Name ?? string.Empty,
             "loop" => RunningLoop(svc)?.Name ?? string.Empty,
             "lap" => RunningLoop(svc) is null ? string.Empty : $"Lap {svc.LoopRunner.CompletedLaps + 1}",
+            "loopstep" => LoopStep(svc),
             "destination" => svc.Walker.State != WalkState.Idle && svc.Walker.Destination is { } to ? $"To {to}" : string.Empty,
 
             "fighting" => state.InCombat ? svc.Combat.CurrentTarget ?? string.Empty : string.Empty,
@@ -157,6 +158,14 @@ public static class StatusBarValues
         return read.MaxWeight > 0
             ? $"{level} {read.CurrentWeight}/{read.MaxWeight} ({read.Percentage}%)"
             : level.ToString();
+    }
+
+    // "Step 36 of 60" once the loop is circling; nothing during its approach walk.
+    private static string LoopStep(AppServices svc)
+    {
+        if (RunningLoop(svc) is null || svc.LoopRunner.State == LoopState.Approaching) return string.Empty;
+        string step = MainWindowViewModel.LoopStepText(svc.LoopRunner);
+        return step.Length == 0 ? string.Empty : char.ToUpperInvariant(step[0]) + step[1..];
     }
 
     private static Loop? RunningLoop(AppServices svc) =>
