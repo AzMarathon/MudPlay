@@ -220,6 +220,24 @@ public sealed class UpdateServiceTests
         Assert.Contains("goto rollback", s);
     }
 
+    // The renamed-in executable is a new file, so it would take the folder's
+    // permissions and drop any set on the old one by hand. They are saved off the old
+    // file and restored onto the new one before it is started.
+    [Fact]
+    public void BuildWindows_CarriesTheExecutablesPermissionsAcross()
+    {
+        string s = SwapScriptBuilder.BuildWindows();
+        int save = s.IndexOf("icacls \"%EXE%\" /save \"%ACL%\"", StringComparison.Ordinal);
+        int renameAside = s.IndexOf("move /y \"%EXE%\" \"%OLD%\"", StringComparison.Ordinal);
+        int renameIn = s.IndexOf("move /y \"%EXE%.new\" \"%EXE%\"", StringComparison.Ordinal);
+        int restore = s.IndexOf("icacls \"%DST%\" /restore \"%ACL%\"", StringComparison.Ordinal);
+        int start = s.IndexOf("start \"\" \"%EXE%\"", StringComparison.Ordinal);
+        Assert.True(save >= 0 && save < renameAside);
+        Assert.True(restore > renameIn && restore < start);
+        // The saved permissions never outlive the swap, failed or not.
+        Assert.Equal(2, s.Split("del /f /q \"%ACL%\"").Length - 1);
+    }
+
     // A failed swap leaves its step log beside the executable for the user to attach
     // to a bug report; a successful one deletes it.
     [Fact]

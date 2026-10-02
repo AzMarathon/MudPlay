@@ -1,5 +1,9 @@
 # Version history
 
+## 3.137.5
+
+- Windows: an update keeps the permissions set on the MudPlay program file, so a shortcut to it still opens afterwards
+
 ## 3.137.4
 
 - Auto-train funding reads a stash before taking from it: only what the train is short, in the largest coins, and nothing at all if stash plus bank still fall short

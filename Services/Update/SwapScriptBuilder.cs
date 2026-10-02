@@ -88,6 +88,11 @@ public static class SwapScriptBuilder
     // which dies before the crash reporter is up. The renamed-aside copy is deleted
     // here when nothing holds it, else by the next startup
     // (UpdatePlatform.DeleteReplacedExecutables).
+    //
+    // A renamed-in executable is a new file: it takes the folder's permissions and
+    // loses any set on the old one by hand, which left one user's taskbar shortcut
+    // refused ("Windows cannot access the specified device, path, or file"). So the
+    // old executable's permissions are saved before the swap and put on the new one.
     public static string BuildWindows() => """
         @echo off
         setlocal
@@ -102,6 +107,7 @@ public static class SwapScriptBuilder
         set "BAK=%DST%.bak"
         set "OLD=%EXE%.old-%RANDOM%%RANDOM%"
         set "LOG=%~dpn0.log"
+        set "ACL=%~dpn0.acl"
         set "FAILLOG=%DST%\MudPlay-update-failed.log"
         set "KEEP=/XF "%EXENAME%" "%EXENAME%.old-*" "MudPlay-update-failed.log""
         set "WHY="
@@ -145,6 +151,9 @@ public static class SwapScriptBuilder
           set "WHY=copying the new build in failed"
           goto rollback
         )
+        rem icacls records the file by name, so the restore below finds the new
+        rem executable under the same name in the same folder.
+        icacls "%EXE%" /save "%ACL%" >>"%LOG%" 2>&1
         copy /y "%NEW%\%EXENAME%" "%EXE%.new" >>"%LOG%" 2>&1
         if errorlevel 1 (
           set "WHY=copying the new %EXENAME% in failed"
@@ -161,11 +170,15 @@ public static class SwapScriptBuilder
           set "WHY=renaming the new %EXENAME% into place failed"
           goto rollback
         )
+        rem Not worth failing a finished swap over: the new build still runs with the
+        rem folder's permissions.
+        if exist "%ACL%" icacls "%DST%" /restore "%ACL%" /C >>"%LOG%" 2>&1
         >>"%LOG%" echo [%time%] swapped - starting the new build
         start "" "%EXE%" %ARGS%
         rmdir /s /q "%STAGE%"
         rmdir /s /q "%BAK%"
         del /f /q "%OLD%" >nul 2>&1
+        del /f /q "%ACL%" >nul 2>&1
         del /f /q "%LOG%" >nul 2>&1
         rem Pop the batch context so cmd stops reading this file, then delete it — a
         rem .cmd can't del itself while cmd is still line-reading it.
@@ -186,6 +199,7 @@ public static class SwapScriptBuilder
         rem attach to a bug report; the relaunched client points them at it.
         >>"%LOG%" echo [%time%] restarting the old build
         copy /y "%LOG%" "%FAILLOG%" >nul 2>&1
+        del /f /q "%ACL%" >nul 2>&1
         start "" "%EXE%" %ARGS%
         exit /b 1
         """;
