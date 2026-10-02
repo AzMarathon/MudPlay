@@ -63,38 +63,40 @@ public static class SoundTones
         return notes is null ? null : ToWav(Mix(notes));
     }
 
-    // A level-up "ding", about four seconds: a deep boom that swells twice and dies
-    // away slowly, a short strike at the start, and a bright shimmer that rises in
-    // over the first half second and hangs above it. Built in layers; each layer is
-    // one loudness curve shared by a handful of pitches.
+    // A level-up "ding", two and a half seconds: a deep boom that swells twice, a
+    // short strike at the start, and a soft shimmer that rises in over the first
+    // half second. Everything fades out together over the last half second, where
+    // the boom falls away. Built in layers; each layer is one loudness curve shared
+    // by a handful of pitches. The shimmer is kept low: as pure tones those pitches
+    // turn piercing well before they sound loud.
     private static readonly Note[] LevelUpDing = new[]
     {
         // The boom. Every layer sits on the same 43 Hz so they add rather than cancel:
-        // the opening swell, the larger second surge, and the long tail under it.
+        // the opening swell, the larger second surge, and the body under it.
         Layer(0.00, 0.06, 0, 1.25, 0.30, 0.41, (43, 1), (86, 0.45), (89, 0.35)),
         Layer(1.00, 0.25, 0, 1.20, 0.45, 0.24, (43, 1), (86, 0.45), (145, 0.4)),
-        Layer(1.00, 0.40, 0.55, 2.70, 1.20, 0.54, (43, 1), (86, 0.45)),
+        Layer(1.00, 0.40, 0.55, 1.50, 0.50, 0.54, (43, 1), (86, 0.45)),
 
         // The rumble over it. Neighbouring pitches a few Hz apart beat against each other.
-        Layer(0.00, 0.10, 1.6, 4.00, 0.80, 0.505, (145, 1), (161, 0.9), (243, 0.25)),
-        Layer(0.15, 0.10, 1.6, 4.00, 0.80, 0.406, (143.2, 1), (156, 0.7), (272, 0.3)),
-        Layer(0.45, 0.30, 1.2, 3.86, 0.80, 0.314, (146.5, 1), (162.6, 0.6), (218, 0.35)),
+        Layer(0.00, 0.10, 1.6, 2.50, 0.50, 0.505, (145, 1), (161, 0.9), (243, 0.25)),
+        Layer(0.15, 0.10, 1.6, 2.35, 0.50, 0.406, (143.2, 1), (156, 0.7), (272, 0.3)),
+        Layer(0.45, 0.30, 1.2, 2.05, 0.50, 0.314, (146.5, 1), (162.6, 0.6), (218, 0.35)),
 
         // The strike, then the mid swell behind it.
-        Layer(0.00, 0.006, 7, 1.00, 0.30, 0.21,
+        Layer(0.00, 0.015, 7, 1.00, 0.30, 0.17,
             (312, 0.7), (377, 0.8), (415, 1), (441, 0.55), (560, 0.4), (614, 0.45), (716, 0.4), (775, 0.4)),
-        Layer(0.00, 0.006, 1, 1.00, 0.30, 0.06, (900, 1), (1150, 0.8), (1470, 0.7)),
-        Layer(0.00, 0.10, 1.6, 3.00, 0.80, 0.09, (350, 1), (382, 0.5), (431, 0.5)),
-        Layer(0.70, 0.30, 1.6, 3.30, 0.80, 0.19, (349, 1), (447, 0.7), (538, 0.4), (760, 0.5), (810, 0.45)),
-        Layer(0.45, 0.50, 2.2, 3.00, 0.80, 0.214, (813, 0.8), (1308, 0.7), (1470, 1), (1577, 0.6)),
-        Layer(1.00, 0.10, 1.6, 2.50, 0.80, 0.086, (1265, 1), (1954, 0.7)),
+        Layer(0.00, 0.015, 1, 1.00, 0.30, 0.045, (900, 1), (1150, 0.8), (1470, 0.7)),
+        Layer(0.00, 0.10, 1.6, 2.50, 0.50, 0.09, (350, 1), (382, 0.5), (431, 0.5)),
+        Layer(0.70, 0.30, 1.6, 1.80, 0.50, 0.19, (349, 1), (447, 0.7), (538, 0.4), (760, 0.5), (810, 0.45)),
+        Layer(0.45, 0.50, 2.2, 2.05, 0.50, 0.17, (813, 0.8), (1308, 0.7), (1470, 1), (1577, 0.6)),
+        Layer(1.00, 0.10, 1.6, 1.50, 0.50, 0.065, (1265, 1), (1954, 0.7)),
 
         // The shimmer: high bell-like pitches that come in as three waves.
-        Layer(0.12, 0.45, 1.2, 4.10, 0.80, 0.24, (2939, 1), (3494, 0.8), (3305, 0.45), (4048, 0.45)),
-        Layer(0.80, 0.50, 2.2, 3.50, 0.80, 0.189, (2342, 0.8), (2573, 0.6), (4409, 0.8), (4592, 0.9), (4775, 1)),
-        Layer(0.60, 0.10, 1.6, 3.70, 0.80, 0.085, (3133, 1), (3623, 1)),
-        Layer(0.45, 0.30, 1.2, 3.86, 0.80, 0.119, (5329, 1), (6062, 0.6), (7935, 0.4)),
-        Layer(0.15, 0.60, 2.2, 4.10, 0.80, 0.19, (5146, 0.8), (5378, 0.7), (7100, 0.5), (8554, 0.5), (9593, 0.4)),
+        Layer(0.12, 0.45, 1.2, 2.38, 0.50, 0.12, (2939, 1), (3494, 0.8), (3305, 0.45), (4048, 0.45)),
+        Layer(0.80, 0.50, 2.2, 1.70, 0.50, 0.095, (2342, 0.8), (2573, 0.6), (4409, 0.8), (4592, 0.9), (4775, 1)),
+        Layer(0.60, 0.10, 1.6, 1.90, 0.50, 0.042, (3133, 1), (3623, 1)),
+        Layer(0.45, 0.30, 1.2, 2.05, 0.50, 0.042, (5329, 1), (6062, 0.6), (7935, 0.4)),
+        Layer(0.15, 0.60, 2.2, 2.35, 0.50, 0.066, (5146, 0.8), (5378, 0.7), (7100, 0.5), (8554, 0.5), (9593, 0.4)),
     }.SelectMany(static layer => layer).ToArray();
 
     // Several pitches sharing one loudness curve. Level is the layer's as a whole:
