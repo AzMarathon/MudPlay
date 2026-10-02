@@ -1,0 +1,144 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:views="using:MudPlay.Views"
+             x:Class="MudPlay.Views.Settings.StatusBarEditorView"
+             x:DataType="vm:StatusBarEditorViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.Hint">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="TextBlock.ZoneLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style Selector="Border.Zone">
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderSoftBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="8,6"/>
+        </Style>
+        <!-- A placed item: a small button; clicking it opens the move / remove menu. -->
+        <Style Selector="Button.Chip">
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="Margin" Value="0,0,4,4"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="CornerRadius" Value="10"/>
+        </Style>
+        <Style Selector="Button.AddItem">
+            <Setter Property="Padding" Value="8,2"/>
+            <Setter Property="MinHeight" Value="0"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <!-- One zone: its label, its items, and the Add button under them. -->
+        <DataTemplate x:Key="ZoneEditor" x:DataType="vm:StatusBarZoneEditor">
+            <Border Classes="Zone">
+                <StackPanel>
+                    <TextBlock Classes="ZoneLabel" Text="{Binding Title}"/>
+                    <ItemsControl ItemsSource="{Binding Entries}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:StatusBarEntryEditor">
+                                <Panel>
+                                    <Button Classes="Chip" Content="{Binding Label}"
+                                            IsVisible="{Binding !IsCustomText}"
+                                            Click="OnEntryClick"
+                                            ToolTip.Tip="{Binding Description}"/>
+                                    <!-- The user's own text: typed in place, with a
+                                         button beside it for the same menu. -->
+                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="2" Margin="0,0,4,4"
+                                          IsVisible="{Binding IsCustomText}">
+                                        <TextBox Grid.Column="0" MinWidth="150"
+                                                 Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 PlaceholderText="Lap {lap} of {loop}"
+                                                 ToolTip.Tip="{Binding TextHint}"/>
+                                        <Button Grid.Column="1" Classes="Chip" Margin="0" Content="..."
+                                                Click="OnEntryClick"
+                                                ToolTip.Tip="Move or remove this text"/>
+                                    </Grid>
+                                </Panel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Button Classes="AddItem" Content="+ Add" Click="OnAddClick" HorizontalAlignment="Left"
+                            ToolTip.Tip="Add an item to this zone"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <StackPanel Spacing="8" HorizontalAlignment="Stretch">
+        <TextBlock Text="Status bar"
+                   Foreground="{StaticResource ChromeFgMutedBrush}"
+                   FontSize="11" FontWeight="SemiBold"/>
+        <TextBlock Classes="Hint"
+                   Text="The bar under the terminal. Each row has a left, centre and right side. Press + Add to put an item on a side; click an item to move or remove it. An item with nothing to show takes no space."/>
+
+        <!-- The bar as it would look with the edits so far. Live values where there
+             are any, sample values otherwise, so every placed item shows. -->
+        <StackPanel Spacing="4" IsVisible="{Binding HasPreview}">
+            <TextBlock Classes="ZoneLabel" Margin="0" Text="PREVIEW"/>
+            <Border BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1">
+                <views:StatusBarView DataContext="{Binding Preview}"/>
+            </Border>
+            <TextBlock Classes="Hint"
+                       Text="Nothing changes under the terminal until you press OK or Apply."/>
+        </StackPanel>
+
+        <ItemsControl ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:StatusBarRowEditor">
+                    <Border BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="1"
+                            CornerRadius="3" Padding="10,8" Margin="0,0,0,8">
+                        <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="16">
+                                <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                                <CheckBox Grid.Column="1" Content="Scroll as a marquee"
+                                          IsChecked="{Binding Marquee, Mode=TwoWay}" VerticalAlignment="Center"
+                                          ToolTip.Tip="Crawl this row's text sideways as one line (left items, then centre, then right), so it can carry more than fits the window. The engine chip, statline warning and connection light don't crawl: they stay at the ends of the row."/>
+                                <Button Grid.Column="3" Content="Remove row" Command="{Binding RemoveCommand}"
+                                        IsVisible="{Binding CanRemove}" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- The three sides, laid out as they sit on the bar. -->
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                <ContentControl Grid.Column="0" Content="{Binding Left}"
+                                                ContentTemplate="{StaticResource ZoneEditor}"/>
+                                <ContentControl Grid.Column="1" Content="{Binding Center}"
+                                                ContentTemplate="{StaticResource ZoneEditor}"/>
+                                <ContentControl Grid.Column="2" Content="{Binding Right}"
+                                                ContentTemplate="{StaticResource ZoneEditor}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Add a status bar row" Command="{Binding AddRowCommand}"
+                    ToolTip.Tip="Up to four rows. A new row goes under the others, and the window grows to fit it."/>
+            <Button Content="Reset to default" Command="{Binding ResetCommand}"
+                    ToolTip.Tip="One row: engine chip, location, exp rate and time to level on the left; the looked-at target in the centre; the statline warning, ticks and connection light on the right."/>
+        </StackPanel>
+    </StackPanel>
+</UserControl>

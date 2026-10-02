@@ -505,6 +505,12 @@ public partial class MainWindowViewModel : ObservableObject
     // bottom bar should never show "Unknown location" while the Navigation
     // strip knows where the player is.
     [ObservableProperty] private string _locationText = "Unknown location";
+    [ObservableProperty] private string _expRateText = "0/hr";
+    [ObservableProperty] private string _timeToLevelText = string.Empty;
+
+    // The status bar under the terminal: rows of items laid out in Settings → BBS +
+    // Display (global). Built in the constructor, rebuilt when the layout is saved.
+    public ViewModels.StatusBar.StatusBarViewModel StatusBar { get; }
 
 
     // ----- Engine-state chip (mirrors the Navigation window's badge) -----
@@ -723,6 +729,9 @@ public partial class MainWindowViewModel : ObservableObject
         // profile during AppServices.Initialize (which runs before this ctor).
         _splashAnimate = AppServices.Current.Display.SplashAnimate;
 
+        StatusBar = new ViewModels.StatusBar.StatusBarViewModel(this, preview: false);
+        StatusBar.Apply(Models.Settings.StatusBarSettings.Read(AppServices.Current.Settings.Current));
+
         Lines = new LineExtractor(Emulator);
         Capture = new CaptureSession(Emulator.Screen.Scrollback);
 
@@ -756,13 +765,13 @@ public partial class MainWindowViewModel : ObservableObject
         {
             Interval = TimeSpan.FromMilliseconds(100),
         };
-        // The location slot's trailing exp/hr is a continuously-decaying rate
-        // (windowed experience ÷ elapsed time), so it rides this same tick — the
-        // slot's own room / engine events fire too rarely to keep it live, which
-        // left it frozen at its entry value (0/hr at session start) while the
-        // Session Stats window, ticking the same tracker, showed the real rate.
-        // The LocationText setter's equality check drops the repaint when the
-        // compact rate is unchanged, so most ticks cost only a string compare.
+        // The exp/hr beside the location is a continuously-decaying rate (windowed
+        // experience ÷ elapsed time), so it rides this same tick — the location's
+        // own room / engine events fire too rarely to keep it live, which left it
+        // frozen at its entry value (0/hr at session start) while the Session
+        // Stats window, ticking the same tracker, showed the real rate. The
+        // setters' equality checks drop the repaint when the text is unchanged, so
+        // most ticks cost only a few string compares.
         _statusTickRefresh.Tick += (_, _) =>
         {
             RefreshStatusBarTicks();
@@ -894,8 +903,10 @@ public partial class MainWindowViewModel : ObservableObject
         // global-settings Save so the Toolbar + Shortcuts editor's changes land
         // in the menu without a relaunch.
         RefreshHelpLinks();
-        AppServices.Current.Settings.GlobalSettingsChanged += _ =>
+        AppServices.Current.Settings.GlobalSettingsChanged += global =>
         {
+            if (StatusBar.Apply(Models.Settings.StatusBarSettings.Read(global)))
+                AppServices.Current.Log.Info("StatusBar", $"Layout changed: {StatusBar.Describe()}.");
             RefreshHelpLinks();
             // A BBS rename rewrites the recent-profiles refs in the Global tier
             // — re-mirror so the File → Recent menu drops the old BBS name.
@@ -988,6 +999,7 @@ public partial class MainWindowViewModel : ObservableObject
                 () => WriteTerminalStatus(text, TerminalStatusKind.Notice)));
         // Let non-main surfaces (Settings → BBS) open the Profile Management window.
         AppServices.Current.SetOpenProfileManager(OpenProfileManager);
+        AppServices.Current.SetStatusBarPreviewFactory(() => new ViewModels.StatusBar.StatusBarViewModel(this, preview: true));
         RebuildCombatProfilesMenu();
         AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
 
@@ -2135,34 +2147,32 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void RefreshLocationSlot()
     {
+        LocationText = BuildLocationText();
+        RefreshExpRate();
+    }
+
+    private static string BuildLocationText()
+    {
         // Loop status takes over the location slot while a loop is active. While
         // the runner is still walking to the loop's entry (Approaching), the slot
         // shows the same walk-to readout as a plain goto — current room,
-        // destination, remaining steps, rate — because we haven't begun the loop
-        // yet. Only once the circle is actually running does it collapse to the
-        // terse lap counter + rate (the CURRENT NAV pane owns per-step detail).
+        // destination, remaining steps — because we haven't begun the loop yet.
+        // Only once the circle is actually running does it collapse to the terse
+        // lap counter (the CURRENT NAV pane owns per-step detail).
         Game.Map.LoopRunner runner = AppServices.Current.LoopRunner;
         if (runner.State != Game.Map.LoopState.Idle && runner.CurrentLoop is not null)
         {
-            if (runner.State == Game.Map.LoopState.Approaching)
-            {
-                LocationText = BuildWalkLocationText();
-                return;
-            }
-            double xpHr = AppServices.Current.SessionActivity.Snapshot().ExperiencePerHour;
-            LocationText = $"lap {runner.CompletedLaps + 1} · {RateWithTnl(xpHr)}";
-            return;
+            return runner.State == Game.Map.LoopState.Approaching
+                ? BuildWalkLocationText()
+                : $"lap {runner.CompletedLaps + 1}";
         }
 
-        // A plain walk-to (goto / favourite) gets the same C/D/Steps/rate readout
-        // as a loop approach. Checked before the tracker fallback below, which
-        // would otherwise win (the current room is non-null throughout a walk).
+        // A plain walk-to (goto / favourite) gets the same C/D/Steps readout as a
+        // loop approach. Checked before the tracker fallback below, which would
+        // otherwise win (the current room is non-null throughout a walk).
         if (AppServices.Current.Walker.State is Game.Map.WalkState.Walking or Game.Map.WalkState.Paused
             && AppServices.Current.Walker.Destination is not null)
-        {
-            LocationText = BuildWalkLocationText();
-            return;
-        }
+            return BuildWalkLocationText();
 
         Game.Map.RoomState state = AppServices.Current.RoomTracker.State;
         Game.Map.Room? room = state.CurrentRoom;
@@ -2172,22 +2182,13 @@ public partial class MainWindowViewModel : ObservableObject
         // the real cause instead and point the user at the fix. Clears
         // automatically once a set loads (RoomGraph.GraphReloaded → here).
         if (room is null && AppServices.Current.RoomGraph.RoomCount == 0)
-        {
-            LocationText = "Load a game data set to use navigation";
-            return;
-        }
-        // Map/room number + the session exp rate — no room name. Names run long
-        // ("Newhaven, Arena", …) and were overflowing the narrow status slot,
-        // pushing the rate behind an ellipsis exactly when the name was longest.
-        // The map/room key is always short and identifies the room just as well
-        // for a player watching the strip.
-        if (room is not null)
-        {
-            double xpHr = AppServices.Current.SessionActivity.Snapshot().ExperiencePerHour;
-            LocationText = $"{room.Key} · {RateWithTnl(xpHr)}";
-            return;
-        }
-        LocationText = state.Confidence switch
+            return "Load a game data set to use navigation";
+        // The map/room number, not the room name. Names run long ("Newhaven,
+        // Arena", …) and were overflowing the narrow status slot; the key is
+        // always short and identifies the room just as well for a player watching
+        // the strip.
+        if (room is not null) return room.Key.ToString();
+        return state.Confidence switch
         {
             Game.Map.RoomConfidence.Pending        => "Pending move…",
             Game.Map.RoomConfidence.Lost           => "Lost — pick a room on the map",
@@ -2196,9 +2197,9 @@ public partial class MainWindowViewModel : ObservableObject
         };
     }
 
-    // "C: M/R  D: M/R  Steps: N - rate/hr" — the walk-to readout shared by a
-    // plain goto and a loop's approach leg. Remaining steps = total path length
-    // minus the next-step index (CurrentStepIndex), clamped at 0.
+    // "C: M/R  D: M/R  Steps: N" — the walk-to readout shared by a plain goto and a
+    // loop's approach leg. Remaining steps = total path length minus the next-step
+    // index (CurrentStepIndex), clamped at 0.
     private static string BuildWalkLocationText()
     {
         Game.Map.AutoWalkManager walker = AppServices.Current.Walker;
@@ -2206,27 +2207,36 @@ public partial class MainWindowViewModel : ObservableObject
         string cur = here is { } r ? r.Key.ToString() : "?";
         string dest = walker.Destination is { } d ? d.ToString() : "?";
         int remaining = Math.Max(0, walker.StepCount - walker.CurrentStepIndex);
-        double xpHr = AppServices.Current.SessionActivity.Snapshot().ExperiencePerHour;
-        return $"C: {cur} D: {dest} Steps: {remaining} - {RateWithTnl(xpHr)}";
+        return $"C: {cur} D: {dest} Steps: {remaining}";
     }
 
-    // "<rate>/hr" with " - TNL: <time> (+N.NN lvls)" appended when the
-    // time-to-next-level can be computed. Uses the SAME estimate as the Session Stats
-    // "time to next level" readout (banked-aware target level + game-data exp chart)
-    // so the two never drift — an earlier stat-line "exp to next" ÷ rate ignored
-    // banked levels and desynced from Session Stats. The "(+N.NN lvls)" is the
-    // banked-levels ratio (whole banked + progress toward the next) — since TNL
-    // targets the next UNearned level, that bracket says how far past your trained
-    // level your exp already sits, so a big TNL time on a low level reads clearly.
-    private static string RateWithTnl(double xpHr)
+    // The session exp rate ("1.2M/hr") and the time to the next level ("TNL: 42m
+    // (+0.35 lvls)"), each its own status-bar item. TNL uses the SAME estimate as the
+    // Session Stats "time to next level" readout (banked-aware target level +
+    // game-data exp chart) so the two never drift — an earlier stat-line "exp to
+    // next" ÷ rate ignored banked levels and desynced from Session Stats. The
+    // "(+N.NN lvls)" is the banked-levels ratio (whole banked + progress toward the
+    // next) — since TNL targets the next UNearned level, that bracket says how far
+    // past your trained level your exp already sits, so a big TNL time on a low
+    // level reads clearly. Empty until there is a rate to estimate from.
+    private void RefreshExpRate()
     {
-        string rate = $"{Game.Combat.RateText.Compact(xpHr)}/hr";
-        if (xpHr <= 0) return rate;
+        double xpHr = AppServices.Current.SessionActivity.Snapshot().ExperiencePerHour;
+        ExpRateText = $"{Game.Combat.RateText.Compact(xpHr)}/hr";
+        if (xpHr <= 0)
+        {
+            TimeToLevelText = string.Empty;
+            return;
+        }
         (Game.Calculators.TimeToLevelEstimator.Result est, TimeSpan? remaining) = AppServices.Current.SelfTimeToLevel();
-        if (remaining is not { } tnl) return rate;
+        if (remaining is not { } tnl)
+        {
+            TimeToLevelText = string.Empty;
+            return;
+        }
         string time = tnl <= TimeSpan.Zero ? "ready"
             : Game.Calculators.ExperienceTableCalculator.FormatTimeToLevel(tnl);
-        return $"{rate} - TNL: {time} (+{Game.Calculators.TrainBudgetCalculator.FormatBankableLevels(est.BankableLevelsFractional)} lvls)";
+        TimeToLevelText = $"TNL: {time} (+{Game.Calculators.TrainBudgetCalculator.FormatBankableLevels(est.BankableLevelsFractional)} lvls)";
     }
 
     private void RefreshStatusBarTicks()

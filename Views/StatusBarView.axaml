@@ -1,0 +1,176 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sb="using:MudPlay.ViewModels.StatusBar"
+             x:Class="MudPlay.Views.StatusBarView"
+             x:DataType="sb:StatusBarViewModel">
+
+    <UserControl.Styles>
+        <!-- An item with nothing to show hides its whole slot, so the zone's
+             spacing closes up around it. -->
+        <Style Selector="ItemsControl.Zone > ContentPresenter" x:DataType="sb:StatusBarItemViewModel">
+            <Setter Property="IsVisible" Value="{Binding IsShown}"/>
+        </Style>
+
+        <!-- Engine-state chip — same colour-code rules as the Navigation window's
+             badge (idle grey / walking + looping green / lair amber). -->
+        <Style Selector="Border.EngineBadge">
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="6,1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="Border.EngineBadge TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.WalkingState">
+            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.WalkingState TextBlock">
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LoopingState">
+            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LoopingState TextBlock">
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LairState">
+            <Setter Property="Background" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.LairState TextBlock">
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
+        <!-- Tier overlays — engine-recovery gate state. Border-only; fill stays the
+             engine colour. Tier 2 = gate watching for 1-of-1 recovery (yellow);
+             Tier 3 = backtrack recovery active (red). Declared after the engine
+             classes so the BorderBrush setter precedence lands here. -->
+        <Style Selector="Border.EngineBadge.Tier2State">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentYellowBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+        <Style Selector="Border.EngineBadge.Tier3State">
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <!-- One item. Each kind's visual sits in the panel; only the item's own is
+             visible. The chip, warning and light read the main window's state. -->
+        <DataTemplate x:Key="StatusItem" x:DataType="sb:StatusBarItemViewModel">
+            <Panel VerticalAlignment="Center">
+                <TextBlock Classes="StatusSlot"
+                           Classes.StatusMono="{Binding IsMono}"
+                           Classes.Pulsing="{Binding IsPulsing}"
+                           IsVisible="{Binding IsText}"
+                           Text="{Binding Text}"
+                           TextTrimming="CharacterEllipsis"/>
+
+                <Border Classes="EngineBadge"
+                        IsVisible="{Binding IsEngineChip}"
+                        Classes.WalkingState="{Binding Main.EngineActionIsWalking}"
+                        Classes.LoopingState="{Binding Main.EngineActionIsLooping}"
+                        Classes.LairState="{Binding Main.EngineActionIsLair}"
+                        Classes.Tier2State="{Binding Main.IsTier2}"
+                        Classes.Tier3State="{Binding Main.IsTier3}">
+                    <TextBlock Text="{Binding Main.EngineActionBadge}"/>
+                </Border>
+
+                <!-- Statline mismatch: the game's prompt doesn't match Settings →
+                     Statline and the automatic reset didn't take, so HP / MA can't
+                     be read. Click opens the Statline tab. -->
+                <Button Padding="0" MinHeight="0" Background="Transparent" BorderThickness="0"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding IsStatlineWarning}"
+                        ToolTip.Tip="{Binding Main.StatlineMismatchTip}"
+                        Command="{Binding Main.OpenSettingsTabCommand}"
+                        CommandParameter="statline">
+                    <TextBlock Classes="StatusSlot"
+                               Foreground="{StaticResource AccentRedBrush}"
+                               FontWeight="Bold"
+                               Text="STATLINE MISMATCH"/>
+                </Button>
+
+                <!-- Connection stoplight: red idle · yellow connecting · green
+                     connected, with the reconnect countdown beside it when a
+                     long-delay reconnect is armed. -->
+                <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                            IsVisible="{Binding IsConnectionLight}"
+                            ToolTip.Tip="{Binding Main.ConnectionStatusText}">
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{StaticResource AccentRedBrush}"
+                             IsVisible="{Binding Main.IsIdle}"/>
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{StaticResource AccentYellowBrush}"
+                             IsVisible="{Binding Main.IsConnecting}"/>
+                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{StaticResource AccentGreenBrush}"
+                             IsVisible="{Binding Main.IsConnected}"/>
+                    <TextBlock Classes="StatusSlot"
+                               Foreground="{StaticResource AccentAmberBrush}"
+                               Text="{Binding Main.ReconnectCountdownText}"
+                               IsVisible="{Binding Main.IsReconnectCountdownVisible}"/>
+                </StackPanel>
+            </Panel>
+        </DataTemplate>
+
+        <ItemsPanelTemplate x:Key="StatusZone">
+            <StackPanel Orientation="Horizontal" Spacing="14"/>
+        </ItemsPanelTemplate>
+    </UserControl.Resources>
+
+    <ItemsControl ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="sb:StatusBarRowViewModel">
+                <Border Classes="StatusBar" ClipToBounds="True">
+                    <Panel>
+                        <!-- Left, centre and right. The centre floats in whatever
+                             space the two sides leave. -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding !IsMarquee}">
+                            <ItemsControl Grid.Column="0" Classes="Zone" ItemsSource="{Binding Left}"
+                                          ItemTemplate="{StaticResource StatusItem}"
+                                          ItemsPanel="{StaticResource StatusZone}"/>
+                            <ItemsControl Grid.Column="1" Classes="Zone" ItemsSource="{Binding Center}"
+                                          HorizontalAlignment="Center"
+                                          ItemTemplate="{StaticResource StatusItem}"
+                                          ItemsPanel="{StaticResource StatusZone}"/>
+                            <ItemsControl Grid.Column="2" Classes="Zone" ItemsSource="{Binding Right}"
+                                          HorizontalAlignment="Right"
+                                          ItemTemplate="{StaticResource StatusItem}"
+                                          ItemsPanel="{StaticResource StatusZone}"/>
+                        </Grid>
+
+                        <!-- Marquee: the row's text as one crawling line, in
+                             fixed-width type so each step moves it by the same
+                             amount. The chip, warning and light don't crawl: they
+                             hold their ends of the row. -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding IsMarquee}">
+                            <ItemsControl Grid.Column="0" Classes="Zone" ItemsSource="{Binding PinnedLeft}"
+                                          ItemTemplate="{StaticResource StatusItem}"
+                                          ItemsPanel="{StaticResource StatusZone}"/>
+                            <TextBlock Grid.Column="1" Classes="StatusSlot StatusMono"
+                                       Text="{Binding MarqueeText}"
+                                       TextWrapping="NoWrap"
+                                       ClipToBounds="True"/>
+                            <ItemsControl Grid.Column="2" Classes="Zone" ItemsSource="{Binding PinnedRight}"
+                                          HorizontalAlignment="Right"
+                                          ItemTemplate="{StaticResource StatusItem}"
+                                          ItemsPanel="{StaticResource StatusZone}"/>
+                        </Grid>
+                    </Panel>
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>

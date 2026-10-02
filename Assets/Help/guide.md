@@ -123,11 +123,11 @@ Type, and your keystrokes go straight to the game. The **numpad** is pre-wired t
 - **Tab-complete** — completes what you're typing against the START of your carried, worn, and key-ring item names (`drop emerald-` + **Tab** → `drop emerald-hilted rapier`; a "bronze emblem" needs `bro`/`bronze`, not `e`). Keep typing to narrow it — `drop padded h` + **Tab** → `drop padded helm`. A stack's count (`2 padded helm`) and a leading "a"/"an" are skipped, so you match on the name; a count you type yourself (`drop 5 padded h`) is left as is. Press it again, or **Shift+Tab**, to step through other matches; toggle it off in **Settings → General**.
 - **Right-click menu** — your starred GOTO **Favorites** and **Recent destinations** (the last 10 places you walked — click either to walk there) lead the menu, followed by a set of entries you fully control: by default quick-opens for Backscroll / Player Workshop / Party / Spell Book / Conversation / Navigation / Session Stats, **Reset States** (the recovery escape hatch — see Automation), and **Bug report…**. Rebuild that lower section — add commands, direct links to a Workshop tab or a calculator, your own fly-out folders, and rename anything — under **Settings → Toolbar + Shortcuts** (see *Customizing the terminal right-click menu*).
 
-The status bar along the bottom packs several live readouts:
+The status bar along the bottom packs several live readouts. This is the default layout; you can change what it shows, add more rows, or make a row crawl like a ticker under **Settings → BBS + Display → Status bar** (see *Status Bar*):
 
 - The **connection light** — **red** idle · **yellow** connecting · **green** connected (a reconnect countdown shows beside it while reconnecting). It's just the dot; hover it for the state text.
 - An **engine-state badge** mirroring the Navigation one — **IDLE / WALKING / LOOPING / AUTO-LAIR** — whose border turns **yellow** then **red** as the engine-recovery gate escalates.
-- Your **location** (the map/room key), the session's **exp/hr** rate, and **- TNL:** — the estimated time to next level at that rate, followed by a bracketed **(+N.NN lvls)** ratio. TNL runs as a **countdown**: once estimated it ticks down second by second, and only resets when a fresh estimate differs by more than a little (a much better or worse stretch, a level gained), not on every kill. Under 10 minutes it shows minutes and seconds (`4m 12s`), under a minute just seconds. Session Stats and your own Party-window row read the **same** clock, so all three always agree. Because TNL counts to the next level you can still *earn* (banked-but-untrained levels are already skipped), that bracket says how far past your current trained level your exp already sits — e.g. `(+2.91 lvls)` means you've banked two full levels and you're 91% of the way to a third, so a large TNL time on a lower level reads clearly. It rounds down, so 99.6% of the way to a level still reads `0.99`, not `1.00`. It's the same figure a website toplist shows in brackets beside a player's level.
+- Your **location** (the map/room key), then the session's **exp/hr** rate, then **TNL:** — the estimated time to next level at that rate, followed by a bracketed **(+N.NN lvls)** ratio. TNL runs as a **countdown**: once estimated it ticks down second by second, and only resets when a fresh estimate differs by more than a little (a much better or worse stretch, a level gained), not on every kill. Under 10 minutes it shows minutes and seconds (`4m 12s`), under a minute just seconds. Session Stats and your own Party-window row read the **same** clock, so all three always agree. Because TNL counts to the next level you can still *earn* (banked-but-untrained levels are already skipped), that bracket says how far past your current trained level your exp already sits — e.g. `(+2.91 lvls)` means you've banked two full levels and you're 91% of the way to a third, so a large TNL time on a lower level reads clearly. It rounds down, so 99.6% of the way to a level still reads `0.99`, not `1.00`. It's the same figure a website toplist shows in brackets beside a player's level.
 - A **TGT HP:** readout that appears after you `look <monster>` — a coarse wound band × the monster's max HP, so you get an absolute HP range (invaluable on fast-regen bosses), with a bracketed best guess from the damage it's taken since (see *Show monster HP lookup*). The same estimate is also printed as a yellow line in the terminal. A **Settings → Other → "Show monster HP lookup"** checkbox (default on) toggles both. The max HP is read from the monster record **placed or summoned in your current room**, so a display name shared across zones (an "orc lieutenant" in the barracks vs the slums) resolves to the one you're actually fighting.
 - **Tick countdowns** — the combat round tick, the natural HP-regen tick, and the mana / meditate tick.
 
@@ -2628,6 +2628,51 @@ Found near the bottom of the "BBS + Display" tab, under a "Show confirmations" h
 
 ---
 
+## Status Bar
+
+Found at the bottom of the "BBS + Display" tab, under the confirmations. **Global-tier** — one layout for every BBS and every character on this install.
+
+**What it does:** Lets you decide what the bar under the terminal shows. The bar is one to four **rows**; each row has a **Left**, **Centre** and **Right** side, and each side holds the items you put on it, in order. The default is the bar MudPlay has always had: one row with the engine chip, location, exp rate and time to level on the left, the looked-at target in the centre, and the statline warning, tick countdowns and connection light on the right.
+
+### Building a row
+
+Each row is drawn as three boxes — **Left**, **Centre**, **Right** — laid out the way they sit on the bar.
+
+- **+ Add** (under each side) — opens a menu of everything the bar can show, grouped by kind (Standard bar, Character, Vitals, …). Point at a group, click an item, and it goes on the end of that side. Hover an item for what it shows.
+- **Click a placed item** — opens its menu: **Move earlier** / **Move later** within its side, **Move to** another side (or a side of another row), and **Remove**.
+- **Scroll as a marquee** — shows the row as one line of text crawling sideways (left items, then centre, then right), like the "update available" crawl in the title bar. Use it when you want more on a row than fits the window. Only text crawls: the engine chip, the statline warning and the connection light stay where they are, at the left end (if they sit on the left or centre) or the right end (if they sit on the right).
+- **Remove row** — on every row when there is more than one; the bar always keeps at least one.
+- **Add a status bar row** — up to four. A new row goes under the others, and the window grows by the height of the row so the terminal keeps its size (and shrinks back when a row is removed).
+- **Reset to default** — back to the single original row.
+
+An item with nothing to show takes no space, and the items after it close up. The statline warning, the looked-at target, the loop name, the next event and the combat target are empty most of the time.
+
+### Preview
+
+Above the rows, **Preview** draws the bar as it would look with your edits so far. It uses live values where there are any and sample values otherwise, so every item you placed is visible even when you aren't connected. Nothing under the terminal changes until you press **OK** or **Apply**; **Cancel** throws the edits away.
+
+### What you can show
+
+| Group | Items |
+|---|---|
+| Standard bar | Engine state chip · Location (map/room, the walk readout, or the lap) · Exp rate · Time to next level · Looked-at target HP · Statline warning · Combat tick · HP tick · Mana tick · Connection light |
+| Character | Profile name · Character name · Level · Race and class · Lives · BBS · Game data set · Combat profile (number and name, number only, or name only) · Gear set |
+| Vitals | HP · HP percent · Mana · Mana percent · Posture (resting / meditating) · Stealth (sneaking / hidden) · Encumbrance (the word, weight carried out of your limit, and percent) |
+| Location and movement | Map / room number · Room name · Loop name · Lap · Walk destination |
+| Combat | Combat target · Exp to next level · Party (size and leader) · Hit rate · Crit rate · Backstab rate · Average hit · Average round · Dodge rate · Hit-taken rate |
+| Session stats | Time online · Exp earned · Kills · Kills per hour · Cash collected · Cash per hour · Items collected · Items sold · Steps walked · Average step time · Sneak success |
+| Other | Auto engines (which are on) · Next event (the Event due soonest, and how long until it fires) · Cash carried · Clock · Custom text |
+
+The Combat and Session stats items are the same tallies the **Session Stats** window shows.
+
+### Custom text
+
+**Custom text…** (in the Other group) adds a box where you type your own label. Put another item's name in braces to show its live value: `Lap {lap} of {loop}`, or `{profile} · {hp} · {mana}`. Hover the box for the full list of names (`{profile}`, `{hp}`, `{roomkey}`, …). A name that isn't an item is left exactly as typed, so a typo is easy to spot in the preview. The button beside the box opens the same move / remove menu.
+
+**Important notes:** The standard-bar items update the instant they change. The others are read twice a second, and only the ones actually on a bar are read, so a bigger bar costs next to nothing; a marquee row steps about four and a half times a second. The layout applies when you click OK/Apply — no restart needed.
+
+---
+
 ## Combat
 
 Settings → Combat. Two switches live *outside* this tab and gate everything here: **Auto-Combat** (Settings → General, or its toolbar toggle) must be on for any of this to matter at all; **Auto-Nuke** separately gates **both multi-attack** slots and the **AoE-debuff** slot (single-target attack spells aren't considered "nukes" and stay available regardless). The **single-target debuff** is part of the attack rotation, so it follows **Auto-Combat**, not Auto-Nuke.
@@ -4167,6 +4212,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Sysop powers — status / god lives (per-char) | `false` | bool ×2 | `SysopStatus` / `SysopGodLives` | Models/Profile/BbsCredentials.cs |
 | Menu nav steps (per-char) | `[]` | list of `MenuStep{WaitForPattern, Send}` | `MenuNavSteps` | Models/Profile/BbsCredentials.cs |
 | Confirm exit / hangup / save settings / deletes | `false` (all) | bool | `ConfirmExit`, `ConfirmHangup`, `ConfirmSaveSettings`, `ConfirmDeletes` | Models/Settings/ConfirmSettings.cs |
+| Status bar layout (rows, zones, items, marquee) | one row: the original bar | 1–4 rows; items from the Status Bar list; custom text | `GlobalSettings.Settings["StatusBar"]` → `Rows[].Left` / `Center` / `Right` / `Marquee` | Models/Settings/StatusBarSettings.cs |
 
 ### Combat
 

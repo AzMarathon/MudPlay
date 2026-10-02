@@ -19,7 +19,6 @@ namespace MudPlay.Views;
 // can start typing right away).
 public partial class MainWindow : Window
 {
-    private TextBlock? _combatTickLabel;
     // Set once the user (or programmatic shutdown) has confirmed exit, so the second Close call sails through.
     private bool _exitConfirmed;
 
@@ -114,6 +113,20 @@ public partial class MainWindow : Window
         TerminalScroll.GetObservable(Visual.BoundsProperty)
             .Subscribe(new AnonymousObserver<Rect>(b => Terminal.ViewportSize = b.Size));
 
+        // A status-bar row added or removed changes the window's height by that
+        // much, so the terminal keeps its size rather than being squeezed. The
+        // first layout only records the height: the saved window size already
+        // allows for the rows it was saved with.
+        double statusBarHeight = 0;
+        StatusBarHost.GetObservable(Visual.BoundsProperty)
+            .Subscribe(new AnonymousObserver<Rect>(b =>
+            {
+                double was = statusBarHeight;
+                statusBarHeight = b.Height;
+                if (was <= 0 || b.Height <= 0 || was == b.Height || WindowState != WindowState.Normal) return;
+                Height = (double.IsNaN(Height) ? ClientSize.Height : Height) + (b.Height - was);
+            }));
+
         // Subscribe to VM PropertyChanged so we can react to IsConnected.
         // Hooking via DataContextChanged covers the case where the VM is
         // swapped at runtime — even though today it's set once in App.
@@ -143,8 +156,6 @@ public partial class MainWindow : Window
 
         Opened += (_, _) =>
         {
-            _combatTickLabel = this.FindControl<TextBlock>("CombatTickLabel");
-            AppServices.Current.Tick.CombatTickElapsed += OnCombatTickElapsed;
             // Put keyboard focus on the terminal from launch (not only on connect),
             // so the window's KeyBindings fire on the FIRST hotkey press. With focus
             // sitting on nothing (or on a toolbar button), the first press was being
@@ -209,10 +220,6 @@ public partial class MainWindow : Window
         {
             if (DataContext is MainWindowViewModel mvm) mvm.Tutorial.Refresh();
         };
-        Closed += (_, _) =>
-        {
-            AppServices.Current.Tick.CombatTickElapsed -= OnCombatTickElapsed;
-        };
 
         // Confirm-exit prompt + auto-save the loaded profile before exit.
         //
@@ -256,21 +263,6 @@ public partial class MainWindow : Window
                     $"Auto-save on exit failed: {ex.Message}");
             }
         };
-    }
-
-    // Pulse the Tick status-bar label amber for a brief beat each time
-    // TickEngine fires. Class is added immediately, removed after a 200 ms
-    // dispatcher delay so the user gets a visual heartbeat.
-    private void OnCombatTickElapsed()
-    {
-        if (_combatTickLabel is null) return;
-        Dispatcher.UIThread.Post(() =>
-        {
-            _combatTickLabel.Classes.Add("Pulsing");
-            DispatcherTimer.RunOnce(
-                () => _combatTickLabel.Classes.Remove("Pulsing"),
-                TimeSpan.FromMilliseconds(200));
-        });
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
