@@ -287,6 +287,18 @@ MudPlay plots the shortest route and walks it, opening doors, disarming traps, a
 
 If you **type a movement command yourself** while a walk, loop, or auto-lair is running — a direction (`n`, `sw`, …) or a text-exit step (`go path`) — navigation **pauses automatically** so the automation never fights your hand-driven step. It's a user pause, just like clicking **Pause**: press **Start** (Alt+V) when you're ready to hand control back. (Peeking with `l <dir>` doesn't count — that's a look, not a move.)
 
+**Stop during a money or training trip holds it.** While MudPlay is on a trip of its own — an auto-train run (fetching the coin, training, buying spell scrolls), a **Transfer Stash to Bank**, a bank or stash deposit trip, or a trip to sell — **Stop** does not throw the trip away. It holds it where it stands, the same as Pause, and the terminal says so: `[Stop is holding the training trip - Resume carries it on, Stop again ends it]`.
+
+- **Stop again** ends the trip for good. (A double-click counts as one press.)
+- **Resume** (the toolbar's Start / Pause button, or the Navigation window's) carries the trip on from where it stopped.
+- **Start a walk, a loop or an Auto-Lair** and MudPlay asks **Resume it first?**
+  - **Resume it first** finishes the trip, then starts what you asked for.
+  - **No, drop it** ends the trip and starts what you asked for straight away. Coin already fetched stays in your pocket.
+
+An ended trip is not undone and not remembered. Auto-train and the bank or sell trips come due again by your settings, so a loop you start afterwards may be interrupted for them again; turn the setting off if you don't want that. Spell scrolls are the exception: they are only bought after a train, so dropping that trip skips them until the next one.
+
+Trips that are over in a few steps (a key or light purchase on the way, fetching a party member) are not held; Stop ends those as before. Reset States and a death always end the trip outright.
+
 ## Building and running a loop
 
 A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and looting as it goes. To build one the quick way:
@@ -1035,7 +1047,7 @@ Right-click a **stash room** on the Navigation map and open **Transfer Stash to 
 - It walks to the bank and deposits everything you are carrying above your **Minimum cash to keep on hand** (Settings → Cash) — the stash's coin, anything picked up off the ground on the way, and whatever was already in your pocket. With that setting at 0 it deposits all of it. If your pocket was below the keep-on-hand amount, the stash's coin tops it up first.
 - It goes back for more and repeats until a search shows nothing left, and ends standing in the bank. A notice in the terminal says how much moved and in how many trips.
 
-To end it early, stop movement (the toolbar Stop, or **Stop Stash Transfer** on the map's right-click menu). It also ends on its own, and says why, if nothing can be picked up (you are already at your weight limit), if the bank takes no deposit, or if a walk fails. Whatever you are carrying from the stash at that point stays in your pocket. While it runs the Navigation window shows a **Stash Transfer** chip. On the walks between the two rooms coin on the ground is picked up exactly as your cash settings say. Auto-Get Cash is borrowed for the stash stop only — your saved setting isn't changed.
+To end it early, press **Stop** twice. The first Stop holds the transfer: Resume carries it on, and starting a walk, loop or Auto-Lair asks whether to finish it first (see [Walking somewhere](#walking-somewhere-goto)). The second Stop ends it, as does **Stop Stash Transfer** on the map's right-click menu while a transfer is running. It also ends on its own, and says why, if nothing can be picked up (you are already at your weight limit), if the bank takes no deposit, or if a walk fails. Whatever you are carrying from the stash at that point stays in your pocket. While it runs the Navigation window shows a **Stash Transfer** chip. On the walks between the two rooms coin on the ground is picked up exactly as your cash settings say. Auto-Get Cash is borrowed for the stash stop only — your saved setting isn't changed.
 
 **With a party.** If you lead a party and tick **Settings → Cash → Stash transfers: party members carry a share too**, the members carry as well. A search shows hidden coin only to the one who searched, so each member has to search for themselves: once you have taken your own load, MudPlay telepaths each member `@get-stash`, which makes their client search and take coin up to *their own* coin weight limits. Each replies when they are loaded; as soon as all have replied (or after 12 seconds, for a member who never answers) MudPlay searches again to count what is really left and heads for the bank. There, after your own deposit, it telepaths each of them `@deposit-all`, so they deposit into their own accounts at that bank, and waits for those replies the same way. The members must be running a MudPlay version that knows `@get-stash` and have given you permission to run commands on them; whatever a member doesn't take, you carry on a later trip.
 

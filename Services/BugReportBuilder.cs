@@ -1240,6 +1240,8 @@ public static class BugReportBuilder
         // Whether the Auto-All kill switch is the one holding navigation — it
         // suspends an in-flight nav on engage and resumes it on restore.
         Kv(sb, "Auto-All suspended nav", svc.MovementControl.IsAutoAllSuspended.ToString());
+        // A Stop that held an errand reads as a plain User pause above; this names it.
+        Kv(sb, "Errand held by Stop", svc.MovementControl.SuspendedErrand ?? "(none)");
         var loop = svc.LoopRunner;
         Kv(sb, "Loop runner", loop.State.ToString());
         // CurrentLoop is the loop of the LIVE run; StagedLoop is the loaded-but-

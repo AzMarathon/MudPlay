@@ -42,6 +42,15 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Stop is holding an errand: ask whether it goes first. The walk comes back
+        // through here once that is settled — after the errand, or straight away.
+        if (services.MovementControl.SuspendedErrand is not null)
+        {
+            services.MovementControl.StartUserRun(
+                () => _ = WalkAsync(services, destination, previewSink, startMode));
+            return;
+        }
+
         // Remember it for the bug report even if the walk is declined at the picker
         // or fails — so a capture can re-plan and explain what the picker decided.
         services.LastRequestedWalkTo = destination;

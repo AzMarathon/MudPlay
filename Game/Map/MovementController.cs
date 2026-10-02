@@ -44,6 +44,161 @@ public sealed class MovementController : IDisposable
     // Fires whenever State may have changed.
     public event Action? StateChanged;
 
+    // ----- Errand held by Stop -----------------------------------------
+    // A money or training errand (a train trip, a stash transfer, a bank or sell
+    // trip) drives the walker for many legs, and a Stop used to end it where it
+    // stood: the coin already fetched stayed in the purse, the scrolls unbought.
+    // Stop now holds it instead — the user gate, the same hold Pause uses, so Resume
+    // carries it on — and the next walk, loop or Auto-Lair the user starts asks
+    // whether to finish the errand first (user, 2026-10-02).
+    private Func<string?>? _activeErrand;
+    private Action<string>? _abandonErrand;
+    private Func<string, System.Threading.Tasks.Task<bool>>? _askResumeErrand;
+    private Action<Action> _post = static run => run();
+    private Action? _afterErrand;
+    // The start the open "Resume first?" question is being asked for.
+    private Action? _awaitingAnswer;
+    // Bumped when the queued run is dropped, so one already posted stands down.
+    private int _queuedRun;
+    // We asserted the user gate for the errand (it wasn't already paused by hand).
+    private bool _gateHeldForErrand;
+    private static readonly TimeSpan DoubleStopGuard = TimeSpan.FromSeconds(1);
+    private Func<DateTime> _utcNow = static () => DateTime.UtcNow;
+    private DateTime _heldAt;
+
+    // The errand Stop is holding, as it reads in a sentence ("the stash transfer").
+    public string? SuspendedErrand { get; private set; }
+
+    // Raised when an errand is held or let go.
+    public event Action? SuspendedErrandChanged;
+
+    // activeErrand names the suspendable errand under way, or null. abandonErrand
+    // ends it for good. askResume shows "Resume <errand> first?" and answers.
+    // post defers a call until the current one has unwound: what the user queued
+    // must start after the errand's own finishing moves, not in the middle of them.
+    public void SetErrandHooks(
+        Func<string?> activeErrand, Action<string> abandonErrand,
+        Func<string, System.Threading.Tasks.Task<bool>> askResume, Action<Action>? post = null,
+        Func<DateTime>? utcNow = null)
+    {
+        ArgumentNullException.ThrowIfNull(activeErrand);
+        ArgumentNullException.ThrowIfNull(abandonErrand);
+        ArgumentNullException.ThrowIfNull(askResume);
+        _activeErrand = activeErrand;
+        _abandonErrand = abandonErrand;
+        _askResumeErrand = askResume;
+        if (post is not null) _post = post;
+        if (utcNow is not null) _utcNow = utcNow;
+    }
+
+    // The user's Stop. The first one with an errand under way holds it and returns
+    // true: the caller stops nothing. Stop is the only stop control there is, so a
+    // second one while it is still held ends the errand and returns false, and the
+    // caller's own stop runs (user, 2026-10-02).
+    public bool HoldErrandOnStop()
+    {
+        if (_activeErrand?.Invoke() is not { } errand) return false;
+        if (SuspendedErrand is not null)
+        {
+            // A double-click on Stop is one decision, not two.
+            if (_utcNow() - _heldAt < DoubleStopGuard) return true;
+            _log?.Info("Movement", $"Second Stop ended {errand}.");
+            _abandonErrand?.Invoke("stopped by the user");
+            Stop();
+            return false;
+        }
+        _gateHeldForErrand = !_coordinator.AssertedGates.Contains(MovementCoordinator.UserGate);
+        _coordinator.AssertGate(MovementCoordinator.UserGate, nameof(MovementController), $"Stop held {errand}");
+        SuspendedErrand = errand;
+        _heldAt = _utcNow();
+        _log?.Info("Movement", $"Stop held {errand} — Resume carries it on; Stop again ends it; starting something else asks first.");
+        SuspendedErrandChanged?.Invoke();
+        return true;
+    }
+
+    // A walk, loop or Auto-Lair the user starts. Runs straight away unless Stop is
+    // holding an errand; then the user is asked. Yes carries the errand on and
+    // starts this once it is done; No ends the errand and starts this now.
+    public void StartUserRun(Action start)
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        if (SuspendedErrand is null || _activeErrand?.Invoke() is not { } errand)
+        {
+            LetErrandGo();
+            start();
+            return;
+        }
+        // The question is modeless, so a second start can arrive while it stands.
+        // One question, and the latest start is the one it answers for.
+        bool asking = _awaitingAnswer is not null;
+        _awaitingAnswer = start;
+        if (!asking) _ = AskThenStartAsync(errand);
+    }
+
+    private async System.Threading.Tasks.Task AskThenStartAsync(string errand)
+    {
+        bool resume = _askResumeErrand is null || await _askResumeErrand(errand);
+        if (_awaitingAnswer is not { } start) return;
+        _awaitingAnswer = null;
+        // The errand may have ended while the question stood.
+        if (_activeErrand?.Invoke() is null)
+        {
+            LetErrandGo();
+            start();
+            return;
+        }
+        if (resume)
+        {
+            _log?.Info("Movement", $"Resuming {errand} first; what was queued starts when it is done.");
+            _afterErrand = start;
+            ReleaseErrandHold(always: true);
+            return;
+        }
+        _log?.Info("Movement", $"{errand} abandoned for a new run.");
+        _afterErrand = null;
+        _abandonErrand?.Invoke("the user started something else");
+        Stop();
+        start();
+    }
+
+    // An errand started or ended. Wired to each suspendable errand's state event.
+    public void NoteErrandStateChanged()
+    {
+        if (_activeErrand?.Invoke() is not null) return;
+        // Ended while held (finished its last step, or was cancelled elsewhere): a
+        // hold we placed for it must not strand the next run.
+        if (SuspendedErrand is not null) ReleaseErrandHold(always: false);
+        if (_afterErrand is not { } next) return;
+        _afterErrand = null;
+        int queued = _queuedRun;
+        _post(() => { if (queued == _queuedRun) next(); });
+    }
+
+    // A full stop from outside (a death, a reset) ends the errand without finishing
+    // it. What was queued behind it must not start on its own afterwards.
+    public void DropQueuedRun()
+    {
+        _afterErrand = null;
+        _queuedRun++;
+    }
+
+    // always: the user asked for the errand to go on, so a pause of their own from
+    // before the Stop goes too. Otherwise only the hold Stop placed is lifted.
+    private void ReleaseErrandHold(bool always)
+    {
+        bool lift = always || _gateHeldForErrand;
+        LetErrandGo();
+        if (lift) _coordinator.ClearGate(MovementCoordinator.UserGate, nameof(MovementController), "errand hold released");
+    }
+
+    private void LetErrandGo()
+    {
+        _gateHeldForErrand = false;
+        if (SuspendedErrand is null) return;
+        SuspendedErrand = null;
+        SuspendedErrandChanged?.Invoke();
+    }
+
     public MovementController(
         AutoWalkManager walker,
         LoopRunner loops,
@@ -138,6 +293,7 @@ public sealed class MovementController : IDisposable
     // gate; we just clear the user's hold. No-op when not user-paused.
     public void Resume()
     {
+        LetErrandGo();
         if (!IsUserPaused) return;
         if (_autoLair.IsActive)
         {
@@ -163,6 +319,8 @@ public sealed class MovementController : IDisposable
 
     public void Stop()
     {
+        LetErrandGo();
+        DropQueuedRun();
         Stopping?.Invoke();
         if (_autoLair.IsActive) _autoLair.Stop("user stop from toolbar");
         if (_loops.State != LoopState.Idle) _loops.Stop("user stop from toolbar");
@@ -212,7 +370,15 @@ public sealed class MovementController : IDisposable
     private void OnWalkerEvent(WalkEvent _) => StateChanged?.Invoke();
     private void OnLoopEvent(LoopEvent _) => StateChanged?.Invoke();
     private void OnAutoLairBool(bool _) => StateChanged?.Invoke();
-    private void OnCoordinatorGatesChanged() => StateChanged?.Invoke();
+    private void OnCoordinatorGatesChanged()
+    {
+        // The user gate has other hands on it (the Navigation window's own Resume,
+        // a remote resume). Whoever lifts it has carried the errand on.
+        if (SuspendedErrand is not null
+            && !_coordinator.AssertedGates.Contains(MovementCoordinator.UserGate))
+            LetErrandGo();
+        StateChanged?.Invoke();
+    }
 
     public void Dispose()
     {
