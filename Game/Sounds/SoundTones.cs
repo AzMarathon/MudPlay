@@ -29,20 +29,16 @@ public static class SoundTones
 
     private const int SampleRate = 44100;
 
-    // One note: when it starts, its pitch, how long it rings and how hard. Decay is
-    // how fast it dies away (higher = shorter, more bell-like). Attack and Release
-    // are the fade in and out, in seconds: the defaults are a struck note, longer
-    // ones a swell.
-    private readonly record struct Note(
-        double Start, double Hz, double Length, double Level, double Decay,
-        double Attack = 0.004, double Release = 0.01);
+    // One struck note: when it starts, its pitch, how long it rings and how hard.
+    // Decay is how fast it dies away (higher = shorter, more bell-like).
+    private readonly record struct Note(double Start, double Hz, double Length, double Level, double Decay);
 
     // The tone as a 16-bit mono WAV file, or null for a name that isn't a tone.
     public static byte[]? Render(string tone)
     {
         Note[]? notes = tone switch
         {
-            Ding => LevelUpDing,
+            Ding => BellDing,
             Chime => new[] { new Note(0, 1046.5, 0.5, 0.7, 6), new Note(0.14, 1568, 0.7, 0.7, 5) },
             Fanfare => new[]
             {
@@ -63,54 +59,19 @@ public static class SoundTones
         return notes is null ? null : ToWav(Mix(notes));
     }
 
-    // A level-up "ding", two and a half seconds: a deep boom that swells twice, a
-    // short strike at the start, and a soft shimmer that rises in over the first
-    // half second. Everything fades out together over the last half second, where
-    // the boom falls away. Built in layers; each layer is one loudness curve shared
-    // by a handful of pitches. The shimmer is kept low: as pure tones those pitches
-    // turn piercing well before they sound loud.
-    private static readonly Note[] LevelUpDing = new[]
+    // One strike of a small bell: a hum an octave below, the note itself (with a
+    // faint second pitch just beside it, for the slow waver of a real bell), and
+    // overtones above. The upper two aren't whole multiples of the note, which is
+    // what tells the ear "bell" rather than "beep". Each overtone is quieter and
+    // dies sooner than the one below, so the strike is bright and the ring mellow.
+    private static readonly Note[] BellDing =
     {
-        // The boom. Every layer sits on the same 43 Hz so they add rather than cancel:
-        // the opening swell, the larger second surge, and the body under it.
-        Layer(0.00, 0.06, 0, 1.25, 0.30, 0.41, (43, 1), (86, 0.45), (89, 0.35)),
-        Layer(1.00, 0.25, 0, 1.20, 0.45, 0.24, (43, 1), (86, 0.45), (145, 0.4)),
-        Layer(1.00, 0.40, 0.55, 1.50, 0.50, 0.54, (43, 1), (86, 0.45)),
-
-        // The rumble over it. Neighbouring pitches a few Hz apart beat against each other.
-        Layer(0.00, 0.10, 1.6, 2.50, 0.50, 0.505, (145, 1), (161, 0.9), (243, 0.25)),
-        Layer(0.15, 0.10, 1.6, 2.35, 0.50, 0.406, (143.2, 1), (156, 0.7), (272, 0.3)),
-        Layer(0.45, 0.30, 1.2, 2.05, 0.50, 0.314, (146.5, 1), (162.6, 0.6), (218, 0.35)),
-
-        // The strike, then the mid swell behind it.
-        Layer(0.00, 0.015, 7, 1.00, 0.30, 0.17,
-            (312, 0.7), (377, 0.8), (415, 1), (441, 0.55), (560, 0.4), (614, 0.45), (716, 0.4), (775, 0.4)),
-        Layer(0.00, 0.015, 1, 1.00, 0.30, 0.045, (900, 1), (1150, 0.8), (1470, 0.7)),
-        Layer(0.00, 0.10, 1.6, 2.50, 0.50, 0.09, (350, 1), (382, 0.5), (431, 0.5)),
-        Layer(0.70, 0.30, 1.6, 1.80, 0.50, 0.19, (349, 1), (447, 0.7), (538, 0.4), (760, 0.5), (810, 0.45)),
-        Layer(0.45, 0.50, 2.2, 2.05, 0.50, 0.17, (813, 0.8), (1308, 0.7), (1470, 1), (1577, 0.6)),
-        Layer(1.00, 0.10, 1.6, 1.50, 0.50, 0.065, (1265, 1), (1954, 0.7)),
-
-        // The shimmer: high bell-like pitches that come in as three waves.
-        Layer(0.12, 0.45, 1.2, 2.38, 0.50, 0.12, (2939, 1), (3494, 0.8), (3305, 0.45), (4048, 0.45)),
-        Layer(0.80, 0.50, 2.2, 1.70, 0.50, 0.095, (2342, 0.8), (2573, 0.6), (4409, 0.8), (4592, 0.9), (4775, 1)),
-        Layer(0.60, 0.10, 1.6, 1.90, 0.50, 0.042, (3133, 1), (3623, 1)),
-        Layer(0.45, 0.30, 1.2, 2.05, 0.50, 0.042, (5329, 1), (6062, 0.6), (7935, 0.4)),
-        Layer(0.15, 0.60, 2.2, 2.35, 0.50, 0.066, (5146, 0.8), (5378, 0.7), (7100, 0.5), (8554, 0.5), (9593, 0.4)),
-    }.SelectMany(static layer => layer).ToArray();
-
-    // Several pitches sharing one loudness curve. Level is the layer's as a whole:
-    // it is split between the pitches by weight so their combined power matches a
-    // single note at that level.
-    private static Note[] Layer(
-        double start, double attack, double decay, double length, double release, double level,
-        params (double Hz, double Weight)[] pitches)
-    {
-        double norm = Math.Sqrt(pitches.Sum(static p => p.Weight * p.Weight));
-        return pitches
-            .Select(p => new Note(start, p.Hz, length, level * p.Weight / norm, decay, attack, release))
-            .ToArray();
-    }
+        new(0, 523.3, 1.8, 0.22, 2.5),
+        new(0, 1046.5, 1.8, 0.60, 3.0), new(0, 1048.0, 1.8, 0.12, 3.0),
+        new(0, 2093.0, 1.2, 0.30, 5.0),
+        new(0, 2888.3, 0.8, 0.16, 8.0),
+        new(0, 5651.1, 0.4, 0.05, 14.0),
+    };
 
     private static short[] Mix(Note[] notes)
     {
@@ -123,8 +84,8 @@ public static class SoundTones
             for (int i = 0; i < count; i++)
             {
                 double t = i / (double)SampleRate;
-                // Even a struck note fades in and out over a few ms, so it never clicks.
-                double attack = Math.Min(1, t / n.Attack), release = Math.Min(1, (n.Length - t) / n.Release);
+                // A 4 ms attack and a short release keep the note from clicking.
+                double attack = Math.Min(1, t / 0.004), release = Math.Min(1, (n.Length - t) / 0.01);
                 double envelope = attack * release * Math.Exp(-n.Decay * t);
                 double phase = 2 * Math.PI * n.Hz * t;
                 double wave = Math.Sin(phase) + 0.25 * Math.Sin(2 * phase);
