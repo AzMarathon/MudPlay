@@ -648,6 +648,12 @@ public sealed class CastingDirector : IDisposable
     {
         if (_executeItemCast is null || !_executeItemCast(token)) return false;
         _cast.NotifyExternalCastSent();
+        // A draw can deal the card already up (user, 2026-10-02), and a card still
+        // latched as applied would land without a fresh applied event: the draw would
+        // read as "no card seen" and go again, round after round. Every draw starts
+        // from no card.
+        if (_drawOutcomes?.Invoke(token) is { } outcomes)
+            _conditions?.ReleaseApplied(r => outcomes.Any(o => IsOutcomeRecord(r, o.SpellNumber, o.Name)));
         // The slot's timer is set when the card lands (NoteDrawOutcome).
         _activeUntil.Remove(("", token));
         _drawPendingUntil[token] = _now().AddSeconds(DrawSettleSec);
@@ -666,15 +672,16 @@ public sealed class CastingDirector : IDisposable
         {
             if (!ItemCastToken.IsToken(slot.Spell) || _drawOutcomes(slot.Spell!) is not { Count: > 0 } outcomes) continue;
             foreach ((int SpellNumber, string Name, long DurationSec) o in outcomes)
-            {
-                bool linked = r.Links is { } links && links.Any(l =>
-                    l.Number == o.SpellNumber && string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase));
-                if (linked || string.Equals(r.Name, o.Name, StringComparison.OrdinalIgnoreCase))
+                if (IsOutcomeRecord(r, o.SpellNumber, o.Name))
                     return (slot, o);
-            }
         }
         return null;
     }
+
+    private static bool IsOutcomeRecord(MessageRecord r, int spellNumber, string name) =>
+        string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase)
+        || (r.Links is { } links && links.Any(l =>
+            l.Number == spellNumber && string.Equals(l.Table, "Spells", StringComparison.OrdinalIgnoreCase)));
 
     internal void NoteDrawOutcome(MessageRecord r)
     {
