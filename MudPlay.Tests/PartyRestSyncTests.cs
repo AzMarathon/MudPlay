@@ -227,6 +227,23 @@ public sealed class PartyRestSyncTests
         Assert.Equal("/Leader @wait (pinned down)\r", LastWire(wire));
     }
 
+    // Every @wait names its reason, so a reason added without a note fails here.
+    // Health is the exception at this level: its note comes from HealthManager.
+    [Fact]
+    public void EveryReasonExceptHealth_HasANote()
+    {
+        foreach (WaitReason r in Enum.GetValues<WaitReason>())
+        {
+            if (r == WaitReason.Health) continue;
+            var (sync, party, wire) = Setup();
+            party.IsInParty = true;
+            party.LeaderName = "Leader";
+            sync.RequestWait(r);
+            Assert.True(LastWire(wire).Contains('('),
+                $"{r} telepathed a bare @wait: give it a note in PartyRestSync.DefaultNote");
+        }
+    }
+
     // Only the first reason telepaths, so its note is the one the leader sees.
     [Fact]
     public void SecondReason_IsDedupedSoItsNoteNeverReachesTheWire()

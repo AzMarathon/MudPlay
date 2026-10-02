@@ -51,12 +51,11 @@ public sealed class PartyRestSync : IDisposable
         _wireSender = sender;
     }
 
-    // The reason a wait names after the token, in MegaMUD's wording, so a leader
-    // sees why the party stopped ("@wait (HP's too low)"). A receiver keys on the
-    // token alone (PartyEssentialHandlers.OnWait), so the note changes nothing it
-    // does. Only strings MegaMUD has been seen to send are used (GAME_MECHANICS
-    // "`@wait` / `@ok` party pause"). ConditionNote is its blanket for a condition
-    // with no wording of its own, which is what poison and disease get.
+    // Every @wait names its reason after the token, so a leader sees why the party
+    // stopped ("@wait (HP's too low)"): MegaMUD's wording where it has one, our own
+    // where it doesn't (GAME_MECHANICS "`@wait` / `@ok` party pause"). A receiver
+    // keys on the token alone (PartyEssentialHandlers.OnWait), so the note changes
+    // nothing it does. ConditionNote is what MegaMUD sends for poison and disease.
     public const string HpNote        = "(HP's too low)";
     public const string ConditionNote = "(waiting on message condition)";
     public const string BlindNote     = "(blinded)";
@@ -64,7 +63,8 @@ public sealed class PartyRestSync : IDisposable
     public const string HeldNote      = "(can't move)";
     public const string TooHeavyNote  = "(too heavy to move)";
 
-    // MudPlay's own wording, in the same shape: MegaMUD sends nothing for a mana wait.
+    // Our own wording, in the same shape: MegaMUD sends nothing for a mana wait.
+    // (TooHeavyNote is ours too.)
     public const string ManaNote      = "(mana's too low)";
 
     // The note a reason carries unless the caller passes one. Health has none here:
