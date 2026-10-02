@@ -135,6 +135,14 @@ public sealed class AppServices
     public void SetOpenProfileManager(Action open) => _openProfileManager = open;
     public void OpenProfileManager() => _openProfileManager?.Invoke();
 
+    // A status bar that draws a layout with sample values, for the preview in
+    // Settings → BBS + Display. The bar's chip and connection light read the main
+    // VM's state, so the main VM makes it; null until it binds this.
+    private Func<ViewModels.StatusBar.StatusBarViewModel>? _statusBarPreviewFactory;
+    public void SetStatusBarPreviewFactory(Func<ViewModels.StatusBar.StatusBarViewModel> create) =>
+        _statusBarPreviewFactory = create;
+    public ViewModels.StatusBar.StatusBarViewModel? CreateStatusBarPreview() => _statusBarPreviewFactory?.Invoke();
+
     // Opens (or re-focuses) the single Navigation Management dialog. Both the map
     // window's "Navigation Management" button and the toolbar Start button route
     // here so there's only ever one instance — no two identical windows. The bool

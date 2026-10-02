@@ -73,6 +73,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     public override IEnumerable<string> SearchableLabels => new[]
     {
         "BBS", "Host", "Port", "Telnet", "Redial", "Cleanup", "Reconnect",
+        "Status bar", "Marquee", "Status bar row", "Custom text",
         "Sysop", "Sys Goto", "Terminal", "Cols", "Rows", "NAWS", "Connection",
         "Game entry command", "Game exit command", "Enter realm", "Logoff",
         "Player dies at", "Death floor", "Bleeding out", "Dropped", "Hangup HP",
@@ -282,6 +283,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // True when the loaded profile carries a stored suicide password.
     public bool HasSuicidePassword => !string.IsNullOrEmpty(SuicidePassword);
 
+    // ----- Status bar layout (Global tier) -----
+    // Persisted in GlobalSettings.Settings["StatusBar"]; the main window rebuilds
+    // its bar on SettingsService.GlobalSettingsChanged.
+    public StatusBarEditorViewModel StatusBarEditor { get; }
+
     // ----- Confirm prompts (Global tier — install-wide UX preferences) -----
     // Persisted in GlobalSettings.Settings["Confirm"] and mirrored live
     // onto AppServices.Current.Confirm by ApplyConfirmFromGlobalSettings.
@@ -373,6 +379,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         });
         RefreshProfileState();
         LoadConfirmFromGlobalSettings();
+        StatusBarEditor = new StatusBarEditorViewModel(
+            () => AppServices.CurrentOrNull?.CreateStatusBarPreview());
+        StatusBarEditor.Load(Models.Settings.StatusBarSettings.Read(_globalSettings.Current));
+        StatusBarEditor.Changed += Dirty;
+        OnDispose(StatusBarEditor.Dispose);
 
         ReloadBbsList();
         // Default selection to the loaded character's active BBS when it's
@@ -506,6 +517,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         _globalSettings.Current.Settings ??= new Dictionary<string, System.Text.Json.JsonElement>();
         _globalSettings.Current.Settings["Confirm"] =
             System.Text.Json.JsonSerializer.SerializeToElement(dto);
+        // The status-bar layout is the same Global tier and rides the same save.
+        StatusBarEditor.ToSettings().WriteTo(_globalSettings.Current);
         _globalSettings.Save();
     }
 
@@ -634,6 +647,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // they're independent of the BBS cache but share this section's
         // dirty bit.
         LoadConfirmFromGlobalSettings();
+        StatusBarEditor.Load(Models.Settings.StatusBarSettings.Read(_globalSettings.Current));
 
         // Roll the live DisplayConfig back to the *active* BBS, not the
         // BBS that happened to be selected in the editor. Otherwise the

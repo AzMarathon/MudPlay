@@ -506,6 +506,10 @@ public partial class MainWindowViewModel : ObservableObject
     // strip knows where the player is.
     [ObservableProperty] private string _locationText = "Unknown location";
 
+    // The status bar under the terminal: rows of items laid out in Settings → BBS +
+    // Display (global). Built in the constructor, rebuilt when the layout is saved.
+    public ViewModels.StatusBar.StatusBarViewModel StatusBar { get; }
+
 
     // ----- Engine-state chip (mirrors the Navigation window's badge) -----
 
@@ -723,6 +727,9 @@ public partial class MainWindowViewModel : ObservableObject
         // profile during AppServices.Initialize (which runs before this ctor).
         _splashAnimate = AppServices.Current.Display.SplashAnimate;
 
+        StatusBar = new ViewModels.StatusBar.StatusBarViewModel(this, preview: false);
+        StatusBar.Apply(Models.Settings.StatusBarSettings.Read(AppServices.Current.Settings.Current));
+
         Lines = new LineExtractor(Emulator);
         Capture = new CaptureSession(Emulator.Screen.Scrollback);
 
@@ -894,8 +901,10 @@ public partial class MainWindowViewModel : ObservableObject
         // global-settings Save so the Toolbar + Shortcuts editor's changes land
         // in the menu without a relaunch.
         RefreshHelpLinks();
-        AppServices.Current.Settings.GlobalSettingsChanged += _ =>
+        AppServices.Current.Settings.GlobalSettingsChanged += global =>
         {
+            if (StatusBar.Apply(Models.Settings.StatusBarSettings.Read(global)))
+                AppServices.Current.Log.Info("StatusBar", $"Layout changed: {StatusBar.Describe()}.");
             RefreshHelpLinks();
             // A BBS rename rewrites the recent-profiles refs in the Global tier
             // — re-mirror so the File → Recent menu drops the old BBS name.
@@ -988,6 +997,7 @@ public partial class MainWindowViewModel : ObservableObject
                 () => WriteTerminalStatus(text, TerminalStatusKind.Notice)));
         // Let non-main surfaces (Settings → BBS) open the Profile Management window.
         AppServices.Current.SetOpenProfileManager(OpenProfileManager);
+        AppServices.Current.SetStatusBarPreviewFactory(() => new ViewModels.StatusBar.StatusBarViewModel(this, preview: true));
         RebuildCombatProfilesMenu();
         AppServices.Current.CombatProfiles.Changed += RebuildCombatProfilesMenu;
 

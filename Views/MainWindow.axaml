@@ -18,62 +18,11 @@
     </Design.DataContext>
 
     <Window.Styles>
-        <!-- Engine-state chip — same colour-code rules as the Navigation
-             window's badge (idle grey / walking + looping green / lair
-             amber). Living here keeps the two windows in visual sync
-             without dragging a shared theme file in. -->
         <!-- First-run tour: glow the menu item the current step points at. -->
         <Style Selector="MenuItem.tutTarget">
             <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
         </Style>
 
-        <Style Selector="Border.EngineBadge">
-            <Setter Property="CornerRadius" Value="3"/>
-            <Setter Property="Padding" Value="6,1"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderBrush}"/>
-            <Setter Property="Background" Value="Transparent"/>
-        </Style>
-        <Style Selector="Border.EngineBadge TextBlock">
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
-        </Style>
-        <Style Selector="Border.EngineBadge.WalkingState">
-            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
-        </Style>
-        <Style Selector="Border.EngineBadge.WalkingState TextBlock">
-            <Setter Property="Foreground" Value="#0E0E0E"/>
-        </Style>
-        <Style Selector="Border.EngineBadge.LoopingState">
-            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
-        </Style>
-        <Style Selector="Border.EngineBadge.LoopingState TextBlock">
-            <Setter Property="Foreground" Value="#0E0E0E"/>
-        </Style>
-        <Style Selector="Border.EngineBadge.LairState">
-            <Setter Property="Background" Value="{StaticResource AccentAmberBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
-        </Style>
-        <Style Selector="Border.EngineBadge.LairState TextBlock">
-            <Setter Property="Foreground" Value="#0E0E0E"/>
-        </Style>
-        <!-- Tier overlays — engine-recovery gate state. Border-only;
-             fill stays the engine colour. Tier 2 = gate watching for
-             1-of-1 recovery (yellow); Tier 3 = backtrack recovery
-             active (red). Declared after engine classes so the
-             BorderBrush setter precedence lands here. -->
-        <Style Selector="Border.EngineBadge.Tier2State">
-            <Setter Property="BorderBrush" Value="{StaticResource AccentYellowBrush}"/>
-            <Setter Property="BorderThickness" Value="2"/>
-        </Style>
-        <Style Selector="Border.EngineBadge.Tier3State">
-            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
-            <Setter Property="BorderThickness" Value="2"/>
-        </Style>
     </Window.Styles>
 
     <!-- KeyBindings are wired in code-behind from KeybindingStore so the
@@ -488,110 +437,12 @@
             </ItemsControl>
         </Border>
 
-        <!-- ============ Status bar (two slots) ============ -->
-        <!-- Left  : room + confidence dot.
-             Mid   : tick countdowns — combat tick + HP (natural / rest) +
-                     MA (natural / medi). Source-of-truth: TickEngine +
-                     RegenTracker. -->
-        <Border DockPanel.Dock="Bottom" Classes="StatusBar">
-            <!-- Layout (left → right):
-                 [chip] [room name, Auto] [flex] [look target] [flex] [statline warning + ticks] [connection]
-                 The room-name slot is Auto so the walk-to readout (C/D/Steps)
-                 takes its natural width and never trims while space is free; a
-                 star spacer on each side of the look-target lets it float in the
-                 open space between the room-name block and the ticks. -->
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,*,Auto,Auto"
-                  VerticalAlignment="Center"
-                  ColumnSpacing="14">
-
-                <!-- Engine-state chip — mirrors the Navigation badge.
-                     Tier overlays paint the border yellow when the
-                     engine-recovery gate is in tier 2, red in tier 3. -->
-                <Border Grid.Column="0"
-                        Classes="EngineBadge"
-                        Classes.WalkingState="{Binding EngineActionIsWalking}"
-                        Classes.LoopingState="{Binding EngineActionIsLooping}"
-                        Classes.LairState="{Binding EngineActionIsLair}"
-                        Classes.Tier2State="{Binding IsTier2}"
-                        Classes.Tier3State="{Binding IsTier3}">
-                    <TextBlock Text="{Binding EngineActionBadge}"/>
-                </Border>
-
-                <!-- Map/room number + session exp/hr. VM shows the short key
-                     rather than the (often long) room name, so the rate can't
-                     be pushed behind an ellipsis; TextTrimming stays as a
-                     safety net for extreme narrow-window resizes. -->
-                <TextBlock Grid.Column="1"
-                           Classes="StatusSlot"
-                           Text="{Binding LocationText}"
-                           TextTrimming="CharacterEllipsis"/>
-
-                <!-- Look-target HP window. Empty (hidden) until a `look <monster>`
-                     resolves; a coarse wound band × the monster's max HP → an
-                     absolute HP range, invaluable on fast-regen bosses. -->
-                <TextBlock Grid.Column="3"
-                           Classes="StatusSlot StatusMono"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Text="{Binding TargetHpText}"
-                           IsVisible="{Binding TargetHpText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-
-                <!-- Cycle countdowns. Natural HP / MA are always visible
-                     once observed; rest / medi append while resting / meditating. -->
-                <StackPanel Grid.Column="5"
-                            Orientation="Horizontal" Spacing="14"
-                            VerticalAlignment="Center">
-                    <!-- Statline mismatch: the game's prompt doesn't match Settings →
-                         Statline and the automatic reset didn't take, so HP / MA
-                         can't be read. Stays up until a prompt matches; click opens
-                         the Statline tab. -->
-                    <Button Padding="0"
-                            MinHeight="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            VerticalAlignment="Center"
-                            IsVisible="{Binding IsStatlineMismatchVisible}"
-                            ToolTip.Tip="{Binding StatlineMismatchTip}"
-                            Command="{Binding OpenSettingsTabCommand}"
-                            CommandParameter="statline">
-                        <TextBlock Classes="StatusSlot"
-                                   Foreground="{StaticResource AccentRedBrush}"
-                                   FontWeight="Bold"
-                                   Text="STATLINE MISMATCH"/>
-                    </Button>
-                    <TextBlock x:Name="CombatTickLabel"
-                               Classes="StatusSlot StatusMono"
-                               Text="{Binding CombatTickText}"/>
-                    <TextBlock Classes="StatusSlot StatusMono" Text="{Binding HpTickText}"/>
-                    <TextBlock Classes="StatusSlot StatusMono" Text="{Binding MaTickText}"/>
-                </StackPanel>
-
-                <!-- Connection stoplight: red idle · yellow connecting · green connected.
-                     Live reconnect countdown shown beside the status text
-                     when a long-delay reconnect is armed (eg cleanup-mode
-                     backoff). Hides itself when the timer fires or the
-                     user cancels. -->
-                <StackPanel Grid.Column="6"
-                            Orientation="Horizontal" Spacing="6"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            ToolTip.Tip="{Binding ConnectionStatusText}">
-                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                             Fill="{StaticResource AccentRedBrush}"
-                             IsVisible="{Binding IsIdle}"/>
-                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                             Fill="{StaticResource AccentYellowBrush}"
-                             IsVisible="{Binding IsConnecting}"/>
-                    <Ellipse Width="8" Height="8" VerticalAlignment="Center"
-                             Fill="{StaticResource AccentGreenBrush}"
-                             IsVisible="{Binding IsConnected}"/>
-                    <TextBlock Classes="StatusSlot"
-                               Foreground="{StaticResource AccentAmberBrush}"
-                               Text="{Binding ReconnectCountdownText}"
-                               IsVisible="{Binding IsReconnectCountdownVisible}"/>
-                </StackPanel>
-            </Grid>
-        </Border>
+        <!-- ============ Status bar ============ -->
+        <!-- One or more rows the user lays out in Settings → BBS + Display. The
+             default is a single row: engine chip and location on the left, the
+             looked-at target in the middle, ticks and the connection light on the
+             right. -->
+        <views:StatusBarView DockPanel.Dock="Bottom" DataContext="{Binding StatusBar}"/>
 
         <!-- Bottom (horizontal). Docked after the status bar so the status
              bar keeps the very-bottom edge and this toolbar sits directly

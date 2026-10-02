@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.135.2**
-> - Auto Heal and Auto Rest are separate switches, each with its own toolbar button, Action-menu entry, base-mode checkbox and keybind; the combined Auto Rest / Heal button sets both
-> - `@auto-heal` and `@auto-rest` now switch healing and resting separately
-> - The Combat Profile (menu) toolbar button shows the active profile number
+> **Version 3.136.0**
+> - Settings → BBS + Display → Status bar: choose what the bar under the terminal shows, on its left, centre and right
+> - Up to four status bar rows, any of which can crawl as a marquee
+> - New status bar items: profile, combat profile, HP and mana, room, loop and lap, exp rate, party, auto engines, cash, clock and more, plus your own text with live values
+> - A preview in Settings shows the bar before you accept it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
