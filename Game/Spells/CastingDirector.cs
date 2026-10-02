@@ -278,6 +278,9 @@ public sealed class CastingDirector : IDisposable
     // that removes other buffs is that victim's wear-off, not the caster's.
     private string? _lastCastShort;
     private DateTime _lastCastAt;
+    // Whether that cast landed on us (a self or whole-party cast) rather than on one
+    // party member. Only a buff on us can strip a buff of ours.
+    private bool _lastCastOnUs;
     private static readonly TimeSpan ClobberWindow = TimeSpan.FromSeconds(5);
 
     // The self-buff last confirmed via an applied line, and when. The applied line is
@@ -1204,7 +1207,7 @@ public sealed class CastingDirector : IDisposable
                 ? prev.MarginSec
                 : DefaultRecastMarginSec;
             _activeUntil[("", shortCode)] = (_now().AddSeconds(info.DurationSec), margin, (int)info.DurationSec);
-            NoteSuccessfulCast(shortCode);
+            NoteSuccessfulCast(shortCode, targetKey: "");
             _appliedBurstShort = shortCode;
             _appliedBurstAt = _now();
             _log?.Combat(LogCategory,
@@ -1225,11 +1228,17 @@ public sealed class CastingDirector : IDisposable
     // party-cast confirm names the spell, a self-buff carries its pending short) rather
     // than a shared condition message. Lets OnConditionEnded tell a clobber victim's
     // wear-off from the caster's own.
-    private void NoteSuccessfulCast(string shortCode)
+    //
+    // targetKey is who it landed on, as the timers are keyed: "" for us, else the
+    // member's lower-cased given name. A whole-party buff lands on everyone whatever
+    // the key says.
+    private void NoteSuccessfulCast(string shortCode, string targetKey)
     {
         if (string.IsNullOrEmpty(shortCode)) return;
+        bool everyone = _isPartyWideBuff?.Invoke(shortCode) == true;
         _lastCastShort = shortCode;
         _lastCastAt = _now();
+        _lastCastOnUs = everyone || targetKey.Length == 0;
 
         // A landed buff clobbers the buffs its spell removes (RemovesSpell) — the game
         // strips them, so drop any active timer we still hold for one. A stripped buff
@@ -1239,17 +1248,27 @@ public sealed class CastingDirector : IDisposable
         // the RIGHT buff; the clobber conflict is still surfaced by the config-side ⚠.
         if (_removesShortsFor?.Invoke(shortCode) is { Count: > 0 } victims)
             foreach (string victim in victims)
-                ClearTimersForShort(victim, clobberedBy: shortCode);
+                ClearTimersForShort(victim, clobberedBy: shortCode, targetKey, everyone);
     }
 
-    // Remove every active timer (self + any member) whose cast code matches — used when
-    // a landing buff strips it everywhere it was up. Skips the caster itself so a spell
-    // that lists its own family can never wipe the timer it just armed.
-    private void ClearTimersForShort(string shortCode, string clobberedBy)
+    // Remove the active timer of a buff a landing buff strips — on whoever that buff
+    // landed on, and no one else: a spell strips its removes off its own target only,
+    // so smite cast on one member leaves greater smite on another untouched (report
+    // paradigm-20261002-012234: the two cleared each other across targets and were
+    // recast every few seconds). A whole-party buff lands on everyone, so it clears
+    // every target's. Skips the caster itself so a spell that lists its own family can
+    // never wipe the timer it just armed.
+    private void ClearTimersForShort(string shortCode, string clobberedBy, string targetKey, bool everyone)
     {
         if (string.IsNullOrWhiteSpace(shortCode)
             || string.Equals(shortCode, clobberedBy, StringComparison.OrdinalIgnoreCase))
             return;
+
+        List<(string Target, string Short)>? doomed = null;
+        foreach ((string Target, string Short) key in _activeUntil.Keys)
+            if (string.Equals(key.Short, shortCode, StringComparison.OrdinalIgnoreCase)
+                && (everyone || string.Equals(key.Target, targetKey, StringComparison.OrdinalIgnoreCase)))
+                (doomed ??= new()).Add(key);
 
         // The clobbering buff strips this one in-game, so release its applied-latch in
         // the ConditionTracker too — not just the timer below. A latched applied line
@@ -1257,14 +1276,12 @@ public sealed class CastingDirector : IDisposable
         // re-fire, and that re-cast could then never drive its own clobber-clear
         // (report paradigm-20260910-012303: a re-cast greater bless never dropped an
         // active chant because gbls stayed latched from before chant clobbered it).
-        if (_conditions is not null && _shortFromAppliedRecord is { } resolve)
+        // The tracker follows the conditions on US, so only a buff that landed on us
+        // releases one.
+        if ((everyone || targetKey.Length == 0) && _conditions is not null && _shortFromAppliedRecord is { } resolve)
             _conditions.ReleaseApplied(rec =>
                 string.Equals(resolve(rec), shortCode, StringComparison.OrdinalIgnoreCase));
 
-        List<(string Target, string Short)>? doomed = null;
-        foreach ((string Target, string Short) key in _activeUntil.Keys)
-            if (string.Equals(key.Short, shortCode, StringComparison.OrdinalIgnoreCase))
-                (doomed ??= new()).Add(key);
         if (doomed is null) return;
         foreach ((string, string) key in doomed) _activeUntil.Remove(key);
         _log?.Combat(LogCategory,
@@ -1285,6 +1302,7 @@ public sealed class CastingDirector : IDisposable
         // and clears normally below.
         if (resolved is not null
             && _lastCastShort is { } caster
+            && _lastCastOnUs
             && _now() - _lastCastAt <= ClobberWindow
             && _removesShortsFor?.Invoke(caster) is { Count: > 0 } victims)
         {
@@ -1344,7 +1362,7 @@ public sealed class CastingDirector : IDisposable
 
         string key = p.Target.Trim().ToLowerInvariant();
         _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec, (int)p.DurationSec);
-        NoteSuccessfulCast(p.Short);   // the "You cast <spell> on …" confirm names it reliably
+        NoteSuccessfulCast(p.Short, key);   // the "You cast <spell> on …" confirm names it reliably
         // Info, not Combat: the user wants to confirm the recast timer actually
         // armed and see when it will re-fire, and the combat-diagnostics channel is
         // off in normal play. Surface both the effect duration and the recast lead
@@ -1366,12 +1384,14 @@ public sealed class CastingDirector : IDisposable
     {
         if (!man.Matcher.TryResolveTarget(lineText, man.Prefix, out string full)) return;
         _pendingManualCast = null;
-        NoteSuccessfulCast(man.Short);   // the resolved "You cast <spell> on …" names it reliably
 
         string given = GivenName(full).ToLowerInvariant();
+        bool onSelf = string.Equals(given, SelfGivenLower(), StringComparison.OrdinalIgnoreCase);
+        // The resolved "You cast <spell> on …" names it reliably.
+        NoteSuccessfulCast(man.Short, onSelf ? string.Empty : given);
         if (given.Length == 0) return;
 
-        if (string.Equals(given, SelfGivenLower(), StringComparison.OrdinalIgnoreCase))
+        if (onSelf)
         {
             StartSelfBuffTimer(man.Short, SelfBuffMargin(man.Short));   // we named ourselves
             return;

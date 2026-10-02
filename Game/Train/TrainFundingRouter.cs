@@ -76,6 +76,8 @@ public sealed class TrainFundingRouter
     private readonly Action<RoomKey, long> _reconcileStash;
     private readonly Func<bool> _autoGetCash;
     private readonly Action<bool> _setAutoGetCash;
+    private readonly Action<long?>? _limitCollection;
+    private readonly Func<long>? _surveyedCopper;
     private readonly LogService? _log;
 
     private Phase _phase = Phase.Idle;
@@ -143,7 +145,13 @@ public sealed class TrainFundingRouter
         // Without a listing no bank is a funding source at all, so a purse that
         // can't pay would read as short even with money on deposit.
         Func<bool>? bankBalancesKnown = null,
-        Action? requestBankBalances = null)
+        Action? requestBankBalances = null,
+        // Caps what the collect engines may take to a copper value (null lifts the
+        // cap), and reads back the value of the coin the room surveys have shown
+        // since it was set. Wired, a stash leg takes only what the run is short and
+        // leaves the rest hidden; unwired, the collect engines take all they would.
+        Action<long?>? limitCollection = null,
+        Func<long>? surveyedCopper = null)
     {
         _autoGetCash = autoGetCash ?? throw new ArgumentNullException(nameof(autoGetCash));
         _setAutoGetCash = setAutoGetCash ?? throw new ArgumentNullException(nameof(setAutoGetCash));
@@ -160,6 +168,8 @@ public sealed class TrainFundingRouter
         _requestInventory = requestInventory;
         _bankBalancesKnown = bankBalancesKnown;
         _requestBankBalances = requestBankBalances;
+        _limitCollection = limitCollection;
+        _surveyedCopper = surveyedCopper;
     }
 
     // Price the bill against everything reachable and act on the answer.
@@ -341,6 +351,10 @@ public sealed class TrainFundingRouter
         _purseAtLegStart = onHand;
         _visited.Add(_leg.Room);
         ForceAutoGetCash();
+        // The errand is after a sum, not every coin it passes: loading up on the whole
+        // stash left a character at 100% encumbrance with a small fee to pay (report
+        // paradigm-20261001-222332).
+        _limitCollection?.Invoke(need - spendable);
 
         if (plan.DependsOnStash)
             _log?.Info(LogCategory,
@@ -405,7 +419,10 @@ public sealed class TrainFundingRouter
         {
             // Search reliably surfaces coin we hid — no skill check — and the
             // collect engines take it from the reveal survey exactly as they would
-            // ordinary floor loot.
+            // ordinary floor loot, up to what the run is still short from here. The
+            // rest of the pile stays hidden where it is.
+            long spendable = Spendable(_purseAtLegStart);
+            _limitCollection?.Invoke(Math.Max(0, Needed(_currentRoom(), spendable) - spendable));
             _phase = Phase.Collecting;
             _send("sea");
             _armTimer(CollectWindow, () => CompleteLeg(session));
@@ -437,11 +454,17 @@ public sealed class TrainFundingRouter
         {
             // Whatever the search turned up IS the room's balance now — correcting
             // the belief here is what stops a looted stash being planned against on
-            // every future run.
-            _reconcileStash(_leg.Room, 0);
+            // every future run. What the search showed, less what we took, is still
+            // hidden there; with no cap wired the collect engines took all they could.
+            long shown = _limitCollection is null ? 0 : _surveyedCopper?.Invoke() ?? 0;
+            long left = Math.Max(0, shown - recovered);
+            _reconcileStash(_leg.Room, left);
             _log?.Info(LogCategory, recovered > 0
-                ? $"Recovered {recovered:N0} copper from {_leg.Name}."
-                : $"{_leg.Name} held nothing — writing it off and re-pricing.");
+                ? $"Recovered {recovered:N0} copper from {_leg.Name}"
+                    + (left > 0 ? $", leaving {left:N0} stashed." : ".")
+                : left > 0
+                    ? $"Took nothing from {_leg.Name} ({left:N0} copper still stashed) — re-pricing."
+                    : $"{_leg.Name} held nothing — writing it off and re-pricing.");
         }
         else
         {
@@ -522,6 +545,8 @@ public sealed class TrainFundingRouter
     // setting silently changing itself.
     private void RestoreAutoGetCash()
     {
+        // The cap goes with the errand whether or not the toggle was ours to restore.
+        _limitCollection?.Invoke(null);
         if (!_forcedAutoGetCash) return;
         _forcedAutoGetCash = false;
         _setAutoGetCash(false);

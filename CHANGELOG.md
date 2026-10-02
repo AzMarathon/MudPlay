@@ -1,5 +1,12 @@
 # Version history
 
+## 3.137.3
+
+- Auto-train funding takes only what the train is short from a stash, in the largest coins, and leaves the rest hidden
+- A buff that removes another only clears it on the same target, so smite on one party member and greater smite on another both stay up
+- The Witchunter quest is no longer announced as available to other classes
+- bug reports addressed: paradigm-20261001-222332, paradigm-20261002-012234, paradigm-20261001-235024
+
 ## 3.137.0
 
 - Round Totals window (View → Round Totals, toolbar button, keybind): each round's damage table in a small window with its own row choices, sized steadily so it does not jump as the room changes

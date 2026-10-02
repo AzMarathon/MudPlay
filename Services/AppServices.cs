@@ -7223,6 +7223,8 @@ public sealed class AppServices
                 .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
                     System.Threading.Tasks.TaskScheduler.Default),
             reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
+            limitCollection: copper => Cash.SetCollectLimit(copper),
+            surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
             autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
             setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
             log: Log,

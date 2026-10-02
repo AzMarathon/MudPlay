@@ -760,6 +760,63 @@ public sealed class CashManagerTests
         Assert.DoesNotContain(lines, l => l.StartsWith("get") && l.Contains("copper"));
     }
 
+    // ----- A collect ceiling (an errand that wants a set sum) -------------
+
+    // The train-funding stash stop took the whole revealed pile and left the
+    // character at 100% encumbrance (report paradigm-20261001-222332). Under a
+    // ceiling the funnel takes the dearest coin first and only what covers the sum.
+    [Fact]
+    public void CollectLimit_TakesOnlyWhatCoversTheSum_DearestCoinFirst()
+    {
+        using Harness h = new();
+        h.Settings.PlatinumPolicy = CashPolicy.Collect;
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Settings.SilverPolicy = CashPolicy.Collect;
+        h.Cash.SetCollectLimit(25_050);
+
+        h.Feed("You notice 5 platinum pieces, 154 gold crowns, 6818 silver nobles here.");
+
+        // 25,050 copper rounds up to 3 platinum (30,000), the fewest and lightest
+        // coins that cover it; the gold and silver stay where they are.
+        string get = Assert.Single(h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
+            .Where(l => l.StartsWith("get")));
+        Assert.StartsWith("get 3 platinum", get);
+        // Everything the survey showed is remembered, so the errand knows what it left.
+        Assert.Equal(5 * 10_000 + 154 * 100 + 6818 * 10, h.Cash.SurveyedCopperUnderLimit);
+    }
+
+    [Fact]
+    public void CollectLimit_PileSmallerThanTheSum_SpillsIntoTheNextCoin()
+    {
+        using Harness h = new();
+        h.Settings.PlatinumPolicy = CashPolicy.Collect;
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Cash.SetCollectLimit(25_050);
+
+        h.Feed("You notice 2 platinum pieces, 154 gold crowns here.");
+
+        List<string> gets = h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r'))
+            .Where(l => l.StartsWith("get")).ToList();
+        Assert.Equal(2, gets.Count);
+        Assert.StartsWith("get 2 platinum", gets[0]);   // all there is: 20,000
+        Assert.StartsWith("get 51 gold", gets[1]);      // the other 5,050, rounded up
+    }
+
+    [Fact]
+    public void CollectLimit_Lifted_CollectsEverythingAgain()
+    {
+        using Harness h = new();
+        h.Settings.GoldPolicy = CashPolicy.Collect;
+        h.Cash.SetCollectLimit(0);
+        h.Feed("You notice 40 gold crowns here.");
+        Assert.DoesNotContain(h.Sent, b => Encoding.Latin1.GetString(b).StartsWith("get"));
+
+        h.Cash.SetCollectLimit(null);
+        Assert.Equal(0, h.Cash.SurveyedCopperUnderLimit);
+        h.Feed("You notice 41 gold crowns here.");
+        Assert.Contains(h.Sent, b => Encoding.Latin1.GetString(b).StartsWith("get 41 gold"));
+    }
+
     [Fact]
     public void YouNotice_CollectAfterCombat_HostileRevealsAfterCashLine_Defers()
     {

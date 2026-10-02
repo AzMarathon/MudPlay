@@ -47,6 +47,27 @@ public sealed class EmbeddedSeedsTests : IDisposable
         }
     }
 
+    // Paradigm's data leaves the Witchunter quest unguarded, so the crawl reads it as
+    // open to everyone and the login dump announced it to a Gypsy (report
+    // paradigm-20261001-235024). The shipped quest list carries the class lock for it.
+    [Theory]
+    [InlineData(1)]   // Magebane
+    [InlineData(4)]   // Draka's Blade
+    public void ShippedQuestList_LocksTheWitchunterQuestToWitchunters(int step)
+    {
+        AppPaths.ExtractEmbeddedSeeds(_dir);
+        QuestStore quests = new(seedPath: Path.Combine(_dir, "QuestDefs.seed.json"));
+
+        System.Collections.Generic.List<int>? lockedTo = quests.Resolve(50, step).ClassRestrict;
+        Assert.Equal(new[] { 2 }, lockedTo);   // class 2 = Witchunter on both realms
+
+        MudPlay.Game.Quests.CrawledQuest unguarded = new(Flag: 50, Step: step, RequiredLevel: 15,
+            Bonuses: Array.Empty<MudPlay.Game.Quests.QuestBonus>(), AwardItems: Array.Empty<int>(),
+            ClassIds: null, RaceIds: null, RequiredAlignment: null);
+        Assert.True(MudPlay.Game.Quests.QuestEligibilityResolver.IsIneligible(unguarded, classId: 10, null, lockedTo, false, false, false));
+        Assert.False(MudPlay.Game.Quests.QuestEligibilityResolver.IsIneligible(unguarded, classId: 2, null, lockedTo, false, false, false));
+    }
+
     [Fact]
     public void ExtractEmbeddedSeeds_CarriesShippedContent_GuardianIsFriend()
     {

@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.137.0**
-> - Round Totals window (View → Round Totals, toolbar button, keybind): each round's damage table in a small window with its own row choices, sized steadily so it does not jump as the room changes
-> - Status bar: the Location item shows the loop step beside the lap, and Loop step is an item of its own
-> - Settings → Other: "Show monster HP lookup" is now "Print monster HP in the terminal when I look"; the status bar readout is a bar item you add or remove
+> **Version 3.137.3**
+> - Auto-train funding takes only what the train is short from a stash, in the largest coins, and leaves the rest hidden
+> - A buff that removes another only clears it on the same target, so smite on one party member and greater smite on another both stay up
+> - The Witchunter quest is no longer announced as available to other classes
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

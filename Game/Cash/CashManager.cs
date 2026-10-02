@@ -165,6 +165,37 @@ public sealed class CashManager : IDisposable
     // paradigm-20260819-121516). Wired by AppServices to AutoDeposit; defaults to
     // never-suppress so tests and non-looping play are unaffected.
     internal Func<bool> SuppressCollectInStashRoom { get; set; } = static () => false;
+
+    // A ceiling on the coin VALUE the collect funnel may still take, in copper, for an
+    // errand that wants a set sum rather than everything on the floor (auto-train
+    // funding at a stash). Null = no ceiling: collect as the settings say. Each get
+    // sent takes its value off the ceiling. Surveyed is the value of the coin the room
+    // surveys have shown since the ceiling was set, taken or not — what the errand
+    // reads to know how much it left behind.
+    private long? _collectLimitCopper;
+    public long? CollectLimitCopper => _collectLimitCopper;
+    public long SurveyedCopperUnderLimit { get; private set; }
+
+    public void SetCollectLimit(long? copper)
+    {
+        _collectLimitCopper = copper is { } c ? Math.Max(0, c) : null;
+        SurveyedCopperUnderLimit = 0;
+    }
+
+    private static long CoinValue(int slot) =>
+        slot >= 0 ? CurrencyHoldings.CopperUnit((CoinDenomination)slot) : 0;
+
+    private void NoteSurveyed(string currency, int count)
+    {
+        if (_collectLimitCopper is not null)
+            SurveyedCopperUnderLimit += CoinValue(SlotForCurrency(currency)) * count;
+    }
+
+    private void SpendCollectLimit(int slot, long coins)
+    {
+        if (_collectLimitCopper is { } limit)
+            _collectLimitCopper = Math.Max(0, limit - CoinValue(slot) * coins);
+    }
     private bool _disposed;
 
     // ----- Encumbrance-gated collection --------------------------------
@@ -402,6 +433,7 @@ public sealed class CashManager : IDisposable
 
         _log?.Info(LogCategory,
             $"on-ground currency={currency} count={count} policy={policy}");
+        NoteSurveyed(currency, count);
         CashDispatched?.Invoke(currency, count, policy);
 
         switch (policy)
@@ -645,6 +677,7 @@ public sealed class CashManager : IDisposable
             CashPolicy policy = ResolvePolicy(settings, currency!);
             _log?.Info(LogCategory,
                 $"you-notice cash currency={currency} count={count} policy={policy}");
+            NoteSurveyed(currency!, count);
             CashDispatched?.Invoke(currency!, count, policy);
 
             if (policy == CashPolicy.Collect)
@@ -858,6 +891,28 @@ public sealed class CashManager : IDisposable
 
         CashSettings settings = _readSettings();
         int slot = SlotForCurrency(currency);
+
+        // An errand's ceiling: take only as many of this coin as still cover the sum
+        // it wants (rounded up to a whole coin), and nothing once it is covered. The
+        // survey lists the dearest coin first, so the sum is met in the fewest coins.
+        if (_collectLimitCopper is { } limit && slot >= 0)
+        {
+            long each = CoinValue(slot);
+            long allowed = limit <= 0 ? 0 : (limit + each - 1) / each;
+            if (allowed <= 0)
+            {
+                _log?.Info(LogCategory,
+                    $"collect skipped currency={currency} want={count} — the errand's sum is covered; leaving the rest");
+                return;
+            }
+            if (allowed < count)
+            {
+                _log?.Info(LogCategory,
+                    $"collect limited currency={currency} {count} → {allowed} — the errand needs {limit:N0} copper more");
+                count = (int)allowed;
+            }
+        }
+
         InventorySnapshot snap = _getSnapshot();
         EncumbranceReading enc = snap.Encumbrance;
 
@@ -877,6 +932,7 @@ public sealed class CashManager : IDisposable
             _gate?.NoteGetSent();
             _log?.Info(LogCategory, $"collect currency={currency} get={count} (ungated)");
             Send($"get {count} {_naming.WireNoun(currency)}");
+            SpendCollectLimit(slot, count);
             return;
         }
 
@@ -969,6 +1025,7 @@ public sealed class CashManager : IDisposable
             ? $"collect currency={currency} get={totalPickup} (free={freePickup} + {swapDone} via drop-smaller-for-larger)"
             : $"collect currency={currency} get={totalPickup}");
         Send($"get {totalPickup} {_naming.WireNoun(currency)}");
+        SpendCollectLimit(slot, totalPickup);
         _inFlightCoinDelta[slot] += totalPickup;
         _inFlightCoinDeltaSetAt[slot] = now;
     }

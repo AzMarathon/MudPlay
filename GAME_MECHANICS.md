@@ -2263,6 +2263,10 @@ How one damage spell cast against a monster is worked out.
   - **Mutual pairs (bless ↔ greater bless — each lists the other) are last-cast-wins in both realms.**
 - **For a mutual pair, whichever was cast last is on you; one-way pairs follow the per-realm rule**;
   the buffs the winning cast removes are gone.
+- **A spell strips its removes off its own target only** *([OBSERVED] 2026-10-02, report
+  `paradigm-20261002-012234`: smite on one party member and greater smite on the caster, which remove
+  each other, both stayed up)*. Casting smite on a party member does not touch greater smite on someone
+  else. A whole-party cast lands on everyone, so it strips its removes from everyone.
 - **A buff strips exactly the spells its own `RemovesSpell` (Abil-122) list names — nothing more.** There
   is NO "family exclusivity slot": the fact that bless removes both chant and greater bless, and that
   bless ↔ greater bless remove each other, does NOT make chant remove greater bless.
@@ -2306,6 +2310,10 @@ How one damage spell cast against a monster is worked out.
     cast, leaves both timers alone and **infers** the clobber from RemovesSpell + cast order
     (`Until − TotalSec` = each buff's cast instant), rendering the clobbered bar as **"conflict"** rather
     than a bogus countdown.
+  - `CastingDirector.ClearTimersForShort` drops a stripped buff's timer only on the target the remover
+    landed on (every target for a whole-party remover). Clearing it on everyone made smite on one
+    member and greater smite on the caster wipe each other and recast every few seconds (report
+    `paradigm-20261002-012234`).
   - **Applied-latch gotcha** *(report `paradigm-20260910-012303`)*: `ConditionTracker` dedups a repeated
     applied line (each spell's "You feel …" latches once until its wear-off). A clobber clears the
     victim's *timer* but the only wear-off the game sends for it is the shared family text, which the
@@ -4871,8 +4879,18 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   `N <coin> drop to the ground.`), which is fine to collect, and **search-revealed** coin (the pile we
   just stashed), which must **not** be re-grabbed.
 
+- **Coin a search surfaced but nobody took stays hidden** `[NEEDS CONFIRMATION]` — the client has always
+  relied on this (auto-search re-surfaces a stash pile on every pass and leaves it, and the pile still
+  needs a search next time), but it has not been stated outright. Question: after `sea` shows a stashed
+  pile and only part of it is taken, is the rest still hidden from a player who walks in without
+  searching?
+
 **Client use:**
 - In a stash room the client `hide`s excess coin.
+- The auto-train funding errand (`TrainFundingRouter`, with `CashManager.SetCollectLimit`) takes only the
+  copper value the run is short from a stash, dearest coin first, and leaves the rest of the pile where
+  it is; the stash ledger keeps what the search showed less what was taken (report
+  `paradigm-20261001-222332`: it took the whole pile and reached 100% encumbrance).
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
   shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.
