@@ -679,7 +679,7 @@
                 <TextBlock Classes="SectionHeader" Text="Display"/>
                 <CheckBox Content="Show combat round totals"
                           IsChecked="{Binding ShowCombatRoundTotals, Mode=TwoWay}"
-                          ToolTip.Tip="Append the per-round damage roll-up to the terminal after each round."/>
+                          ToolTip.Tip="Print the per-round damage roll-up in the terminal after each round. The Round Totals window (View menu) shows each round whether or not this is ticked, with its own choice of rows."/>
                 <WrapPanel Margin="24,0,0,0" IsEnabled="{Binding ShowCombatRoundTotals}"
                            ToolTip.Tip="Which rows the round table prints. Tick all four for the full table; with none ticked it doesn't print. The unknown row prints whenever the table does.">
                     <CheckBox Content="Me" Margin="0,0,16,0"

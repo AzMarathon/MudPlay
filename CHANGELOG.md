@@ -1,7 +1,8 @@
 # Version history
 
-## 3.136.1
+## 3.137.0
 
+- Round Totals window (View → Round Totals, toolbar button, keybind): each round's damage table in a small window with its own row choices, sized steadily so it does not jump as the room changes
 - Settings → Other: "Show monster HP lookup" is now "Print monster HP in the terminal when I look"; the status bar readout is a bar item you add or remove
 
 ## 3.136.0

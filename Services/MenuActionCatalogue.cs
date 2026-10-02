@@ -74,6 +74,7 @@ public static class MenuActionCatalogue
         new("view.spellbook", "Spell Book", Kind.Command, "View", CommandName: "OpenSpellBookCommand", GestureProperty: "SpellBookGesture"),
         new("view.monsterintel", "Monster Intel", Kind.Command, "View", CommandName: "OpenMonsterIntelCommand", GestureProperty: "MonsterIntelGesture"),
         new("view.sessionstats", "Session Stats", Kind.Command, "View", CommandName: "OpenSessionStatsCommand", GestureProperty: "SessionStatsGesture"),
+        new("view.roundtotals", "Round Totals", Kind.Command, "View", CommandName: "OpenRoundTotalsCommand", GestureProperty: "RoundTotalsGesture"),
         new("view.events", "Events", Kind.Command, "View", CommandName: "OpenEventsCommand"),
     };
 

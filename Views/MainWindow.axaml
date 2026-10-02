@@ -125,6 +125,7 @@
                 <MenuItem Header="Spell Book"    InputGesture="{Binding SpellBookGesture}"  Command="{Binding OpenSpellBookCommand}"/>
                 <MenuItem Header="Monster Intel" InputGesture="{Binding MonsterIntelGesture}" Command="{Binding OpenMonsterIntelCommand}"/>
                 <MenuItem Header="Session Stats" InputGesture="{Binding SessionStatsGesture}" Command="{Binding OpenSessionStatsCommand}"/>
+                <MenuItem Header="Round Totals"  InputGesture="{Binding RoundTotalsGesture}" Command="{Binding OpenRoundTotalsCommand}"/>
                 <Separator/>
                 <MenuItem Header="Players"  Command="{Binding OpenGameDataPlayersCommand}"/>
                 <MenuItem Header="Macros"   Command="{Binding OpenGameDataMacrosCommand}"/>

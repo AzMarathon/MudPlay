@@ -23,12 +23,13 @@ public static class RoundTotalsFormatter
     // Longest combatant name the table shows in full; longer ones are cut.
     private const int MaxNameWidth = 24;
 
-    // A row several same-named monsters share is labelled "muckworm x3"; eachMonster
-    // gives every monster with HP data its own numbered row instead.
-    public static IReadOnlyList<string> Table(RoundSummary round, IReadOnlyCollection<CombatantKind> shown,
+    // The table's rows, in display order. A row several same-named monsters share is
+    // labelled "muckworm x3"; eachMonster gives every monster with HP data its own
+    // numbered row instead. Empty when no kind of row was asked for.
+    public static IReadOnlyList<RoundTotalsRow> Rows(RoundSummary round, IReadOnlyCollection<CombatantKind> shown,
         bool eachMonster = false)
     {
-        if (shown.Count == 0) return Array.Empty<string>();
+        if (shown.Count == 0) return Array.Empty<RoundTotalsRow>();
         IEnumerable<CombatantDamage> combatants = round.Combatants;
         if (eachMonster && round.EachMonster is { Count: > 0 } each)
         {
@@ -42,29 +43,50 @@ public static class RoundTotalsFormatter
             combatants = combatants.Select(c =>
                 c.Kind == CombatantKind.Monster && c.Count > 1 ? c with { Name = $"{c.Name} x{c.Count}" } : c);
         }
-        List<(string Name, int Dealt, int Taken)> rows = combatants
+        List<RoundTotalsRow> rows = combatants
             .Where(c => shown.Contains(c.Kind))
             .OrderBy(c => c.Kind)
             .ThenByDescending(c => c.Dealt)
             .ThenByDescending(c => c.Taken)
             .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(c => (c.Name, c.Dealt, c.Taken))
+            .Select(c => new RoundTotalsRow(c.Name, c.Dealt, c.Taken, c.Kind))
             .ToList();
         if (round.UnknownDealt > 0 || round.UnknownTaken > 0)
-            rows.Add(("unknown", round.UnknownDealt, round.UnknownTaken));
+            rows.Add(new RoundTotalsRow("unknown", round.UnknownDealt, round.UnknownTaken, Kind: null));
+        return rows;
+    }
 
-        int nameWidth = Math.Min(MaxNameWidth,
-            rows.Select(r => r.Name.Length).DefaultIfEmpty(0).Append("Combatant".Length).Max());
+    // The name column's width for these rows: the longest name, no narrower than its
+    // heading and no wider than MaxNameWidth.
+    public static int NameWidth(IReadOnlyList<RoundTotalsRow> rows) =>
+        Math.Min(MaxNameWidth, rows.Select(r => r.Name.Length).DefaultIfEmpty(0).Append("Combatant".Length).Max());
+
+    // One table line without its frame: the name cut or padded to the column, then
+    // the two numbers right-aligned.
+    public static string Columns(string name, string dealt, string taken, int nameWidth)
+        => $"{Fit(name, nameWidth)}  {dealt,5}  {taken,5}";
+
+    public static string HeaderColumns(int nameWidth) => Columns("Combatant", "Dealt", "Taken", nameWidth);
+
+    // The table as the terminal prints it, one framed line per row. Empty when no
+    // kind of row was asked for.
+    public static IReadOnlyList<string> Table(RoundSummary round, IReadOnlyCollection<CombatantKind> shown,
+        bool eachMonster = false)
+        => shown.Count == 0 ? Array.Empty<string>() : Table(round.FightRound, Rows(round, shown, eachMonster));
+
+    public static IReadOnlyList<string> Table(int fightRound, IReadOnlyList<RoundTotalsRow> rows)
+    {
+        int nameWidth = NameWidth(rows);
         string Row(string name, string dealt, string taken)
-            => $"[ {Fit(name, nameWidth)}  {dealt,5}  {taken,5} ]";
+            => $"[ {Columns(name, dealt, taken, nameWidth)} ]";
 
         List<string> lines = new(rows.Count + 2);
         string header = Row("Combatant", "Dealt", "Taken");
-        string title = $"[Round {round.FightRound} ";
+        string title = $"[Round {fightRound} ";
         lines.Add(title + new string('-', Math.Max(3, header.Length - title.Length - 1)) + "]");
         lines.Add(header);
-        foreach ((string name, int dealt, int taken) in rows)
-            lines.Add(Row(name, dealt.ToString(), taken.ToString()));
+        foreach (RoundTotalsRow row in rows)
+            lines.Add(Row(row.Name, row.Dealt.ToString(), row.Taken.ToString()));
         return lines;
     }
 

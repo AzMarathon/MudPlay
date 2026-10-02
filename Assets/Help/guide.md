@@ -163,7 +163,7 @@ Each is modeless; pressing its key again brings it to the front if it's buried, 
 - **Player Workshop** (F1) — your gear sets and the Item Finder, CP allocation and level projection, quest log, boss timers, and death history. See the **Player Workshop** section for how to use it.
 - **Game Data Browser** (F3) — the imported game-data tables (rooms, items, monsters, spells) you can browse and override per-character. See the **Game Data** section for how to use it.
 - **Buff Watchdog** (View → Buff Watchdog, or a toolbar button — no default hotkey) — the one place you configure every automated buff and watch each one's live recast timer. See the **Buff Watchdog** section for how to use it.
-- **Spell Book** (F2), **Monster Intel** (View menu, or the toolbar's *Monster Intel* button — no default hotkey), **Session Stats**, and **Wire Inspector** (F5) round out the set — a read-only spell reference, a monster reference, session counters, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Monster Intel under **Game Data**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
+- **Spell Book** (F2), **Monster Intel** (View menu, or the toolbar's *Monster Intel* button — no default hotkey), **Session Stats**, **Round Totals** (View menu — each round's damage table in a small window of its own) and **Wire Inspector** (F5) round out the set — a read-only spell reference, a monster reference, session counters, the round table, and raw wire I/O for troubleshooting. The Spell Book is covered under **Healing & Spells**; Monster Intel under **Game Data**; Session Stats and the Wire Inspector under **Tools & Diagnostics**.
 
 The **Settings** window follows the same modeless rule — the terminal stays interactive while it's open — and **OK / Apply / Cancel** decide whether your edits stick.
 
@@ -1919,6 +1919,19 @@ All of these reset with the rest of the session (connect, character switch, **Re
 - **Reset session** zeroes every counter and restarts the clocks; individual panels have their own **Reset** too. (These don't ask for confirmation.)
 - **Transaction history** and **Players Seen** open the detailed ledgers — coin banked and stashed this session, and every player you've encountered. In the Transaction history, coin you stash in a room is **one row per stash room** rather than a row per stash. It carries the time of the latest stash and three lines: **Last** (what you hid that time, each coin type) with **Total Stashes**, **Avg** (the average stash, in the highest coins), and **Total** (everything hidden there, per coin type, followed by what it all comes to in the highest coin, e.g. *(≈ 8.7 platinum)*). Rows from an older log are folded in the first time it loads, and **Clear** starts the count again. Items you hide still get a row each. **Selling and buying** are recorded too, one row per shop visit listing the items and what they came to (*Sold orc-head ×7, club for 16 gold, 5 silver*). Players in your party at the time don't count as seen; once someone leaves the party, seeing them counts again. In the transaction ledger, **stash** entries are tinted faint gold (the map's stash-marker colour) so they stand out from bank deposits, and **double-clicking any entry** opens the Navigation map centred on the room where that deposit or stash happened. Each row has a **Keep** checkbox, saved with the row so it's still ticked after a restart: check the entries you want to hold onto, and **Clear history** wipes everything *except* those — a way to prune a full ledger without losing the rows that matter (with nothing checked it clears the whole thing, as before). The clear updates the on-disk log too, so kept rows survive a reconnect and cleared ones don't come back.
 
+## Round Totals
+
+Open **Round Totals** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Toolbar + Shortcuts). It is a small window showing the last combat round's damage table: who **dealt** and **took** what, one row per combatant, with your own row picked out.
+
+- **Always on.** Every round lands in the window while it is open, whether or not **Settings → Combat → Show combat round totals** is ticked. That checkbox only decides whether the table is *also* printed in the terminal.
+- **Its own rows.** The **Rows** button in the window ticks which kinds of row it shows — **Me**, **Party**, **Other players**, **Monsters** — and **One row per monster** (off: same-named monsters share a row, `muckworm x3`; on: `muckworm #1`, `#2`, …). These are saved for the character and are separate from the terminal table's boxes, so the terminal can print only your own row while the window shows the whole room, or the other way round. **Cap at monster HP** (Settings → Combat) is shared: it changes how the damage is counted, for both.
+- **Steady size.** The window fits the table, but it doesn't jump around as the room changes: it grows at once for a bigger round and only shrinks after ten rounds in a row have been smaller, so stepping between a packed room and a near-empty one leaves it where it was.
+- **Out of your way.** It opens without taking the keyboard from the terminal, and it remembers where you put it. If it was open when you closed MudPlay, it comes back open.
+
+Before the first round of a session it reads *Waiting for a round of combat.* See *Show combat round totals* for how the numbers are counted.
+
+---
+
 ## Buff Watchdog
 
 Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) brings it forward if it's buried, or closes it if it's already in front.
@@ -2951,6 +2964,7 @@ At **0 mana** a mana-costing action can't land (the server silently ignores it),
 ### Show combat round totals
 
 **Default:** Off
+**Terminal only:** this checkbox and the boxes under it control what prints **in the terminal**. The same table is always available in the **Round Totals** window (View → Round Totals), which has its own row choices and doesn't need this box ticked — see *Round Totals*.
 **What it does:** After each combat round, prints a small yellow table to the terminal: how much damage each combatant **dealt** and **took** that round, one row for **everyone in the room** — you, party members, other players and monsters:
 
 ```
@@ -4240,6 +4254,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Multi-attack 2 (enable + slot) | off, unset | bool + spell code + MaxCastsPerRoom(null/0-100) + MinManaPerCast (MinEnemies shared with slot 1) | `MultiAttack2Enabled`, `MultiAttack2Spell` | Models/Profile/CombatSettings.cs |
 | Drain (life-steal) spell + HP trigger + Drains override AOE | unset / 50% / off | spell code + MaxCastsPerRoom + MinManaPerCast; DrainHpTrigger(0-100); DrainsOverrideAoe(bool) | `DrainSpell`, `DrainHpTrigger`, `DrainsOverrideAoe` | Models/Profile/CombatSettings.cs |
 | Show combat round totals | `false` | bool | `ShowCombatRoundTotals` | Models/Profile/CombatSettings.cs |
+| Round Totals window rows (set in the window) | all on / stacked monsters | bool × 5 | `RoundTotalsWindow.ShowSelf` / `ShowParty` / `ShowPlayers` / `ShowMonsters` / `EachMonster` | Models/Profile/RoundTotalsWindowSettings.cs |
 | Round totals rows: Me / Party / Other players / Monsters | `false` each | bool | `ShowCombatRoundTotalsSelf` / `…Party` / `…Players` / `…Monsters` | Models/Profile/CombatSettings.cs |
 | Round totals: Cap at monster HP | `false` | bool | `CapRoundTotalsAtMonsterHp` | Models/Profile/CombatSettings.cs |
 

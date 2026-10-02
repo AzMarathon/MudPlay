@@ -1060,6 +1060,7 @@ public partial class MainWindowViewModel : ObservableObject
         layouts.RegisterOpener("navigation", OpenNavigation);
         layouts.RegisterOpener("party", OpenParty);
         layouts.RegisterOpener("playersseen", OpenPlayersSeen);
+        layouts.RegisterOpener("round-totals", OpenRoundTotals);
         layouts.RegisterOpener("session-stats", OpenSessionStats);
         layouts.RegisterOpener("settings", OpenSettings);
         layouts.RegisterOpener("spellbook", OpenSpellBook);
@@ -5345,6 +5346,26 @@ public partial class MainWindowViewModel : ObservableObject
         window.Show(main);
     }
 
+    // Singleton handle for the live RoundTotalsWindow (see RaiseOrClose).
+    private RoundTotalsWindow? _roundTotals;
+
+    [RelayCommand]
+    private void OpenRoundTotals()
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        if (_roundTotals is { } existing) { RaiseOrClose(existing); return; }
+
+        RoundTotalsWindow window = new()
+        {
+            DataContext = new RoundTotalsViewModel(AppServices.Current.RoundTotals, AppServices.Current.Profile),
+        };
+        window.Closed += (_, _) => _roundTotals = null;
+        _roundTotals = window;
+        window.Show(main);
+    }
+
     // Singleton handle for the live SessionStatsWindow (see RaiseOrClose).
     private SessionStatsWindow? _sessionStats;
 
@@ -5521,6 +5542,7 @@ public partial class MainWindowViewModel : ObservableObject
     public string LogPaneGesture          => GetGesture(Models.Profile.BuiltInAction.OpenLogPane);
     public string BackscrollGesture       => GetGesture(Models.Profile.BuiltInAction.OpenBackscroll);
     public string SessionStatsGesture     => GetGesture(Models.Profile.BuiltInAction.OpenSessionStats);
+    public string RoundTotalsGesture      => GetGesture(Models.Profile.BuiltInAction.OpenRoundTotals);
     public string SettingsGesture         => GetGesture(Models.Profile.BuiltInAction.OpenSettings);
     public string GameDataBrowserGesture  => GetGesture(Models.Profile.BuiltInAction.OpenGameDataBrowser);
     public string ToggleConnectionGesture => GetGesture(Models.Profile.BuiltInAction.ToggleConnection);
@@ -5543,6 +5565,7 @@ public partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(LogPaneGesture));
         OnPropertyChanged(nameof(BackscrollGesture));
         OnPropertyChanged(nameof(SessionStatsGesture));
+        OnPropertyChanged(nameof(RoundTotalsGesture));
         OnPropertyChanged(nameof(SettingsGesture));
         OnPropertyChanged(nameof(GameDataBrowserGesture));
         OnPropertyChanged(nameof(ToggleConnectionGesture));

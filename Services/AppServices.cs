@@ -1182,6 +1182,10 @@ public sealed class AppServices
     // boundary alongside RoundDamage.
     public Game.Combat.CombatSessionTracker CombatSession { get; private set; } = null!;
 
+    // The latest round's damage table for the Round Totals window (View → Round
+    // Totals). Built just before the round-complete hook that feeds it.
+    public Game.Combat.RoundTotalsBoard RoundTotals { get; private set; } = null!;
+
     // Generic color+wording combat-line recognizer (monster-agnostic, no per-monster
     // data). Classifies each in-combat-window line into a Game.Combat.CombatLineKind
     // for the Wire Inspector's classified view + bug-report capture. The per-monster
@@ -3664,12 +3668,19 @@ public sealed class AppServices
             log: Log);
         GameData.ActiveSetChanged += _ => PartyHp.Invalidate();
         Messages.Messages.CollectionChanged += (_, _) => PartyHp.Invalidate();
-        // Settings → Combat "Show combat round totals": print each round's ledger
-        // as a table (read per round, so the checkboxes apply at once), with the rows
-        // its Me / Party / Other players / Monsters boxes pick. One notice for all its
-        // lines, so no blank line falls between them.
+        // Every round's ledger goes to the Round Totals window's board, which picks
+        // its rows by the window's own options.
+        RoundTotals = new Game.Combat.RoundTotalsBoard(() =>
+            ReadSection<Models.Profile.RoundTotalsWindowSettings>(
+                Profile.Current, Models.Profile.RoundTotalsWindowSettings.SectionKey));
+        Profile.ProfileLoaded += _ => RoundTotals.Clear();
+        // Settings → Combat "Show combat round totals": also print each round's ledger
+        // in the terminal as a table (read per round, so the checkboxes apply at once),
+        // with the rows its Me / Party / Other players / Monsters boxes pick. One
+        // notice for all its lines, so no blank line falls between them.
         RoundDamage.RoundComplete += round =>
         {
+            RoundTotals.Publish(round);
             Models.Profile.CombatSettings combat = ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
             if (!combat.ShowCombatRoundTotals) return;
             List<Game.Combat.CombatantKind> shown = new(4);
