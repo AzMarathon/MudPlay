@@ -337,12 +337,14 @@ public sealed class MessageCandidateWatcher : IDisposable
 
         // Cheap own-output filters first, before the costlier catalogue scans:
         //  - near-empty noise ("OK", a blank continuation)
+        //  - a row of painted art
         //  - the client's own "[…]" status notices (WriteTerminalStatus)
         //  - the echo of a command we or the user just sent
         // None of these can become a candidate, and none may RELEASE the held one
         // either: a blank line or a status notice landing between the death message
         // and the experience line would otherwise defeat the positional rule above.
         if (text.Length < MinLineLength) return;
+        if (IsPaintedArt(text)) return;
         if (ClientNotice.IsNotice(text)) return;
         if (IsRecentCommand(text, line.Timestamp)) return;
 
@@ -438,6 +440,15 @@ public sealed class MessageCandidateWatcher : IDisposable
         _inListing = false;
         _inWrappedList = false;
         _quoteRowsLeft = 0;
+    }
+
+    // A row of a picture the game paints (a drawn card, a sign). Box-drawing and
+    // block glyphs are never part of a message.
+    private static bool IsPaintedArt(string text)
+    {
+        foreach (char c in text)
+            if (c is >= '\u2500' and <= '\u259F') return true;
+        return false;
     }
 
     private bool IsQuoteContinuation(string text)

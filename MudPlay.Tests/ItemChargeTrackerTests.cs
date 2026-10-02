@@ -36,6 +36,9 @@ public sealed class ItemChargeTrackerTests : IDisposable
     private readonly List<Action> _scheduled = new();
     private DateTimeOffset _clock = new(2026, 1, 1, 10, 0, 0, TimeSpan.Zero);   // before the 21:00 cleanup
     private bool _paradigm = true;
+    // Item number → the line a successful use prints. An item absent here has no use
+    // line on record, so its uses are settled by a look.
+    private readonly Dictionary<int, string> _useLines = new();
     private readonly ItemChargeTracker _tracker;
 
     public ItemChargeTrackerTests()
@@ -55,6 +58,9 @@ public sealed class ItemChargeTrackerTests : IDisposable
             itemNumberOf: Number,
             onParadigm: () => _paradigm,
             cleanupConfig: () => new BossCleanupConfig(TimeSpan.FromHours(21), TimeZoneInfo.Utc),
+            useConfirmLine: n => _useLines.TryGetValue(n, out string? text)
+                ? line => line.Contains(text, StringComparison.Ordinal)
+                : null,
             // Mirror production: SendGameCommand re-enters the outbound tap, so a look
             // sent by the tracker arms its own capture.
             sendLook: cmd => { _sent.Add(cmd); _tracker!.ObserveOutbound(Bytes(cmd)); },
@@ -224,6 +230,95 @@ public sealed class ItemChargeTrackerTests : IDisposable
         FireTimers();
         Line("Uses remaining: 5");                // re-look shows the count unchanged
         Assert.Equal(5, _tracker.RemainingFor(10));
+    }
+
+    // Report paradigm-20261002-140153: a deck of cards drawn every round was looked at
+    // after every draw. Once the count is known the use line counts it down.
+    [Fact]
+    public void KnownCount_UseLine_CountsDown_WithoutALook()
+    {
+        _carried.Add("gnarled wand");
+        _useLines[10] = "You wave the gnarled wand";
+        Look("look gnarled");
+        Line("Uses remaining: 5");
+
+        _sent.Clear();
+        Use("use gnarled wand");
+        Line("You wave the gnarled wand!");
+        FireTimers();
+
+        Assert.Equal(4, _tracker.RemainingFor(10));
+        Assert.Empty(_sent);
+    }
+
+    [Fact]
+    public void UseLine_CountsOnce_PerUse()
+    {
+        _carried.Add("gnarled wand");
+        _useLines[10] = "You wave the gnarled wand";
+        Look("look gnarled");
+        Line("Uses remaining: 5");
+
+        Use("use gnarled wand");
+        Line("You wave the gnarled wand!");
+        Line("You wave the gnarled wand!");     // someone else's, or a repaint
+
+        Assert.Equal(4, _tracker.RemainingFor(10));
+    }
+
+    // A use takes the round's between-round cast slot; refused for that, it spends
+    // no charge (user, 2026-10-02) and needs no look.
+    [Fact]
+    public void UseRefused_AlreadyCastThisRound_SpendsNothing_AndSendsNoLook()
+    {
+        _carried.Add("gnarled wand");
+        _useLines[10] = "You wave the gnarled wand";
+        Look("look gnarled");
+        Line("Uses remaining: 5");
+
+        _sent.Clear();
+        Use("use gnarled wand");
+        Line("You have already cast a spell this round!");
+        FireTimers();
+
+        Assert.Equal(5, _tracker.RemainingFor(10));
+        Assert.Empty(_sent);
+    }
+
+    // Neither the use line nor a refusal we know: the count is not guessed at.
+    [Fact]
+    public void UseWithNoAnswerWeKnow_IsSettledByALook()
+    {
+        _carried.Add("gnarled wand");
+        _useLines[10] = "You wave the gnarled wand";
+        Look("look gnarled");
+        Line("Uses remaining: 5");
+
+        _sent.Clear();
+        Use("use gnarled wand");
+        Line("Nothing happens.");
+        FireTimers();                             // the confirm window lapses → re-look scheduled
+        FireTimers();                             // the re-look fires
+        Assert.Contains("look gnarled wand", _sent);
+        Line("Uses remaining: 5");
+        Assert.Equal(5, _tracker.RemainingFor(10));
+    }
+
+    // The last charge is read from the game, which also notices the item gone.
+    [Fact]
+    public void LastCharge_IsLooked_NotCounted()
+    {
+        _carried.Add("gnarled wand");
+        _useLines[10] = "You wave the gnarled wand";
+        Look("look gnarled");
+        Line("Uses remaining: 1");
+
+        _sent.Clear();
+        Use("use gnarled wand");
+        Line("You wave the gnarled wand!");
+        FireTimers();
+
+        Assert.Contains("look gnarled wand", _sent);
     }
 
     [Fact]

@@ -5428,7 +5428,8 @@ public sealed class AppServices
 
         // Paradigm limited-use item charges from look replies ("Uses remaining: N"),
         // persisted per-character (CharacterProfile.ItemCharges): auto-looks an unknown
-        // charged item, and re-looks after a `use` to reconcile. Rechargeables restock
+        // charged item, then counts each use down on the item's own use line (a look
+        // only when a use can't be confirmed). Rechargeables restock
         // at the BBS cleanup time. The look sender is SendGameCommand (rides the same
         // outbound tap so its looks re-arm capture); the line feed + outbound tap are
         // wired in MainWindowViewModel alongside Tokens.
@@ -5439,6 +5440,7 @@ public sealed class AppServices
             itemNumberOf: ItemNumberByName,
             onParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             cleanupConfig: ResolveBossCleanupConfig,
+            useConfirmLine: BuildItemUseLinePredicate,
             sendLook: cmd => SendGameCommand(cmd),
             schedule: (ms, action) =>
             {
