@@ -4716,6 +4716,14 @@ public sealed class AppServices
         // suppress the doomed `sn` instead of firing it into a rejection.
         Stealth.SetSneakBlockCheck(() => CombatTracker.HasRoomNpc);
         Stealth.SetMovementCoordinator(MovementCoordinator);
+        // With no walk, loop or auto-lair driving the moves (walking by hand), a
+        // broken sneak is re-taken in place; an engine re-takes it at its pre-move hook.
+        Stealth.SetEngineDrivingCheck(() => ResolveActiveMovementEngine() is not null);
+        // In place, a rest short of rest-max isn't broken for a sneak. A ShadowRest
+        // character sneaks over it: there the `sn` leaves the rest standing.
+        Stealth.SetIdleRestChecks(
+            restUnderWay: () => Health.RestingShortOfRestMax,
+            restKeepsSneak: () => Health.UsesShadowRest);
         // A refused move never left the room — Stealth drops its arrival-confirm wait.
         RoomTracker.MoveBlocked += Stealth.NoteMoveBlocked;
         // Auto-hide is suppressed in a party — a hidden member falls off the
@@ -6708,6 +6716,10 @@ public sealed class AppServices
             // tail, not a new one.
             restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)));
         OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
+        // A hand-typed move sneaks first, like an engine's own step (ObserveOutbound
+        // runs before the typed bytes go out, so the `sn` leaves ahead of them). After
+        // the gear hook above: equipping ends a sneak, so any swap goes out first.
+        OutboundMovement.MoveSent += Stealth.NoteTypedMove;
         // Every move re-opens the backstab surprise round, typed moves included.
         OutboundMovement.MoveSent += Combat.NoteMoveSent;
         OutboundMovement.MoveSent += CombatTracker.NoteMoveSent;
@@ -7223,6 +7235,9 @@ public sealed class AppServices
                 .ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(action),
                     System.Threading.Tasks.TaskScheduler.Default),
             reconcileStash: (room, copper) => StashBalances.Reconcile(room, copper),
+            limitCollection: copper => Cash.SetCollectLimit(copper),
+            surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
+            collectSurveyed: copper => Cash.CollectSurveyed(copper),
             autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
             setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
             log: Log,

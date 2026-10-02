@@ -1818,6 +1818,9 @@ public static class BugReportBuilder
         sb.Append('\n');
         Kv(sb, "Train funding errand", svc.TrainFunding.IsCheckingFunds ? "checking purse / bank (i, bank)"
             : svc.TrainFunding.IsBusy ? "collecting" : "idle");
+        Kv(sb, "Coin pickup ceiling (funding errand)", svc.Cash.CollectLimitCopper is { } cap
+            ? $"{cap:N0} copper still to take; {svc.Cash.SurveyedCopperUnderLimit:N0} copper surveyed"
+            : "(none)");
         Kv(sb, "Trainer choice (if a run started now)", svc.TrainerWalk.DescribeTrainerChoiceFromHere());
         Kv(sb, "Last train shortfall", svc.TrainerWalk.LastFundingShortfall > 0
             ? $"{svc.TrainerWalk.LastFundingShortfall:N0} copper"

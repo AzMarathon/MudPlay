@@ -736,6 +736,12 @@ public sealed class HealthManager : IDisposable
     // opts into "bless while resting."
     public bool IsRecoveringRest => _hpGateAsserted || _maGateAsserted;
 
+    // A rest or meditate still doing its job where we stand, whoever sent it — the
+    // engine or the player by hand: the posture is up and a pool is short of rest-max.
+    public bool RestingShortOfRestMax =>
+        (_state.Position is PlayerPosition.Resting or PlayerPosition.Meditating)
+        && NeedsOpportunisticTopOff(_readSettings());
+
     // A rest we sent finished (the pools reached their targets) within window — for a
     // sit the server confirms only after that, which is the tail of a finished rest.
     public bool RecoveredWithin(TimeSpan window) => _now() - _recoveredAt <= window;

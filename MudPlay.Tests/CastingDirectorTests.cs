@@ -3355,6 +3355,10 @@ public sealed class CastingDirectorTests
         public Dictionary<string, (string Caster, long Duration)> BuffInfo { get; } =
             new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>Buff short → the shorts its spell removes (RemovesSpell).</summary>
+        public Dictionary<string, string[]> Removes { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
         public PartyBlessHarness()
         {
             DefaultPatterns.Seed(Router);
@@ -3375,7 +3379,9 @@ public sealed class CastingDirectorTests
                     ? (info.Caster, info.Duration)
                     : null,
                 // No self-confirm path exercised here.
-                _ => null);
+                _ => null,
+                removesShortsFor: code =>
+                    Removes.TryGetValue(code, out string[]? v) ? v : System.Array.Empty<string>());
             Director.SetPartyBuffSource(() => PartyBuffs);
             Director.SetRoomPresenceCheck(g => InRoom.Contains(g));
             Director.SetPartyWideBuffCheck(s => WholeParty.Contains(s));
@@ -3632,6 +3638,83 @@ public sealed class CastingDirectorTests
 
         Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
         Assert.Equal("raijin", kept.Target);
+    }
+
+    // A spell strips what it removes off its own target only. Smite on one member and
+    // greater smite on another (each removes the other) cleared each other's timers
+    // and were recast every few seconds (report paradigm-20261002-012234).
+    [Fact]
+    public void PartyBless_RemoverOnOneMember_LeavesItsVictimOnAnother()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("smit", "Raijin");
+        h.AddTargetSlot("grsm", "Goldar");
+        h.BuffInfo["smit"] = ("You cast {s} on {s}!", 365);
+        h.BuffInfo["grsm"] = ("You cast {s} on {s}!", 365);
+        h.Removes["smit"] = new[] { "grsm" };
+        h.Removes["grsm"] = new[] { "smit" };
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+
+        h.Director.Evaluate();
+        h.Confirm("You cast smite on Raijin!");
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        h.Confirm("You cast greater smite on Goldar!");
+
+        Assert.Equal(
+            new[] { ("goldar", "grsm"), ("raijin", "smit") },
+            h.Director.SnapshotActiveBuffs().Select(b => (b.Target, b.Short)).OrderBy(b => b.Target));
+
+        // Both are up, so nothing is due: neither is recast.
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_RemoverOnAMember_LeavesOurOwnVictimBuff()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("smit", "Raijin");
+        h.BuffInfo["smit"] = ("You cast {s} on {s}!", 365);
+        h.BuffInfo["grsm"] = (string.Empty, 365);
+        h.Removes["smit"] = new[] { "grsm" };
+        h.AddMember("Raijin");
+        h.Director.NoteManualBuffCast("grsm");           // greater smite on ourselves ("")
+
+        h.Director.Evaluate();
+        h.Confirm("You cast smite on Raijin!");
+
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), b => b.Short == "grsm" && b.Target.Length == 0);
+    }
+
+    [Fact]
+    public void PartyBless_RemoverOnTheSameMember_ClearsItsVictimThere()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("smit", "Raijin");
+        h.AddTargetSlot("grsm", "Raijin");
+        h.BuffInfo["smit"] = ("You cast {s} on {s}!", 365);
+        h.BuffInfo["grsm"] = ("You cast {s} on {s}!", 365);
+        h.Removes["grsm"] = new[] { "smit" };
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You cast smite on Raijin!");
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        h.Confirm("You cast greater smite on Raijin!");
+
+        Game.Spells.ActiveBuffTimer kept = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("grsm", kept.Short);
     }
 
     [Fact]

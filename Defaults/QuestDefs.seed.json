@@ -17,7 +17,10 @@
     "Steps": "[] (2/2566) \u0027ask huge dwarven witchunter sword\u0027",
     "Rewards": null,
     "RequiredLevel": null,
-    "Blocked": false
+    "Blocked": false,
+    "ClassRestrict": [
+      2
+    ]
   },
   {
     "Flag": 50,
@@ -27,7 +30,10 @@
     "Steps": "-MUST COMPLETE MAGEBANE PORTION FIRST-\n[] (2/2566) \u0027ask huge dwarven witchunter witchunter\u0027\n[] (15/1101) \u0027ask inquisitor fulgore messenger\u0027\n[] (15/1112) \u0027touch ruby\u0027 (drops you into flame pit randomly)\n[] (15/1127) kill demoness irikani (severed head of irikani)\n[] (15/1101) \u0027ask inquisitor fulgore return\u0027\n[] (2/2566) \u0027ask huge dwarven witchunter draka\u0027\n[] (2/2566) \u0027ask huge dwarven witchunter visit\u0027\n[] (17/2586) kill enigma lord (severed head of enigma lord)\n[] (17/359) \u0027ask spirit of draka return\u0027",
     "Rewards": "Draka\u0027s Blade",
     "RequiredLevel": null,
-    "Blocked": false
+    "Blocked": false,
+    "ClassRestrict": [
+      2
+    ]
   },
   {
     "Flag": 57,

@@ -1032,7 +1032,7 @@ How HP works from full health down through dropping and death, how monster healt
 - **Some Paradigm races and classes have a ShadowRest ability; it is not a stock MajorMUD mechanic.** Resting with it doesn't break sneak or hide *([CONFIRMED] 2026-09-28, user: the flag can sit on the race or the class)*. In the imported game data it is **class-ability code 1103** on the Classes table (`AbilityNames` maps `1103 → "ShadowRest"`); a class row carrying that code in any `Abil-N` slot has the ability.
 - **While hidden or sneaking, the character can `rest` (or meditate) and stay stealthed while resting in the room.** Monsters in the room **do not attack** the resting stealthed character. Normally a hostile in the room means you can't safely rest; ShadowRest lets a stealthed character rest right there without being engaged.
 - **Some ShadowRest classes gain an HP-regen bonus while resting this way** (e.g. thief gets extra regen). The bonus is server-side.
-- **No special messages mark the state.** The only observable sequence is a successful hide/sneak followed by `rest` — there is no "you shadow-rest" line.
+- **No special messages mark the state.** The only observable sequence is a successful hide/sneak followed by `rest` — there is no "you shadow-rest" line. An `sn` sent while already resting is covered in *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine* (*Sneaking and resting in place*).
 - **Ideally used solo.** Resting while hidden un-targets you from party single-target heals/buffs (the same reason auto-hide is party-suppressed), so ShadowRest resting is a solo behavior.
 - **Client use:**
   - The client's `RegenTracker` measures the actual regen rate off the stat line, so it needs no separate model of the bonus magnitude.
@@ -2263,6 +2263,10 @@ How one damage spell cast against a monster is worked out.
   - **Mutual pairs (bless ↔ greater bless — each lists the other) are last-cast-wins in both realms.**
 - **For a mutual pair, whichever was cast last is on you; one-way pairs follow the per-realm rule**;
   the buffs the winning cast removes are gone.
+- **A spell strips its removes off its own target only** *([OBSERVED] 2026-10-02, report
+  `paradigm-20261002-012234`: smite on one party member and greater smite on the caster, which remove
+  each other, both stayed up)*. Casting smite on a party member does not touch greater smite on someone
+  else. A whole-party cast lands on everyone, so it strips its removes from everyone.
 - **A buff strips exactly the spells its own `RemovesSpell` (Abil-122) list names — nothing more.** There
   is NO "family exclusivity slot": the fact that bless removes both chant and greater bless, and that
   bless ↔ greater bless remove each other, does NOT make chant remove greater bless.
@@ -2306,6 +2310,10 @@ How one damage spell cast against a monster is worked out.
     cast, leaves both timers alone and **infers** the clobber from RemovesSpell + cast order
     (`Until − TotalSec` = each buff's cast instant), rendering the clobbered bar as **"conflict"** rather
     than a bogus countdown.
+  - `CastingDirector.ClearTimersForShort` drops a stripped buff's timer only on the target the remover
+    landed on (every target for a whole-party remover). Clearing it on everyone made smite on one
+    member and greater smite on the caster wipe each other and recast every few seconds (report
+    `paradigm-20261002-012234`).
   - **Applied-latch gotcha** *(report `paradigm-20260910-012303`)*: `ConditionTracker` dedups a repeated
     applied line (each spell's "You feel …" latches once until its wear-off). A clobber clears the
     victim's *timer* but the only wear-off the game sends for it is the shared family text, which the
@@ -3246,6 +3254,11 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **Being spotted:** by a monster with see-hidden, or by a Gaunt One player who has finished their level-15 race quest *([CONFIRMED] 2026-09-28, user)*.
   - **Other:** `quit`, `suicide`; `sneak` itself resets the flag before it re-tries.
   - Not on the list: `get` / `drop`, `look`, telepaths, gossip and other channels, `use` — none of these clear it in the DLL.
+- **Sneaking and resting in place** *([CONFIRMED] 2026-10-02, user)*:
+  - **Stock: a sneak and a rest don't share a spot.** `rest` ends the sneak (see *What ends a sneak* in this topic), and sending `sn` while resting breaks the rest (user: "on stock, sneaking while resting, breaks the rest"). So a rest isn't broken to sneak unless HP is past rest-max (user: "if i manually typed rest, it shouldnt break the rest to sneak unless we were above our rest max hp").
+  - **Paradigm with ShadowRest: sneak, then rest.** The rest keeps the sneak, so that order is fine (user: "its fine to send a sneak then rest because of shadowrest") — see *Health, resting & recovery → ShadowRest*.
+  - **Paradigm: `sn` while resting does not break the rest.** For a ShadowRest character it is believed to start the ShadowRest if the rest wasn't one already (user: "i believe it puts us into shadowrest if we werent previously") *([NEEDS CONFIRMATION]: does an `sn` sent mid-rest turn the rest into a ShadowRest?)*.
+  - Whether the sneak holds through the rest for a Paradigm race or class **without** ShadowRest is not recorded; the client leaves such a rest alone, as on Stock (**Client policy**).
 
 **Client use:**
 - The backstab loadout is applied in the walker's pre-move step, ahead of the `sn`, rather than raced at room-clear (because of the equip-before-sneak rule).
@@ -3268,6 +3281,23 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **Not held:** walk steps the route can't skip (doors, traps, room commands, winches, hidden-exit search) and their `.@party` / `.@trap` relays, plus `.@panic` (the leader's hang-up call; followers just hang up).
   - **Health-gate flee:** while fleeing on the run-if-below HP / MA gates (`HealthManager.IsGateFleeing`; not a hit-and-run or failed-backstab run), the emergency heal isn't held, and the re-sneak waits until it has gone out (`StealthManager.SetSneakHoldForHeal`).
   - **Marking the sneak broken:** any command on the "What ends a sneak" list sets the sneak broken (`StealthManager.NoteSneakBroken`), so the next move re-sneaks. That covers the client's own sends (the send gate, the walker's room-command hook) and lines the player types (`AppServices.NoteSentForSneak` from `SendUserInput`; report `paradigm-20260928-163051`: a typed `sea` left the client believing it still sneaked, so every buff stayed held). A hand-typed cast re-sneaks like an engine one (`StealthManager.ReSneakAfterCast`).
+  - **Re-sneaking in place when nothing drives the moves** (report `paradigm-20261002-004148`): an engine
+    re-takes a broken sneak at its pre-move hook; a player walking by hand has no such hook, and the
+    arrival re-sneak is refused in any room with an NPC, so in a tunnel with a monster in every room a
+    broken sneak never came back. With no walk, loop or auto-lair running, `StealthManager` re-sneaks
+    where the character stands: 700 ms after `NoteSneakBroken` (so a burst of commands finishes first),
+    at combat end (`NoteCombatEndedStealthReset`), and when Auto-Sneak is switched on. A hand-typed move
+    also sends `sn` ahead of itself (`NoteTypedMove`, off `OutboundMovementObserver.MoveSent`), since the
+    report shows `sea` typed about a second before the next step.
+  - **The in-place re-sneak yields to a rest** (*Sneaking and resting in place* in this topic; **Client
+    policy**, user 2026-10-02): while the character is resting or meditating with a pool short of rest-max
+    (`HealthManager.RestingShortOfRestMax` — the engine's rest or one typed by hand), no `sn` goes out;
+    `StealthManager.ReSneakInPlace` looks again every 2 s and sneaks once the rest has topped off. With
+    ShadowRest utilized (`HealthManager.UsesShadowRest`) the `sn` goes out over the rest, the engine's or
+    a hand-typed one, since on Paradigm it leaves the rest standing.
+  - **An `sn` answered after a later sneak-ending command** (same report): `sn` then `sea` leaves the
+    character not sneaking, but the `Attempting to sneak...` for that `sn` arrives after the `sea` was
+    noted. `StealthManager` ignores that answer instead of reading it as sneaking.
   - **Stopping to cast** (report `paradigm-20260928-165844`): a sneaked walk is always mid-step, so a held buff / heal / cure never finds a gap. When one is due (and affordable), the step in the next NPC-free room waits on `SneakCastGate` (`StealthManager.ReadyToMoveSneaking`, from `CastingDirector.HasSneakHeldCast`); the arrival `sn` waits too, the cast goes out, and the re-sneak after it sends us on. Capped at 7 s per room.
   - **After the backstab** (report `paradigm-20260928-165954`): when the backstab round settles with the target still up, a cast held for the opener goes out before the re-announce, and its `*Combat Off*` resume re-attacks (`CombatManager.SettleBackstab`).
   - **Ordering:** pre-move gear now goes out before the `sn`.
@@ -4847,7 +4877,7 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   `look` — *Re-surveying ground cash with `look`*).
 
 ### Hiding coin in a room (stashing)
-*Status: CONFIRMED 2026-08-29 (user; report `paradigm-20260829-212158`); CONFIRMED 2026-09-14 (user)*
+*Status: CONFIRMED 2026-08-29 (user; report `paradigm-20260829-212158`); CONFIRMED 2026-09-14 (user); partial-take rule CONFIRMED 2026-10-02 (user)*
 
 - **`hide <N> <coin>` is a stash, not a vault.** `hide <item>` is the full command and `hid <item>` its
   shorthand *([CONFIRMED] 2026-09-26, user)*. Hiding an object (or coin) is a different act from
@@ -4871,8 +4901,21 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   `N <coin> drop to the ground.`), which is fine to collect, and **search-revealed** coin (the pile we
   just stashed), which must **not** be re-grabbed.
 
+- **Coin a search surfaced but nobody took stays hidden** *([CONFIRMED] 2026-10-02, user)*. Search a
+  stash holding 50 runic, 50 platinum and 50 gold, take 25 of each, and the other 25 of each are still
+  hidden: a player who walks in without searching doesn't see them.
+- **A search of a stash does two jobs** *([CONFIRMED] 2026-10-02, user)*: it surfaces the hidden coin,
+  which always shows on the first search, and it verifies the amount — the pile isn't held by us or by
+  a bank, so any player can have come by and taken some.
+
 **Client use:**
 - In a stash room the client `hide`s excess coin.
+- The auto-train funding errand (`TrainFundingRouter`, with `CashManager.SetCollectLimit` /
+  `CollectSurveyed`) holds the pickup while it searches a stash, reads what the search showed, and only
+  then decides: a pile that covers the shortfall gives up just that much, dearest coin first; a short
+  pile is drawn on only if a `bank` check shows stash plus bank cover the run, and is otherwise left
+  hidden (**Client policy**, user 2026-10-02). The stash ledger keeps what the search showed less what
+  was taken (report `paradigm-20261001-222332`: it took the whole pile and reached 100% encumbrance).
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
   shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.

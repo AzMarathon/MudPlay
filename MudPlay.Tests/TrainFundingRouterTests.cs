@@ -30,6 +30,13 @@ public sealed class TrainFundingRouterTests
         public bool AutoGetCash;
         public List<bool> AutoGetCashWrites = new();
 
+        // The collect ceiling the errand set (null = lifted), what the stash room
+        // really holds (the search shows it), and what the errand then asked to take.
+        public List<long?> Limits = new();
+        public long StashHolds;
+        public long Surveyed;
+        public List<long> Taken = new();
+
         // Keep-on-hand floor in copper, and whether Begin re-anchors the purse
         // with an `i` first. Both default to the old behaviour so the existing
         // cases are untouched.
@@ -69,7 +76,11 @@ public sealed class TrainFundingRouterTests
                     if (!WalkSucceeds) return false;
                     return true;
                 },
-                send: Sent.Add,
+                send: cmd =>
+                {
+                    Sent.Add(cmd);
+                    if (cmd == "sea") Surveyed = StashHolds;
+                },
                 armTimer: (_, a) => _timers.Add(a),
                 reconcileStash: (k, c) => Reconciled.Add((k, c)),
                 autoGetCash: () => AutoGetCash,
@@ -81,7 +92,17 @@ public sealed class TrainFundingRouterTests
                 bankBalancesKnown: () => BankKnown,
                 requestBankBalances: refresh
                     ? () => { BankRequests++; Sent.Add("bank"); }
-                    : null);
+                    : null,
+                limitCollection: Limits.Add,
+                surveyedCopper: () => Surveyed,
+                collectSurveyed: copper =>
+                {
+                    long got = Math.Min(copper, StashHolds);
+                    Taken.Add(copper);
+                    StashHolds -= got;
+                    Purse += got;
+                });
+
             Router.Finished += r => Result = r;
         }
 
@@ -137,6 +158,111 @@ public sealed class TrainFundingRouterTests
         h.FireTimers();
 
         Assert.True(h.Result!.Value.Funded);
+    }
+
+    // The stash holds far more than the train costs: the errand reads the pile first,
+    // takes only the shortfall and leaves the rest on the ledger (report
+    // paradigm-20261001-222332 — it took everything and hit 100% encumbrance).
+    [Fact]
+    public void StashLeg_ReadsThePileFirst_ThenTakesOnlyTheShortfall()
+    {
+        Harness h = new() { Purse = 200, StashHolds = 133_580 };
+        h.Sources.Add(Stash(133_580));
+
+        h.Router.Begin(1000, Trainer);
+        h.ArriveAtLastWalk();
+        Assert.Equal(0, h.Limits[^1]);            // nothing is taken on the reveal itself
+        Assert.Contains("sea", h.Sent);
+        Assert.Empty(h.Taken);
+
+        h.FireTimers();                           // the search has answered
+        Assert.Equal(new long[] { 800 }, h.Taken);   // 1000 fee less the 200 carried
+
+        h.FireTimers();                           // the pickup has settled
+        Assert.True(h.Result!.Value.Funded);
+        Assert.Contains(h.Reconciled, r => r.Room.Equals(StashRoom) && r.Copper == 133_580 - 800);
+        Assert.Null(h.Limits[^1]);                // the cap is lifted with the errand
+    }
+
+    // The pile is short. The errand asks the bank what it holds before touching the
+    // stash, and draws on the stash only because the two together cover the train.
+    [Fact]
+    public void ShortStash_BankCoversTheRest_TakesTheStashThenWithdraws()
+    {
+        Harness h = new(refresh: true) { Purse = 0, StashHolds = 400 };
+        h.Sources.Add(Stash(1000));               // believed to cover it; someone has been at it
+        h.Sources.Add(Bank(5000));
+
+        h.Router.Begin(1000, Trainer);
+        h.Router.NoteInventoryRefreshed();
+        h.ArriveAtLastWalk();
+        h.FireTimers();                           // the search shows 400 of the 1000
+
+        Assert.Empty(h.Taken);                    // not yet: the bank is asked first
+        Assert.Equal(1, h.BankRequests);
+
+        h.Router.NoteBankRefreshed();
+        Assert.Equal(new long[] { 400 }, h.Taken);   // the whole pile, now that the rest is reachable
+
+        h.FireTimers();                           // pickup settles → on to the bank
+        Assert.Equal(BankRoom, h.Walked[^1]);
+        Assert.Contains(h.Reconciled, r => r.Room.Equals(StashRoom) && r.Copper == 0);
+
+        h.ArriveAtLastWalk();
+        Assert.Contains("with 600", h.Sent);
+    }
+
+    // Short even with the bank: the stash is left exactly as it was found, and the run
+    // goes back to looping until the difference is earned (user, 2026-10-02).
+    [Fact]
+    public void ShortStash_BankCantCoverTheRest_LeavesTheStashHidden()
+    {
+        Harness h = new(refresh: true) { Purse = 0, StashHolds = 400 };
+        h.Sources.Add(Stash(1000));
+        h.Sources.Add(Bank(100));
+
+        h.Router.Begin(1000, Trainer);
+        h.Router.NoteInventoryRefreshed();
+        h.ArriveAtLastWalk();
+        h.FireTimers();
+        h.Router.NoteBankRefreshed();
+
+        Assert.Empty(h.Taken);
+        Assert.Equal(400, h.StashHolds);
+        Assert.False(h.Result!.Value.Funded);
+        // The ledger now says what the room really holds, not what we believed.
+        Assert.Contains(h.Reconciled, r => r.Room.Equals(StashRoom) && r.Copper == 400);
+        Assert.Null(h.Limits[^1]);
+        Assert.DoesNotContain(BankRoom, h.Walked);
+    }
+
+    // No `bank` reply inside the window: decide on the balances already known.
+    [Fact]
+    public void ShortStash_BankListingNeverArrives_DecidesOnWhatIsKnown()
+    {
+        Harness h = new(refresh: true) { Purse = 0, StashHolds = 400 };
+        h.Sources.Add(Stash(1000));
+        h.Sources.Add(Bank(5000));
+
+        h.Router.Begin(1000, Trainer);
+        h.Router.NoteInventoryRefreshed();
+        h.ArriveAtLastWalk();
+        h.FireTimers();                           // survey
+        h.FireTimers();                           // the bank window closes with no listing
+
+        Assert.Equal(new long[] { 400 }, h.Taken);
+    }
+
+    [Fact]
+    public void Cancel_LiftsTheCollectCap()
+    {
+        Harness h = new() { Purse = 0, AutoGetCash = true };   // the toggle was already on
+        h.Sources.Add(Stash(5000));
+        h.Router.Begin(1000, Trainer);
+        Assert.Equal(1000, h.Limits[^1]);
+
+        h.Router.Cancel("test");
+        Assert.Null(h.Limits[^1]);
     }
 
     [Fact]

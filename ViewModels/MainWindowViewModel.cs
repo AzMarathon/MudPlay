@@ -6126,7 +6126,12 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     partial void OnIsAutoSneakActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoSneak", value, d => d.AutoSneak = value);
+    {
+        PersistAutoModeFlag("AutoSneak", value, d => d.AutoSneak = value);
+        // A genuine flip to on sneaks now (when nothing is driving the moves) instead
+        // of waiting for the next NPC-free room. A profile reseed isn't one.
+        if (value && _suppressAutoEngineWriteback == 0) AppServices.Current.Stealth?.NoteAutoSneakSwitchedOn();
+    }
 
     partial void OnIsAutoHideActiveChanged(bool value)
         => PersistAutoModeFlag("AutoHide", value, d => d.AutoHide = value);
