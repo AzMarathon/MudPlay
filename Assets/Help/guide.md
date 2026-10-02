@@ -3712,6 +3712,19 @@ The bill counts the **tolls and transport fares on the trip** as well as the tra
 - **Stash:** limits collection to one of your flagged stash rooms, e.g. the one where your money sits. It's listed as `(map/room) Room name - Stash`. **(Any stash room)** uses any of them.
 **Important notes:** A bank or stash the setting excludes is never planned, so the run reads as short and keeps looping. With banks excluded, MudPlay doesn't send `bank` to check balances.
 
+### Auto-obtain spells from shops
+
+**Default:** off · every listed spell wanted
+**Where:** Settings → Auto-Trainer → **Spells from shops** tab (beside **Trainers**).
+**What it does:** When a solo Auto-train or **Train Now** trip has trained its levels, it walks on to the shops that sell the scrolls for spells you can now learn, buys them, reads them, and only then heads back to your loop.
+- **Which spells:** every spell your class can learn from a scroll that some shop restocks, that your new level allows, and that isn't in your spellbook yet. That includes spells from earlier levels you never picked up, because many scrolls restock on a small chance and a shop is often out of them. A scroll a shop only has when another player sold it there is never planned for.
+- **The list:** one row per spell, with the level it unlocks at, the scroll, the shops that sell it and the cheapest price at your Charm. Untick **Get?** on any spell the trip should never go after, for instance one sold only somewhere you don't want to walk alone. **Hide learned** (a view filter) leaves out what you already know.
+- **Money:** the trip's funding fetches the scroll money along with the training fee, and counts the tolls out to the shops. If it can't cover both, it funds the training alone and trains anyway; the shop trip then buys what your purse above keep-on-hand stretches to, lowest level first, and logs what it left out. On the way to a shop a toll is taken only when the scrolls can still be paid for after it.
+- **Which shop:** one already on the trip, otherwise the one that adds the fewest steps between the trainer and where your loop resumes. A shop it can't route to and back from is skipped: an area behind a level gate you can't pass yet (Port Blackwater below level 25), a room you've marked Avoid.
+- **At the shop:** it sends `list` and buys only what's in stock, then `read <scroll>` for each. A scroll already in your pack is read without buying another. A read that isn't answered leaves the scroll in your pack, and the next trip tries it again.
+- **Before it leaves the trainer** it sends `sp`, so the plan is checked against your actual spellbook.
+**Important notes:** Solo trips only: a party training trip and a remote `@train` never go shopping. Stopping the walk yourself ends the trip and leaves the loop stopped, the same as stopping a walk to the trainer. Every step is in the Program Log under `AutoTrain`.
+
 ### Discovered trainers table
 
 **Default:** every discovered trainer allowed
@@ -4358,6 +4371,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Levels to keep banked / Do not train above level | 0 / 0 | ≥0 (UI 0–60 / 0–200) | `LevelsToKeep` / `DoNotTrainAbove` | Models/Profile/AutoTrainerSettings.cs |
 | Announce level-ups / channel | false / Gangpath | bool / Gangpath,Gossip,Yell,Say | `AnnounceLevelUps` / `AnnounceChannel` | Models/Profile/AutoTrainerSettings.cs |
 | Discovered trainers "Use?" | all allowed | bool per trainer (disabled-list) | `DisabledTrainers` | Models/Profile/AutoTrainerSettings.cs |
+| Auto-obtain spells from shops / spell "Get?" | false / all wanted | bool / bool per spell (skipped-list, by spell name) | `AutoObtainShopSpells` / `SkippedShopSpells` | Models/Profile/AutoTrainerSettings.cs |
 | Block @suicide when lives ≤ | `5` | 0–9 | `OtherSettings.MaxSuicideLivesThreshold` | Models/Profile/OtherSettings.cs |
 | Utilize disarm traps | `true` | bool | `OtherSettings.UtilizeDisarmTrapsIfAble` | Models/Profile/OtherSettings.cs |
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |

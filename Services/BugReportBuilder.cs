@@ -1832,6 +1832,9 @@ public static class BugReportBuilder
         Kv(sb, "Funding retry held until", svc.TrainerWalk.FundingRetryAt is { } at
             ? at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
             : "(not held)");
+        Kv(sb, "Auto-obtain spells from shops", svc.TrainerWalk.CurrentSettings.AutoObtainShopSpells ? "on" : "off");
+        Kv(sb, "Spell trip", svc.ShopSpells.Describe());
+        Kv(sb, "Spell trip (if one started now)", svc.DescribeShopSpellTripFromHere());
 
         // Only the starred quick-access favourites — the full GOTO list runs to
         // hundreds of entries and bloats the report without helping diagnosis.

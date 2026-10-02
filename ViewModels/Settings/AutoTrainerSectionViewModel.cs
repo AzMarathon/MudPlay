@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Train;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Views.Settings;
@@ -21,6 +22,9 @@ namespace MudPlay.ViewModels.Settings;
 // Trainers with the 999 MaxLVL sentinel (unreachable placeholders) are never
 // listed. Persists to AutoTrainerSettings.
 //
+// A second list holds the spells the character's class can buy as scrolls, each
+// with a Get? toggle, and the switch that sends a train trip on to buy them.
+//
 // The Auto-train / Auto-train stats switches themselves live on the Player
 // Workshop's CP Allocation tab, next to the plan they act on, and are NOT edited
 // here — Apply carries their persisted values forward untouched.
@@ -34,6 +38,14 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     // Every discovered trainer (allow-state preserved across filter toggles);
     // Trainers is the filtered view bound by the grid.
     private readonly List<AutoTrainerRowViewModel> _allRows = new();
+    // Every shop-sold spell for the class (Get? state preserved across the
+    // hide-learned filter); ShopSpells is the filtered view bound by the grid.
+    private readonly List<ShopSpellRowViewModel> _allSpellRows = new();
+    private readonly Func<IReadOnlyList<ShopSpellOffer>> _shopSpellOffers;
+    private readonly Func<int, bool> _isSpellObtained;
+    // Skipped names the current list doesn't show (another data set's spells, or a
+    // class the character was before a reroll): carried through a Save untouched.
+    private List<string> _unlistedSkippedSpells = new();
     private Control? _view;
     private bool _suppressDirty;
     private bool _dirty;
@@ -112,6 +124,19 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     // Discovered trainers in the active set, ascending by level range.
     public ObservableCollection<AutoTrainerRowViewModel> Trainers { get; } = new();
 
+    // After a train trip, go on to the shops for the scrolls of spells the
+    // character can now learn.
+    [ObservableProperty] private bool _autoObtainShopSpells;
+
+    // View filter (not persisted): leave out the spells already in the spellbook.
+    [ObservableProperty] private bool _hideLearnedSpells = true;
+
+    // Shop-sold spells for the character's class, ascending by level.
+    public ObservableCollection<ShopSpellRowViewModel> ShopSpells { get; } = new();
+
+    // False when the class has no spell a shop sells — drives the empty-state.
+    public bool HasShopSpells => _allSpellRows.Count > 0;
+
     public override IEnumerable<string> SearchableLabels => new[]
     {
         Title, "trainer", "train", "guild", "level up",
@@ -120,12 +145,15 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         "levels stacked", "train once stacked", "fire at banked levels", "batch training",
         "party", "party train", "auto-train party", "members ready", "quorum", "power level", "level gap", "level 11",
         "short on cash", "funding", "withdraw", "bank", "stash", "keep looping",
+        "auto-obtain spells from shops", "spells", "scrolls", "spell shop", "learn spells", "buy spells",
     };
 
     public AutoTrainerSectionViewModel()
-        : this(AppServices.Current.Profile, AppServices.Current.GameData, AppServices.Current.PlayerStats) { }
+        : this(AppServices.Current.Profile, AppServices.Current.GameData, AppServices.Current.PlayerStats,
+            AppServices.Current.ShopSpellOffers, AppServices.Current.Spellbook.IsObtained) { }
 
-    public AutoTrainerSectionViewModel(ProfileService profile, GameDataCache gameData, PlayerStats stats)
+    public AutoTrainerSectionViewModel(ProfileService profile, GameDataCache gameData, PlayerStats stats,
+        Func<IReadOnlyList<ShopSpellOffer>>? shopSpellOffers = null, Func<int, bool>? isSpellObtained = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -133,6 +161,8 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         _profile = profile;
         _gameData = gameData;
         _stats = stats;
+        _shopSpellOffers = shopSpellOffers ?? (static () => Array.Empty<ShopSpellOffer>());
+        _isSpellObtained = isSpellObtained ?? (static _ => false);
 
         _profile.ProfileLoaded += OnProfileChanged;
         _profile.ProfileClosed += OnProfileClosedExternally;
@@ -158,6 +188,14 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         List<string> disabled = _allRows.Where(t => !t.Allowed)
             .Select(t => t.RowKey)
             .OrderBy(k => k, StringComparer.Ordinal)
+            .ToList();
+
+        // _allSpellRows for the same reason: a learned spell hidden by the filter
+        // keeps its Get? state.
+        List<string> skippedSpells = _allSpellRows.Where(r => !r.Wanted).Select(r => r.Spell)
+            .Concat(_unlistedSkippedSpells)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         // Auto-train / Auto-train stats / Auto-train party are owned by the CP Allocation tab and are
@@ -188,6 +226,8 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
             FundingStash = SelectedFundingStash is { } fs && _stashByLabel.TryGetValue(fs, out RoomRef? room)
                 ? new RoomRef(room.Map, room.Room)
                 : null,
+            AutoObtainShopSpells = AutoObtainShopSpells,
+            SkippedShopSpells = skippedSpells.Count == 0 ? null : skippedSpells,
         };
 
         profile.Settings ??= new();
@@ -230,6 +270,31 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         PartySkipLevel11 = dto.PartySkipLevel11;
         LoadFunding(dto);
         RebuildTrainers(dto.DisabledTrainers);
+        AutoObtainShopSpells = dto.AutoObtainShopSpells;
+        RebuildShopSpells(dto.SkippedShopSpells);
+    }
+
+    private void RebuildShopSpells(IReadOnlyCollection<string>? skipped)
+    {
+        HashSet<string> off = new(skipped ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        HashSet<string> listed = new(StringComparer.OrdinalIgnoreCase);
+        _allSpellRows.Clear();
+        foreach (ShopSpellOffer offer in _shopSpellOffers())
+        {
+            listed.Add(offer.SpellName);
+            _allSpellRows.Add(new ShopSpellRowViewModel(
+                offer, learned: _isSpellObtained(offer.SpellNumber), wanted: !off.Contains(offer.SpellName), MarkDirty));
+        }
+        _unlistedSkippedSpells = off.Where(name => !listed.Contains(name)).ToList();
+        ApplySpellFilter();
+    }
+
+    private void ApplySpellFilter()
+    {
+        ShopSpells.Clear();
+        foreach (ShopSpellRowViewModel row in _allSpellRows)
+            if (!HideLearnedSpells || !row.IsLearned) ShopSpells.Add(row);
+        OnPropertyChanged(nameof(HasShopSpells));
     }
 
     // Fill the bank / stash dropdowns from the active set's banks and the
@@ -348,6 +413,8 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     }
 
     partial void OnOnlyUsableLevelChanged(bool value) => ApplyFilter();
+    partial void OnHideLearnedSpellsChanged(bool value) => ApplySpellFilter();
+    partial void OnAutoObtainShopSpellsChanged(bool value) => MarkDirty();
 
     private AutoTrainerSettings ReadOrDefault()
     {

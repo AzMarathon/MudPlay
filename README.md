@@ -1,14 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.139.0**
-> - Buff Watchdog can keep the Gypsy's deck of cards up: tick the cards you want, and it re-draws each round until one of them lands
-> - Stash transfer deposits all your cash above the keep-on-hand amount each trip, including what you were already carrying
-> - Spell Book lists class cast-on-use items that are carried rather than worn, such as the Gypsy's deck of cards
-> - Stash transfer started with a full purse goes to the bank first instead of back to the stash
-> - Using the deck of cards no longer marks you Confused: each card is recognised by its own text
-> - The "Please be more specific" list for an ambiguous name is no longer flagged as unrecognised lines
-> - The rest of a quoted passage that runs over several lines no longer lands in the unrecognised lines
+> **Version 3.140.0**
+> - Auto-train can go on to buy and learn the spell scrolls your new level unlocks (Settings → Auto-Trainer → Spells from shops)
+> - Per-spell Get? list picks which shop-sold spells a trip goes after
+> - Train funding fetches the scroll money with the training fee, and trains anyway when it can't cover both
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -16,7 +16,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid Margin="22" RowDefinitions="Auto,Auto,*" IsVisible="{Binding HasProfile}">
+    <Grid Margin="22" RowDefinitions="Auto,*" IsVisible="{Binding HasProfile}">
 
         <!-- How auto-train behaves once it runs: when to make the trip, what to hold
              back, where to stop, and whether to announce. -->
@@ -132,58 +132,125 @@
                       ToolTip.Tip="In party mode, train no higher than level 10: the level-11 trainer is a solo effort, so take that step on your own."/>
         </StackPanel>
 
-        <!-- Header + right-aligned view filter. Unchecked = all discovered
-             trainers; checked = only the trainers usable at your current level. -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" VerticalAlignment="Bottom">
-            <TextBlock Grid.Column="0" Classes="SectionHeader" Text="DISCOVERED TRAINERS"/>
-            <CheckBox Grid.Column="1" Content="Usable at my level" VerticalAlignment="Center"
-                      IsChecked="{Binding OnlyUsableLevel, Mode=TwoWay}"
-                      ToolTip.Tip="Show only trainers whose level range covers your current level."/>
-        </Grid>
+        <!-- The two lists share the space under the options: the trainers auto-train
+             may walk to, and the spells it may go on to buy once the levels are trained. -->
+        <TabControl Grid.Row="1" Margin="0,10,0,0">
+            <TabItem Header="Trainers">
+                <Grid RowDefinitions="Auto,*">
+                    <!-- Header + right-aligned view filter. Unchecked = all discovered
+                         trainers; checked = only the trainers usable at your current level. -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" VerticalAlignment="Bottom">
+                        <TextBlock Grid.Column="0" Classes="SectionHeader" Text="DISCOVERED TRAINERS"/>
+                        <CheckBox Grid.Column="1" Content="Usable at my level" VerticalAlignment="Center"
+                                  IsChecked="{Binding OnlyUsableLevel, Mode=TwoWay}"
+                                  ToolTip.Tip="Show only trainers whose level range covers your current level."/>
+                    </Grid>
 
-        <!-- Discovered trainers (ShopType 8, MaxLVL != 999), with a per-trainer
-             Allow toggle gating whether auto-train may route to it. -->
-        <DataGrid Grid.Row="2"
-                  ItemsSource="{Binding Trainers}"
-                  IsVisible="{Binding HasTrainers}"
-                  Background="{StaticResource ChromeBgSunkenBrush}"
-                  BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
-                  IsReadOnly="False"
-                  AutoGenerateColumns="False"
-                  CanUserSortColumns="False"
-                  CanUserResizeColumns="True"
-                  HeadersVisibility="Column"
-                  GridLinesVisibility="Horizontal"
-                  VerticalScrollBarVisibility="Auto">
-            <DataGrid.Columns>
-                <!-- Single-click toggle: a template column with a plain CheckBox,
-                     not DataGridCheckBoxColumn, so one click flips it (the built-in
-                     column needs a click to enter edit mode first). -->
-                <DataGridTemplateColumn Header="Use?" Width="60">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate x:DataType="vm:AutoTrainerRowViewModel">
-                            <CheckBox HorizontalAlignment="Center"
-                                      IsChecked="{Binding Allowed, Mode=TwoWay}"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Trainer" Width="*"
-                                    Binding="{ReflectionBinding TrainerLabel}" IsReadOnly="True"/>
-                <DataGridTextColumn Header="Map/Room" Width="110"
-                                    Binding="{ReflectionBinding MapRoom}" IsReadOnly="True"
-                                    FontFamily="{StaticResource FontMono}"/>
-                <DataGridTextColumn Header="Levels" Width="90"
-                                    Binding="{ReflectionBinding LevelRange}" IsReadOnly="True"
-                                    FontFamily="{StaticResource FontMono}"/>
-            </DataGrid.Columns>
-        </DataGrid>
+                    <!-- Discovered trainers (ShopType 8, MaxLVL != 999), with a per-trainer
+                         Allow toggle gating whether auto-train may route to it. -->
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding Trainers}"
+                              IsVisible="{Binding HasTrainers}"
+                              Background="{StaticResource ChromeBgSunkenBrush}"
+                              BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
+                              IsReadOnly="False"
+                              AutoGenerateColumns="False"
+                              CanUserSortColumns="False"
+                              CanUserResizeColumns="True"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              VerticalScrollBarVisibility="Auto">
+                        <DataGrid.Columns>
+                            <!-- Single-click toggle: a template column with a plain CheckBox,
+                                 not DataGridCheckBoxColumn, so one click flips it (the built-in
+                                 column needs a click to enter edit mode first). -->
+                            <DataGridTemplateColumn Header="Use?" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:AutoTrainerRowViewModel">
+                                        <CheckBox HorizontalAlignment="Center"
+                                                  IsChecked="{Binding Allowed, Mode=TwoWay}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Trainer" Width="*"
+                                                Binding="{ReflectionBinding TrainerLabel}" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Map/Room" Width="110"
+                                                Binding="{ReflectionBinding MapRoom}" IsReadOnly="True"
+                                                FontFamily="{StaticResource FontMono}"/>
+                            <DataGridTextColumn Header="Levels" Width="90"
+                                                Binding="{ReflectionBinding LevelRange}" IsReadOnly="True"
+                                                FontFamily="{StaticResource FontMono}"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
 
-        <!-- Empty-state: no game-data set loaded, or it has no usable trainers. -->
-        <TextBlock Grid.Row="2"
-                   IsVisible="{Binding !HasTrainers}"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
-                   Foreground="{StaticResource ChromeFgMutedBrush}"
-                   Text="No trainers found in the active game-data set. Load a set with a Shops table to see discovered trainers here."/>
+                    <!-- Empty-state: no game-data set loaded, or it has no usable trainers. -->
+                    <TextBlock Grid.Row="1"
+                               IsVisible="{Binding !HasTrainers}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               Text="No trainers found in the active game-data set. Load a set with a Shops table to see discovered trainers here."/>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Spells from shops">
+                <Grid RowDefinitions="Auto,Auto,*">
+                    <CheckBox Grid.Row="0" Content="Auto-obtain spells from shops" Margin="0,6,0,0"
+                              IsChecked="{Binding AutoObtainShopSpells, Mode=TwoWay}"
+                              ToolTip.Tip="After a solo auto-train or Train Now trip has trained its levels, walk on to the shops that sell the scrolls for spells you can now learn and haven't, buy them, read them, and then go back to the loop. The trip's funding fetches the scroll money along with the training fee; if it can't cover both, it trains anyway and buys what the purse stretches to, lowest level first. A shop you can't route to (a level-gated area, an avoided room) is skipped."/>
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" VerticalAlignment="Bottom">
+                        <TextBlock Grid.Column="0" Classes="SectionHeader" Text="SPELLS SOLD IN SHOPS"/>
+                        <CheckBox Grid.Column="1" Content="Hide learned" VerticalAlignment="Center"
+                                  IsChecked="{Binding HideLearnedSpells, Mode=TwoWay}"
+                                  ToolTip.Tip="Leave out the spells already in your spellbook."/>
+                    </Grid>
+
+                    <!-- Every spell the class can learn from a scroll some shop restocks.
+                         Untick Get? for one the trip should never go after. -->
+                    <DataGrid Grid.Row="2"
+                              ItemsSource="{Binding ShopSpells}"
+                              IsVisible="{Binding HasShopSpells}"
+                              Background="{StaticResource ChromeBgSunkenBrush}"
+                              BorderThickness="1" BorderBrush="{StaticResource ChromeBorderBrush}"
+                              IsReadOnly="False"
+                              AutoGenerateColumns="False"
+                              CanUserSortColumns="False"
+                              CanUserResizeColumns="True"
+                              HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal"
+                              VerticalScrollBarVisibility="Auto">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Get?" Width="60">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="vm:ShopSpellRowViewModel">
+                                        <CheckBox HorizontalAlignment="Center"
+                                                  IsChecked="{Binding Wanted, Mode=TwoWay}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Level" Width="60"
+                                                Binding="{ReflectionBinding Level}" IsReadOnly="True"
+                                                FontFamily="{StaticResource FontMono}"/>
+                            <DataGridTextColumn Header="Spell" Width="170"
+                                                Binding="{ReflectionBinding Spell}" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Scroll" Width="190"
+                                                Binding="{ReflectionBinding Scroll}" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Sold at" Width="*"
+                                                Binding="{ReflectionBinding SoldAt}" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Price" Width="100"
+                                                Binding="{ReflectionBinding Price}" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Learned" Width="70"
+                                                Binding="{ReflectionBinding Learned}" IsReadOnly="True"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Grid.Row="2"
+                               IsVisible="{Binding !HasShopSpells}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center"
+                               Foreground="{StaticResource ChromeFgMutedBrush}"
+                               Text="No shop sells a spell scroll your class can learn. The list fills in once your class is known (type stat) and a game-data set with Shops and Items is loaded."/>
+                </Grid>
+            </TabItem>
+        </TabControl>
     </Grid>
 </UserControl>

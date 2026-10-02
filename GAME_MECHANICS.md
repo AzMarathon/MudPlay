@@ -2512,20 +2512,28 @@ How one damage spell cast against a monster is worked out.
   - Our own single-target manual cast IS tracked: `CastingDirector.NoteManualBuffCast` arms a pending confirm for a targeted hand cast (`gbls fuj`) and resolves the member off the success line.
 
 ### Learning a spell from a teaching item
-*Status: CONFIRMED 2026-08-15 (user + wire capture)*
+*Status: CONFIRMED 2026-08-15 (user + wire capture); the command and the Stock refusal lines [OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p; same command on both realms CONFIRMED 2026-10-02 (user) · Realm: both (the success wording differs)*
 
-- **A teaching item is used with `read <code>` — the SAME 4-letter cast-code the spell is otherwise cast by.** A teaching item is a spellbook / tome carrying the `LearnSp` ability, code **42**, whose value is the `Spells.Number` it teaches.
-- **On success the game confirms with the full spell name**, even though the command speaks the short code:
+- **A teaching item is a scroll / spellbook / tome carrying the `LearnSp` ability, code 42**, whose value is the `Spells.Number` it teaches.
+- **It is learned with `read <item>`, and `use <item>` is the same command.** *([OBSERVED] 2026-10-02, `_cmd_use` @0x460d5c)* One handler serves both verbs (its usage lines are `Syntax: Read {Item}` and `Syntax: USE {Item to use} [{target}]`). It looks the argument up as an item in the inventory (`_find_item_in_inventory`), by the usual partial name match. Same on Stock and Paradigm *([CONFIRMED] 2026-10-02, user)*.
+  - **`read agon` matches the item's name, not the spell's cast code**: `agon` is part of `scroll of agony`. A cast code that isn't part of the item's name (`site` for `scroll of cure blindness`) doesn't find the scroll. (An earlier note said the argument was the SAME 4-letter cast-code the spell is otherwise cast by; superseded 2026-10-02.)
+- **On success Paradigm confirms with the full spell name**:
 
   ```
   :read agon
   You add agony to your spellbook!
   ```
 
-  The command uses `agon`; the confirmation names `agony`.
-- **This wording is distinct from the classic learn-scroll line** ("You read <scroll> and learn the spell <name>.").
+  The command says `agon`; the confirmation names `agony`.
+- **Stock's success line is the classic learn-scroll line**, distinct from that wording: `You read <scroll> and learn the spell <name>.` *([OBSERVED] 2026-10-02: `You read %s and learn the spell %s.`)*
+- **Stock refusals** *([OBSERVED] 2026-10-02, `_use_no_target` @0x44a630, the ability-42 branch)*:
+  - `You don't know what to do with this!` — the character can't use the spell (`_user_can_use_spell`: the class's magery type and level, the character's level, alignment), or the spellbook wouldn't take it (`_add_spell_to_spellbook` failed).
+  - `You realize that you already know this scroll!` — the spell is already in the spellbook. The line names neither the scroll nor the spell.
+  - `You may not use that item!` — the item itself is barred to the character (`_user_can_use`, checked in `_cmd_use` before the abilities run).
+  - Paradigm's wording for these refusals `[NEEDS CONFIRMATION]`: is it the same text as Stock's?
 - **Client use:**
-  - The client recognises both (`KnownPatterns.LearnSpell` + `LearnSpellFromItem`) and marks the spell obtained (`SpellbookState.MarkObtainedByName`, keyed on the name), so the learned-spell set updates the instant a spell is learned mid-session rather than waiting for the next `spells` poll.
+  - The client recognises both success lines (`KnownPatterns.LearnSpell` + `LearnSpellFromItem`) and marks the spell obtained (`SpellbookState.MarkObtainedByName`, keyed on the name), so the learned-spell set updates the instant a spell is learned mid-session rather than waiting for the next `spells` poll.
+  - `ShopSpellErrand` (the *Auto-obtain spells from shops* leg of a train trip) sends `read <full item name>`, and waits for the spellbook to gain the spell or for a timeout, so an unrecorded refusal line costs a few seconds and nothing else. `KnownPatterns.LearnSpellAlreadyKnown` ends that wait early and puts the spell in the spellbook.
 
 ### Self-buff recast tracking — keyed on the 4-letter cast code
 *Status: CONFIRMED 2026-08-16 (user + report `paradigm-20260816-101702`)*
