@@ -431,7 +431,7 @@ public sealed class StealthManager : IDisposable
     private static readonly TimeSpan InPlaceRestRecheck = TimeSpan.FromSeconds(2);
     private Func<bool>? _isEngineDriving;
     private Func<bool>? _restUnderWay;
-    private Func<bool>? _sneakThenRest;
+    private Func<bool>? _restKeepsSneak;
     private bool _waitingOnRestLogged;
     private Avalonia.Threading.DispatcherTimer? _inPlaceTimer;
 
@@ -445,14 +445,14 @@ public sealed class StealthManager : IDisposable
 
     // How a rest and a sneak share the spot we stand on (GAME_MECHANICS "Sneaking and
     // resting in place"). restUnderWay: resting or meditating, by the engine or by
-    // hand, with a pool still short of rest-max. sneakThenRest: a ShadowRest character
-    // whose rest the health engine sends again once the sneak is up.
-    public void SetIdleRestChecks(Func<bool> restUnderWay, Func<bool> sneakThenRest)
+    // hand, with a pool still short of rest-max. restKeepsSneak: a ShadowRest
+    // character, whose rest an `sn` neither breaks nor is ended by.
+    public void SetIdleRestChecks(Func<bool> restUnderWay, Func<bool> restKeepsSneak)
     {
         ArgumentNullException.ThrowIfNull(restUnderWay);
-        ArgumentNullException.ThrowIfNull(sneakThenRest);
+        ArgumentNullException.ThrowIfNull(restKeepsSneak);
         _restUnderWay = restUnderWay;
-        _sneakThenRest = sneakThenRest;
+        _restKeepsSneak = restKeepsSneak;
     }
 
     // Auto-Sneak was just switched on: sneak now rather than at the next clear room.
@@ -497,10 +497,10 @@ public sealed class StealthManager : IDisposable
         // `sn` stands a resting character up and `rest` ends a sneak, so a rest still
         // short of rest-max is left to finish — one the player typed as much as the
         // engine's own — and this looks again. Once it has topped off, the sneak goes
-        // out. A ShadowRest rest keeps a sneak, so there the sneak goes first and the
-        // health engine sends its rest again.
+        // out. On Paradigm an `sn` doesn't break a rest, and a ShadowRest rest keeps
+        // the sneak, so a ShadowRest character sneaks right where it rests.
         bool restWins = _skipReSneakForRest?.Invoke() == true
-            || (_restUnderWay?.Invoke() == true && _sneakThenRest?.Invoke() != true);
+            || (_restUnderWay?.Invoke() == true && _restKeepsSneak?.Invoke() != true);
         if (restWins)
         {
             if (!_waitingOnRestLogged)

@@ -473,7 +473,7 @@ public sealed class StealthManagerTests
     {
         using AutoHarness h = ManualPlay();
         bool resting = true;
-        h.Stealth.SetIdleRestChecks(restUnderWay: () => resting, sneakThenRest: () => false);
+        h.Stealth.SetIdleRestChecks(restUnderWay: () => resting, restKeepsSneak: () => false);
 
         h.Stealth.ReSneakInPlaceForTests();
         Assert.Empty(h.Sent);
@@ -483,13 +483,13 @@ public sealed class StealthManagerTests
         Assert.Equal("sn", h.LastSent());
     }
 
-    // Paradigm ShadowRest (user, 2026-10-02): sneak, then rest. The sneak goes out
-    // over a rest the health engine will send again.
+    // Paradigm ShadowRest (user, 2026-10-02): an `sn` doesn't break the rest and the
+    // rest keeps the sneak, so the sneak goes out over a rest, hand-typed or not.
     [Fact]
-    public void ManualPlay_ShadowRest_SneaksOverItsOwnRest()
+    public void ManualPlay_ShadowRest_SneaksOverARest()
     {
         using AutoHarness h = ManualPlay();
-        h.Stealth.SetIdleRestChecks(restUnderWay: () => true, sneakThenRest: () => true);
+        h.Stealth.SetIdleRestChecks(restUnderWay: () => true, restKeepsSneak: () => true);
 
         h.Stealth.ReSneakInPlaceForTests();
         Assert.Equal("sn", h.LastSent());

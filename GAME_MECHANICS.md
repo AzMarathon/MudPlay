@@ -1032,7 +1032,7 @@ How HP works from full health down through dropping and death, how monster healt
 - **Some Paradigm races and classes have a ShadowRest ability; it is not a stock MajorMUD mechanic.** Resting with it doesn't break sneak or hide *([CONFIRMED] 2026-09-28, user: the flag can sit on the race or the class)*. In the imported game data it is **class-ability code 1103** on the Classes table (`AbilityNames` maps `1103 → "ShadowRest"`); a class row carrying that code in any `Abil-N` slot has the ability.
 - **While hidden or sneaking, the character can `rest` (or meditate) and stay stealthed while resting in the room.** Monsters in the room **do not attack** the resting stealthed character. Normally a hostile in the room means you can't safely rest; ShadowRest lets a stealthed character rest right there without being engaged.
 - **Some ShadowRest classes gain an HP-regen bonus while resting this way** (e.g. thief gets extra regen). The bonus is server-side.
-- **No special messages mark the state.** The only observable sequence is a successful hide/sneak followed by `rest` — there is no "you shadow-rest" line.
+- **No special messages mark the state.** The only observable sequence is a successful hide/sneak followed by `rest` — there is no "you shadow-rest" line. An `sn` sent while already resting is covered in *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine* (*Sneaking and resting in place*).
 - **Ideally used solo.** Resting while hidden un-targets you from party single-target heals/buffs (the same reason auto-hide is party-suppressed), so ShadowRest resting is a solo behavior.
 - **Client use:**
   - The client's `RegenTracker` measures the actual regen rate off the stat line, so it needs no separate model of the bonus magnitude.
@@ -3257,7 +3257,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Sneaking and resting in place** *([CONFIRMED] 2026-10-02, user)*:
   - **Stock: a sneak and a rest don't share a spot.** `rest` ends the sneak (see *What ends a sneak* in this topic), and sending `sn` while resting breaks the rest (user: "if i manually typed rest, it shouldnt break the rest to sneak unless we were above our rest max hp").
   - **Paradigm with ShadowRest: sneak, then rest.** The rest keeps the sneak, so that order is fine (user: "its fine to send a sneak then rest because of shadowrest") — see *Health, resting & recovery → ShadowRest*.
-  - Whether `sn` stands a ShadowRest character up out of a rest already under way is not recorded *([NEEDS CONFIRMATION]: does `sn` typed while ShadowResting end the rest on Paradigm?)*. A Paradigm race or class without ShadowRest is treated as Stock (**Client policy**).
+  - **Paradigm: `sn` while resting does not break the rest.** For a ShadowRest character it is believed to start the ShadowRest if the rest wasn't one already (user: "i believe it puts us into shadowrest if we werent previously") *([NEEDS CONFIRMATION]: does an `sn` sent mid-rest turn the rest into a ShadowRest?)*.
+  - Whether the sneak holds through the rest for a Paradigm race or class **without** ShadowRest is not recorded; the client leaves such a rest alone, as on Stock (**Client policy**).
 
 **Client use:**
 - The backstab loadout is applied in the walker's pre-move step, ahead of the `sn`, rather than raced at room-clear (because of the equip-before-sneak rule).
@@ -3292,9 +3293,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     policy**, user 2026-10-02): while the character is resting or meditating with a pool short of rest-max
     (`HealthManager.RestingShortOfRestMax` — the engine's rest or one typed by hand), no `sn` goes out;
     `StealthManager.ReSneakInPlace` looks again every 2 s and sneaks once the rest has topped off. With
-    ShadowRest utilized the `sn` goes out over a rest the health engine is running (`IsRecoveringRest`),
-    which then sends its rest again (`SneakBeforeRest`); a hand-typed rest the engine wouldn't re-send is
-    left to finish like any other.
+    ShadowRest utilized (`HealthManager.UsesShadowRest`) the `sn` goes out over the rest, the engine's or
+    a hand-typed one, since on Paradigm it leaves the rest standing.
   - **An `sn` answered after a later sneak-ending command** (same report): `sn` then `sea` leaves the
     character not sneaking, but the `Attempting to sneak...` for that `sn` arrives after the `sea` was
     noted. `StealthManager` ignores that answer instead of reading it as sneaking.
