@@ -724,10 +724,17 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     }
 
     // The buffs a draw item (a deck of cards) can deal, for the dialog's tick boxes.
+    // None for an item that can't redraw: there is nothing to pick when every card
+    // it deals has to be kept.
     private IReadOnlyList<CastOutcome> OutcomesOf(string? code) =>
-        ItemCastToken.TryResolve(code, _spellbook.GetCastItems(), out ClassCastItem item) && item.Outcomes is { } outcomes
+        ItemCastToken.TryResolve(code, _spellbook.GetCastItems(), out ClassCastItem item)
+        && item is { CanRedraw: true, Outcomes: { } outcomes }
             ? outcomes
             : Array.Empty<CastOutcome>();
+
+    private bool IsNoRedrawDraw(string? code) =>
+        ItemCastToken.TryResolve(code, _spellbook.GetCastItems(), out ClassCastItem item)
+        && item is { IsDraw: true, CanRedraw: false };
 
     // A slot's reroll aggression as (threshold, cap), so an edit can tell whether it
     // LOOSENED (higher threshold or bigger cap → re-evaluate an already-active roll). A
@@ -743,7 +750,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     {
         AddBuffDialogViewModel dlg = new(BuildPickOptions(SlottedSpells()), IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickSteps,
-            rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf);
+            rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf,
+            isNoRedrawDraw: IsNoRedrawDraw);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
@@ -865,7 +873,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         AddBuffDialogViewModel dlg = new(
             options, IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickSteps, initial,
-            rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf);
+            rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf,
+            isNoRedrawDraw: IsNoRedrawDraw);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;

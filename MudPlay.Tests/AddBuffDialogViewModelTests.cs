@@ -105,6 +105,25 @@ public sealed class AddBuffDialogViewModelTests
         Assert.False(d.Outcomes[1].IsChecked);
     }
 
+    // Stock's deck can't be used again while a card is up: nothing to pick, and a
+    // recast that leads the wear-off would only be refused (user, 2026-10-02).
+    [Fact]
+    public void ADeckThatCantRedraw_HasNoTickBoxes_AndItsRecastStopsAtZero()
+    {
+        AddBuffResult saved = new("#deck of cards", 15, false, false, false, false, 0, null, false);
+        AddBuffDialogViewModel d = new(
+            new[] { new BuffPickOption("#deck of cards", "deck of cards (Lvl 35)", true) },
+            isLightSpell: _ => false, isRollSpell: _ => false, initial: saved,
+            outcomesOf: _ => System.Array.Empty<MudPlay.Game.Spells.CastOutcome>(),
+            isNoRedrawDraw: code => code == "#deck of cards");
+
+        Assert.True(d.IsNoRedrawDraw);
+        Assert.False(d.HasOutcomes);
+        Assert.Equal(0, d.RecastMarginMaximum);
+        Assert.Equal(0, d.RecastMarginSec);
+        Assert.True(d.CanAdd);
+    }
+
     [Fact]
     public void AnOrdinaryBuff_HasNoOutcomes()
     {

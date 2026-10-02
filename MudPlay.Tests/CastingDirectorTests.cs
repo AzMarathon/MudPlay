@@ -2623,6 +2623,51 @@ public sealed class CastingDirectorTests
         Assert.Equal(2, uses());
     }
 
+    // Stock's deck answers "Nothing happens." while a card is up, so it can't choose:
+    // whatever it deals is kept, an unticked card included, and no recast lead sends
+    // a use before the card has worn off (user, 2026-10-02).
+    [Fact]
+    public void DrawItem_ThatCantRedraw_KeepsWhateverItDeals_UntilItHasWornOff()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> uses, rejected: 965);
+        h.Director.SetItemDrawSource(
+            token => token == Deck ? new[] { (965, "card-wizard", 720L), (966, "card-priest", 720L) } : null,
+            canRedraw: _ => false);
+
+        h.Director.Evaluate();
+        h.Director.NoteDrawOutcome(CardRecord("card-wizard", 965));   // unticked, kept all the same
+        NextRound(h);
+        Assert.Equal(1, uses());
+        Assert.Equal(0, Assert.Single(h.Director.SnapshotActiveBuffs()).MarginSec);
+
+        // Inside the slot's 15 s recast lead: still held.
+        h.Now = h.Now.AddSeconds(705);
+        NextRound(h);
+        Assert.Equal(1, uses());
+
+        h.Now = h.Now.AddSeconds(15);
+        NextRound(h);
+        Assert.Equal(2, uses());
+    }
+
+    // No card after a use on such an item most likely means a card was still up. It
+    // waits a minute rather than repeating the refusal every round.
+    [Fact]
+    public void DrawItem_ThatCantRedraw_NoCardSeen_WaitsBeforeTryingAgain()
+    {
+        using PartyBlessHarness h = DeckHarness(out Func<int> uses);
+        h.Director.SetItemDrawSource(
+            token => token == Deck ? new[] { (965, "card-wizard", 720L), (966, "card-priest", 720L) } : null,
+            canRedraw: _ => false);
+        h.Director.Evaluate();
+
+        for (int i = 0; i < 10; i++) NextRound(h);        // 50 s
+        Assert.Equal(1, uses());
+
+        for (int i = 0; i < 3; i++) NextRound(h);         // past the minute
+        Assert.Equal(2, uses());
+    }
+
     // A slot that keeps several cards doesn't say which one is up: the timer carries
     // the card's name for the Buff Watchdog row.
     [Fact]

@@ -421,7 +421,8 @@ public sealed class KnownSpellCatalog
                 SpellEffect: spellEffect,
                 WearSlot: carried ? string.Empty : WearSlotFor(row),
                 Carried: carried,
-                Outcomes: RandomOutcomes(spellNumber, minLevel, ref tbIndex)));
+                Outcomes: RandomOutcomes(spellNumber, minLevel, ref tbIndex),
+                CanRedraw: CanRedraw(spellNumber)));
         }
 
         results.Sort(static (a, b) =>
@@ -629,8 +630,64 @@ public sealed class KnownSpellCatalog
         return outcomes;
     }
 
+    // Whether using a draw item again deals a new outcome over the one already up.
+    // A `failability N` step ahead of the table ends the use while the user has
+    // ability N, and every outcome carries one (15, the fortune marker), so a card
+    // that is up blocks the next draw. The use only gets past it when an earlier
+    // `cast` step has just removed the outcomes — Paradigm's deck shuffles first,
+    // Stock's does not.
+    private bool CanRedraw(int spellNumber)
+    {
+        if (_cache.FindRowByNumber("Spells", spellNumber) is not { } spell) return true;
+        int textblock = 0;
+        for (int i = 0; i < SpellAbilSlots && textblock == 0; i++)
+            if (ReadInt(spell, $"Abil-{i}") == TextblockAbilityCode) textblock = ReadInt(spell, $"AbilVal-{i}");
+        if (textblock <= 0 || TextblockAction(textblock) is not { } action) return true;
+
+        Match table = RandomTableStep.Match(action);
+        if (!table.Success || !int.TryParse(table.Groups[1].Value, out int tableNumber)) return true;
+        List<JsonElement> outcomes = new();
+        foreach (int dealt in SpellsCastByTextblock(tableNumber))
+            if (_cache.FindRowByNumber("Spells", dealt) is { } row) outcomes.Add(row);
+
+        HashSet<int> removed = new();
+        foreach (Match step in GateStep.Matches(action[..table.Index]))
+        {
+            if (!int.TryParse(step.Groups[2].Value, out int n)) continue;
+            if (step.Groups[1].Value.Equals("cast", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_cache.FindRowByNumber("Spells", n) is not { } cast) continue;
+                for (int i = 0; i < SpellAbilSlots; i++)
+                    if (ReadInt(cast, $"Abil-{i}") == RemovesSpellAbilityCode) removed.Add(ReadInt(cast, $"AbilVal-{i}"));
+                continue;
+            }
+            foreach (JsonElement outcome in outcomes)
+            {
+                if (removed.Contains(ReadInt(outcome, "Number"))) continue;
+                for (int i = 0; i < SpellAbilSlots; i++)
+                    if (ReadInt(outcome, $"Abil-{i}") == n) return false;
+            }
+        }
+        return true;
+    }
+
+    // The spells whose "Casted By" names a textblock: the outcomes of a random table.
+    private IEnumerable<int> SpellsCastByTextblock(int textblock)
+    {
+        JsonDocument? doc = _cache.GetRawTable("Spells");
+        if (doc is null) yield break;
+        Regex named = new($@"Textblock\s*#{textblock}\b", RegexOptions.IgnoreCase);
+        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+            if (ReadString(row, "Casted By") is { } by && named.IsMatch(by))
+                yield return ReadInt(row, "Number");
+    }
+
     private const int TextblockAbilityCode = 148;
+    private const int RemovesSpellAbilityCode = 122;
     private const int SpellAbilSlots = 10;
+
+    // `cast 5145` or `failability 15` in a textblock's action.
+    private static readonly Regex GateStep = new(@"\b(cast|failability)\s+(\d+)", RegexOptions.IgnoreCase);
 
     // `random 9822` in a textblock's action: run that table.
     private static readonly Regex RandomTableStep = new(@"\brandom\s+(\d+)", RegexOptions.IgnoreCase);

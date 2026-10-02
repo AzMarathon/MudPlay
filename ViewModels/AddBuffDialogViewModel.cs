@@ -50,6 +50,15 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     private readonly Func<string?, string?>? _tickSteps;
     private readonly Func<string?, (int Min, int Max)?>? _rollRange;
     private readonly Func<string?, IReadOnlyList<CastOutcome>>? _outcomesOf;
+    private readonly Func<string?, bool>? _isNoRedrawDraw;
+
+    // A draw item that can't be used again while its card is up (Stock's deck): no
+    // tick boxes, since no card can be turned down. The dialog says so instead.
+    public bool IsNoRedrawDraw => _isNoRedrawDraw?.Invoke(Spell) == true;
+
+    // Its recast can't lead the wear-off either: a use before the card is gone is
+    // refused. 0 (at wear-off) or negative (some time after) only (user, 2026-10-02).
+    public int RecastMarginMaximum => IsNoRedrawDraw ? 0 : 999;
     private readonly HashSet<int> _initiallyRejected = new();
 
     // A draw item (a deck of cards) deals one of several buffs at random. One tick
@@ -69,6 +78,9 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
                 !_initiallyRejected.Contains(o.SpellNumber),
                 OnOutcomeToggled));
         OnPropertyChanged(nameof(HasOutcomes));
+        OnPropertyChanged(nameof(IsNoRedrawDraw));
+        OnPropertyChanged(nameof(RecastMarginMaximum));
+        if (RecastMarginSec > RecastMarginMaximum) RecastMarginSec = RecastMarginMaximum;
         OnOutcomeToggled();
     }
 
@@ -168,9 +180,11 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         Func<string?, bool> isLightSpell, Func<string?, bool> isRollSpell,
         bool isStockRealm = false, Func<string?, string?>? tickSteps = null,
         AddBuffResult? initial = null, Func<string?, (int Min, int Max)?>? rollRange = null,
-        Func<string?, IReadOnlyList<CastOutcome>>? outcomesOf = null)
+        Func<string?, IReadOnlyList<CastOutcome>>? outcomesOf = null,
+        Func<string?, bool>? isNoRedrawDraw = null)
     {
         _outcomesOf = outcomesOf;
+        _isNoRedrawDraw = isNoRedrawDraw;
         foreach (int rejected in initial?.RejectedOutcomes ?? Array.Empty<int>()) _initiallyRejected.Add(rejected);
         ArgumentNullException.ThrowIfNull(pickOptions);
         PickOptions = pickOptions;
@@ -205,7 +219,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             Spell!.Trim(),
             // Negative = recast AFTER wear-off (lapse |margin| seconds first), to spread
             // out mana use; positive = recast that many seconds before expiry.
-            Math.Clamp(RecastMarginSec, -999, 999),
+            Math.Clamp(RecastMarginSec, -999, RecastMarginMaximum),
             OnlyWhenHpFull,
             OnlyWhenMaFull,
             IsLightSpell && OnlyWhenDark,

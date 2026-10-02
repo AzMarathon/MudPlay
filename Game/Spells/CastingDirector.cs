@@ -627,7 +627,20 @@ public sealed class CastingDirector : IDisposable
     // its applied line. A wanted card arms the slot's timer for that card's duration;
     // an unwanted one (BuffSlot.RejectedOutcomes) leaves the slot due, so the next
     // cycle draws again. A use can be repeated every cycle (user, 2026-10-02).
+    //
+    // That is Paradigm's deck, which shuffles the old card away before it draws.
+    // Stock's has no shuffle: used while a card is up it answers "Nothing happens."
+    // and deals nothing. Such an item can't choose its card, so whatever it deals is
+    // kept, and it is used again only once that card has worn off (user, 2026-10-02).
     private Func<string, IReadOnlyList<(int SpellNumber, string Name, long DurationSec)>?>? _drawOutcomes;
+    private Func<string, bool>? _drawCanRedraw;
+
+    // A draw that shows no card on an item that can't redraw was most likely turned
+    // away because a card is still up (its wear-off line was missed, or a fortune
+    // teller's reading). Trying again every cycle would repeat the refusal each round.
+    private const int NoRedrawRetrySec = 60;
+
+    private bool CanRedraw(string token) => _drawCanRedraw?.Invoke(token) ?? true;
 
     // How long a sent draw is given to show its card before the slot counts as due
     // again (the use didn't happen, or the card's line wasn't recognised).
@@ -642,10 +655,15 @@ public sealed class CastingDirector : IDisposable
     // it, since a slot that keeps several cards doesn't say which one is up.
     private readonly Dictionary<string, string> _drawnOutcome = new(StringComparer.OrdinalIgnoreCase);
 
-    public void SetItemDrawSource(Func<string, IReadOnlyList<(int SpellNumber, string Name, long DurationSec)>?> outcomesOf)
+    // canRedraw: whether a use replaces the outcome already up. Left out, every draw
+    // item is taken to.
+    public void SetItemDrawSource(
+        Func<string, IReadOnlyList<(int SpellNumber, string Name, long DurationSec)>?> outcomesOf,
+        Func<string, bool>? canRedraw = null)
     {
         ArgumentNullException.ThrowIfNull(outcomesOf);
         _drawOutcomes = outcomesOf;
+        _drawCanRedraw = canRedraw;
     }
 
     private bool TryFireDraw(string token)
@@ -661,7 +679,7 @@ public sealed class CastingDirector : IDisposable
         // The slot's timer is set when the card lands (NoteDrawOutcome).
         _activeUntil.Remove(("", token));
         _drawnOutcome.Remove(token);
-        _drawPendingUntil[token] = _now().AddSeconds(DrawSettleSec);
+        _drawPendingUntil[token] = _now().AddSeconds(CanRedraw(token) ? DrawSettleSec : NoRedrawRetrySec);
         _log?.Info(LogCategory, $"draw item used token={token} — waiting for the card.");
         CastFired?.Invoke();
         return true;
@@ -693,7 +711,7 @@ public sealed class CastingDirector : IDisposable
         if (DrawOutcomeOf(r) is not { } drawn) return;
         string token = drawn.Slot.Spell!;
         _drawPendingUntil.Remove(token);
-        if (drawn.Slot.RejectedOutcomes.Contains(drawn.Outcome.SpellNumber))
+        if (CanRedraw(token) && drawn.Slot.RejectedOutcomes.Contains(drawn.Outcome.SpellNumber))
         {
             _activeUntil.Remove(("", token));
             _log?.Info(LogCategory, $"draw item {token}: drew {drawn.Outcome.Name}, which isn't ticked — drawing again.");
@@ -710,6 +728,7 @@ public sealed class CastingDirector : IDisposable
     {
         if (DrawOutcomeOf(r) is not { } ended) return;
         _drawnOutcome.Remove(ended.Slot.Spell!);
+        _drawPendingUntil.Remove(ended.Slot.Spell!);
         if (_activeUntil.Remove(("", ended.Slot.Spell!)))
             _log?.Info(LogCategory, $"draw item {ended.Slot.Spell}: {ended.Outcome.Name} wore off.");
     }
@@ -1174,12 +1193,20 @@ public sealed class CastingDirector : IDisposable
     // tokens not carried as a slot's Spell) keep their cast-time margin.
     private int EffectiveMargin(string targetKey, string spellShort, int stored)
     {
+        int margin = stored;
         if (_readPartyBuffs?.Invoke() is { } buffs)
             foreach (Models.Profile.BuffSlot slot in buffs.Slots)
                 if (string.Equals(slot.Spell?.Trim(), spellShort, StringComparison.OrdinalIgnoreCase)
                     && (targetKey.Length != 0 || slot.CastOnSelf))
-                    return slot.RecastMarginSec;
-        return stored;
+                {
+                    margin = slot.RecastMarginSec;
+                    break;
+                }
+        // A draw item that can't redraw is refused until its card is gone: a recast
+        // lead would only send a use into that refusal.
+        return margin > 0 && targetKey.Length == 0 && ItemCastToken.IsToken(spellShort) && !CanRedraw(spellShort)
+            ? 0
+            : margin;
     }
 
     // A server rejection of a between-round cast we just sent. "You have already cast

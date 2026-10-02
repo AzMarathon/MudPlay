@@ -34,11 +34,14 @@ namespace MudPlay.Game.Spells;
 // Carried marks an item with no equip slot that is kept after use (Paradigm's
 // Gypsy deck of cards): it is used straight from the pack, with nothing to equip or
 // put back. Outcomes lists the spells a draw item deals at random (the deck's cards);
-// null or empty for an item that always casts SpellNumber.
+// null or empty for an item that always casts SpellNumber. CanRedraw says whether a
+// use replaces the outcome already up: Paradigm's deck shuffles the old card away
+// first, Stock's answers "Nothing happens." until the card has worn off.
 public readonly record struct ClassCastItem(
     int ItemNumber, string ItemName, int SpellNumber, string SpellName, int ManaCost, int UseCount,
     bool IsTwoHanded = false, bool ClassRestricted = false, int MinLevel = 0, string SpellEffect = "",
-    string WearSlot = "", bool Carried = false, IReadOnlyList<CastOutcome>? Outcomes = null)
+    string WearSlot = "", bool Carried = false, IReadOnlyList<CastOutcome>? Outcomes = null,
+    bool CanRedraw = true)
 {
     // True for an item whose use deals one of several spells at random.
     public bool IsDraw => Outcomes is { Count: > 0 };

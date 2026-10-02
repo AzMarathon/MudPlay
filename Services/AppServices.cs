@@ -5619,7 +5619,7 @@ public sealed class AppServices
             wornLoadoutKnown: () => Inventory.IsLoaded);
         CastDirector.SetItemCastSource(ItemCastDurationOf, ItemCast.Execute);
         CastDirector.SetItemCastManaCost(ItemCastManaCostOf);
-        CastDirector.SetItemDrawSource(ItemDrawOutcomesOf);
+        CastDirector.SetItemDrawSource(ItemDrawOutcomesOf, ItemDrawCanRedraw);
 
         // Auto-train. Drives the `train stats` screen to apply the CP
         // plan (Workshop CP Allocation tab) when armed + a level-up enables it.
@@ -8898,6 +8898,12 @@ public sealed class AppServices
                 (long)System.Math.Round(o.DurationRounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock)))
             .ToList();
     }
+
+    // Whether using the draw item named by token again replaces the card that is up
+    // (ClassCastItem.CanRedraw). True for anything that doesn't resolve.
+    private bool ItemDrawCanRedraw(string token)
+        => !Game.Spells.ItemCastToken.TryResolve(token, Spellbook.GetCastItems(),
+               out Game.Spells.ClassCastItem item) || item.CanRedraw;
 
     // Mana the item-cast buff named by token draws on use —
     // the cast spell's Spells.ManaCost, surfaced on the resolved

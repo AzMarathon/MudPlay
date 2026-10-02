@@ -487,6 +487,40 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.Contains(book.GetCastItems(), i => i.ItemName == "Deck Of Cards");
     }
 
+    // Every card carries ability 15, and the deck's textblock ends the use on
+    // `failability 15` while the user has it. Paradigm's chain casts a shuffle first
+    // that removes the cards, so a redraw gets through; Stock's has no shuffle, so the
+    // deck can't be used again until the card is gone (`wccmmud.dll` 1.11p: a
+    // failability that finds the ability prints its message and stops the chain).
+    [Theory]
+    [InlineData("message 8815:message 2780:cast 705:failability 15 1114:random 9001\n", true)]
+    [InlineData("message 2780:failability 15 1114:random 9001\n", false)]
+    [InlineData("message 2780:random 9001\n", true)]
+    public void DrawItem_CanRedraw_OnlyWhenItsOwnCardCantBlockTheUse(string action, bool canRedraw)
+    {
+        Dictionary<string, object> draw = SpellRow(700, "card deck draw", "", magery: 0, mageryLvl: 0, reqLevel: 0);
+        draw["Abil-0"] = 148;
+        draw["AbilVal-0"] = 9000;
+        Dictionary<string, object> wizard = SpellRow(701, "card-wizard", "", magery: 0, mageryLvl: 0, reqLevel: 0);
+        wizard["Dur"] = 240;
+        wizard["Casted By"] = "Textblock #9001(100%)";
+        wizard["Abil-0"] = 44;
+        wizard["AbilVal-0"] = 5;
+        wizard["Abil-1"] = 15;
+        Dictionary<string, object> shuffle = SpellRow(705, "card shuffle", "", magery: 0, mageryLvl: 0, reqLevel: 0);
+        shuffle["Abil-0"] = 122;
+        shuffle["AbilVal-0"] = 701;
+        object[] tbInfo = [new Dictionary<string, object> { ["Number"] = "9000", ["Action"] = action }];
+        Dictionary<string, object> deck = NonEquippableCastItemRow(301, "Deck Of Cards", castSpell: 700, itemType: 10, 12);
+        deck["Retain After Uses"] = 1;
+        deck["UseCount"] = 9999;
+
+        SpellbookState book = NewBook(classNumber: 12, level: 20, items: [deck],
+            spells: [draw, wizard, shuffle], tbInfo: tbInfo);
+
+        Assert.Equal(canRedraw, Assert.Single(book.GetDrawCastItems()).CanRedraw);
+    }
+
     [Fact]
     public void CastItems_ExcludeAutomaticProcs_KeepOnlyCommandCasts()
     {
