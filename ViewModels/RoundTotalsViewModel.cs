@@ -31,6 +31,7 @@ public sealed partial class RoundTotalsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _showPlayers = true;
     [ObservableProperty] private bool _showMonsters = true;
     [ObservableProperty] private bool _eachMonster;
+    [ObservableProperty] private bool _capAtMonsterHp;
 
     public RoundTotalsViewModel(RoundTotalsBoard board, ProfileService profile)
     {
@@ -67,6 +68,7 @@ public sealed partial class RoundTotalsViewModel : ObservableObject, IDisposable
         ShowPlayers = saved.ShowPlayers;
         ShowMonsters = saved.ShowMonsters;
         EachMonster = saved.EachMonster;
+        CapAtMonsterHp = saved.CapAtMonsterHp;
         _loading = false;
     }
 
@@ -82,6 +84,7 @@ public sealed partial class RoundTotalsViewModel : ObservableObject, IDisposable
             s.ShowPlayers = ShowPlayers;
             s.ShowMonsters = ShowMonsters;
             s.EachMonster = EachMonster;
+            s.CapAtMonsterHp = CapAtMonsterHp;
         });
         _board.OptionsChanged();
     }
@@ -91,6 +94,7 @@ public sealed partial class RoundTotalsViewModel : ObservableObject, IDisposable
     partial void OnShowPlayersChanged(bool value) => SaveOptions();
     partial void OnShowMonstersChanged(bool value) => SaveOptions();
     partial void OnEachMonsterChanged(bool value) => SaveOptions();
+    partial void OnCapAtMonsterHpChanged(bool value) => SaveOptions();
 
     private void Refresh()
     {

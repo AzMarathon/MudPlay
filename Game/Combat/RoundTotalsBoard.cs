@@ -74,7 +74,7 @@ public sealed class RoundTotalsBoard
         if (options.ShowMonsters) shown.Add(CombatantKind.Monster);
 
         Round = round.FightRound;
-        Rows = RoundTotalsFormatter.Rows(round, shown, options.EachMonster);
+        Rows = RoundTotalsFormatter.Rows(round, shown, options.EachMonster, options.CapAtMonsterHp);
 
         _recent.Enqueue((Rows.Count, RoundTotalsFormatter.NameWidth(Rows)));
         while (_recent.Count > Memory) _recent.Dequeue();

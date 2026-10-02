@@ -33,6 +33,7 @@ public partial class RoundTotalsWindow : Window
         menu.Items.Add(Tick("Monsters", vm.ShowMonsters, on => vm.ShowMonsters = on));
         menu.Items.Add(new Separator());
         menu.Items.Add(Tick("One row per monster", vm.EachMonster, on => vm.EachMonster = on));
+        menu.Items.Add(Tick("Cap at monster HP", vm.CapAtMonsterHp, on => vm.CapAtMonsterHp = on));
         menu.ShowAt(button);
     }
 

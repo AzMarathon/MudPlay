@@ -288,7 +288,7 @@ public sealed class RoundDamageTracker : IDisposable
 
         // Worked out before Attributed, whose MonsterHpTracker takes the hit off the HP
         // it caps against.
-        List<(string Row, int? Id, int Taken)> hits = Hits(target, a.Amount, foesHit.Count > 0);
+        List<(string Row, int? Id, int Taken, int Other)> hits = Hits(target, a.Amount, foesHit.Count > 0);
         int? dealerId = !a.NoDealer && source is not null && IsFoe(source)
             ? _monsterTarget?.Invoke(source)?.Id : null;
 
@@ -306,21 +306,28 @@ public sealed class RoundDamageTracker : IDisposable
         NoteActivity();
         // Damage nobody dealt (a poison tick) is only damage taken. The dealer dealt what
         // the victims could take.
+        // Each number is kept twice: as the cap setting counts it, and the other way
+        // (Other), so a reader with its own cap choice has both to pick from.
         int dealt = hits.Count > 0 ? hits.Sum(h => h.Taken) : a.Amount;
+        int dealtOther = hits.Count > 0 ? hits.Sum(h => h.Other) : a.Amount;
         if (!a.NoDealer)
         {
-            if (source is null) round.UnknownDealt += dealt;
+            if (source is null)
+            {
+                round.UnknownDealt += dealt;
+                round.UnknownDealtOther += dealtOther;
+            }
             else
             {
-                round.For(source).Dealt += dealt;
-                if (dealerId is { } did) round.Monster(did, source).Dealt += dealt;
+                round.For(source).AddDealt(dealt, dealtOther);
+                if (dealerId is { } did) round.Monster(did, source).AddDealt(dealt, dealtOther);
             }
         }
         if (hits.Count == 0) round.UnknownTaken += a.Amount;
-        foreach ((string row, int? id, int taken) in hits)
+        foreach ((string row, int? id, int taken, int other) in hits)
         {
-            round.For(row).Taken += taken;
-            if (id is { } mid) round.Monster(mid, row).Taken += taken;
+            round.For(row).AddTaken(taken, other);
+            if (id is { } mid) round.Monster(mid, row).AddTaken(taken, other);
         }
     }
 
@@ -331,10 +338,17 @@ public sealed class RoundDamageTracker : IDisposable
     // regained — regen, a heal — is in the estimate already. An estimate already at 0
     // that still takes a hit was wrong, so that hit counts in full. A room spell hits
     // each monster once, matched to the tracker's monsters of each name in order.
-    private List<(string Row, int? Id, int Taken)> Hits(string? target, int amount, bool roomSpell)
+    private List<(string Row, int? Id, int Taken, int Other)> Hits(string? target, int amount, bool roomSpell)
     {
-        List<(string, int?, int)> hits = new();
+        List<(string, int?, int, int)> hits = new();
         bool cap = _capAtHp();
+        // What a tracked monster took by the cap setting, and what it would have by
+        // the opposite one.
+        (int Taken, int Other) Split(int hpLeft)
+        {
+            int capped = Capped(amount, hpLeft);
+            return cap ? (capped, amount) : (amount, capped);
+        }
         if (roomSpell)
         {
             Dictionary<string, Queue<(int Id, int Hp)>> tracked = new(StringComparer.OrdinalIgnoreCase);
@@ -345,14 +359,14 @@ public sealed class RoundDamageTracker : IDisposable
             }
             foreach (string foe in _foes)
                 hits.Add(tracked.TryGetValue(foe, out Queue<(int Id, int Hp)>? q) && q.Count > 0 && q.Dequeue() is var m
-                    ? (foe, m.Id, cap ? Capped(amount, m.Hp) : amount)
-                    : (foe, null, amount));
+                    ? (foe, m.Id, Split(m.Hp).Taken, Split(m.Hp).Other)
+                    : (foe, null, amount, amount));
         }
         else if (target is not null)
         {
             hits.Add(IsFoe(target) && _monsterTarget?.Invoke(target) is { } m
-                ? (target, m.Id, cap ? Capped(amount, m.Hp) : amount)
-                : (target, null, amount));
+                ? (target, m.Id, Split(m.Hp).Taken, Split(m.Hp).Other)
+                : (target, null, amount, amount));
         }
         return hits;
     }
@@ -553,6 +567,8 @@ public sealed class RoundDamageTracker : IDisposable
             Combatants:   _current.Rows(KindOf),
             EachMonster:  _current.MonsterRows(),
             UnknownDealt: _current.UnknownDealt,
+            Capped:       _capAtHp(),
+            UnknownDealtOther: _current.UnknownDealtOther,
             UnknownTaken: _current.UnknownTaken,
             HpBefore:     _current.HpStart,
             HpAfter:      _state.Hp,
@@ -614,6 +630,7 @@ public sealed class RoundDamageTracker : IDisposable
         public int FightRound;
         public DateTimeOffset StartedAt;
         public int UnknownDealt;
+        public int UnknownDealtOther;
         public int UnknownTaken;
         public int HpStart;
         public int MaStart;
@@ -648,7 +665,7 @@ public sealed class RoundDamageTracker : IDisposable
 
         public IReadOnlyList<CombatantDamage> Rows(Func<string, CombatantKind> kindOf)
             => _rows.Values.Select(r => new CombatantDamage(r.Name, r.Dealt, r.Taken, kindOf(r.Name),
-                Math.Max(1, _counts.GetValueOrDefault(r.Name)))).ToArray();
+                Math.Max(1, _counts.GetValueOrDefault(r.Name)), r.DealtOther, r.TakenOther)).ToArray();
 
         // Same-named monsters are numbered in the order they were seen: "muckworm #1",
         // "muckworm #2"; a lone one keeps its plain name.
@@ -659,7 +676,8 @@ public sealed class RoundDamageTracker : IDisposable
             {
                 int n = 0, total = g.Count();
                 foreach (Row r in g)
-                    rows.Add(new CombatantDamage(total > 1 ? $"{r.Name} #{++n}" : r.Name, r.Dealt, r.Taken, CombatantKind.Monster));
+                    rows.Add(new CombatantDamage(total > 1 ? $"{r.Name} #{++n}" : r.Name, r.Dealt, r.Taken, CombatantKind.Monster,
+                        DealtOther: r.DealtOther, TakenOther: r.TakenOther));
             }
             return rows;
         }
@@ -670,5 +688,20 @@ public sealed class RoundDamageTracker : IDisposable
         public string Name { get; } = name;
         public int Dealt;
         public int Taken;
+        // The same two tallies under the opposite cap choice.
+        public int DealtOther;
+        public int TakenOther;
+
+        public void AddDealt(int amount, int other)
+        {
+            Dealt += amount;
+            DealtOther += other;
+        }
+
+        public void AddTaken(int amount, int other)
+        {
+            Taken += amount;
+            TakenOther += other;
+        }
     }
 }

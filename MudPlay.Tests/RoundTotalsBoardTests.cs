@@ -97,6 +97,27 @@ public sealed class RoundTotalsBoardTests
     }
 
     [Fact]
+    public void TheWindowsOwnCapChoice_PicksItsTallies()
+    {
+        RoundTotalsWindowSettings options = new();
+        RoundTotalsBoard board = new(() => options);
+        // Counted uncapped (the terminal's setting off): 812 taken, 540 if capped.
+        board.Publish(new RoundSummary(1, 1, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch,
+            new[]
+            {
+                new CombatantDamage(DamageLineAttributor.Self, 812, 0, CombatantKind.Self, DealtOther: 540, TakenOther: 0),
+                new CombatantDamage("muckworm", 0, 812, CombatantKind.Monster, DealtOther: 0, TakenOther: 540),
+            },
+            0, 0, 0, 0, 0, 0, Capped: false));
+        Assert.Equal(812, board.Rows[1].Taken);
+
+        options.CapAtMonsterHp = true;
+        board.OptionsChanged();
+        Assert.Equal(540, board.Rows[1].Taken);
+        Assert.Equal(540, board.Rows[0].Dealt);
+    }
+
+    [Fact]
     public void Clear_ForgetsTheRoundAndTheSizes()
     {
         RoundTotalsBoard board = new(() => new RoundTotalsWindowSettings());

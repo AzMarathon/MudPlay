@@ -26,13 +26,21 @@ public static class RoundTotalsFormatter
     // The table's rows, in display order. A row several same-named monsters share is
     // labelled "muckworm x3"; eachMonster gives every monster with HP data its own
     // numbered row instead. Empty when no kind of row was asked for.
+    // capAtHp asks for the tallies counted with "Cap at monster HP" on or off; left
+    // null, they are as the round counted them.
     public static IReadOnlyList<RoundTotalsRow> Rows(RoundSummary round, IReadOnlyCollection<CombatantKind> shown,
-        bool eachMonster = false)
+        bool eachMonster = false, bool? capAtHp = null)
     {
         if (shown.Count == 0) return Array.Empty<RoundTotalsRow>();
-        IEnumerable<CombatantDamage> combatants = round.Combatants;
-        if (eachMonster && round.EachMonster is { Count: > 0 } each)
+        bool otherCap = capAtHp is { } wanted && wanted != round.Capped;
+        IEnumerable<CombatantDamage> combatants = otherCap
+            ? round.Combatants.Select(static c => c.WithOtherCap())
+            : round.Combatants;
+        if (eachMonster && round.EachMonster is { Count: > 0 } counted)
         {
+            IReadOnlyList<CombatantDamage> each = otherCap
+                ? counted.Select(static c => c.WithOtherCap()).ToList()
+                : counted;
             HashSet<string> split = new(each.Select(m => BaseName(m.Name)), StringComparer.OrdinalIgnoreCase);
             combatants = combatants
                 .Where(c => c.Kind != CombatantKind.Monster || !split.Contains(c.Name))
@@ -51,8 +59,9 @@ public static class RoundTotalsFormatter
             .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .Select(c => new RoundTotalsRow(c.Name, c.Dealt, c.Taken, c.Kind))
             .ToList();
-        if (round.UnknownDealt > 0 || round.UnknownTaken > 0)
-            rows.Add(new RoundTotalsRow("unknown", round.UnknownDealt, round.UnknownTaken, Kind: null));
+        int unknownDealt = otherCap ? round.UnknownDealtOther : round.UnknownDealt;
+        if (unknownDealt > 0 || round.UnknownTaken > 0)
+            rows.Add(new RoundTotalsRow("unknown", unknownDealt, round.UnknownTaken, Kind: null));
         return rows;
     }
 
