@@ -1250,11 +1250,17 @@ public sealed class AppServices
         return StashTransfer.Start(stash, bank.Key, bank.Name);
     }
 
-    // The active set's banks, nearest to `from` first (walking steps under the
-    // character's movement filter).
-    public IReadOnlyList<(Game.GameData.BankShop Bank, int? Steps)> BanksNearestFirst(Game.Map.RoomKey from) =>
-        Game.GameData.BankCatalog.ByDistance(
-            Game.GameData.BankCatalog.Enumerate(GameData), Bfs.ComputeDistancesFrom(from, Movement));
+    // The active set's banks, nearest to `from` first. Reach is counted the way the
+    // transfer's own walks plan: through gates whose key or item can be acquired, and
+    // across sailings (one step each). A walk-only count called a bank behind a
+    // key-door or a boat unreachable.
+    public IReadOnlyList<(Game.GameData.BankShop Bank, int? Steps)> BanksNearestFirst(Game.Map.RoomKey from)
+    {
+        IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
+        using (Movement.SuspendAcquirableGates())
+            distances = Bfs.ComputeDistancesFrom(from, Movement, viaBoats: true);
+        return Game.GameData.BankCatalog.ByDistance(Game.GameData.BankCatalog.Enumerate(GameData), distances);
+    }
 
     // In-memory force of cash COLLECTION while an auto-train funding errand runs.
     // Deliberately not a write to the saved AutoGetCash setting: that would move the

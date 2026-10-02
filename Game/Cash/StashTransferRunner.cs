@@ -126,7 +126,7 @@ public sealed class StashTransferRunner
             _log?.Info(LogCategory, $"transfer not started — {refused}");
             return refused;
         }
-        _notice($"Stash transfer: {stash.Map}/{stash.Room} → {bankName}. Stop movement to end it.");
+        _notice($"[Stash Transfer Started: {stash.Map}/{stash.Room} -> {bankName}]");
         StateChanged?.Invoke();
         return null;
     }
@@ -210,7 +210,7 @@ public sealed class StashTransferRunner
         {
             _reconcileStash(Stash, 0);
             LeftCopper = 0;
-            End(Trips == 0 ? "the stash is empty — nothing to transfer" : "the stash is empty");
+            End(Trips == 0 ? "the stash is empty, nothing to transfer" : "the stash is empty");
             return;
         }
 
@@ -233,8 +233,7 @@ public sealed class StashTransferRunner
 
         if (taken <= 0)
         {
-            End($"nothing could be picked up ({CurrencyFormat.Full(LeftCopper)} still stashed) — "
-                + "check the coin weight limits in Settings → Cash");
+            End("nothing could be picked up - check the coin weight limits in Settings, Cash");
             return;
         }
 
@@ -288,7 +287,9 @@ public sealed class StashTransferRunner
         if (GoToStash() is { } refused) End(refused);
     }
 
-    // why: null when the stash was emptied into the bank.
+    // why: null when the stash was emptied into the bank. The notice goes to the
+    // terminal, whose CP437 font has no arrows or long dashes, and follows the
+    // client's bracketed-notice form.
     private void End(string? why)
     {
         _phase = Phase.Idle;
@@ -299,10 +300,11 @@ public sealed class StashTransferRunner
             ? "nothing moved"
             : $"{CurrencyFormat.Full(MovedCopper)} moved to {BankName} in {Trips} trip{(Trips == 1 ? "" : "s")}";
         string text = why is null
-            ? $"Stash transfer done — {moved}; the stash is empty."
-            : $"Stash transfer ended: {why}. {char.ToUpperInvariant(moved[0])}{moved[1..]}"
+            ? $"[Stash Transfer Done: {moved}]"
+            : $"[Stash Transfer Ended: {why}; {moved}"
               + (_carried > 0 ? $"; carrying {CurrencyFormat.Full(_carried)} from the stash" : "")
-              + (LeftCopper > 0 ? $"; {CurrencyFormat.Full(LeftCopper)} still stashed." : ".");
+              + (LeftCopper > 0 ? $"; {CurrencyFormat.Full(LeftCopper)} still stashed" : "")
+              + "]";
         _carried = 0;
         _log?.Info(LogCategory, text);
         _notice(text);

@@ -113,7 +113,8 @@ public sealed class StashTransferRunnerTests
         Assert.Equal(30_000, h.BankHolds);
         Assert.Equal(500, h.Purse);                       // the float is untouched
         Assert.Equal((StashRoom, 0L), h.Reconciled[^1]);
-        Assert.Contains("the stash is empty", h.Notices[^1]);
+        Assert.Equal("[Stash Transfer Started: 1/20 -> First Bank]", h.Notices[0]);
+        Assert.Equal("[Stash Transfer Done: 3 platinum moved to First Bank in 1 trip]", h.Notices[^1]);
     }
 
     // The weight limits cap a trip, so a big pile takes several: each one searches
@@ -163,7 +164,7 @@ public sealed class StashTransferRunnerTests
         Assert.False(h.Runner.IsBusy);
         Assert.Single(h.Walked);                          // never set off for the bank
         Assert.DoesNotContain(h.Sent, s => s.StartsWith("dep", StringComparison.Ordinal));
-        Assert.Contains("nothing to transfer", h.Notices[^1]);
+        Assert.Equal("[Stash Transfer Ended: the stash is empty, nothing to transfer; nothing moved]", h.Notices[^1]);
     }
 
     // Already at the weight limit: a trip that takes nothing would repeat forever.
@@ -179,6 +180,9 @@ public sealed class StashTransferRunnerTests
         Assert.Single(h.Walked);
         Assert.Equal((StashRoom, 8_000L), h.Reconciled[^1]);
         Assert.Contains("nothing could be picked up", h.Notices[^1]);
+        Assert.EndsWith("80 gold still stashed]", h.Notices[^1]);
+        // The terminal font is CP437: no arrows or long dashes in a notice.
+        Assert.All(h.Notices, n => Assert.All(n, c => Assert.True(c < 128)));
     }
 
     [Fact]

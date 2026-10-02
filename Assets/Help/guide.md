@@ -1027,7 +1027,7 @@ Set the bank and thresholds on Settings → Cash. To bank right now regardless o
 
 ### Moving a stash into a bank
 
-Right-click a **stash room** on the Navigation map and open **Transfer Stash to Bank**. The fly-out lists every bank in the game data, nearest to where you are standing first, each with its map/room and the walking steps to it. Pick one and MudPlay shuttles the stash's coin to it:
+Right-click a **stash room** on the Navigation map and open **Transfer Stash to Bank**. The fly-out lists every bank in the game data, nearest to where you are standing first, each with its map/room and the number of steps to it. Steps are counted the way the trip will travel, through doors and gates whose key or item can be obtained and across boat crossings, so a bank behind one of those still shows its distance; only a bank with no route at all reads *no route found*. Pick one and MudPlay shuttles the stash's coin to it:
 
 - It stops any loop or Auto-Lair that is running (it does not resume it afterwards), walks to the stash room and searches.
 - It reads the pile the search shows, then takes as much as your coin weight limits allow (**Settings → Cash**: *Don't collect if it makes you Light / Medium / Heavy*, *Don't collect past 90% encumbrance*, and *Drop smaller currency to make room for larger*). With no limit ticked that is everything you can physically carry. The per-coin Collect / Ignore / Discard choices don't decide what it takes — this is your own stash — but a coin set to **Discard** will still be dropped again, so set it to Ignore or Collect first if your stash holds any.

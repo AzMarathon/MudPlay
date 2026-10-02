@@ -2391,7 +2391,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             foreach ((Game.GameData.BankShop bank, int? steps) in _services.BanksNearestFirst(from))
             {
                 Game.GameData.BankShop target = bank;
-                string reach = steps is { } n ? $"{n} step{(n == 1 ? "" : "s")}" : "no walking route found";
+                string reach = steps is { } n ? $"{n} step{(n == 1 ? "" : "s")}" : "no route found";
                 ContextTransferBanks.Add(new MudPlay.ViewModels.FavoriteMenuItem(
                     $"{++number})", $"{bank.Name} {bank.Map}/{bank.Room} — {reach}", GotoWalkBrush,
                     new RelayCommand(() => StartStashTransfer(stash, target))));
@@ -2404,7 +2404,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void StartStashTransfer(RoomKey stash, Game.GameData.BankShop bank)
     {
         if (_services.StartStashTransfer(stash, bank) is { } refused)
-            _services.WriteTerminalNotice($"Stash transfer not started: {refused}.");
+            _services.WriteTerminalNotice($"[Stash Transfer Not Started: {refused}]");
     }
 
     [RelayCommand]
