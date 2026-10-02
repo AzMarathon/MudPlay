@@ -49,22 +49,35 @@ public sealed class SoundCueTests : IDisposable
     // ----- SoundCueEngine ------------------------------------------------------
 
     [Fact]
-    public void UntouchedCue_TakesItsCatalogueDefault()
+    public void EveryCue_StartsOff()
     {
         Rig rig = new();
-        rig.Engine.Fire(SoundCues.LevelUp);       // on by default
-        rig.Engine.Fire(SoundCues.WalkFinished);  // off by default
+        foreach (SoundCue cue in SoundCues.All)
+        {
+            rig.Engine.Fire(cue.Id);
+            rig.Engine.FireWith(cue.Id, "/sounds/a.wav");
+        }
+        Assert.Empty(rig.Played);
+    }
 
-        Assert.Equal(new[] { (SoundTones.Fanfare, 80) }, rig.Played);   // master 80 × cue 100
+    [Fact]
+    public void TickedCue_PlaysItsDefaultSound_AtMasterTimesCueVolume()
+    {
+        Rig rig = new();
+        rig.Set(SoundCues.LevelUp);
+        rig.Engine.Fire(SoundCues.LevelUp);
+        Assert.Equal(new[] { (SoundTones.Ding, 80) }, rig.Played);   // master 80 × cue 100
     }
 
     [Fact]
     public void MasterSwitchOff_SilencesEveryCue()
     {
         Rig rig = new();
+        rig.Set(SoundCues.LevelUp);
+        rig.Set(SoundCues.Trigger, sound: string.Empty);
         rig.Settings.Enabled = false;
         rig.Engine.Fire(SoundCues.LevelUp);
-        rig.Engine.FireFile("/tmp/x.wav");
+        rig.Engine.FireWith(SoundCues.Trigger, "/tmp/x.wav");
         Assert.Empty(rig.Played);
     }
 
@@ -94,6 +107,8 @@ public sealed class SoundCueTests : IDisposable
     public void ABurstOfOneCue_IsOneSound_UntilTheGapPasses()
     {
         Rig rig = new();
+        rig.Set(SoundCues.LevelUp);
+        rig.Set(SoundCues.Death);
         rig.Engine.Fire(SoundCues.LevelUp);
         rig.Now += TimeSpan.FromMilliseconds(400);
         rig.Engine.Fire(SoundCues.LevelUp);
@@ -162,21 +177,43 @@ public sealed class SoundCueTests : IDisposable
         Assert.Empty(rig.Played);
     }
 
-    [Fact]
-    public void TriggerFile_PlaysAtTheTriggerCueVolume_ThrottledPerFile()
+    [Theory]
+    [InlineData(SoundCues.Trigger)]
+    [InlineData(SoundCues.EventFired)]
+    public void NamedSound_PlaysAtItsCueVolume_ThrottledPerSound(string cue)
     {
         Rig rig = new();
-        rig.Set(SoundCues.Trigger, sound: string.Empty, volume: 50);
-        rig.Engine.FireFile("/sounds/a.wav");
-        rig.Engine.FireFile("/sounds/a.wav");   // same file inside the gap
-        rig.Engine.FireFile("/sounds/b.wav");   // a different trigger's file still sounds
+        rig.Set(cue, sound: string.Empty, volume: 50);
+        rig.Engine.FireWith(cue, "/sounds/a.wav");
+        rig.Engine.FireWith(cue, "/sounds/a.wav");   // the same sound inside the gap
+        rig.Engine.FireWith(cue, SoundTones.Chime);  // a different one still plays
 
-        Assert.Equal(new[] { ("/sounds/a.wav", 40), ("/sounds/b.wav", 40) }, rig.Played);
+        Assert.Equal(new[] { ("/sounds/a.wav", 40), (SoundTones.Chime, 40) }, rig.Played);
 
-        rig.Set(SoundCues.Trigger, enabled: false, sound: string.Empty);
+        rig.Set(cue, enabled: false, sound: string.Empty);
         rig.Now += TimeSpan.FromSeconds(5);
-        rig.Engine.FireFile("/sounds/a.wav");
+        rig.Engine.FireWith(cue, "/sounds/a.wav");
         Assert.Equal(2, rig.Played.Count);
+    }
+
+    [Fact]
+    public void CueWithNoSoundOfItsOwn_PlaysNothingByItself()
+    {
+        Rig rig = new();
+        rig.Set(SoundCues.EventFired, sound: string.Empty);
+        rig.Engine.Fire(SoundCues.EventFired);
+        Assert.Empty(rig.Played);
+    }
+
+    [Fact]
+    public void Preview_PlaysAtTheCueVolume_WhateverTheSwitchesSay()
+    {
+        Rig rig = new();
+        rig.Settings.Enabled = false;
+        rig.Set(SoundCues.EventFired, enabled: false, sound: string.Empty, volume: 50);
+        rig.Engine.Preview(SoundCues.EventFired, SoundTones.Coin);
+        rig.Engine.Preview(SoundCues.EventFired, SoundTones.Coin);   // no gap on a test button
+        Assert.Equal(new[] { (SoundTones.Coin, 40), (SoundTones.Coin, 40) }, rig.Played);
     }
 
     [Fact]
@@ -190,10 +227,10 @@ public sealed class SoundCueTests : IDisposable
     // ----- Catalogue + settings ------------------------------------------------
 
     [Fact]
-    public void CueIds_AreUnique_AndEverySoundedCueDefaultsToARealTone()
+    public void CueIds_AreUnique_AndEveryCueWithItsOwnSoundDefaultsToARealTone()
     {
         Assert.Equal(SoundCues.All.Count, SoundCues.All.Select(c => c.Id).Distinct(StringComparer.Ordinal).Count());
-        foreach (SoundCue cue in SoundCues.All.Where(c => c.Id != SoundCues.Trigger))
+        foreach (SoundCue cue in SoundCues.All.Where(c => c.HasOwnSound))
             Assert.NotNull(SoundTones.Render(cue.DefaultSound));
     }
 
@@ -263,6 +300,8 @@ public sealed class SoundCueTests : IDisposable
         timers.OnRealmChanged(dir);
 
         Rig rig = new();
+        rig.Set(SoundCues.BossWindow);
+        rig.Set(SoundCues.BossReady);
         SoundBossWatcher watcher = new(rig.Engine, bosses, timers, cache, () => true) { Now = () => rig.Now };
         return (rig, watcher, timers);
     }

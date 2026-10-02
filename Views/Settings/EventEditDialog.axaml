@@ -70,13 +70,26 @@
         <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
 
             <!-- Header: Name + Disabled flag. -->
-            <Grid Grid.Row="0" ColumnDefinitions="Auto,300,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,300,Auto,Auto,150,Auto,*,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Name"/>
                 <TextBox Grid.Column="1"
                          Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                          ToolTip.Tip="Also how another event's Then finds this one."/>
                 <CheckBox Grid.Column="2" Content="Disabled" Margin="14,0,0,0"
                           IsChecked="{Binding DisabledFlag, Mode=TwoWay}"/>
+                <TextBlock Grid.Column="3" Classes="FieldLabel" Text="Sound" Margin="22,0,0,0"/>
+                <ComboBox Grid.Column="4" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding SoundOptions}"
+                          SelectedItem="{Binding SelectedSound, Mode=TwoWay}"
+                          ToolTip.Tip="A sound to play when this event fires: a built-in tone or your own file. Settings → Sounds → Event sounds turns event sounds on or off and sets how loud they play."/>
+                <Button Grid.Column="5" Content="▶" Command="{Binding TestSoundCommand}"
+                        IsEnabled="{Binding HasSound}"
+                        ToolTip.Tip="Play this sound at the Event sounds volume."/>
+                <TextBox Grid.Column="6" IsVisible="{Binding IsSoundFile}"
+                         Text="{Binding SoundFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         PlaceholderText="Path to a sound file"/>
+                <Button Grid.Column="7" Content="Browse…" Click="OnBrowseSound"
+                        IsVisible="{Binding IsSoundFile}"/>
             </Grid>
 
             <Grid Grid.Row="1" ColumnDefinitions="*,12,*" RowDefinitions="Auto,10,Auto">

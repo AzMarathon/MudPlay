@@ -26,6 +26,11 @@ public sealed class ScheduledEvent
     // its manager's collection.
     public bool Disabled { get; set; }
 
+    // A sound to play when the event fires: a built-in tone ("tone:chime") or a
+    // sound file's path. Null = silent. Whether it plays, and how loud, is the
+    // "Event sounds" row on Settings → Sounds.
+    public string? Sound { get; set; }
+
     // Which lifecycle / schedule trigger fires this event.
     public EventTriggerType TriggerType { get; set; }
 

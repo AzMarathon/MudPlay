@@ -1444,7 +1444,7 @@ Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove*
     To send **several commands**, put each on its own line in the box (the Response box accepts Enter) — every line is sent as a separate command, each with its own Enter. `^M` and `;` do the same thing on a single line, so `north;get all;south` is three commands too.
 
     Leave the box blank to send a bare Enter.
-  - **Sound** (optional) — a sound file to play when the trigger matches. WAV plays on every system; MP3, OGG and FLAC depend on your system's player. **Settings → Sounds → Trigger sounds** turns trigger sounds on or off and sets how loud they play.
+  - **Sound** (optional) — a sound file to play when the trigger matches. WAV plays on every system; MP3, OGG and FLAC depend on your system's player. **Settings → Sounds → Trigger sounds** turns trigger sounds on (it starts off) and sets how loud they play.
 
 ### Writing an alias
 
@@ -3780,6 +3780,11 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 **What it does:** Shows every scheduled event you've defined, with its **Name**, its trigger (**When**), a live countdown to its next fire (**Next**), and its action, its stop rule and its Then step (**What**, e.g. `Loop "Sewer" (until 3 laps) → go back`). **New…** and **Modify…** open the event editor; **Remove** deletes the selected event. Changes save to the profile immediately.
 **Important notes:** Each event has a **Name** and a **Disabled** checkbox in its editor — untick Disabled to make it live. A row can show a "target missing" warning if it points at a saved Loop or Auto-Lair setup that's since been deleted or renamed — the event auto-disables itself in that case, and you'll need to clear its **Disabled** box again once you've fixed the reference. The **Next** column only counts down for **At time**, **Every** and timed **Boss** events while you're connected and in-game (those timers don't run otherwise); lifecycle events (Logon/Logoff/Re-log) fire on connection, not a clock, and **When** events fire on a state change, so both show a dash.
 
+### Event editor — Sound
+
+**What it does:** Next to the event's name, **Sound** picks what plays when the event fires: **(no sound)** (the default), one of the built-in tones, or **Custom file…** with a path box and **Browse…**. **▶** plays it at the Event sounds volume.
+**Important notes:** Whether event sounds play at all, and how loud, is the **Event sounds** row on **Settings → Sounds** — it starts off, so tick it there. The sound plays when the event fires, before its action runs.
+
 ### Event editor — trigger types
 
 - **Logon** — fires on every successful game entry, including the first connect of a session and every reconnect.
@@ -3847,12 +3852,12 @@ A walk or trip that can't be finished (no path, a leg fails) still runs its Then
 
 ### Master
 
-- **Sounds enabled** — off silences every cue below and the sounds on Triggers. Default on.
+- **Sounds enabled** — off silences every cue below, and the sounds on Triggers and Events. Default on.
 - **Master volume** (0–100, default 80) — every sound's own volume is scaled by this. A cue at 50 with the master at 80 plays at 40.
 
 ### Each cue's row
 
-- **The tick** — whether this cue plays. Hover the name for exactly when it fires.
+- **The tick** — whether this cue plays. **Every cue starts unticked**, so nothing makes a sound until you choose it. Hover the name for exactly when it fires.
 - **Sound** — one of the built-in tones (Ding, Chime, Fanfare, Coin, Alert, Alarm, Low tone, Click) or **Custom file…**, which shows a path box and a **Browse…** button for your own file. WAV plays on every system; MP3, OGG and FLAC depend on your system's player.
 - **Volume** (0–100, default 100) — this cue's own level, before the master volume. 0 is silent.
 - **▶** — plays the row as it is set right now, unsaved edits included, even if the cue or the master switch is off.
@@ -3862,43 +3867,43 @@ A walk or trip that can't be finished (no path, a leg fails) still runs its Then
 
 **Progress**
 
-- **Level up** *(on)* — you train a level.
-- **Loop milestone** *(off, every 100)* — every so many laps of the running loop. The count is the loop's own lap count: it carries on across a sell, train or bank detour and starts again when you start a loop.
-- **Kill milestone** *(off, every 300)* — every so many kills since this character was loaded.
-- **Walk finished** *(off)* — a walk-to reaches its destination. A loop lap, and the legs of a sell / train / bank detour, don't count.
+- **Level up** — you train a level. Its default sound is **Ding**: a rising swell that opens into a bright, slowly fading chord.
+- **Loop milestone** *(every 100)* — every so many laps of the running loop. The count is the loop's own lap count: it carries on across a sell, train or bank detour and starts again when you start a loop.
+- **Kill milestone** *(every 300)* — every so many kills since this character was loaded.
+- **Walk finished** — a walk-to reaches its destination. A loop lap, and the legs of a sell / train / bank detour, don't count.
 
 **Automation**
 
-- **Auto-training** *(off)* — an auto-train trip sets off.
-- **Auto-selling** *(off)* — an auto-sell trip sets off.
-- **Event runs** *(off)* — one of your Events (Settings → Events) fires.
+- **Auto-training** — an auto-train trip sets off.
+- **Auto-selling** — an auto-sell trip sets off.
+- **Event sounds** — whether Events that have a sound play it, and how loud. Each event names its own sound in its editor (Settings → Events), so this row has no sound to pick.
 
 **Bosses**
 
-- **Boss killed** *(on)* — a boss on the Bosses table dies.
-- **Boss spawn window opens** *(on)* — a boss timer reaches its first early spawn window (Paradigm 80% of the timer, Stock 87.5%).
-- **Boss timer done** *(on)* — a boss timer reaches its guaranteed respawn; for a cleanup boss, the nightly cleanup that brings it back.
+- **Boss killed** — a boss on the Bosses table dies.
+- **Boss spawn window opens** — a boss timer reaches its first early spawn window (Paradigm 80% of the timer, Stock 87.5%).
+- **Boss timer done** — a boss timer reaches its guaranteed respawn; for a cleanup boss, the nightly cleanup that brings it back.
 
 The two timer cues are checked every 30 seconds while you're in the game, and each plays once per kill. A timer that ran out more than ten minutes ago — while the client was closed or disconnected — stays quiet, so logging in doesn't ring for everything that respawned overnight.
 
 **Chat and party**
 
-- **Telepath received** *(off)* — someone telepaths you. An `@` remote command doesn't count.
-- **Party invite** *(off)* — someone invites you to follow them.
-- **Party member down** *(off)* — a party member drops to the ground.
+- **Telepath received** — someone telepaths you. An `@` remote command doesn't count.
+- **Party invite** — someone invites you to follow them.
+- **Party member down** — a party member drops to the ground.
 
 **Danger**
 
-- **You died** *(on)*.
-- **Mortally wounded** *(on)* — you drop to the ground.
-- **Fleeing** *(off)* — a low-HP flee starts.
-- **Navigation stopped** *(off)* — a walk or loop fails, or the client loses track of the room.
+- **You died**.
+- **Mortally wounded** — you drop to the ground.
+- **Fleeing** — a low-HP flee starts.
+- **Navigation stopped** — a walk or loop fails, or the client loses track of the room.
 
 **Connection and triggers**
 
-- **Disconnected** *(on)* — the connection drops on its own. Hanging up yourself is silent.
-- **Reconnected** *(off)* — the connection comes back after such a drop.
-- **Trigger sounds** *(on)* — whether Triggers with a sound file play it, and how loud. Each trigger plays its own file, so this row has no sound to pick.
+- **Disconnected** — the connection drops on its own. Hanging up yourself is silent.
+- **Reconnected** — the connection comes back after such a drop.
+- **Trigger sounds** — whether Triggers with a sound file play it, and how loud. Each trigger names its own file, so this row has no sound to pick.
 
 ### What plays the sounds
 
@@ -4272,9 +4277,9 @@ This section is a compact, technical lookup table for every setting documented a
 | Navigation map: hold a browsed view | `15` s | 0–300 (Global) | `GlobalSettings.MapRecenterHoldSeconds` | Models/Settings/GlobalSettings.cs |
 | Cleanup Player DB after N days | `90` | 0–3650 (Global) | `GlobalSettings.PlayerCleanupDays` | Models/Settings/GlobalSettings.cs |
 | Disable all events | `false` | bool | `CharacterProfile.EventsGloballyDisabled` | Models/Profile/CharacterProfile.cs |
-| Event (Name/Disabled/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
+| Event (Name/Disabled/Sound/Trigger/Action fields) | see above | see above | `ScheduledEvent.*` | Models/GameData/ScheduledEvent.cs |
 | Sounds enabled / Master volume | true / 80 | bool / 0–100 | `SoundSettings.Enabled` / `MasterVolume` | Models/Profile/SoundSettings.cs |
-| Sound cue (on / sound / volume / every) | per cue, see **Sounds** | bool / built-in tone or file path / 0–100 / ≥1 | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
+| Sound cue (on / sound / volume / every) | off / per cue, see **Sounds** / 100 / per cue | bool / built-in tone or file path / 0–100 / ≥1 | `SoundSettings.Cues[<cue>].Enabled` / `Sound` / `Volume` / `Every` | Models/Profile/SoundSettings.cs |
 
 ### Diagnostics / Log Pane / Equipment
 

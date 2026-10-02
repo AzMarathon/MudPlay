@@ -8026,7 +8026,7 @@ public sealed class AppServices
         Sounds = new Game.Sounds.SoundCueEngine(
             () => ReadSection<Models.Profile.SoundSettings>(Profile.Current, ViewModels.Settings.SoundsSectionViewModel.TabKey),
             SoundPlayer.Play, log: Log);
-        Triggers.PlaySound = Sounds.FireFile;
+        Triggers.PlaySound = file => Sounds.FireWith(Game.Sounds.SoundCues.Trigger, file);
 
         // Progress.
         Router.Subscribe(Patterns.KnownPatterns.TrainAttainLevel, _ => Sounds.Fire(Game.Sounds.SoundCues.LevelUp));
@@ -8068,7 +8068,10 @@ public sealed class AppServices
         {
             if (SellDetour.IsDetouring) Sounds.Fire(Game.Sounds.SoundCues.AutoSell);
         };
-        Events.Fired += _ => Sounds.Fire(Game.Sounds.SoundCues.EventFired);
+        Events.Fired += e =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Sound)) Sounds.FireWith(Game.Sounds.SoundCues.EventFired, e.Sound);
+        };
 
         // Bosses.
         BossTimers.BossKilled += _ => Sounds.Fire(Game.Sounds.SoundCues.BossKilled);

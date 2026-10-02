@@ -22,8 +22,9 @@ public sealed partial class SoundCueRowViewModel : ObservableObject
     // The counted cues carry an "every N" box.
     public bool HasEvery => Cue.DefaultEvery > 0;
 
-    // Trigger sounds play each trigger's own file, so the row has no sound to pick.
-    public bool HasSound => Cue.Id != SoundCues.Trigger;
+    // False for the cues whose triggers / events each name their own sound: the row
+    // has nothing to pick.
+    public bool HasSound => Cue.HasOwnSound;
 
     public IReadOnlyList<string> SoundOptions { get; }
 
@@ -81,7 +82,7 @@ public sealed partial class SoundCueRowViewModel : ObservableObject
 
     // True when the row is exactly the catalogue default, so nothing need be saved.
     public bool IsDefault =>
-        Enabled == Cue.DefaultEnabled && Sound == Cue.DefaultSound && VolumePercent == 100
+        !Enabled && Sound == Cue.DefaultSound && VolumePercent == 100
         && (!HasEvery || Every == Cue.DefaultEvery);
 
     [RelayCommand]

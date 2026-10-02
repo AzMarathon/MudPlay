@@ -41,10 +41,7 @@ public sealed class SoundCueEngine
     public static SoundCueSettings Resolve(SoundSettings settings, SoundCue cue) =>
         settings.Cues.TryGetValue(cue.Id, out SoundCueSettings? set)
             ? set
-            : new SoundCueSettings
-            {
-                Enabled = cue.DefaultEnabled, Sound = cue.DefaultSound, Volume = 100, Every = cue.DefaultEvery,
-            };
+            : new SoundCueSettings { Enabled = false, Sound = cue.DefaultSound, Volume = 100, Every = cue.DefaultEvery };
 
     // Master volume × the cue's own, as 0–100.
     public static int EffectiveVolume(SoundSettings settings, SoundCueSettings cue) =>
@@ -58,8 +55,18 @@ public sealed class SoundCueEngine
     // Play the cue's sound, if sounds and the cue are on.
     public void Fire(string cueId) => Fire(cueId, soundOverride: null);
 
-    // A Trigger's own sound file, gated and levelled by the Trigger cue.
-    public void FireFile(string file) => Fire(SoundCues.Trigger, file);
+    // A sound named by the thing that fired (a trigger's file, an event's pick),
+    // gated and levelled by its cue.
+    public void FireWith(string cueId, string sound) => Fire(cueId, soundOverride: sound);
+
+    // An editor's test button: the sound at the cue's volume, whatever the switches
+    // say and with no gap.
+    public void Preview(string cueId, string sound)
+    {
+        if (SoundCues.Find(cueId) is not { } cue || string.IsNullOrWhiteSpace(sound)) return;
+        int volume = EffectiveVolume(Settings, Resolve(Settings, cue));
+        if (volume > 0) _play(sound, volume);
+    }
 
     private void Fire(string cueId, string? soundOverride)
     {
@@ -73,8 +80,8 @@ public sealed class SoundCueEngine
         int volume = EffectiveVolume(settings, set);
         if (volume <= 0) return;
 
-        // A trigger's file is throttled per file, so two different triggers firing
-        // together both sound.
+        // A named sound is throttled per sound, so two different triggers firing
+        // together both play.
         string gapKey = soundOverride is null ? cueId : cueId + "|" + soundOverride;
         DateTimeOffset now = _clock();
         if (_lastPlayed.TryGetValue(gapKey, out DateTimeOffset last) && now - last < MinGap) return;

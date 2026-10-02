@@ -132,7 +132,7 @@
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Sound"/>
                 <TextBox   Grid.Column="1"
                            Text="{Binding SoundFile, Mode=TwoWay}"
-                           ToolTip.Tip="A sound file to play when this trigger matches. WAV plays everywhere; MP3, OGG and FLAC depend on your system's player. Settings → Sounds → Trigger sounds turns these on or off and sets how loud they play."/>
+                           ToolTip.Tip="A sound file to play when this trigger matches. WAV plays everywhere; MP3, OGG and FLAC depend on your system's player. Settings → Sounds → Trigger sounds turns these on (it starts off) and sets how loud they play."/>
                 <Button    Grid.Column="2"
                            Content="Browse…"
                            Command="{Binding BrowseSoundCommand}"

@@ -3,8 +3,8 @@
 ## 3.135.0
 
 - Settings → Sounds: per-event sounds, each with its own tone or file and volume, plus a master volume
-- Sounds for level up, boss kill and boss timers, loop / kill milestones, finished walks, auto-train and auto-sell trips, Events, telepaths, party, danger and connection drops
-- Trigger sound files now play
+- Sounds for level up, boss kill and boss timers, loop / kill milestones, finished walks, auto-train and auto-sell trips, telepaths, party, danger and connection drops; all start off
+- Trigger sound files now play, and each Event can name a sound of its own
 - Sounds play in the background through the system player, so the terminal never waits on them
 
 ## 3.134.60

@@ -66,6 +66,41 @@ public sealed class EventEditDialogViewModelTests
         Assert.Equal("1/297", vm.WalkToText);
     }
 
+    // ----- Sound -----------------------------------------------------
+
+    [Theory]
+    [InlineData(null, EventEditDialogViewModel.NoSoundLabel, "")]
+    [InlineData("tone:chime", "Chime", "")]
+    [InlineData("/sounds/horn.wav", EventEditDialogViewModel.SoundFileLabel, "/sounds/horn.wav")]
+    public void Sound_HydratesAndSavesBack(string? stored, string shown, string file)
+    {
+        ScheduledEvent existing = new()
+        {
+            TriggerType = EventTriggerType.Logon, ActionType = EventActionType.Command, CommandText = "stat",
+            Sound = stored,
+        };
+        EventEditDialogViewModel vm = new(existing, isNew: false);
+
+        Assert.Equal(shown, vm.SelectedSound);
+        Assert.Equal(file, vm.SoundFile);
+
+        ScheduledEvent? saved = null;
+        vm.CloseRequested += e => saved = e;
+        vm.SaveCommand.Execute(null);
+        Assert.Equal(stored, saved!.Sound);
+    }
+
+    [Fact]
+    public void Sound_CustomFileLeftBlank_SavesAsNoSound()
+    {
+        EventEditDialogViewModel vm = new(
+            new ScheduledEvent { ActionType = EventActionType.Command, CommandText = "stat" }, isNew: true)
+        {
+            SelectedSound = EventEditDialogViewModel.SoundFileLabel,
+        };
+        Assert.Null(vm.SelectedSoundValue());
+    }
+
     // ----- Validation gates Save --------------------------------------
 
     [Fact]

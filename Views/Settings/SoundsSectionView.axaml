@@ -44,7 +44,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="18">
                     <CheckBox Content="Sounds enabled" IsChecked="{Binding SoundsEnabled, Mode=TwoWay}"
                               VerticalAlignment="Center"
-                              ToolTip.Tip="Off silences every sound below, and the sounds on Triggers."/>
+                              ToolTip.Tip="Off silences every sound below, and the sounds on Triggers and Events."/>
                     <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <TextBlock Classes="FieldLabel" Text="Master volume"/>
                         <Slider Minimum="0" Maximum="100" Width="220" VerticalAlignment="Center"
@@ -55,7 +55,7 @@
                     </StackPanel>
                 </StackPanel>
                 <TextBlock Classes="Readout" MaxWidth="760" HorizontalAlignment="Left"
-                           Text="Tick the moments you want to hear. Each has its own sound and volume, and ▶ plays it as set. A sound can be one of the built-in tones or your own file (WAV works everywhere; MP3 on most systems)."/>
+                           Text="Nothing plays until you tick it. Each moment has its own sound and volume, and ▶ plays it as set. A sound can be one of the built-in tones or your own file (WAV works everywhere; MP3 on most systems). Triggers and Events name their own sounds in their editors."/>
 
                 <ItemsControl ItemsSource="{Binding Groups}">
                     <ItemsControl.ItemTemplate>
