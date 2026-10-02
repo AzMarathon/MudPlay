@@ -4902,8 +4902,11 @@ public partial class MainWindowViewModel : ObservableObject
     private void StartLoopFavorite(Game.Map.Loop loop)
     {
         var s = AppServices.Current;
-        if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
-        s.LoopRunner.Start(loop);
+        s.MovementControl.StartUserRun(() =>
+        {
+            if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
+            s.LoopRunner.Start(loop);
+        });
     }
 
     // Start a favourited auto-lair setup from the flyout — mirrors the
@@ -4912,12 +4915,15 @@ public partial class MainWindowViewModel : ObservableObject
     private void StartLairFavorite(Models.Profile.LairSetup setup)
     {
         var s = AppServices.Current;
-        if (s.LoopRunner.State != Game.Map.LoopState.Idle) s.LoopRunner.Stop("auto-lair favorite started");
-        if (s.AutoLair.IsActive) s.AutoLair.Stop("auto-lair favorite started");
-        s.AutoLair.Clear();
-        foreach (Models.Profile.LairMarker m in setup.Markers)
-            s.AutoLair.Mark(new Game.Map.RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
-        s.AutoLair.Start();
+        s.MovementControl.StartUserRun(() =>
+        {
+            if (s.LoopRunner.State != Game.Map.LoopState.Idle) s.LoopRunner.Stop("auto-lair favorite started");
+            if (s.AutoLair.IsActive) s.AutoLair.Stop("auto-lair favorite started");
+            s.AutoLair.Clear();
+            foreach (Models.Profile.LairMarker m in setup.Markers)
+                s.AutoLair.Mark(new Game.Map.RoomKey(m.Map, m.Room), m.OverrideRespawnSeconds);
+            s.AutoLair.Start();
+        });
     }
 
     // Walk to a starred favourite from the right-click flyout — stop any running
@@ -5219,6 +5225,8 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void MovementStop()
     {
+        // A money or training errand is held, not ended (MovementController).
+        if (AppServices.Current.MovementControl.SuspendErrandIfAny()) return;
         AppServices.Current.MovementControl.Stop();
         OnUserStoppedRun();
     }

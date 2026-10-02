@@ -359,4 +359,237 @@ public sealed class MovementControllerTests : IDisposable
 
         Assert.True(fires > 0);
     }
+
+    // ----- An errand held by Stop --------------------------------------
+    // Stop used to end a money or training errand where it stood. It now holds it,
+    // and the next thing the user starts asks whether to finish the errand first.
+
+    private sealed class Errand
+    {
+        public string? Active = "the stash transfer";
+        public int Abandoned;
+        public bool Answer = true;
+        public int Asked;
+        public System.Threading.Tasks.TaskCompletionSource<bool>? Pending;
+
+        public void Wire(MovementController c) => c.SetErrandHooks(
+            activeErrand: () => Active,
+            abandonErrand: _ => { Abandoned++; Active = null; },
+            askResume: _ =>
+            {
+                Asked++;
+                return Pending is { } p ? p.Task : System.Threading.Tasks.Task.FromResult(Answer);
+            });
+    }
+
+    [Fact]
+    public void Stop_WithAnErrandUnderWay_HoldsIt_AndTheWalkKeepsItsDestination()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+
+        Assert.True(h.Controller.SuspendErrandIfAny());
+
+        Assert.Equal("the stash transfer", h.Controller.SuspendedErrand);
+        Assert.True(h.Controller.IsUserPaused);
+        Assert.NotEqual(WalkState.Idle, h.Walker.State);      // paused, not stopped
+        Assert.Equal(0, e.Abandoned);
+    }
+
+    [Fact]
+    public void Stop_WithNoErrand_IsNotHeld()
+    {
+        using Harness h = NewHarness();
+        Errand e = new() { Active = null };
+        e.Wire(h.Controller);
+
+        Assert.False(h.Controller.SuspendErrandIfAny());
+        Assert.Null(h.Controller.SuspendedErrand);
+        Assert.False(h.Controller.IsUserPaused);
+    }
+
+    [Fact]
+    public void Resume_CarriesTheHeldErrandOn()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+
+        h.Controller.Resume();
+
+        Assert.Null(h.Controller.SuspendedErrand);
+        Assert.False(h.Controller.IsUserPaused);
+        Assert.Equal(0, e.Abandoned);
+    }
+
+    [Fact]
+    public void StartingARun_WithNothingHeld_StartsAtOnce_WithoutAsking()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        int started = 0;
+
+        h.Controller.StartUserRun(() => started++);
+
+        Assert.Equal(1, started);
+        Assert.Equal(0, e.Asked);
+    }
+
+    [Fact]
+    public void StartingARun_AnsweredYes_ResumesTheErrand_AndStartsTheRunWhenItEnds()
+    {
+        using Harness h = NewHarness();
+        Errand e = new() { Answer = true };
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+        int started = 0;
+
+        h.Controller.StartUserRun(() => started++);
+
+        Assert.Equal(1, e.Asked);
+        Assert.Equal(0, started);                              // the errand goes first
+        Assert.False(h.Controller.IsUserPaused);               // and is moving again
+        Assert.Equal(0, e.Abandoned);
+
+        e.Active = null;                                       // the errand finishes
+        h.Controller.NoteErrandStateChanged();
+        Assert.Equal(1, started);
+
+        h.Controller.NoteErrandStateChanged();                 // only once
+        Assert.Equal(1, started);
+    }
+
+    [Fact]
+    public void StartingARun_AnsweredNo_AbandonsTheErrand_AndStartsTheRunNow()
+    {
+        using Harness h = NewHarness();
+        Errand e = new() { Answer = false };
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+        int started = 0;
+
+        h.Controller.StartUserRun(() => started++);
+
+        Assert.Equal(1, e.Abandoned);
+        Assert.Equal(1, started);
+        Assert.Null(h.Controller.SuspendedErrand);
+        Assert.False(h.Controller.IsUserPaused);
+    }
+
+    // The errand finished on its own while the question was still on screen: there
+    // is nothing left to choose, so the run just starts.
+    [Fact]
+    public void TheErrandEndingWhileTheQuestionStands_StartsTheRun()
+    {
+        using Harness h = NewHarness();
+        Errand e = new() { Pending = new System.Threading.Tasks.TaskCompletionSource<bool>() };
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+        int started = 0;
+        h.Controller.StartUserRun(() => started++);
+        Assert.Equal(0, started);
+
+        e.Active = null;
+        h.Controller.NoteErrandStateChanged();
+        e.Pending.SetResult(true);
+
+        Assert.Equal(1, started);
+        Assert.Equal(0, e.Abandoned);
+        Assert.False(h.Controller.IsUserPaused);
+    }
+
+    // The errand ended while held (cancelled from its own menu): the hold Stop placed
+    // must not strand the next run behind a pause nobody asked for.
+    [Fact]
+    public void TheErrandEndingWhileHeld_LiftsTheHold()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+
+        e.Active = null;
+        h.Controller.NoteErrandStateChanged();
+
+        Assert.Null(h.Controller.SuspendedErrand);
+        Assert.False(h.Controller.IsUserPaused);
+    }
+
+    // A real Stop (Reset States, a death halt) still stops, errand or not.
+    [Fact]
+    public void ARealStop_ClearsTheHold()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+
+        h.Controller.Stop();
+
+        Assert.Null(h.Controller.SuspendedErrand);
+        Assert.False(h.Controller.IsUserPaused);
+    }
+
+    // The Navigation window's own Resume lifts the user gate without going through
+    // the controller. That carries the errand on, so nothing is left to ask about.
+    [Fact]
+    public void ThePauseLiftedElsewhere_CarriesTheErrandOn()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+
+        h.Coordinator.ClearGate(MovementCoordinator.UserGate);
+
+        Assert.Null(h.Controller.SuspendedErrand);
+        int started = 0;
+        h.Controller.StartUserRun(() => started++);
+        Assert.Equal(1, started);
+        Assert.Equal(0, e.Asked);
+    }
+
+    // The errand was resumed with a run queued behind it, then everything was
+    // stopped outright (a death, Reset States). The queued run must not start itself.
+    [Fact]
+    public void ARealStop_DropsTheRunQueuedBehindTheErrand()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+        int started = 0;
+        h.Controller.StartUserRun(() => started++);
+
+        h.Controller.Stop();
+        e.Active = null;
+        h.Controller.NoteErrandStateChanged();
+
+        Assert.Equal(0, started);
+    }
+
+    // The question is modeless: a second start while it stands must not ask twice,
+    // and the answer applies to the start made last.
+    [Fact]
+    public void ASecondStartWhileTheQuestionStands_AsksOnce_AndTheLastStartWins()
+    {
+        using Harness h = NewHarness();
+        Errand e = new() { Pending = new System.Threading.Tasks.TaskCompletionSource<bool>() };
+        e.Wire(h.Controller);
+        h.Controller.SuspendErrandIfAny();
+        int first = 0, second = 0;
+
+        h.Controller.StartUserRun(() => first++);
+        h.Controller.StartUserRun(() => second++);
+        e.Pending.SetResult(false);
+
+        Assert.Equal(1, e.Asked);
+        Assert.Equal(0, first);
+        Assert.Equal(1, second);
+    }
 }

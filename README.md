@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.140.2**
-> - Auto-train no longer locks up when a trainer refuses for money and no funds can be found: the run ends, and levels already trained still get their stat refresh and report
-> - A money trip that starts after a trainer's refusal and comes back short also ends with the stat refresh and report for the levels already trained
+> **Version 3.141.0**
+> - Stop during a train trip, stash transfer, bank trip or sell trip holds it instead of ending it; Resume carries it on
+> - Starting a walk, loop or Auto-Lair while one is held asks "Resume it first?"; No drops the trip and starts the new run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

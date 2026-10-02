@@ -1271,6 +1271,16 @@ public sealed class AppServices
         return givens;
     }
 
+    // The errand a user's Stop holds instead of ending, as it reads in a sentence;
+    // null when none is under way. The money and training trips only: a party
+    // comeback or a key detour is over in a few steps and is simply stopped.
+    private string? SuspendableErrand() =>
+        StashTransfer.IsBusy ? "the stash transfer"
+        : TrainerWalk.IsBusy || TrainFunding.IsBusy ? "the training trip"
+        : SellDetour.IsDetouring ? "the sell trip"
+        : AutoDeposit.IsRerouting ? "the bank trip"
+        : null;
+
     // The same, for a saved bank room (an Event's stash transfer). The room has to
     // still hold a bank in the active game data.
     public string? StartStashTransfer(Game.Map.RoomKey stash, Game.Map.RoomKey bankRoom)
@@ -7263,6 +7273,7 @@ public sealed class AppServices
             LoopRunner.Stop("player died — halting in graveyard");
             Walker.Stop("player died — halting in graveyard");
             AutoLair.Stop("player died — halting in graveyard");
+            MovementControl.DropQueuedRun();
         });
         // Wipe the classifier's room view so a hostile from the room we died in
         // doesn't linger as a stale target the combat engine re-attacks when a
@@ -7722,6 +7733,37 @@ public sealed class AppServices
                 || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
             nearestLoopRoom: NearestLoopRoom,
             log: Log);
+
+        // Stop holds a money or training errand instead of ending it, and the next
+        // walk, loop or Auto-Lair the user starts asks whether to finish it first.
+        MovementControl.SetErrandHooks(
+            activeErrand: SuspendableErrand,
+            abandonErrand: reason =>
+            {
+                StashTransfer.Cancel(reason);
+                TrainerWalk.Cancel(reason);
+                TrainFunding.Cancel(reason);
+                SellDetour.Cancel();
+                AutoDeposit.Cancel();
+            },
+            askResume: errand => Dialogs.OpenWindowAsync<ViewModels.ConfirmDialogViewModel, bool>(
+                new ViewModels.ConfirmDialogViewModel(
+                    "Resume first?",
+                    $"Stop is holding {errand}.\n\nResume it first? What you just started will begin when it is done.\n\n"
+                    + $"No ends {errand} and starts this now.",
+                    yesLabel: "Resume it first", noLabel: "No, drop it")),
+            post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run));
+        StashTransfer.StateChanged += MovementControl.NoteErrandStateChanged;
+        TrainerWalk.StateChanged += MovementControl.NoteErrandStateChanged;
+        TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
+        SellDetour.DetouringChanged += MovementControl.NoteErrandStateChanged;
+        AutoDeposit.ReroutingChanged += MovementControl.NoteErrandStateChanged;
+        MovementControl.SuspendedErrandChanged += () =>
+        {
+            if (MovementControl.SuspendedErrand is { } held)
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
+                    $"[Stop is holding {held} - Resume carries it on, or start something else to choose]"));
+        };
         SellDetour.HandOffToBank = AutoDeposit.TakeOverFromDetour;
         Tick.HeartbeatElapsed += SellDetour.Evaluate;
         Inventory.Changed += SellDetour.Evaluate;

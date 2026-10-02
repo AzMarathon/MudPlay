@@ -541,7 +541,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void ToggleAutoLair()
     {
         if (_services.AutoLair.IsActive) _services.AutoLair.Stop();
-        else _services.AutoLair.Start();
+        else _services.MovementControl.StartUserRun(() => _services.AutoLair.Start());
     }
 
     // Right-click → "Add this room to Blacklist". Captures the selected
@@ -1273,11 +1273,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             Game.Map.Loop target = loop;
             ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
                 $"{++number})", loop.Name, LoopFavBrush,
-                new RelayCommand(() =>
+                new RelayCommand(() => _services.MovementControl.StartUserRun(() =>
                 {
                     if (_services.AutoLair.IsActive) _services.AutoLair.Stop("loop favorite started");
                     _services.LoopRunner.Start(target);
-                })));
+                }))));
         }
 
         foreach (Models.Profile.LairSetup setup in _services.Lairs.Setups
@@ -1287,7 +1287,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             Models.Profile.LairSetup target = setup;
             ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
                 $"{++number})", setup.Name, LairFavBrush,
-                new RelayCommand(() => { LoadSetupInternal(target); _services.AutoLair.Start(); })));
+                new RelayCommand(() => _services.MovementControl.StartUserRun(
+                    () => { LoadSetupInternal(target); _services.AutoLair.Start(); }))));
         }
 
         OnPropertyChanged(nameof(HasContextFavorites));
@@ -1633,9 +1634,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void StartSetup(LairSetupRowViewModel? row, Game.Map.RunStartMode mode)
     {
         if (row is null) return;
-        LoadSetupInternal(row.Source);
-        ApplyStartMode(mode);
-        _services.AutoLair.Start();
+        _services.MovementControl.StartUserRun(() =>
+        {
+            LoadSetupInternal(row.Source);
+            ApplyStartMode(mode);
+            _services.AutoLair.Start();
+        });
     }
 
     // Right-click → Load on a Setups row. Wipes current markers and loads the
@@ -2058,8 +2062,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void StartLoop(LoopRowViewModel? row, Game.Map.RunStartMode mode)
     {
         if (row is null) return;
-        ApplyStartMode(mode);
-        _services.LoopRunner.Start(row.Source);
+        _services.MovementControl.StartUserRun(() =>
+        {
+            ApplyStartMode(mode);
+            _services.LoopRunner.Start(row.Source);
+        });
     }
 
     // Load a saved loop's waypoints into LoopBuild mode so the user can
@@ -3283,6 +3290,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void StopWalk()
     {
+        // A money or training errand is held, not ended (MovementController).
+        if (_services.MovementControl.SuspendErrandIfAny()) return;
         _services.TokenRoute.Cancel();
         _services.Walker.Stop("user stop from Navigation");
     }
@@ -4548,6 +4557,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         bool loopRunReady = CurrentMode == NavigationMode.LoopBuild && LoopBuilder?.CanSave == true;
         if (!loopRunReady && _services.Walker.State is WalkState.Walking or WalkState.Paused)
         {
+            if (_services.MovementControl.SuspendErrandIfAny()) return;
             _services.Walker.Stop("user stop from Navigation");
             _services.NoteUserStoppedRun?.Invoke();
             return;
@@ -4565,24 +4575,28 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // running loop's CURRENT NAV pane takes over.
             Game.Map.Loop? transient = LoopBuilder.BuildTransient();
             if (transient is not null)
-            {
-                // Building a loop no longer stops an in-flight walk-to (only Run
-                // does) — take movement over now: stop the walker and lift the
-                // user-pause gate before the loop runner starts.
-                if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
-                    _services.Walker.Stop("loop run supersedes walk-to");
-                _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
-                ApplyStartMode(mode);
-                _services.LoopRunner.Start(transient);
-                if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
-            }
+                _services.MovementControl.StartUserRun(() =>
+                {
+                    // Building a loop no longer stops an in-flight walk-to (only Run
+                    // does) — take movement over now: stop the walker and lift the
+                    // user-pause gate before the loop runner starts.
+                    if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
+                        _services.Walker.Stop("loop run supersedes walk-to");
+                    _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
+                    ApplyStartMode(mode);
+                    _services.LoopRunner.Start(transient);
+                    if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
+                });
             return;
         }
         if (CurrentMode == NavigationMode.AutoLair
             && _services.AutoLair.Marked.Count > 0)
         {
-            ApplyStartMode(mode);
-            _services.AutoLair.Start();
+            _services.MovementControl.StartUserRun(() =>
+            {
+                ApplyStartMode(mode);
+                _services.AutoLair.Start();
+            });
             return;
         }
     }
@@ -4676,6 +4690,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void StopAll()
     {
+        if (_services.MovementControl.SuspendErrandIfAny()) return;
         _services.TokenRoute.Cancel();
         if (_services.AutoLair.IsActive) _services.AutoLair.Stop();
         if (_services.LoopRunner.State != Game.Map.LoopState.Idle)
