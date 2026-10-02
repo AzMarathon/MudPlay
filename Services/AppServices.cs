@@ -7361,7 +7361,15 @@ public sealed class AppServices
             // Walker events and timers can land inside the message pump.
             notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
             log: Log,
-            partyMembers: StashTransferPartyMembers);
+            partyMembers: StashTransferPartyMembers,
+            // The same floor Deposit All and the auto-deposit leave in the purse.
+            keepOnHandCopper: () =>
+            {
+                Models.Profile.CashSettings cash =
+                    ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash");
+                return (long)cash.KeepOnHandWealth
+                       * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
+            });
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
         // A member's {reply} to @get-stash / @deposit-all says that member is done.
         Chat.EntryClassified += e =>

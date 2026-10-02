@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.138.6**
-> - `@wait` to your leader names the reason: `(HP's too low)`, `(mana's too low)`, `(blinded)`, `(confused)`, `(can't move)`, `(waiting on message condition)`
-> - A wait reason that keeps your `@ok` from going out is logged, and the bug report lists the reasons held
+> **Version 3.138.8**
+> - Stash transfer deposits all your cash above the keep-on-hand amount each trip, including what you were already carrying
+> - Spell Book lists class cast-on-use items used from your pack, such as the Gypsy's deck of cards
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

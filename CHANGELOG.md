@@ -1,5 +1,11 @@
 # Version history
 
+## 3.138.8
+
+- Stash transfer deposits all your cash above the keep-on-hand amount each trip, including what you were already carrying
+- Spell Book lists class cast-on-use items used from your pack, such as the Gypsy's deck of cards
+- bug reports addressed: paradigm-20261002-111650, paradigm-20261002-114043
+
 ## 3.138.6
 
 - `@wait` to your leader names the reason: `(HP's too low)`, `(mana's too low)`, `(blinded)`, `(confused)`, `(can't move)`, `(waiting on message condition)`

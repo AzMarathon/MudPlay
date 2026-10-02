@@ -359,7 +359,11 @@ public sealed class KnownSpellCatalog
         foreach (JsonElement row in items.RootElement.EnumerateArray())
         {
             if (!ItemUsableByClass(row, classNumber)) continue;
-            if (!IsEquippableCastItem(row)) continue;
+            // An item with no equip slot counts only when it is kept after use — a
+            // tool used from the pack, like a deck of cards (report
+            // paradigm-20261002-114043), not a potion, scroll or thrown flask.
+            bool carried = !IsEquippableCastItem(row);
+            if (carried && ReadInt(row, "Retain After Uses") != 1) continue;
 
             // One scan of the 20 ability slots pulls both facts we need: the
             // first command-activated CastsSp (code 43) slot names the use-spell,
@@ -415,7 +419,8 @@ public sealed class KnownSpellCatalog
                 ClassRestricted: ItemClassRestricted(row, classNumber),
                 MinLevel: minLevel,
                 SpellEffect: spellEffect,
-                WearSlot: WearSlotFor(row)));
+                WearSlot: carried ? string.Empty : WearSlotFor(row),
+                Carried: carried));
         }
 
         results.Sort(static (a, b) =>

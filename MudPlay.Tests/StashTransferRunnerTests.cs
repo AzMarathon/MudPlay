@@ -19,7 +19,9 @@ public sealed class StashTransferRunnerTests
     private sealed class Harness
     {
         public RoomKey Room = Start;
-        public long Purse = 500;
+        public long Purse;
+        // Settings → Cash keep-on-hand, in copper.
+        public long Keep;
         public long StashHolds;
         // The most one trip can carry (the weight limits, in copper for the test).
         public long CarryPerTrip = long.MaxValue;
@@ -85,7 +87,8 @@ public sealed class StashTransferRunnerTests
                 forceAutoGetCash: AutoGetCashWrites.Add,
                 reconcileStash: (k, c) => Reconciled.Add((k, c)),
                 notice: Notices.Add,
-                partyMembers: () => Party);
+                partyMembers: () => Party,
+                keepOnHandCopper: () => Keep);
         }
 
         public void Arrive()
@@ -123,7 +126,7 @@ public sealed class StashTransferRunnerTests
         Assert.False(h.Runner.IsBusy);
         Assert.Equal(BankRoom, h.Room);
         Assert.Equal(30_000, h.BankHolds);
-        Assert.Equal(500, h.Purse);                       // the float is untouched
+        Assert.Equal(0, h.Purse);
         Assert.Equal((StashRoom, 0L), h.Reconciled[^1]);
         Assert.Equal("[Stash Transfer Started: 1/20 -> First Bank]", h.Notices[0]);
         Assert.Equal("[Stash Transfer Done: 3 platinum moved to First Bank in 1 trip]", h.Notices[^1]);
@@ -272,8 +275,7 @@ public sealed class StashTransferRunnerTests
         Assert.Empty(h.Notices);
     }
 
-    // Coin picked up between the two rooms is banked with the stash's, so the purse
-    // ends where it started.
+    // Coin picked up between the two rooms is banked with the stash's.
     [Fact]
     public void CoinPickedUpOnTheWay_IsDepositedToo()
     {
@@ -287,7 +289,61 @@ public sealed class StashTransferRunnerTests
 
         Assert.Equal("dep 10290", h.Sent[^1]);
         h.FireTimers();
-        Assert.Equal(500, h.Purse);
+        Assert.Equal(0, h.Purse);
+    }
+
+    // Report paradigm-20261002-111650: the purse as it stood when the transfer
+    // started (1,100 copper of earlier pickups) was kept back on every deposit. A
+    // deposit banks everything above the keep-on-hand amount, like any other.
+    [Fact]
+    public void CashAlreadyCarried_IsDepositedToo()
+    {
+        Harness h = new() { Purse = 1_100, StashHolds = 69_560 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+
+        Assert.Equal("dep 70660", h.Sent[^1]);
+        h.FireTimers();
+        Assert.Equal(0, h.Purse);
+    }
+
+    [Fact]
+    public void TheKeepOnHandAmount_StaysInThePurse()
+    {
+        Harness h = new() { Purse = 1_100, Keep = 1_000, StashHolds = 20_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+
+        Assert.Equal("dep 20100", h.Sent[^1]);
+        h.FireTimers();
+        Assert.Equal(1_000, h.Purse);
+    }
+
+    // A purse under the keep-on-hand amount is topped up from the stash first; a trip
+    // that leaves nothing above it sends no deposit and still goes back for the rest.
+    [Fact]
+    public void PurseUnderTheKeepOnHandAmount_IsToppedUpBeforeAnythingIsBanked()
+    {
+        Harness h = new() { Purse = 0, Keep = 5_000, StashHolds = 8_000, CarryPerTrip = 4_000 };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();                                       // 4,000 carried, under the 5,000 kept
+
+        Assert.DoesNotContain(h.Sent, c => c.StartsWith("dep", StringComparison.Ordinal));
+        Assert.Equal(StashRoom, h.Walked[^1]);
+
+        h.Arrive();
+        h.SearchAndCollect();
+        h.Arrive();
+        Assert.Equal("dep 3000", h.Sent[^1]);
+        h.FireTimers();
+        Assert.False(h.Runner.IsBusy);
+        Assert.Equal(5_000, h.Purse);
     }
 
     // Party share (Settings → Cash, leading a party): once the leader has its load,

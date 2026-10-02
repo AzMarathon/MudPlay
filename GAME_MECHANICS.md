@@ -4924,7 +4924,9 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   limits allow, and trusts the untaken part to stay hidden while it walks to the bank and back
   (**Client policy**, user 2026-10-02). Coin on the ground between the two rooms is picked up as usual
   (report `paradigm-20261002-101410`: it was held off on the walk back), and each `dep <copper>` is
-  everything gained since the transfer started, so the purse ends where it began. The stash ledger is
+  everything carried above the Settings → Cash keep-on-hand amount, as every other deposit is (report
+  `paradigm-20261002-111650`: holding back the purse as it stood at the start left earlier pickups
+  unbanked). The stash ledger is
   set to what the search showed less what was taken.
   - **Party share** (`CashSettings.StashTransferPartyShare`; **Client policy**, user 2026-10-02): a
     search shows the pile only to the searcher, so a leader telepaths each member one command,

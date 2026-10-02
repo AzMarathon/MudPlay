@@ -429,6 +429,29 @@ public sealed class SpellBookViewModelTests : IDisposable
         Assert.Equal(new[] { "Healing Wand" }, vm.CastItems.Select(r => r.ItemName));
     }
 
+    // Report paradigm-20261002-114043: a Gypsy's deck of cards casts on use but has
+    // no equip slot, so the equippable-only list left it out. An item used from the
+    // pack and kept afterwards is listed; the cast engines' list stays readied-only.
+    [Fact]
+    public void CastItems_IncludeACarriedItemKeptAfterUse_ButTheEnginesDoNotSeeIt()
+    {
+        Dictionary<string, object> deck = NonEquippableCastItemRow(301, "Deck Of Cards", castSpell: 100, itemType: 10, 12);
+        deck["Retain After Uses"] = 1;
+        deck["UseCount"] = 9999;
+        object[] items =
+        [
+            ItemRow(300, "Healing Wand", castSpell: 100, useCount: 0, 12),
+            deck,
+            NonEquippableCastItemRow(302, "Healing Potion", castSpell: 100, itemType: 5, 12), // consumed
+        ];
+        SpellbookState book = NewBook(classNumber: 12, level: 5, items: items);
+        using SpellBookViewModel vm = new(book);
+
+        Assert.Equal(new[] { "Deck Of Cards", "Healing Wand" }, vm.CastItems.Select(r => r.ItemName).OrderBy(n => n));
+        Assert.Contains("used from your pack", vm.CastItems.Single(r => r.ItemName == "Deck Of Cards").CastsText);
+        Assert.Equal(new[] { "Healing Wand" }, book.GetCastItems().Select(i => i.ItemName));
+    }
+
     [Fact]
     public void CastItems_ExcludeAutomaticProcs_KeepOnlyCommandCasts()
     {

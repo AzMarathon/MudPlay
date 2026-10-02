@@ -25,8 +25,9 @@ public sealed class SpellBookItemRowViewModel
     // The cast spell's name, or a #number fallback when it didn't resolve.
     public string SpellName => _item.SpellName.Length > 0 ? _item.SpellName : $"spell #{_item.SpellNumber}";
 
-    // "casts <spell>" sub-label shown next to the item name.
-    public string CastsText => $"casts {SpellName}";
+    // "casts <spell>" sub-label shown next to the item name. An item with no equip
+    // slot says it is used from the pack, so it isn't looked for among worn gear.
+    public string CastsText => _item.Carried ? $"casts {SpellName} (used from your pack)" : $"casts {SpellName}";
 
     // The cast spell's decoded effect wrapped in parentheses ("(AC +10)",
     // "(Dmg 14–22)"), shown between the spell name and the mana cost so the

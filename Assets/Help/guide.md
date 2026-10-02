@@ -1004,7 +1004,7 @@ The **Success %** column is your **chance to land the cast** (as opposed to fizz
 
 A spell shows **—** when no chance can be stated — you're not a caster class, or your stats haven't been read yet (type `stat` in the game to populate them). Reopen the book after a `stat` to refresh it.
 
-If your class carries wands, scrolls, or potions that cast a spell, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges.
+If your class has gear that casts a spell when you `use` it, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges. It covers items you wear or wield (a wand, a staff, a charged ring) and class items used straight from your pack that aren't used up, marked *used from your pack* (a Gypsy's deck of cards). One-shot consumables such as potions and scrolls aren't listed.
 
 ---
 
@@ -1032,7 +1032,7 @@ Right-click a **stash room** on the Navigation map and open **Transfer Stash to 
 
 - It stops any loop or Auto-Lair that is running (it does not resume it afterwards), walks to the stash room and searches.
 - It reads the pile the search shows, then takes as much as your coin weight limits allow (**Settings → Cash**: *Don't collect if it makes you Light / Medium / Heavy*, *Don't collect past 90% encumbrance*, and *Drop smaller currency to make room for larger*). With no limit ticked that is everything you can physically carry. The per-coin Collect / Ignore / Discard choices don't decide what it takes — this is your own stash — but a coin set to **Discard** will still be dropped again, so set it to Ignore or Collect first if your stash holds any.
-- It walks to the bank and deposits everything you have gained since the transfer started — the stash's coin plus anything picked up off the ground on the way — so you end with the same cash you started with and your keep-on-hand float never goes into the bank.
+- It walks to the bank and deposits everything you are carrying above your **Minimum cash to keep on hand** (Settings → Cash) — the stash's coin, anything picked up off the ground on the way, and whatever was already in your pocket. With that setting at 0 it deposits all of it. If your pocket was below the keep-on-hand amount, the stash's coin tops it up first.
 - It goes back for more and repeats until a search shows nothing left, and ends standing in the bank. A notice in the terminal says how much moved and in how many trips.
 
 To end it early, stop movement (the toolbar Stop, or **Stop Stash Transfer** on the map's right-click menu). It also ends on its own, and says why, if nothing can be picked up (you are already at your weight limit), if the bank takes no deposit, or if a walk fails. Whatever you are carrying from the stash at that point stays in your pocket. While it runs the Navigation window shows a **Stash Transfer** chip. On the walks between the two rooms coin on the ground is picked up exactly as your cash settings say. Auto-Get Cash is borrowed for the stash stop only — your saved setting isn't changed.
