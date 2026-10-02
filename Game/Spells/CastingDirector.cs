@@ -637,8 +637,9 @@ public sealed class CastingDirector : IDisposable
 
     // A draw that shows no card on an item that can't redraw was most likely turned
     // away because a card is still up (its wear-off line was missed, or a fortune
-    // teller's reading). Trying again every cycle would repeat the refusal each round.
-    private const int NoRedrawRetrySec = 60;
+    // teller's reading). The refusal comes after the use has gone through, so it
+    // costs a charge all the same: retry seldom, not every round.
+    private const int NoRedrawRetrySec = 180;
 
     private bool CanRedraw(string token) => _drawCanRedraw?.Invoke(token) ?? true;
 

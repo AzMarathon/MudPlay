@@ -2650,8 +2650,8 @@ public sealed class CastingDirectorTests
         Assert.Equal(2, uses());
     }
 
-    // No card after a use on such an item most likely means a card was still up. It
-    // waits a minute rather than repeating the refusal every round.
+    // No card after a use on such an item most likely means a card was still up, and
+    // the refused use still cost a charge. It waits three minutes before the next.
     [Fact]
     public void DrawItem_ThatCantRedraw_NoCardSeen_WaitsBeforeTryingAgain()
     {
@@ -2661,10 +2661,10 @@ public sealed class CastingDirectorTests
             canRedraw: _ => false);
         h.Director.Evaluate();
 
-        for (int i = 0; i < 10; i++) NextRound(h);        // 50 s
+        for (int i = 0; i < 35; i++) NextRound(h);        // 175 s
         Assert.Equal(1, uses());
 
-        for (int i = 0; i < 3; i++) NextRound(h);         // past the minute
+        for (int i = 0; i < 2; i++) NextRound(h);         // past the three minutes
         Assert.Equal(2, uses());
     }
 
