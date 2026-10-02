@@ -3255,7 +3255,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - **Other:** `quit`, `suicide`; `sneak` itself resets the flag before it re-tries.
   - Not on the list: `get` / `drop`, `look`, telepaths, gossip and other channels, `use` — none of these clear it in the DLL.
 - **Sneaking and resting in place** *([CONFIRMED] 2026-10-02, user)*:
-  - **Stock: a sneak and a rest don't share a spot.** `rest` ends the sneak (see *What ends a sneak* in this topic), and sending `sn` while resting breaks the rest (user: "if i manually typed rest, it shouldnt break the rest to sneak unless we were above our rest max hp").
+  - **Stock: a sneak and a rest don't share a spot.** `rest` ends the sneak (see *What ends a sneak* in this topic), and sending `sn` while resting breaks the rest (user: "on stock, sneaking while resting, breaks the rest"). So a rest isn't broken to sneak unless HP is past rest-max (user: "if i manually typed rest, it shouldnt break the rest to sneak unless we were above our rest max hp").
   - **Paradigm with ShadowRest: sneak, then rest.** The rest keeps the sneak, so that order is fine (user: "its fine to send a sneak then rest because of shadowrest") — see *Health, resting & recovery → ShadowRest*.
   - **Paradigm: `sn` while resting does not break the rest.** For a ShadowRest character it is believed to start the ShadowRest if the rest wasn't one already (user: "i believe it puts us into shadowrest if we werent previously") *([NEEDS CONFIRMATION]: does an `sn` sent mid-rest turn the rest into a ShadowRest?)*.
   - Whether the sneak holds through the rest for a Paradigm race or class **without** ShadowRest is not recorded; the client leaves such a rest alone, as on Stock (**Client policy**).
