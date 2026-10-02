@@ -430,8 +430,8 @@ public sealed class SpellBookViewModelTests : IDisposable
     }
 
     // Report paradigm-20261002-114043: a Gypsy's deck of cards casts on use but has
-    // no equip slot, so the equippable-only list left it out. An item used from the
-    // pack and kept afterwards is listed; the cast engines' list stays readied-only.
+    // no equip slot, so the equippable-only list left it out. A carried item kept
+    // after use is listed; the cast engines' list stays readied-only.
     [Fact]
     public void CastItems_IncludeACarriedItemKeptAfterUse_ButTheEnginesDoNotSeeIt()
     {
@@ -448,7 +448,7 @@ public sealed class SpellBookViewModelTests : IDisposable
         using SpellBookViewModel vm = new(book);
 
         Assert.Equal(new[] { "Deck Of Cards", "Healing Wand" }, vm.CastItems.Select(r => r.ItemName).OrderBy(n => n));
-        Assert.Contains("used from your pack", vm.CastItems.Single(r => r.ItemName == "Deck Of Cards").CastsText);
+        Assert.Contains("carried, not worn", vm.CastItems.Single(r => r.ItemName == "Deck Of Cards").CastsText);
         Assert.Equal(new[] { "Healing Wand" }, book.GetCastItems().Select(i => i.ItemName));
     }
 

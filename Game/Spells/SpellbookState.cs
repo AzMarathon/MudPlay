@@ -38,7 +38,7 @@ public sealed class SpellbookState
     // class-change / set-swap lifecycle as _available (see RebuildAvailable) instead
     // of re-scanning every pass.
     private IReadOnlyList<ClassCastItem> _castItems = Array.Empty<ClassCastItem>();
-    // The same scan including the items used from the pack, for the Spell Book.
+    // The same scan including the carried (no equip slot) items, for the Spell Book.
     private IReadOnlyList<ClassCastItem> _spellBookCastItems = Array.Empty<ClassCastItem>();
 
     public SpellbookState(KnownSpellCatalog catalog)
@@ -112,7 +112,7 @@ public sealed class SpellbookState
     public IReadOnlyList<ClassCastItem> GetCastItems() => _castItems;
 
     // Every cast-on-use item for the Spell Book's reference list: the readied ones
-    // above plus those used straight from the pack (ClassCastItem.Carried).
+    // above plus the carried ones with no equip slot (ClassCastItem.Carried).
     public IReadOnlyList<ClassCastItem> GetSpellBookCastItems() => _spellBookCastItems;
 
     // Cast-on-use items whose spell is a WHOLE-PARTY buff (Targets 10 / 13) and which

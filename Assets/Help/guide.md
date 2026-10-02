@@ -1004,7 +1004,7 @@ The **Success %** column is your **chance to land the cast** (as opposed to fizz
 
 A spell shows **—** when no chance can be stated — you're not a caster class, or your stats haven't been read yet (type `stat` in the game to populate them). Reopen the book after a `stat` to refresh it.
 
-If your class has gear that casts a spell when you `use` it, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges. It covers items you wear or wield (a wand, a staff, a charged ring) and class items used straight from your pack that aren't used up, marked *used from your pack* (a Gypsy's deck of cards). One-shot consumables such as potions and scrolls aren't listed.
+If your class has gear that casts a spell when you `use` it, a **Cast-on-use items** section at the bottom lists what each one casts, its mana, and its charges. It covers items you wear or wield (a wand, a staff, a charged ring) and class items that are carried rather than worn and aren't used up, marked *carried, not worn* (Paradigm's Gypsy deck of cards). One-shot consumables such as potions and scrolls aren't listed.
 
 ---
 

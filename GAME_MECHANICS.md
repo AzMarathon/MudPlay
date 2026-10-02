@@ -4717,6 +4717,16 @@ There is no room to drop amethyst pendant here.
 *Status: CONFIRMED 2026-08-06 (user); 2H-weapon + off-hand-buff exception CONFIRMED 2026-08-26 (user)*
 
 - **To command-cast from an equippable item you must have it equipped.** Consumables — potions, waterskins — are `use`d straight from inventory and never need equipping *([CONFIRMED] 2026-09-26, user)*. So the buff engine equips the cast item, `use`s it, then puts back whatever it displaced.
+- **What `use <item>` checks on Stock** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_use`; Realm: Stock — Paradigm not recorded)*, in order:
+  - the item must be in the inventory (`You don't have %s.`) and pass `_user_can_use` (`You may not use that item!`);
+  - an item with a wear slot (`Worn` ≥ 1) must be worn: `You must be wearing that item to use it!`;
+  - a weapon (`ItemType` 1) with no wear slot must be the readied weapon: `You must have that item readied to use it!`;
+  - any other item with no wear slot is used straight from the inventory;
+  - a spent item answers `There are no more uses in %s.`.
+- **The deck of cards (item 1441, Gypsy only) differs by realm** *([OBSERVED] 2026-10-02, imported game data)*.
+  - Stock: wearable (`Worn` 12), 100 uses, kept after use, level 35, casts spell 1139.
+  - Paradigm: `ItemType` 10 with **no wear slot**, `UseCount` 9999, kept after use, not droppable, level 15, casts spell 5144 `card deck draw`, which runs textblock 9821 (`cast 5145`, then `random 9822`).
+  - How the Paradigm deck is used is not recorded *([NEEDS CONFIRMATION]: the user expects it not to follow the normal `use` rules — what command works it, and does it need to be held?)*.
 - **A buff item can live in ANY equip slot, not just weapon / off-hand.** A warhorn is off-hand, a charged amulet is neck, etc.
 - **Restore is slot-specific.** `eq <item>` puts the item into **its own** slot and displaces only what was there.
 - **1H weapon buff:** displaces the **weapon hand**, so restore the weapon.
@@ -4733,6 +4743,9 @@ There is no room to drop amethyst pendant here.
 - **2H weapon buff while holding a 1H weapon + off-hand:** the buff needs **both** hands.
   - Order: `rem <off-hand>` → `eq <2H buff>` → `use` → `eq <1H weapon>` (this displaces the two-hander back to the pack and frees the off-hand) → `eq <off-hand>`.
 - **Whatever slot was empty simply isn't restored** (nothing to put back).
+- **Client use:**
+  - `ItemCastSequencer` equips, uses and restores a readied cast item; its list (`SpellbookState.GetCastItems`) holds only items with a wear slot or weapons.
+  - The Spell Book also lists a cast item with no wear slot when the data marks it kept after use (`ClassCastItem.Carried`, `SpellbookState.GetSpellBookCastItems`; report `paradigm-20261002-114043`: the Paradigm deck of cards was missing). It labels it *carried, not worn* and nothing tries to equip or use it automatically.
 
 ### Chests and chest loot tables
 *Status: CONFIRMED (chest behaviour); CONFIRMED — verified against the 1.11p / Paradigm / Euphoria data, 2026-07-10 (loot-table chain)*

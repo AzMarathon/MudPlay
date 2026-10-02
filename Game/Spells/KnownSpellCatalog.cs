@@ -360,7 +360,7 @@ public sealed class KnownSpellCatalog
         {
             if (!ItemUsableByClass(row, classNumber)) continue;
             // An item with no equip slot counts only when it is kept after use — a
-            // tool used from the pack, like a deck of cards (report
+            // class tool like Paradigm's deck of cards (report
             // paradigm-20261002-114043), not a potion, scroll or thrown flask.
             bool carried = !IsEquippableCastItem(row);
             if (carried && ReadInt(row, "Retain After Uses") != 1) continue;
