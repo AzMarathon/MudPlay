@@ -1,4 +1,5 @@
 using System.Text;
+using MudPlay.Services;
 
 namespace MudPlay.Game;
 
@@ -21,16 +22,25 @@ namespace MudPlay.Game;
 // should. Engines call into this service when their own conditions fire.
 public sealed class PartyRestSync : IDisposable
 {
+    private const string LogCategory = "Party";
+
     private readonly PartyState _party;
     private readonly HashSet<WaitReason> _waitReasons = new();
+    private readonly LogService? _log;
     private Action<byte[]>? _wireSender;
     private bool _disposed;
 
-    public PartyRestSync(PartyState party)
+    public PartyRestSync(PartyState party, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(party);
         _party  = party;
+        _log    = log;
     }
+
+    // The reasons currently holding the wait, for diagnostics and bug reports.
+    // An @ok goes out only when this empties, so a reason that is listed here
+    // long after it should have cleared is the thing keeping a party stopped.
+    public IReadOnlyCollection<WaitReason> HeldReasons => _waitReasons;
 
     // Bind the wire-sender. Without it, RequestWait / RequestOk calls are silent
     // no-ops (no telepath). MainWindowViewModel supplies SendUserInput alongside
@@ -119,12 +129,43 @@ public sealed class PartyRestSync : IDisposable
     // party leader only on the non-empty→0 transition (the LAST reason
     // clearing). While other reasons still hold the wait, this records the
     // release and sends nothing. Same wire gates as RequestWait.
-    public void RequestOk(WaitReason reason)
+    // Returns true only when an @ok actually reached the wire. Callers do not
+    // have to check it — nothing re-sends on false, because a suppressed @ok is
+    // usually CORRECT: another reason still holds the wait and the party should
+    // still be stopped. When the last reason does clear, ITS RequestOk empties
+    // the set and the @ok goes out then.
+    //
+    // WHY THIS LOGS. The one way the protocol fails is a reason that never
+    // clears: the set never empties, every later @ok is suppressed, and the
+    // party is stopped for good. That used to happen in total silence — a
+    // follower's own log showed the @wait and simply no @ok, with nothing
+    // saying what was holding it. The line below names the reasons still held,
+    // which is what turns an invisible wedge into a one-line diagnosis.
+    //
+    // It deliberately does NOT auto-release a long-held reason. A blind timeout
+    // would tell the leader to walk off while a follower is genuinely still
+    // poisoned or held, which is worse than stopping; identifying the stuck
+    // reason has to come first.
+    public bool RequestOk(WaitReason reason)
     {
-        if (!_waitReasons.Remove(reason)) return;
-        if (_waitReasons.Count > 0) return;
-        if (!CanSignal()) return;
+        if (!_waitReasons.Remove(reason))
+        {
+            _log?.Info(LogCategory,
+                $"@ok for {reason} ignored — that reason was not holding the wait");
+            return false;
+        }
+        if (_waitReasons.Count > 0)
+        {
+            _log?.Info(LogCategory,
+                $"{reason} released but NO @ok sent — still held by " +
+                $"{string.Join(", ", _waitReasons)}. The leader stays paused until " +
+                "these clear; a reason that never clears keeps it paused for good.");
+            return false;
+        }
+        if (!CanSignal()) return false;
         Telepath(_party.LeaderName!, "@ok");
+        _log?.Info(LogCategory, $"last wait reason ({reason}) cleared — sent @ok");
+        return true;
     }
 
     // True while any wait reason (a rest, a hold, a blinding…) still stands.

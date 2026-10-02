@@ -2639,7 +2639,7 @@ public sealed class AppServices
         // Emit side of @wait/@ok. Observes our own
         // position transitions and telepaths the leader when we enter
         // / leave a rest state. Wire-sender hookup in MainWindowVM.
-        PartyRest = new Game.PartyRestSync(PartyState);
+        PartyRest = new Game.PartyRestSync(PartyState, Log);
         // One-to-many @-command sender. Auto-Exp-Reset
         // is the first consumer (LoopManager calls BroadcastExpReset on
         // loop start); the broadcaster's also the canonical spot for the

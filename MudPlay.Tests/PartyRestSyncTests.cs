@@ -95,6 +95,91 @@ public sealed class PartyRestSyncTests
         Assert.Empty(wire);
     }
 
+    // ===== @ok outcome and the held-reason set =====
+    // The one way this protocol fails is a reason that never clears: the set
+    // never empties, every later @ok is suppressed, and the party stays stopped.
+    // RequestOk reports whether it actually sent, and HeldReasons names what is
+    // still holding, so that state is visible instead of silent.
+
+    [Fact]
+    public void RequestOk_ReturnsTrueOnlyWhenItReachesTheWire()
+    {
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+
+        sync.RequestWait(WaitReason.Health);
+        sync.RequestWait(WaitReason.Poison);
+
+        Assert.False(sync.RequestOk(WaitReason.Health));   // Poison still holds
+        Assert.Single(wire);                               // nothing new on the wire
+        Assert.True(sync.RequestOk(WaitReason.Poison));    // last one out
+        Assert.Equal("/Leader @ok\r", LastWire(wire));
+    }
+
+    [Fact]
+    public void RequestOk_ForAReasonNeverPlaced_ReturnsFalse()
+    {
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+        Assert.False(sync.RequestOk(WaitReason.Held));
+        Assert.Empty(wire);
+    }
+
+    [Fact]
+    public void HeldReasons_NamesWhatIsKeepingTheLeaderPaused()
+    {
+        // This is the diagnosis a wedged party needs: @wait went out, no @ok
+        // followed, and this says which reason is the one that never cleared.
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+
+        Assert.Empty(sync.HeldReasons);
+        sync.RequestWait(WaitReason.Blindness);
+        sync.RequestWait(WaitReason.Poison);
+        // OrderBy on the enum is DECLARATION order, so Poison (1) precedes
+        // Blindness (2) — not alphabetical.
+        Assert.Equal(new[] { WaitReason.Poison, WaitReason.Blindness },
+                     sync.HeldReasons.OrderBy(r => r).ToArray());
+
+        sync.RequestOk(WaitReason.Blindness);
+        Assert.Equal(new[] { WaitReason.Poison }, sync.HeldReasons.ToArray());
+        Assert.True(sync.IsHoldingWait);
+
+        sync.RequestOk(WaitReason.Poison);
+        Assert.Empty(sync.HeldReasons);
+        Assert.False(sync.IsHoldingWait);
+    }
+
+    [Fact]
+    public void AStuckReason_SuppressesEveryLaterOk_WhichIsTheWedge()
+    {
+        // Documents the failure mode rather than papering over it. A reason that
+        // never clears (here: Held, whose condition flag never went away) means a
+        // later Health wait/release cycle sends NOTHING, and the leader is paused
+        // indefinitely. No auto-release: it would tell the leader to move off
+        // while the follower genuinely still cannot.
+        var (sync, party, wire) = Setup();
+        party.IsInParty = true;
+        party.LeaderName = "Leader";
+
+        sync.RequestWait(WaitReason.Held);        // never released
+        Assert.Single(wire);
+
+        for (int i = 0; i < 3; i++)
+        {
+            sync.RequestWait(WaitReason.Health);
+            Assert.False(sync.RequestOk(WaitReason.Health));
+        }
+        Assert.Single(wire);                       // not one @ok in three cycles
+        Assert.Equal(new[] { WaitReason.Held }, sync.HeldReasons.ToArray());
+
+        Assert.True(sync.RequestOk(WaitReason.Held));   // ...and it recovers at once
+        Assert.Equal("/Leader @ok\r", LastWire(wire));
+    }
+
     // ===== MegaMUD wait reasons on the wire =====
     // MegaMUD telepaths a parenthetical reason after the token — "@wait (HP's
     // too low)" — and MudPlay used to send one for TooHeavy only. These pin the

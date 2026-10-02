@@ -5340,6 +5340,11 @@ This covers how a client learns which ailments afflict itself and its party memb
 
   - **Only the FIRST reason's note reaches the wire**, because only the 0→non-empty transition telepaths. A follower who is blinded and then poisoned tells the leader `(blinded)`; the poison is held silently and both must clear before `@ok`. So the note says what *started* the hold, not everything holding it.
   - HP and mana share one wait reason, so `HealthManager.PartyWaitNote` decides which string to send from its own gate flags. **HP leads when both pools are low.**
+- **An `@ok` goes out only when the LAST held reason clears, and a reason that never clears stops the party for good.** *(**Client behaviour**, 2026-10-02.)*
+  - Wait reasons are reference-counted (`PartyRestSync.HeldReasons`). Releasing one while others are held sends nothing — correct, because the party should still be stopped — and the `@ok` goes out when the final one clears.
+  - **The failure mode is a reason that never clears.** The set never empties, every later `@ok` is suppressed, and the leader stays paused until its own wait timer expires, every time, forever. Observed: four followers telepathed `@wait` in the same second and none ever sent `@ok`.
+  - `RequestOk` returns whether it reached the wire and logs the reasons still held (`Party` category), so this is diagnosable from a follower's own log instead of showing up as an `@wait` with silence after it.
+  - **Nothing auto-releases a long-held reason.** A blind timeout would tell the leader to walk off while a follower genuinely still cannot move, which is worse than stopping.
 - **`@wait` / `@ok` is a leader-directed pause flag, not a momentary signal.** The leader stays paused until **either** the same member telepaths `@ok`, **or** the leader's own wait timer expires.
   - The timer is the "If leading, wait only (s)" cap (`PartySettings.IfLeadingWaitTotalSec`).
   - On expiry the leader gives up and resumes, so a dropped / AFK member can't strand the party forever.
