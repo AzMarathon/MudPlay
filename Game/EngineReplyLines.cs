@@ -15,6 +15,7 @@ public static partial class EngineReplyLines
 {
     private static readonly string[] Formats =
     {
+        "-- %s",
         "--- Message Not Sent ---",
         "--- Telepath Not Sent ---",
         "Are you sure you want to disband %s?",
@@ -32,6 +33,7 @@ public static partial class EngineReplyLines
         "No more new items may be stocked in this shop.",
         "Paging is now set to %s",
         "Perhaps you should invite %s into your gang first.",
+        "Please be more specific.  You could have meant any of these:",
         "Please specify a more reasonable amount.",
         "Quiet mode set",
         "Someone yells from above \"%s\"",

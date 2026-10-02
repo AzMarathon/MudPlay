@@ -332,6 +332,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
   - **Doors, seen and done:** `The %s to the %s just opened.`, `The door is now locked.`, `You see %s pick the lock on the %s to the %s.`, `You successfully unlocked the %s.`.
   - **Bank, shop and gang:** `The bank cannot accept your deposit at this time.`, `You would get %s %s for your %s.`, `Gang member %s has been notified of their promotion.`, `Your gang leader has demoted you.`.
   - **Channels and talk:** `--- Telepath Not Sent ---`, `You just joined channel %d.`, `Someone yells from the %s "%s"`, `You are using too much profanity - your message is not sent.`.
+  - **An ambiguous name** (`look`, `ask`, any command naming something in the room, when the name fits more than one): `Please be more specific.  You could have meant any of these:` (two spaces after the full stop), then one `-- %s` row per match, e.g. `-- old gypsy woman` / `-- old gypsy man`. Seen on Paradigm with the same wording *([OBSERVED] 2026-10-02, user screenshot)*.
 - **Some engine-printed lines share their wording with a spell's message and are NOT in this family:** `You eat the %s.` and `You drink the %s.` are also the catalogued text of item spells (red fungus, the potions).
 - **`You are not of a high enough level to cast that spell.` is in the DLL but has never been seen in play** *([CONFIRMED] 2026-10-01, user)*.
 - **Client use:**

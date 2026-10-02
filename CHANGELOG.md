@@ -1,11 +1,12 @@
 # Version history
 
-## 3.138.10
+## 3.138.11
 
 - Stash transfer deposits all your cash above the keep-on-hand amount each trip, including what you were already carrying
 - Spell Book lists class cast-on-use items that are carried rather than worn, such as the Gypsy's deck of cards
 - Stash transfer started with a full purse goes to the bank first instead of back to the stash
 - Using the deck of cards no longer marks you Confused: each card is recognised by its own text
+- The "Please be more specific" list for an ambiguous name is no longer flagged as unrecognised lines
 - bug reports addressed: paradigm-20261002-111650, paradigm-20261002-114043, paradigm-20261002-114620, paradigm-20261002-120516
 
 ## 3.138.6
