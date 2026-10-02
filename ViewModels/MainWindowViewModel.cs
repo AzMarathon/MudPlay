@@ -3267,6 +3267,8 @@ public partial class MainWindowViewModel : ObservableObject
                 // redisplays. Resumes itself on the first in-game prompt after
                 // reconnect (see LoopRunner.NotifyDisconnected).
                 AppServices.Current.LoopRunner.NotifyDisconnected();
+                // A move still awaiting its room display will never get one now.
+                AppServices.Current.RoomTracker.NoteConnectionLost();
 
                 // Drop per-session condition state so a fresh login starts clean: any
                 // non-auto-clearing condition (no AppliedEndsWith) must not survive the

@@ -1,5 +1,9 @@
 # Version history
 
+## 3.141.9
+
+- After a connection drop, a move the server never answered no longer leaves the map stuck waiting on it: the first room display after reconnect settles where you are, so Go and the loop restart work straight away
+
 ## 3.141.8
 
 - Deck of cards: the card drawn is now recognised, so the Buff Watchdog keeps a ticked card instead of drawing again

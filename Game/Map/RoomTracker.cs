@@ -703,6 +703,59 @@ public sealed class RoomTracker
         return when <= until;
     }
 
+    // ----- A move the connection swallowed ----------------------------
+    // A carrier loss usually shows as a move that is never answered: the loop sent a
+    // step and the link died under it. That move stayed queued across the reconnect
+    // and held the tracker in Pending for good. The login's room display read as a
+    // passive re-look, a new walk deferred "until the in-flight move settles" (and
+    // every Go re-armed that wait), and the next real move was reconciled against the
+    // dead one. The server will never answer a move sent before the drop, so the
+    // first display after the reconnect says where we stand instead.
+    private bool _connectionLostMidMove;
+
+    public void NoteConnectionLost()
+    {
+        if (!_pending.IsEmpty) _connectionLostMidMove = true;
+    }
+
+    // The first room display after a drop that had a move in flight. The move either
+    // landed before the link died or it didn't: whichever of the two rooms the
+    // display matches is where we are. When it matches both (an identically-named
+    // corridor) or neither, the display can't say, and the ordinary unsure-position
+    // handling takes it from the room we last knew.
+    private void ReconcileAfterReconnect(RoomObservation observation, DateTimeOffset when)
+    {
+        Room? source = State.CurrentRoom;
+        Room? target = null;
+        if (_pending.Count == 1 && _pending.TryPeek(out PendingMove head) && source is not null
+            && TryResolvePendingExit(source, head, out RoomExit exit))
+            target = _graph.GetRoom(exit.Target);
+        while (_pending.TryDequeue(out _)) { /* drain */ }
+        _passivePendingMove = null;
+        _cardinalEchoClaim = null;
+
+        bool atSource = source is not null && MatchesPredicted(source, observation);
+        bool atTarget = target is not null && MatchesPredicted(target, observation);
+        if (atSource && !atTarget)
+        {
+            DropMostRecentStep();   // the step it logged was never taken
+            SetRoom(source, RoomConfidence.Confirmed, when, "reconnected: the move sent before the drop never landed");
+            return;
+        }
+        if (atTarget && !atSource)
+        {
+            SetRoom(target, RoomConfidence.Confirmed, when, "reconnected: the move sent before the drop had landed");
+            return;
+        }
+        if (atSource)
+        {
+            EnterSuspect(when, "reconnected with a move in flight; the room it left and the room it led to read the same");
+            return;
+        }
+        State.Confidence = RoomConfidence.Confirmed;
+        ReconcileFromConfirmed(observation, when);
+    }
+
     // The server-side observation parser reports the room it just saw — name +
     // the set of directions on the "Obvious exits:" line. The tracker reconciles
     // this against the expected outcome of any pending move.
@@ -757,6 +810,13 @@ public sealed class RoomTracker
         State.OpenDoorDirections = observation.OpenDoorDirections;
         State.ClosedDoorDirections = observation.ClosedDoorDirections;
 
+        bool afterDrop = _connectionLostMidMove;
+        _connectionLostMidMove = false;
+        // Unsure of the room already: there is no in-flight move to settle, only dead
+        // ones to forget before the display is judged.
+        if (afterDrop && State.Confidence != RoomConfidence.Pending)
+            while (_pending.TryDequeue(out _)) { /* drain */ }
+
         switch (State.Confidence)
         {
             case RoomConfidence.Unknown:
@@ -768,7 +828,8 @@ public sealed class RoomTracker
                 break;
 
             case RoomConfidence.Pending:
-                ReconcileFromPending(observation, when);
+                if (afterDrop) ReconcileAfterReconnect(observation, when);
+                else ReconcileFromPending(observation, when);
                 break;
 
             case RoomConfidence.Suspect:

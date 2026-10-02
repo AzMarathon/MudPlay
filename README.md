@@ -1,18 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.141.8**
-> - Deck of cards: the card drawn is now recognised, so the Buff Watchdog keeps a ticked card instead of drawing again
-> - Buff Watchdog timer shows the card that landed (Knight, Priest) instead of the deck
-> - Card tooltips no longer list GypsyFortune, a marker with no effect
-> - Stock deck of cards: used once and again when the card wears off, with no card picking and Recast limited to 0 or below (it cannot be redrawn while a card is up)
-> - Item charges (Paradigm): after the first look, each use counts the charge down instead of looking at the item again
-> - A use refused because you had already cast that round no longer triggers a look, and spends no charge
-> - Monster Intel counts an applied buff at the bottom of its roll, so a "sure" kill is sure; the top of the roll is shown beside it
-> - Stop Stash Transfer on the map menu now stops the walk too
-> - Right-click a bank room to start a stash transfer into it: the menu lists your stash rooms
-> - Text painted by cursor positioning (card art and its reading) now reaches triggers and the message matcher
-> - A stray "79D" no longer appears before the prompt after a card is drawn
+> **Version 3.141.9**
+> - After a connection drop, a move the server never answered no longer leaves the map stuck waiting on it: the first room display after reconnect settles where you are, so Go and the loop restart work straight away
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
