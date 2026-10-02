@@ -7762,7 +7762,7 @@ public sealed class AppServices
         {
             if (MovementControl.SuspendedErrand is { } held)
                 Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
-                    $"[Stop is holding {held} - Resume carries it on, or start something else to choose]"));
+                    $"[Stop is holding {held} - Resume carries it on, Stop again ends it]"));
         };
         SellDetour.HandOffToBank = AutoDeposit.TakeOverFromDetour;
         Tick.HeartbeatElapsed += SellDetour.Evaluate;

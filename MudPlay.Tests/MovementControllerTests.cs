@@ -371,6 +371,7 @@ public sealed class MovementControllerTests : IDisposable
         public bool Answer = true;
         public int Asked;
         public System.Threading.Tasks.TaskCompletionSource<bool>? Pending;
+        public DateTime Now = new(2026, 10, 2, 12, 0, 0, DateTimeKind.Utc);
 
         public void Wire(MovementController c) => c.SetErrandHooks(
             activeErrand: () => Active,
@@ -379,7 +380,8 @@ public sealed class MovementControllerTests : IDisposable
             {
                 Asked++;
                 return Pending is { } p ? p.Task : System.Threading.Tasks.Task.FromResult(Answer);
-            });
+            },
+            utcNow: () => Now);
     }
 
     [Fact]
@@ -391,7 +393,7 @@ public sealed class MovementControllerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Walker.WalkTo(new RoomKey(1, 3));
 
-        Assert.True(h.Controller.SuspendErrandIfAny());
+        Assert.True(h.Controller.HoldErrandOnStop());
 
         Assert.Equal("the stash transfer", h.Controller.SuspendedErrand);
         Assert.True(h.Controller.IsUserPaused);
@@ -406,7 +408,7 @@ public sealed class MovementControllerTests : IDisposable
         Errand e = new() { Active = null };
         e.Wire(h.Controller);
 
-        Assert.False(h.Controller.SuspendErrandIfAny());
+        Assert.False(h.Controller.HoldErrandOnStop());
         Assert.Null(h.Controller.SuspendedErrand);
         Assert.False(h.Controller.IsUserPaused);
     }
@@ -417,7 +419,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new();
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
 
         h.Controller.Resume();
 
@@ -446,7 +448,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new() { Answer = true };
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
         int started = 0;
 
         h.Controller.StartUserRun(() => started++);
@@ -470,7 +472,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new() { Answer = false };
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
         int started = 0;
 
         h.Controller.StartUserRun(() => started++);
@@ -489,7 +491,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new() { Pending = new System.Threading.Tasks.TaskCompletionSource<bool>() };
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
         int started = 0;
         h.Controller.StartUserRun(() => started++);
         Assert.Equal(0, started);
@@ -511,7 +513,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new();
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
 
         e.Active = null;
         h.Controller.NoteErrandStateChanged();
@@ -527,7 +529,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new();
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
 
         h.Controller.Stop();
 
@@ -543,7 +545,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new();
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
 
         h.Coordinator.ClearGate(MovementCoordinator.UserGate);
 
@@ -562,7 +564,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new();
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
         int started = 0;
         h.Controller.StartUserRun(() => started++);
 
@@ -581,7 +583,7 @@ public sealed class MovementControllerTests : IDisposable
         using Harness h = NewHarness();
         Errand e = new() { Pending = new System.Threading.Tasks.TaskCompletionSource<bool>() };
         e.Wire(h.Controller);
-        h.Controller.SuspendErrandIfAny();
+        h.Controller.HoldErrandOnStop();
         int first = 0, second = 0;
 
         h.Controller.StartUserRun(() => first++);
@@ -591,5 +593,56 @@ public sealed class MovementControllerTests : IDisposable
         Assert.Equal(1, e.Asked);
         Assert.Equal(0, first);
         Assert.Equal(1, second);
+    }
+
+    // Stop is the only stop control there is: pressed again while the errand is
+    // still held, it ends it, and the caller's own stop runs.
+    [Fact]
+    public void ASecondStop_EndsTheHeldErrand()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        Assert.True(h.Controller.HoldErrandOnStop());
+
+        e.Now += TimeSpan.FromSeconds(5);
+        Assert.False(h.Controller.HoldErrandOnStop());
+
+        Assert.Equal(1, e.Abandoned);
+        Assert.Null(h.Controller.SuspendedErrand);
+        Assert.False(h.Controller.IsUserPaused);
+    }
+
+    // A double-click on Stop is one press; it must not hold and end in one go.
+    [Fact]
+    public void ADoubleClickOnStop_StillOnlyHolds()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        Assert.True(h.Controller.HoldErrandOnStop());
+
+        e.Now += TimeSpan.FromMilliseconds(300);
+        Assert.True(h.Controller.HoldErrandOnStop());
+
+        Assert.Equal(0, e.Abandoned);
+        Assert.Equal("the stash transfer", h.Controller.SuspendedErrand);
+    }
+
+    // Resumed and stopped again: that Stop is a first press once more.
+    [Fact]
+    public void AStopAfterResume_HoldsAgain()
+    {
+        using Harness h = NewHarness();
+        Errand e = new();
+        e.Wire(h.Controller);
+        h.Controller.HoldErrandOnStop();
+        h.Controller.Resume();
+
+        e.Now += TimeSpan.FromSeconds(5);
+        Assert.True(h.Controller.HoldErrandOnStop());
+
+        Assert.Equal(0, e.Abandoned);
+        Assert.Equal("the stash transfer", h.Controller.SuspendedErrand);
     }
 }

@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.141.0**
-> - Stop during a train trip, stash transfer, bank trip or sell trip holds it instead of ending it; Resume carries it on
+> - Stop during a train trip, stash transfer, bank trip or sell trip holds it instead of ending it; Resume carries it on, Stop again ends it
 > - Starting a walk, loop or Auto-Lair while one is held asks "Resume it first?"; No drops the trip and starts the new run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

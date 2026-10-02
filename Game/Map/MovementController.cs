@@ -62,6 +62,9 @@ public sealed class MovementController : IDisposable
     private int _queuedRun;
     // We asserted the user gate for the errand (it wasn't already paused by hand).
     private bool _gateHeldForErrand;
+    private static readonly TimeSpan DoubleStopGuard = TimeSpan.FromSeconds(1);
+    private Func<DateTime> _utcNow = static () => DateTime.UtcNow;
+    private DateTime _heldAt;
 
     // The errand Stop is holding, as it reads in a sentence ("the stash transfer").
     public string? SuspendedErrand { get; private set; }
@@ -75,7 +78,8 @@ public sealed class MovementController : IDisposable
     // must start after the errand's own finishing moves, not in the middle of them.
     public void SetErrandHooks(
         Func<string?> activeErrand, Action<string> abandonErrand,
-        Func<string, System.Threading.Tasks.Task<bool>> askResume, Action<Action>? post = null)
+        Func<string, System.Threading.Tasks.Task<bool>> askResume, Action<Action>? post = null,
+        Func<DateTime>? utcNow = null)
     {
         ArgumentNullException.ThrowIfNull(activeErrand);
         ArgumentNullException.ThrowIfNull(abandonErrand);
@@ -84,21 +88,31 @@ public sealed class MovementController : IDisposable
         _abandonErrand = abandonErrand;
         _askResumeErrand = askResume;
         if (post is not null) _post = post;
+        if (utcNow is not null) _utcNow = utcNow;
     }
 
-    // The user's Stop. With an errand under way it is held, not ended, and this
-    // returns true: the caller stops nothing.
-    public bool SuspendErrandIfAny()
+    // The user's Stop. The first one with an errand under way holds it and returns
+    // true: the caller stops nothing. Stop is the only stop control there is, so a
+    // second one while it is still held ends the errand and returns false, and the
+    // caller's own stop runs (user, 2026-10-02).
+    public bool HoldErrandOnStop()
     {
         if (_activeErrand?.Invoke() is not { } errand) return false;
-        _gateHeldForErrand |= !_coordinator.AssertedGates.Contains(MovementCoordinator.UserGate);
-        _coordinator.AssertGate(MovementCoordinator.UserGate, nameof(MovementController), $"Stop held {errand}");
-        if (SuspendedErrand != errand)
+        if (SuspendedErrand is not null)
         {
-            SuspendedErrand = errand;
-            _log?.Info("Movement", $"Stop held {errand} — Resume carries it on; starting something else asks first.");
-            SuspendedErrandChanged?.Invoke();
+            // A double-click on Stop is one decision, not two.
+            if (_utcNow() - _heldAt < DoubleStopGuard) return true;
+            _log?.Info("Movement", $"Second Stop ended {errand}.");
+            _abandonErrand?.Invoke("stopped by the user");
+            Stop();
+            return false;
         }
+        _gateHeldForErrand = !_coordinator.AssertedGates.Contains(MovementCoordinator.UserGate);
+        _coordinator.AssertGate(MovementCoordinator.UserGate, nameof(MovementController), $"Stop held {errand}");
+        SuspendedErrand = errand;
+        _heldAt = _utcNow();
+        _log?.Info("Movement", $"Stop held {errand} — Resume carries it on; Stop again ends it; starting something else asks first.");
+        SuspendedErrandChanged?.Invoke();
         return true;
     }
 

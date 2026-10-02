@@ -5225,8 +5225,8 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void MovementStop()
     {
-        // A money or training errand is held, not ended (MovementController).
-        if (AppServices.Current.MovementControl.SuspendErrandIfAny()) return;
+        // The first Stop holds a money or training errand; a second ends it.
+        if (AppServices.Current.MovementControl.HoldErrandOnStop()) return;
         AppServices.Current.MovementControl.Stop();
         OnUserStoppedRun();
     }

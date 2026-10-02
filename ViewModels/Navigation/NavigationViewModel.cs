@@ -3290,8 +3290,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void StopWalk()
     {
-        // A money or training errand is held, not ended (MovementController).
-        if (_services.MovementControl.SuspendErrandIfAny()) return;
+        // The first Stop holds a money or training errand; a second ends it.
+        if (_services.MovementControl.HoldErrandOnStop()) return;
         _services.TokenRoute.Cancel();
         _services.Walker.Stop("user stop from Navigation");
     }
@@ -4557,7 +4557,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         bool loopRunReady = CurrentMode == NavigationMode.LoopBuild && LoopBuilder?.CanSave == true;
         if (!loopRunReady && _services.Walker.State is WalkState.Walking or WalkState.Paused)
         {
-            if (_services.MovementControl.SuspendErrandIfAny()) return;
+            if (_services.MovementControl.HoldErrandOnStop()) return;
             _services.Walker.Stop("user stop from Navigation");
             _services.NoteUserStoppedRun?.Invoke();
             return;
@@ -4690,7 +4690,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void StopAll()
     {
-        if (_services.MovementControl.SuspendErrandIfAny()) return;
+        if (_services.MovementControl.HoldErrandOnStop()) return;
         _services.TokenRoute.Cancel();
         if (_services.AutoLair.IsActive) _services.AutoLair.Stop();
         if (_services.LoopRunner.State != Game.Map.LoopState.Idle)
