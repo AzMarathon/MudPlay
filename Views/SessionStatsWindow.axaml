@@ -472,7 +472,7 @@
                                    FontSize="12"/>
                         <Button Grid.Column="1" Classes="sectionreset" Content="Reset"
                                 Command="{Binding ResetTimeAnalysisCommand}"
-                                ToolTip.Tip="Reset everything in this section: the time breakdown, Sneak, Walk and the loop laps."/>
+                                ToolTip.Tip="Reset everything in this section: the time breakdown, Sneak, Disarm Trap, Walk and the loop laps."/>
                     </Grid>
                 </Expander.Header>
                 <StackPanel Spacing="2" Margin="4,2">
@@ -534,6 +534,12 @@
                                    ToolTip.Tip="Share of rooms you entered while sneaking where the sneak held."/>
                         <TextBlock Grid.Column="1" Classes="valr" Text="{Binding SneakText}"
                                    ToolTip.Tip="{Binding SneakTip}"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="*,148">
+                        <TextBlock Grid.Column="0" Classes="lbl" Text="Disarm Trap"
+                                   ToolTip.Tip="Traps you disarmed this session, and the share of disarm attempts that succeeded."/>
+                        <TextBlock Grid.Column="1" Classes="valr" Text="{Binding DisarmText}"
+                                   ToolTip.Tip="{Binding DisarmTip}"/>
                     </Grid>
                     <Grid ColumnDefinitions="*,148">
                         <TextBlock Grid.Column="0" Classes="lbl" Text="Walk Latency"

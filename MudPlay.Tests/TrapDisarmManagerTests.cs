@@ -1,5 +1,6 @@
 using System.Text;
 using MudPlay.Game;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -375,6 +376,100 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Dispatch(router, "You failed to disarm any trap to the east.");
         Assert.StartsWith("No trap to the e", reply);  // the walker's "clear" reply
         Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+    }
+
+    // Every attempt reports its outcome; Stock's ambiguous "failed to disarm any"
+    // only counts once the same exit proves to hold a trap.
+    [Fact]
+    public void DisarmAttempted_CountsFumblesOnlyOnceATrapIsProven()
+    {
+        var (mgr, router, _, _) = Setup();
+        List<bool> outcomes = new();
+        mgr.DisarmAttempted += outcomes.Add;
+
+        mgr.Enqueue("e", "walker", _ => { });
+        Dispatch(router, "You failed to disarm any trap to the east.");
+        Assert.Empty(outcomes);                          // could be an empty exit
+        Dispatch(router, "You try to disarm the trap, but instead trigger it!");
+        Dispatch(router, "You successfully disarmed the trap to the east.");
+        Assert.Equal(new[] { false, false, true }, outcomes);
+
+        outcomes.Clear();
+        mgr.MaxDisarmAttempts = 2;
+        mgr.Enqueue("n", "walker", _ => { });
+        Dispatch(router, "You failed to disarm any trap to the north.");
+        Dispatch(router, "You failed to disarm any trap to the north.");
+        Assert.Empty(outcomes);                          // taken as no trap: not attempts
+
+        mgr.Enqueue("s", "walker", _ => { });
+        Dispatch(router, "Your command had no effect.");
+        Assert.Empty(outcomes);
+    }
+
+    // Paradigm report paradigm-20261002-191037: the line went unrecognised, so the
+    // watchdog took it for a trap that went off and retried.
+    [Fact]
+    public void AlreadyDisarmed_MeansTheExitIsClear_AndIsNotAnAttempt()
+    {
+        var (mgr, router, _, wire) = Setup();
+        List<bool> outcomes = new();
+        mgr.DisarmAttempted += outcomes.Add;
+        string? reply = null;
+        mgr.Enqueue("w", "loop", t => reply = t);
+
+        Dispatch(router, "The trap is already disarmed.");
+
+        Assert.Single(wire);
+        Assert.Equal("Trap to the w already disarmed.", reply);
+        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+        Assert.Empty(outcomes);
+    }
+
+    // An exit we disarmed stays down until the realm's re-arm time: skipped before
+    // it, disarmed again at or after it. Someone else's "already disarmed" never
+    // starts the clock.
+    [Theory]
+    [InlineData(false, 5)]
+    [InlineData(true, 2)]
+    public void OurDisarm_SkipsTheExitUntilItReArms(bool paradigm, int rearmMinutes)
+    {
+        DateTimeOffset now = Now;
+        GameDataCache cache = new(_root);
+        string dir = Path.Combine(_root, "set");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Info.json"), paradigm ? "[{\"Legit\":2}]" : "[{\"Legit\":0}]");
+        cache.SwitchSet("set");
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        TrapDisarmManager mgr = new(router, new PlayerStats { Traps = 50 }, cache, clock: () => now);
+        List<byte[]> wire = new();
+        mgr.SetWireSender(wire.Add);
+        RoomKey room = new(9, 448);
+        mgr.SetCurrentRoom(() => room);
+
+        mgr.Enqueue("w", "loop", _ => { });
+        Dispatch(router, "You successfully disarmed the trap to the west.");
+        Assert.Single(wire);
+
+        now += TimeSpan.FromMinutes(rearmMinutes) - TimeSpan.FromSeconds(1);
+        string? reply = null;
+        mgr.Enqueue("west", "loop", t => reply = t);
+        Assert.Single(wire);                                   // skipped
+        Assert.Contains("disarmed", reply);
+        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+
+        room = new(9, 449);                                    // same direction, other room
+        mgr.Enqueue("w", "loop", _ => { });
+        Assert.Equal(2, wire.Count);
+        Dispatch(router, "The trap is already disarmed.");     // not ours: no clock
+        mgr.Enqueue("w", "loop", _ => { });
+        Assert.Equal(3, wire.Count);
+        Dispatch(router, "The trap is already disarmed.");
+
+        room = new(9, 448);
+        now += TimeSpan.FromSeconds(1);                        // on the timer: disarm again
+        mgr.Enqueue("w", "loop", _ => { });
+        Assert.Equal(4, wire.Count);
     }
 
     [Fact]

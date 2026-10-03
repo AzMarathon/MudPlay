@@ -33,12 +33,18 @@ public readonly record struct SessionActivityStats(
     int ItemsStashed,
     int SneakEntries,
     int SneakHeld,
+    int DisarmAttempts,
+    int TrapsDisarmed,
     int Steps,
     TimeSpan StepTime)
 {
     // Share of sneaking room entries where the sneak held, 0–100; null before the
     // first one.
     public double? SneakPercent => SneakEntries > 0 ? 100.0 * SneakHeld / SneakEntries : null;
+
+    // Share of disarm trap attempts that disarmed the trap, 0–100; null before the
+    // first one.
+    public double? DisarmPercent => DisarmAttempts > 0 ? 100.0 * TrapsDisarmed / DisarmAttempts : null;
 
     // Average send-to-arrival time of a walk step; null before the first one.
     public TimeSpan? AverageStep => Steps > 0 ? StepTime / Steps : null;

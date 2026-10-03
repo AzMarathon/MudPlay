@@ -60,6 +60,8 @@ public sealed class SessionActivityTracker
     private int _itemsStashed;
     private int _sneakEntries;
     private int _sneakHeld;
+    private int _disarmAttempts;
+    private int _trapsDisarmed;
     private int _steps;
     private TimeSpan _stepTime;
 
@@ -189,6 +191,14 @@ public sealed class SessionActivityTracker
         Changed?.Invoke();
     }
 
+    // One disarm trap attempt settled (from TrapDisarmManager.DisarmAttempted).
+    public void NoteDisarmAttempt(bool disarmed)
+    {
+        _disarmAttempts++;
+        if (disarmed) _trapsDisarmed++;
+        Changed?.Invoke();
+    }
+
     // A walk step's move just went out — starts its timer. A second send before
     // the first arrives restarts it from the later send.
     public void NoteStepSent() => _stepSentAt = _clock();
@@ -251,6 +261,8 @@ public sealed class SessionActivityTracker
             ItemsStashed:      _itemsStashed,
             SneakEntries:      _sneakEntries,
             SneakHeld:         _sneakHeld,
+            DisarmAttempts:    _disarmAttempts,
+            TrapsDisarmed:     _trapsDisarmed,
             Steps:             _steps,
             StepTime:          _stepTime);
     }
@@ -343,7 +355,7 @@ public sealed class SessionActivityTracker
         if (drop > 0) events.RemoveRange(0, drop);
     }
 
-    // Zero every counter — lifetime totals, sneak and walk figures, and the rate
+    // Zero every counter — lifetime totals, sneak, disarm and walk figures, and the rate
     // window alike — and restart the clock. Called on the connect /
     // character-switch boundary, matching the other session trackers.
     public void Reset()
@@ -368,11 +380,13 @@ public sealed class SessionActivityTracker
         ResetRates();
     }
 
-    // The sneak and walk figures, shown under Time Analysis and reset with it.
+    // The sneak, disarm and walk figures, shown under Time Analysis and reset with it.
     public void ResetMovement()
     {
         _sneakEntries = 0;
         _sneakHeld = 0;
+        _disarmAttempts = 0;
+        _trapsDisarmed = 0;
         _steps = 0;
         _stepTime = TimeSpan.Zero;
         _stepSentAt = null;
