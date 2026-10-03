@@ -38,7 +38,7 @@ public sealed class InventoryActionHandlerTests
         public required List<byte[]> WireSent { get; init; }
     }
 
-    private static Harness Setup(bool paradigm = false, Func<string, bool, bool, bool>? cannotDrop = null)
+    private static Harness Setup(bool paradigm = false, Func<string, bool, bool>? cannotDrop = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -249,7 +249,7 @@ public sealed class InventoryActionHandlerTests
     [Fact]
     public void DropAllFull_LeavesOutWhatTheGameWontDrop_AndSaysSo()
     {
-        Harness h = Setup(paradigm: true, cannotDrop: (name, worn, _) =>
+        Harness h = Setup(paradigm: true, cannotDrop: (name, worn) =>
             name == "token of Silvermere" || (worn && name == "cursed ring"));
         SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
         Feed(h.Lines, "You are carrying a rusty dagger, token of Silvermere, cursed ring (Finger), "

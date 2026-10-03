@@ -4560,12 +4560,13 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - **What the game refuses to drop or hide** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_drop` and `_cmd_hide`, the same two checks in each; Realm: Stock; the no-drop part CONFIRMED on both realms by the user 2026-10-02)*. Either one answers `You may not drop that item!`:
   - an item with the no-drop flag (game data `Not Droppable` = 1). Both realms' data flag Paradigm's tokens of (place), the Gypsy's deck of cards and the Mercy / Balance / Hate tokens;
   - a cursed item (ability 82 Cursed or 83 CursedMajor) **while it is worn**. A carried cursed item drops. (If two worn slots hold the same item number the check is skipped; an edge case.)
-- **A loyal item (ability 100) can't be dropped, on either realm** *([CONFIRMED] 2026-10-02, user)*. Nor can a no-drop item, on either realm (same confirmation). (An earlier note said Stock's `_cmd_drop` / `_cmd_hide` don't check ability 100, and the data has loyal items without the no-drop flag, e.g. the emblems; the user's confirmation stands, superseded 2026-10-02. The refusal must come from somewhere this reading missed.) [NEEDS CONFIRMATION] Can a loyal item be hidden?
+- **A loyal item (ability 100) can't be dropped, on either realm** *([CONFIRMED] 2026-10-02, user)*. Nor can a no-drop item, on either realm (same confirmation). (An earlier note said Stock's `_cmd_drop` / `_cmd_hide` don't check ability 100, and the data has loyal items without the no-drop flag, e.g. the emblems; the user's confirmation stands, superseded 2026-10-02. The refusal must come from somewhere this reading missed.)
+- **Whatever can't be dropped can't be hidden either** *([CONFIRMED] 2026-10-02, user)*: no-drop, loyal, and cursed-while-worn alike.
 
 **Client use:**
 - Roomba treats any drop refusal as "verify against a real `i` before doing anything else". It also drops its belief in a carried item the moment anything else is seen dropping it.
 - `@drop-all full` / Drop Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
-- Drop All / Drop Everything / Hide All leave out what the game refuses (`ItemDropRule`, `AppServices.GameRefusesToDrop`) and name it in their reply. Loyal items are left out of drops; a hide still sends them until that is known.
+- Drop All / Drop Everything / Hide All leave out what the game refuses (`ItemDropRule`, `AppServices.GameRefusesToDrop`) and name it in their reply. Loyal items are left out too, for hides as well as drops.
 
 ### Hiding items in a room (stashing)
 *Status: CONFIRMED 2026-09-26 (user) · Realm: both; the counted form is Paradigm-only*
