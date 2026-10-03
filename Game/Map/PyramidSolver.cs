@@ -204,6 +204,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // The leader (us) can be held too — set on our own "Your legs are paralyzed!",
     // cleared on "You can move again!" (both are lines we DO see for ourselves).
     private bool _selfHeld;
+    private int _selfHeldTicks;
 
     // Re-check ticks a party-member hold has persisted; at the cap we assume it wore
     // off (we can't see a member's private wear-off) and clear the held set.
@@ -355,6 +356,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _keyRespawns = 0;
         _heldMembers.Clear();
         _selfHeld = false;
+        _selfHeldTicks = 0;
         _holdTicks = 0;
         _moveInFlight = false;
         _ceilingOpenOn = PyramidFloor.None;
@@ -856,6 +858,16 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _phase = Phase.Held;
         _holdReason = reason;
 
+        // Our own wear-off line can be missed. Past the cap, stop taking our word for
+        // it: the Held gate still holds us if the game does, and a move it refuses
+        // says so.
+        if (_selfHeld && ++_selfHeldTicks >= HoldCapTicks)
+        {
+            _log?.Log(LogSeverity.Info, LogSource, "our own hold assumed worn off after cap");
+            _selfHeld = false;
+            _selfHeldTicks = 0;
+        }
+
         // A party member's hold wears off on a private line we never see, so after
         // the cap assume it's gone rather than wait on it forever.
         if (_heldMembers.Count > 0 && ++_holdTicks >= HoldCapTicks)
@@ -1170,7 +1182,10 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         // Leader (us) held by hold person — set on our own applied line, cleared on
         // our own wear-off (both are lines we see for ourselves).
         if (t.Contains("Your legs are paralyzed", StringComparison.OrdinalIgnoreCase))
+        {
             _selfHeld = true;
+            _selfHeldTicks = 0;
+        }
         else if (t.Contains("You can move again", StringComparison.OrdinalIgnoreCase))
         {
             _selfHeld = false;

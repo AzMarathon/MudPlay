@@ -748,13 +748,24 @@ public sealed class PyramidSolverTests : IDisposable
         RunUntil(h, () => h.Room == 1803);
 
         h.Solver.FeedLineForTests("Your legs are paralyzed!");
-        for (int i = 0; i < 30; i++) Pump(h);
+        for (int i = 0; i < 10; i++) Pump(h);       // well inside the wear-off cap
         Assert.True(h.Solver.IsHeld);
 
         h.Solver.FeedLineForTests("You can move again!");
         RunToEnd(h);
         AssertFinished(h);
         Assert.Equal(0, h.Refused);                  // no moves were thrown at the hold
+    }
+
+    [Fact]
+    public void SelfHeld_WithItsWearOffLineMissed_IsLetGoAfterTheCap()
+    {
+        using Harness h = Begin(NewHarness());
+        RunUntil(h, () => h.Room == 1803);
+
+        h.Solver.FeedLineForTests("Your legs are paralyzed!");
+        RunToEnd(h);                                 // "You can move again!" never arrives
+        AssertFinished(h);
     }
 
     [Fact]
