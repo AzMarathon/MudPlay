@@ -1,5 +1,12 @@
 # Version history
 
+## 3.142.3
+
+- Session Stats → Time Analysis → Other: new Disarm Trap row, traps disarmed and the disarm success rate
+- Paradigm: "The trap is already disarmed." clears the exit at once instead of stalling 8 seconds per retry
+- A trap you disarmed is crossed without disarming again until it re-arms (5 min Stock, 2 min Paradigm)
+- bug reports addressed: paradigm-20261002-191037
+
 ## 3.142.0
 
 - Map: rooms, exits and markers are drawn once and only moved when you pan; walking redraws just the player marker and routes, and off-screen exits are no longer drawn
