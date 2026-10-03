@@ -2182,7 +2182,9 @@ How one damage spell cast against a monster is worked out.
     - merciful grace (`mgra`, #804) carries CurePoison (20) value 8. `cure poison` (#19) and `antidote` (#31) carry value 0 with Min/Max 8; `curing wind` (#1317) carries 100.
     - Three members showed `P` in `par` from 13:15:46. One took 29 casts (`You cast merciful grace on Silvix!` each time) and lost the flag at 13:18:26; one took 27 and lost it at 13:21:05; the third took none and lost it by 13:19:10.
     - So the flag cleared in about the same time with and without the cure. That doesn't fit the cure ending the poison in one cast.
-    - *[CONFLICT — ask the user]: the user says a cast removes one poison; the capture shows 29 casts not clearing one member. Do poisons from repeated hits stack on Paradigm, one removed per cast? Or does a cure with a value below the poison's amount do nothing?*
+    - Stacking can't explain it (one instance per poison spell, below), and nothing was re-applying it: the depth dwellers were left behind by 13:16:36 and the party sat in a room with no poison source.
+    - *[NEEDS CONFIRMATION]: why did `mgra` not clear bee poison? The user can't say from one point of view (2026-10-03). Does a cure whose value (8) is below the poison's amount (12–20) do nothing on Paradigm? One tentacle hit, one `mgra`, then `par` would settle it.*
+  - **On Paradigm a player carries at most one instance of each poison spell** *([CONFIRMED] 2026-10-03, user)*: bee poison on you is one record however many hits landed. Once cured it can be re-applied at once by the next hit.
 - **Where it shows:** `You are Poisoned!` in the status display, a `P` flag in `par`, and `%s is poisoned!` when someone looks at you.
 - **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
 
