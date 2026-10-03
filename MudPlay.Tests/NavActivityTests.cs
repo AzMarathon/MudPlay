@@ -127,6 +127,21 @@ public sealed class NavActivityTests
             holds.Select(h => h.Label));
     }
 
+    // A pause the user's own typed move caused says so: nobody pressed Pause, and the
+    // state chip alone reads "Paused" (report paradigm-20261003-162514).
+    [Fact]
+    public void ActiveHolds_NameTheTypedMoveThatPausedNavigation()
+    {
+        var holds = NavActivity.ActiveHolds(
+            new[] { MovementCoordinator.UserGate },
+            isMovementPrevented: false,
+            NavHoldNames.None with { TypedMove = "u" });
+        Assert.Equal(new[] { "You typed 'u' - Resume to go on" }, holds.Select(h => h.Label));
+
+        // A pause from the Pause button has no chip of its own.
+        Assert.Empty(NavActivity.ActiveHolds(new[] { MovementCoordinator.UserGate }, isMovementPrevented: false));
+    }
+
     // The holds the user doesn't want to see get no chip.
     [Fact]
     public void ActiveHolds_HiddenHoldsAndSettleBeats_GetNoChip()

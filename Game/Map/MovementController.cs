@@ -199,6 +199,34 @@ public sealed class MovementController : IDisposable
         SuspendedErrandChanged?.Invoke();
     }
 
+    // ----- Paused by a typed move --------------------------------------
+    // A move the user types pauses navigation on the same hold the Pause button
+    // uses, but nobody pressed Pause. Unless the status says what did it, a slipped
+    // key reads as a loop that simply stopped, with nothing holding it (report
+    // paradigm-20261003-162514). The command that caused the pause, until the pause
+    // lifts.
+    public string? PausedByTypedMove { get; private set; }
+
+    // Raised when that note is set or dropped.
+    public event Action? PausedByTypedMoveChanged;
+
+    public void PauseForTypedMove(string command)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(command);
+        if (IsIdle || IsUserPaused) return;
+        Pause();
+        if (!IsUserPaused) return;
+        PausedByTypedMove = command;
+        PausedByTypedMoveChanged?.Invoke();
+    }
+
+    private void ForgetTypedMoveOnceResumed()
+    {
+        if (PausedByTypedMove is null || IsUserPaused) return;
+        PausedByTypedMove = null;
+        PausedByTypedMoveChanged?.Invoke();
+    }
+
     // ----- Puzzle solvers ----------------------------------------------
     // The Great Pyramid climb and the asylum maze solve take a walk-to over from the
     // walker, which goes idle for them. Without these the toolbar read a solve as
@@ -392,7 +420,11 @@ public sealed class MovementController : IDisposable
 
     private void OnWalkerEvent(WalkEvent _) => StateChanged?.Invoke();
     private void OnLoopEvent(LoopEvent _) => StateChanged?.Invoke();
-    private void OnAutoLairBool(bool _) => StateChanged?.Invoke();
+    private void OnAutoLairBool(bool _)
+    {
+        ForgetTypedMoveOnceResumed();
+        StateChanged?.Invoke();
+    }
     private void OnCoordinatorGatesChanged()
     {
         // The user gate has other hands on it (the Navigation window's own Resume,
@@ -400,6 +432,7 @@ public sealed class MovementController : IDisposable
         if (SuspendedErrand is not null
             && !_coordinator.AssertedGates.Contains(MovementCoordinator.UserGate))
             LetErrandGo();
+        ForgetTypedMoveOnceResumed();
         StateChanged?.Invoke();
     }
 

@@ -16,7 +16,9 @@ public sealed record NavHoldNames(
     IReadOnlyCollection<string> Disconnected,
     IReadOnlyCollection<string> Invited,
     IReadOnlyCollection<string> Downed,
-    string? HeldCast)
+    string? HeldCast,
+    // The move the user typed that paused navigation, while that pause stands.
+    string? TypedMove = null)
 {
     public static readonly NavHoldNames None = new([], [], [], [], null);
 }
@@ -104,8 +106,9 @@ public static class NavActivity
     }
 
     // The chips for the holds in force right now, in priority order. User pause and
-    // combat are left out (the live state chip already reads Paused / Fighting), and
-    // so is every hold the user doesn't want to see. The held condition flag stands
+    // combat are left out (the live state chip already reads Paused / Fighting), bar
+    // a pause that a typed move caused, and so is every hold the user doesn't want
+    // to see. The held condition flag stands
     // in for HeldGate, since it flips first and the two describe the same thing.
     public static IReadOnlyList<(string Label, NavChipTone Tone)> ActiveHolds(
         IReadOnlyCollection<string> gates, bool isMovementPrevented, NavHoldNames? names = null)
@@ -113,6 +116,9 @@ public static class NavActivity
         ArgumentNullException.ThrowIfNull(gates);
         names ??= NavHoldNames.None;
         List<(string, NavChipTone)> holds = [];
+        // A pause nobody pressed Pause for. The state chip only says "Paused".
+        if (names.TypedMove is { Length: > 0 } typed)
+            holds.Add(($"You typed '{typed}' - Resume to go on", NavChipTone.Wait));
         if (isMovementPrevented) holds.Add(("Held", NavChipTone.Wait));
         foreach ((string gate, string label, _, bool chip) in Holds)
         {

@@ -646,6 +646,62 @@ public sealed class MovementControllerTests : IDisposable
         Assert.Equal("the stash transfer", h.Controller.SuspendedErrand);
     }
 
+    // ----- paused by a typed move ------------------------------------
+
+    [Fact]
+    public void PauseForTypedMove_PausesAndRemembersTheCommand_UntilResumed()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        int notes = 0;
+        h.Controller.PausedByTypedMoveChanged += () => notes++;
+
+        h.Controller.PauseForTypedMove("u");
+
+        Assert.True(h.Controller.IsUserPaused);
+        Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate));
+        Assert.Equal("u", h.Controller.PausedByTypedMove);
+        Assert.Equal(1, notes);
+
+        h.Controller.Resume();
+        Assert.Null(h.Controller.PausedByTypedMove);
+        Assert.Equal(2, notes);
+    }
+
+    [Fact]
+    public void PauseForTypedMove_IsDroppedByStop_AndByAnyoneLiftingThePause()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Controller.PauseForTypedMove("go path");
+        h.Controller.Stop();
+        Assert.Null(h.Controller.PausedByTypedMove);
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Controller.PauseForTypedMove("n");
+        h.Coordinator.ClearGate(MovementCoordinator.UserGate, "someone else");   // a remote resume, say
+        Assert.Null(h.Controller.PausedByTypedMove);
+    }
+
+    [Fact]
+    public void PauseForTypedMove_LeavesAPauseTheUserPressedAlone()
+    {
+        using Harness h = NewHarness();
+        Assert.Null(h.Controller.PausedByTypedMove);
+        h.Controller.PauseForTypedMove("u");             // nothing running
+        Assert.Null(h.Controller.PausedByTypedMove);
+        Assert.False(h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate));
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Controller.Pause();                            // the Pause button
+        h.Controller.PauseForTypedMove("u");
+        Assert.Null(h.Controller.PausedByTypedMove);     // already paused by choice
+    }
+
     // ----- puzzle solvers --------------------------------------------
 
     [Fact]

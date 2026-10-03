@@ -241,7 +241,7 @@ public sealed class RoomTrackerTests : IDisposable
     {
         RoomTracker tracker = NewTracker();
         int fired = 0;
-        tracker.ManualMoveObserved += () => fired++;
+        tracker.ManualMoveObserved += _ => fired++;
 
         // A hand-typed cardinal — no engine pre-announce, so no echo claim to consume.
         tracker.NoteMoveSentByObserver(Direction.N);
@@ -250,11 +250,24 @@ public sealed class RoomTrackerTests : IDisposable
     }
 
     [Fact]
+    public void ManualMoveObserved_CarriesWhatWasTyped()
+    {
+        RoomTracker tracker = NewTracker();
+        List<string> typed = new();
+        tracker.ManualMoveObserved += typed.Add;
+
+        tracker.NoteMoveSentByObserver(Direction.U);
+        tracker.NoteMoveSentByObserver("go path");
+
+        Assert.Equal(new[] { "u", "go path" }, typed);
+    }
+
+    [Fact]
     public void EngineCardinalMove_DoesNotFireManualMoveObserved()
     {
         RoomTracker tracker = NewTracker();
         int fired = 0;
-        tracker.ManualMoveObserved += () => fired++;
+        tracker.ManualMoveObserved += _ => fired++;
 
         // The walker pre-announces (arms the echo claim); its bytes then echo back
         // through the observer and are consumed — not treated as a manual step.
@@ -270,7 +283,7 @@ public sealed class RoomTrackerTests : IDisposable
     {
         RoomTracker tracker = NewTracker();
         int fired = 0;
-        tracker.ManualMoveObserved += () => fired++;
+        tracker.ManualMoveObserved += _ => fired++;
 
         tracker.NoteMoveSentByObserver("go path");   // hand-typed text exit, no engine claim
 

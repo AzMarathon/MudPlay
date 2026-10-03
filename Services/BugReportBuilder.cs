@@ -1253,6 +1253,7 @@ public static class BugReportBuilder
         // needs to point at the right engine.
         var gates = svc.MovementCoordinator.AssertedGates;
         Kv(sb, "Paused by", gates.Count > 0 ? string.Join(", ", gates) : "(nothing)");
+        Kv(sb, "Paused by a typed move", svc.MovementControl.PausedByTypedMove ?? "(no)");
         // Whether the Auto-All kill switch is the one holding navigation — it
         // suspends an in-flight nav on engage and resumes it on restore.
         Kv(sb, "Auto-All suspended nav", svc.MovementControl.IsAutoAllSuspended.ToString());

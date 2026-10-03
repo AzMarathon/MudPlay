@@ -7350,15 +7350,20 @@ public sealed class AppServices
         // the gate asserted but the toolbar / coalesced state didn't cleanly reflect
         // the pause (report paradigm-20260814-131551). Deferring lets the move fully
         // settle first, then the pause applies exactly like a Pause-button click.
-        RoomTracker.ManualMoveObserved += () =>
+        //
+        // Nobody pressed Pause, so the pause says what caused it: in the terminal, on
+        // the Navigation window's hold chips, and in the bug report.
+        RoomTracker.ManualMoveObserved += command =>
         {
             if (!MovementControl.IsActive || MovementControl.IsUserPaused) return;
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
                 if (!MovementControl.IsActive || MovementControl.IsUserPaused) return;
                 Log.Info("Navigation",
-                    "manual movement command — pausing navigation (user override; press Start to resume)");
-                MovementControl.Pause();
+                    $"manual movement command '{command}' — pausing navigation (user override; press Start to resume)");
+                MovementControl.PauseForTypedMove(command);
+                if (MovementControl.PausedByTypedMove is not null)
+                    WriteTerminalNotice($"[Navigation paused: you typed '{command}' - Resume to carry on]");
             });
         };
 

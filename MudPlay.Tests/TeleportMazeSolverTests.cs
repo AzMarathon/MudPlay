@@ -265,7 +265,7 @@ public sealed class TeleportMazeSolverTests : IDisposable
             Graph = graph, Bfs = bfs, Tracker = tracker,
             Walker = walker, Index = index, Solver = solver, DoorOpens = doorOpens, Coord = coord,
         };
-        tracker.ManualMoveObserved += () => h.ManualMoves++;
+        tracker.ManualMoveObserved += _ => h.ManualMoves++;
         walker.SetWireSender(h.Sent.Add);
         walker.SetMazeSolver(solver);
         walker.Event += h.Events.Add;

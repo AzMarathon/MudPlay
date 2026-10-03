@@ -89,6 +89,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnMapComparisonChanged();
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
+        // What a pause is for (a typed move) is set just after its gate goes up.
+        _services.MovementControl.PausedByTypedMoveChanged += RefreshActivityStatus;
         _services.AutoDeposit.ReroutingChanged += OnTripChanged;
         _services.SellDetour.DetouringChanged += OnTripChanged;
         _services.TrainerWalk.StateChanged += OnTripChanged;
@@ -263,6 +265,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.MapComparison.Changed -= OnMapComparisonChanged;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
+        _services.MovementControl.PausedByTypedMoveChanged -= RefreshActivityStatus;
         _services.AutoDeposit.ReroutingChanged -= OnTripChanged;
         _services.SellDetour.DetouringChanged -= OnTripChanged;
         _services.TrainerWalk.StateChanged -= OnTripChanged;
@@ -3647,6 +3650,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // start/stop path).
         OnPropertyChanged(nameof(IsWalkUserPaused));
         OnPropertyChanged(nameof(WalkPauseLabel));
+        OnPropertyChanged(nameof(TopBarStatusBadge));
         // A loop's Pause / Go face reads the user pause too.
         OnPropertyChanged(nameof(RunStopLabel));
         OnPropertyChanged(nameof(RunChipIsGo));
@@ -3731,7 +3735,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 or Game.Spells.SpellCategory.MinorPartyHeal or Game.Spells.SpellCategory.MajorPartyHeal
                 or Game.Spells.SpellCategory.MinorSelfHeal or Game.Spells.SpellCategory.MajorSelfHeal => "Healing",
             _ => null,   // a buff, or nothing known: the chip reads "Buffing"
-        });
+        },
+        _services.MovementControl.PausedByTypedMove);
 
     private void RefreshActivityStatus()
     {
@@ -4517,8 +4522,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     }
 
     // Engine-state tag the badge displays: WALKING / LOOPING / AUTO-LAIR /
-    // IDLE.
-    public string TopBarStatusBadge => EngineActionKind switch
+    // IDLE — or PAUSED while the user's own pause holds a running engine, so a
+    // paused loop doesn't go on reading LOOPING.
+    public string TopBarStatusBadge => EngineActionKind != NavigationEngineKind.Idle
+        && _services.MovementControl.IsUserPaused ? "PAUSED" : EngineActionKind switch
     {
         NavigationEngineKind.Walking  => "WALKING",
         NavigationEngineKind.Looping  => "LOOPING",
