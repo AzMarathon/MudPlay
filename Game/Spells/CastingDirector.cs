@@ -87,6 +87,17 @@ public sealed class CastingDirector : IDisposable
     // the flag long before then, so the throttle only bites a stuck flag.
     private static readonly TimeSpan SelfCureRetryWindow = TimeSpan.FromSeconds(15);
 
+    // Party-cure back-off. A cure cast at a member clears their chip on the cast line,
+    // but the next par poll puts a poison chip straight back when the cure didn't take
+    // (a cure-poison spell only lowers the poison by its own value, so a heavy poison
+    // outlasts it). Unthrottled, that loop re-cast the cure every 5 s, breaking our rest
+    // each time and running mana dry (report paradigm-20261003-131851). Each cast that
+    // follows a re-flag doubles the wait, up to PartyCureMaxWindow; the count starts
+    // over once the chip has stayed clear for PartyCureSettledAfter.
+    private static readonly TimeSpan PartyCureRetryWindow = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan PartyCureMaxWindow = TimeSpan.FromSeconds(120);
+    private static readonly TimeSpan PartyCureSettledAfter = TimeSpan.FromSeconds(12);
+
     // How long after arming a self-buff's pending marker an AlreadyCastThisRound /
     // fizzle rejection can still plausibly be about that send. Our recast draws its
     // rejection within the same ~5-6s round; a later one is an unrelated cast the
@@ -343,6 +354,10 @@ public sealed class CastingDirector : IDisposable
     // When each self-cure spell code was last cast. Feeds SelfCureRetryWindow so a stuck
     // condition flag can't re-fire the same cure every round.
     private readonly Dictionary<string, DateTime> _lastSelfCureAt = new(StringComparer.OrdinalIgnoreCase);
+
+    // Party cures in their back-off, keyed "spell target": when the last one went out
+    // and how many have gone out since the member's chip last stayed clear.
+    private readonly Dictionary<string, (DateTime At, int Casts)> _partyCures = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _disposed;
 
@@ -907,6 +922,7 @@ public sealed class CastingDirector : IDisposable
         _pendingManaRegenReroll = null;
         _lastSelfHealCast = null;
         _lastSelfCureAt.Clear();
+        _partyCures.Clear();
         _betweenRoundSlotUsedAt = DateTime.MinValue;
         _pausedAt = null;
     }
@@ -1859,6 +1875,8 @@ public sealed class CastingDirector : IDisposable
                 _lastSelfHealCast = (cand.Spell, _state.Hp, _state.Ma, _now());
             if (isSelfCure)
                 _lastSelfCureAt[cand.Spell] = _now();
+            if (category == SpellCategory.Curing && cand.Target is { } cured)
+                NotePartyCureCast(cand.Spell, cured);
 
             // Buff cast sent — start the recast clock immediately. A party buff
             // (targeted) arms CasterMessage confirmation so the timer starts on
@@ -2133,16 +2151,67 @@ public sealed class CastingDirector : IDisposable
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
-            if (m.Held && !string.IsNullOrWhiteSpace(spells.CureHoldsSpell))
-                return new CastCandidate(spells.CureHoldsSpell, MemberTarget(m));
-            if (m.Poisoned && !string.IsNullOrWhiteSpace(spells.CurePoisonSpell))
-                return new CastCandidate(spells.CurePoisonSpell, MemberTarget(m));
-            if (m.Diseased && !string.IsNullOrWhiteSpace(spells.CureDiseaseSpell))
-                return new CastCandidate(spells.CureDiseaseSpell, MemberTarget(m));
-            if (m.Blinded && !string.IsNullOrWhiteSpace(spells.CureBlindnessSpell))
-                return new CastCandidate(spells.CureBlindnessSpell, MemberTarget(m));
+            CastCandidate? cure = PartyCureFor(m, m.Held, spells.CureHoldsSpell)
+                ?? PartyCureFor(m, m.Poisoned, spells.CurePoisonSpell)
+                ?? PartyCureFor(m, m.Diseased, spells.CureDiseaseSpell)
+                ?? PartyCureFor(m, m.Blinded, spells.CureBlindnessSpell);
+            if (cure is not null) return cure;
         }
         return null;
+    }
+
+    // The cure for one of a member's ailments, or null when they don't have it, no
+    // spell is configured, or the spell is in its back-off for them (so the picker
+    // moves on to their next ailment, then the next member). A chip that has stayed
+    // clear since the last cast means the cure took: the back-off record is dropped.
+    private CastCandidate? PartyCureFor(PartyMember m, bool afflicted, string? spell)
+    {
+        if (string.IsNullOrWhiteSpace(spell) || MemberTarget(m) is not { } target) return null;
+        string key = PartyCureKey(spell, target);
+        if (!_partyCures.TryGetValue(key, out (DateTime At, int Casts) last))
+            return afflicted ? new CastCandidate(spell, target) : null;
+
+        TimeSpan since = _now() - last.At;
+        if (!afflicted)
+        {
+            if (since >= PartyCureSettledAfter) _partyCures.Remove(key);
+            return null;
+        }
+        return since < PartyCureWindow(last.Casts) ? null : new CastCandidate(spell, target);
+    }
+
+    private static string PartyCureKey(string spell, string target) => $"{spell} {target}";
+
+    // 15 s after the first cast, doubling with each further one, capped.
+    private static TimeSpan PartyCureWindow(int casts)
+    {
+        double secs = PartyCureRetryWindow.TotalSeconds * Math.Pow(2, Math.Min(casts - 1, 10));
+        return secs >= PartyCureMaxWindow.TotalSeconds ? PartyCureMaxWindow : TimeSpan.FromSeconds(secs);
+    }
+
+    private void NotePartyCureCast(string spell, string target)
+    {
+        string key = PartyCureKey(spell, target);
+        int casts = _partyCures.TryGetValue(key, out (DateTime At, int Casts) last) ? last.Casts + 1 : 1;
+        _partyCures[key] = (_now(), casts);
+        if (casts > 1)
+            _log?.Info(LogCategory,
+                $"party cure {spell} on {target}: cast {casts} and the ailment keeps coming back — "
+                + $"next try in {PartyCureWindow(casts).TotalSeconds:0}s if it's still there");
+    }
+
+    // Party cures waiting out their back-off, for the bug report.
+    public IReadOnlyList<string> DescribePartyCureBackoff()
+    {
+        DateTime now = _now();
+        List<string> rows = new();
+        foreach (KeyValuePair<string, (DateTime At, int Casts)> kv in _partyCures)
+        {
+            double left = (PartyCureWindow(kv.Value.Casts) - (now - kv.Value.At)).TotalSeconds;
+            rows.Add($"{kv.Key}: {kv.Value.Casts} cast(s), "
+                + (left > 0 ? $"next in {left:0}s" : "free to cast"));
+        }
+        return rows;
     }
 
     // Resolve the cast-target string for a party member. Self resolves to null —

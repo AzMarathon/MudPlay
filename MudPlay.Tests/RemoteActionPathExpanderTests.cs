@@ -747,4 +747,54 @@ public sealed class RemoteActionPathExpanderTests : IDisposable
         Assert.Empty(steps);
     }
 
+    // 1/1 ─E→ 1/2 (lever A) ─E→ 1/3 ─E→ 1/5 (host) ─E (needs A then B)→ 1/9
+    //                            1/3 ⇄N 1/4 (lever B);  1/5 ─W→ 1/3
+    // Lever A's room has no way back in: the walk passes it, but nothing returns to it.
+    private const string OneWayLeverGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/2", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "LeverA", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/3", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "Action#1 [on the E exit of room 1/5]: pull lever" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Mid", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/4", "S": "0", "E": "1/5", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "LeverB", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "1/3", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "Action#2 [on the E exit of room 1/5]: turn wheel" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Host", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/9 (Hidden/Needs 2 Actions, specific order)", "W": "1/3", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "0", "W": "1/5", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // Report paradigm-20261003-132757: the first lever room lay on the route but
+    // couldn't be walked back to, so no round trip existed and the walk failed.
+    [Fact]
+    public void LeverRoomWithNoWayBack_IsWorkedOneWayAlongTheRoute()
+    {
+        RoomGraphManager graph = NewGraph(OneWayLeverGraphJson);
+        BfsMapper bfs = new(graph);
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 1),
+            new[] { Direction.E, Direction.E, Direction.E, Direction.E }, bfs);
+
+        string[] walked = steps.Select(s => s switch
+        {
+            MoveStep m => $"{m.ExpectedTarget.Room}",
+            CommandStep c => c.Command,
+            _ => "?",
+        }).ToArray();
+        Assert.Equal(new[] { "2", "pull lever", "3", "4", "turn wheel", "3", "5", "9" }, walked);
+        Assert.True(((MoveStep)steps[^1]).SkipSpecialDispatch);
+    }
+
+    [Fact]
+    public void LeverRoomOutOfReach_NamesTheLegThatCannotBeWalked()
+    {
+        RoomGraphManager graph = NewGraph(OneWayLeverGraphJson);
+        BfsMapper bfs = new(graph);
+        List<UnroutableLeverLeg> unroutable = new();
+
+        var steps = RemoteActionPathExpander.Expand(
+            graph, new RoomKey(1, 5), new[] { Direction.E }, bfs, unroutable: unroutable);
+
+        Assert.Empty(steps);
+        UnroutableLeverLeg leg = Assert.Single(unroutable);
+        Assert.Equal(new UnroutableLeverLeg(new RoomKey(1, 5), Direction.E, new RoomKey(1, 5), new RoomKey(1, 2)), leg);
+    }
 }

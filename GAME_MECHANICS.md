@@ -2176,11 +2176,13 @@ How one damage spell cast against a monster is worked out.
   - **A CurePoison (ability 20) spell ends one poison spell**, the first poison slot it finds, running its wear-off. It then lowers the poison number by the cure's own value, floored at 0 (Stock cure poison: 8) (`_cast_user_target` @ `0x44683f`). So one cast can leave a player with two poisons still poisoned.
   - **The healer's `buy cure poison`** (`_buy_item` @ `0x41b9e6`) zeroes the poison number and ends every poison slot, for 25 silver: `... and your poisoning is cured.`. If you weren't poisoned it costs 15 silver: `... and find that you were not poisoned!`.
   - **Death** ends every slot and zeroes the poison number.
+  - **A cure cast can leave the `par` `P` flag up on Paradigm** *([OBSERVED] 2026-10-03, report `paradigm-20261003-131851`)*: merciful grace (`mgra`, #804, CurePoison (20) value 8 in `data-Paradigm-1.9.1`) cast on poisoned party members printed `You cast merciful grace on Silvix!` each time, and the member's `P` stayed in `par` through more than twenty casts in a row. That fits the lowers-by-its-own-value rule above, but the capture can't tell a cure finally landing from the poison wearing off. *[NEEDS CONFIRMATION]: does a Paradigm cure-poison cast lower the poison by its value as on Stock?*
 - **Where it shows:** `You are Poisoned!` in the status display, a `P` flag in `par`, and `%s is poisoned!` when someone looks at you.
 - **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
 
 **Client use:**
 - `LoopSimulator` (`LandProc`, `Burn`) applies the hit-spell policy above: one slot per spell, its stored value taken every 3 s, refreshed only by a strictly higher roll. Which spells burn follows the realm (`SimProc.From`): on Stock only a Damage (1) spell with a duration, while Damage-MR (17) hits on landing; on Paradigm every damage spell with a duration, as the `envelops` capture shows. It doesn't simulate poison (ability 19) hit spells, or monster poison.
+- `CastingDirector.PickPartyCure` backs off a party cure whose ailment comes back after the cast (`PartyCureFor`, `NotePartyCureCast`): 15 s, doubling to a 2-minute cap, starting over once the chip has stayed clear 12 s (report `paradigm-20261003-131851`: `mgra` went out every 5 s until mana ran dry).
 
 ### Attack-spell mana efficiency
 *Status: Unrated (client formula as used by Monster Intel)*
