@@ -64,17 +64,21 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         // The CP Allocation tab (writer) and Level Projection tab (reader) share
         // one plan state so the projection's HP / regen reflect planned training.
         var planState = new CpPlanState();
-        Sections.Add(new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses));
+        Sections.Add(new LazyWorkshopSection(LevelProjectionSectionViewModel.SectionId, LevelProjectionSectionViewModel.SectionTitle,
+            () => new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses)));
 
         Sections.Add(new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk, AppServices.Current.AutoTrain));
 
         Sections.Add(new QuestSectionViewModel(playerStats, gameData, profile, quests, questBonuses));
 
-        Sections.Add(new EquipmentSectionViewModel(profile, inventory, gameData, equipment, playerStats, players, questBonuses));
+        Sections.Add(new LazyWorkshopSection(EquipmentSectionViewModel.SectionId, EquipmentSectionViewModel.SectionTitle,
+            () => new EquipmentSectionViewModel(profile, inventory, gameData, equipment, playerStats, players, questBonuses)));
 
-        Sections.Add(new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile, leaderboards));
+        Sections.Add(new LazyWorkshopSection(CalculatorsSectionViewModel.SectionId, CalculatorsSectionViewModel.SectionTitle,
+            () => new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile, leaderboards)));
 
-        Sections.Add(new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick));
+        Sections.Add(new LazyWorkshopSection(BossesSectionViewModel.SectionId, BossesSectionViewModel.SectionTitle,
+            () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick)));
 
         Sections.Add(new GhManagementSectionViewModel(AppServices.Current.GhRoomLabels, AppServices.Current.GhSweep, AppServices.Current.RoomGraph, AppServices.Current.GhItemLocations, AppServices.Current.GhManagedRooms));
 

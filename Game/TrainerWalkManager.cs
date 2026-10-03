@@ -461,7 +461,7 @@ public sealed class TrainerWalkManager : IDisposable
         if (_tracker.State.CurrentRoom is not { } cur) return 0;
         IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
             TrainerCatalog.Enumerate(_gameData), level, levels, classNumber,
-            ReadDisabledTrainers(), cur.Key, (a, b) => _bfs.DistanceBetween(a, b));
+            ReadDisabledTrainers(), cur.Key, _bfs.DistanceMemo());
         return Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
     }
 
@@ -591,7 +591,7 @@ public sealed class TrainerWalkManager : IDisposable
 
         IReadOnlyList<Game.Train.TrainSegment> itinerary = Game.Train.TrainItineraryPlanner.Build(
             TrainerCatalog.Enumerate(_gameData), RunLevel, levels, ResolveClassNumber(),
-            ReadDisabledTrainers(), from, (a, b) => _bfs.DistanceBetween(a, b));
+            ReadDisabledTrainers(), from, _bfs.DistanceMemo());
         long cost = Game.Train.TrainItineraryPlanner.TotalCost(itinerary);
         if (cost <= 0) return Game.Train.TrainFundingHandoff.Proceed;
         ReserveForTraining?.Invoke(cost);
@@ -978,7 +978,7 @@ public sealed class TrainerWalkManager : IDisposable
         TrainerShop? pick = Game.Train.TrainItineraryPlanner.NextTrainerInChain(
             TrainerCatalog.Enumerate(_gameData), level, CountBankableAbove(level), _keepLevels,
             EffectiveCeiling(), ResolveClassNumber(), ReadDisabledTrainers(),
-            cur.Key, (a, b) => _bfs.DistanceBetween(a, b));
+            cur.Key, _bfs.DistanceMemo());
 
         if (pick is not { } next) return false;
         var room = new RoomKey(next.Map, next.Room);
@@ -1382,7 +1382,7 @@ public sealed class TrainerWalkManager : IDisposable
     private TrainerShop? SelectNearestForStats(RoomKey from) =>
         TrainerCatalog.SelectNearestForStats(
             TrainerCatalog.Enumerate(_gameData), ResolveClassNumber(), ReadDisabledTrainers(),
-            t => _bfs.DistanceBetween(from, new RoomKey(t.Map, t.Room)));
+            DistancesFrom(from));
 
     // Level is explicit for the chain re-target: mid-run PlayerStats.Level lags the
     // level we've actually attained, and picking the next trainer against a stale
@@ -1402,7 +1402,15 @@ public sealed class TrainerWalkManager : IDisposable
     private IReadOnlyList<TrainerCandidate> RankTrainers(RoomKey from, int level) =>
         TrainerCatalog.RankCandidates(
             TrainerCatalog.Enumerate(_gameData), level, ResolveClassNumber(), ReadDisabledTrainers(),
-            t => _bfs.DistanceBetween(from, new RoomKey(t.Map, t.Room)));
+            DistancesFrom(from));
+
+    // Distance from one room to each trainer, mapped once rather than searched per
+    // trainer (BfsMapper.DistanceMemo).
+    private Func<TrainerShop, int?> DistancesFrom(RoomKey from)
+    {
+        Func<RoomKey, RoomKey, int?> distance = _bfs.DistanceMemo();
+        return t => distance(from, new RoomKey(t.Map, t.Room));
+    }
 
     // The ranking a level-up run would use if it started right now, for the bug
     // report — the capture lands after the walk began, so this shows whether the

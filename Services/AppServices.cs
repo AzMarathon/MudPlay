@@ -7465,7 +7465,7 @@ public sealed class AppServices
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             onHandCopper: () => Inventory.Snapshot.Currency.TotalCopperValue,
             sources: BuildTrainFundingSources,
-            distance: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            newDistanceLookup: () => Bfs.DistanceMemo(Movement),
             // Same gate planning the trainer walk uses — a stash or bank can sit
             // behind a key-door or hidden exit a plain walk can't route through.
             walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),

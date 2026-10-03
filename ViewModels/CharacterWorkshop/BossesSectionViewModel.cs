@@ -36,8 +36,10 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     private Control? _view;
     private bool _suppress;
 
-    public override string Id => "bosses";
-    public override string Title => "Bosses";
+    public const string SectionId = "bosses";
+    public const string SectionTitle = "Bosses";
+    public override string Id => SectionId;
+    public override string Title => SectionTitle;
     public override Control View => _view ??= new BossesSectionView { DataContext = this };
 
     // The grid binds this filtered view; heartbeat refresh + persist iterate the

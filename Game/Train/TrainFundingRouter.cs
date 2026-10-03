@@ -81,7 +81,10 @@ public sealed class TrainFundingRouter
     private readonly Func<bool>? _bankBalancesKnown;
     private readonly Action? _requestBankBalances;
     private readonly Func<IReadOnlyList<TrainFundingSource>> _sources;
-    private readonly Func<RoomKey, RoomKey, int?> _distance;
+    // A fresh distance lookup for each planning pass (BfsMapper.DistanceMemo): a plan
+    // asks the same few rooms about many others, and the answers go stale between
+    // passes as avoids and gates change.
+    private readonly Func<Func<RoomKey, RoomKey, int?>> _newDistanceLookup;
     private readonly Func<RoomKey, bool> _walkTo;
     private readonly Action<string> _send;
     private readonly Action<TimeSpan, Action> _armTimer;
@@ -136,7 +139,7 @@ public sealed class TrainFundingRouter
         Func<RoomKey?> currentRoom,
         Func<long> onHandCopper,
         Func<IReadOnlyList<TrainFundingSource>> sources,
-        Func<RoomKey, RoomKey, int?> distance,
+        Func<Func<RoomKey, RoomKey, int?>> newDistanceLookup,
         Func<RoomKey, bool> walkTo,
         Action<string> send,
         Action<TimeSpan, Action> armTimer,
@@ -172,7 +175,7 @@ public sealed class TrainFundingRouter
         _currentRoom = currentRoom ?? throw new ArgumentNullException(nameof(currentRoom));
         _onHandCopper = onHandCopper ?? throw new ArgumentNullException(nameof(onHandCopper));
         _sources = sources ?? throw new ArgumentNullException(nameof(sources));
-        _distance = distance ?? throw new ArgumentNullException(nameof(distance));
+        _newDistanceLookup = newDistanceLookup ?? throw new ArgumentNullException(nameof(newDistanceLookup));
         _walkTo = walkTo ?? throw new ArgumentNullException(nameof(walkTo));
         _send = send ?? throw new ArgumentNullException(nameof(send));
         _armTimer = armTimer ?? throw new ArgumentNullException(nameof(armTimer));
@@ -600,9 +603,10 @@ public sealed class TrainFundingRouter
     // 2026-09-30).
     private TrainFundingPlan PlanFrom(RoomKey here, long spendable, IReadOnlyList<TrainFundingSource> sources, long need)
     {
-        TrainFundingPlan plan = TrainFundingPlanner.Plan(need, spendable, sources, here, _trainerRoom, _distance);
+        Func<RoomKey, RoomKey, int?> distance = _newDistanceLookup();
+        TrainFundingPlan plan = TrainFundingPlanner.Plan(need, spendable, sources, here, _trainerRoom, distance);
         if (plan.Affordable || need <= _cost || !TollsAvoidable(here)) return plan;
-        TrainFundingPlan feeOnly = TrainFundingPlanner.Plan(_cost, spendable, sources, here, _trainerRoom, _distance);
+        TrainFundingPlan feeOnly = TrainFundingPlanner.Plan(_cost, spendable, sources, here, _trainerRoom, distance);
         if (feeOnly.Affordable)
             _log?.Info(LogCategory, $"Not enough to cover the trip's {need - _cost:N0} copper in tolls as well — "
                 + "fetching the train fee and routing round them.");

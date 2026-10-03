@@ -292,6 +292,17 @@ public sealed class MapControl : Control
     // while the static layer draws the dimmed floors (the same drawing, a different
     // set of cells).
     private RoomLayout? _drawingOtherLevels;
+
+    // Whether route lines run on through the other floors' rooms; off keeps them
+    // to the floor shown (GlobalSettings.MapRouteLinesOnOtherFloors).
+    public static readonly StyledProperty<bool> RouteLinesOnOtherLevelsProperty =
+        AvaloniaProperty.Register<MapControl, bool>(nameof(RouteLinesOnOtherLevels), defaultValue: true);
+
+    public bool RouteLinesOnOtherLevels
+    {
+        get => GetValue(RouteLinesOnOtherLevelsProperty);
+        set => SetValue(RouteLinesOnOtherLevelsProperty, value);
+    }
     private RoomLayout? DrawLayout => _drawingOtherLevels ?? Layout;
 
     // Where a room sits on the map: on the current floor, else on another floor
@@ -1000,7 +1011,7 @@ public sealed class MapControl : Control
         _dynamicLayer = new MapLayer(DrawDynamicLayer);
         VisualChildren.Add(_staticLayer);
         VisualChildren.Add(_dynamicLayer);
-        InvalidateStatic();
+        InvalidateStatic("first draw");
         AffectsRender<MapControl>(LayoutProperty, CurrentRoomKeyProperty, DestinationRoomKeyProperty, GraphProperty,
             LairModeProperty, LairRespawnSecondsProperty, LairMaxRespawnSecondsProperty, LairMonsterCountsProperty,
             HighlightShopsProperty, SpellModeProperty,
@@ -1514,7 +1525,7 @@ public sealed class MapControl : Control
         if (margin != _staticMargin)
         {
             _staticMargin = margin;
-            InvalidateStatic();
+            InvalidateStatic("resize");
         }
         _staticLayer?.Arrange(new Rect(-margin, -margin, finalSize.Width + 2 * margin, finalSize.Height + 2 * margin));
         _dynamicLayer?.Arrange(new Rect(finalSize));
@@ -1548,8 +1559,15 @@ public sealed class MapControl : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        bool resized = change.Property == BoundsProperty;
-        if (resized || StaticLayerProperties.Contains(change.Property)) InvalidateStatic();
+        // Bounds carries position too: the map shifting a pixel because the header
+        // above it rewrapped changes nothing drawn.
+        bool resized = change.Property == BoundsProperty
+            && change.OldValue is Rect before && change.NewValue is Rect after && before.Size != after.Size;
+        if (change.Property != BoundsProperty && StaticLayerProperties.Contains(change.Property)
+            && SameContents(change.OldValue, change.NewValue))
+            return;
+        if (resized) InvalidateStatic("resize");
+        else if (StaticLayerProperties.Contains(change.Property)) InvalidateStatic(change.Property.Name);
         // Everything that affects drawing at all reaches the dynamic layer: the
         // current and destination rooms are redrawn there over their static nodes.
         if (resized || StaticLayerProperties.Contains(change.Property) || DynamicLayerProperties.Contains(change.Property))
@@ -1563,7 +1581,7 @@ public sealed class MapControl : Control
         AutoLairWaypointsProperty, AutoLairApproachPathProperty, LoopApproachPreviewPathProperty,
         WalkPathIsAutoLairProperty, SelectedRoomKeyProperty, PreviewPathProperty, LeaderRoutePathProperty,
         WhereTargetRoomsProperty, ComparisonRecordedPathProperty, ComparisonConvertedPathProperty,
-        ComparisonStuckRoomsProperty,
+        ComparisonStuckRoomsProperty, RouteLinesOnOtherLevelsProperty,
     };
 
     // The view moved (pan, zoom, re-centre). The cached static layer stands in
@@ -1610,7 +1628,7 @@ public sealed class MapControl : Control
         _staticRedrawTimer ??= new DispatcherTimer(TimeSpan.Zero, DispatcherPriority.Background, (_, _) =>
         {
             _staticRedrawTimer!.Stop();
-            InvalidateStatic();
+            InvalidateStatic(_zoom != _staticZoom ? "zoom" : "pan");
         });
         if (debounce)
         {
@@ -1623,7 +1641,7 @@ public sealed class MapControl : Control
         TimeSpan since = DateTime.UtcNow - _lastStaticRedraw;
         if (since >= StaticRedrawGap)
         {
-            InvalidateStatic();
+            InvalidateStatic("pan");
             return;
         }
         _staticRedrawTimer.Interval = StaticRedrawGap - since;
@@ -1633,8 +1651,27 @@ public sealed class MapControl : Control
     // Redraw the static layer at the view as it is now. The view it is drawn at is
     // taken here, not in the render: a visual can't change its own transform while
     // it renders, and a pan before that render lands as a shift from this view.
-    private void InvalidateStatic()
+    // A room set or count map republished with the same contents: the overlays are
+    // rebuilt from scratch on every change of what they mirror, and each one used to
+    // cost a full redraw of the map even when nothing in it had changed.
+    private static bool SameContents(object? before, object? after)
     {
+        if (ReferenceEquals(before, after)) return true;
+        return (before, after) switch
+        {
+            (IReadOnlySet<RoomKey> a, IReadOnlySet<RoomKey> b) => a.Count == b.Count && a.SetEquals(b),
+            (IReadOnlyDictionary<RoomKey, int> a, IReadOnlyDictionary<RoomKey, int> b) =>
+                a.Count == b.Count && a.All(kv => b.TryGetValue(kv.Key, out int v) && v == kv.Value),
+            _ => false,
+        };
+    }
+
+    // Why the static layer is being redrawn, for the performance log.
+    private string _staticCause = "first draw";
+
+    private void InvalidateStatic(string cause)
+    {
+        _staticCause = cause;
         _staticRedrawTimer?.Stop();
         _lastStaticRedraw = DateTime.UtcNow;
         _staticPanX = _panX;
@@ -1648,7 +1685,8 @@ public sealed class MapControl : Control
     private void DrawStaticLayer(DrawingContext context)
     {
         if (Layout is null || Layout.CoordToRoom.Count == 0) return;
-        using PerformanceMonitor.Scope? timing = AppServices.CurrentOrNull?.Performance.Measure("map redraw");
+        using PerformanceMonitor.Scope? timing = AppServices.CurrentOrNull?.Performance is { IsCollecting: true } perf
+            ? perf.Measure($"map redraw ({_staticCause})") : null;
 
         double tilePixels = TileWorldSize * _staticZoom;
         if (tilePixels < MinTilePixels) return;
@@ -2289,9 +2327,11 @@ public sealed class MapControl : Control
 
         Point? prev = null;
         RoomKey? prevKey = null;
+        bool throughOtherLevels = RouteLinesOnOtherLevels;
         foreach (RoomKey key in path)
         {
-            if (!TryGetCoord(key, out (int X, int Y) coord))
+            (int X, int Y) coord;
+            if (throughOtherLevels ? !TryGetCoord(key, out coord) : !Layout.Positions.TryGetValue(key, out coord))
             {
                 prev = null;                                  // gap — skip until next placed room
                 prevKey = null;

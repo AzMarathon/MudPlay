@@ -2274,9 +2274,9 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 
 ### Navigation map: other floors
 
-**Default:** On; **10** floors up and down; leave out a floor that overlaps more than **50%**
-**Available options:** On / off; 1–99 floors; 0–100%.
-**What it does:** Draws the floors reached by up and down exits dimmed around the floor the Navigation map shows (see **The map and obstacles**). **Floors drawn up and down** is how many up/down steps away a floor may be; a mountain path climbs one step per floor (the Barren Hills climb is over 40), so raise it to see a long climb end to end. **Leave out a floor that overlaps more than** drops a floor when that share of its rooms would land on rooms already drawn, since a floor stacked right on this one is a different place; a floor with three or fewer rooms covered is always kept, and **100%** keeps every floor.
+**Default:** On; **10** floors up and down; leave out a floor that overlaps more than **50%**; route lines drawn on other floors
+**Available options:** On / off; 1–99 floors; 0–100%; route lines on other floors on / off.
+**What it does:** Draws the floors reached by up and down exits dimmed around the floor the Navigation map shows (see **The map and obstacles**). **Floors drawn up and down** is how many up/down steps away a floor may be; a mountain path climbs one step per floor (the Barren Hills climb is over 40), so raise it to see a long climb end to end. **Leave out a floor that overlaps more than** drops a floor when that share of its rooms would land on rooms already drawn, since a floor stacked right on this one is a different place; a floor with three or fewer rooms covered is always kept, and **100%** keeps every floor. **Draw route lines on other floors** lets a walk's route line run on through the shadowed floors' rooms; the game doesn't always lay two floors out so they line up, so a route crossing between them can draw as a long diagonal. Turn it off to keep route lines to the floor shown, broken off where the route leaves it.
 **When you might change it:** Raise the floor count for long climbs and deep dungeons; lower it, or the overlap share, if the map feels busy.
 **Important notes:** Install-wide (Global tier); the map's **Overlays → Other floors** chip flips the same on/off. Applies on Apply; an open map redraws at once.
 

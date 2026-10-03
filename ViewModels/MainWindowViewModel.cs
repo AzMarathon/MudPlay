@@ -4392,7 +4392,8 @@ public partial class MainWindowViewModel : ObservableObject
             ViewModels.CharacterWorkshop.WorkshopSectionViewModel? section = vm.Sections
                 .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
             if (section is not null) vm.SelectedSection = section;
-            if (calculatorId is not null && section is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc)
+            if (calculatorId is not null
+                && section is ViewModels.CharacterWorkshop.LazyWorkshopSection { Section: ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc })
                 calc.NavigateToCalculator(calculatorId);
             RaiseExisting(existing);
             return;
@@ -4429,7 +4430,7 @@ public partial class MainWindowViewModel : ObservableObject
         // honors on first layout).
         if (calculatorId is not null
             && workshopVm.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase))
-                is ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calcSection)
+                is ViewModels.CharacterWorkshop.LazyWorkshopSection { Section: ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calcSection })
         {
             calcSection.NavigateToCalculator(calculatorId);
         }

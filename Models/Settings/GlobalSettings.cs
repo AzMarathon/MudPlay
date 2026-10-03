@@ -91,6 +91,10 @@ public sealed class GlobalSettings
     public const int MaxMapOtherFloorsLevels = 99;
     public int MapOtherFloorsLevels { get; set; } = 10;
     public int MapOtherFloorsMaxOverlapPercent { get; set; } = 50;
+    // Whether route lines run on through the other floors' rooms. Off keeps them
+    // to the floor shown: where the game's own layout of two floors doesn't line
+    // up, a route crossing between them draws as a jarring diagonal.
+    public bool MapRouteLinesOnOtherFloors { get; set; } = true;
 
     // Map legend overlay's user-dragged position, in pixels from the top-left of
     // the map viewport. Null (the default) parks it bottom-left. Install-wide

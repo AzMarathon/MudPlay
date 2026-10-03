@@ -176,6 +176,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _mapShowOtherFloors = true;
     [ObservableProperty] private int _mapOtherFloorsLevels = 10;
     [ObservableProperty] private int _mapOtherFloorsMaxOverlapPercent = 50;
+    [ObservableProperty] private bool _mapRouteLinesOnOtherFloors = true;
     public int MaxMapOtherFloorsLevels => GlobalSettings.MaxMapOtherFloorsLevels;
 
     // Buff Watchdog window layout — where the config table sits relative to the timer
@@ -496,6 +497,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             System.Math.Clamp(MapOtherFloorsLevels, 1, GlobalSettings.MaxMapOtherFloorsLevels);
         _globalSettings.Current.MapOtherFloorsMaxOverlapPercent =
             System.Math.Clamp(MapOtherFloorsMaxOverlapPercent, 0, 100);
+        _globalSettings.Current.MapRouteLinesOnOtherFloors = MapRouteLinesOnOtherFloors;
         _globalSettings.Save();
 
         // A plain profile Save fires neither ProfileLoaded nor ProfileMutated, so the
@@ -575,6 +577,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         MapShowOtherFloors = _globalSettings.Current.MapShowOtherFloors;
         MapOtherFloorsLevels = _globalSettings.Current.MapOtherFloorsLevels;
         MapOtherFloorsMaxOverlapPercent = _globalSettings.Current.MapOtherFloorsMaxOverlapPercent;
+        MapRouteLinesOnOtherFloors = _globalSettings.Current.MapRouteLinesOnOtherFloors;
 
         // Buff Watchdog layout is a top-level per-character field (not in the DTO).
         BuffWatchdogLayout layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
@@ -728,6 +731,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnMapShowOtherFloorsChanged(bool value)             => Dirty();
     partial void OnMapOtherFloorsLevelsChanged(int value)            => Dirty();
     partial void OnMapOtherFloorsMaxOverlapPercentChanged(int value) => Dirty();
+    partial void OnMapRouteLinesOnOtherFloorsChanged(bool value)     => Dirty();
     partial void OnSelectedBuffWatchdogLayoutChanged(BuffLayoutOption? value) => Dirty();
     // Live preview: push straight to the terminal canvas as the picker
     // changes, before Save/Cancel commit the choice. Discard reverts by
