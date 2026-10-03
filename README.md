@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.36**
-> - A party cure that doesn't clear the ailment is no longer recast every 5 seconds: the wait doubles each time, from 15 seconds up to 2 minutes
-> - A lever room on your route that can't be walked back to no longer fails the walk: the levers are worked one-way and the walk comes out at the exit
-> - A walk that fails because a lever room can't be reached names the exit, the room and what's in the way, instead of "path expansion empty"
+> **Version 3.142.37**
+> - Route picker opens when a lever needed on your route sits behind a hazard or item gate: obtain the counter or cross unprotected, and the walk runs the whole lever detour
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

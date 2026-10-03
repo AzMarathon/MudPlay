@@ -31,7 +31,11 @@ public static class CurrentRouteDetails
         Func<RoomKey, RouteStepWarning?> roomHazard,
         Func<int, RoomDetailLink> itemLink,
         int maxHp = 0,
-        Game.TrapDisarmOdds? disarmOdds = null)
+        Game.TrapDisarmOdds? disarmOdds = null,
+        // The route's walk when the caller already has it expanded (a route-picker
+        // choice whose lever detour crosses gates the live filter would refuse, so
+        // expanding the polyline here would cut it short).
+        IReadOnlyList<WalkStep>? walk = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -44,10 +48,15 @@ public static class CurrentRouteDetails
         if (route is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
 
         RoomKey source = route[0];
-        IReadOnlyList<Direction> dirs = RouteStepList.DirectionsAlong(graph, route);
-        if (dirs.Count == 0) return Array.Empty<RouteDetailRow>();
-
-        IReadOnlyList<WalkStep> steps = RemoteActionPathExpander.Expand(graph, source, dirs, bfs, filter);
+        IReadOnlyList<WalkStep> steps;
+        if (walk is not null)
+            steps = walk;
+        else
+        {
+            IReadOnlyList<Direction> dirs = RouteStepList.DirectionsAlong(graph, route);
+            if (dirs.Count == 0) return Array.Empty<RouteDetailRow>();
+            steps = RemoteActionPathExpander.Expand(graph, source, dirs, bfs, filter);
+        }
 
         // No gated acquire rows for the current route — the run's gates were already
         // resolved at plan time, and the walker's expanded steps already carry the
