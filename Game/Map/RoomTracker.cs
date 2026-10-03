@@ -185,6 +185,11 @@ public sealed class RoomTracker
     // the like) — raised after the tracker has un-counted it.
     public event Action? MoveBlocked;
 
+    // A sent or dragged move landed in the room it predicted, shown by that room's
+    // own display. Proof the character can move, which a consumer holding a stale
+    // "held" condition uses to drop it.
+    public event Action? MoveConfirmed;
+
     // A room script refused the typed exit command in flight — raised BEFORE the
     // revert, so a consumer that retries the command on its own (the walker's greet
     // re-ask) can stand down before the revert's transition reaches it.
@@ -1358,6 +1363,7 @@ public sealed class RoomTracker
                     // Pending posture if more confirmations are due.
                     SetRoom(expected, RoomConfidence.Pending, when, $"move {moveLabel} confirmed, queue not empty");
                 }
+                MoveConfirmed?.Invoke();
                 return;
             }
 
@@ -1384,6 +1390,7 @@ public sealed class RoomTracker
                         ? RoomConfidence.Confirmed
                         : RoomConfidence.Pending;
                     SetRoom(learned, target, when, $"move {moveLabel} confirmed (null-name learned)");
+                    MoveConfirmed?.Invoke();
                     return;
                 }
             }

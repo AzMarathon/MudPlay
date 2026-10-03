@@ -11,6 +11,11 @@
 - Floor 3 doors: open ones are walked without a look, shut ones go through the normal door opener (rests when hurt), timer doors are waited for
 - Golden lion key: the climb waits for it in the floating key's room, asks a member who picked it up, and steps out and back in when nothing dropped
 
+## 3.142.41
+
+- A stale "held" state now clears as soon as a move goes through, so navigation resumes and the hold cure stops re-casting
+- bug reports addressed: paradigm-20261003-161904
+
 ## 3.142.40
 
 - Bossing set: new "Keep on while heading to another boss" checkbox for walk-to's; a follower asks the leader's client (`@path`) whether it's walking to a boss room

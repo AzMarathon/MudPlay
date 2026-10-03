@@ -2743,6 +2743,7 @@ How one damage spell cast against a monster is worked out.
   - `MovementRefusalDetector` matches the `You are flat on your back!` move refusal.
   - `LoopSimulator` applies a hit spell's AC / Dodge / Accuracy change for its duration, and neither walks on nor flees (the Health run trigger waits) while a HoldPerson hit spell is on (`Held`).
   - The applied/clear pair maps to the `MovementPrevented` flag, so the local hold (`SelfHeldResponder` → `HeldGate`) holds our own loop for the duration exactly as a confused leader's does. A held leader or solo character has no leader to send `.@held` to, so the local `HeldGate` alone pauses the loop.
+  - **Client policy:** a move that lands in its predicted room (walked or follow-dragged) drops a latched `MovementPrevented` flag, since a held character can't move and a held follower isn't dragged (see *Party → A follower who can't move is left behind*). `RoomTracker.MoveConfirmed` → `ConditionTracker.ClearFlag` covers a wear-off line that never arrived (report `paradigm-20261003-161904`).
 
 ---
 
