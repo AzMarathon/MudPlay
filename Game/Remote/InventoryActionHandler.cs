@@ -46,9 +46,9 @@ public sealed class InventoryActionHandler : IDisposable
     // Paradigm batches a counted item command ("drop 3 black star key"); Stock needs
     // one command per copy (CountedCommand). Unwired reads as Stock — the safe form.
     private readonly Func<bool> _isParadigm;
-    // True when the game would refuse to drop or hide the named item (worn or not).
-    // Unwired: nothing is skipped.
-    private readonly Func<string, bool, bool> _cannotDrop;
+    // True when the game would refuse to drop (or, with hiding set, hide) the named
+    // item, worn or not. Unwired: nothing is skipped.
+    private readonly Func<string, bool, bool, bool> _cannotDrop;
     // Paces the sweeps (BulkCommandPacer). Null when no scheduler is wired (tests):
     // every command then goes straight out.
     private readonly BulkCommandPacer? _pacer;
@@ -66,12 +66,12 @@ public sealed class InventoryActionHandler : IDisposable
         Func<CashSettings> readCash,
         CurrencyNaming naming,
         Func<bool>? isParadigm = null,
-        Func<string, bool, bool>? cannotDrop = null,
+        Func<string, bool, bool, bool>? cannotDrop = null,
         Action<TimeSpan, Action>? scheduleAfter = null,
         Services.LogService? log = null)
     {
         _isParadigm = isParadigm ?? (() => false);
-        _cannotDrop = cannotDrop ?? ((_, _) => false);
+        _cannotDrop = cannotDrop ?? ((_, _, _) => false);
         if (scheduleAfter is not null) _pacer = new BulkCommandPacer(Send, scheduleAfter, log: log);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -292,14 +292,14 @@ public sealed class InventoryActionHandler : IDisposable
     // Drop / hide one pack / ring entry, which may be a stack ("43 black diamond"):
     // one counted command on Paradigm, one per copy on Stock (no item batching
     // there). Returns how many copies it covered. An item the game won't let go of
-    // (no-drop, or a cursed item worn) is left out: sending it only earns "You may not
+    // (no-drop, loyal, or a cursed item worn — see ItemDropRule) is left out: sending it only earns "You may not
     // drop that item!" and spends a place in the game's command queue.
     private int SweepNamed(List<string> commands, List<string> kept, string verb, string item, bool worn)
     {
         (int count, string raw) = CountedCommand.SplitLeadingCount(item.Trim());
         string name = StripArticle(raw);
         if (name.Length == 0) return 0;
-        if (_cannotDrop(name, worn))
+        if (_cannotDrop(name, worn, verb == "hide"))
         {
             kept.Add(name);
             return 0;

@@ -4,6 +4,7 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // wccmmud.dll 1.11p _cmd_drop / _cmd_hide: the no-drop flag, or a cursed item worn.
+// Loyal items can't be dropped either (user, 2026-10-02).
 public sealed class ItemDropRuleTests
 {
     [Fact]
@@ -22,11 +23,17 @@ public sealed class ItemDropRuleTests
         Assert.False(ItemDropRule.Refused(false, [cursed], worn: false));
     }
 
-    // Loyal (100) isn't checked when dropping; it only keeps an item through theft
-    // and death.
     [Fact]
-    public void ALoyalItem_IsNotRefused()
+    public void ALoyalItem_IsRefused_WornOrNot()
     {
-        Assert.False(ItemDropRule.Refused(false, [100], worn: true));
+        Assert.True(ItemDropRule.Refused(false, [ItemDropRule.LoyalCode], worn: false));
+        Assert.True(ItemDropRule.Refused(false, [ItemDropRule.LoyalCode], worn: true));
+    }
+
+    // Whether a loyal item can be hidden isn't known: a hide sends it.
+    [Fact]
+    public void ALoyalItem_IsStillSentToHide()
+    {
+        Assert.False(ItemDropRule.Refused(false, [ItemDropRule.LoyalCode], worn: false, hiding: true));
     }
 }

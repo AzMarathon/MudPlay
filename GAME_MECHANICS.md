@@ -4557,15 +4557,15 @@ A `get <item>` that can't succeed replies with one of these shapes:
   - **Had the collision landed on something droppable, the wrong item would have been dropped with no complaint at all.**
   - So a drop for an item you may no longer hold is never safe to send blind. Either confirm you hold it, or be ready to treat any refusal as "verify against a real `i` before doing anything else".
 - **A worn item drops with a plain `drop <item>`** *([CONFIRMED] 2026-09-26, user)*: no `rem` first. The game takes it off and drops it in one command.
-- **What the game refuses to drop or hide** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_drop` and `_cmd_hide`, the same two checks in each; Realm: Stock)*. Either one answers `You may not drop that item!`:
+- **What the game refuses to drop or hide** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_drop` and `_cmd_hide`, the same two checks in each; Realm: Stock; the no-drop part CONFIRMED on both realms by the user 2026-10-02)*. Either one answers `You may not drop that item!`:
   - an item with the no-drop flag (game data `Not Droppable` = 1). Both realms' data flag Paradigm's tokens of (place), the Gypsy's deck of cards and the Mercy / Balance / Hate tokens;
   - a cursed item (ability 82 Cursed or 83 CursedMajor) **while it is worn**. A carried cursed item drops. (If two worn slots hold the same item number the check is skipped; an edge case.)
-- [CONFLICT — ask the user] **Loyal items (ability 100).** The user said 2026-10-02 that loyal items can't be dropped. Stock's `_cmd_drop` and `_cmd_hide` don't check ability 100, and the data has many loyal items without the no-drop flag (70 on Stock, 111 on Paradigm, e.g. the emblems). Is a loyal-only item refused on Paradigm, on Stock, or neither?
+- **A loyal item (ability 100) can't be dropped, on either realm** *([CONFIRMED] 2026-10-02, user)*. Nor can a no-drop item, on either realm (same confirmation). (An earlier note said Stock's `_cmd_drop` / `_cmd_hide` don't check ability 100, and the data has loyal items without the no-drop flag, e.g. the emblems; the user's confirmation stands, superseded 2026-10-02. The refusal must come from somewhere this reading missed.) [NEEDS CONFIRMATION] Can a loyal item be hidden?
 
 **Client use:**
 - Roomba treats any drop refusal as "verify against a real `i` before doing anything else". It also drops its belief in a carried item the moment anything else is seen dropping it.
 - `@drop-all full` / Drop Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
-- Drop All / Drop Everything / Hide All leave out what the game refuses (`ItemDropRule`, `AppServices.GameRefusesToDrop`) and name it in their reply. Loyal-only items are still sent until the conflict above is settled.
+- Drop All / Drop Everything / Hide All leave out what the game refuses (`ItemDropRule`, `AppServices.GameRefusesToDrop`) and name it in their reply. Loyal items are left out of drops; a hide still sends them until that is known.
 
 ### Hiding items in a room (stashing)
 *Status: CONFIRMED 2026-09-26 (user) · Realm: both; the counted form is Paradigm-only*

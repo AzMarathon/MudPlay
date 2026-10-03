@@ -1,19 +1,27 @@
 namespace MudPlay.Game.Inventory;
 
 // When the game refuses to drop or hide an item: "You may not drop that item!".
-// Read from wccmmud.dll 1.11p _cmd_drop and _cmd_hide, which make the same two
-// checks: the item's no-drop flag (game data "Not Droppable"), and a cursed item
-// (ability 82 Cursed or 83 CursedMajor) while it is worn. A carried cursed item
-// drops. Loyal (ability 100) is not checked by either command.
+//   - The item's no-drop flag (game data "Not Droppable"), and a cursed item
+//     (ability 82 Cursed or 83 CursedMajor) while it is worn: wccmmud.dll 1.11p
+//     _cmd_drop and _cmd_hide make these two checks. A carried cursed item drops.
+//   - A loyal item (ability 100) can't be dropped on either realm (user,
+//     2026-10-02). Whether it can be hidden isn't known, so a hide sends it and the
+//     game decides.
 public static class ItemDropRule
 {
     public const int CursedCode = 82;
     public const int CursedMajorCode = 83;
+    public const int LoyalCode = 100;
 
-    public static bool Refused(bool notDroppable, IEnumerable<int> abilities, bool worn)
+    public static bool Refused(bool notDroppable, IEnumerable<int> abilities, bool worn, bool hiding = false)
     {
         ArgumentNullException.ThrowIfNull(abilities);
         if (notDroppable) return true;
-        return worn && abilities.Any(static a => a is CursedCode or CursedMajorCode);
+        foreach (int a in abilities)
+        {
+            if (a == LoyalCode && !hiding) return true;
+            if (worn && a is CursedCode or CursedMajorCode) return true;
+        }
+        return false;
     }
 }
