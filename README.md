@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.16**
-> - Game text is handled with a quarter of the memory churn: the BBS file is no longer re-read for every line, and settings and boss lists are no longer rebuilt per line
-> - Game-data tables stay loaded while in use instead of being re-read after each index build (Monsters was read nine times in a session's first minute)
-> - Performance log: each minute's summary lists the object types allocated most
+> **Version 3.142.17**
+> - Session counters no longer reset when a loop resumes after going back for a party member who fell behind
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

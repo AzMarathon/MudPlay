@@ -385,6 +385,30 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Contains("resuming", h.LastReply);
     }
 
+    // Recovering a member mid-loop continues the same session: the loop resumes
+    // without re-raising ReachedFirstWaypoint, whose consumer zeroes the session
+    // stats and broadcasts @reset to the party.
+    [Fact]
+    public void FollowConfirmed_ResumesLoop_WithoutANewLoopStart()
+    {
+        using Harness h = NewHarness();
+        SeatFollower(h, "Tank");
+        int loopStarts = 0;
+        h.Loop.Event += e => { if (e.Kind == LoopEventKind.ReachedFirstWaypoint) loopStarts++; };
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("circuit", [new RoomKey(1, 1), new RoomKey(1, 3)])));
+        Assert.Equal(1, loopStarts);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/1"));
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // settle → Finished → re-invite
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Tracker.SetLocated(new RoomKey(1, 1));   // settle any deferred loop entry
+
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Equal(1, loopStarts);
+    }
+
     // ----- repeated-failure backoff (report -154819) -----------------
 
     [Fact]

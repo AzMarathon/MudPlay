@@ -3311,6 +3311,7 @@ Any OTHER pair of configured buffs that remove each other this way — two self-
 
 **Default:** On
 **What it does:** At the start of every loop or Auto-Lair run, broadcasts a stat-reset request to the whole party so everyone's kill/exp counters start from zero together, for a clean comparison.
+**Important notes:** Only a run you start counts as a start. A loop that stops to go back for a party member who fell behind (held, knocked down, dropped) and then carries on is the same session — the counters keep running, as they do across a bank, sell or training trip.
 
 ### Re-invite lost party members
 
