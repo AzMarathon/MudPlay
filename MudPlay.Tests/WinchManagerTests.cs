@@ -204,4 +204,41 @@ public sealed class WinchManagerTests
         Assert.True(WinchManager.IsWinchExit(winch));
         Assert.Equal("pull winch", WinchManager.PullCommand(winch));
     }
+
+    // A pull waits out a rest hold and goes out when the hold ends.
+    [Fact]
+    public void RestHold_HoldsThePull_UntilTheRestIsOver()
+    {
+        using Harness h = new();
+        bool resting = true;
+        h.Mgr.SetRestHold(() => resting);
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "loop", _ => { });
+        Assert.Empty(h.Sent);
+        Assert.Equal(WinchManager.WinchState.HeldForRest, h.Mgr.CurrentState);
+
+        h.Mgr.NotifyRestHoldChanged();                  // still resting
+        Assert.Empty(h.Sent);
+
+        resting = false;
+        h.Mgr.NotifyRestHoldChanged();
+        Assert.Equal("pull winch", Assert.Single(h.AllSent));
+    }
+
+    // The hold also catches a re-pull: a rest that starts between pulls isn't broken.
+    [Fact]
+    public void RestHold_StartingBetweenPulls_HoldsTheRePull()
+    {
+        using Harness h = new();
+        bool resting = false;
+        h.Mgr.SetRestHold(() => resting);
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "loop", _ => { });
+        h.Line(BudgeLine);
+        resting = true;
+        h.Fire();                                       // the paced re-pull comes due
+        Assert.Equal(1, h.Count("pull winch"));
+
+        resting = false;
+        h.Mgr.NotifyRestHoldChanged();
+        Assert.Equal(2, h.Count("pull winch"));
+    }
 }

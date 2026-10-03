@@ -75,6 +75,9 @@ public sealed class TrapDisarmManager : IDisposable
     // The currently-in-flight request, or null when idle.
     private TrapRequest? _current;
     private State _state = State.Idle;
+    private bool _heldForRest;
+    // True while the movement engines hold for a rest or a meditate. Unset → never.
+    private Func<bool>? _restHold;
     private int _disarmAttempts;
     // Stock "failed to disarm any" replies on the request in flight. That line also
     // answers an exit with no trap, so they only count as fumbles once the same
@@ -187,6 +190,24 @@ public sealed class TrapDisarmManager : IDisposable
     // MainWindowVM supplies the gate-wrapped SendUserInput.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
+    // A disarm stands a resting character up (GAME_MECHANICS "What ends a rest"),
+    // and the rest that follows a trap going off is there because HP is low: the
+    // next try waits it out rather than risk the trap again on what's left.
+    public void SetRestHold(Func<bool> isHeld) => _restHold = isHeld;
+
+    // The in-flight disarm is waiting for a rest hold to end.
+    public bool HeldForRest => _heldForRest;
+
+    // The rest hold changed: a disarm that was waiting on it goes out once it's over.
+    public void NotifyRestHoldChanged()
+    {
+        if (_disposed || !_heldForRest || _state != State.DisarmPending || _current is null) return;
+        if (_restHold?.Invoke() == true) return;
+        _heldForRest = false;
+        _log?.Log(LogSeverity.Info, "Trap", "Rest over — disarming.");
+        SendDisarm();
+    }
+
     // The room the player stands in, which keys the remembered disarms.
     public void SetCurrentRoom(Func<RoomKey?> room) => _currentRoom = room;
 
@@ -261,6 +282,7 @@ public sealed class TrapDisarmManager : IDisposable
             q.Reply("Trap flow stopped.");
         }
         _state = State.Idle;
+        _heldForRest = false;
         _disarmAttempts = 0;
         _unconfirmedFailures = 0;
         CancelWatchdog();
@@ -317,6 +339,14 @@ public sealed class TrapDisarmManager : IDisposable
     private void SendDisarm()
     {
         if (_current is not { } cur) return;
+        if (_restHold?.Invoke() == true)
+        {
+            CancelWatchdog();
+            _heldForRest = true;
+            _log?.Log(LogSeverity.Info, "Trap",
+                $"Disarm {cur.Direction} held — resting; trying once the rest is over.");
+            return;
+        }
         _disarmAttempts++;
         _linesSinceDisarm.Clear();
         CancelWatchdog();
@@ -479,6 +509,7 @@ public sealed class TrapDisarmManager : IDisposable
         _current = null;
         _currentRoomKey = null;
         _state = State.Idle;
+        _heldForRest = false;
         _disarmAttempts = 0;
         _unconfirmedFailures = 0;
         TryStartNext();

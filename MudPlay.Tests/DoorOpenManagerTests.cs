@@ -634,4 +634,38 @@ public sealed class DoorOpenManagerTests
         h.Line("The door is locked.");                    // open says locked
         Assert.Equal("use black star key n", h.LastSent);
     }
+
+    // A pick stands a resting character up, so the next try waits out a rest hold that
+    // something else started.
+    [Fact]
+    public void RestHold_HoldsThePick_UntilTheRestIsOver()
+    {
+        using Harness h = new() { PicklocksOverBash = true };
+        bool resting = true;
+        h.Mgr.SetRestHold(() => resting);
+        h.Mgr.Enqueue(Direction.W, 0, canBash: true, "loop", _ => { });
+        Assert.Empty(h.AllSent);
+
+        h.Mgr.NotifyRestHoldChanged();                  // still resting
+        Assert.Empty(h.AllSent);
+
+        resting = false;
+        h.Mgr.NotifyRestHoldChanged();
+        Assert.Equal("pick w", h.LastSent);
+    }
+
+    // A door someone else opens while our try is held still completes the request.
+    [Fact]
+    public void RestHold_DoorOpensMeanwhile_ReportsOpened()
+    {
+        using Harness h = new() { PicklocksOverBash = true };
+        h.Mgr.SetRestHold(() => true);
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.W, 0, canBash: true, "loop", r => result = r);
+
+        h.Line("The door is now open.");
+
+        Assert.IsType<DoorOpenResult.Opened>(result);
+        Assert.Empty(h.AllSent);
+    }
 }

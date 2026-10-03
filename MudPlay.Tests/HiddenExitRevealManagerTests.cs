@@ -304,4 +304,23 @@ public sealed class HiddenExitRevealManagerTests : IDisposable
         Assert.IsType<HiddenSearchResult.Failed>(result);
         Assert.Equal(0, h.Mgr.QueueDepth);
     }
+
+    // A search stands a resting character up, so it waits out a rest hold.
+    [Fact]
+    public void RestHold_HoldsTheSearch_UntilTheRestIsOver()
+    {
+        Harness h = new(_root);
+        bool resting = true;
+        h.Mgr.SetRestHold(() => resting);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Mgr.Enqueue(Direction.N, "loop", _ => { });
+        Assert.Empty(h.Sent);
+
+        h.Mgr.NotifyRestHoldChanged();                  // still resting
+        Assert.Empty(h.Sent);
+
+        resting = false;
+        h.Mgr.NotifyRestHoldChanged();
+        Assert.Equal("sea n\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
 }

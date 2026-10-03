@@ -628,4 +628,28 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Assert.Null(reply);
         Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
     }
+
+    // Report paradigm-20261003-111800: two fires took HP under the rest trigger and
+    // the third try went out as the rest began. The retry now waits the rest out.
+    [Fact]
+    public void RestHold_AfterTheTrapFires_HoldsTheRetry_UntilTheRestIsOver()
+    {
+        var (mgr, router, _, wire) = Setup();
+        bool resting = false;
+        mgr.SetRestHold(() => resting);
+        mgr.Enqueue("e", "loop", _ => { });
+        wire.Clear();
+
+        resting = true;                                  // the fire dropped HP; resting
+        Dispatch(router, "An arrow shoots out of the wall and strikes you!");
+        Assert.Empty(wire);
+        Assert.Equal(TrapDisarmManager.State.DisarmPending, mgr.CurrentState);
+
+        mgr.NotifyRestHoldChanged();                     // still resting
+        Assert.Empty(wire);
+
+        resting = false;
+        mgr.NotifyRestHoldChanged();
+        Assert.Equal("disarm trap e\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+    }
 }

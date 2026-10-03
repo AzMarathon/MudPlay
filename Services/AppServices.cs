@@ -3772,6 +3772,26 @@ public sealed class AppServices
         // the PartyPoller / AutoPartyManager pattern).
         MovementCoordinator = new Game.Map.MovementCoordinator(Log);
 
+        // Door, winch, hidden-exit and trap tries wait out a rest or a meditate:
+        // bash, pick, search and disarm each stand a resting character up, so a try
+        // sent mid-rest only breaks a rest that has to start again (and for a trap
+        // that just fired, risks it again on low HP). The loop or walk is held for
+        // the rest anyway, so nothing is lost by waiting.
+        bool RestHeld() =>
+            MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.HealthRecoveryGate)
+            || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.ManaRecoveryGate);
+        Door.SetRestHold(RestHeld);
+        Winch.SetRestHold(RestHeld);
+        HiddenSearch.SetRestHold(RestHeld);
+        TrapDisarm.SetRestHold(RestHeld);
+        MovementCoordinator.GatesChanged += () =>
+        {
+            Door.NotifyRestHoldChanged();
+            Winch.NotifyRestHoldChanged();
+            HiddenSearch.NotifyRestHoldChanged();
+            TrapDisarm.NotifyRestHoldChanged();
+        };
+
         // Party-vitals pause bridge — asserts MovementCoordinator's
         // PartyVitalsGate while any other party member's HP% is below the
         // Party-tab "wait if members are below" threshold.
