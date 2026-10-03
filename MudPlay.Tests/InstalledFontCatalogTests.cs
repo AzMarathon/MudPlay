@@ -1,14 +1,42 @@
 using MudPlay.Services;
+using SkiaSharp;
 using Xunit;
 
 namespace MudPlay.Tests;
 
 // The monospace filter's decision core: does a set of measured probe-glyph
-// advances read as fixed-pitch? Enumeration itself needs a live Avalonia font
-// stack, so only the pure width comparison is pinned here — the part with an
-// epsilon tolerance and a zero-width guard worth getting right.
+// advances read as fixed-pitch? Enumerating installed families depends on the
+// machine, so the width comparison is pinned on its own, and the Skia probe is
+// pinned against the fonts the app bundles.
 public sealed class InstalledFontCatalogTests
 {
+    private static SKTypeface BundledFont(string file)
+    {
+        DirectoryInfo? dir = new(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "MudPlay.csproj")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        SKTypeface? face = SKTypeface.FromFile(Path.Combine(dir!.FullName, "Assets", "Fonts", file));
+        Assert.NotNull(face);
+        return face!;
+    }
+
+    [Theory]
+    [InlineData("JetBrainsMono-Regular.ttf")]
+    [InlineData("Mx437_IBM_VGA_8x16.ttf")]
+    public void Probe_FixedPitchFont_IsTextAndMonospace(string file)
+    {
+        using SKTypeface face = BundledFont(file);
+        Assert.Equal((true, true), InstalledFontCatalog.Probe(face));
+    }
+
+    [Fact]
+    public void Probe_ProportionalFont_IsTextButNotMonospace()
+    {
+        using SKTypeface face = BundledFont("IBMPlexSans-Regular.ttf");
+        Assert.Equal((true, false), InstalledFontCatalog.Probe(face));
+    }
+
     [Fact]
     public void IdenticalWidths_AreUniform()
     {

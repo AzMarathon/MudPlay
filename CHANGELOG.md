@@ -1,5 +1,10 @@
 # Version history
 
+## 3.142.26
+
+- Fixed a crash at launch in release builds: the installed-font scan could kill the client with no error
+- Conversation font list no longer offers a few non-Latin fonts that can't show chat text
+
 ## 3.142.25
 
 - Killing a monster that summons another on death holds the loop until the room is re-read, instead of letting go on the kill itself
