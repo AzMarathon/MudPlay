@@ -61,6 +61,14 @@ public sealed class TrapDisarmManager : IDisposable
     private TrapRequest? _current;
     private State _state = State.Idle;
     private int _disarmAttempts;
+    // Stock "failed to disarm any" replies on the request in flight. That line also
+    // answers an exit with no trap, so they only count as fumbles once the same
+    // request proves a trap is there (a success or a trap going off).
+    private int _unconfirmedFailures;
+
+    // One disarm attempt settled: true = disarmed, false = failed. Feeds the
+    // session's disarm success rate.
+    public event Action<bool>? DisarmAttempted;
 
     // Max disarm trap <dir> attempts before giving up. Default 5; pushed from
     // Models.Profile.OtherSettings.MaxTrapDisarmAttempts.
@@ -215,6 +223,7 @@ public sealed class TrapDisarmManager : IDisposable
         }
         _state = State.Idle;
         _disarmAttempts = 0;
+        _unconfirmedFailures = 0;
         CancelWatchdog();
         _log?.Log(LogSeverity.Info, "Trap", "Trap flow stopped — queue drained.");
     }
@@ -227,6 +236,7 @@ public sealed class TrapDisarmManager : IDisposable
         if (_queue.Count == 0) return;
         _current = _queue.Dequeue();
         _disarmAttempts = 0;
+        _unconfirmedFailures = 0;
         _state = State.DisarmPending;
         SendDisarm();
     }
@@ -249,6 +259,8 @@ public sealed class TrapDisarmManager : IDisposable
         if (_current is not { } cur) return;
         if (!MatchesCurrentDirection(result)) return;
 
+        ConfirmFailures();
+        DisarmAttempted?.Invoke(true);
         cur.Reply($"Trap to the {cur.Direction} disarmed.");
         CompleteCurrent();
     }
@@ -266,6 +278,8 @@ public sealed class TrapDisarmManager : IDisposable
     {
         if (_state != State.DisarmPending) return;
         if (_current is not { } cur) return;
+        ConfirmFailures();
+        DisarmAttempted?.Invoke(false);
         if (_disarmAttempts >= MaxDisarmAttempts)
         {
             _log?.Log(LogSeverity.Info, "Trap",
@@ -289,6 +303,7 @@ public sealed class TrapDisarmManager : IDisposable
         if (_state != State.DisarmPending) return;
         if (_current is not { } cur) return;
         if (!MatchesCurrentDirection(result)) return;
+        _unconfirmedFailures++;
         if (_disarmAttempts < MaxDisarmAttempts)
         {
             _log?.Log(LogSeverity.Info, "Trap", $"Disarm {cur.Direction} failed — trying again.");
@@ -358,6 +373,13 @@ public sealed class TrapDisarmManager : IDisposable
         _linesSinceDisarm.Add(text);
     }
 
+    // A trap proved to be there, so the request's earlier "failed to disarm any"
+    // replies were real fumbles.
+    private void ConfirmFailures()
+    {
+        for (; _unconfirmedFailures > 0; _unconfirmedFailures--) DisarmAttempted?.Invoke(false);
+    }
+
     private void CancelWatchdog()
     {
         _replyWatchdog?.Dispose();
@@ -370,6 +392,7 @@ public sealed class TrapDisarmManager : IDisposable
         _current = null;
         _state = State.Idle;
         _disarmAttempts = 0;
+        _unconfirmedFailures = 0;
         TryStartNext();
     }
 

@@ -99,7 +99,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     [NotifyPropertyChangedFor(nameof(CurrencyCollectedText), nameof(CurrencyCollectedTip),
         nameof(CurrencyPerHourText), nameof(CurrencyStashedText), nameof(CurrencyStashedTip),
         nameof(CurrencyDepositedText), nameof(CurrencyDepositedTip),
-        nameof(SneakText), nameof(SneakTip), nameof(WalkText), nameof(WalkTip),
+        nameof(SneakText), nameof(SneakTip), nameof(DisarmText), nameof(DisarmTip), nameof(WalkText), nameof(WalkTip),
         nameof(KillsRateText), nameof(ExpRateText))]
     private SessionActivityStats _activity;
 
@@ -402,6 +402,9 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
 
     public string SneakText => Activity.SneakPercent is { } p ? RateText.Percent(p) : "—";
     public string SneakTip  => $"{Activity.SneakHeld:N0} of {Activity.SneakEntries:N0} rooms entered while sneaking kept the sneak.";
+    public string DisarmText => Activity.DisarmPercent is { } d
+        ? $"{Activity.TrapsDisarmed:N0} · {RateText.Percent(d)}" : "—";
+    public string DisarmTip  => $"{Activity.TrapsDisarmed:N0} of {Activity.DisarmAttempts:N0} disarm attempts disarmed the trap.";
     public string WalkText  => Activity.AverageStep is { } step ? $"{step.TotalSeconds:F2}s" : "—";
     public string WalkTip   => $"Average from a move going out to the new room showing, over {Activity.Steps:N0} walk / loop steps.";
 
@@ -584,7 +587,7 @@ public sealed partial class SessionStatsViewModel : ObservableObject, IDisposabl
     private void ResetPlayerStats() => _combatTracker.Reset();
 
     // "Time Analysis" reset — every line under that section: the time breakdown,
-    // Sneak and Walk, and the loop laps. The per-hour rates sit under Session
+    // Sneak, Disarm Trap and Walk, and the loop laps. The per-hour rates sit under Session
     // Statistics and restart with its reset instead.
     [RelayCommand]
     private void ResetTimeAnalysis()

@@ -1929,10 +1929,11 @@ The **Player Statistics** panel is your own combat, read off the same round ledg
 The **Time Analysis** panel splits the session's time into moving, attacking, resting and waiting, with the time spent under each ailment. Below that:
 
 - **Sneak** — the share of rooms you entered while sneaking where the sneak held (the room showed `Sneaking...`). A loud entry, or a room that showed without `Sneaking...`, counts as a lost sneak. Hover it for the counts.
+- **Disarm Trap** — how many traps the client disarmed this session, then the share of its `disarm trap` attempts that worked. A trap going off counts as a failed attempt. On Stock, `You failed to disarm any trap…` also answers an exit with no trap, so it only counts as a failure once a later attempt on that exit disarms the trap or sets it off. Disarms you type yourself aren't counted. Hover it for the counts.
 - **Walk Latency** — the average time per walk or loop step, from the move going out to the new room showing (how long the server takes to answer a move). Time stopped between steps (a fight, a rest, a door, a gate) doesn't count, and a step that didn't land isn't timed.
 - **Loop laps** — while a loop runs: laps completed, the last and average lap time, the live current lap and the room each lap starts at.
 
-Each panel's **Reset** clears everything under it and nothing else: Time Analysis's clears the time breakdown, Sneak, Walk and the loop laps (a running loop's current lap keeps ticking); Session Statistics' clears its totals and restarts its per-hour rates.
+Each panel's **Reset** clears everything under it and nothing else: Time Analysis's clears the time breakdown, Sneak, Disarm Trap, Walk and the loop laps (a running loop's current lap keeps ticking); Session Statistics' clears its totals and restarts its per-hour rates.
 
 The **Session Statistics** panel, modelled on MegaMUD's statistics screen, is in three groups:
 

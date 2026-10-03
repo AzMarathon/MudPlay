@@ -307,6 +307,26 @@ public sealed class SessionActivityTrackerTests
         Assert.Equal(75d, s.SneakPercent!.Value, 3);
     }
 
+    [Fact]
+    public void DisarmPercent_IsDisarmedOverAttempts_NullBeforeAny()
+    {
+        (SessionActivityTracker t, _) = Make();
+        Assert.Null(t.Snapshot().DisarmPercent);
+
+        t.NoteDisarmAttempt(false);
+        t.NoteDisarmAttempt(true);
+        t.NoteDisarmAttempt(false);
+        t.NoteDisarmAttempt(true);
+
+        SessionActivityStats s = t.Snapshot();
+        Assert.Equal(4, s.DisarmAttempts);
+        Assert.Equal(2, s.TrapsDisarmed);
+        Assert.Equal(50d, s.DisarmPercent!.Value, 3);
+
+        t.ResetMovement();
+        Assert.Equal(0, t.Snapshot().DisarmAttempts);
+    }
+
     // ----- walk ----------------------------------------------------------
 
     [Fact]

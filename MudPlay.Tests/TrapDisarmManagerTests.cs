@@ -377,6 +377,34 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
     }
 
+    // Every attempt reports its outcome; Stock's ambiguous "failed to disarm any"
+    // only counts once the same exit proves to hold a trap.
+    [Fact]
+    public void DisarmAttempted_CountsFumblesOnlyOnceATrapIsProven()
+    {
+        var (mgr, router, _, _) = Setup();
+        List<bool> outcomes = new();
+        mgr.DisarmAttempted += outcomes.Add;
+
+        mgr.Enqueue("e", "walker", _ => { });
+        Dispatch(router, "You failed to disarm any trap to the east.");
+        Assert.Empty(outcomes);                          // could be an empty exit
+        Dispatch(router, "You try to disarm the trap, but instead trigger it!");
+        Dispatch(router, "You successfully disarmed the trap to the east.");
+        Assert.Equal(new[] { false, false, true }, outcomes);
+
+        outcomes.Clear();
+        mgr.MaxDisarmAttempts = 2;
+        mgr.Enqueue("n", "walker", _ => { });
+        Dispatch(router, "You failed to disarm any trap to the north.");
+        Dispatch(router, "You failed to disarm any trap to the north.");
+        Assert.Empty(outcomes);                          // taken as no trap: not attempts
+
+        mgr.Enqueue("s", "walker", _ => { });
+        Dispatch(router, "Your command had no effect.");
+        Assert.Empty(outcomes);
+    }
+
     [Fact]
     public void StockFailedAny_OtherDirection_Ignored()
     {

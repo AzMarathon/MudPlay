@@ -738,6 +738,7 @@ public static class BugReportBuilder
         Kv(sb, "Deposit/Sold", $"{a.CurrencyDeposited} copper, {a.ItemsSold} items sold");
         Kv(sb, "Stashed", $"{a.CurrencyStashed} copper in {a.CoinsStashed} coins, {a.ItemsStashed} items");
         Kv(sb, "Sneak entries", $"{a.SneakHeld} held of {a.SneakEntries}");
+        Kv(sb, "Trap disarms", $"{a.TrapsDisarmed} disarmed of {a.DisarmAttempts} attempts");
         Kv(sb, "Walk steps", a.AverageStep is { } step ? $"{a.Steps} timed, avg {step.TotalSeconds:F2}s" : "(none timed)");
         return sb.ToString();
     }

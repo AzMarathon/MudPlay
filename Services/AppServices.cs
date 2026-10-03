@@ -5340,10 +5340,11 @@ public sealed class AppServices
         });
         Profile.ProfileLoaded += _ => SessionActivity.Reset();
         // The rest of the Session Statistics inputs: rooms entered while sneaking
-        // (held or broke), items picked up, and shop sales (items + proceeds). Walk
+        // (held or broke), disarm trap attempts, items picked up, and shop sales (items + proceeds). Walk
         // steps are wired with the loop runner below; stash hides and bank deposits
         // with their engines.
         Stealth.SneakEntry += held => SessionActivity.NoteSneakEntry(held);
+        TrapDisarm.DisarmAttempted += SessionActivity.NoteDisarmAttempt;
         Inventory.ItemTaken += (_, count) => SessionActivity.NoteItemsCollected(count);
         Inventory.ItemSold += (name, count, copper) =>
         {
