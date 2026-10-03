@@ -41,6 +41,7 @@ public sealed class PartyAilmentTrackerTests
         // tracker reads for arming + sweeping expiries.
         public List<ApplyCastMatcher> Applies { get; } = new();
         public Dictionary<int, double?> Durations { get; } = new();
+        public List<string?> Sources { get; } = new();
         public long NowMs;
 
         public Harness()
@@ -54,7 +55,11 @@ public sealed class PartyAilmentTrackerTests
             Lines = new LineExtractor(emulator);
             Tracker = new PartyAilmentTracker(Chat, Party, Essentials, () => Cures,
                 readApplyMatchers: () => Applies,
-                resolveDurationSeconds: n => Durations.TryGetValue(n, out double? d) ? d : null,
+                resolveDurationSeconds: (n, source) =>
+                {
+                    Sources.Add(source);
+                    return Durations.TryGetValue(n, out double? d) ? d : null;
+                },
                 nowMs: () => NowMs);
             Tracker.AttachLineExtractor(Lines);
         }
@@ -530,6 +535,53 @@ public sealed class PartyAilmentTrackerTests
         h.NowMs = 12_000;
         h.EmitLine("The kobold shaman swings.");
         Assert.False(forged.Blinded);
+    }
+
+    [Fact]
+    public void WitnessedApply_TargetOnlyLine_SetsChipWithResolvedDuration()
+    {
+        // An on-hit effect's line names only the victim. Two records share the
+        // line; the one no monster in the room carries resolves nothing and must
+        // not replace the resolved duration with the fallback cap.
+        using Harness h = new();
+        PartyMember forged = h.AddMember("Forged");
+        h.Durations[318] = 12.0;
+        h.Applies.Add(new ApplyCastMatcher(
+            MessageFlags.MovementPrevented, "knockdown", 318,
+            CasterMessageMatcher.TryCreate("{target} is knocked flat!")!));
+        h.Applies.Add(new ApplyCastMatcher(
+            MessageFlags.MovementPrevented, "knockdown", 1245,
+            CasterMessageMatcher.TryCreate("{target} is knocked flat!")!));
+
+        h.NowMs = 1_000;
+        h.EmitLine("Someone is knocked flat!");
+        Assert.False(forged.Held);     // names somebody else
+        h.EmitLine("Forged is knocked flat!");
+        Assert.True(forged.Held);
+
+        // The member's own announce arrives after the hit and keeps the armed window.
+        h.Say(@"Forged says ""@held""");
+        h.NowMs = 12_000;
+        h.EmitLine("The ultangir tramples Forged.");
+        Assert.True(forged.Held);
+        h.NowMs = 14_000;
+        h.EmitLine("The ultangir tramples Forged.");
+        Assert.False(forged.Held);
+    }
+
+    [Fact]
+    public void WitnessedApply_PassesTheNamedCasterToTheResolver()
+    {
+        using Harness h = new();
+        h.AddMember("Forged");
+        h.Durations[100] = 10.0;
+        h.Applies.Add(new ApplyCastMatcher(
+            MessageFlags.Blinded, "blind", 100,
+            CasterMessageMatcher.TryCreate("The {source} casts {spellname} on {target}!")!));
+
+        h.EmitLine("The kobold shaman casts blind on Forged!");
+
+        Assert.Equal("kobold shaman", Assert.Single(h.Sources));
     }
 
     [Fact]

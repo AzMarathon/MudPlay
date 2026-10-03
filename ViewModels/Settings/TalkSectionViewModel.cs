@@ -95,7 +95,7 @@ public sealed partial class TalkSectionViewModel : SettingsSectionViewModel
     // family name (installed) plus a point size, and is read back live.
     //
     // The rows are plain wrapped text, not the terminal's fixed cell grid, so the
-    // picker offers every installed text font — proportional ones included — after
+    // picker offers every installed font — proportional ones included — after
     // the three bundled faces, and the same size range as the terminal.
     private const string DefaultConvoFontUri =
         "avares://MudPlay/Assets/Fonts/JetBrainsMono-Regular.ttf#JetBrains Mono";

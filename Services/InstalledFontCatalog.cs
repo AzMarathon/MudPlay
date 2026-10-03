@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using SkiaSharp;
 
 namespace MudPlay.Services;
 
@@ -8,13 +9,13 @@ namespace MudPlay.Services;
 //     cell grid). A proportional font would mangle the fixed CP437 grid, so
 //     anything that isn't monospace is dropped rather than left for the user to
 //     pick and regret.
-//   Text — every family that can render ordinary text, fixed-pitch or not, for the
-//     Conversation window, whose rows are plain wrapped text with no grid. Emoji
-//     and symbol-only faces are dropped: they carry no Latin letters.
+//   Text — every installed family, for the Conversation window. Its rows are
+//     plain wrapped text with no grid and no ANSI art to keep aligned, so nothing
+//     is ruled out; a letter the chosen face lacks falls back to another font.
 //
 // Built once, then cached for the app's lifetime — probing every installed
 // family is too costly to repeat each time Settings opens. Detection reads glyph
-// advances straight off the font's metric table (no FormattedText layout pass),
+// advances straight from Skia (no glyph typeface, no FormattedText layout pass),
 // which is both far cheaper and safe to run off the UI thread, so Warm() can
 // pre-build the list on a background thread at startup and the first Settings
 // open pays nothing.
@@ -27,8 +28,8 @@ public static class InstalledFontCatalog
     // and de-duplicated across weights.
     public static IReadOnlyList<string> Monospace => Lists.Monospace;
 
-    // Family names of every installed font that renders text, monospace included,
-    // sorted and de-duplicated the same way.
+    // Family names of every installed font, monospace included, sorted and
+    // de-duplicated the same way.
     public static IReadOnlyList<string> Text => Lists.Text;
 
     private static (IReadOnlyList<string> Monospace, IReadOnlyList<string> Text) Lists
@@ -51,6 +52,9 @@ public static class InstalledFontCatalog
         catch { /* best-effort pre-warm; the picker rebuilds lazily if this fails */ }
     }
 
+    // The probe letters, in the order IsFixedPitch reads them.
+    private const string ProbeText = "aiMW ";
+
     private static (IReadOnlyList<string> Monospace, IReadOnlyList<string> Text) Build()
     {
         SortedSet<string> mono = new(StringComparer.OrdinalIgnoreCase);
@@ -58,64 +62,68 @@ public static class InstalledFontCatalog
         foreach (FontFamily family in FontManager.Current.SystemFonts)
         {
             if (string.IsNullOrWhiteSpace(family.Name)) continue;
-            if (TryGlyph(family) is not { } glyph) continue;
-            if (!RendersText(glyph)) continue;
-            text.Add(family.Name);
-            // Probe the actual Latin advances rather than trusting the font's own
-            // IsFixedPitch flag — that flag is set on emoji/symbol faces (all-uniform
-            // but no text glyphs) and on some proportional Nerd Font variants, none of
-            // which render BBS text at fixed pitch. Requiring 'i'/'M'/'W'/space to be
-            // present and equal keeps only faces that behave as a monospace font.
-            if (AdvancesUniform(glyph)) mono.Add(family.Name);
+            (bool usable, bool fixedPitch) = ProbeFamily(family.Name);
+            if (usable) text.Add(family.Name);
+            if (fixedPitch) mono.Add(family.Name);
         }
         return (mono.ToArray(), text.ToArray());
     }
 
-    private static GlyphTypeface? TryGlyph(FontFamily family)
+    // Deliberately not through FontManager.TryGetGlyphTypeface: for a family whose
+    // name carries a weight ("Roboto Black") that call synthesises a bold face by
+    // copying the whole font file out of a native stream the garbage collector can
+    // free mid-copy, which kills the process outright in optimised builds. This
+    // scan runs for every installed family at launch, while startup is allocating
+    // hardest, so it asks Skia for the face and its advances directly.
+    private static (bool Usable, bool FixedPitch) ProbeFamily(string family)
     {
         try
         {
-            return FontManager.Current.TryGetGlyphTypeface(new Typeface(family), out GlyphTypeface? glyph)
-                ? glyph : null;
+            using SKTypeface? face = SKFontManager.Default.MatchFamily(family);
+            return face is null ? default : (true, IsFixedPitch(face));
         }
         catch
         {
-            // A family that can't be realised into a glyph typeface (a broken or
-            // partial install) simply doesn't make the cut — skip it rather than
-            // let one bad font abort the whole enumeration.
-            return null;
+            // A family that can't be realised (a broken or partial install) simply
+            // doesn't make the cut — skip it rather than let one bad font abort the
+            // whole enumeration.
+            return default;
         }
     }
 
-    // A face that can set ordinary text: it carries the Latin letters a chat line is
-    // made of. Emoji / symbol / dingbat faces don't, and would render boxes.
-    private static bool RendersText(GlyphTypeface glyph) =>
-        Advance(glyph, 'a') > 0 && Advance(glyph, 'M') > 0 && Advance(glyph, ' ') > 0;
-
-    private static bool AdvancesUniform(GlyphTypeface glyph)
+    // Whether a face sets BBS text at fixed pitch, which is what the terminal's
+    // cell grid needs.
+    internal static bool IsFixedPitch(SKTypeface face)
     {
-        double em = glyph.Metrics.DesignEmHeight;
+        int em = face.UnitsPerEm;
         if (em <= 0) return false;
 
-        // Advances come back in font design units, independent of point size, so
-        // the ratio between them is all that matters. A narrow 'i', a wide
-        // 'M'/'W', and a space all advancing the same width is the fixed-pitch
-        // signature. Any missing probe glyph (advance <= 0) fails it.
-        double[] advances =
+        // Sized to the em with hinting off, so the advances come back in font
+        // design units and only the ratio between them matters.
+        using SKFont font = new(face, em)
         {
-            Advance(glyph, 'i'),
-            Advance(glyph, 'M'),
-            Advance(glyph, 'W'),
-            Advance(glyph, ' '),
+            LinearMetrics = true,
+            Hinting = SKFontHinting.None,
+            Subpixel = true,
         };
-        return WidthsUniform(advances, epsilon: em * 0.02);
-    }
+        Span<float> advances = stackalloc float[ProbeText.Length];
+        font.GetGlyphWidths(ProbeText, advances, Span<SKRect>.Empty);
+        // A missing letter still measures (as the face's "not defined" box), so ask
+        // for the glyph itself.
+        for (int i = 0; i < ProbeText.Length; i++)
+            if (face.GetGlyph(ProbeText[i]) == 0) advances[i] = -1;
 
-    private static double Advance(GlyphTypeface glyph, char ch) =>
-        glyph.CharacterToGlyphMap.TryGetGlyph(ch, out ushort g) && g != 0
-            && glyph.TryGetHorizontalGlyphAdvance(g, out ushort adv)
-                ? adv
-                : -1;
+        // Probe the actual Latin advances rather than trusting the font's own
+        // IsFixedPitch flag — that flag is set on emoji/symbol faces (all-uniform
+        // but no text glyphs) and on some proportional Nerd Font variants, none of
+        // which render BBS text at fixed pitch. A narrow 'i', a wide 'M' / 'W' and a
+        // space all advancing the same width is the fixed-pitch signature; a face
+        // missing any of them fails, since WidthsUniform rejects the -1. An 'a' has
+        // to be there too, though not at the same width.
+        if (advances[0] <= 0) return false;
+        double[] pitch = { advances[1], advances[2], advances[3], advances[4] };
+        return WidthsUniform(pitch, epsilon: em * 0.02);
+    }
 
     // A fixed-pitch face advances its probe glyphs by the same width. Compare
     // within a tolerance (a small fraction of the em) to absorb the odd

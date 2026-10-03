@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.25**
-> - Killing a monster that summons another on death holds the loop until the room is re-read, instead of letting go on the kill itself
+> **Version 3.142.28**
+> - A party member's knockdown chip clears when the knockdown ends, not after three minutes
+> - Ailment chips time out by the monster the line names
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

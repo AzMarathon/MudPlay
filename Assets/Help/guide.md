@@ -942,9 +942,9 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 A member's chip clears on the first of:
 
 - the member broadcasting they're clear (`@ok`);
-- the effect's duration lapsing;
+- the effect's duration lapsing, counted from the moment you see it land on them. The length comes from the game's spell data for the monster that did it (the one the line names when it names one), and covers effects that ride a physical hit, such as a knockdown. When the client can't work out a length it falls back to three minutes;
 - the `par` `P` flag dropping (poison);
-- **you witnessing any cure land on them** — including one cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, and heal+cures like curing wind). Cure recognition reads the game's own spell data, so it doesn't depend on you having that cure configured.
+- **you witnessing any cure land on them** — including one cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, and heal+cures like curing wind). Cure recognition reads the game's own spell data, so it doesn't depend on you having that cure configured. The reverse holds too: a spell the game data doesn't list as curing an ailment won't clear that chip, even if you put it in that ailment's cure slot.
 
 ## Reconnecting
 
@@ -3561,7 +3561,7 @@ Applied emotes live under your app-data **Emotes** folder.
 ### Font / Font size (Conversation window)
 
 **Default:** JetBrains Mono, 12pt
-**Available options:** Font — JetBrains Mono, IBM Plex Sans, MX437 IBM VGA, then **every text font installed on your system** (proportional fonts included — chat rows are plain wrapped text, not the terminal's fixed grid); Size — 8–32pt, the same list as the terminal font. Sizes are in points on the same scale as the terminal, so 16 here matches 16 there.
+**Available options:** Font — JetBrains Mono, IBM Plex Sans, MX437 IBM VGA, then **every font installed on your system** (proportional, symbol and non-Latin fonts included — chat rows are plain wrapped text, not the terminal's fixed grid, and a letter the font lacks is drawn from another font); Size — 8–32pt, the same list as the terminal font. Sizes are in points on the same scale as the terminal, so 16 here matches 16 there.
 **What it does:** The font used inside the Conversation window's chat log.
 **Important notes:** Applies **live** — hit Apply and an already-open Conversation window re-fonts on the spot, no reopen needed.
 
@@ -4388,7 +4388,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Warn on invalid remote command / Failure message | true / default text | bool / free text | `WarnOnInvalidRemoteCommand` / `RemoteCommandFailureMessage` | Models/Profile/TalkSettings.cs |
 | Greet / Look back / Look on arrival | false (all) | bool | `GreetPlayersWhenFirstMet`, `LookBackWhenLookedAt`, `LookAtPlayersOnArrival` | Models/Profile/TalkSettings.cs |
 | Log conversations / transactions / line limit | true/true/2000 | bool / bool / 100–100,000 | `LogConversations`, `LogTransactions`, `LogMaxLines` | Models/Profile/TalkSettings.cs |
-| Conversation font / size / channel colors | defaults | bundled + installed text fonts / 8-32pt / hex per channel | `ConvoFont`, `ConvoFontSize`, `ChannelColors` | Models/Profile/TalkSettings.cs |
+| Conversation font / size / channel colors | defaults | bundled + every installed font / 8-32pt / hex per channel | `ConvoFont`, `ConvoFontSize`, `ChannelColors` | Models/Profile/TalkSettings.cs |
 
 ### Auto-Light / Auto-Lair / Auto-Trainer / Other / Events / Sounds
 
