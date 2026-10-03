@@ -1071,6 +1071,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.MonsterHpEstimates.EstimateChanged += OnMonsterEstimateChanged;
         // A kill in the room retires whatever target we last looked at.
         AppServices.Current.MonsterDeath.MonsterDied += OnMonsterDied;
+        AppServices.Current.AutoEquip.HeldSetChanged += OnHeldGearSetChanged;
         // Quest becomes available (trained past its min level, or the login dump) → a
         // yellow terminal notice.
         AppServices.Current.QuestAvailability.QuestBecameAvailable += OnQuestAvailable;
@@ -1349,6 +1350,7 @@ public partial class MainWindowViewModel : ObservableObject
         // when a movement-failure line strands us as the party walks
         // off; rides the same gate-wrapped pipeline.
         AppServices.Current.ComebackRequest.SetWireSender(engineSend);
+        AppServices.Current.LeaderBossTravel.SetWireSender(engineSend);
         // Follower-side reconnect auto-rejoin — telepaths @comeback + @invite
         // to re-form the party after a drop; same gate-wrapped pipeline.
         AppServices.Current.PartyRejoin.SetWireSender(engineSend);
@@ -5911,6 +5913,8 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void EquipAll()
     {
+        // Going back to Default is how a set held from this menu is let go (any equip
+        // asked for by hand drops the hold; see EquipmentManager.ManualEquipStarting).
         Game.Inventory.EquipResult result =
             AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
         string? note = result switch
@@ -5927,11 +5931,35 @@ public partial class MainWindowViewModel : ObservableObject
     // Wear one of the six gear sets by its short name (default / backstab / resthp /
     // restma / moving / bossing — EquipmentManager resolves them). Backs the Equip
     // toolbar button's ▾ picks and the Action → Equip submenu.
+    //
+    // Any set but Default is a hold: it goes on and stays on, with every automatic
+    // gear swap off, until the same entry is picked again (or Default is). The menu
+    // shows the held set ticked.
     [RelayCommand]
     private void EquipSet(string? keyword)
     {
         if (string.IsNullOrWhiteSpace(keyword)) return;
+        Game.Inventory.AutoEquipCoordinator auto = AppServices.Current.AutoEquip;
+        Models.Profile.EquipmentSet? set = AppServices.Current.Equipment.FindSetByKeyword(keyword);
+        if (set is { Trigger: Models.Profile.EquipTriggerType.Default })
+        {
+            EquipAll();
+            return;
+        }
+        if (set is not null && auto.HeldSet == set.Trigger)
+        {
+            auto.ReleaseHeldSet();
+            return;
+        }
         Game.Inventory.EquipResult result = AppServices.Current.Equipment.ApplyByKeyword(keyword);
+        if (set is not null && result is Game.Inventory.EquipResult.Applied or Game.Inventory.EquipResult.NoChange)
+        {
+            auto.HoldSet(set!.Trigger);
+            string name = string.IsNullOrWhiteSpace(set.Name) ? keyword : set.Name;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
+                $"[{name} will stay equipped until you deselect it.]", TerminalStatusKind.Notice));
+            return;
+        }
         string? note = result switch
         {
             Game.Inventory.EquipResult.NoChange => $"Gear set '{keyword}' already worn.",
@@ -5942,6 +5970,25 @@ public partial class MainWindowViewModel : ObservableObject
         if (note is not null)
             AppServices.Current.Log.Info(Game.Inventory.EquipmentManager.LogCategory, note);
     }
+
+    // Which set, if any, is held from the Equip menu — the menu's tick marks.
+    public bool IsBackstabSetHeld => HeldGearSet == Models.Profile.EquipTriggerType.Backstab;
+    public bool IsRestHpSetHeld   => HeldGearSet == Models.Profile.EquipTriggerType.PreRestHp;
+    public bool IsRestManaSetHeld => HeldGearSet == Models.Profile.EquipTriggerType.PreRestMana;
+    public bool IsMovingSetHeld   => HeldGearSet == Models.Profile.EquipTriggerType.WhileMoving;
+    public bool IsBossingSetHeld  => HeldGearSet == Models.Profile.EquipTriggerType.Bossing;
+
+    private static Models.Profile.EquipTriggerType? HeldGearSet => AppServices.Current.AutoEquip.HeldSet;
+
+    private void OnHeldGearSetChanged()
+        => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            OnPropertyChanged(nameof(IsBackstabSetHeld));
+            OnPropertyChanged(nameof(IsRestHpSetHeld));
+            OnPropertyChanged(nameof(IsRestManaSetHeld));
+            OnPropertyChanged(nameof(IsMovingSetHeld));
+            OnPropertyChanged(nameof(IsBossingSetHeld));
+        });
 
     // Re-entrancy-safe suppression depth for the auto-engine writeback: a reseed
     // (SyncAutoEngineTogglesFromProfile) can trigger a Save whose ProfileSaving /

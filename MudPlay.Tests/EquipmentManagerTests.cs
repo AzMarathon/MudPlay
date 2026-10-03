@@ -1652,4 +1652,36 @@ public sealed class EquipmentManagerTests
         EquipmentManager mgr = Manager(RosterSettings(), SnapshotWithSlots(("Neck", "x")), new CombatSettings());
         Assert.Equal(EquipUpdateOutcome.NotFound, mgr.UpdateSetFromWorn("tanking").Outcome);
     }
+
+    // An equip asked for by hand (Equip menu, Workshop Equip Now, @equip) announces
+    // itself so a set held from the Equip menu lets go; an automatic apply doesn't.
+    [Fact]
+    public void ManualEquips_AnnounceThemselves_AutomaticAppliesDoNot()
+    {
+        EquipmentSettings settings = new()
+        {
+            Sets =
+            {
+                SetWithId("set-1", "Combat", Entry(EquipmentSlot.AlternateWeapon, "bow")),
+                SetWithId("set-2", "Backstab", Entry(EquipmentSlot.AlternateWeapon, "dagger")),
+            },
+        };
+        EquipmentManager mgr = Manager(settings, InventorySnapshot.Empty, new CombatSettings());
+        int manual = 0;
+        mgr.ManualEquipStarting += () => manual++;
+
+        mgr.ApplyBySetId("set-1");                       // what an automatic swap calls
+        Assert.Equal(0, manual);
+
+        mgr.ApplySetNow("set-2");                        // Workshop Equip Now
+        Assert.Equal(1, manual);
+        Assert.Equal("set-2", mgr.CurrentSetId);
+
+        mgr.ApplyByKeyword("Combat");                    // @equip / the Equip menu
+        Assert.Equal(2, manual);
+
+        Assert.Equal(EquipResult.NotFound, mgr.ApplySetNow("no-such-set"));
+        Assert.Equal(EquipResult.NotFound, mgr.ApplyByKeyword("no such set"));
+        Assert.Equal(2, manual);                         // nothing to equip, nothing let go
+    }
 }

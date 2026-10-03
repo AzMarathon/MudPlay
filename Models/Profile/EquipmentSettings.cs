@@ -38,6 +38,14 @@ public sealed class EquipmentSettings
     // Default. Clamped to 1+ where it's read.
     public int WhileMovingManualIdleSeconds { get; set; } = 10;
 
+    // Opt-in: stepping out of a boss room keeps the Bossing set on while a walk-to is
+    // heading for another boss room, instead of reverting to Default (and the While
+    // Moving set) for the trip. Walk-to only: loops and Auto-Lair runs revert as
+    // before. A party follower has no route of its own, so it asks the leader's
+    // client where it's going (@path). Surfaced
+    // in the Equipment Manager, shown only when the Bossing set is selected.
+    public bool KeepBossingBetweenBosses { get; set; }
+
     // The trimmed weapon on the Backstab set, or null when it has none — what the
     // equipment manager wields for the opener, so backstab projections use it.
     public string? BackstabSetWeapon()

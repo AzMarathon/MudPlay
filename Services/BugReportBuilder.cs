@@ -244,6 +244,16 @@ public static class BugReportBuilder
         // fight. Answers a "why did/didn't my gear swap when a mob showed up" report.
         Kv(sb, "Swap to Default on combat",
             (svc.Profile.Current?.Equipment?.SwapToDefaultOnCombat ?? false) ? "on" : "off");
+        // A set picked from the Equip menu turns every automatic gear swap off — the
+        // first thing to rule out in a "my gear stopped swapping" report.
+        Kv(sb, "Gear set held from the Equip menu",
+            svc.AutoEquip.HeldSet is { } heldSet ? $"{heldSet} (automatic swaps off)"
+            : svc.AutoEquip.ReleasedSetAwaitingDefault is { } owed ? $"(none; '{owed}' deselected mid-fight, Default owed once combat clears)"
+            : "(none)");
+        Kv(sb, "Keep Bossing set between bosses",
+            ((svc.Profile.Current?.Equipment?.KeepBossingBetweenBosses ?? false) ? "on" : "off")
+            + (svc.AutoEquip.IsKeepingBossing ? ", kept on right now" : string.Empty)
+            + $"; last leader answer: {svc.LeaderBossTravel.LastOutcome}");
         // Non-zero while an in-combat recovery is still pacing its re-equip across
         // rounds — shows a "recovered but not fully re-equipped" report mid-burst.
         if (svc.DeathRecovery.PendingReequipCount > 0)

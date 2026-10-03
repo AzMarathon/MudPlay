@@ -171,11 +171,23 @@
                 </MenuItem>
                 <MenuItem Header="Equip">
                     <MenuItem Header="Default set"       Command="{Binding EquipAllCommand}"                                  ToolTip.Tip="Wear the Default gear set"/>
-                    <MenuItem Header="Backstab set"      Command="{Binding EquipSetCommand}" CommandParameter="backstab"/>
-                    <MenuItem Header="Pre-rest HP set"   Command="{Binding EquipSetCommand}" CommandParameter="resthp"/>
-                    <MenuItem Header="Pre-rest Mana set" Command="{Binding EquipSetCommand}" CommandParameter="restma"/>
-                    <MenuItem Header="While Moving set"  Command="{Binding EquipSetCommand}" CommandParameter="moving"/>
-                    <MenuItem Header="Bossing set"       Command="{Binding EquipSetCommand}" CommandParameter="bossing"/>
+                    <!-- Any set but Default is a hold: it stays on, ticked here, with
+                         automatic gear swaps off until it's picked again or Default is. -->
+                    <MenuItem Header="Backstab set"      Command="{Binding EquipSetCommand}" CommandParameter="backstab"
+                              ToggleType="CheckBox" IsChecked="{Binding IsBackstabSetHeld, Mode=OneWay}"
+                              ToolTip.Tip="Wear this set and keep it on until you pick it again (or Default); automatic gear swaps stay off meanwhile"/>
+                    <MenuItem Header="Pre-rest HP set"   Command="{Binding EquipSetCommand}" CommandParameter="resthp"
+                              ToggleType="CheckBox" IsChecked="{Binding IsRestHpSetHeld, Mode=OneWay}"
+                              ToolTip.Tip="Wear this set and keep it on until you pick it again (or Default); automatic gear swaps stay off meanwhile"/>
+                    <MenuItem Header="Pre-rest Mana set" Command="{Binding EquipSetCommand}" CommandParameter="restma"
+                              ToggleType="CheckBox" IsChecked="{Binding IsRestManaSetHeld, Mode=OneWay}"
+                              ToolTip.Tip="Wear this set and keep it on until you pick it again (or Default); automatic gear swaps stay off meanwhile"/>
+                    <MenuItem Header="While Moving set"  Command="{Binding EquipSetCommand}" CommandParameter="moving"
+                              ToggleType="CheckBox" IsChecked="{Binding IsMovingSetHeld, Mode=OneWay}"
+                              ToolTip.Tip="Wear this set and keep it on until you pick it again (or Default); automatic gear swaps stay off meanwhile"/>
+                    <MenuItem Header="Bossing set"       Command="{Binding EquipSetCommand}" CommandParameter="bossing"
+                              ToggleType="CheckBox" IsChecked="{Binding IsBossingSetHeld, Mode=OneWay}"
+                              ToolTip.Tip="Wear this set and keep it on until you pick it again (or Default); automatic gear swaps stay off meanwhile"/>
                 </MenuItem>
                 <MenuItem Header="Deposit All" Command="{Binding DepositAllCommand}" ToolTip.Tip="Bank wealth down to the keep-on-hand floor"/>
                 <Separator/>

@@ -566,6 +566,7 @@ public sealed class AppServices
     // Recognises an @where reply telepath and flashes its room on the nav map.
     public Game.Remote.WhereReplyTracker WhereReply { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
+    public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
     // Follower-side @comeback sender. Detects being left
     // behind (a movement-failure line just before "You are no longer
@@ -6990,7 +6991,14 @@ public sealed class AppServices
             scheduleAfter: ScheduleOnce,
             // A sit confirmed within a few seconds of a finished rest is that rest's
             // tail, not a new one.
-            restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)));
+            restJustEnded: () => Health.RecoveredWithin(TimeSpan.FromSeconds(5)),
+            // The Bossing set's "keep on between bosses": is this trip to another boss?
+            bossTravel: BossTravelNow);
+        // A set held from the Equip menu belongs to the character that picked it, and
+        // any other equip asked for by hand (Workshop Equip Now, @equip, Equip All)
+        // replaces it: the hold drops and that set goes on.
+        Profile.ProfileLoaded += _ => AutoEquip.ReleaseHeldSet(quiet: true);
+        Equipment.ManualEquipStarting += () => AutoEquip.ReleaseHeldSet(quiet: true);
         OutboundMovement.MoveSent += AutoEquip.OnMoveSent;
         // A hand-typed move sneaks first, like an engine's own step (ObserveOutbound
         // runs before the typed bytes go out, so the `sn` leaves ahead of them). After
@@ -7281,6 +7289,8 @@ public sealed class AppServices
         {
             if (t.NewConfidence != Game.Map.RoomConfidence.Confirmed || t.NewRoom is not { } nr) return;
             AutoEquip.OnRoomChanged(t.PreviousRoom?.Key, nr.Key);
+            // Following, a new room means the leader moved: an idle leader gets asked again.
+            if (t.PreviousRoom?.Key != nr.Key) LeaderBossTravel?.NoteMoved();
         };
 
         // Roomba Mode — see GhSweepManager. Built on the same LoopRunner
@@ -7483,6 +7493,19 @@ public sealed class AppServices
             log: Log);
         PathReply.PathReported += ShowLeaderRoute;
         PathReply.GotoReported += ShowLeaderGoto;
+
+        // A follower's side of the Bossing set's "keep on between bosses": ask the
+        // leader's client where it's going. Wire sender bound per-session by the VM.
+        LeaderBossTravel = new Game.Remote.LeaderBossTravelProbe(
+            PathReply,
+            leaderGivenName: () => PartyState.IsInParty && !PartyState.SelfIsLeader
+                ? GivenNameOf(PartyState.LeaderName) : null,
+            headsToBoss: LeaderPathHeadsToBoss,
+            isBossRoom: IsBossRoomLive,
+            stillNeeded: () => AutoEquip.IsKeepingBossing,
+            schedule: ScheduleOnce,
+            log: Log);
+        LeaderBossTravel.Resolved += AutoEquip.OnBossTravelResolved;
 
         // Auto-deposit reroute. Built here
         // (after the movement engines) so it can snapshot / stop / restart
@@ -9165,6 +9188,32 @@ public sealed class AppServices
     // boss in the Bosses table (all rooms, not just the StopBefore subset). Resolved
     // live so a realm swap or Bosses-tab edit takes effect without re-wiring; the
     // Bossing gear set consults it, called at most once per room change / combat entry.
+    // Whether the trip under way is a walk-to that ends at a boss room other than the
+    // one just left. Walk-to only (user, 2026-10-03): a loop or an Auto-Lair run
+    // reverts between bosses as before, even when it passes through another one. With
+    // no engine running, a party follower asks its leader (the answer arrives later
+    // through LeaderBossTravel.Resolved).
+    private Game.Inventory.BossTravel BossTravelNow(Game.Map.RoomKey? leftBossRoom)
+    {
+        if (MovementControl is { } control && control.State != Game.Map.MovementEngineState.Idle)
+        {
+            // A loop's approach leg and an Auto-Lair run both drive the walker too.
+            bool plainWalk = !AutoLair.IsActive && LoopRunner.CurrentLoop is null;
+            bool heading = plainWalk && Walker.Destination is { } dest
+                && dest != leftBossRoom && IsBossRoomLive(dest);
+            return heading ? Game.Inventory.BossTravel.Yes : Game.Inventory.BossTravel.No;
+        }
+        return LeaderBossTravel is { } probe && probe.Ask()
+            ? Game.Inventory.BossTravel.Asking
+            : Game.Inventory.BossTravel.No;
+    }
+
+    // Whether the leader's @path reply is a walk-to ending at a boss room other than
+    // the one it's standing in. A leader on a loop or an Auto-Lair run reports no
+    // destination, so that's a no, as it is for our own.
+    private bool LeaderPathHeadsToBoss(Game.Remote.PathReport report) =>
+        report.Destination is { } dest && dest != report.LeaderRoom && IsBossRoomLive(dest);
+
     private bool IsBossRoomLive(Game.Map.RoomKey key)
     {
         foreach (Models.Profile.BossDef b in Bosses.ResolveForRealm(GameData.ActiveRealm))
