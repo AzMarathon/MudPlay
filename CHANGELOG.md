@@ -1,5 +1,17 @@
 # Version history
 
+## 3.141.15
+
+- Terminal draws each colour run as one glyph run instead of one call per character: about ten times less drawing work per frame, pixel-identical
+- Scrolling the history window no longer re-lays out every character and timestamp on each wheel tick
+- Zoomed CP437 font: the enlarged screen is only re-rendered when something on it changed
+- Session Stats: the current lap time keeps counting through a fight instead of dropping to zero
+- Drop All / Drop Everything / Hide All leave out what the game won't let go of: no-drop items (tokens, the deck of cards), loyal items, and cursed gear you're wearing
+- Get All / Drop All / Hide All send their commands a few at a time, so a long sweep can't overflow the game's command limit
+- Chest Offload's Drop All and per-item Drop are paced the same way
+- Get All leaves cursed items on the floor
+- bug reports addressed: paradigm-20261002-170259, paradigm-20261002-174951
+
 ## 3.141.9
 
 - After a connection drop, a move the server never answered no longer leaves the map stuck waiting on it: the first room display after reconnect settles where you are, so Go and the loop restart work straight away

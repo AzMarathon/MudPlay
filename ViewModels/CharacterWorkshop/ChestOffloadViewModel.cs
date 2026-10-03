@@ -38,6 +38,9 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private readonly MovementFilter _movement;
     private readonly CurrencyNaming _naming;
     private readonly Action<string> _send;
+    // Drops go out through the sweeps' pacer: a whole shop group of copies, one
+    // `drop` per copy on Stock, would otherwise overflow the game's command queue.
+    private readonly Action<IReadOnlyList<string>> _sendPaced;
     private readonly Action<RoomKey> _queueWalk;
     private readonly DispatcherTimer _reparse;
     private readonly LogDiagnosticState? _diagnostics;
@@ -73,15 +76,18 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         AppServices.Current.ItemNames, AppServices.Current.PlayerStats, AppServices.Current.GameData,
         AppServices.Current.RoomTracker, AppServices.Current.Bfs, AppServices.Current.Movement,
         AppServices.Current.Currency,
-        cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo)
+        cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo,
+        cmds => AppServices.Current.InventoryAction.SendPaced(cmds))
     { }
 
     public ChestOffloadViewModel(
         InventoryManager inventory, ShopStockIndex shops, RoomGraphManager rooms,
         ItemNameStore itemNames, PlayerStats stats, GameDataCache gameData,
         RoomTracker tracker, BfsMapper bfs, MovementFilter movement, CurrencyNaming naming,
-        Action<string> send, Action<RoomKey> queueWalk)
+        Action<string> send, Action<RoomKey> queueWalk,
+        Action<IReadOnlyList<string>>? sendPaced = null)
     {
+        _sendPaced = sendPaced ?? (cmds => { foreach (string cmd in cmds) send(cmd); });
         _inventory = inventory;
         _shops = shops;
         _rooms = rooms;
@@ -486,7 +492,9 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     {
         if (item.Gained <= 0) return;
         _log?.Info(LogCategory, $"drop {item.Gained} {item.Name} (whole stack)");
-        CountedCommand.Emit(_send, "drop", item.Gained, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
+        List<string> drops = new();
+        CountedCommand.Emit(drops.Add, "drop", item.Gained, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
+        _sendPaced(drops);
     }
 
     // Alternate shops that also buy this item, nearest first, minus the one it's in.
@@ -547,11 +555,13 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     {
         _log?.Info(LogCategory, $"Drop All '{group.ShopName}' — {group.Items.Count} item(s)");
         bool paradigm = _gameData.ActiveRealm == RealmType.ParaMud;
+        List<string> drops = new();
         foreach (ChestOffloadItemRow item in group.Items)
         {
             _log?.Info(LogCategory, $"drop {item.Gained} {item.Name} (whole stack)");
-            CountedCommand.Emit(_send, "drop", item.Gained, item.Name, paradigm);
+            CountedCommand.Emit(drops.Add, "drop", item.Gained, item.Name, paradigm);
         }
+        _sendPaced(drops);
     }
 
     private double BaseCopperOf(int number)

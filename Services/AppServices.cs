@@ -5547,6 +5547,7 @@ public sealed class AppServices
             {
                 RoombaQuery.NoteRateLimitClobber();
                 LoopShare?.NoteRateLimitClobber();   // built later in this constructor
+                InventoryAction?.NoteRateLimited();  // built just below
             }
         };
 
@@ -5561,7 +5562,17 @@ public sealed class AppServices
             PartyState,
             readCash: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash"),
             naming: Currency,
-            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud);
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            cannotDrop: GameRefusesToDrop,
+            isCursed: name => Game.Inventory.ItemDropRule.IsCursed(ItemAbilityCodes(name)),
+            scheduleAfter: (delay, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        PromptScanner.PromptObserved += _ => InventoryAction.NotePrompt();
 
         // @get-stash: a leader's stash transfer has us search and carry a load too.
         // Cash is built further down; these only run when a command arrives.
@@ -11970,6 +11981,33 @@ public sealed class AppServices
 
     // Item number for a carried item name in the active set (0 when unresolved) — used
     // by the stock use-counter to key charges by number.
+    // Whether the game would refuse to drop or hide the named item (ItemDropRule).
+    // An item the game data doesn't know is sent, and the game decides.
+    private bool GameRefusesToDrop(string name, bool worn)
+    {
+        if (string.IsNullOrWhiteSpace(name) || GameData.FindRowByName("Items", name) is not { } row) return false;
+        bool notDroppable = row.TryGetProperty("Not Droppable", out System.Text.Json.JsonElement nd)
+            && nd.ValueKind == System.Text.Json.JsonValueKind.Number && nd.GetInt32() != 0;
+        return Game.Inventory.ItemDropRule.Refused(notDroppable, ItemAbilityCodes(row), worn);
+    }
+
+    // The ability codes an item carries, by name; empty for an item the game data
+    // doesn't know.
+    private List<int> ItemAbilityCodes(string name)
+        => !string.IsNullOrWhiteSpace(name) && GameData.FindRowByName("Items", name) is { } row
+            ? ItemAbilityCodes(row)
+            : new List<int>();
+
+    private static List<int> ItemAbilityCodes(System.Text.Json.JsonElement row)
+    {
+        List<int> abilities = new();
+        for (int i = 0; i < 20; i++)
+            if (row.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement a)
+                && a.ValueKind == System.Text.Json.JsonValueKind.Number && a.GetInt32() is int code and not 0)
+                abilities.Add(code);
+        return abilities;
+    }
+
     private int ItemNumberByName(string name)
         => !string.IsNullOrWhiteSpace(name)
            && GameData.FindRowByName("Items", name) is { } row

@@ -1326,7 +1326,7 @@ A helper for cashing in boss chests (on the Bosses tab). It snapshots your carri
 
 - **Pricing and selling** — each item has an editable sell quantity (keep some, sell the rest) priced at a **charm** picker, its own **Sell** button, and a **Drop** button that drops that one item's **whole held stack**. Both act while you're standing in the shop, and the list reconciles against the game's own confirmations: the row shrinks (and clears at zero) only when the `You sold …` / `You dropped …` actually lands. A **Total to sell** figure sums everything selected across all shops.
 - **Picking a shop** — when an item is sold by more than one shop it gets a **⇄** button. The plan already assigns it to whichever shop keeps the trip to the fewest counters, but click **⇄** to see the other shops that buy it (each with name, map/room, and current walking distance), pick one, and hit **Change** to move it there.
-- **The selling trip** — each shop header shows a running total and **walks you there** when clicked. It carries a **Sell All** button that fires the sell commands for every item in the group (batched on Paradigm), plus a **Drop All** button. The shops are ordered into a short nearest-first trip using the same routing the walker uses (respecting avoid rooms, usable teleport gates, and item/hazard/boat gates).
+- **The selling trip** — each shop header shows a running total and **walks you there** when clicked. It carries a **Sell All** button that fires the sell commands for every item in the group (batched on Paradigm), plus a **Drop All** button (its drops go out a few at a time, like the Action menu's Drop All, so a big group can't overflow the game's command limit). The shops are ordered into a short nearest-first trip using the same routing the walker uses (respecting avoid rooms, usable teleport gates, and item/hazard/boat gates).
 
 ### Death Recovery
 
@@ -1440,8 +1440,8 @@ A flee or an emergency hangup is never held. With **Use @panic while leading** o
 
 The **Action menu** also carries commands you fire once, on demand, rather than leaving running:
 
-- **Get All / Deposit All** — pick up everything on the floor, or bank your wealth down to the keep-on-hand floor, right now.
-- **Drop ▸** / **Hide ▸** — submenus with **All** (every carried, unworn item), **Everything** (worn gear, light, keys and coins too — no confirmation), **Coins** and **Keys**. Hide does the same sweeps with `hide`, stashing everything in the room where only a search turns it up. A stack goes in one counted command on Paradigm and one per item on Stock.
+- **Get All / Deposit All** — pick up everything on the floor (except cursed items, which it leaves there and names in the log), or bank your wealth down to the keep-on-hand floor, right now.
+- **Drop ▸** / **Hide ▸** — submenus with **All** (every carried, unworn item), **Everything** (worn gear, light, keys and coins too — no confirmation), **Coins** and **Keys**. Hide does the same sweeps with `hide`, stashing everything in the room where only a search turns it up. A stack goes in one counted command on Paradigm and one per item on Stock. Items the game won't let go of are left out and named in the log: no-drop items (Paradigm's tokens, the Gypsy's deck of cards), loyal items, and cursed gear you're wearing. The commands go out a few at a time, each batch waiting for the game to answer, so a long sweep never overflows the game's command limit.
 - **Equip ▸** — wear any of your gear sets: **Default**, **Backstab**, **Pre-rest HP**, **Pre-rest Mana**, **While Moving** or **Bossing**.
 - (These are the local twins of the `@get-all` / `@drop-all` / `@hide-all` / `@equip` / `@deposit-all` remote commands.)
 

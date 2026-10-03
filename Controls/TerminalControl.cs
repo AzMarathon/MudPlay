@@ -227,6 +227,7 @@ public sealed class TerminalControl : Control
         ClipToBounds = true;
         _typeface = new Typeface(FontFamily);
         UpdateRenderMode();
+        _text.Reset(_typeface, RenderFontSize, _cellW);
     }
 
     // The bundled CP437 bitmap font's family name — the only face that needs
@@ -321,6 +322,8 @@ public sealed class TerminalControl : Control
 
     private void OnEmulatorChanged(TerminalEmulator? oldEm, TerminalEmulator? newEm)
     {
+        // A new screen can carry the same revision number as the old one.
+        _scaledFrame = null;
         // Detach from the previous emulator before subscribing to the new
         // one to avoid leaking handler references.
         if (oldEm is not null)
@@ -467,6 +470,7 @@ public sealed class TerminalControl : Control
         }
         _scaleBitmap?.Dispose();
         _scaleBitmap = null;
+        _scaledFrame = null;
         if (_onBufferChanged is not null && InputBuffer is { } buf)
         {
             buf.Changed -= _onBufferChanged;
@@ -498,13 +502,12 @@ public sealed class TerminalControl : Control
     private void RecalculateMetrics()
     {
         _typeface = new Typeface(FontFamily);
-        // The cached glyphs were shaped against the old typeface + size; drop them so
-        // they're rebuilt at the new font. (Zoom doesn't reach here — it upscales the
-        // render bitmap and leaves RenderFontSize untouched — so a resize never
-        // needlessly clears the cache.)
-        _glyphCache.Clear();
         UpdateRenderMode();
         (_cellW, _cellH) = MeasureCell(RenderFontSize);
+        // The glyph lookups are for the old face and size. (Zoom doesn't reach here —
+        // it scales the native render and leaves RenderFontSize untouched.)
+        _text.Reset(_typeface, RenderFontSize, _cellW);
+        _scaledFrame = null;
         RecomputeScale();
         InvalidateMeasure();
         InvalidateVisual();
@@ -642,10 +645,21 @@ public sealed class TerminalControl : Control
         int nativeH = Math.Max(1, (int)Math.Round(_cellH * screen.Rows));
         EnsureScaleBitmap(nativeW, nativeH);
 
-        using (var bctx = _scaleBitmap!.CreateDrawingContext())
+        ScaledFrameKey key = new(
+            screen.Revision,
+            InputBuffer is { Length: > 0 } buffer ? buffer.Text : null,
+            InputBuffer is { CharacterMode: true },
+            InputBuffer is { IsFull: true },
+            _pendingFlushText, _pendingFlushCol, _pendingFlushRow,
+            _cursorBlinkOn, screen.CursorX, screen.CursorY, screen.CursorVisible);
+        if (_scaledFrame != key)
         {
-            bctx.FillRectangle(Brushes.Black, new Rect(0, 0, nativeW, nativeH));
-            DrawScreen(bctx, em);
+            using (var bctx = _scaleBitmap!.CreateDrawingContext())
+            {
+                bctx.FillRectangle(Brushes.Black, new Rect(0, 0, nativeW, nativeH));
+                DrawScreen(bctx, em);
+            }
+            _scaledFrame = key;
         }
 
         var src = new Rect(0, 0, nativeW, nativeH);
@@ -685,6 +699,7 @@ public sealed class TerminalControl : Control
         int nativeW = Math.Max(1, (int)Math.Round(_cellW * screen.Cols));
         int nativeH = Math.Max(1, (int)Math.Round(_cellH * screen.Rows));
         EnsureScaleBitmap(nativeW, nativeH);
+        _scaledFrame = null;   // the bitmap no longer shows the terminal
         using (var bctx = _scaleBitmap!.CreateDrawingContext())
         {
             bctx.FillRectangle(Brushes.Black, new Rect(0, 0, nativeW, nativeH));
@@ -711,7 +726,20 @@ public sealed class TerminalControl : Control
             return;
         _scaleBitmap?.Dispose();
         _scaleBitmap = new RenderTargetBitmap(new PixelSize(width, height), new Vector(96, 96));
+        _scaledFrame = null;
     }
+
+    // What the zoomed bitmap last showed. Rasterising the whole screen offscreen is
+    // the costliest thing this control does, and many repaints change nothing it
+    // shows (a resize, a focus change, an invalidate from elsewhere), so it is only
+    // redrawn when one of these moved. The screen's revision covers every cell and
+    // cursor change, since the emulator bumps it once per feed.
+    private ScaledFrameKey? _scaledFrame;
+
+    private readonly record struct ScaledFrameKey(
+        uint Revision, string? Overlay, bool CharacterMode, bool BufferFull,
+        string? PendingFlush, int PendingCol, int PendingRow,
+        bool BlinkOn, int CursorX, int CursorY, bool CursorVisible);
 
     // Draw the whole screen (cell runs + input overlay + caret) at native cell
     // size into the given context. Used directly for the unscaled path and into
@@ -801,7 +829,8 @@ public sealed class TerminalControl : Control
             {
                 int col = overlayStartCol;
                 int row = overlayStartRow;
-                foreach (char ch in overlayText)
+                int next = 0;
+                while (next < overlayText.Length)
                 {
                     if (col >= screen.Cols)
                     {
@@ -810,15 +839,16 @@ public sealed class TerminalControl : Control
                         col = 0;
                         row++;
                     }
+                    int count = Math.Min(screen.Cols - col, overlayText.Length - next);
                     double px = col * _cellW;
                     double py = row * _cellH;
                     // Black BG fill first so any server-painted cells
-                    // underneath don't bleed through, then the glyph in the
+                    // underneath don't bleed through, then the text in the
                     // prompt foreground so the overlay reads inline.
-                    context.FillRectangle(Brushes.Black,
-                        new Rect(px, py, _cellW, _cellH));
-                    context.DrawText(Glyph(ch, OverlayFgArgb, Brushes.LightGray), new Point(px, py));
-                    col++;
+                    context.FillRectangle(Brushes.Black, new Rect(px, py, count * _cellW, _cellH));
+                    _text.Draw(context, overlayText.ToCharArray(next, count), count, px, py, Brushes.LightGray, OverlayFgArgb);
+                    next += count;
+                    col += count;
                 }
                 // Caret tracks the END of the LIVE buffer overlay (mode 1).
                 // For pending overlay (mode 2) the caret stays at the
@@ -875,16 +905,16 @@ public sealed class TerminalControl : Control
         double left = x0 * _cellW;
         double top = y * _cellH;
         double width = (x1 - x0) * _cellW;
-        // Single fill for the whole run's background.
-        context.FillRectangle(bg, new Rect(left, top, width, _cellH));
+        // Single fill for the whole run's background. Every render path has already
+        // painted the whole surface black, so a default background needs none.
+        if (bgArgb != AnsiPalette.DefaultBackgroundArgb)
+            context.FillRectangle(bg, new Rect(left, top, width, _cellH));
 
         // SGR 8 — concealed: fill bg only; skip glyphs.
         if ((attr.Flags & CellFlags.Concealed) != 0) return;
 
-        // Draw each cell individually at its exact pixel-aligned position.
-        // Drawing a run as one FormattedText lets the font's advance widths
-        // drift the glyph row away from the cell grid by fractions of a pixel,
-        // which manifests as the visible "color bleed" between cells.
+        // One glyph run for the whole run, each glyph pinned to its own cell (see
+        // CellRunText for why that keeps the grid exact).
         //
         // Always the regular weight — never a bold typeface. In MajorMUD's world SGR
         // "bold" (SGR 1) means BRIGHT, not heavy: it's already applied to the colour
@@ -892,12 +922,16 @@ public sealed class TerminalControl : Control
         // MegaMUD never does — room names + hostile-monster names came out visibly
         // heavier than the reference client on vector fonts (the MX437 bitmap has no
         // bold face, so it always looked right). Match that: bright colour, normal weight.
-        for (int i = x0; i < x1; i++)
+        int count = x1 - x0;
+        char[] chars = new char[count];
+        bool anyText = false;
+        for (int i = 0; i < count; i++)
         {
-            char ch = screen[i, y].Char;
-            if (ch == ' ') continue;
-            context.DrawText(Glyph(ch, fgArgb, fg), new Point(x0 == i ? left : i * _cellW, top));
+            char ch = screen[x0 + i, y].Char;
+            chars[i] = ch;
+            anyText |= ch != ' ';
         }
+        if (anyText) _text.Draw(context, chars, count, left, top, fg, fgArgb);
 
         // Underline — draw a 1px line along the bottom of the run.
         if ((attr.Flags & CellFlags.Underline) != 0)
@@ -920,36 +954,12 @@ public sealed class TerminalControl : Control
         return brush;
     }
 
-    // Per-glyph FormattedText cache. DrawRun (and the input overlay) built a fresh
-    // FormattedText for every non-space cell on EVERY frame — the app's heaviest
-    // per-frame work (native Skia/HarfBuzz text shaping + layout), and the native
-    // memory churn diagnosed earlier. A FormattedText for a given (char, colour) at
-    // the current font + size is deterministic, so build it once and redraw the
-    // cached instance each frame. This is byte-identical rendering — same object,
-    // same DrawText, same exact per-cell position — so the pixel alignment (no colour
-    // bleed) and the bright-colour-not-bold-face rule above are preserved unchanged;
-    // only the per-frame allocation + reshaping is removed. Keyed by (char, fg ARGB);
-    // cleared when the font or size changes (RecalculateMetrics). The key space is
-    // bounded (CP437's ~256 glyphs × the fixed palette), but a hard cap guards against
-    // a pathological spread — on overflow the whole cache is dropped and refills lazily.
-    // Instance-scoped (not static) because it closes over this control's _typeface /
-    // RenderFontSize. Render is UI-thread only, so a plain Dictionary needs no lock.
-    private readonly Dictionary<(char Ch, uint Fg), FormattedText> _glyphCache = new();
-    private const int GlyphCacheCap = 8192;
+    // Draws each run's text as one glyph run pinned to the cell grid.
+    private readonly CellRunText _text = new();
 
     // The input-overlay foreground (the buffered not-yet-sent text), as an ARGB key
-    // for the glyph cache. A fixed colour, so it shares the same cache as the grid.
+    // for the glyph fallback cache.
     private static readonly uint OverlayFgArgb = Colors.LightGray.ToUInt32();
-
-    private FormattedText Glyph(char ch, uint fgArgb, IBrush fg)
-    {
-        if (_glyphCache.TryGetValue((ch, fgArgb), out FormattedText? cached)) return cached;
-        if (_glyphCache.Count >= GlyphCacheCap) _glyphCache.Clear();
-        var ft = new FormattedText(ch.ToString(), CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight, _typeface, RenderFontSize, fg);
-        _glyphCache[(ch, fgArgb)] = ft;
-        return ft;
-    }
 
     // ----- Input ---------------------------------------------------------
 
