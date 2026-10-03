@@ -545,17 +545,35 @@ public sealed class MessageCandidateWatcher : IDisposable
     {
         List<string> gone = new();
         foreach (MessageCandidateRecord c in _candidates.Candidates)
-        {
-            if (c.Dismissed) continue;
-            string text = c.RawText.Trim();
-            var line = new LineExtractor.EmittedLine(
-                text, Array.Empty<CellAttributes>(), c.LastSeenAt, IsPromptLine: false);
-            if (IsKnownText(line, text)) gone.Add(c.Id);
-        }
+            if (IsNowRecognized(c)) gone.Add(c.Id);
         foreach (string id in gone) _candidates.Remove(id);
-        if (gone.Count > 0)
-            _log?.Info(LogCategory, $"un-staged {gone.Count} line(s) the catalogues now recognize.");
+        ReportPruned(gone.Count);
         return gone.Count;
+    }
+
+    // The same check a candidate at a time, for a caller that spreads the pass out:
+    // a queue of a thousand candidates against every pattern is half a second.
+    public bool PruneIfRecognized(MessageCandidateRecord candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        if (!IsNowRecognized(candidate)) return false;
+        _candidates.Remove(candidate.Id);
+        return true;
+    }
+
+    public void ReportPruned(int count)
+    {
+        if (count > 0)
+            _log?.Info(LogCategory, $"un-staged {count} line(s) the catalogues now recognize.");
+    }
+
+    private bool IsNowRecognized(MessageCandidateRecord c)
+    {
+        if (c.Dismissed) return false;
+        string text = c.RawText.Trim();
+        var line = new LineExtractor.EmittedLine(
+            text, Array.Empty<CellAttributes>(), c.LastSeenAt, IsPromptLine: false);
+        return IsKnownText(line, text);
     }
 
     // True while consuming the `br` broadcast-channel member list — set by the header,

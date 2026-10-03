@@ -70,7 +70,7 @@ internal sealed class NumericAwareCellComparer : IComparer
     private string? ExtractCell(object? rowObject)
     {
         if (rowObject is not GameDataRow row) return null;
-        if (_columnIndex < 0 || _columnIndex >= row.Cells.Count) return null;
-        return row.Cells[_columnIndex].Value;
+        if (_columnIndex < 0 || _columnIndex >= row.CellCount) return null;
+        return row.DisplayAt(_columnIndex);
     }
 }

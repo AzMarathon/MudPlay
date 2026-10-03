@@ -3366,6 +3366,7 @@ public sealed class AppServices
         // active set changes so the Browser tab and runtime engines
         // see the right realm's catalogue.
         Messages = new MessageStore(Log);
+        Messages.Messages.CollectionChanged += (_, _) => _spellMessages = null;
         GameData.ActiveSetChanged += Messages.Load;
         // The apply-cast matcher list + spell-formula cache (PartyAilmentTracker's
         // witness-SET + duration clear) are derived from Messages + the Spells
@@ -4491,7 +4492,7 @@ public sealed class AppServices
                     && commands.Contains(command, StringComparer.OrdinalIgnoreCase)));
         // Subscribed after the message and candidate stores' own loads, so the queue is
         // re-checked against the set's freshly loaded catalogue.
-        GameData.ActiveSetChanged += _ => MessageCandidateWatcher.PruneRecognized();
+        GameData.ActiveSetChanged += _ => PruneMessageCandidatesWhenIdle();
 
         // AilmentSyncEngine — outbound ailment broadcast. On catching a VERBOSE
         // ailment (blind / confused / diseased / held) it announces a BARE token
@@ -8341,6 +8342,33 @@ public sealed class AppServices
     // immediately write it straight back.
     private bool _suppressLogDiagnosticsPersist;
 
+    // Re-checks the staged unrecognized lines against the set's catalogue a few
+    // milliseconds at a time, whenever the UI has nothing else to do. Done in one go
+    // inside the set switch it was half a second of the launch freeze, for
+    // housekeeping nothing waits on. A newer set switch abandons the pass.
+    private int _candidatePruneRun;
+
+    private void PruneMessageCandidatesWhenIdle()
+    {
+        int run = ++_candidatePruneRun;
+        List<Models.GameData.MessageCandidateRecord> pending = MessageCandidates.Candidates.ToList();
+        int next = 0, pruned = 0;
+        Avalonia.Threading.Dispatcher.UIThread.Post(Slice, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
+
+        void Slice()
+        {
+            if (run != _candidatePruneRun) return;
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            while (next < pending.Count
+                   && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < 8)
+                if (MessageCandidateWatcher.PruneIfRecognized(pending[next++])) pruned++;
+            if (next < pending.Count)
+                Avalonia.Threading.Dispatcher.UIThread.Post(Slice, Avalonia.Threading.DispatcherPriority.ApplicationIdle);
+            else
+                MessageCandidateWatcher.ReportPruned(pruned);
+        }
+    }
+
     private void WarmGameDataLists()
     {
         try
@@ -10096,21 +10124,42 @@ public sealed class AppServices
     // null when the catalogue has no record for the spell.
     private Models.GameData.MessageRecord? FindSpellMessage(int spellNumber, string spellName)
     {
-        foreach (Models.GameData.MessageRecord m in Messages.Messages)
-        {
-            if (m.Links is null) continue;
-            foreach (Models.GameData.GameDataLink link in m.Links)
-                if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)
-                    && link.Number == spellNumber)
-                    return m;
-        }
+        SpellMessageIndex index = SpellMessages();
+        if (index.ByLink.TryGetValue(spellNumber, out Models.GameData.MessageRecord? linked)) return linked;
 
         string target = spellName.Trim();
         if (target.Length == 0) return null;   // link-only lookup — never name-match ""
+        return index.ByName.TryGetValue(target, out List<Models.GameData.MessageRecord>? named) ? named[0] : null;
+    }
+
+    // The message catalogue by the spell a record is linked to (the first record
+    // linking each spell) and by record name (every record of a name, in catalogue
+    // order). Looking a spell's message up used to scan all ~1,100 records, twice,
+    // and the matcher build does that for every spell: over a second of the launch
+    // freeze. Rebuilt after any change to the catalogue.
+    private sealed record SpellMessageIndex(
+        Dictionary<int, Models.GameData.MessageRecord> ByLink,
+        Dictionary<string, List<Models.GameData.MessageRecord>> ByName);
+
+    private SpellMessageIndex? _spellMessages;
+
+    private SpellMessageIndex SpellMessages()
+    {
+        if (_spellMessages is { } built) return built;
+        Dictionary<int, Models.GameData.MessageRecord> byLink = new();
+        Dictionary<string, List<Models.GameData.MessageRecord>> byName = new(StringComparer.OrdinalIgnoreCase);
         foreach (Models.GameData.MessageRecord m in Messages.Messages)
-            if (string.Equals(m.Name.Trim(), target, StringComparison.OrdinalIgnoreCase))
-                return m;
-        return null;
+        {
+            if (m.Links is not null)
+                foreach (Models.GameData.GameDataLink link in m.Links)
+                    if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase))
+                        byLink.TryAdd(link.Number, m);
+            string name = m.Name.Trim();
+            if (!byName.TryGetValue(name, out List<Models.GameData.MessageRecord>? sameName))
+                byName[name] = sameName = new();
+            sameName.Add(m);
+        }
+        return _spellMessages = new SpellMessageIndex(byLink, byName);
     }
 
     // Compile a predicate that recognises a spell's own player-facing line —
@@ -10194,6 +10243,14 @@ public sealed class AppServices
             ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
         List<Game.Spells.SpellLineMatcher> list = new();
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        // Each spell by its name and its short code, the first spell to carry either:
+        // the same spell a scan of the spellbook for that text would stop at.
+        Dictionary<string, Game.Spells.KnownSpell> byNameOrShort = new(StringComparer.OrdinalIgnoreCase);
+        foreach (Game.Spells.KnownSpell spell in Spellbook.Available)
+        {
+            byNameOrShort.TryAdd(spell.Name.Trim(), spell);
+            byNameOrShort.TryAdd(spell.Short.Trim(), spell);
+        }
         Add(combat.NormalAttackSpell?.SpellName);
         Add(combat.AlternateAttackSpell?.SpellName);
         Add(combat.MultiAttackSpell?.SpellName);
@@ -10206,17 +10263,10 @@ public sealed class AppServices
         void Add(string? spellName)
         {
             if (string.IsNullOrWhiteSpace(spellName)) return;
-            string wanted = spellName.Trim();
-            foreach (Game.Spells.KnownSpell spell in Spellbook.Available)
-            {
-                if (!string.Equals(spell.Name.Trim(), wanted, StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(spell.Short.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                string name = spell.Name.Trim();
-                if (seen.Add(name))
-                    list.AddRange(OwnSpellLines(spell).Select(l => l with { Name = name }));
-                return;
-            }
+            if (!byNameOrShort.TryGetValue(spellName.Trim(), out Game.Spells.KnownSpell spell)) return;
+            string name = spell.Name.Trim();
+            if (seen.Add(name))
+                list.AddRange(OwnSpellLines(spell).Select(l => l with { Name = name }));
         }
     }
 
@@ -10240,10 +10290,9 @@ public sealed class AppServices
         HashSet<string> templates = new(StringComparer.Ordinal);
         string? own = FindSpellMessage(spell.Number, spell.Name)?.CasterMessage;
         if (HasDamageSlot(own)) AddLine(own!, followUp: false);
-        else
-            foreach (Models.GameData.MessageRecord m in Messages.Messages)
-                if (string.Equals(m.Name.Trim(), spell.Name.Trim(), StringComparison.OrdinalIgnoreCase)
-                    && HasDamageSlot(m.CasterMessage))
+        else if (SpellMessages().ByName.TryGetValue(spell.Name.Trim(), out List<Models.GameData.MessageRecord>? sameName))
+            foreach (Models.GameData.MessageRecord m in sameName)
+                if (HasDamageSlot(m.CasterMessage))
                     AddLine(m.CasterMessage, followUp: false);
         if (SpellFormulaFor(spell.Number) is { } formula)
             foreach (Game.Spells.SpellAbility ability in formula.Abilities)

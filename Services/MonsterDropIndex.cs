@@ -163,13 +163,17 @@ public sealed class MonsterDropIndex
     {
         if (string.IsNullOrEmpty(text)) return null;
         List<RoomKey>? rooms = null;
+        // A wandering monster can list thousands of rooms; checking the list itself
+        // for each one made that quadratic.
+        HashSet<RoomKey>? seen = null;
         foreach (Match m in s_roomToken.Matches(text))
         {
             if (!int.TryParse(m.Groups[1].Value, out int map) || map <= 0) continue;
             if (!int.TryParse(m.Groups[2].Value, out int room) || room <= 0) continue;
             RoomKey key = new(map, room);
             rooms ??= new List<RoomKey>();
-            if (!rooms.Contains(key)) rooms.Add(key);
+            seen ??= new HashSet<RoomKey>();
+            if (seen.Add(key)) rooms.Add(key);
         }
         return rooms;
     }

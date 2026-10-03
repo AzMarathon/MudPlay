@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.17**
-> - Session counters no longer reset when a loop resumes after going back for a party member who fell behind
+> **Version 3.142.19**
+> - Startup is about a third faster: rooms are read on every core, spell matchers use an index, and housekeeping waits until the client is idle
+> - Game Data tables use far less memory and load with fewer pauses: Rooms holds about 40 MB instead of 100 MB
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
