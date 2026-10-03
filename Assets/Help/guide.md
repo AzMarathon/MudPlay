@@ -1906,7 +1906,7 @@ Press **F4** (or **Tools → Program Log…**) to open the **Program Log** — a
 - **INF / WRN / ERR** — severity filters; tick the ones you want to see.
 - **Search** filters the rows by source or message text; **Clear** empties the view; **Auto-scroll** keeps it pinned to the newest row.
 - **Debug** and **Combat** are *generation* toggles (not just filters): they turn the verbose cross-engine trace and the combat-decision channel on or off across the whole app, and show those rows here. Both are **on by default** and persist per character — leave them on for the richest diagnostics; turn one off to quiet the noise. (These are the same two channels you'll see in a bug report.)
-- **Auto-collect logs** writes the program, memory, and combat-trace files to the Logs folder for the session (off by default, so a normal run leaves nothing behind). The Exp/Hr Estimator's **Check against my play** reads its loop history from these program logs, so leave it on if you want that check. **Hop timing** logs one line per confirmed room hop with its measured wall-clock time — used to tune the Auto-Lair travel-cost table.
+- **Auto-collect logs** writes the program, memory, combat-trace and performance files to the Logs folder for the session (off by default, so a normal run leaves nothing behind). The Exp/Hr Estimator's **Check against my play** reads its loop history from these program logs, so leave it on if you want that check. **Hop timing** logs one line per confirmed room hop with its measured wall-clock time — used to tune the Auto-Lair travel-cost table.
 - **Simulate buttons** is a dropdown of test-only toggles, each revealing a hidden **Simulate …** button on its feature window (all off by default and reset off every launch, so a normal session never shows them): **Simulate Death button** (Player Workshop → Death Recovery tab), **Simulate Chest button** (Bosses tab → Chest Offload — seeds a few random containers so you can exercise the window without real chests), and **Simulate entry button** (Game Data → Unrecognized Lines — feeds a synthetic unknown line through the capture flow so a candidate appears, letting you see the feature work without waiting for the game to emit one).
 
 ## Backscroll (Alt+L)
@@ -2274,9 +2274,9 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 
 ### Navigation map: other floors
 
-**Default:** On; **10** floors up and down; leave out a floor that overlaps more than **50%**
-**Available options:** On / off; 1–99 floors; 0–100%.
-**What it does:** Draws the floors reached by up and down exits dimmed around the floor the Navigation map shows (see **The map and obstacles**). **Floors drawn up and down** is how many up/down steps away a floor may be; a mountain path climbs one step per floor (the Barren Hills climb is over 40), so raise it to see a long climb end to end. **Leave out a floor that overlaps more than** drops a floor when that share of its rooms would land on rooms already drawn, since a floor stacked right on this one is a different place; a floor with three or fewer rooms covered is always kept, and **100%** keeps every floor.
+**Default:** On; **10** floors up and down; leave out a floor that overlaps more than **50%**; route lines drawn on other floors
+**Available options:** On / off; 1–99 floors; 0–100%; route lines on other floors on / off.
+**What it does:** Draws the floors reached by up and down exits dimmed around the floor the Navigation map shows (see **The map and obstacles**). **Floors drawn up and down** is how many up/down steps away a floor may be; a mountain path climbs one step per floor (the Barren Hills climb is over 40), so raise it to see a long climb end to end. **Leave out a floor that overlaps more than** drops a floor when that share of its rooms would land on rooms already drawn, since a floor stacked right on this one is a different place; a floor with three or fewer rooms covered is always kept, and **100%** keeps every floor. **Draw route lines on other floors** lets a walk's route line run on through the shadowed floors' rooms; the game doesn't always lay two floors out so they line up, so a route crossing between them can draw as a long diagonal. Turn it off to keep route lines to the floor shown, broken off where the route leaves it.
 **When you might change it:** Raise the floor count for long climbs and deep dungeons; lower it, or the overlap share, if the map feels busy.
 **Important notes:** Install-wide (Global tier); the map's **Overlays → Other floors** chip flips the same on/off. Applies on Apply; an open map redraws at once.
 
@@ -4048,7 +4048,7 @@ MudPlay uses the player your system already has, so there's nothing to install o
 
 ## Diagnostics / Log Pane
 
-Not a Settings tab — these five toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine per-character saved preferences. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
+Not a Settings tab — these five toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine saved preferences. They're saved **for all characters** (not per character), and take effect from the moment MudPlay starts, so **Auto-collect logs** captures the whole session, including before you load a character. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
 
 ### Debug channel
 
@@ -4059,13 +4059,14 @@ Not a Settings tab — these five toggles live in the **Program Log** window (de
 
 **Default:** On
 **What it does:** The same idea, but specifically for verbose combat-decision tracing (why an attack/spell choice was made each round).
-**Important notes:** Both Debug and Combat default **on** so that a fresh character's Program Log already has enough detail to diagnose a problem the first time something goes wrong — a bug report captured with both off has nothing useful in it.
+**Important notes:** Both Debug and Combat default **on** so that a fresh Program Log already has enough detail to diagnose a problem the first time something goes wrong — a bug report captured with both off has nothing useful in it.
 
 ### Auto-collect logs
 
 **Default:** Off
-**What it does:** When on, MudPlay writes out full on-disk diagnostic files (program log, memory log, combat-trace log) for the session, under the data folder's `Logs/` directory, instead of only keeping recent lines in memory.
-**When you might change it:** Turn on before a play session where you're trying to reproduce and capture an intermittent bug.
+**What it does:** When on, MudPlay writes out full on-disk diagnostic files (program log, memory log, combat-trace log, performance log) for the session, under the data folder's `Logs/` directory, instead of only keeping recent lines in memory.
+**The performance log** (`…-performance.log`) is for lag and stutters. MudPlay keeps checking whether its window is keeping up. Every moment it fell behind by 50 ms or more gets a `stall` line saying how long it lasted and what it was busy with: incoming game text, opening a window (named), saving your profile, reading game data, or drawing the terminal or the map. Once a minute a `summary` line adds up that minute: the stalls, how long each kind of work took, and the client's CPU, memory and garbage-collection activity. Nothing is measured while the setting is off.
+**When you might change it:** Turn on before a play session where you're trying to reproduce and capture an intermittent bug, or one where the client felt laggy.
 
 ### Hop timing
 
@@ -4424,10 +4425,10 @@ This section is a compact, technical lookup table for every setting documented a
 
 | Setting | Default | Allowed Values | Config Key | Location |
 |---|---|---|---|---|
-| Debug channel | `true` | bool | `LogDiagnosticsSettings.Debug` | Models/Profile/LogDiagnosticsSettings.cs |
-| Combat channel | `true` | bool | `LogDiagnosticsSettings.Combat` | Models/Profile/LogDiagnosticsSettings.cs |
-| Auto-collect logs | `false` | bool | `LogDiagnosticsSettings.AutoCollect` | Models/Profile/LogDiagnosticsSettings.cs |
-| Hop timing | `false` | bool | `LogDiagnosticsSettings.HopTiming` | Models/Profile/LogDiagnosticsSettings.cs |
+| Debug channel | `true` | bool (Global) | `GlobalSettings.LogDiagnostics.Debug` | Models/Settings/LogDiagnosticsSettings.cs |
+| Combat channel | `true` | bool (Global) | `GlobalSettings.LogDiagnostics.Combat` | Models/Settings/LogDiagnosticsSettings.cs |
+| Auto-collect logs | `false` | bool (Global) | `GlobalSettings.LogDiagnostics.AutoCollect` | Models/Settings/LogDiagnosticsSettings.cs |
+| Hop timing | `false` | bool (Global) | `GlobalSettings.LogDiagnostics.HopTiming` | Models/Settings/LogDiagnosticsSettings.cs |
 | Equipment sets (gear loadouts, edited in Character Workshop) | empty list, seeded per trigger type | list of `EquipmentSet` | `EquipmentSettings.Sets` | Models/Profile/EquipmentSettings.cs |
 
 ### Not user-configurable (confirmed, for completeness)
@@ -4455,5 +4456,6 @@ Open the **Program Log** (F4) — it records what the engines decided and why. T
 ## Filing a bug report
 
 Use the menu-bar **Bug Report** button, or right-click the terminal → **Bug report…**. It writes a Markdown snapshot of your current state — movement, player, settings, program log, and scrollback — to your Desktop, ready to attach to a GitHub issue, so a problem can be diagnosed from the exact moment it happened.
+
 
 **Help → Report an issue…** opens the project's GitHub issues page in your browser, where you file the report and attach that snapshot. **Help → About MudPlay** shows the version, license, and bundled-component credits — handy when a report needs the exact build you're on.

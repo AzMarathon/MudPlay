@@ -471,6 +471,9 @@
                                        Minimum="0" Maximum="100"
                                        Increment="5" FormatString="0" Width="120"/>
                     </StackPanel>
+                    <CheckBox IsChecked="{Binding MapRouteLinesOnOtherFloors, Mode=TwoWay}"
+                              Content="Draw route lines on other floors"
+                              ToolTip.Tip="When checked (default), a route line runs on through the shadowed floors' rooms. The game doesn't always lay two floors out so they line up, so a route crossing between them can draw as a long diagonal; uncheck this to keep route lines to the floor shown, broken off where the route leaves it. Install-wide; applies on Apply."/>
                 </StackPanel>
 
                 <TextBlock Classes="SectionHeader" Text="Navigation line appearance"/>

@@ -1585,4 +1585,21 @@ public sealed class BfsMapperTests : IDisposable
         Assert.Equal(1, bfs.CountTrapsOnPath(new RoomKey(1, 1), new[] { Direction.E, Direction.N, Direction.N }));
         Assert.Equal(0, bfs.CountTrapsOnPath(new RoomKey(1, 1), System.Array.Empty<Direction>()));
     }
+
+    // The memo answers every pair as DistanceBetween does, whether a room is asked
+    // once (DistanceBetween's own search) or several times (one map of the room).
+    [Fact]
+    public void DistanceMemo_matches_DistanceBetween_for_every_pair()
+    {
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper();
+        RoomKey[] rooms = graph.Rooms.Select(r => r.Key).Append(new RoomKey(9, 9)).ToArray();
+        System.Func<RoomKey, RoomKey, int?> memo = bfs.DistanceMemo();
+        foreach (RoomKey from in rooms)
+            foreach (RoomKey to in rooms)
+                Assert.Equal(bfs.DistanceBetween(from, to), memo(from, to));
+        // And again, now every answer is remembered.
+        foreach (RoomKey from in rooms)
+            foreach (RoomKey to in rooms)
+                Assert.Equal(bfs.DistanceBetween(from, to), memo(from, to));
+    }
 }

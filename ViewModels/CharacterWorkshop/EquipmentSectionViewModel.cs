@@ -66,8 +66,10 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     // so a profile load or set switch doesn't re-persist what it just read.
     private bool _suppress;
 
-    public override string Id => "equipment";
-    public override string Title => "Equipment Manager";
+    public const string SectionId = "equipment";
+    public const string SectionTitle = "Equipment Manager";
+    public override string Id => SectionId;
+    public override string Title => SectionTitle;
     public override Control View => _view ??= new EquipmentSectionView { DataContext = this };
 
     // The four fixed trigger-purposed sets, in roster order.

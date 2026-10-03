@@ -69,7 +69,7 @@ public sealed class TrainFundingRouterTests
                 currentRoom: () => Room,
                 onHandCopper: () => Purse,
                 sources: () => Sources,
-                distance: (a, b) => a.Equals(b) ? 0 : 5,
+                newDistanceLookup: () => (a, b) => a.Equals(b) ? 0 : 5,
                 walkTo: key =>
                 {
                     Walked.Add(key);

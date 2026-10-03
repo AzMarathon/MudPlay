@@ -75,6 +75,8 @@ public sealed class ProfileService
     // the always-on Info stream — the peer of the game-data set audit in
     // GameDataCache. Left null in tests.
     public LogService? Log { get; set; }
+    // Times saves for the performance log; set once by AppServices.
+    public PerformanceMonitor? Performance { get; set; }
 
     private const string LogCategory = "Profile";
 
@@ -496,6 +498,7 @@ public sealed class ProfileService
     public void Save(bool backup = false)
     {
         if (Current is null) return;
+        using PerformanceMonitor.Scope? timing = Performance?.Measure("profile save");
 
         // The default profile (no named character) persists to the Global folder.
         // That file is the install-wide defaults and the template File → Save As

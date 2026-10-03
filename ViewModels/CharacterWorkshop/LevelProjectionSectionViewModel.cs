@@ -54,8 +54,10 @@ public sealed partial class LevelProjectionSectionViewModel : WorkshopSectionVie
     // (next level), dropping the just-achieved level's row.
     private int _lastCharLevel;
 
-    public override string Id => "levelprojection";
-    public override string Title => "Level Projection";
+    public const string SectionId = "levelprojection";
+    public const string SectionTitle = "Level Projection";
+    public override string Id => SectionId;
+    public override string Title => SectionTitle;
     public override Control View => _view ??= new LevelProjectionSectionView { DataContext = this };
 
     public ObservableCollection<LevelProjectionRow> Rows { get; } = new();

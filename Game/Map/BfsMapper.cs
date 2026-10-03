@@ -295,7 +295,7 @@ public sealed class BfsMapper
     // a step count can actually use.
     public IReadOnlyDictionary<RoomKey, int> ComputeDistancesFrom(
         RoomKey source, IRoomFilter? filter = null, bool viaBoats = false) =>
-        Distances(source, filter, viaBoats, targets: null);
+        Distances(source, filter, viaBoats, targets: null, allowGateway: viaBoats);
 
     // Walk-only hop counts from source, stopping as soon as every room in targets
     // has been reached — a clustered target set (one area's lairs) is answered
@@ -305,11 +305,11 @@ public sealed class BfsMapper
         RoomKey source, IReadOnlyCollection<RoomKey> targets, IRoomFilter? filter = null)
     {
         ArgumentNullException.ThrowIfNull(targets);
-        return Distances(source, filter, viaBoats: false, new HashSet<RoomKey>(targets));
+        return Distances(source, filter, viaBoats: false, new HashSet<RoomKey>(targets), allowGateway: false);
     }
 
     private Dictionary<RoomKey, int> Distances(
-        RoomKey source, IRoomFilter? filter, bool viaBoats, HashSet<RoomKey>? targets)
+        RoomKey source, IRoomFilter? filter, bool viaBoats, HashSet<RoomKey>? targets, bool allowGateway)
     {
         Dictionary<RoomKey, int> dist = new();
         if (_graph.GetRoom(source) is null) return dist;
@@ -342,7 +342,7 @@ public sealed class BfsMapper
                 if (dist.ContainsKey(next)) continue;
                 if (exit.CastTeleportRandom) continue; // unpredictable landing — not routable
                 // Last-resort crossing — keep walk distances deterministic.
-                if (exit.GatewayTeleport && !viaBoats) continue;
+                if (exit.GatewayTeleport && !allowGateway) continue;
                 // Un-openable hidden action exit (no / insufficient action data) —
                 // not routable (see FindPathCore).
                 if (exit.Hint == RoomExitHint.MultiActionHidden
@@ -362,6 +362,47 @@ public sealed class BfsMapper
             }
         }
         return dist;
+    }
+
+    // DistanceBetween for many pairs, answered with fewer searches: for one planning
+    // pass (ranking 50 trainers from one room, a funding plan weighing every stash),
+    // not to be kept — the answers go stale once avoids, gates or the graph change.
+    //
+    // Each answer is remembered. A room's first question gets DistanceBetween's own
+    // search, which stops at the destination; a second, different question from the
+    // same room maps it once instead (Distances, walk-only), and a destination that
+    // map misses gets the gateway pass FindPath falls back to. The hop counts are
+    // DistanceBetween's: both are breadth-first, so a shortest count doesn't depend
+    // on which of several routes was found. Picking the auto-trainer's trainer this
+    // way took 50 searches, over half a second on the UI thread.
+    public Func<RoomKey, RoomKey, int?> DistanceMemo(IRoomFilter? filter = null)
+    {
+        Dictionary<(RoomKey, RoomKey), int?> answers = new();
+        HashSet<RoomKey> askedOnce = new();
+        Dictionary<RoomKey, Dictionary<RoomKey, int>> walk = new();
+        Dictionary<RoomKey, Dictionary<RoomKey, int>> viaGateway = new();
+        return (source, destination) =>
+        {
+            if (answers.TryGetValue((source, destination), out int? known)) return known;
+            int? d;
+            // Distances refuses an avoided source outright, where FindPath walks out
+            // of it, so that one is always asked the slow way.
+            if (walk.TryGetValue(source, out Dictionary<RoomKey, int>? map)
+                || (!askedOnce.Add(source) && filter?.IsAvoided(source) != true
+                    && (map = walk[source] = Distances(source, filter, viaBoats: false, targets: null, allowGateway: false)) is not null))
+            {
+                if (map.TryGetValue(destination, out int hops)) d = hops;
+                else
+                {
+                    if (!viaGateway.TryGetValue(source, out Dictionary<RoomKey, int>? gateway))
+                        viaGateway[source] = gateway = Distances(source, filter, viaBoats: false, targets: null, allowGateway: true);
+                    d = gateway.TryGetValue(destination, out int via) ? via : null;
+                }
+            }
+            else d = DistanceBetween(source, destination, filter);
+            answers[(source, destination)] = d;
+            return d;
+        };
     }
 
     // Hop count from source to destination, or null when no path exists.

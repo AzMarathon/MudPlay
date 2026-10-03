@@ -133,6 +133,8 @@ public sealed class GameDataCache
     // incoming set so the user can verify swap success in the program log. Tests
     // leave it null.
     public LogService? Log { get; set; }
+    // Times table parses for the performance log; set once by AppServices.
+    public PerformanceMonitor? Performance { get; set; }
 
     public GameDataCache() : this(AppPaths.GameDataRoot)
     {
@@ -276,6 +278,7 @@ public sealed class GameDataCache
             // ReadAllBytes is fine — these JSON files are tens of MB at
             // most and we don't want to hold a FileStream while Parse
             // walks the buffer.
+            using PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}");
             byte[] bytes = File.ReadAllBytes(path);
 
             try

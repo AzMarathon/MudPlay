@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MudPlay.Models.Profile;
+using MudPlay.Models.Settings;
 using MudPlay.Services;
 using Xunit;
 
@@ -7,7 +8,7 @@ namespace MudPlay.Tests;
 
 /// <summary>
 /// Phase-1 log-overhaul framework: the generation-gated Debug / Combat
-/// channels, their guard flags, and the Char-tier persistence DTO. Info /
+/// channels, their guard flags, and the Global-tier persistence DTO. Info /
 /// Warn / Error stay always-on; Debug / Combat no-op unless the matching
 /// diagnostic toggle is set on the wired <see cref="LogDiagnosticState"/>.
 /// </summary>
@@ -151,7 +152,7 @@ public sealed class LogDiagnosticsTests
     [Fact]
     public void LogDiagnosticsSettings_Defaults()
     {
-        // Debug + Combat default ON so a fresh character's Program Log already
+        // Debug + Combat default ON so a fresh Program Log already
         // carries the decision trail a bug report needs; the heavier on-disk /
         // hop-timing traces stay off.
         LogDiagnosticsSettings dto = new();

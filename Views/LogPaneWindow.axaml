@@ -36,7 +36,7 @@
                 <!-- Generation toggles. Unlike the display filters, these
                      change what the program PRODUCES: flipping one on makes
                      the matching channel emit (and its rows appear); off
-                     silences it at the source. Persisted per-character. -->
+                     silences it at the source. Saved globally. -->
                 <Border Grid.Column="1" Margin="14,0,0,0"
                         BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                         BorderThickness="1,0,0,0" Padding="12,0,0,0">
@@ -45,12 +45,12 @@
                                   Content="Debug"
                                   Foreground="{StaticResource SeverityDebugBrush}"
                                   FontSize="11"
-                                  ToolTip.Tip="Generate the verbose Debug channel across all engines and show its rows. Persisted per-character; on by default."/>
+                                  ToolTip.Tip="Generate the verbose Debug channel across all engines and show its rows. Saved for all characters; on by default."/>
                         <CheckBox IsChecked="{Binding CombatDiagnostics}"
                                   Content="Combat"
                                   Foreground="{StaticResource SeverityCombatBrush}"
                                   FontSize="11"
-                                  ToolTip.Tip="Generate the combat-decision channel and show its rows. Persisted per-character; on by default."/>
+                                  ToolTip.Tip="Generate the combat-decision channel and show its rows. Saved for all characters; on by default."/>
                     </StackPanel>
                 </Border>
 
@@ -72,23 +72,23 @@
                  Auto-collect gates whether the program / memory / combat-trace
                  files are written to Data/Logs at all; Hop timing gates the
                  navigation calibration trace. Both off by default so a normal
-                 session leaves nothing extra behind. Persisted per-character. -->
+                 session leaves nothing extra behind. Saved globally. -->
             <StackPanel Orientation="Horizontal" Spacing="14">
                 <CheckBox IsChecked="{Binding AutoCollectLogs}"
                           Content="Auto-collect logs"
                           Foreground="{StaticResource ChromeFgSecBrush}"
                           FontSize="11"
-                          ToolTip.Tip="Write the program, memory, and combat-trace diagnostic files to Data/Logs. Off by default; turning it on generates all three for the session. Persisted per-character."/>
+                          ToolTip.Tip="Write the program, memory, combat-trace and performance diagnostic files to the Logs folder. Off by default; turning it on generates all of them for the session. Saved for all characters."/>
                 <CheckBox IsChecked="{Binding HopTiming}"
                           Content="Hop timing"
                           Foreground="{StaticResource ChromeFgSecBrush}"
                           FontSize="11"
-                          ToolTip.Tip="Log one Info line per confirmed room hop with the measured wall-clock time + current encumbrance. Use it to tune the Auto-Lair travel-cost table against in-game truth, then turn off for normal play. Persisted per-character."/>
+                          ToolTip.Tip="Log one Info line per confirmed room hop with the measured wall-clock time + current encumbrance. Use it to tune the Auto-Lair travel-cost table against in-game truth, then turn off for normal play. Saved for all characters."/>
                 <CheckBox IsChecked="{Binding CaptureUnrecognizedMessages}"
                           Content="Capture unrecognized messages"
                           Foreground="{StaticResource ChromeFgSecBrush}"
                           FontSize="11"
-                          ToolTip.Tip="Stage wire lines the Messages catalogue doesn't recognize as review candidates (Game Data → Unrecognized Lines), and log a Warn row on first sighting. On by default. Persisted per-character."/>
+                          ToolTip.Tip="Stage wire lines the Messages catalogue doesn't recognize as review candidates (Game Data → Unrecognized Lines), and log a Warn row on first sighting. On by default. Saved for all characters."/>
 
                 <!-- The test-only "Simulate …" buttons all share one dropdown of
                      checkboxes rather than a checkbox each: each reveals a hidden

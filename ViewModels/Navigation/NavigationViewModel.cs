@@ -39,6 +39,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _showOtherLevels = _services.Settings.Current.MapShowOtherFloors;
         _otherFloorsLevels = _services.Settings.Current.MapOtherFloorsLevels;
         _otherFloorsMaxOverlapPercent = _services.Settings.Current.MapOtherFloorsMaxOverlapPercent;
+        _routeLinesOnOtherFloors = _services.Settings.Current.MapRouteLinesOnOtherFloors;
         _services.Settings.GlobalSettingsChanged += OnGlobalSettingsChanged;
 
         // Reopen in the collapse mode the user last left. Set the backing field
@@ -233,6 +234,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             || settings.MapOtherFloorsMaxOverlapPercent != _otherFloorsMaxOverlapPercent;
         _otherFloorsLevels = settings.MapOtherFloorsLevels;
         _otherFloorsMaxOverlapPercent = settings.MapOtherFloorsMaxOverlapPercent;
+        RouteLinesOnOtherFloors = settings.MapRouteLinesOnOtherFloors;
         if (ShowOtherLevels != settings.MapShowOtherFloors) ShowOtherLevels = settings.MapShowOtherFloors;
         else if (reach) RebuildOtherLevels(Layout);
     }
@@ -862,6 +864,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Overlays chip flips the same setting.
     [ObservableProperty] private bool _showOtherLevels = true;
     [ObservableProperty] private RoomLayout? _otherLevelsLayout;
+    [ObservableProperty] private bool _routeLinesOnOtherFloors = true;
     private int _otherFloorsLevels;
     private int _otherFloorsMaxOverlapPercent;
     private CancellationTokenSource? _otherLevelsBuild;
@@ -3823,9 +3826,48 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 || exitedBlacklistedOrigin
                 || (!mapBrowsing && !Layout.Positions.ContainsKey(here.Key)))
             {
-                Layout = _services.Bfs.BuildLayout(here.Key);
+                RebuildAroundPlayer(here.Key);
             }
         }
+    }
+
+    // A step off the drawn map rebuilds it around the player, off the UI thread:
+    // a big area (a 6,500-room town with its retries) took two seconds, which
+    // froze the client mid-walk. One build at a time: steps come faster than a big
+    // build finishes, and restarting it on each one would never land. When it
+    // does, a player who has walked on past it gets the next build from there.
+    private RoomKey? _playerBuildFor;
+
+    private void RebuildAroundPlayer(RoomKey here)
+    {
+        if (_playerBuildFor is not null) return;
+        _playerBuildFor = here;
+        _ = BuildAroundPlayerAsync(here);
+    }
+
+    private async Task BuildAroundPlayerAsync(RoomKey here)
+    {
+        int request = _reRootRequest;
+        Game.Map.BfsMapper bfs = _services.Bfs;
+        RoomLayout? layout = null;
+        try
+        {
+            layout = await Task.Run(() => bfs.BuildLayout(here));
+        }
+        catch (Exception ex)
+        {
+            _services.Log?.Warn("Navigation", $"map not redrawn around {here}: {ex.Message}");
+        }
+        finally
+        {
+            _playerBuildFor = null;
+        }
+        // A jump the user asked for meanwhile wins.
+        if (layout is null || request != _reRootRequest) return;
+        Layout = layout;
+        if (CurrentRoomKey is { } now && !layout.Positions.ContainsKey(now)
+            && !(IsMapBrowsing?.Invoke() ?? false))
+            RebuildAroundPlayer(now);
     }
 
     private void OnGraphReloaded()

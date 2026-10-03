@@ -1,10 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.3**
-> - Session Stats → Time Analysis → Other: new Disarm Trap row, traps disarmed and the disarm success rate
-> - Paradigm: "The trap is already disarmed." clears the exit at once instead of stalling 8 seconds per retry
-> - A trap you disarmed is crossed without disarming again until it re-arms (5 min Stock, 2 min Paradigm)
+> **Version 3.142.10**
+> - Auto-collect logs also writes a performance log: every UI hitch (how long, what was running) and a per-minute summary of work timings, CPU, memory and GC
+> - Program Log settings (Debug, Combat, Auto-collect logs, Hop timing, unrecognized messages) are saved for all characters and apply from launch
+> - Walking off the drawn map rebuilds it in the background instead of freezing the client (up to 2 s in a big area)
+> - Auto-train picks its trainer about 10 times faster, and its funding plan reuses route searches instead of repeating them
+> - Player Workshop opens about twice as fast: Level Projection, Equipment, Calculators and Bosses are built when first shown
+> - Map no longer redraws when its overlays are republished unchanged or the window above it shifts
+> - Settings → General: "Draw route lines on other floors" to keep route lines to the floor shown
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

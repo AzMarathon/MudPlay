@@ -220,6 +220,9 @@ public sealed class AppServices
     // session leaves a trail that tells a managed-heap leak from working-set creep.
     // Only writes while LogDiagnostics.AutoCollectLogs is on (default off).
     public MemoryUsageLog MemoryLog { get; }
+    // UI-thread stall probe and work timings, written to their own log while
+    // Auto-collect logs is on.
+    public PerformanceMonitor Performance { get; }
 
     // Background memory hygiene: compacts the LOH once a game-data set settles
     // (reclaiming the startup JSON-parse fragmentation) and periodically returns
@@ -2534,6 +2537,7 @@ public sealed class AppServices
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
         MemoryLog = new MemoryUsageLog(LogDiagnostics);
+        Performance = new PerformanceMonitor(LogDiagnostics);
         // Self-update checker. Constructed early (only needs Log); the startup check
         // itself is kicked off at the end of construction, gated on the setting.
         Update = new Services.Update.UpdateService(Log);
@@ -2545,11 +2549,16 @@ public sealed class AppServices
         // audit entries (load / unload / swap) without coupling the
         // cache to AppServices construction order.
         GameData.Log = bootstrapLog;
+        GameData.Performance = Performance;
         Settings = new SettingsService();
+        // The Program Log switches are global: applied here, before any character,
+        // so Auto-collect logs captures the session from launch.
+        ApplyLogDiagnostics(Settings.Current.LogDiagnostics ?? new Models.Settings.LogDiagnosticsSettings());
         Profile = new ProfileService();
         // Same late-bind pattern as GameData.Log above: the profile-lifecycle
         // audit (load / swap / close / re-home) rides the always-on Info stream.
         Profile.Log = bootstrapLog;
+        Profile.Performance = Performance;
         Bbs = new BbsProfileStore(() => Settings.Current.DefaultGameDataSet, bootstrapLog);
         Realms = new RealmCatalog(Bbs, Profile, bootstrapLog);
 
@@ -3305,8 +3314,7 @@ public sealed class AppServices
         // persisted state on load, reset to off on close, and persist back
         // whenever a Log-pane toggle flips (the LogPane is the only editor —
         // no Settings-tab Apply path, so we persist on Changed directly).
-        Profile.ProfileLoaded += _ => ApplyLogDiagnosticsFromActiveProfile();
-        Profile.ProfileClosed += ResetLogDiagnosticsToDefaults;
+        Profile.ProfileLoaded += _ => AdoptCharacterLogDiagnostics();
         LogDiagnostics.Changed += PersistLogDiagnostics;
 
         // Bridge: per-character Party / Talk / Other settings into
@@ -7457,7 +7465,7 @@ public sealed class AppServices
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
             onHandCopper: () => Inventory.Snapshot.Currency.TotalCopperValue,
             sources: BuildTrainFundingSources,
-            distance: (a, b) => Bfs.DistanceBetween(a, b, Movement),
+            newDistanceLookup: () => Bfs.DistanceMemo(Movement),
             // Same gate planning the trainer walk uses — a stash or bank can sit
             // behind a key-door or hidden exit a plain walk can't route through.
             walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
@@ -8329,10 +8337,8 @@ public sealed class AppServices
     // immediately write it straight back.
     private bool _suppressLogDiagnosticsPersist;
 
-    private void ApplyLogDiagnosticsFromActiveProfile()
+    private void ApplyLogDiagnostics(Models.Settings.LogDiagnosticsSettings dto)
     {
-        Models.Profile.LogDiagnosticsSettings dto =
-            ReadSection<Models.Profile.LogDiagnosticsSettings>(Profile.Current, "LogDiagnostics");
         _suppressLogDiagnosticsPersist = true;
         LogDiagnostics.DebugDiagnostics  = dto.Debug;
         LogDiagnostics.CombatDiagnostics = dto.Combat;
@@ -8342,26 +8348,21 @@ public sealed class AppServices
         _suppressLogDiagnosticsPersist = false;
     }
 
-    private void ResetLogDiagnosticsToDefaults()
+    // The switches used to be saved per character. Until they've been saved
+    // globally, the first character loaded hands over its own, so whatever the
+    // user had set carries across the move.
+    private void AdoptCharacterLogDiagnostics()
     {
-        _suppressLogDiagnosticsPersist = true;
-        // Mirror LogDiagnosticsSettings defaults: Debug + Combat + message-candidate
-        // capture on, the heavier on-disk / hop-timing traces off.
-        LogDiagnostics.DebugDiagnostics  = true;
-        LogDiagnostics.CombatDiagnostics = true;
-        LogDiagnostics.AutoCollectLogs   = false;
-        LogDiagnostics.HopTiming         = false;
-        LogDiagnostics.CaptureUnrecognizedMessages = true;
-        _suppressLogDiagnosticsPersist = false;
+        if (Settings.Current.LogDiagnostics is not null) return;
+        if (Profile.Current?.Settings is not { } sections || !sections.ContainsKey("LogDiagnostics")) return;
+        ApplyLogDiagnostics(ReadSection<Models.Settings.LogDiagnosticsSettings>(Profile.Current, "LogDiagnostics"));
+        PersistLogDiagnostics();
     }
 
     private void PersistLogDiagnostics()
     {
         if (_suppressLogDiagnosticsPersist) return;
-        // No loaded character → session-only value; nothing to persist to.
-        if (Profile.Current is not { } profile) return;
-
-        Models.Profile.LogDiagnosticsSettings dto = new()
+        Settings.Current.LogDiagnostics = new Models.Settings.LogDiagnosticsSettings
         {
             Debug      = LogDiagnostics.DebugDiagnostics,
             Combat     = LogDiagnostics.CombatDiagnostics,
@@ -8369,9 +8370,7 @@ public sealed class AppServices
             HopTiming  = LogDiagnostics.HopTiming,
             CaptureUnrecognizedMessages = LogDiagnostics.CaptureUnrecognizedMessages,
         };
-        profile.Settings ??= new();
-        profile.Settings["LogDiagnostics"] = System.Text.Json.JsonSerializer.SerializeToElement(dto);
-        Profile.Save();
+        Settings.Save();
     }
 
     // Generic per-section settings reader. Returns a fresh default-

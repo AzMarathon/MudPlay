@@ -784,6 +784,7 @@
                                  AvoidedRooms="{Binding AvoidedRooms}"
                                  LevelGatedRooms="{Binding LevelGatedRooms}"
                                  OtherLevels="{Binding OtherLevelsLayout}"
+                                 RouteLinesOnOtherLevels="{Binding RouteLinesOnOtherFloors}"
                                  StashRooms="{Binding StashRooms}"
                                  GhRooms="{Binding GhRooms}"
                                  GhFullRooms="{Binding GhFullRooms}"

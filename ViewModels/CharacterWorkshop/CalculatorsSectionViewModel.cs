@@ -56,8 +56,10 @@ public sealed partial class CalculatorsSectionViewModel : WorkshopSectionViewMod
     private readonly LeaderboardSnapshotStore _leaderboards;
     private Control? _view;
 
-    public override string Id => "calculators";
-    public override string Title => "Calculators";
+    public const string SectionId = "calculators";
+    public const string SectionTitle = "Calculators";
+    public override string Id => SectionId;
+    public override string Title => SectionTitle;
     public override Control View => _view ??= new CalculatorsSectionView { DataContext = this };
 
     // ----- Calculator deep-link (from the customizable terminal right-click menu)

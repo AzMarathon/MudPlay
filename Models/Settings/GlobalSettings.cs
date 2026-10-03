@@ -77,6 +77,11 @@ public sealed class GlobalSettings
     // which pushes it to MapControl.
     public NavLineStyles? NavLines { get; set; }
 
+    // The Program Log window's switches (Debug / Combat channels, Auto-collect
+    // logs, Hop timing, Capture unrecognized messages). Null until first set, which
+    // lets the first character loaded after they moved here hand over its own.
+    public LogDiagnosticsSettings? LogDiagnostics { get; set; }
+
     // The Navigation map's other floors (Settings → General, and the map's
     // Overlays chip): the floors reached through up/down exits drawn dimmed around
     // the one shown. How many up/down steps away they reach, and the share of a
@@ -86,6 +91,10 @@ public sealed class GlobalSettings
     public const int MaxMapOtherFloorsLevels = 99;
     public int MapOtherFloorsLevels { get; set; } = 10;
     public int MapOtherFloorsMaxOverlapPercent { get; set; } = 50;
+    // Whether route lines run on through the other floors' rooms. Off keeps them
+    // to the floor shown: where the game's own layout of two floors doesn't line
+    // up, a route crossing between them draws as a jarring diagonal.
+    public bool MapRouteLinesOnOtherFloors { get; set; } = true;
 
     // Map legend overlay's user-dragged position, in pixels from the top-left of
     // the map viewport. Null (the default) parks it bottom-left. Install-wide
