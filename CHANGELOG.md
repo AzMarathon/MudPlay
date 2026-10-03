@@ -7,6 +7,8 @@
 - Floors above are drawn before floors below, and a floor landing mostly on drawn rooms is left out
 - Settings → General: other floors on/off, how many floors up and down, and the overlap cut-off
 - Right-click → Center on this room redraws the map from that room
+- Blacklisting a room redraws the map in place instead of jumping back to your room
+- Jumping the map to another area no longer freezes the window, and going back to an area is instant
 - Map zooms out much further; zooming and panning a big area stay smooth (redrawn once the wheel rests, exit lines worked out once per map)
 
 ## 3.141.15

@@ -578,8 +578,13 @@ public sealed class BfsMapper
     //   moves off it — a deferred hide that lets the blacklist be used to prune
     //   rooms the user is still looking at. A keepVisible build is transient and
     //   depends on live selection, so it bypasses the layout cache entirely.
+    //
+    // remember: false reads the cache but neither stores the result nor refreshes
+    //   an entry's age. The map's other floors build a layout for every floor in
+    //   reach, often more than the cache holds; remembered, they evicted the
+    //   layouts the map itself keeps going back to (a town, rebuilt on every jump).
     public RoomLayout BuildLayout(RoomKey origin, int maxRadius = int.MaxValue,
-        RoomKey? keepVisible = null)
+        RoomKey? keepVisible = null, bool remember = true)
     {
         (RoomKey Origin, int Radius) cacheKey = (origin, maxRadius);
         bool cacheable = keepVisible is null;
@@ -589,11 +594,12 @@ public sealed class BfsMapper
             {
                 if (_layoutCache.TryGetValue(cacheKey, out RoomLayout? cached))
                 {
-                    TouchLru(cacheKey);
+                    if (remember) TouchLru(cacheKey);
                     return cached;
                 }
             }
         }
+        cacheable &= remember;
 
         if (_graph.GetRoom(origin) is null)
         {

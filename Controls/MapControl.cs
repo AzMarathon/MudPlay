@@ -1029,8 +1029,8 @@ public sealed class MapControl : Control
         // TryStepSelection / TryStepFloor since those can step off
         // the visible window.
         // When the layout itself rebuilds, re-centre on its origin —
-        // the room it was built around. Two kinds of rebuild reach
-        // here, distinguished by whether that origin is our live room:
+        // the room it was built around. Three kinds of rebuild reach
+        // here, told apart by that origin:
         //   - Movement rebuild (walked onto a new floor, reconnect,
         //     party-follow drag / leader loop): origin == CurrentRoomKey.
         //     Re-centre on it, but honour the browse-suppression window
@@ -1044,10 +1044,13 @@ public sealed class MapControl : Control
         //     for the suppression interval, then rebounds to the player —
         //     mirroring a pan-drag. Without this a search jump re-rooted the
         //     layout off the player permanently and never rebounded.
-        LayoutProperty.Changed.AddClassHandler<MapControl>((c, _) =>
+        //   - A redraw of the same map (blacklist edit, graph reload): same origin.
+        //     The view stays exactly where the user left it.
+        LayoutProperty.Changed.AddClassHandler<MapControl>((c, e) =>
         {
             if (c.Layout is not { } layout) return;
             RoomKey origin = layout.Origin;
+            if (e.OldValue is RoomLayout previous && previous.Origin.Equals(origin)) return;
             if (c.CurrentRoomKey is { } cur && cur.Equals(origin))
             {
                 if (c.IsAutoFollowSuppressed) return;
