@@ -4001,6 +4001,7 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.ChatHistory,
                 AppServices.Current.CommandHistory,
                 SendUserText,
+                ClearChatlog,
                 Application.Current,
                 AppServices.Current.Resolver.Resolve<Models.Profile.TalkSettings>("Talk"),
                 AppServices.Current.Profile,
@@ -5510,11 +5511,11 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.Log.Warn("ShellLaunch", $"Could not open {AppPaths.LogsDir}");
     }
 
-    // Tools → Clear chatlog. Wipes every entry from the app-singleton
+    // Tools → Clear chatlog, and the Conversation window's Clear All. Wipes every entry from the app-singleton
     // ChatHistoryStore — the Conversation window's contents go with it
     // (it binds to the same store) and a fresh open shows an empty list — and
     // truncates the persisted talk.log so the on-disk copy matches. Destructive;
-    // no confirm dialog.
+    // the menu entry asks nothing, the window's button confirms in its flyout.
     [RelayCommand]
     private void ClearChatlog()
     {

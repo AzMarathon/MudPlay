@@ -1894,7 +1894,7 @@ Type into the input box at the bottom and press **Enter** (or click **Send**) to
 
 ## Logging and history
 
-The window keeps its history even after you close it, and replays your last session's chat when you reconnect. To save chat to a file, turn on **Settings → Talk → Log conversations** — it writes to the `Logs` folder, which you can open from **Tools → Open logs folder**. There's no clear button in the window itself; use **Tools → Clear chatlog** on the main window to wipe it. The chat font and channel colors are set on the Talk tab and apply live the moment you hit Apply — an already-open window re-fonts and recolors on the spot.
+The window keeps its history even after you close it, and replays your last session's chat when you reconnect. To save chat to a file, turn on **Settings → Talk → Log conversations** — it writes to the `Logs` folder, which you can open from **Tools → Open logs folder**. **Clear All**, beside Auto-scroll, wipes the whole history and the saved copy after one confirming click; **Tools → Clear chatlog** on the main window does the same without asking. The chat font and channel colors are set on the Talk tab and apply live the moment you hit Apply — an already-open window re-fonts and recolors on the spot.
 
 ---
 
