@@ -1,5 +1,9 @@
 # Version history
 
+## 3.142.38
+
+- Monster Intel: Hide 0 exp checkbox beside Hide regen timers drops monsters that give no experience
+
 ## 3.142.37
 
 - Route picker opens when a lever needed on your route sits behind a hazard or item gate: obtain the counter or cross unprotected, and the walk runs the whole lever detour

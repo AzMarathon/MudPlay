@@ -1813,7 +1813,7 @@ Raise the cap to include tougher monsters. At the default 999, a monster the sel
 
 Every column is independently sortable (click a header; click again to reverse), and **double-clicking a monster opens its full record in the Game Data Browser**. Once a character is loaded, a monster with no computable Hits You % (an NPC/caster-only record with no catalogued physical attack — a trainer, quest-giver, etc.) is dropped from the list entirely — it isn't a meaningful "can this thing hurt me" entry.
 
-A **Hide regen timers** checkbox (beside the rounds cap) drops monsters that respawn on their own timer — bosses, lair leaders, and other timed spawns (any with a non-zero respawn/regen time) — leaving only freely-farmable monsters in the list.
+A **Hide regen timers** checkbox (beside the rounds cap) drops monsters that respawn on their own timer — bosses, lair leaders, and other timed spawns (any with a non-zero respawn/regen time) — leaving only freely-farmable monsters in the list. Next to it, **Hide 0 exp** drops every monster that gives no experience (shopkeepers, trainers, quest NPCs and the like). Both start unticked each time the window opens.
 
 A **Hits You %** filter dropdown narrows the list by how dangerous a monster's own attack is. It offers a set of contiguous %-bands — each its own discrete range, together covering the realm's whole range with no gap — and you tick **any combination** (multi-select): a monster shows if its Hits You % falls in **any** ticked band (tick the safe end and the risky end to see both while hiding the middle); tick none and every monster shows.
 

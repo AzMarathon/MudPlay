@@ -453,4 +453,32 @@ public sealed class MonsterIntelViewModelTests : IDisposable
         vm.RowsView.Refresh();
         return vm;
     }
+
+    // Hide 0 exp drops the monsters worth no experience and nothing else. A monster
+    // whose exp only comes from its multiplier still counts as worth something.
+    [Fact]
+    public void HideZeroExp_DropsOnlyMonstersWorthNoExperience()
+    {
+        string setDir = Path.Combine(_root, "exp-set");
+        Directory.CreateDirectory(setDir);
+        File.WriteAllText(Path.Combine(setDir, "Monsters.json"), """
+        [
+          { "Number": 1, "Name": "test goblin", "Type": 1, "Align": 2, "HP": 10, "EXP": 50 },
+          { "Number": 2, "Name": "test shopkeeper", "Type": 1, "Align": 2, "HP": 10, "EXP": 0 },
+          { "Number": 3, "Name": "test champion", "Type": 1, "Align": 2, "HP": 10, "EXP": 20, "ExpMulti": 3 }
+        ]
+        """);
+        var cache = new GameDataCache(_root);
+        cache.SwitchSet("exp-set");
+        using var vm = new MonsterIntelViewModel(cache, new MonsterCatalog(cache), NewResolver());
+
+        Assert.Equal(3, vm.RowsView.Cast<MonsterIntelEntry>().Count());
+
+        vm.HideZeroExpMonsters = true;
+        Assert.Equal(new[] { "test champion", "test goblin" },
+            vm.RowsView.Cast<MonsterIntelEntry>().Select(e => e.Name).OrderBy(n => n).ToArray());
+
+        vm.HideZeroExpMonsters = false;
+        Assert.Equal(3, vm.RowsView.Cast<MonsterIntelEntry>().Count());
+    }
 }
