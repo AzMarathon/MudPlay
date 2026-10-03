@@ -3422,6 +3422,55 @@ public sealed class CastingDirectorTests
         Assert.Equal("neutralize Tank", h.CastsSent[0]);
     }
 
+    // Report paradigm-20261003-131851: a cure-poison too weak for the poison left the
+    // member's par `P` flag up, so the chip came back after every cast and the cure
+    // went out every 5 s until mana ran dry.
+    [Fact]
+    public void PartyCure_AilmentKeepsComingBack_BacksOff()
+    {
+        using PartyHarness h = new();
+        DateTime now = new(2026, 10, 3, 12, 0, 0, DateTimeKind.Utc);
+        h.Director.SetClock(() => now);
+        h.Spells.CurePoisonSpell = "mgra";
+        PartyMember tank = h.AddMember("Tank", hpPercent: 100);
+        PartyMember mage = h.AddMember("Mage", hpPercent: 100);
+        tank.Poisoned = true;
+
+        void Round(int seconds)
+        {
+            now = now.AddSeconds(seconds);
+            h.Cast.OnCombatTick();
+            h.Director.NotifyRoundComplete();
+            h.Director.Evaluate();
+        }
+
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "mgra Tank" }, h.CastsSent);
+
+        // Still poisoned 5 s on (par re-flagged them): held off. A different member's
+        // cure isn't.
+        mage.Poisoned = true;
+        Round(5);
+        Assert.Equal(new[] { "mgra Tank", "mgra Mage" }, h.CastsSent);
+        mage.Poisoned = false;
+
+        Round(11);                                  // 16 s after the first: retry
+        Assert.Equal(3, h.CastsSent.Count);
+        Round(16);                                  // second wait is 30 s
+        Assert.Equal(3, h.CastsSent.Count);
+        Round(15);
+        Assert.Equal(4, h.CastsSent.Count);
+        Assert.Equal("mgra Tank", h.CastsSent[3]);
+
+        // The chip stays clear long enough to count as cured: the next poison is
+        // treated at once.
+        tank.Poisoned = false;
+        Round(13);
+        tank.Poisoned = true;
+        Round(1);
+        Assert.Equal(5, h.CastsSent.Count);
+    }
+
     // Report paradigm-20260929-230346: a member's @held lit their Held chip but the
     // cure-holds spell was never cast at them; a hold goes first, as it does for us.
     [Fact]

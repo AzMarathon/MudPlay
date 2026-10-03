@@ -2176,11 +2176,21 @@ How one damage spell cast against a monster is worked out.
   - **A CurePoison (ability 20) spell ends one poison spell**, the first poison slot it finds, running its wear-off. It then lowers the poison number by the cure's own value, floored at 0 (Stock cure poison: 8) (`_cast_user_target` @ `0x44683f`). So one cast can leave a player with two poisons still poisoned.
   - **The healer's `buy cure poison`** (`_buy_item` @ `0x41b9e6`) zeroes the poison number and ends every poison slot, for 25 silver: `... and your poisoning is cured.`. If you weren't poisoned it costs 15 silver: `... and find that you were not poisoned!`.
   - **Death** ends every slot and zeroes the poison number.
+  - **On Paradigm a cure-poison cast removes one poison per cast** *([CONFIRMED] 2026-10-03, user: merciful grace "removes one poison per cast")*, matching the one-slot rule above.
+  - **`mgra` did not visibly cure bee poison on Paradigm** *([OBSERVED] 2026-10-03, reports `paradigm-20261003-131851` and `paradigm-20261003-132224`; data from `data-Paradigm-1.9.1`)*:
+    - The poison came from the depth dweller (#2774): its `whips you with a tentacle` attack carries hit spell #365 bee poison (Poison (19) value 0, 12–20, `Dur` 100). The temple's ancient preserver, dark templar and dark fanatic carry no poison.
+    - merciful grace (`mgra`, #804) carries CurePoison (20) value 8. `cure poison` (#19) and `antidote` (#31) carry value 0 with Min/Max 8; `curing wind` (#1317) carries 100.
+    - Three members showed `P` in `par` from 13:15:46. One took 29 casts (`You cast merciful grace on Silvix!` each time) and lost the flag at 13:18:26; one took 27 and lost it at 13:21:05; the third took none and lost it by 13:19:10.
+    - So the flag cleared in about the same time with and without the cure. That doesn't fit the cure ending the poison in one cast.
+    - Stacking can't explain it (one instance per poison spell, below), and nothing was re-applying it: the depth dwellers were left behind by 13:16:36 and the party sat in a room with no poison source.
+    - *[NEEDS CONFIRMATION]: why did `mgra` not clear bee poison? The user can't say from one point of view (2026-10-03). Does a cure whose value (8) is below the poison's amount (12–20) do nothing on Paradigm? One tentacle hit, one `mgra`, then `par` would settle it.*
+  - **On Paradigm a player carries at most one instance of each poison spell** *([CONFIRMED] 2026-10-03, user)*: bee poison on you is one record however many hits landed. Once cured it can be re-applied at once by the next hit. *[NEEDS CONFIRMATION]: when the same poison lands on someone who already has it, does the new cast fail, or refresh the duration? The user doesn't know (2026-10-03). On Stock a monster's repeat cast refreshes only on a strictly higher roll (**Recasting the same spell on someone who has it**, above).*
 - **Where it shows:** `You are Poisoned!` in the status display, a `P` flag in `par`, and `%s is poisoned!` when someone looks at you.
 - **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
 
 **Client use:**
 - `LoopSimulator` (`LandProc`, `Burn`) applies the hit-spell policy above: one slot per spell, its stored value taken every 3 s, refreshed only by a strictly higher roll. Which spells burn follows the realm (`SimProc.From`): on Stock only a Damage (1) spell with a duration, while Damage-MR (17) hits on landing; on Paradigm every damage spell with a duration, as the `envelops` capture shows. It doesn't simulate poison (ability 19) hit spells, or monster poison.
+- `CastingDirector.PickPartyCure` backs off a party cure whose ailment comes back after the cast (`PartyCureFor`, `NotePartyCureCast`): 15 s, doubling to a 2-minute cap, starting over once the chip has stayed clear 12 s (report `paradigm-20261003-131851`: `mgra` went out every 5 s until mana ran dry).
 
 ### Attack-spell mana efficiency
 *Status: Unrated (client formula as used by Monster Intel)*

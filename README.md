@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.33**
-> - A loop that pauses to rest after a trap fires carries on across the exit when it resumes, instead of running a recovery first; same for a door, winch or hidden exit that clears while the loop is held
-> - Door, hidden-exit, trap and winch tries wait until a rest or meditate is over instead of interrupting it
+> **Version 3.142.36**
+> - A party cure that doesn't clear the ailment is no longer recast every 5 seconds: the wait doubles each time, from 15 seconds up to 2 minutes
+> - A lever room on your route that can't be walked back to no longer fails the walk: the levers are worked one-way and the walk comes out at the exit
+> - A walk that fails because a lever room can't be reached names the exit, the room and what's in the way, instead of "path expansion empty"
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

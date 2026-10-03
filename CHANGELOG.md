@@ -1,5 +1,12 @@
 # Version history
 
+## 3.142.36
+
+- A party cure that doesn't clear the ailment is no longer recast every 5 seconds: the wait doubles each time, from 15 seconds up to 2 minutes
+- A lever room on your route that can't be walked back to no longer fails the walk: the levers are worked one-way and the walk comes out at the exit
+- A walk that fails because a lever room can't be reached names the exit, the room and what's in the way, instead of "path expansion empty"
+- bug reports addressed: paradigm-20261003-131851, paradigm-20261003-132224, paradigm-20261003-132757
+
 ## 3.142.33
 
 - A loop that pauses to rest after a trap fires carries on across the exit when it resumes, instead of running a recovery first; same for a door, winch or hidden exit that clears while the loop is held

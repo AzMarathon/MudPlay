@@ -1107,6 +1107,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             : null;
         IReadOnlyList<Direction>? path;
         IReadOnlyList<WalkStep> expanded;
+        List<UnroutableLeverLeg> unroutable = new();
         BoatRoutePlan? boatPlan = null;
         SysopGotoRoutePlan? sysGotoPlan = null;
         try
@@ -1197,10 +1198,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 IReadOnlySet<Direction>? openHere = _tracker.State.CurrentRoom?.Key.Equals(source.Key) == true
                     ? _tracker.ShownOpenExits()
                     : null;
-                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter, _log, openHere);
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter, _log, openHere, unroutable);
             }
         }
         finally { gateScope?.Dispose(); }
+
+        // A lever the route's exit needs sits somewhere the crosser can't walk to.
+        // Name the exit, the room and what's in the way, ahead of the generic
+        // failures below (which read "path expansion empty" when the exit is the
+        // walk's first step). The innermost exit comes first when the lever sits
+        // behind another lever exit.
+        if (unroutable.Count > 0 && boatPlan is null
+            && !RemoteActionPathExpander.ReachesDestination(expanded, destination))
+        {
+            string reason = DescribeUnroutableLever(unroutable[0]);
+            _log?.Info("Walker", $"walk to {destination}: {reason}");
+            Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
+            return false;
+        }
 
         if (expanded.Count == 0)
         {
@@ -1474,6 +1489,33 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
         return FormatBlockReasons(reasons, missingItems, levelGate, doorGate);
     }
+
+    // "the exit east of 14/10218 (Small Chamber) is opened from 14/10329 (Central
+    // Water Main), which can't be reached from 14/10218: all routes blocked by a
+    // room hazard you can't survive — walk there first" — the same gate wording a
+    // blocked walk gets, for the leg to a lever room. Walking to that room directly
+    // puts the obstacle on the route itself, where the route picker offers its
+    // usual ways across.
+    private string DescribeUnroutableLever(UnroutableLeverLeg leg)
+    {
+        IReadOnlyList<Direction>? probe;
+        using (_filter?.SuspendAcquirableGates())
+            probe = _bfs.FindPath(leg.From, leg.To, _filter);
+        if (probe is null || probe.Count == 0)
+            probe = _bfs.FindPath(leg.From, leg.To, _filter, ignoreExitGates: true);
+        string why = probe is { Count: > 0 }
+            ? DescribeBlockedRoute(leg.From, probe)
+            : DescribeNoPlainRoute(leg.From, leg.To);
+
+        string exit = $"the exit {leg.GateDir.ToLongName()} of {NameRoom(leg.GateRoom)}";
+        return leg.To.Equals(leg.GateRoom)
+            ? $"{exit} can't be walked back to from {NameRoom(leg.From)}, where it's opened: {why}"
+            : $"{exit} is opened from {NameRoom(leg.To)}, which can't be reached from {NameRoom(leg.From)}: {why} — "
+              + $"walk to {NameRoom(leg.To)} first";
+    }
+
+    private string NameRoom(RoomKey key) =>
+        _graph.GetRoom(key)?.Name is { Length: > 0 } name ? $"{key} ({name})" : key.ToString();
 
     // No gated route resolved even with gates ignored. Before reporting a bare
     // "no path", check whether the ONLY thing walling the destination off is a

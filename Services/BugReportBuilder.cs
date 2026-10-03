@@ -591,6 +591,9 @@ public static class BugReportBuilder
         Kv(sb, "Sneak keeping — cast held", svc.CastDirector.HasSneakHeldCast
             ? (svc.Stealth.IsHoldingForCast ? "yes — the step waits here while it goes out" : "yes — stops in the next NPC-free room")
             : "no");
+        Kv(sb, "Party cures backing off", svc.CastDirector.DescribePartyCureBackoff() is { Count: > 0 } cures
+            ? string.Join(" · ", cures)
+            : "(none)");
         if (svc.Health.IsGateFleeing)
             Kv(sb, "Sneak keeping — gate flee", svc.CastDirector.IsEmergencyHealDue
                 ? "emergency heal due; it goes out, the re-sneak waits for it"
