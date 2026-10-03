@@ -75,6 +75,12 @@ public sealed class GameDataCache
     private readonly Dictionary<string, long> _lastRead = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Set, string Table), long> _prewarmedAt = new();
 
+    // Results worked out from the active set's tables (Derived), and a count bumped
+    // whenever the set's tables are dropped for re-reading, so a result built from
+    // the old ones is never kept. Guarded by the _tables lock.
+    private readonly Dictionary<string, object> _derived = new(StringComparer.Ordinal);
+    private long _generation;
+
     // Long enough that anything read per combat round / tick / room entry never ages
     // out; short enough that a startup-only table is gone within minutes of its build.
     public static readonly TimeSpan IdleEvictAfter = TimeSpan.FromMinutes(5);
@@ -193,6 +199,13 @@ public sealed class GameDataCache
         string? outgoing = ActiveSet;
         EvictAll();
         ActiveSet = setName;
+        // Again once the new set is the active one: a result built in between read
+        // tables of the old.
+        lock (_tables)
+        {
+            _derived.Clear();
+            _generation++;
+        }
         Log?.Log(LogSeverity.Info, "GameData",
             (outgoing, setName) switch
             {
@@ -251,6 +264,9 @@ public sealed class GameDataCache
 
         bool notifyParseFailed = false;
         JsonDocument? result = null;
+        string set;
+        string? path;
+        long generation;
         lock (_tables)
         {
             if (_tables.TryGetValue(tableName, out JsonDocument? cached))
@@ -272,24 +288,48 @@ public sealed class GameDataCache
                 return warmed;
             }
 
-            string? path = ResolveTablePath(ActiveSet, tableName);
+            set = ActiveSet;
+            path = ResolveTablePath(set, tableName);
             if (path is null || !File.Exists(path)) return null;
+            generation = _generation;
+        }
 
-            // ReadAllBytes is fine — these JSON files are tens of MB at
-            // most and we don't want to hold a FileStream while Parse
-            // walks the buffer.
-            using PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}");
+        // Read and parse outside the lock: Rooms takes half a second, and holding the
+        // lock that long stalled every other table lookup, the UI thread's included,
+        // behind a background read. Two threads may parse the same table at once;
+        // the first to publish wins and the other copy is dropped. ReadAllBytes is
+        // fine — these JSON files are tens of MB at most and we don't want to hold a
+        // FileStream while Parse walks the buffer.
+        JsonDocument? parsed = null;
+        JsonException? failure = null;
+        int kilobytes;
+        using (PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}"))
+        {
             byte[] bytes = File.ReadAllBytes(path);
+            kilobytes = bytes.Length / 1024;
+            try { parsed = JsonDocument.Parse(bytes); }
+            catch (JsonException ex) { failure = ex; }
+        }
 
-            try
+        lock (_tables)
+        {
+            // The set was switched or reloaded meanwhile: hand the caller what it
+            // asked for, as if the read had finished first, but don't keep it.
+            if (generation != _generation) return parsed;
+            if (_tables.TryGetValue(tableName, out JsonDocument? won))
             {
-                result = JsonDocument.Parse(bytes);
+                _lastRead[tableName] = Environment.TickCount64;
+                return won;
+            }
+            if (parsed is not null)
+            {
+                result = parsed;
                 _tables[tableName] = result;
                 _lastRead[tableName] = Environment.TickCount64;
                 Log?.Log(LogSeverity.Debug, "GameData",
-                    $"'{tableName}' loaded for '{ActiveSet}' ({bytes.Length / 1024} KB).");
+                    $"'{tableName}' loaded for '{set}' ({kilobytes} KB).");
             }
-            catch (JsonException ex)
+            else if (failure is { } ex)
             {
                 // Malformed table JSON is an external-data-boundary failure (a bad
                 // MDB import, hand-edited file, etc.), not an app invariant — treat
@@ -297,7 +337,7 @@ public sealed class GameDataCache
                 // happens to look it up.
                 _failedTables.Add(tableName);
                 Log?.Log(LogSeverity.Error, "GameData",
-                    $"'{tableName}' could not be parsed for set '{ActiveSet}' ({ex.Message}) — " +
+                    $"'{tableName}' could not be parsed for set '{set}' ({ex.Message}) — " +
                     "treating it as unavailable until the set is reloaded or re-imported.");
                 notifyParseFailed = true;
             }
@@ -357,6 +397,38 @@ public sealed class GameDataCache
                     _prewarmedAt[(setName, tableName)] = Environment.TickCount64;
                 }
             })));
+    }
+
+    // True when tableName is held parsed right now; never reads it.
+    public bool IsTableLoaded(string tableName)
+    {
+        lock (_tables) return _tables.ContainsKey(tableName);
+    }
+
+    // A result worked out from the active set's tables, built once and kept until
+    // the set is switched, reloaded or re-imported: the trainer and bank lists, a
+    // room-name index. Those were rebuilt by every window open and right-click that
+    // listed them, each walking the raw tables (and the 22 MB Rooms table re-parsed
+    // after the room graph had freed it). Evicting a table to save memory leaves
+    // them, since the data they came from hasn't changed. build runs outside the
+    // lock and may run twice when two threads ask at once; the first result is kept.
+    public T Derived<T>(string key, Func<T> build) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        long generation;
+        lock (_tables)
+        {
+            if (_derived.TryGetValue(key, out object? hit)) return (T)hit;
+            generation = _generation;
+        }
+        T value = build();
+        lock (_tables)
+        {
+            if (generation != _generation) return value;
+            if (_derived.TryGetValue(key, out object? won)) return (T)won;
+            _derived[key] = value;
+            return value;
+        }
     }
 
     // Try-get variant of GetRawTable.
@@ -524,6 +596,8 @@ public sealed class GameDataCache
     {
         lock (_tables)
         {
+            _derived.Clear();
+            _generation++;
             _tables.Clear();
             _failedTables.Clear();
             _numberIndex.Clear();

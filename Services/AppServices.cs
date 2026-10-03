@@ -3472,6 +3472,10 @@ public sealed class AppServices
         // so the build can promote CMD-teleport-shadowed door exits to Teleport,
         // and SpellCatalog so a cast-based CMD teleport becomes a routable edge.
         RoomGraph = new Game.Map.RoomGraphManager(GameData, Log, TBInfo, SpellCatalog);
+        // Once a set's graph is loaded, build the lists Navigation, Settings and the
+        // map's right-click menu show, off the UI thread, so the first open doesn't
+        // pay for them (the trainer list alone re-read the 22 MB Rooms table).
+        RoomGraph.GraphReloaded += () => Task.Run(WarmGameDataLists);
         GameData.ActiveSetChanged += RoomGraph.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             RoomGraph.OnActiveSetChanged(GameData.ActiveSet);
@@ -8336,6 +8340,22 @@ public sealed class AppServices
     // LogDiagnostics from disk — otherwise applying the loaded state would
     // immediately write it straight back.
     private bool _suppressLogDiagnosticsPersist;
+
+    private void WarmGameDataLists()
+    {
+        try
+        {
+            Game.GameData.TrainerCatalog.Enumerate(GameData);
+            Game.GameData.BankCatalog.Enumerate(GameData);
+            Game.Map.LevelGatedRooms.Compute(RoomGraph);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The set switched again mid-build and the graph was cleared under us;
+            // that reload warms its own lists, and nothing half-built is kept.
+            Log.Debug("GameData", $"list warm-up overtaken by a set switch ({ex.Message})");
+        }
+    }
 
     private void ApplyLogDiagnostics(Models.Settings.LogDiagnosticsSettings dto)
     {

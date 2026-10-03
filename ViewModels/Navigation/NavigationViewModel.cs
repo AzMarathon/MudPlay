@@ -3882,48 +3882,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RefreshLevelGatedRooms();   // gates are per game-data set too
     }
 
-    // Walk every room with a non-zero Cmd and ask TBInfo whether the CMD's
-    // Action chain contains a teleport directive. Both literal
-    // (teleport <room> <map>) and cast-delivered (cast <spell> where the
-    // spell carries a teleport ability) directives qualify — a random
-    // cast-teleport drops the walker into the same room-uncertainty state
-    // a literal one does, so it earns the same glyph. A sea-captain dock earns
-    // it too: `secure passage` is a delayed, party-splitting teleport to a
-    // distant shore — not an instant one, but still non-exit movement the user
-    // wants to spot. The resulting set drives the map's diagonal hash-line
-    // overlay so the user can pick out every non-exit movement spot at a glance.
+    // Every room with a non-exit way to move (Game.Map.TeleportRooms), for the map's
+    // hatch overlay.
     private void RefreshTeleportRooms()
     {
-        if (Graph is null) { TeleportRooms = null; return; }
-        HashSet<RoomKey> set = new();
-        foreach (Room room in Graph.Rooms)
-        {
-            // A dock's `secure passage` sailings live in the data-driven boat
-            // index, not the CMD teleport resolvers — flag it off that index so a
-            // captain room glyphs even though its CMD carries no cast-teleport.
-            if (Graph.BoatPassagesAt(room.Key).Count > 0) { set.Add(room.Key); continue; }
-
-            // A placed NPC that teleports you when asked a keyword (its greet chain) —
-            // the same resolver the Room info "NPC transports" section reads, so the
-            // glyph and the panel agree.
-            if (room.Npc > 0 && RoomTooltipBuilder.ResolveNpcTransports(
-                    room, _services.GameData, spawnIndex: null, _services.TBInfo).Count > 0)
-            { set.Add(room.Key); continue; }
-
-            if (room.Cmd <= 0) continue;
-            // Destinations, not keyworded teleports: a captain dock reaches its
-            // `teleport` through a colour-code intro block that LinkTo's the
-            // effect block, so the glyph must follow the CMD's whole text chain.
-            using IEnumerator<RoomKey> literal =
-                TBInfoTeleportResolver.EnumerateTeleportDestinations(_services.TBInfo, room.Cmd).GetEnumerator();
-            if (literal.MoveNext()) { set.Add(room.Key); continue; }
-
-            using IEnumerator<(string, IReadOnlyList<RoomKey>, bool, int, bool)> cast =
-                TBInfoCastTeleportResolver.EnumerateCastTeleports(
-                    _services.TBInfo, room.Cmd, room.Key.Map, _services.SpellCatalog).GetEnumerator();
-            if (cast.MoveNext()) set.Add(room.Key);
-        }
-        TeleportRooms = set;
+        TeleportRooms = Graph is null ? null
+            : Game.Map.TeleportRooms.Compute(Graph, _services.GameData, _services.TBInfo, _services.SpellCatalog);
     }
 
     // Blacklist Changed → rebuild the cached layout (BFS already flushed

@@ -29,12 +29,18 @@ public static class BankCatalog
     // Shops.ShopType value for a bank.
     public const int BankShopType = 7;
 
+    // Built once per game-data set (GameDataCache.Derived).
     public static IReadOnlyList<BankShop> Enumerate(GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(gameData);
+        return gameData.Derived("banks", () => Build(gameData));
+    }
+
+    private static List<BankShop> Build(GameDataCache gameData)
+    {
         var banks = new List<BankShop>();
 
-        Dictionary<(int, int), string> roomNames = BuildRoomNameIndex(gameData);
+        IReadOnlyDictionary<(int Map, int Room), string> roomNames = RoomNameIndex.For(gameData);
         foreach ((int number, string name, int map, int room) in EnumerateRaw(gameData))
         {
             string roomName = roomNames.TryGetValue((map, room), out string? rn) ? rn : string.Empty;
@@ -86,25 +92,6 @@ public static class BankCatalog
             foreach ((int map, int room) in ShopRoomParser.ParseRooms(GetString(el, "Assigned To")))
                 yield return (number, name, map, room);
         }
-    }
-
-    // Build a (map, room) → room-name index from the active set's Rooms table.
-    // Used only for the display label; an absent/odd Rooms table just yields
-    // empty names (the row still lists by shop name + coords).
-    private static Dictionary<(int, int), string> BuildRoomNameIndex(GameDataCache gameData)
-    {
-        var index = new Dictionary<(int, int), string>();
-        JsonDocument? rooms = gameData.GetRawTable("Rooms");
-        if (rooms is null) return index;
-
-        foreach (JsonElement el in rooms.RootElement.EnumerateArray())
-        {
-            int map = GetInt(el, "Map Number");
-            int room = GetInt(el, "Room Number");
-            if (map <= 0 || room <= 0) continue;
-            index[(map, room)] = GetString(el, "Name");
-        }
-        return index;
     }
 
     private static int GetInt(JsonElement el, string prop) =>
