@@ -383,6 +383,9 @@
                     <CheckBox Content="Hide regen timers" IsChecked="{Binding HideRegenMonsters, Mode=TwoWay}"
                               VerticalAlignment="Center" Margin="0,0,0,4"
                               ToolTip.Tip="Hide monsters that respawn on their own timer (bosses, lair leaders, and other timed spawns — any with a non-zero respawn/regen time), leaving only freely-farmable monsters."/>
+                    <CheckBox Content="Hide 0 exp" IsChecked="{Binding HideZeroExpMonsters, Mode=TwoWay}"
+                              VerticalAlignment="Center" Margin="12,0,0,4"
+                              ToolTip.Tip="Hide monsters that give no experience (shopkeepers, trainers, quest NPCs and the like), leaving only monsters worth killing for exp."/>
                 </WrapPanel>
 
                 <DataGrid Grid.Row="2" x:Name="MonsterGrid" ItemsSource="{Binding RowsView}"

@@ -208,7 +208,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(NameFilter) or nameof(HideRegenMonsters))
+            if (e.PropertyName is nameof(NameFilter) or nameof(HideRegenMonsters) or nameof(HideZeroExpMonsters))
             { RowsView.Refresh(); RaiseCountChanged(); }
             else if (e.PropertyName == nameof(SelectedEntry)) { RebuildDetail(); UpdateAcVsTarget(); }
         };
@@ -386,6 +386,11 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
     // lair leaders, other timed spawns) so the list shows only freely-farmable
     // monsters. Session-only, like the Hits-You-% boxes it sits beside.
     [ObservableProperty] private bool _hideRegenMonsters;
+
+    // Drop monsters worth no experience (shopkeepers, trainers, quest NPCs and
+    // other records with 0 exp) so the list holds only what's worth hunting.
+    // Session-only, like the checkbox it sits beside.
+    [ObservableProperty] private bool _hideZeroExpMonsters;
 
     // Ceiling for the master list's "Est. Rounds to Kill" column — edited
     // right here instead of Settings → Other so changing it doesn't mean
@@ -1148,6 +1153,8 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
 
         // Optionally drop timed/boss respawns — a non-zero per-monster RegenTime.
         if (HideRegenMonsters && e.HasRegenTimer) return false;
+
+        if (HideZeroExpMonsters && e.Exp <= 0) return false;
 
         // Once a character is loaded, a monster with no computable Hits You %
         // (no catalogued physical attack — an NPC/caster-only record, e.g. a
