@@ -3814,6 +3814,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 - **Paradigm:** `Your command had no effect.` means there's no trap that way, and the walk carries on.
 - **Paradigm:** `The trap is already disarmed.` means the trap is down; the walk crosses straight away.
 - **Stock:** `You failed to disarm any trap to the <dir>.` means either a failed disarm or no trap there; the game doesn't say which. MudPlay retries up to the cap, and if it's still getting that answer it takes the exit as clear and walks on.
+- **Recently disarmed:** a trap you disarmed stays down until the game re-arms it — 5 minutes on Stock, 2 on Paradigm. Coming back to that exit sooner, MudPlay crosses without disarming again, which saves the command and keeps your sneak. Once the time is up it disarms again. Only your own disarms count: a trap that was already down when you got there is disarmed again next time.
 - **No searching:** MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
 
 ### Door max pick

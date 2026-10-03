@@ -1605,6 +1605,8 @@ public static class BugReportBuilder
             + $", canDisarm={trap.CanDisarm}, trapsStat={svc.PlayerStats.Traps}"
             + $", skillFromClassRace={trap.SkillInferredFromClassOrRace}"
             + (trap.DisarmOdds is { } odds ? $", disarmSkill={odds.Skill} ({odds.Summary})" : string.Empty));
+        Kv(sb, "Trap disarm, exits we disarmed (re-arm "
+            + $"{trap.RearmTime.TotalMinutes:0} min)", trap.RecentDisarmsDescription());
         if (trap.LastUnansweredReply is { } unanswered)
             Kv(sb, "Trap disarm, last unanswered reply", unanswered);
 

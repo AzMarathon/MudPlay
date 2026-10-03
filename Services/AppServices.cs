@@ -6613,6 +6613,7 @@ public sealed class AppServices
         // Route walker over trapped exits (RoomExitHint.Trap) through the
         // TrapDisarmManager.
         Walker.SetTrapEnqueuer(TrapDisarm.Enqueue);
+        TrapDisarm.SetCurrentRoom(() => RoomTracker.State.CurrentRoom?.Key);
         // Worn gear's trap abilities, which split the disarm skill from the Traps
         // `stat` shows (the odds shown in route details and map tooltips).
         TrapDisarm.SetWornTrapBonuses(() =>

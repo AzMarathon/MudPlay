@@ -1,4 +1,5 @@
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -26,6 +27,12 @@ namespace MudPlay.Game;
 // silent; Telepath → reply) since the channel context lives at handler dispatch
 // time.
 //
+// An exit we disarmed ourselves stays down until the engine re-arms it (5 minutes
+// on Stock, about 2 on Paradigm — GAME_MECHANICS "Exit traps — search and disarm"),
+// so a request for it inside that window is answered clear without a disarm, which
+// would cost a command and end the sneak. Only our own success starts the clock:
+// "already disarmed" means someone else's timer, and we can't tell when it started.
+//
 // A request ends on a successful disarm, on a reply meaning there's no trap that
 // way, or once MaxDisarmAttempts disarms have all failed.
 //
@@ -47,6 +54,13 @@ public sealed class TrapDisarmManager : IDisposable
     private readonly IDisposable _alreadyDisarmedSub;
     private readonly WireSender _wire = new();
     private readonly Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
+    private readonly Func<DateTimeOffset> _clock;
+    private Func<RoomKey?>? _currentRoom;
+
+    // When we last disarmed each exit, keyed by room + short direction.
+    private readonly Dictionary<(RoomKey Room, string Dir), DateTimeOffset> _ourDisarms = new();
+    // The room the request in flight started in; null when the room wasn't known.
+    private RoomKey? _currentRoomKey;
     private bool _disposed;
 
     // A disarm reply comes back with the next prompt; this is long enough to cover lag.
@@ -128,11 +142,28 @@ public sealed class TrapDisarmManager : IDisposable
     // wording of a trap we don't know yet. Surfaced in the bug report.
     public string? LastUnansweredReply { get; private set; }
 
+    // How long a trap we disarmed stays down, by realm.
+    public TimeSpan RearmTime => _gameData.ActiveRealm == RealmType.ParaMud
+        ? TimeSpan.FromMinutes(2)
+        : TimeSpan.FromMinutes(5);
+
+    // The exits we disarmed that haven't re-armed yet, for the bug report.
+    public string RecentDisarmsDescription()
+    {
+        DateTimeOffset now = _clock();
+        IEnumerable<string> live = _ourDisarms
+            .Where(kv => now - kv.Value < RearmTime)
+            .Select(kv => $"{kv.Key.Room.Map}/{kv.Key.Room.Room} {kv.Key.Dir} {(now - kv.Value).TotalSeconds:0}s ago");
+        string text = string.Join(", ", live);
+        return text.Length == 0 ? "(none)" : text;
+    }
+
     // scheduleDelay runs the reply watchdog on the router's thread; tests leave it
     // null and drive replies synchronously.
     public TrapDisarmManager(
         MessageRouter router, PlayerStats stats, GameDataCache gameData, LogService? log = null,
-        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null)
+        Func<TimeSpan, Action, IDisposable>? scheduleDelay = null,
+        Func<DateTimeOffset>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(stats);
@@ -142,6 +173,7 @@ public sealed class TrapDisarmManager : IDisposable
         _gameData = gameData;
         _log      = log;
         _scheduleDelay = scheduleDelay;
+        _clock = clock ?? (static () => DateTimeOffset.Now);
 
         _disarmedSub = _router.Subscribe(KnownPatterns.TrapDisarmedSuccess, OnDisarmedSuccess);
         _triggeredSub = _router.Subscribe(KnownPatterns.TrapDisarmTriggered, OnDisarmTriggered);
@@ -154,6 +186,9 @@ public sealed class TrapDisarmManager : IDisposable
     // Bind the wire-sender. Same shape as the rest of the engine-side handlers —
     // MainWindowVM supplies the gate-wrapped SendUserInput.
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
+
+    // The room the player stands in, which keys the remembered disarms.
+    public void SetCurrentRoom(Func<RoomKey?> room) => _currentRoom = room;
 
     // Test seam — bytes the manager asked to write to the wire.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
@@ -218,6 +253,7 @@ public sealed class TrapDisarmManager : IDisposable
         {
             cur.Reply("Trap flow stopped.");
             _current = null;
+            _currentRoomKey = null;
         }
         while (_queue.Count > 0)
         {
@@ -235,13 +271,47 @@ public sealed class TrapDisarmManager : IDisposable
 
     private void TryStartNext()
     {
-        if (_state != State.Idle) return;
-        if (_queue.Count == 0) return;
-        _current = _queue.Dequeue();
-        _disarmAttempts = 0;
-        _unconfirmedFailures = 0;
-        _state = State.DisarmPending;
-        SendDisarm();
+        // A reply can enqueue the next request re-entrantly, so re-check the state
+        // each pass rather than assume we're still idle.
+        while (_state == State.Idle && _queue.Count > 0)
+        {
+            TrapRequest next = _queue.Dequeue();
+            RoomKey? room = _currentRoom?.Invoke();
+            if (StillDisarmed(room, next.Direction) is { } ago)
+            {
+                _log?.Log(LogSeverity.Info, "Trap",
+                    $"We disarmed the trap to the {next.Direction} {ago.TotalSeconds:0}s ago "
+                    + $"(re-arms after {RearmTime.TotalMinutes:0} min) — crossing without a disarm.");
+                next.Reply($"Trap to the {next.Direction} disarmed {ago.TotalSeconds:0}s ago.");
+                continue;
+            }
+            _current = next;
+            _currentRoomKey = room;
+            _disarmAttempts = 0;
+            _unconfirmedFailures = 0;
+            _state = State.DisarmPending;
+            SendDisarm();
+        }
+    }
+
+    // How long ago we disarmed this exit, while that's still under the re-arm time.
+    private TimeSpan? StillDisarmed(RoomKey? room, string direction)
+    {
+        if (room is not { } r || NormaliseDirection(direction) is not { } dir) return null;
+        if (!_ourDisarms.TryGetValue((r, dir), out DateTimeOffset at)) return null;
+        TimeSpan ago = _clock() - at;
+        if (ago >= TimeSpan.Zero && ago < RearmTime) return ago;
+        _ourDisarms.Remove((r, dir));
+        return null;
+    }
+
+    // Remember (disarmed) or forget (the trap is armed) the exit in flight.
+    private void NoteExitState(bool disarmed)
+    {
+        if (_currentRoomKey is not { } r || _current is null
+            || NormaliseDirection(_current.Direction) is not { } dir) return;
+        if (disarmed) _ourDisarms[(r, dir)] = _clock();
+        else _ourDisarms.Remove((r, dir));
     }
 
     private void SendDisarm()
@@ -264,6 +334,7 @@ public sealed class TrapDisarmManager : IDisposable
 
         ConfirmFailures();
         DisarmAttempted?.Invoke(true);
+        NoteExitState(disarmed: true);
         cur.Reply($"Trap to the {cur.Direction} disarmed.");
         CompleteCurrent();
     }
@@ -283,6 +354,7 @@ public sealed class TrapDisarmManager : IDisposable
         if (_current is not { } cur) return;
         ConfirmFailures();
         DisarmAttempted?.Invoke(false);
+        NoteExitState(disarmed: false);
         if (_disarmAttempts >= MaxDisarmAttempts)
         {
             _log?.Log(LogSeverity.Info, "Trap",
@@ -405,6 +477,7 @@ public sealed class TrapDisarmManager : IDisposable
     {
         CancelWatchdog();
         _current = null;
+        _currentRoomKey = null;
         _state = State.Idle;
         _disarmAttempts = 0;
         _unconfirmedFailures = 0;
