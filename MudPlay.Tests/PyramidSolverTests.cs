@@ -132,7 +132,7 @@ public sealed class PyramidSolverTests : IDisposable
         walker.SetWireSender(h.Sent.Add);
         walker.SetPyramidSolver(solver);
         walker.Event += h.Events.Add;
-        tracker.ManualMoveObserved += () => h.ManualMoves++;
+        tracker.ManualMoveObserved += _ => h.ManualMoves++;
         solver.RunThroughChanged += h.RunThrough.Add;
         // Through the outbound observer, as in the app: a move the solver didn't
         // announce to the tracker first would be read as hand-typed.

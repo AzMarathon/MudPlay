@@ -367,7 +367,7 @@ public sealed class OutboundMovementObserverTests : IDisposable
         (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
         tracker.SetLocated(new RoomKey(1, 1));
         bool manual = false;
-        tracker.ManualMoveObserved += () => manual = true;
+        tracker.ManualMoveObserved += _ => manual = true;
 
         tracker.NoteAuxCommandSent(command);     // what SpecialExitDispatch now does
         observer.ObserveOutbound(Cmd(command));  // our own bytes echoing back
@@ -387,7 +387,7 @@ public sealed class OutboundMovementObserverTests : IDisposable
         (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
         tracker.SetLocated(new RoomKey(1, 1));
         bool manual = false;
-        tracker.ManualMoveObserved += () => manual = true;
+        tracker.ManualMoveObserved += _ => manual = true;
 
         observer.ObserveOutbound(Cmd("step tile"));
 
@@ -402,7 +402,7 @@ public sealed class OutboundMovementObserverTests : IDisposable
         (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
         tracker.SetLocated(new RoomKey(1, 1));
         int manualCount = 0;
-        tracker.ManualMoveObserved += () => manualCount++;
+        tracker.ManualMoveObserved += _ => manualCount++;
 
         tracker.NoteAuxCommandSent("step tile");
         observer.ObserveOutbound(Cmd("step tile"));   // ours — claimed

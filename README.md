@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.1**
-> - Map other floors: a floor reachable by more than one chain of stairs is placed by the one that crosses the least ground, so the old world sits beside the lands below the Frozen Cavern instead of on top of them
+> **Version 3.143.2**
+> - A walk, loop or Auto-Lair paused by a move you typed now says so: a terminal notice, a hold chip naming the command, and the engine badge reads PAUSED instead of LOOPING / WALKING
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

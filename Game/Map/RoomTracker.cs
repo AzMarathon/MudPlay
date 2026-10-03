@@ -178,8 +178,9 @@ public sealed class RoomTracker
     // Fires when a MANUAL movement step is observed — a cardinal or text-exit command
     // the user typed that did NOT match a walker/loop echo claim (so the engine didn't
     // send it). Consumers pause navigation so the automation never fights a hand-driven
-    // step. The engines' own moves are echo-claimed and never fire this.
-    public event Action? ManualMoveObserved;
+    // step. The engines' own moves are echo-claimed and never fire this. Carries the
+    // command as typed, so the pause can say what caused it.
+    public event Action<string>? ManualMoveObserved;
 
     // The server refused the move just sent ("There is no exit in that direction!" and
     // the like) — raised after the tracker has un-counted it.
@@ -430,7 +431,7 @@ public sealed class RoomTracker
             return;
         }
         NoteMoveSentCore(direction, isEngineAnnouncement: false, isFollowDrag: false, when);
-        ManualMoveObserved?.Invoke();
+        ManualMoveObserved?.Invoke(direction.ToToken());
     }
 
     // Echo-aware overload for OutboundMovementObserver's text-exit path. Mirrors
@@ -457,7 +458,7 @@ public sealed class RoomTracker
             return;
         }
         NoteMoveSentCore(command, cardinal: null, isEngineAnnouncement: false, when);
-        ManualMoveObserved?.Invoke();
+        ManualMoveObserved?.Invoke(command);
     }
 
     private (Direction Dir, DateTimeOffset ExpiresAt)? _cardinalEchoClaim;

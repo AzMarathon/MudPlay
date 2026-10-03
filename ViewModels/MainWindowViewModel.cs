@@ -519,9 +519,12 @@ public partial class MainWindowViewModel : ObservableObject
     private bool               _loopRunning;
     private bool               _autoLairOn;
 
-    // Label inside the chip — short upper-case state tag.
+    // Label inside the chip — short upper-case state tag. PAUSED while the user's
+    // own pause holds a running engine, so a paused loop doesn't go on reading
+    // LOOPING.
     public string EngineActionBadge =>
-        _autoLairOn                                     ? "AUTO-LAIR"
+        !EngineActionIsIdle && AppServices.Current.MovementControl.IsUserPaused ? "PAUSED"
+        : _autoLairOn                                   ? "AUTO-LAIR"
         : _loopRunning                                  ? "LOOPING"
         : (_walkerState != Game.Map.WalkState.Idle)     ? "WALKING"
         :                                                 "IDLE";
@@ -623,6 +626,7 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 if (row.IsButton) ApplyToolbarRowState(row);
             }
+            OnPropertyChanged(nameof(EngineActionBadge));
         });
 
     private void RefreshEngineActionChip()
