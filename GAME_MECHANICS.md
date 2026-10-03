@@ -271,7 +271,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 **Client use:**
 - Every telepath passes `TelepathPacer`'s 100 ms floor; bulk reply bursts (e.g. `@roomba sync`) go ~800 ms apart via `PacedReplySender`. See *Talk & chat channels → Telepath throttle and per-telepath acknowledgement*.
 - Roomba releases `get`/`drop` at most one per wire prompt AND no faster than an 800 ms floor (`GhSweepManager.MinCommandInterval`). The game's own prompt acts as the meter, so no rate has to be guessed. Because the prompt alone is not sufficient, it is used as a gate on top of a time floor.
-- Get All / Drop All / Hide All go through `BulkCommandPacer`: at most 6 unanswered (two short of the nudge), one more per prompt, 150 ms apart. On a rate-limit line it waits 3 s and re-sends nothing, since a second `drop` of a stack would drop another copy. Both realms until Paradigm is measured.
+- Get All / Drop All / Hide All, and Chest Offload's drops, go through `BulkCommandPacer`: at most 6 unanswered (two short of the nudge), one more per prompt, 150 ms apart. On a rate-limit line it waits 3 s and re-sends nothing, since a second `drop` of a stack would drop another copy. Both realms until Paradigm is measured.
 
 ### Message catalogue (lines the client parses)
 *Status: rows Unrated; realm rule CONFIRMED 2026-09-28 (user); the Thorns/ShockShield row is CONFIRMED 2026-08-15 (user)*
