@@ -57,8 +57,9 @@ public sealed class LeaderBossTravelProbeTests
         h.Line("Raijin telepaths: {walking to 6/1249; Dark Road (map 6, room 1200); step 3/40}");
 
         Assert.Equal(new[] { true }, h.Answers);
-        // The answer is refreshed for as long as the gear rides on it.
-        Assert.Equal(LeaderBossTravelProbe.RecheckInterval, h.Scheduled[^1]);
+        // Nothing more is asked until the next boss room.
+        h.Probe.NoteMoved();
+        Assert.Single(h.Probe.LastSentForTests);
     }
 
     [Fact]
@@ -72,16 +73,37 @@ public sealed class LeaderBossTravelProbeTests
         Assert.Equal(new[] { false }, h.Answers);
     }
 
+    // No reply to the first ask decides nothing: ask again when the party moves. No
+    // reply to that one within the wait takes the gear off.
     [Fact]
-    public void NoAnswer_TimesOutToANo()
+    public void NoAnswer_AsksAgainOnTheNextMove_ThenGivesUp()
     {
         using Harness h = new();
         h.Probe.Ask();
         Assert.Equal(LeaderBossTravelProbe.ReplyTimeout, h.Scheduled[^1]);
 
         h.Probe.OnTimeout();
+        Assert.Empty(h.Answers);
+        Assert.True(h.Probe.WaitingForLeaderToMove);
+
+        h.Probe.NoteMoved();
+        Assert.Equal(2, h.Probe.LastSentForTests.Count);
+        h.Probe.OnTimeout();
 
         Assert.Equal(new[] { false }, h.Answers);
+    }
+
+    [Fact]
+    public void NoAnswer_ThenABossDestinationOnTheSecondAsk_IsAYes()
+    {
+        using Harness h = new();
+        h.Probe.Ask();
+        h.Probe.OnTimeout();
+        h.Probe.NoteMoved();
+
+        h.Line("Raijin telepaths: {walking to 6/1249; Dark Road (map 6, room 1200); step 1/40}");
+
+        Assert.Equal(new[] { true }, h.Answers);
     }
 
     [Fact]
@@ -101,23 +123,6 @@ public sealed class LeaderBossTravelProbeTests
         h.Line("Suijin telepaths: {walking to 6/1249; Dark Road (map 6, room 1200); step 3/40}");
 
         Assert.Empty(h.Answers);
-    }
-
-    [Fact]
-    public void Recheck_AsksAgainOnlyWhileTheGearIsStillKept()
-    {
-        using Harness h = new();
-        h.Probe.Ask();
-        h.Line("Raijin telepaths: {walking to 6/1249; Dark Road (map 6, room 1200); step 3/40}");
-        Assert.Single(h.Probe.LastSentForTests);
-
-        h.Probe.OnRecheck();
-        Assert.Equal(2, h.Probe.LastSentForTests.Count);
-
-        h.Probe.OnTimeout();
-        h.StillNeeded = false;
-        h.Probe.OnRecheck();
-        Assert.Equal(2, h.Probe.LastSentForTests.Count);
     }
 
     // An idle leader hasn't picked where to go: nothing is decided until the party

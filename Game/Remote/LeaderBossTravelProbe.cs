@@ -10,19 +10,19 @@ namespace MudPlay.Game.Remote;
 // client: this telepaths it @path and reports whether what it says it's doing ends
 // at a boss room.
 //
-// The answer goes stale (the leader can pick somewhere else), so while the gear is
-// still being kept on it asks again every RecheckInterval. No reply inside
-// ReplyTimeout (the leader isn't running MudPlay) counts as no.
-//
-// A leader that answers "not moving" hasn't picked where to go yet: nothing is
-// decided until the party next moves (NoteMoved), when it is asked once more and
-// that answer stands. Idle a second time means the leader is walking by hand.
+// The cycle (user, 2026-10-03), run once per boss room left:
+//   1. Ask. A walk to a boss room keeps the gear on; any other destination takes
+//      it off. Either ends the cycle.
+//   2. "Not moving", or no reply inside ReplyTimeout: nothing is decided. The gear
+//      stays on until we next change rooms (NoteMoved), then ask once more.
+//   3. That second answer stands. "Not moving" again, or no reply inside
+//      ReplyTimeout, takes the gear off.
+// Nothing is re-asked on a timer: the next question is at the next boss room.
 public sealed class LeaderBossTravelProbe : IDisposable
 {
     public const string LogCategory = "BossTravel";
 
     internal static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(15);
-    internal static readonly TimeSpan RecheckInterval = TimeSpan.FromSeconds(60);
 
     private readonly PathReplyTracker _replies;
     private readonly Func<string?> _leaderGivenName;
@@ -35,9 +35,9 @@ public sealed class LeaderBossTravelProbe : IDisposable
     private Action<byte[]>? _wireSender;
     private IDisposable? _timer;
     private bool _awaiting;
-    // The leader said it wasn't moving; ask again when the party moves.
+    // The first ask got "not moving" or no reply; ask again when the party moves.
     private bool _waitingForLeaderToMove;
-    // The question out is that second ask, so an idle answer to it is final.
+    // The question out is that second ask, so its outcome is final.
     private bool _confirming;
     private bool _disposed;
 
@@ -54,8 +54,8 @@ public sealed class LeaderBossTravelProbe : IDisposable
 
     // leaderGivenName: the leader we're following, or null when we lead / are solo.
     // headsToBoss: whether a leader's @path report describes a trip to a boss room.
-    // stillNeeded: the gear is still being kept on, so the answer is worth refreshing.
-    // schedule: one-shot timer (null in tests, which drive Timeout / Recheck directly).
+    // stillNeeded: the gear is still being kept on, so an answer still matters.
+    // schedule: one-shot timer (null in tests, which drive OnTimeout directly).
     public LeaderBossTravelProbe(
         PathReplyTracker replies,
         Func<string?> leaderGivenName,
@@ -125,10 +125,15 @@ public sealed class LeaderBossTravelProbe : IDisposable
             Resolve(false, $"{sender} is moving without a walk-to");
             return;
         }
+        WaitForTheNextMove($"{sender} isn't moving yet");
+    }
+
+    private void WaitForTheNextMove(string why)
+    {
         _awaiting = false;
         CancelTimer();
         _waitingForLeaderToMove = true;
-        LastOutcome = $"{sender} isn't moving yet — asking again when the party moves";
+        LastOutcome = $"{why} — asking again when the party moves";
         _log?.Info(LogCategory, LastOutcome);
     }
 
@@ -150,13 +155,10 @@ public sealed class LeaderBossTravelProbe : IDisposable
     internal void OnTimeout()
     {
         if (!_awaiting) return;
-        Resolve(false, $"no @path answer in {ReplyTimeout.TotalSeconds:0}s");
-    }
-
-    internal void OnRecheck()
-    {
-        _timer = null;
-        if (_stillNeeded()) Ask();
+        if (_confirming)
+            Resolve(false, $"no @path answer in {ReplyTimeout.TotalSeconds:0}s after asking again");
+        else
+            WaitForTheNextMove($"no @path answer in {ReplyTimeout.TotalSeconds:0}s");
     }
 
     private void Resolve(bool headingToBoss, string what)
@@ -168,8 +170,6 @@ public sealed class LeaderBossTravelProbe : IDisposable
         LastOutcome = $"{what} — {(headingToBoss ? "a boss room" : "not a boss room")}";
         _log?.Info(LogCategory, LastOutcome);
         Resolved?.Invoke(headingToBoss);
-        // Keep the answer fresh for as long as the gear rides on it.
-        if (headingToBoss && _stillNeeded()) Arm(RecheckInterval, OnRecheck);
     }
 
     private void Arm(TimeSpan delay, Action action)
