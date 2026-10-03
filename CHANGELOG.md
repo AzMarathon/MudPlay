@@ -1,8 +1,13 @@
 # Version history
 
-## 3.141.16
+## 3.142.0
 
 - Map: rooms, exits and markers are drawn once and only moved when you pan; walking redraws just the player marker and routes, and off-screen exits are no longer drawn
+- Map shows the floors above and below, dimmed, around the one shown: hover, click and walk to them like any other room
+- Floors above are drawn before floors below, and a floor landing mostly on drawn rooms is left out
+- Settings → General: other floors on/off, how many floors up and down, and the overlap cut-off
+- Right-click → Center on this room redraws the map from that room
+- Map zooms out much further; zooming and panning a big area stay smooth (redrawn once the wheel rests, exit lines worked out once per map)
 
 ## 3.141.15
 

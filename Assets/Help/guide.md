@@ -496,7 +496,7 @@ few seconds.
 
 ## The map and obstacles
 
-**Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **Transfer Stash to Bank** (on a stash room only — see [Banking](#banking)), **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.
+**Right-click any room** for its menu: **Favorites** and **Recent destinations** sub-lists at the top (the Favorites list holds your starred GOTO rooms *and* your favourited loops + auto-lairs — click a room to walk there, a loop or lair to start it — and Recent destinations walks to a recent GOTO target), then **Walk here**, **Transfer Stash to Bank** (on a stash room only — see [Banking](#banking)), **I am here** (re-anchor if the map loses track of you), **Save as Go To** (saves the room to your Go To list), **Use Teleport**, **Center on Player**, **Center on this room** (redraws the map from that room as if you stood there: its floor bright, the floors above and below shadowed around it), **Center on Destination** (only while a walk is under way — jumps the view to where the walk ends: the walk-to target, or the loop's start room / the next lair when a loop or Auto-Lair is walking there first), **Center on…**, and toggles to mark a room **Avoid** or **Stash**. Like a manual pan, a re-centre holds the view for a while before it follows you again — 15 seconds by default, set in **Settings → Other → Navigation map: hold a browsed view for N seconds**.
 
 **Shift+right-click** skips the menu when a room's only jump is unambiguous — a room with just an up exit, just a down exit, or a single teleport destination immediately follows it (recentres the map there) instead of opening the menu.
 
@@ -553,6 +553,14 @@ Traps are **directional**, so a connecting line is only red on the trapped side:
 **Level gates** (on by default) marks every room that **holds a level gate** with a small **amber wedge in the top-left corner** — a room you can walk into and stand in, whose way onward is shut unless you're inside the gate's level window. It covers gated exits, **level-gated room teleports** (a vortex that won't take you until level 20), and **level-restricted boat sailings** (a captain who won't board you until level 50). That's deliberately a different mark from the **red exit stubs**, which mean a trap: a level gate is a locked door, not a hazard.
 
 It describes the **map**, not your character — it marks where the gates *are*, not which ones happen to refuse you today. So it reads the same at level 5, at level 99, and while you're browsing game data with nothing connected, which is when "where are the gates?" is most often the question. Hover a marked room to see the gate's actual level window in the tooltip. Your choice is saved per character.
+
+**Other floors** (on by default) draws the floors you reach by **up and down exits**, dimmed, around the floor the map shows. Each one sits where the game puts it, straight above or below the stairs that lead to it, so a mountain path that climbs a floor at a time or a dungeon that drops level by level reads as **one path**: you can see where it goes and walk straight to the end instead of stepping the map floor by floor. Shadowed rooms work like any other: hover for the tooltip, click to select, **Walk here** to go.
+
+- **The floor shown always wins.** Shadows only fill cells it leaves empty. Where two other floors want the same cell, it's a view from above: anything **above** the floor shown is drawn before anything **below** it, the nearer floor first on each side, so a cave under a trail never covers the trail.
+- **Crowded floors are left out.** A floor that would land mostly on rooms already drawn (a volcano under the hills, barracks under a trail) is a different place stacked on this one, so it isn't drawn. A floor with three or fewer rooms covered is always drawn, so a climb's small landings aren't lost.
+- **How far it reaches** — how many floors up and down, and how crowded a floor may be before it's left out — is set in **Settings → General → Navigation map: other floors**. The **Other floors** chip under **Overlays ▾** flips the same setting.
+
+**Zoom out** far enough (mouse wheel) and rooms shrink to dots, small enough to take in a whole region and its shadowed floors at once. At that size the room markers (crowns, skulls, X's, wedges) and one-way arrowheads are left off; they come back as you zoom in. While the wheel is turning the map is stretched from the last drawing, so it can look soft for a moment; it sharpens as soon as the wheel rests.
 
 Hovering a room shows its details in a tooltip:
 
@@ -2262,6 +2270,14 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 **Default:** 5 **Range:** 0–10
 **What it does:** How many recently-loaded characters the **File → Recent** submenu lists. The client always remembers the last ten, so raising this reveals more without your having to re-load them; lowering it just shows fewer.
 **Important notes:** Install-wide (Global tier). Applies on Apply.
+
+### Navigation map: other floors
+
+**Default:** On; **10** floors up and down; leave out a floor that overlaps more than **50%**
+**Available options:** On / off; 1–99 floors; 0–100%.
+**What it does:** Draws the floors reached by up and down exits dimmed around the floor the Navigation map shows (see **The map and obstacles**). **Floors drawn up and down** is how many up/down steps away a floor may be; a mountain path climbs one step per floor (the Barren Hills climb is over 40), so raise it to see a long climb end to end. **Leave out a floor that overlaps more than** drops a floor when that share of its rooms would land on rooms already drawn, since a floor stacked right on this one is a different place; a floor with three or fewer rooms covered is always kept, and **100%** keeps every floor.
+**When you might change it:** Raise the floor count for long climbs and deep dungeons; lower it, or the overlap share, if the map feels busy.
+**Important notes:** Install-wide (Global tier); the map's **Overlays → Other floors** chip flips the same on/off. Applies on Apply; an open map redraws at once.
 
 ### Buff Watchdog layout
 

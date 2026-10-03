@@ -36,6 +36,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // the map without reopening the window.
         _navLineStyles = _services.Settings.Current.NavLines;
         _mapRecenterHoldSeconds = _services.Settings.Current.MapRecenterHoldSeconds;
+        _showOtherLevels = _services.Settings.Current.MapShowOtherFloors;
+        _otherFloorsLevels = _services.Settings.Current.MapOtherFloorsLevels;
+        _otherFloorsMaxOverlapPercent = _services.Settings.Current.MapOtherFloorsMaxOverlapPercent;
         _services.Settings.GlobalSettingsChanged += OnGlobalSettingsChanged;
 
         // Reopen in the collapse mode the user last left. Set the backing field
@@ -226,6 +229,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         NavLineStyles = settings.NavLines;
         MapRecenterHoldSeconds = settings.MapRecenterHoldSeconds;
+        bool reach = settings.MapOtherFloorsLevels != _otherFloorsLevels
+            || settings.MapOtherFloorsMaxOverlapPercent != _otherFloorsMaxOverlapPercent;
+        _otherFloorsLevels = settings.MapOtherFloorsLevels;
+        _otherFloorsMaxOverlapPercent = settings.MapOtherFloorsMaxOverlapPercent;
+        if (ShowOtherLevels != settings.MapShowOtherFloors) ShowOtherLevels = settings.MapShowOtherFloors;
+        else if (reach) RebuildOtherLevels(Layout);
     }
 
     // Bound to MapControl.AutoFollowHoldSeconds — the Settings → Other hold time.
@@ -847,6 +856,68 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _showLevelGates = true;
 
+    // The floors reached through up/down exits, drawn dimmed around the current one
+    // (Game.Map.OtherLevels). Built off the UI thread: a realm's stairs and ladders
+    // can chain through thousands of rooms. Global tier (Settings → General); the
+    // Overlays chip flips the same setting.
+    [ObservableProperty] private bool _showOtherLevels = true;
+    [ObservableProperty] private RoomLayout? _otherLevelsLayout;
+    private int _otherFloorsLevels;
+    private int _otherFloorsMaxOverlapPercent;
+    private CancellationTokenSource? _otherLevelsBuild;
+
+    partial void OnShowOtherLevelsChanged(bool value)
+    {
+        RebuildOtherLevels(Layout);
+        if (_services.Settings.Current.MapShowOtherFloors == value) return;
+        _services.Settings.Current.MapShowOtherFloors = value;
+        _services.Settings.Save();
+    }
+
+    private void RebuildOtherLevels(RoomLayout? layout)
+    {
+        _otherLevelsBuild?.Cancel();
+        _otherLevelsBuild = null;
+        // The old floors sit on the old layout's grid; drawn against the new one
+        // until the build lands they'd be misplaced.
+        OtherLevelsLayout = null;
+        if (!ShowOtherLevels || layout is null) return;
+        CancellationTokenSource build = new();
+        _otherLevelsBuild = build;
+        CancellationToken cancel = build.Token;
+        Game.Map.RoomGraphManager graph = _services.RoomGraph;
+        Game.Map.BfsMapper bfs = _services.Bfs;
+        int levels = Math.Clamp(_otherFloorsLevels, 1, MudPlay.Models.Settings.GlobalSettings.MaxMapOtherFloorsLevels);
+        double maxOverlap = Math.Clamp(_otherFloorsMaxOverlapPercent, 0, 100) / 100.0;
+        _ = Task.Run(() =>
+        {
+            RoomLayout? result;
+            try
+            {
+                result = Game.Map.OtherLevels.Build(layout, graph.GetRoom, k => bfs.BuildLayout(k),
+                    levels, maxOverlap, cancel);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // A game-data swap mid-build; the swap rebuilds the layout and this.
+                _services.Log?.Warn("Navigation", $"other floors not drawn: {ex.Message}");
+                return;
+            }
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (cancel.IsCancellationRequested || !ReferenceEquals(Layout, layout)) return;
+                OtherLevelsLayout = result;
+                if (result is { } r)
+                    _services.Log?.Info("Navigation",
+                        $"other floors drawn — {r.Positions.Count} room(s) within {levels} floor(s) up and down");
+            });
+        }, cancel);
+    }
+
     partial void OnShowLevelGatesChanged(bool value)
     {
         RefreshLevelGatedRooms();
@@ -897,6 +968,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _                       => SpellDisplayMode.Mono,
     };
     [RelayCommand] private void ToggleLevelGates() => ShowLevelGates = !ShowLevelGates;
+    [RelayCommand] private void ToggleOtherLevels() => ShowOtherLevels = !ShowOtherLevels;
     [RelayCommand] private void ToggleLegend() => LegendVisible   = !LegendVisible;
 
     // ----- Map binding ----------------------------------------------
@@ -912,6 +984,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     partial void OnLayoutChanged(RoomLayout? value)
     {
         RebuildLairRespawnSeconds(value);
+        RebuildOtherLevels(value);
         if (value is not { } l) return;
         int rooms = l.Positions.Count;
         string msg = $"map drawn — seed {l.LayoutRoot}, {rooms} room{(rooms == 1 ? "" : "s")}";
@@ -2776,6 +2849,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (DestinationRoomKey is not { } dest) return;
         _services.Log?.Info("Navigation", $"map centred on the walk's destination {dest}");
         OnFloorChangeRequested(dest);
+    }
+
+    // Right-click → "Center on this room": redraw the map from the clicked room as
+    // if standing there, its floor drawn bright and the others shadowed around it.
+    [RelayCommand]
+    private void CenterOnContextRoom()
+    {
+        if (ContextRoomKey is not { } k) return;
+        _services.Log?.Info("Navigation", $"map centred on {k}");
+        OnFloorChangeRequested(k);
     }
 
     // Right-click → "Center on…". Opens the two-int (map / room) input
