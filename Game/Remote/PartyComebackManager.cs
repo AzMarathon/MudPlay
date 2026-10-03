@@ -617,7 +617,10 @@ public sealed class PartyComebackManager : IDisposable
                 _autoLair.Start();
                 break;
             case ResumeKind.Loop:
-                if (r.Loop is { } loop) _loopRunner.Start(loop);
+                // ResumeAfterDetour, not Start: picking a member back up continues the
+                // same hunting session, so the loop-start session-stats reset and
+                // party @reset must not fire again.
+                if (r.Loop is { } loop) _loopRunner.ResumeAfterDetour(loop);
                 break;
             case ResumeKind.Walker:
                 if (r.WalkerDest is { } dest) _walker.WalkTo(dest);

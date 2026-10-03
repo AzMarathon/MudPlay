@@ -1,5 +1,9 @@
 # Version history
 
+## 3.142.17
+
+- Session counters no longer reset when a loop resumes after going back for a party member who fell behind
+
 ## 3.142.16
 
 - Game text is handled with a quarter of the memory churn: the BBS file is no longer re-read for every line, and settings and boss lists are no longer rebuilt per line
