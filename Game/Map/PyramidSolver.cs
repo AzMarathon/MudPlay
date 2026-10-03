@@ -140,6 +140,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // item, sender, reply.
     private readonly Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? _openDoor;
     private readonly Func<int, bool>? _holdsItem;
+    // True when the auto-engine behind a movement gate is switched on (see
+    // PyramidRunThrough).
+    private readonly Func<string, bool>? _gateEngineOn;
     private readonly Action<Action> _post;
 
     private readonly DispatcherTimer? _settleTimer;
@@ -242,6 +245,23 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // toolbar's run-state follows it.
     public event Action? StateChanged;
 
+    // On F1 or F2, the floors that are run through. Raised true as the climb comes
+    // onto them and false as it leaves them or ends: the auto-engines it would
+    // otherwise walk away from are switched off for exactly that stretch.
+    public bool IsRunningThrough { get; private set; }
+    public event Action<bool>? RunThroughChanged;
+
+    private void UpdateRunThrough()
+    {
+        bool now = Active && PyramidScript.KeepsMoving(_floor);
+        if (now == IsRunningThrough) return;
+        IsRunningThrough = now;
+        _log?.Log(LogSeverity.Info, LogSource, now
+            ? $"{_floor}: running through — combat, nuke, rest, get, search, hide and light autos go off until floor 3"
+            : "run-through over — the autos the climb switched off come back on");
+        RunThroughChanged?.Invoke(now);
+    }
+
     public PyramidSolver(
         RoomTracker tracker,
         AutoWalkManager walker,
@@ -256,10 +276,11 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<string, bool>? isPartyMember = null,
         Func<string, Action<RoomKey>, Action, bool>? askPosition = null,
         Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? openDoor = null,
-        Func<int, bool>? holdsItem = null)
+        Func<int, bool>? holdsItem = null,
+        Func<string, bool>? gateEngineOn = null)
         : this(tracker, walker, snapshot, quickness, log, useTimer: true, post: null,
                isParadigm, canDrive, leaderName, enabled, coordinator, isPartyMember, askPosition,
-               openDoor, holdsItem) { }
+               openDoor, holdsItem, gateEngineOn) { }
 
     internal PyramidSolver(
         RoomTracker tracker,
@@ -277,7 +298,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<string, bool>? isPartyMember = null,
         Func<string, Action<RoomKey>, Action, bool>? askPosition = null,
         Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? openDoor = null,
-        Func<int, bool>? holdsItem = null)
+        Func<int, bool>? holdsItem = null,
+        Func<string, bool>? gateEngineOn = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(walker);
@@ -299,6 +321,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _askPosition = askPosition;
         _openDoor = openDoor;
         _holdsItem = holdsItem;
+        _gateEngineOn = gateEngineOn;
 
         _tracker.StateChanged += OnTrackerStateChanged;
         _tracker.MoveBlocked += OnTrackerMoveBlocked;
@@ -412,6 +435,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _floor = at;
         _stepIndex = 0;
         _log?.Log(LogSeverity.Info, LogSource, $"climb starts at 12/{room} ({at})");
+        UpdateRunThrough();
         if (at == PyramidFloor.Firepit)
         {
             // Enter the pyramid: `up` casts the timer and drops us on F1.
@@ -574,6 +598,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _stepIndex = best;
         _detour.Clear();
         _moveRetries = 0;
+        UpdateRunThrough();
         return true;
     }
 
@@ -830,8 +855,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     };
 
     // Floors where the climb holds for everything the walker would. F1/F2 walk on
-    // through fights, rests and party waits: F1 is on a timer and standing in F2
-    // hurts more the longer it lasts.
+    // through party waits and the like, and through fights, rests, pickups and
+    // searches unless the player has that engine switched on (PyramidRunThrough):
+    // F1 is on a timer and standing in F2 hurts more the longer it lasts.
     private static bool HoldsForEverything(PyramidFloor f) => !PyramidScript.KeepsMoving(f);
 
     // Why the next step must wait, or null when it may go.
@@ -842,8 +868,17 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         {
             foreach (string gate in AlwaysGates)
                 if (c.IsGateAsserted(gate)) return gate;
-            if (HoldsForEverything(_floor) && c.IsPaused)
-                return string.Join(", ", c.AssertedGates);
+            if (HoldsForEverything(_floor))
+            {
+                if (c.IsPaused) return string.Join(", ", c.AssertedGates);
+            }
+            else if (_gateEngineOn is { } engineOn)
+            {
+                // An engine the player switched back on for these floors is theirs
+                // to have: the climb waits for it.
+                foreach (string gate in c.AssertedGates)
+                    if (engineOn(gate)) return gate;
+            }
         }
         if (HoldsForEverything(_floor) && _heldMembers.Count > 0)
             return $"held member(s) {string.Join(", ", _heldMembers)}";
@@ -1283,6 +1318,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _holdReason = null;
         _phase = phase;
         Active = false;
+        UpdateRunThrough();
         StateChanged?.Invoke();
     }
 

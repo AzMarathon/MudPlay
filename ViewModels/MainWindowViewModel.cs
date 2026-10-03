@@ -1494,6 +1494,7 @@ public partial class MainWindowViewModel : ObservableObject
         // leader force a door can't fire mid-password-prompt.
         AppServices.Current.LeaderDoorAssist.SetWireSender(engineSend);
         AppServices.Current.DetourCombat.HoldChanged += OnDetourCombatHold;
+        AppServices.Current.PyramidSolver.RunThroughChanged += OnPyramidRunThrough;
         AppServices.Current.Walker.SetDoorEnqueuer(AppServices.Current.Door.Enqueue);
         AppServices.Current.Walker.SetDoorStopper(AppServices.Current.Door.StopAll);
         // Loop runner shares the same door FSM so a closed door mid-circuit is
@@ -6102,9 +6103,98 @@ public partial class MainWindowViewModel : ObservableObject
         // Anyone else changing it mid-detour (the user, Sprint, a base-mode reset)
         // takes it over, so the detour's end doesn't undo their choice.
         if (!_detourDrivingCombat) _detourTurnedOffCombat = false;
+        if (!_climbDrivingEngines) _climbTurnedOffCombat = false;
         // Combat turned back on before the run began: nothing left to give back.
         if (value) _tripTurnedOffCombat = false;
     }
+
+    // ----- Pyramid run-through ----------------------------------------------
+    // Floors 1 and 2 of the Great Pyramid are run through: the climb turns the real
+    // Auto Combat / Nuke / Rest / Get Items / Get Cash / Search / Hide / Light
+    // toggles off as it comes onto them and back on as it reaches floor 3 or ends
+    // (PyramidSolver decides; the list is the user's, 2026-10-03 — Heal, Bless and
+    // Sneak stay as they are),
+    // so those engines stop sending and the toolbar shows the state. Only a toggle
+    // the climb turned off is turned back on, and one the player changes by hand in
+    // between is theirs from then on — switching it on makes the climb wait for it.
+    private bool _climbDrivingEngines;
+    private bool _climbTurnedOffCombat;
+    private bool _climbTurnedOffRest;
+    private bool _climbTurnedOffGetItems;
+    private bool _climbTurnedOffGetCash;
+    private bool _climbTurnedOffSearch;
+    private bool _climbTurnedOffNuke;
+    private bool _climbTurnedOffHide;
+    private bool _climbTurnedOffLight;
+
+    private void OnPyramidRunThrough(bool on) => Dispatcher.UIThread.Post(() =>
+    {
+        _climbDrivingEngines = true;
+        try
+        {
+            if (on)
+            {
+                _climbTurnedOffCombat   = IsAutoCombatActive;
+                _climbTurnedOffRest     = IsAutoRestActive;
+                _climbTurnedOffGetItems = IsAutoGetItemsActive;
+                _climbTurnedOffGetCash  = IsAutoGetCashActive;
+                _climbTurnedOffSearch   = IsAutoSearchActive;
+                _climbTurnedOffNuke     = IsAutoNukeActive;
+                _climbTurnedOffHide     = IsAutoHideActive;
+                _climbTurnedOffLight    = IsAutoLightActive;
+                if (IsAutoCombatActive)   IsAutoCombatActive   = false;
+                if (IsAutoRestActive)     IsAutoRestActive     = false;
+                if (IsAutoGetItemsActive) IsAutoGetItemsActive = false;
+                if (IsAutoGetCashActive)  IsAutoGetCashActive  = false;
+                if (IsAutoSearchActive)   IsAutoSearchActive   = false;
+                if (IsAutoNukeActive)     IsAutoNukeActive     = false;
+                if (IsAutoHideActive)     IsAutoHideActive     = false;
+                if (IsAutoLightActive)    IsAutoLightActive    = false;
+                AppServices.Current.Log.Info("AutoMode",
+                    "Pyramid floors 1-2: Auto Combat, Nuke, Rest, Get Items, Get Cash, Search, Hide and Light off until floor 3 (switch one back on to override).");
+                return;
+            }
+
+            // The Auto-All switch went on since: everything stays off, as asked.
+            if (AppServices.Current.AutoModeController.KillSwitchEngaged)
+            {
+                AppServices.Current.Log.Info("AutoMode",
+                    "Pyramid run-through over with Auto-All engaged: the autos stay off.");
+                return;
+            }
+
+            // Sprint, switched on since, keeps its four off; turning one on here
+            // would end it. They pass to Sprint, which gives them back when it ends.
+            if (IsSprintModeActive)
+            {
+                _sprintTurnedOffCombat   |= _climbTurnedOffCombat;
+                _sprintTurnedOffGetItems |= _climbTurnedOffGetItems;
+                _sprintTurnedOffGetCash  |= _climbTurnedOffGetCash;
+                _sprintTurnedOffSearch   |= _climbTurnedOffSearch;
+            }
+            else
+            {
+                if (_climbTurnedOffCombat)   IsAutoCombatActive   = true;
+                if (_climbTurnedOffGetItems) IsAutoGetItemsActive = true;
+                if (_climbTurnedOffGetCash)  IsAutoGetCashActive  = true;
+                if (_climbTurnedOffSearch)   IsAutoSearchActive   = true;
+            }
+            if (_climbTurnedOffRest)  IsAutoRestActive  = true;
+            if (_climbTurnedOffNuke)  IsAutoNukeActive  = true;
+            if (_climbTurnedOffHide)  IsAutoHideActive  = true;
+            if (_climbTurnedOffLight) IsAutoLightActive = true;
+            AppServices.Current.Log.Info("AutoMode",
+                "Pyramid run-through over: the autos the climb switched off are back on.");
+        }
+        finally
+        {
+            if (!on)
+                _climbTurnedOffCombat = _climbTurnedOffRest = _climbTurnedOffGetItems =
+                    _climbTurnedOffGetCash = _climbTurnedOffSearch = _climbTurnedOffNuke =
+                    _climbTurnedOffHide = _climbTurnedOffLight = false;
+            _climbDrivingEngines = false;
+        }
+    });
 
     // ----- Detour combat hold ------------------------------------------------
     // A sell / deposit detour with its "No combat" box ticked turns the real
@@ -6136,11 +6226,15 @@ public partial class MainWindowViewModel : ObservableObject
     });
 
     partial void OnIsAutoNukeActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoNuke", value, d => d.AutoNuke = value);
+    {
+        PersistAutoModeFlag("AutoNuke", value, d => d.AutoNuke = value);
+        if (!_climbDrivingEngines) _climbTurnedOffNuke = false;
+    }
 
     partial void OnIsAutoRestActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoRest", value, d => d.AutoRest = value);
+        if (!_climbDrivingEngines) _climbTurnedOffRest = false;
         // Mirror the AutoCombat path: a genuine flip must re-evaluate the
         // health engine at once. Toggling off releases a held HP/MA recovery
         // gate immediately (Evaluate clears it) so the walker stops sitting idle
@@ -6176,17 +6270,22 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     partial void OnIsAutoLightActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoLight", value, d => d.AutoLight = value);
+    {
+        PersistAutoModeFlag("AutoLight", value, d => d.AutoLight = value);
+        if (!_climbDrivingEngines) _climbTurnedOffLight = false;
+    }
 
     partial void OnIsAutoGetItemsActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+        if (!_climbDrivingEngines) _climbTurnedOffGetItems = false;
         MaybeEndSprintOnManualEngineEnable(value);
     }
 
     partial void OnIsAutoGetCashActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoGetCash", value, d => d.AutoGetCash = value);
+        if (!_climbDrivingEngines) _climbTurnedOffGetCash = false;
         MaybeEndSprintOnManualEngineEnable(value);
     }
 
@@ -6199,11 +6298,15 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     partial void OnIsAutoHideActiveChanged(bool value)
-        => PersistAutoModeFlag("AutoHide", value, d => d.AutoHide = value);
+    {
+        PersistAutoModeFlag("AutoHide", value, d => d.AutoHide = value);
+        if (!_climbDrivingEngines) _climbTurnedOffHide = false;
+    }
 
     partial void OnIsAutoSearchActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoSearch", value, d => d.AutoSearch = value);
+        if (!_climbDrivingEngines) _climbTurnedOffSearch = false;
         MaybeEndSprintOnManualEngineEnable(value);
     }
 

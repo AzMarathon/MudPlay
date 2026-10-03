@@ -1725,6 +1725,7 @@ public static class BugReportBuilder
             + (pyr.ExpectedRoom is { } er ? $" (scripted from {er.Map}/{er.Room})" : ""));
         Kv(sb, "Move in flight", pyr.MoveInFlightTo is { } mf ? $"to {mf.Map}/{mf.Room}" : "(none)");
         Kv(sb, "Holding on", pyr.HoldReasonText ?? "(nothing)");
+        Kv(sb, "Running through (floors 1-2)", pyr.IsRunningThrough.ToString());
         Kv(sb, "Refused-move retries", pyr.MoveRetries.ToString());
         Kv(sb, "Gate rewinds", pyr.GateRewinds.ToString());
         Kv(sb, "Landings taken on trust", pyr.AssumedLandings.ToString());

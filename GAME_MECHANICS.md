@@ -4651,6 +4651,11 @@ Among protectable hazards, a further split governs whether the navigator may off
   - **Client policy — what the climb waits for.** Every floor: the user's Pause, Auto-All, being held,
     mortally wounded or afraid. The firepit and F3–F5: every movement gate the walker honours (combat,
     rests, party waits, pickups). F1 and F2 walk on through those (**F1 — timed**, **F2 — chaos**).
+  - **Client policy — autos on F1 and F2** *(user, 2026-10-03)*. Coming onto F1 the climb switches the
+    Auto Combat, Nuke, Rest, Get Items, Get Cash, Search, Hide and Light toggles off, if on, and
+    switches back on the ones it turned off at F3 or when it ends; Heal, Bless and Sneak are left
+    alone. A toggle the player switches back on during those floors overrides this: the climb no longer
+    restores it, and waits on that engine's movement gates (`PyramidRunThrough.GateEngineOn`).
   - **A shut gate on F1** (the move through it is refused) sends the climb back along the script to the
     block, to push again; twice per climb, then it fails.
   - The climb reads an arrival either way: off the room display where the floor is lit, off the

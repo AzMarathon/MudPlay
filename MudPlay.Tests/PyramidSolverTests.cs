@@ -51,6 +51,8 @@ public sealed class PyramidSolverTests : IDisposable
         public int KeyRoomVisits;
         public int KeyDropsOnVisit = 1;              // the floating key drops on this visit to its room
         public bool MemberGrabsKey;                  // …into a member's pack, not ours
+        public HashSet<string> EnginesOn { get; } = new();   // gates whose engine the player switched back on
+        public List<bool> RunThrough { get; } = new();       // the run-through signal, as raised
         public int IgnorePushes;                     // the next N push blocks do nothing
         public int RefuseMoves;                      // the next N moves are refused outright
         public int SilentMoves;                      // the next N moves land without a word
@@ -122,7 +124,8 @@ public sealed class PyramidSolverTests : IDisposable
                 g.OpenedDoors.Add((g.Room, doorDir.ToString()));
                 reply(DoorOpenResult.Opened.Instance);
             },
-            holdsItem: id => id == PyramidScript.GoldenLionKeyItem && made!.LeaderHasKey);
+            holdsItem: id => id == PyramidScript.GoldenLionKeyItem && made!.LeaderHasKey,
+            gateEngineOn: gate => made!.EnginesOn.Contains(gate));
 
         Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver };
         made = h;
@@ -130,6 +133,7 @@ public sealed class PyramidSolverTests : IDisposable
         walker.SetPyramidSolver(solver);
         walker.Event += h.Events.Add;
         tracker.ManualMoveObserved += () => h.ManualMoves++;
+        solver.RunThroughChanged += h.RunThrough.Add;
         // Through the outbound observer, as in the app: a move the solver didn't
         // announce to the tracker first would be read as hand-typed.
         OutboundMovementObserver outbound = new(tracker);
@@ -747,6 +751,112 @@ public sealed class PyramidSolverTests : IDisposable
 
         h.Coord.ClearGate(MovementCoordinator.CombatGate, "test");
         Assert.Equal("u", h.SentText[0]);
+    }
+
+    // ----- running through floors 1 and 2 -----------------------------
+
+    [Fact]
+    public void RunThrough_IsSignalledFromFloor1ToFloor3_AndNotAtTheFirepit()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        Assert.Empty(h.RunThrough);                  // still at the firepit: nothing switched off yet
+        Assert.False(h.Solver.IsRunningThrough);
+
+        DriveUntilFloor(h, "F1");
+        Assert.Equal(new[] { true }, h.RunThrough);
+        DriveUntilFloor(h, "F2");
+        Assert.Equal(new[] { true }, h.RunThrough);   // one stretch, not one per floor
+        DriveUntilFloor(h, "F3");
+        Assert.Equal(new[] { true, false }, h.RunThrough);
+
+        RunToEnd(h);
+        AssertFinished(h);
+        Assert.Equal(new[] { true, false }, h.RunThrough);
+    }
+
+    [Theory]
+    [InlineData("cancel")]
+    [InlineData("scatter")]
+    [InlineData("death")]
+    public void RunThrough_EndsWithTheClimb_HoweverItEnds(string how)
+    {
+        using Harness h = Begin(NewHarness());
+        RunUntil(h, () => h.Room == 1803);
+        Assert.True(h.Solver.IsRunningThrough);
+
+        switch (how)
+        {
+            case "cancel": h.Solver.Cancel("test"); break;
+            case "scatter": h.Solver.OnRoomObserved(new RoomObservation("Scorched Cavern, Firepit", new HashSet<Direction>())); break;
+            default: h.Tracker.NoteDeath(livesRemaining: 5); break;
+        }
+
+        Assert.False(h.Solver.Active);
+        Assert.False(h.Solver.IsRunningThrough);
+        Assert.Equal(new[] { true, false }, h.RunThrough);
+    }
+
+    [Fact]
+    public void RunThrough_StartedOnFloor3_IsNeverSignalled()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"), room: 2002);
+        h.LeaderHasKey = true;
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.Empty(h.RunThrough);
+    }
+
+    [Fact]
+    public void EngineSwitchedBackOn_MakesFloor1WaitForItsHolds()
+    {
+        using Harness h = Begin(NewHarness());
+        RunUntil(h, () => h.Room == 1803);
+
+        // A fight with Auto Combat off (as the climb leaves it) is walked through…
+        h.Coord.AssertGate(MovementCoordinator.CombatGate, "test");
+        RunUntil(h, () => h.Room == 1806);
+        Assert.False(h.Solver.IsHeld);
+
+        // …and with the player having switched it back on, it is waited for.
+        h.EnginesOn.Add(MovementCoordinator.CombatGate);
+        for (int i = 0; i < 20; i++) Pump(h);
+        Assert.True(h.Solver.IsHeld);
+        int room = h.Room;
+        for (int i = 0; i < 20; i++) Pump(h);
+        Assert.Equal(room, h.Room);
+
+        h.Coord.ClearGate(MovementCoordinator.CombatGate, "test");
+        RunToEnd(h);
+        AssertFinished(h);
+    }
+
+    [Fact]
+    public void GateEngineOn_MapsEachGateToItsToggle()
+    {
+        Models.Profile.AutoActionDefaults off = new()
+        {
+            AutoCombat = false, AutoRest = false, AutoGetItems = false, AutoGetCash = false, AutoSearch = false,
+            AutoSneak = true, AutoHeal = true,
+        };
+        foreach (string gate in new[]
+                 {
+                     MovementCoordinator.CombatGate, MovementCoordinator.HealthRecoveryGate,
+                     MovementCoordinator.ManaRecoveryGate, MovementCoordinator.AcquisitionGate,
+                     MovementCoordinator.SearchGate, MovementCoordinator.SneakSettleGate,
+                     MovementCoordinator.PartyWaitGate, MovementCoordinator.ConfusionGate,
+                 })
+            Assert.False(PyramidRunThrough.GateEngineOn(gate, off));
+
+        Assert.True(PyramidRunThrough.GateEngineOn(MovementCoordinator.CombatGate, new() { AutoCombat = true }));
+        Assert.True(PyramidRunThrough.GateEngineOn(MovementCoordinator.AbandonedCombatGate, new() { AutoCombat = true }));
+        Assert.True(PyramidRunThrough.GateEngineOn(MovementCoordinator.HealthRecoveryGate, new() { AutoRest = true }));
+        Assert.True(PyramidRunThrough.GateEngineOn(MovementCoordinator.ManaRecoveryGate, new() { AutoRest = true }));
+        Assert.True(PyramidRunThrough.GateEngineOn(MovementCoordinator.AcquisitionGate,
+            new() { AutoGetItems = false, AutoGetCash = true }));
+        Assert.True(PyramidRunThrough.GateEngineOn(MovementCoordinator.SearchGate, new() { AutoSearch = true }));
+        // Sneaking is left as the player has it, and never holds these floors.
+        Assert.False(PyramidRunThrough.GateEngineOn(MovementCoordinator.SneakSettleGate, new() { AutoSneak = true }));
     }
 
     [Theory]

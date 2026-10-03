@@ -6555,7 +6555,8 @@ public sealed class AppServices
                 || SysopLocate.RequestLocateOnce(reason, resolved, failed, forRecovery: true),
             openDoor: (dir, statRequirement, canBash, keyItemId, sender, reply) =>
                 Door.Enqueue(dir, statRequirement, canBash, keyItemId, sender, reply),
-            holdsItem: HoldsKeyItem);
+            holdsItem: HoldsKeyItem,
+            gateEngineOn: gate => ReadAutoModeFlag(d => Game.Map.PyramidRunThrough.GateEngineOn(gate, d)));
         Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land
