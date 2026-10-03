@@ -21,6 +21,7 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     private readonly CommandHistory _commands;
     private readonly CommandHistoryNavigator _nav;
     private readonly Action<string> _sendUserText;
+    private readonly Action _clearChatlog;
     private readonly ProfileService _profile;
     private readonly Application _app;
     // Live display channel carrying the Conversation row font; observed so a
@@ -107,12 +108,13 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
     // Fired by the window's code-behind to scroll the newest row into view.
     public event Action<ConversationRowViewModel>? ScrollToRowRequested;
 
-    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Application app, TalkSettings talk, ProfileService profile, DisplayConfig display)
+    public ConversationViewModel(ChatHistoryStore history, CommandHistory commands, Action<string> sendUserText, Action clearChatlog, Application app, TalkSettings talk, ProfileService profile, DisplayConfig display)
     {
         _history = history;
         _commands = commands;
         _nav = new CommandHistoryNavigator(commands);
         _sendUserText = sendUserText;
+        _clearChatlog = clearChatlog;
         _profile = profile;
         _app = app;
         _display = display;
@@ -360,6 +362,11 @@ public sealed partial class ConversationViewModel : ObservableObject, IDisposabl
         => _textBrushes.TryGetValue(c, out IBrush? brush) ? brush : Brushes.Gray;
 
     // Send InputText to the game and clear the field.
+    // The window's Clear All: the same wipe as Tools → Clear chatlog (history and
+    // the saved talk log), which the main window owns.
+    [RelayCommand]
+    private void ClearAll() => _clearChatlog();
+
     [RelayCommand]
     private void SendInput()
     {

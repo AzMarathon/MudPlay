@@ -72,11 +72,33 @@
                              VerticalAlignment="Top"
                              PlaceholderText="Search speaker / message…"
                              Text="{Binding SearchText, Mode=TwoWay}"/>
-                    <CheckBox HorizontalAlignment="Right"
-                              IsChecked="{Binding AutoScroll}"
-                              Content="Auto-scroll"
-                              Foreground="{StaticResource ChromeFgSecBrush}"
-                              FontSize="11"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                        <!-- Wipes the history for good (the saved talk log too), and it
+                             sits beside a checkbox that gets clicked a lot, so the wipe
+                             itself is a second click inside the flyout. -->
+                        <Button x:Name="ClearAllButton"
+                                Content="Clear All"
+                                FontSize="11" Padding="8,1"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Wipe the whole conversation log, including the saved copy">
+                            <Button.Flyout>
+                                <Flyout Placement="BottomEdgeAlignedRight">
+                                    <StackPanel Spacing="8" MaxWidth="260">
+                                        <TextBlock TextWrapping="Wrap"
+                                                   Text="Wipe the whole conversation log? This also empties the saved copy and can't be undone."/>
+                                        <Button HorizontalAlignment="Right"
+                                                Content="Clear All"
+                                                Click="OnClearAllConfirmed"/>
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                        <CheckBox IsChecked="{Binding AutoScroll}"
+                                  Content="Auto-scroll"
+                                  VerticalAlignment="Center"
+                                  Foreground="{StaticResource ChromeFgSecBrush}"
+                                  FontSize="11"/>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </Border>
@@ -129,12 +151,17 @@
              fill and docked the list left at its content width, so the scrollbar sat
              where the longest line ended instead of at the window edge. -->
         <Grid>
+        <!-- MaxHeight 0 until the window has opened: the first layout would otherwise
+             build the rows at the TOP of the history, only for the open to jump
+             straight to the newest line and build that end as well. OnOpened lifts
+             it and scrolls to the last row in one step. -->
         <ListBox x:Name="RowsList"
                  ItemsSource="{Binding Rows}"
                  Background="{StaticResource ChromeBgSunkenBrush}"
                  BorderThickness="0"
                  Padding="4"
                  SelectionMode="Multiple,Toggle"
+                 MaxHeight="0"
                  KeyDown="OnRowsKeyDown">
             <ListBox.Styles>
                 <Style Selector="ListBoxItem">

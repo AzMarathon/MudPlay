@@ -8,6 +8,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -86,7 +87,14 @@ public partial class ConversationWindow : Window
         {
             vm.ScrollToRowRequested += OnScrollToRow;
             vm.PropertyChanged += OnViewModelPropertyChanged;
-            // Land on the freshest row.
+            // Give the list its height back and, when following the newest line, go
+            // straight there. Asking for the last row while the list still has no
+            // rows built makes the panel build that end only; laying out at the top
+            // first and then scrolling built about three times as many rows on every
+            // open (half a second with a full history).
+            _rowsList?.ClearValue(Layoutable.MaxHeightProperty);
+            if (vm.Rows.Count > 0 && vm.AutoScroll) _rowsList?.ScrollIntoView(vm.Rows.Count - 1);
+            // Land flush on the freshest row.
             if (vm.Rows.Count > 0) PinToBottomOnOpen();
             this.FindControl<TextBox>("InputBox")?.Focus();
         }
@@ -100,6 +108,12 @@ public partial class ConversationWindow : Window
             vm.PropertyChanged -= OnViewModelPropertyChanged;
             vm.Dispose();
         }
+    }
+
+    private void OnClearAllConfirmed(object? sender, RoutedEventArgs e)
+    {
+        this.FindControl<Button>("ClearAllButton")?.Flyout?.Hide();
+        if (DataContext is ConversationViewModel vm) vm.ClearAllCommand.Execute(null);
     }
 
     // Click a picker suggestion → splice it in (the click already selected it).

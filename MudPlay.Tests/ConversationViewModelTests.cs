@@ -35,9 +35,10 @@ public sealed class ConversationViewModelTests
         return (router, new ChatHistoryStore(new ChatRouter(router)));
     }
 
-    private static ConversationViewModel NewViewModel(ChatHistoryStore history, TalkSettings? talk = null)
-        => new(history, new CommandHistory(), _ => { }, new Application(), talk ?? new TalkSettings(),
-               new ProfileService(), new DisplayConfig());
+    private static ConversationViewModel NewViewModel(ChatHistoryStore history, TalkSettings? talk = null,
+                                                      Action? clearChatlog = null)
+        => new(history, new CommandHistory(), _ => { }, clearChatlog ?? (() => { }), new Application(),
+               talk ?? new TalkSettings(), new ProfileService(), new DisplayConfig());
 
     // Fill the store to its cap with gossip "msg 0" … "msg 4999".
     private static void FillToCap(MessageRouter router)
@@ -147,5 +148,23 @@ public sealed class ConversationViewModelTests
 
         Assert.Equal(new[] { NotifyCollectionChangedAction.Add }, actions);
         Assert.Equal(new[] { "one", "two" }, vm.Rows.Select(r => r.Entry.Message).ToArray());
+    }
+
+    // Clear All hands the wipe to the owner of the history and its saved copy; the
+    // store's reset then empties the window's rows.
+    [Fact]
+    public void ClearAll_RunsTheWipe_AndTheRowsEmpty()
+    {
+        (MessageRouter router, ChatHistoryStore history) = NewStore();
+        router.Dispatch(Line("Forged gossips: one", 0));
+        router.Dispatch(Line("Forged gossips: two", 1));
+        int wipes = 0;
+        using ConversationViewModel vm = NewViewModel(history, clearChatlog: () => { wipes++; history.Clear(); });
+        Assert.Equal(2, vm.Rows.Count);
+
+        vm.ClearAllCommand.Execute(null);
+
+        Assert.Equal(1, wipes);
+        Assert.Empty(vm.Rows);
     }
 }

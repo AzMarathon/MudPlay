@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.29**
-> - Map's Other floors chip cycles all floors, up only, down only, off
-> - Other floors on/off checkbox removed from Settings → General; the chip is the control
+> **Version 3.142.31**
+> - Conversation window opens about twice as fast with a long history: it builds only the newest rows instead of the top of the log first
+> - Conversation window: Clear All button beside Auto-scroll wipes the log and its saved copy, after one confirming click
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
