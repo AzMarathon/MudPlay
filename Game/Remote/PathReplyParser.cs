@@ -40,6 +40,15 @@ public static partial class PathReplyParser
         return walk.Success && TryKey(walk.Groups["map"].Value, walk.Groups["room"].Value, out destination);
     }
 
+    // An idle responder's @path reply: "{not moving}" or "{not moving; last ran …}".
+    public static bool IsIdleReply(string? message)
+    {
+        if (string.IsNullOrEmpty(message)) return false;
+        Match wrapped = Wrapped().Match(message);
+        return wrapped.Success
+            && wrapped.Groups["body"].Value.TrimStart().StartsWith("not moving", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool TryParse(string? message, out PathReport? report)
     {
         report = null;

@@ -347,7 +347,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     private void ApplyNow()
     {
         if (SelectedSet is not { } set) return;
-        ApplyStatus = _equipment.ApplyBySetId(set.Id) switch
+        ApplyStatus = _equipment.ApplySetNow(set.Id) switch
         {
             EquipResult.Applied => "Applying gear set…",
             EquipResult.NoChange => "Already wearing this set.",

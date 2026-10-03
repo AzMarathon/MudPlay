@@ -258,6 +258,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         // A *Combat Off* cancels a deferred travelling→Default swap — the engage
         // that armed it was flicker, so we stay in the movement set.
         if (!inCombat) CancelPendingMovingCombatSwap();
+        // A set deselected mid-fight goes back to Default now that it's over.
+        if (!inCombat) SettleReleasedSet();
 
         if (inCombat)
         {
@@ -582,6 +584,7 @@ public sealed class AutoEquipCoordinator : IDisposable
     {
         if (type == EquipTriggerType.Default || HeldSet == type) return;
         HeldSet = type;
+        _releasedSet = null;
         CancelPendingMovingCombatSwap();
         EndManualMovement();
         _inMovementSet = false;
@@ -591,36 +594,70 @@ public sealed class AutoEquipCoordinator : IDisposable
         HeldSetChanged?.Invoke();
     }
 
-    // The user deselected the held set: automatic swaps resume, starting with the
-    // set the moment calls for (boss room, rest, travel, else Default). quiet skips
-    // that swap, for a profile change where the held state just ends.
+    // The user deselected the held set: automatic swaps resume. The set comes off for
+    // Default, then whatever automation wants right now goes on over it (user,
+    // 2026-10-03). Two exceptions: mid-fight the swap waits until combat clears, and
+    // when the released set is itself what automation wants (a pre-rest set while
+    // resting, say) it stays on for automation to use and revert in its own time.
+    // quiet just ends the hold: a profile change, or another equip asked for by hand.
     public void ReleaseHeldSet(bool quiet = false)
     {
         if (HeldSet is not { } was) return;
         HeldSet = null;
         _log?.Info(EquipmentManager.LogCategory, $"'{was}' deselected — automatic gear swaps resume");
         HeldSetChanged?.Invoke();
-        if (quiet) return;
+        if (quiet) { _releasedSet = null; return; }
+        _releasedSet = was;
+        if (_player.InCombat)
+        {
+            _log?.Info(EquipmentManager.LogCategory, "still fighting — going back to Default once combat clears");
+            return;
+        }
+        SettleReleasedSet();
+    }
 
-        if (CurrentRoomIsBoss() && EnabledSet(EquipTriggerType.Bossing) is not null)
+    // The set just deselected, until the swap back to Default it owes has happened.
+    private EquipTriggerType? _releasedSet;
+    public EquipTriggerType? ReleasedSetAwaitingDefault => _releasedSet;
+
+    private void SettleReleasedSet()
+    {
+        if (_releasedSet is not { } released) return;
+        _releasedSet = null;
+        EquipTriggerType wanted = WantedNow();
+        if (wanted == released)
         {
-            Fire(EquipTriggerType.Bossing);
-            return;
-        }
-        if (!_player.InCombat
-            && ClassifyRest(_player.Position, _hpGateAsserted(), _maGateAsserted()) is { } rest
-            && ResolveTarget(_readEquipment(), rest) is not null)
-        {
-            Fire(rest);
-            return;
-        }
-        if (!_player.InCombat && MovementSetActive() && (_isMoving?.Invoke() ?? false))
-        {
-            _inMovementSet = true;
-            Fire(EquipTriggerType.WhileMoving);
+            AdoptReleasedSet(released);
             return;
         }
         Fire(EquipTriggerType.Default);
+        if (wanted == EquipTriggerType.Default) return;
+        if (wanted == EquipTriggerType.WhileMoving) _inMovementSet = true;
+        Fire(wanted);
+    }
+
+    private void AdoptReleasedSet(EquipTriggerType released)
+    {
+        if (released == EquipTriggerType.WhileMoving) _inMovementSet = true;
+        _log?.Info(EquipmentManager.LogCategory,
+            $"'{released}' is what automation wants right now — leaving it on for it to use");
+    }
+
+    // The set automation would be wearing at this moment.
+    private EquipTriggerType WantedNow()
+    {
+        if (CurrentRoomIsBoss() && EnabledSet(EquipTriggerType.Bossing) is not null)
+            return EquipTriggerType.Bossing;
+        if (_player.InCombat) return EquipTriggerType.Default;
+        bool hp = _hpGateAsserted(), ma = _maGateAsserted();
+        bool sitting = IsRestPosture(_player.Position);
+        // A held rest gate means a rest is about to be (or being) taken.
+        if ((sitting || hp || ma)
+            && ClassifyRest(sitting ? _player.Position : PlayerPosition.Resting, hp, ma) is { } rest
+            && ResolveTarget(_readEquipment(), rest) is not null)
+            return rest;
+        if (MovementSetActive() && (_isMoving?.Invoke() ?? false)) return EquipTriggerType.WhileMoving;
+        return EquipTriggerType.Default;
     }
 
     // About to send a step INTO `next`. Swap BEFORE the wire move so we land already
@@ -804,6 +841,19 @@ public sealed class AutoEquipCoordinator : IDisposable
             _log?.Debug(EquipmentManager.LogCategory,
                 $"auto-equip '{type}' held: item-cast swap in progress (its own restore owns the slot)");
             return false;
+        }
+        // Automation wants a set before a deselected one has been swapped off (it was
+        // released mid-fight). The same set stays on for it; any other goes on over
+        // Default, as it would have if the release had settled first.
+        if (_releasedSet is { } released)
+        {
+            _releasedSet = null;
+            if (type == released)
+            {
+                AdoptReleasedSet(released);
+                return false;   // nothing was sent, so nothing for a caller to wait on
+            }
+            if (type != EquipTriggerType.Default) Fire(EquipTriggerType.Default);
         }
         if (ResolveTarget(_readEquipment(), type) is not { } setId) return false;
         // Hold the fire until a full 'i' has established the worn set. Diffing a

@@ -26,6 +26,9 @@ public sealed class PathReplyTracker : IDisposable
     // a follower walks with them, so their route starts where we stand.
     public event Action<string, RoomKey>? GotoReported;
 
+    // The responder's given name, when their @path reply says they aren't moving.
+    public event Action<string>? IdleReported;
+
     // The most recent reply, for the bug report — a "the leader's route looks wrong"
     // report needs exactly what we were told.
     public (string Sender, PathReport Report, DateTimeOffset At)? Last { get; private set; }
@@ -61,6 +64,11 @@ public sealed class PathReplyTracker : IDisposable
             _log?.Info(LogCategory, $"@goto reply from party leader {sender}: walking to {dest}");
             LastGoto = (sender, dest, DateTimeOffset.UtcNow);
             GotoReported?.Invoke(sender, dest);
+            return;
+        }
+        if (PathReplyParser.IsIdleReply(body))
+        {
+            IdleReported?.Invoke(sender);
             return;
         }
         if (!PathReplyParser.TryParse(body, out PathReport? report) || report is null) return;

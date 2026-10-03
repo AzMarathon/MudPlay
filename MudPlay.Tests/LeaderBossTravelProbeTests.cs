@@ -119,4 +119,54 @@ public sealed class LeaderBossTravelProbeTests
         h.Probe.OnRecheck();
         Assert.Equal(2, h.Probe.LastSentForTests.Count);
     }
+
+    // An idle leader hasn't picked where to go: nothing is decided until the party
+    // moves, and the answer to that second question stands.
+    [Fact]
+    public void IdleLeader_IsAskedAgainWhenThePartyMoves()
+    {
+        using Harness h = new();
+        h.Probe.Ask();
+        h.Line("Raijin telepaths: {not moving}");
+        Assert.Empty(h.Answers);
+        Assert.True(h.Probe.WaitingForLeaderToMove);
+
+        h.Probe.NoteMoved();
+        Assert.Equal(2, h.Probe.LastSentForTests.Count);
+        h.Line("Raijin telepaths: {walking to 6/1249; Dark Road (map 6, room 1200); step 1/40}");
+
+        Assert.Equal(new[] { true }, h.Answers);
+    }
+
+    [Fact]
+    public void IdleLeader_StillIdleOnceMoving_IsANo()
+    {
+        using Harness h = new();
+        h.Probe.Ask();
+        h.Line("Raijin telepaths: {not moving; last ran loop 'Bosses'}");
+        h.Probe.NoteMoved();
+        h.Line("Raijin telepaths: {not moving}");
+
+        Assert.Equal(new[] { false }, h.Answers);
+        Assert.False(h.Probe.WaitingForLeaderToMove);
+    }
+
+    [Fact]
+    public void LeaderOnALoop_IsANo()
+    {
+        using Harness h = new();
+        h.Probe.Ask();
+
+        h.Line("Raijin telepaths: {running loop 'Bosses'; Dark Road (map 6, room 1200); step 3/40}");
+
+        Assert.Equal(new[] { false }, h.Answers);
+    }
+
+    [Fact]
+    public void Moving_WithNoIdleAnswerOutstanding_AsksNothing()
+    {
+        using Harness h = new();
+        h.Probe.NoteMoved();
+        Assert.Empty(h.Probe.LastSentForTests);
+    }
 }

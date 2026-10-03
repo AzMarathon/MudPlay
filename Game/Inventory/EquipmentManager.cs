@@ -207,6 +207,10 @@ public sealed class EquipmentManager
 
     // ----- @equip <set> ----------------------------------------------------
 
+    // Someone asked for a set by hand (Equip menu, Workshop Equip Now, @equip): raised
+    // just before it's applied, so a set held from the Equip menu lets go first.
+    public event Action? ManualEquipStarting;
+
     // Resolve a gear set by EquipmentSet.Keyword (case-insensitive, the set's
     // Name as a fallback) and apply it. Declines while an apply is already in
     // flight.
@@ -216,6 +220,7 @@ public sealed class EquipmentManager
         if (_isEquipping) return EquipResult.Busy;
         EquipmentSet? set = FindSet(keyword.Trim());
         if (set is null) return EquipResult.NotFound;
+        ManualEquipStarting?.Invoke();
         // User-initiated gear-up: top empty / unowned slots up from carried gear.
         return ApplySet(set, fillFromInventory: true) ? EquipResult.Applied : EquipResult.NoChange;
     }
@@ -238,6 +243,18 @@ public sealed class EquipmentManager
         return ApplySet(set, fillFromInventory: false) ? EquipResult.Applied : EquipResult.NoChange;
     }
 
+    // The Workshop's Equip Now: the set as configured, like an automatic apply, but
+    // asked for by hand.
+    public EquipResult ApplySetNow(string setId)
+    {
+        if (string.IsNullOrWhiteSpace(setId)) return EquipResult.NotFound;
+        if (_isEquipping) return EquipResult.Busy;
+        if (!_readEquipment().Sets.Any(s => string.Equals(s.Id, setId, StringComparison.Ordinal)))
+            return EquipResult.NotFound;
+        ManualEquipStarting?.Invoke();
+        return ApplyBySetId(setId);
+    }
+
     // Resolve the gear set whose Trigger matches and apply it. The local
     // Action-menu / toolbar "Equip All" drives this with Default — the baseline
     // loadout. Declines while an apply is in flight; NotFound when no set is
@@ -248,6 +265,7 @@ public sealed class EquipmentManager
         EquipmentSet? set = _readEquipment().Sets
             .FirstOrDefault(s => s.Trigger == trigger);
         if (set is null) return EquipResult.NotFound;
+        ManualEquipStarting?.Invoke();
         // "Equip All" is a manual gear-up: top empty / unowned slots up from carried gear.
         return ApplySet(set, fillFromInventory: true) ? EquipResult.Applied : EquipResult.NoChange;
     }

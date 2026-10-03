@@ -247,7 +247,9 @@ public static class BugReportBuilder
         // A set picked from the Equip menu turns every automatic gear swap off — the
         // first thing to rule out in a "my gear stopped swapping" report.
         Kv(sb, "Gear set held from the Equip menu",
-            svc.AutoEquip.HeldSet is { } heldSet ? $"{heldSet} (automatic swaps off)" : "(none)");
+            svc.AutoEquip.HeldSet is { } heldSet ? $"{heldSet} (automatic swaps off)"
+            : svc.AutoEquip.ReleasedSetAwaitingDefault is { } owed ? $"(none; '{owed}' deselected mid-fight, Default owed once combat clears)"
+            : "(none)");
         Kv(sb, "Keep Bossing set between bosses",
             ((svc.Profile.Current?.Equipment?.KeepBossingBetweenBosses ?? false) ? "on" : "off")
             + (svc.AutoEquip.IsKeepingBossing ? ", kept on right now" : string.Empty)

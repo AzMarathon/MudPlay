@@ -12,12 +12,16 @@ namespace MudPlay.Game.Remote;
 //
 // The answer goes stale (the leader can pick somewhere else), so while the gear is
 // still being kept on it asks again every RecheckInterval. No reply inside
-// ReplyTimeout (the leader isn't running MudPlay, or isn't moving) counts as no.
+// ReplyTimeout (the leader isn't running MudPlay) counts as no.
+//
+// A leader that answers "not moving" hasn't picked where to go yet: nothing is
+// decided until the party next moves (NoteMoved), when it is asked once more and
+// that answer stands. Idle a second time means the leader is walking by hand.
 public sealed class LeaderBossTravelProbe : IDisposable
 {
     public const string LogCategory = "BossTravel";
 
-    internal static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(8);
+    internal static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(15);
     internal static readonly TimeSpan RecheckInterval = TimeSpan.FromSeconds(60);
 
     private readonly PathReplyTracker _replies;
@@ -31,7 +35,13 @@ public sealed class LeaderBossTravelProbe : IDisposable
     private Action<byte[]>? _wireSender;
     private IDisposable? _timer;
     private bool _awaiting;
+    // The leader said it wasn't moving; ask again when the party moves.
+    private bool _waitingForLeaderToMove;
+    // The question out is that second ask, so an idle answer to it is final.
+    private bool _confirming;
     private bool _disposed;
+
+    public bool WaitingForLeaderToMove => _waitingForLeaderToMove;
 
     // Whether the leader's trip ends at a boss room. Raised once per question.
     public event Action<bool>? Resolved;
@@ -69,6 +79,7 @@ public sealed class LeaderBossTravelProbe : IDisposable
         _log = log;
         _replies.PathReported += OnPathReported;
         _replies.GotoReported += OnGotoReported;
+        _replies.IdleReported += OnIdleReported;
     }
 
     public void SetWireSender(Action<byte[]> sender) => _wireSender = sender;
@@ -95,7 +106,8 @@ public sealed class LeaderBossTravelProbe : IDisposable
     {
         if (!IsLeader(sender) || !(_awaiting || _stillNeeded())) return;
         Resolve(_headsToBoss(report), report.Destination is { } d ? $"{sender} is walking to {d}"
-            : report.LoopName is { } l ? $"{sender} is on loop '{l}'" : $"{sender} reported no destination");
+            : report.LoopName is { } l ? $"{sender} is on loop '{l}' (only a walk-to keeps the set on)"
+            : $"{sender} reported no destination");
     }
 
     // The leader accepted an @goto: that's its new destination, asked for or not.
@@ -103,6 +115,32 @@ public sealed class LeaderBossTravelProbe : IDisposable
     {
         if (!IsLeader(sender) || !(_awaiting || _stillNeeded())) return;
         Resolve(_isBossRoom(destination), $"{sender} accepted a walk to {destination}");
+    }
+
+    private void OnIdleReported(string sender)
+    {
+        if (!IsLeader(sender) || !_awaiting) return;
+        if (_confirming)
+        {
+            Resolve(false, $"{sender} is moving without a walk-to");
+            return;
+        }
+        _awaiting = false;
+        CancelTimer();
+        _waitingForLeaderToMove = true;
+        LastOutcome = $"{sender} isn't moving yet — asking again when the party moves";
+        _log?.Info(LogCategory, LastOutcome);
+    }
+
+    // We changed rooms. Following, that means the leader moved: if it was idle when
+    // asked, this is the moment to ask where it's going.
+    public void NoteMoved()
+    {
+        if (!_waitingForLeaderToMove) return;
+        _waitingForLeaderToMove = false;
+        if (!_stillNeeded()) return;
+        _confirming = true;
+        if (!Ask()) _confirming = false;
     }
 
     private bool IsLeader(string sender) =>
@@ -124,6 +162,8 @@ public sealed class LeaderBossTravelProbe : IDisposable
     private void Resolve(bool headingToBoss, string what)
     {
         _awaiting = false;
+        _confirming = false;
+        _waitingForLeaderToMove = false;
         CancelTimer();
         LastOutcome = $"{what} — {(headingToBoss ? "a boss room" : "not a boss room")}";
         _log?.Info(LogCategory, LastOutcome);
@@ -151,5 +191,6 @@ public sealed class LeaderBossTravelProbe : IDisposable
         CancelTimer();
         _replies.PathReported -= OnPathReported;
         _replies.GotoReported -= OnGotoReported;
+        _replies.IdleReported -= OnIdleReported;
     }
 }

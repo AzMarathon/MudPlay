@@ -5913,8 +5913,8 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void EquipAll()
     {
-        // Going back to Default is how a set held from this menu is let go.
-        AppServices.Current.AutoEquip.ReleaseHeldSet(quiet: true);
+        // Going back to Default is how a set held from this menu is let go (any equip
+        // asked for by hand drops the hold; see EquipmentManager.ManualEquipStarting).
         Game.Inventory.EquipResult result =
             AppServices.Current.Equipment.ApplyByTrigger(Models.Profile.EquipTriggerType.Default);
         string? note = result switch

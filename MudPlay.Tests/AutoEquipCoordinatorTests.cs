@@ -1250,10 +1250,10 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Empty(applied);
         Assert.Equal(EquipTriggerType.Backstab, coord.HeldSet);
 
-        // Deselected while travelling: the movement set is what the moment calls for.
+        // Deselected while travelling: off to Default, then the set the run wants.
         coord.ReleaseHeldSet();
         Assert.Null(coord.HeldSet);
-        Assert.Equal(new[] { "move-set" }, applied);
+        Assert.Equal(new[] { "default-set", "move-set" }, applied);
         Assert.Equal(2, changes);
     }
 
@@ -1286,5 +1286,94 @@ public sealed class AutoEquipCoordinatorTests
         coord.ReleaseHeldSet(quiet: true);
         Assert.Null(coord.HeldSet);
         Assert.Empty(applied);
+    }
+
+    // Deselected mid-fight: the gear stays put until combat clears, then Default.
+    [Fact]
+    public void HeldSet_ReleasedInCombat_GoesBackToDefaultOnceTheFightIsOver()
+    {
+        var player = new PlayerState { InCombat = true };
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = Coord(player, BossConfig(keep: false), applied,
+            isBossRoom: _ => false, isMoving: () => false);
+
+        coord.HoldSet(EquipTriggerType.Bossing);
+        coord.ReleaseHeldSet();
+        Assert.Empty(applied);
+
+        player.InCombat = false;
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    // The set just deselected is the one automation wants (resting in the pre-rest
+    // set): it stays on, and comes off the usual way when the rest is done.
+    [Fact]
+    public void HeldSet_ReleasedWhileItIsWhatAutomationWants_StaysOn()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Resting };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "rest-set"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: _ => false, isMoving: () => false);
+
+        coord.HoldSet(EquipTriggerType.PreRestHp);
+        coord.ReleaseHeldSet();
+        Assert.Empty(applied);
+
+        player.Position = PlayerPosition.Standing;       // rested: back to Default as usual
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
+
+    // Deselected, then a rest in a different set: Default first, then the rest set.
+    [Fact]
+    public void HeldSet_ReleasedIntoARest_GoesThroughDefaultToTheRestSet()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Resting };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "rest-set"),
+            SetWith(EquipTriggerType.Bossing, enabled: true, "boss-set"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = Coord(player, cfg, applied,
+            isBossRoom: _ => false, isMoving: () => false);
+
+        coord.HoldSet(EquipTriggerType.Bossing);
+        coord.ReleaseHeldSet();
+
+        Assert.Equal(new[] { "default-set", "rest-set" }, applied);
+    }
+
+    // Deselected mid-fight, and the health engine asks for rest gear before the
+    // deferred Default has happened.
+    [Fact]
+    public void HeldSet_ReleasedInCombat_ThenRestGearIsAskedFor()
+    {
+        var player = new PlayerState { InCombat = true };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestHp, enabled: true, "rest-set"),
+            SetWith(EquipTriggerType.Bossing, enabled: true, "boss-set"));
+        var applied = new List<string>();
+        bool hpGate = false;
+        using AutoEquipCoordinator coord = new(player, () => cfg, () => hpGate, () => false,
+            id => { applied.Add(id); return EquipResult.Applied; }, () => true, () => true);
+
+        // Same set: it stays on and nothing is sent.
+        coord.HoldSet(EquipTriggerType.PreRestHp);
+        coord.ReleaseHeldSet();
+        hpGate = true;
+        player.InCombat = false;
+        Assert.Empty(applied);
+
+        // A different set: Default, then the rest set.
+        player.InCombat = true;
+        hpGate = false;
+        coord.HoldSet(EquipTriggerType.Bossing);
+        coord.ReleaseHeldSet();
+        hpGate = true;
+        player.InCombat = false;
+        Assert.Equal(new[] { "default-set", "rest-set" }, applied);
     }
 }

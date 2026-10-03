@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.142.40**
-> - Bossing set: new "Keep on while heading to another boss" checkbox; a follower asks the leader's client (`@path`) whether the party is going to a boss room
+> - Bossing set: new "Keep on while heading to another boss" checkbox for walk-to's; a follower asks the leader's client (`@path`) whether it's walking to a boss room
 > - Action → Equip: any set but Default now stays on, ticked, with automatic gear swaps off until you deselect it; the terminal says so when you pick one
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
