@@ -1503,6 +1503,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - **Identifying a guard from imported data.** The game's monster-`Type` field distinguishes an ordinary NPC from a law-enforcing *guard*, but that distinction is **not exported into the MDB we import** — the imported `Type` only carries Solo / Leader / Follower / Stationary (0–3), never the guard value. So guard-ness can't be read off the type.
   - **The reliable proxy:** a monster that **casts spell 583 (`jail`)** is a guard, and it attacks us when our title is **Outlaw or worse**. Detection = the monster references spell `583` in any of its castable-spell fields (`AttHitSpell-*`, `MidSpell-*`, `DeathSpell`, `CreateSpell`).
   - In the shipped set that flags the guardsmen (#13/#14/#905/#538), Sheriff Lionheart (#40), and elite guardsman (#757).
+  - **The engine's own marker is the monster's group:** group 5 is named `Guard` and group 37 `Angel` in the DLL, and neither is in the MDB (*Monsters, lairs & spawns → Monster roaming and following*; [OBSERVED] 2026-10-03, `wccmmud.dll` 1.11p and `wccknms2.dat`, Stock). Group 5 holds Sheriff Lionheart, Templar and elite guardsman, but also the woodelves, storm giants and Pastor Lander; group 37 holds guardsman and bounty hunter. *[NEEDS CONFIRMATION]: whether group membership, rather than the `jail` spell, is what makes a monster attack the evil-titled.*
   - This is a **partial** list — other mobs aggro the evil-titled without casting `jail` (e.g. Templar is a guard yet has no `jail`); those get added here as they're recognised.
 - **A monster that opens on you unprovoked is an enemy, not a neutral** — e.g. storm giants. The client models those as the `Enemy` relationship (see *Neutral monsters and kill-on-sight*).
 
@@ -1538,7 +1539,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
   2. **No lock → spread pick** among the aggroed players in room / terminal order: each rolls `genrdn(0,100) < 50 − 5 × (hits they're already taking this beat)`; **first to pass** is hit; if none pass, the **last eligible** player is hit (fallback). The mob drifts toward whoever *isn't* already piled on — a player taking ≥10 hits this beat hits a 0% threshold and is skipped by fresh rolls.
   3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`; the roll is 1–99, so Follow% `F` passes `(F − 1)` times in 99 — never at 1 or below, always at 100): pass → **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear** the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
   - **The mirror roll when a *player* hits the mob re-points the lock to that attacker** — the "attack last" behaviour. Follow% is the stickiness dial.
-  - **Special groups** (the monster's group number, not the imported `Type` column — *Monsters, lairs & spawns → Monster roaming and following*)**:** group 37 (`0x25`) monsters never manage a lock this way; a group 5 monster only acquires a lock when currently untargeted. (An earlier note called these an engine-internal type, with `0x25` as "summoned"; superseded 2026-10-03 — the field is the group copied at spawn.)
+  - **Special groups** (the monster's group number, not the imported `Type` column — *Monsters, lairs & spawns → Monster roaming and following*)**:** group 37 (`0x25`, the engine's `Angel`) monsters never manage a lock this way; a group 5 (`Guard`) monster only acquires a lock when currently untargeted. (An earlier note called these an engine-internal type, with `0x25` as "summoned"; superseded 2026-10-03 — the field is the group copied at spawn.)
   - **Carve-out:** an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
 - **Paradigm** *([CONFIRMED] — user writeup, Paradigm only)*. Paradigm rewrote target selection into a **weighted lottery** with no locked-target mechanic. Each player scores from a base **150**: `+ (10 − Charm/5)` (higher Charm lowers the score), `+` party position (frontrank 60 / midrank 30 / backrank 0; **solo = frontrank 60**), `+` recent aggro (last hitter **+30 × players-in-fight**, everyone else **−5 × players-in-fight**), **floored at 50**. The monster rolls a weighted lottery over the summed scores — bigger score = bigger slice, never a guarantee, never impossible.
 - **Charm and party position have no effect on stock target selection** — they are Paradigm-only.
@@ -1688,7 +1689,7 @@ Recorded for future PvP settings; the client doesn't act on any of it yet.
      - otherwise, your levels must be within the config #57 range (1–100; the DLL's built-in value is 10) → refused if they're further apart.
 
      PvP attacks use the same check, with the wording `Such an attack would result in a very unbalanced combat round.` An engine-side per-user exemption flag skips it; that flag wasn't identified.
-  4. **`You are overcome with a feeling of guilt and return your hands to your own pockets`** (no trailing period) — you're standing in a **Protected** room (a room flag), or in an **Arena** room while arenas are in normal mode. Normal mode is where death doesn't count; the sysop switches modes with `SYSOP ARENA [status/normal/combat]`. In an arena in combat mode you can rob.
+  4. **`You are overcome with a feeling of guilt and return your hands to your own pockets`** (no trailing period) — you're standing in a **Protected** room (a room flag), or in an **Arena** room while arenas are in normal mode. The room type the engine tests is 5, which it names `Colliseum` — the training grounds and arena practice rooms, not the three type-2 `Arena` rooms (*Monsters, lairs & spawns → Monster roaming and following*, Room type; [OBSERVED] 2026-10-03, `_rob_user` @ `0x41f59d`). Normal mode is where death doesn't count; the sysop switches modes with `SYSOP ARENA [status/normal/combat]`. In an arena in combat mode you can rob.
 - **The roll.** Roll `genrdn(1,100)` — 1–99 — against your **Thievery** (see *Character stats & progression → Utility skills — Perception + the thief four*). With no Thievery, a success is impossible.
   - **Roll > Thievery + 10: caught.** You see `You bump <victim> as you try to rob <him/her>.` The victim sees `<you> bumps you as <he/she> tries to rob you!`. **This is the only outcome that tells the victim.**
   - **Thievery < roll ≤ Thievery + 10: a quiet fail.** You see `Your skills fail as you try to rob <victim>.`, and the victim sees nothing.
@@ -3022,64 +3023,68 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 - **Ticks** — the engine's three background passes: fast (1 s), medium (3 s), slow (30 s). The lengths are the character ones (*Health, resting & recovery → Rest and meditate tick timing*; *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*; *Monster HP regen*); the monster passes hang off the same background routines.
 - **`Follow%`** — the Monsters-table column (active record `+0x108`), 0–100. High means the monster sticks to a player; it also sets how seldom the monster roams.
 - **`Type`** — the Monsters-table column (active record `+0x148`): 0 Solo, 1 Leader, 2 Follower, 3 Stationary. Leaders and Followers form packs; Stationary monsters never leave their room.
-- **Group** — a number on every monster (active record `+0x12c`, copied at spawn from the known-monster record's `+0x54`, `_generate_monster` @ `0x4247f9`) and on every room (`+0x560`). A room spawns monsters of its group (*`Summoned By` spawn tokens*), and the same number fences where a monster may walk. The MDB carries neither. Stock has 30 monster groups; the movement code singles out five, shown with their members in `wccknms2.dat`:
-  - **group 0** — 25 monsters: the practice dummies and quest NPCs (Vashti, Mayor Delanon, the old hermit);
-  - **group 2** — 95: shopkeepers, trainers and other townsfolk (Aiken, Guildmaster, the healer, the boatman);
-  - **group 5** — 18: Sheriff Lionheart, Templar, elite guardsman, the woodelves, the storm giants, Pastor Lander. These patrol (below);
-  - **group 37 (`0x25`)** — 15: guardsman, bounty hunter, warlock mercenary, greater hellion, Zanthus the Lich, Kai Master, Dark Mage;
-  - **group 38 (`0x26`)** — 40: huge gruesome creation, Demoness Irikani, necromancer, Great Hydra, Majestic Dragon, Demon Lord.
+- **Group** — a number on every monster (active record `+0x12c`, copied at spawn from the known-monster record's `+0x54`, `_generate_monster` @ `0x4247f9`) and on every room (`+0x560`). A room spawns monsters of its group (*`Summoned By` spawn tokens*), and the same number fences where a monster may walk. The MDB carries neither. The engine has a name for each number (the table at `0x480020`, printed as `Group: %s` by the sysop room dump): 0 `Lair`, 1 `Wanderer`, 2 `NPC`, 3 `Living`, 4 `Random`, 5 `Guard`, 6–35 `Group 1`–`Group 30`, 36 `Arena`, 37 `Angel`, 38 `Quest`. Stock's monsters use 30 of them; the movement code singles out five, shown with their members in `wccknms2.dat`:
+  - **group 0 `Lair`** — 25 monsters: the practice dummies and quest NPCs (Vashti, Mayor Delanon, the old hermit);
+  - **group 2 `NPC`** — 95: shopkeepers, trainers and other townsfolk (Aiken, Guildmaster, the healer, the boatman);
+  - **group 5 `Guard`** — 18: Sheriff Lionheart, Templar, elite guardsman, the woodelves, the storm giants, Pastor Lander. These patrol (below);
+  - **group 37 `Angel`** (`0x25`) — 15: guardsman, bounty hunter, warlock mercenary, greater hellion, Zanthus the Lich, Kai Master, Dark Mage;
+  - **group 38 `Quest`** (`0x26`) — 40: huge gruesome creation, Demoness Irikani, necromancer, Great Hydra, Majestic Dragon, Demon Lord.
+- **Pack number** — a second number on every monster (known-monster `+0x6c`; not in the MDB, and only `_move_monster` reads it). Leaders and Followers with the same pack number travel together. Most monsters are pack 1 (741 of the 876 matched to the MDB) and 62 are pack 0; the rest are small families: 6 kobold / kobold warrior / kobold king; 4 saracen raider / leader / zealot / high priest; 3 the rakshasha and the dwarven merchant with his bodyguard; 9 troglodyte / troglodyte leader; 10 the quaggoth, hydra / hydra head, Great Hydra / massive hydra head; 25 the nanati. "Pack number" is this file's name for it; the engine's own name isn't known.
+- **`ExpMulti`** — the Monsters-table exp multiplier (known-monster `+0x58`, copied to the active record's `+0x8` at spawn, @ `0x424734`; *Monster exp multiplier*). Between two Leaders of one pack it works as rank: the higher multiplier is the senior.
 - **Tied to a player** — the active record holds a player's name (`+0x1a`): the monster has that player as its target, from a fight or a charm. A tied monster follows and chases; an untied one roams.
 - **Monster flags** (`+0x128`): bit 1 = in a fight; bit 2 = not decoded (cleared at the end of each medium update); bit 8 = knocked down.
 - **Room flags** (`+0x564`), named by the sysop room dump (*Sysop commands → `SYSOP STATUS` — room dump format*; `_display_debug_room_stats` @ `0x43c524`): 1 `Protected`, 2 `Patrollable`, 8 `Specific Monster is Alive`, `0x40` `Ganghouse`. Bits 4, `0x10` and `0x20` are set on some rooms and aren't named there. 1,211 Stock rooms are `Patrollable`.
-- **Room type** (`+0x43c`): 0 an assigned-spawn room, 1 a set-monster room refilled only by the room reset, 2 an arena, 3 a lair (*`Summoned By` spawn tokens*, *Random spawns in assigned rooms*, *Lair respawn timers*). Type 5 is 118 Stock rooms whose purpose isn't recorded; types 4 and 6 are a handful.
+- **Room type** (`+0x43c`), with the engine's names (the table at `0x47ffc4`): 0 `Normal` (an assigned-spawn room), 1 `Shop` (a set-monster room refilled only by the room reset), 2 `Arena` (the three fast-spawn arena rooms), 3 `Lair`, 4 `Hotel` (4 rooms: two `Kitchen`, two `Inn Room`), 5 `Colliseum`, 6 `Jail` (the 2 `Jail Cell` rooms). *`Summoned By` spawn tokens*, *Random spawns in assigned rooms* and *Lair respawn timers* cover 0–3.
+  - **`Colliseum` (type 5) is the player-fighting ground**: 118 Stock rooms — the 64 `Training Grounds`, map 11's 42 rooms (the Crimson / Ebony / Golden passages and chambers), the 11 `Arena Practice Room`, the `Dwarven Arena`. The engine tests the type wherever players fight players (`_attack_user_user`, `_check_kill_user`, `_add_experience`, `_is_valid_target`, the three cast routines, `_rob_user`, `_cmd_drag`, `_cmd_get`, `_cmd_suicide`), each time with the arena-mode switch at `0x4790e8` (*Combat → Robbing players (`rob`)*, the guilt line). Seen so far with the switch on: HP is saved on walking in from outside (@ `0x416bd8`) and put back by `_check_kill_user` (@ `0x419c33`), robbing is refused, and `suicide` prints `You may not suicide or reroll in this room!` (@ `0x469346`). The other sites aren't decoded.
 - **Abilities named below** (the ability numbers of the imported data): 57 SeeHidden, 68 Slowness, 74 HoldPerson. A monster has one from its own record or from a spell on it (`_monster_has_ability` @ `0x43d969`).
 - **Forced move** — a `_move_monster` call that skips the pack rule: a pack being pulled after its Leader, or a trapdoor.
-- **Exit types** — each of a room's ten exits has a type code in the room record (`+0x360`), which decides what a player needs to pass. The MDB shows them as the exit's text (`Door`, `Key: n`, `Toll: n` …):
+- **Exit types** — each of a room's ten exits has a type code in the room record (`+0x360`), which decides what a player needs to pass. The names are the engine's own (the table at `0x47ff5c`); the MDB shows a type as the exit's text (`Door`, `Key: n`, `Toll: n` …) or not at all:
 
-  | code | exit | for a player |
+  | code | engine name | for a player |
   |---|---|---|
-  | 0 | plain | walks through |
-  | 1 | (no MDB form; no Stock room uses it) | — |
-  | 2 | key | needs the key item or a picklock; has a lock state |
-  | 3 | item | needs an item carried |
-  | 4 | toll | pays coin |
-  | 5 | plain with its own movement message | walks through |
-  | 6 | hidden | must be searched for or opened by room actions |
-  | 7 | door | open / closed / locked |
-  | 8 | map change | plain, lands on another map |
-  | 9 | trap | walks through; an armed trap does damage |
-  | 10 | text | passed by typing a phrase (`go path`) |
-  | 11 | gate | a door by another name |
-  | 12 | action | not an exit: a typed command that acts on another exit |
-  | 13 | class | only (or all but) one class |
-  | 14 | race | only (or all but) one race |
-  | 15 | level | a level range |
-  | 16 | timed | open and closed on a clock |
-  | 17 | ticket / item | not gated by the engine |
-  | 18, 21 | (no Stock room uses them) | — |
-  | 19 | plain | walks through; bars group 5 monsters |
-  | 20 | alignment | an alignment range |
-  | 22 | cast | a spell is cast on the way through |
-  | 23 | ability | needs an ability value in a range |
-  | 24 | spell trap | a trap that casts a spell instead of rolling damage |
+  | 0 | `Normal` | walks through |
+  | 1 | `Spell` | no Stock room uses it |
+  | 2 | `Key` | needs the key item or a picklock; has a lock state |
+  | 3 | `Item` | needs an item carried |
+  | 4 | `Toll` | pays coin |
+  | 5 | `Action` | walks through, with the exit's own movement message |
+  | 6 | `Hidden` | must be searched for or opened by room actions |
+  | 7 | `Door` | open / closed / locked |
+  | 8 | `Map Change` | walks through, lands on another map |
+  | 9 | `Trap` | walks through; an armed trap does damage |
+  | 10 | `Text` | passed by typing a phrase (`go path`) |
+  | 11 | `Gate` | a door by another name |
+  | 12 | `Remote Action` | not an exit: a typed command that acts on another exit |
+  | 13 | `Class` | only (or all but) one class |
+  | 14 | `Race` | only (or all but) one race |
+  | 15 | `Level` | a level range |
+  | 16 | `Timed` | open and closed on a clock |
+  | 17 | `Ticket` | not gated by the engine |
+  | 18 | `User Count` | no Stock room uses it |
+  | 19 | `Block Guard` | walks through; bars `Guard` (group 5) monsters |
+  | 20 | `Alignment` | an alignment range |
+  | 21 | `Delay` | no Stock room uses it |
+  | 22 | `Cast` | a spell is cast on the way through |
+  | 23 | `Ability` | needs an ability value in a range |
+  | 24 | `Spell Trap` | a trap that casts a spell instead of rolling damage |
 
 **When a monster roams**
 
 - **Roaming is decided on the medium tick, once per monster** (`_background_medium` → `_medium_update_monsters` @ `0x421b31` → `_medium_update_monster` @ `0x421cbc`). A monster doesn't roam while:
   - it is tied to a player — it chases instead (*Following and chasing a player*, below);
   - its flags have bit 1 (in a fight) or bit 2 set;
-  - it is in group 0 or group 2 (@ `0x421dff`, the group jump table).
+  - it is in group 0 (`Lair`) or group 2 (`NPC`) (@ `0x421dff`, the group jump table).
 - **An ordinary monster roams on `genrdn(0,100) < (100 − Follow%) / 2`** (@ `0x421eaf`; the division truncates). Follow% 0 roams on 50 rolls in 100, Follow% 50 on 25, Follow% 100 never.
-- **A group 5 monster skips the roll and tries every tick** (@ `0x421e1c`).
-- **At most 3 roam attempts per medium pass, across all monsters** (counter `0x47fb90`, zeroed by `_medium_update_monsters`). An ordinary monster checks the cap before its roll and counts only when the roll passes; a group 5 monster counts every try, and ignores the cap when its record is flagged changed (`+0x140`). Monsters are walked in slot order, so low slots claim the attempts first.
+- **A `Guard` (group 5) monster skips the roll and tries every tick** (@ `0x421e1c`).
+- **At most 3 roam attempts per medium pass, across all monsters** (counter `0x47fb90`, zeroed by `_medium_update_monsters`). An ordinary monster checks the cap before its roll and counts only when the roll passes; a `Guard` counts every try, and ignores the cap when its record is flagged changed (`+0x140`). Monsters are walked in slot order, so low slots claim the attempts first.
 - **A confused monster may not move** (`_check_monster_confusion` @ `0x429812`, run before every self-move; not decoded here).
 
 **Which way it goes**
 
 - **The direction is picked by one scan of the ten exits in order N, S, E, W, NE, NW, SE, SW, U, D** (`_pick_valid_random_direction` @ `0x46e8d2`), by exit type:
-  - plain (0, 5, 19), key (2), door (7), gate (11) and spell trap (24) exits are taken when nothing is held yet, and otherwise replace the held pick on `genrdn(0,100) < 40`;
-  - item (3), toll (4), hidden (6), map change (8), trap (9), text (10), action (12), class (13), race (14), level (15), timed (16) and ticket (17) exits, and types 1 and 18, are taken only on `genrdn(0,100) < 40`;
-  - alignment (20), cast (22) and ability (23) exits, and type 21, are never picked;
+  - `Normal` (0), `Key` (2), `Action` (5), `Door` (7), `Gate` (11), `Block Guard` (19) and `Spell Trap` (24) exits are taken when nothing is held yet, and otherwise replace the held pick on `genrdn(0,100) < 40`;
+  - `Spell` (1), `Item` (3), `Toll` (4), `Hidden` (6), `Map Change` (8), `Trap` (9), `Text` (10), `Remote Action` (12), `Class` (13), `Race` (14), `Level` (15), `Timed` (16), `Ticket` (17) and `User Count` (18) exits are taken only on `genrdn(0,100) < 40`;
+  - `Alignment` (20), `Delay` (21), `Cast` (22) and `Ability` (23) exits are never picked;
   - so later directions are favoured, and the pick can be an exit `_move_monster` then refuses — the monster stays put that tick;
   - a pick equal to the direction of the monster's last move (`+0x132`) is dropped. The slow tick resets that to none (`_slow_update_monster` @ `0x421c60`), and "no exit picked" is the same value, so a room with nothing picked also ends the attempt.
 
@@ -3089,16 +3094,20 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 - **A monster with HoldPerson (74) never moves; one with Slowness (68) fails on `genrdn(0,100) < 50`.**
 - **A knocked-down monster stays** until its counter (`+0x168`) runs out; the fast update prints `Slightly dazed the %s rises from the floor.` when it does.
 - **The destination room's group must equal the monster's group** (@ `0x42551d`–`0x42558e`). This is what keeps a monster in its own area. Exceptions:
-  - group 38 enters any room;
-  - group 37 enters a room that has no room flags set and isn't room type 5;
-  - group 5 enters a `Patrollable` room, but not through a type 19 exit.
+  - `Quest` (38) monsters enter any room;
+  - `Angel` (37) monsters enter a room that has no room flags set and isn't a `Colliseum`;
+  - `Guard` (5) monsters enter a `Patrollable` room, but not through a `Block Guard` exit.
 - **By exit type** (@ `0x4255b2`, the jump table):
-  - item (3), toll (4), hidden (6), map change (8) and action (12) exits, and type 1, always refuse;
-  - door (7) and gate (11) exits refuse unless open, except for groups 5 and 38;
-  - a key (2) exit refuses unless open, except for group 38;
-  - a trap (9) lets the monster through; in trap state 0, 2 or 3 it first takes `genrdn(max/2, max+1)` off its HP, and a monster left below 0 HP dies on its next medium update (`_check_kill_monster`). A spell trap (24) does the same with its first parameter and stops the HP at 0;
-  - every other type passes, including the text, class, race, level, alignment, cast and ability exits that gate a player.
-- **Packs.** A Follower or Leader making an unforced move stays when the room holds another Leader with the same known-monster `+0x6c`; for a Leader that applies only to a Leader whose active `+0x8` is above its own known-monster `+0x58`. After a Leader moves, the Followers left in the old room with the same `+0x6c` (and Leaders whose `+0x8` is below its `+0x58`) are moved through the same exit as forced moves (@ `0x42593b`–`0x425a47`). *[NEEDS CONFIRMATION]: what `+0x6c` and `+0x58` hold — they read as a pack id and a rank, but neither field is decoded.*
+  - `Spell` (1), `Item` (3), `Toll` (4), `Hidden` (6), `Map Change` (8) and `Remote Action` (12) exits always refuse;
+  - `Door` (7) and `Gate` (11) exits refuse unless open, except for `Guard` and `Quest` monsters;
+  - a `Key` (2) exit refuses unless open, except for `Quest` monsters;
+  - a `Trap` (9) lets the monster through; in trap state 0, 2 or 3 it first takes `genrdn(max/2, max+1)` off its HP, and a monster left below 0 HP dies on its next medium update (`_check_kill_monster`). A `Spell Trap` (24) does the same with its first parameter and stops the HP at 0;
+  - every other type passes, including the `Text`, `Class`, `Race`, `Level`, `Alignment`, `Cast` and `Ability` exits that gate a player.
+- **Packs** (@ `0x4253b5`–`0x425491` before the move, `0x42593b`–`0x425a47` after it):
+  - **A Follower won't leave on its own while a Leader of its pack number is in the room.**
+  - **A Leader won't leave while a Leader of its pack number with a higher `ExpMulti` is in the room.**
+  - **When a Leader moves, its pack comes too:** every Follower of its pack number left in the old room, and every Leader of its pack number with a lower `ExpMulti`, is moved through the same exit as a forced move — so each of them still meets the group fence and exit refusals, but not the pack rule.
+  - Solo monsters neither hold nor follow. Since most monsters are pack 1, any pack-1 Leader holds and pulls any pack-1 Follower sharing its room; the group fence is what keeps unrelated packs apart.
 - A move that goes through prints the leave and arrival lines of *Monster movement lines*.
 
 **Following and chasing a player**
@@ -3108,7 +3117,7 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
   - the player must be on the same map; a player with `+0x5f6` set or flag 4 of `+0x6f4` needs the monster to have SeeHidden (57); a player with flag `0x40` of `+0x6f4` isn't chased. *[NEEDS CONFIRMATION]: these player fields aren't decoded — the SeeHidden gate suggests hidden / sneaking.*
   - a monster that isn't in a fight rolls `genrdn(0,100) < Follow%` again;
   - the direction comes from `_dir_player_travelling_coord` @ `0x41d95d` (not decoded);
-  - a failed roll, no direction, a refused move or a player who is offline adds 1 to the monster's lost counter (`+0x124`). Past 15 the monster drops the player and its in-a-fight flag, and some of its spell effects are ended (@ `0x4220f0`, not decoded). A group 37 monster goes to the routine @ `0x4298ec` instead, which touches the room's live count, the area count and the monster's active count — it reads as the monster being removed.
+  - a failed roll, no direction, a refused move or a player who is offline adds 1 to the monster's lost counter (`+0x124`). Past 15 the monster drops the player and its in-a-fight flag, and some of its spell effects are ended (@ `0x4220f0`, not decoded). An `Angel` (group 37) monster goes to the routine @ `0x4298ec` instead, which touches the room's live count, the area count and the monster's active count — it reads as the monster being removed.
 - A charmed monster doesn't roam and moves with its caster: *Spells, buffs & conditions → Spell targeting: monster type tags*.
 
 **Other moves through `_move_monster`**
