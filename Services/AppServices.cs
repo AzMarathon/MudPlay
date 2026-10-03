@@ -5564,6 +5564,7 @@ public sealed class AppServices
             naming: Currency,
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             cannotDrop: GameRefusesToDrop,
+            isCursed: name => Game.Inventory.ItemDropRule.IsCursed(ItemAbilityCodes(name)),
             scheduleAfter: (delay, action) =>
             {
                 var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -11987,12 +11988,24 @@ public sealed class AppServices
         if (string.IsNullOrWhiteSpace(name) || GameData.FindRowByName("Items", name) is not { } row) return false;
         bool notDroppable = row.TryGetProperty("Not Droppable", out System.Text.Json.JsonElement nd)
             && nd.ValueKind == System.Text.Json.JsonValueKind.Number && nd.GetInt32() != 0;
+        return Game.Inventory.ItemDropRule.Refused(notDroppable, ItemAbilityCodes(row), worn);
+    }
+
+    // The ability codes an item carries, by name; empty for an item the game data
+    // doesn't know.
+    private List<int> ItemAbilityCodes(string name)
+        => !string.IsNullOrWhiteSpace(name) && GameData.FindRowByName("Items", name) is { } row
+            ? ItemAbilityCodes(row)
+            : new List<int>();
+
+    private static List<int> ItemAbilityCodes(System.Text.Json.JsonElement row)
+    {
         List<int> abilities = new();
         for (int i = 0; i < 20; i++)
             if (row.TryGetProperty($"Abil-{i}", out System.Text.Json.JsonElement a)
                 && a.ValueKind == System.Text.Json.JsonValueKind.Number && a.GetInt32() is int code and not 0)
                 abilities.Add(code);
-        return Game.Inventory.ItemDropRule.Refused(notDroppable, abilities, worn);
+        return abilities;
     }
 
     private int ItemNumberByName(string name)

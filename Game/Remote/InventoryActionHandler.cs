@@ -49,6 +49,9 @@ public sealed class InventoryActionHandler : IDisposable
     // True when the game would refuse to drop or hide the named item, worn or not.
     // Unwired: nothing is skipped.
     private readonly Func<string, bool, bool> _cannotDrop;
+    // True for a cursed item: Get All leaves it on the floor (user, 2026-10-02).
+    // Unwired: nothing is left.
+    private readonly Func<string, bool> _isCursed;
     // Paces the sweeps (BulkCommandPacer). Null when no scheduler is wired (tests):
     // every command then goes straight out.
     private readonly BulkCommandPacer? _pacer;
@@ -67,11 +70,13 @@ public sealed class InventoryActionHandler : IDisposable
         CurrencyNaming naming,
         Func<bool>? isParadigm = null,
         Func<string, bool, bool>? cannotDrop = null,
+        Func<string, bool>? isCursed = null,
         Action<TimeSpan, Action>? scheduleAfter = null,
         Services.LogService? log = null)
     {
         _isParadigm = isParadigm ?? (() => false);
         _cannotDrop = cannotDrop ?? ((_, _) => false);
+        _isCursed = isCursed ?? (_ => false);
         if (scheduleAfter is not null) _pacer = new BulkCommandPacer(Send, scheduleAfter, log: log);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -161,14 +166,22 @@ public sealed class InventoryActionHandler : IDisposable
     private string GrabGround()
     {
         List<string> commands = new();
+        List<string> cursed = new();
         foreach (string item in _ground.Items)
         {
             string name = StripArticle(item);
             if (name.Length == 0) continue;
+            // A cursed item, once picked up and worn, can't be dropped again.
+            if (_isCursed(name))
+            {
+                cursed.Add(name);
+                continue;
+            }
             commands.Add($"get {name}");
         }
         Dispatch(commands);
-        return $"getting {commands.Count} ground item{(commands.Count == 1 ? "" : "s")}";
+        string leaving = cursed.Count == 0 ? "" : $" (leaving {cursed.Count} cursed: {string.Join(", ", cursed)})";
+        return $"getting {commands.Count} ground item{(commands.Count == 1 ? "" : "s")}{leaving}";
     }
 
     // The game answered a command with a prompt; the sweep pacer counts it.

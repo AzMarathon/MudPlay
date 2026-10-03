@@ -23,4 +23,10 @@ public static class ItemDropRule
         }
         return false;
     }
+
+    public static bool IsCursed(IEnumerable<int> abilities)
+    {
+        ArgumentNullException.ThrowIfNull(abilities);
+        return abilities.Any(static a => a is CursedCode or CursedMajorCode);
+    }
 }

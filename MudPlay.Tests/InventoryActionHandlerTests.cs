@@ -38,7 +38,8 @@ public sealed class InventoryActionHandlerTests
         public required List<byte[]> WireSent { get; init; }
     }
 
-    private static Harness Setup(bool paradigm = false, Func<string, bool, bool>? cannotDrop = null)
+    private static Harness Setup(bool paradigm = false, Func<string, bool, bool>? cannotDrop = null,
+        Func<string, bool>? isCursed = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -53,7 +54,7 @@ public sealed class InventoryActionHandlerTests
         CashSettings cash = new();
         List<byte[]> wire = new();
         InventoryActionHandler handler = new(engine, inv, ground, party, () => cash, new CurrencyNaming(),
-            isParadigm: () => paradigm, cannotDrop: cannotDrop);
+            isParadigm: () => paradigm, cannotDrop: cannotDrop, isCursed: isCursed);
         handler.SetWireSender(wire.Add);
         return new Harness
         {
@@ -149,6 +150,21 @@ public sealed class InventoryActionHandlerTests
         FeedRoom(h.Router, "You notice a rusty dagger, an iron helm here.");
         Assert.Contains("get rusty dagger", Wire(h));
         Assert.Contains("get iron helm", Wire(h));
+    }
+
+    // A cursed item, once picked up and worn, can't be put down again: Get All leaves
+    // it on the floor and says so (user, 2026-10-02).
+    [Fact]
+    public void GetAll_LeavesCursedItemsOnTheFloor()
+    {
+        Harness h = Setup(isCursed: name => name == "cursed ring");
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        FeedRoom(h.Router, "You notice a rusty dagger, a cursed ring here.");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@get-all"));
+
+        Assert.Equal(new[] { "get rusty dagger" }, Wire(h));
+        Assert.Equal("getting 1 ground item (leaving 1 cursed: cursed ring)", Assert.Single(Replies(h.Engine)));
     }
 
     [Fact]

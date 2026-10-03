@@ -30,4 +30,13 @@ public sealed class ItemDropRuleTests
         Assert.True(ItemDropRule.Refused(false, [ItemDropRule.LoyalCode], worn: false));
         Assert.True(ItemDropRule.Refused(false, [ItemDropRule.LoyalCode], worn: true));
     }
+
+    [Theory]
+    [InlineData(ItemDropRule.CursedCode, true)]
+    [InlineData(ItemDropRule.CursedMajorCode, true)]
+    [InlineData(ItemDropRule.LoyalCode, false)]
+    public void IsCursed_IsAbility82Or83(int code, bool cursed)
+    {
+        Assert.Equal(cursed, ItemDropRule.IsCursed([code]));
+    }
 }

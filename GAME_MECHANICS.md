@@ -4566,7 +4566,7 @@ A `get <item>` that can't succeed replies with one of these shapes:
 **Client use:**
 - Roomba treats any drop refusal as "verify against a real `i` before doing anything else". It also drops its belief in a carried item the moment anything else is seen dropping it.
 - `@drop-all full` / Drop Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
-- Drop All / Drop Everything / Hide All leave out what the game refuses (`ItemDropRule`, `AppServices.GameRefusesToDrop`) and name it in their reply. Loyal items are left out too, for hides as well as drops.
+- Drop All / Drop Everything / Hide All leave out what the game refuses (`ItemDropRule`, `AppServices.GameRefusesToDrop`) and name it in their reply. Loyal items are left out too, for hides as well as drops. Get All leaves cursed items (ability 82/83) on the floor and names them (**Client policy**, user 2026-10-02).
 
 ### Hiding items in a room (stashing)
 *Status: CONFIRMED 2026-09-26 (user) · Realm: both; the counted form is Paradigm-only*
