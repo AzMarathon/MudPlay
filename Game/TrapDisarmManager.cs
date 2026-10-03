@@ -44,6 +44,7 @@ public sealed class TrapDisarmManager : IDisposable
     private readonly IDisposable _triggeredSub;
     private readonly IDisposable _failedAnySub;
     private readonly IDisposable _noEffectSub;
+    private readonly IDisposable _alreadyDisarmedSub;
     private readonly WireSender _wire = new();
     private readonly Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private bool _disposed;
@@ -146,6 +147,7 @@ public sealed class TrapDisarmManager : IDisposable
         _triggeredSub = _router.Subscribe(KnownPatterns.TrapDisarmTriggered, OnDisarmTriggered);
         _failedAnySub = _router.Subscribe(KnownPatterns.TrapDisarmFailedAny, OnDisarmFailedAny);
         _noEffectSub = _router.Subscribe(KnownPatterns.CommandNoEffect, OnNoEffect);
+        _alreadyDisarmedSub = _router.Subscribe(KnownPatterns.TrapAlreadyDisarmed, OnAlreadyDisarmed);
         _router.LineDispatched += OnLineDispatched;
     }
 
@@ -164,6 +166,7 @@ public sealed class TrapDisarmManager : IDisposable
         _triggeredSub.Dispose();
         _failedAnySub.Dispose();
         _noEffectSub.Dispose();
+        _alreadyDisarmedSub.Dispose();
         _router.LineDispatched -= OnLineDispatched;
         CancelWatchdog();
     }
@@ -326,6 +329,18 @@ public sealed class TrapDisarmManager : IDisposable
         if (_current is not { } cur) return;
         _log?.Log(LogSeverity.Info, "Trap", $"No trap to the {cur.Direction} — nothing to disarm.");
         cur.Reply($"No trap to the {cur.Direction} to disarm.");
+        CompleteCurrent();
+    }
+
+    // Paradigm: "The trap is already disarmed." The trap is down, so the exit is safe
+    // to cross (GAME_MECHANICS "Exit traps — search and disarm"). Not an attempt: no
+    // roll was made.
+    private void OnAlreadyDisarmed(MatchResult _)
+    {
+        if (_state != State.DisarmPending) return;
+        if (_current is not { } cur) return;
+        _log?.Log(LogSeverity.Info, "Trap", $"Trap to the {cur.Direction} is already disarmed — crossing.");
+        cur.Reply($"Trap to the {cur.Direction} already disarmed.");
         CompleteCurrent();
     }
 

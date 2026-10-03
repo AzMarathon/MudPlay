@@ -916,6 +916,10 @@ public static class DefaultPatterns
         // trap — see TrapDisarmManager.OnDisarmFailedAny.
         yield return new RegexPattern(KnownPatterns.TrapDisarmFailedAny,
             @"^You failed to disarm any trap to the (?<dir>\w+)\.?\s*$");
+        // Paradigm's answer for a trap that's already down. Names no direction, so
+        // TrapDisarmManager only reads it while its own disarm is pending.
+        yield return new RegexPattern(KnownPatterns.TrapAlreadyDisarmed,
+            @"^The trap is already disarmed\.?\s*$");
 
         // ----- Door handling --------------------------------------------
         // Single-shot match — DoorOpenManager runs one request at a time,

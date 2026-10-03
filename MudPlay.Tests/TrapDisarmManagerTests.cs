@@ -405,6 +405,25 @@ public sealed class TrapDisarmManagerTests : IDisposable
         Assert.Empty(outcomes);
     }
 
+    // Paradigm report paradigm-20261002-191037: the line went unrecognised, so the
+    // watchdog took it for a trap that went off and retried.
+    [Fact]
+    public void AlreadyDisarmed_MeansTheExitIsClear_AndIsNotAnAttempt()
+    {
+        var (mgr, router, _, wire) = Setup();
+        List<bool> outcomes = new();
+        mgr.DisarmAttempted += outcomes.Add;
+        string? reply = null;
+        mgr.Enqueue("w", "loop", t => reply = t);
+
+        Dispatch(router, "The trap is already disarmed.");
+
+        Assert.Single(wire);
+        Assert.Equal("Trap to the w already disarmed.", reply);
+        Assert.Equal(TrapDisarmManager.State.Idle, mgr.CurrentState);
+        Assert.Empty(outcomes);
+    }
+
     [Fact]
     public void StockFailedAny_OtherDirection_Ignored()
     {

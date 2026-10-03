@@ -516,6 +516,7 @@ public static class KnownPatterns
     public const string TrapDisarmedSuccess   = "trap.disarmed-success";  // "You successfully disarmed the trap to the <dir>."
     public const string TrapDisarmTriggered   = "trap.disarm-triggered";  // a trap's own "disarm failed and set it off" line, e.g. "You try to disarm the trap, but instead trigger it!" (no direction)
     public const string TrapDisarmFailedAny   = "trap.disarm-failed-any"; // "You failed to disarm any trap to the <dir>." (Stock: failed OR no trap)
+    public const string TrapAlreadyDisarmed   = "trap.already-disarmed";  // "The trap is already disarmed." (Paradigm; no direction)
 
     // Empty result of a room-wide `sea` — nothing concealed here. Lets AutoSearch
     // release its hold the instant an empty room's search comes back, instead of
