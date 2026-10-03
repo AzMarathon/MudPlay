@@ -133,7 +133,7 @@ public sealed class GameDataCache
     // incoming set so the user can verify swap success in the program log. Tests
     // leave it null.
     public LogService? Log { get; set; }
-    // Times table parses for the bug report; set once by AppServices.
+    // Times table parses for the performance log; set once by AppServices.
     public PerformanceMonitor? Performance { get; set; }
 
     public GameDataCache() : this(AppPaths.GameDataRoot)

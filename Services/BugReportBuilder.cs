@@ -54,7 +54,6 @@ public static class BugReportBuilder
         List<Section> sections =
         [
             new("Session", SafeSection(() => BuildSession(svc, realm, now))),
-            new("Performance", SafeSection(() => svc.Performance.Describe())),
             new("Player state", SafeSection(() => BuildPlayerState(svc))),
             new("Statline", SafeSection(() => BuildStatline(svc))),
             new("Party", SafeSection(() => BuildParty(svc))),

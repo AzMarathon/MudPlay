@@ -1,28 +1,28 @@
 namespace MudPlay.Services;
 
-// Live per-character diagnostic switches. Two gate in-memory generation of the
+// Live diagnostic switches. Two gate in-memory generation of the
 // Debug and Combat log channels; the third gates whether the on-disk
 // diagnostic files (program / memory / combat trace) are written at all; the
 // fourth gates the navigation hop-timing calibration trace; the fifth gates
 // whether Game.MessageCandidateWatcher captures unrecognized wire lines.
 // Surfaced as the toggles in the Log pane.
 //
-// This is the in-memory source of truth. AppServices mirrors it to the
-// Char-tier LogDiagnosticsSettings section: it applies the persisted values
-// on ProfileLoaded, resets to the LogDiagnosticsSettings defaults on
-// ProfileClosed, and writes back on Changed. The field initializers below are
-// all false, but the effective per-character defaults come from
-// LogDiagnosticsSettings, which ships Debug + Combat + CaptureUnrecognizedMessages
-// ON (so a fresh character's Program Log already carries the decision-trail a
-// bug report needs, and silent message-recognition gaps get noticed) and
-// AutoCollect + HopTiming off (the heavier on-disk / trace affordances).
+// This is the in-memory source of truth. AppServices mirrors it to the Global-tier
+// GlobalSettings.LogDiagnostics: it applies the saved values at launch and writes
+// back on Changed. The field initializers below are all false, but the effective
+// defaults come from LogDiagnosticsSettings, which ships Debug + Combat +
+// CaptureUnrecognizedMessages ON (so a Program Log already carries the
+// decision-trail a bug report needs, and silent message-recognition gaps get
+// noticed) and AutoCollect + HopTiming off (the heavier on-disk / trace
+// affordances).
 //
 // DebugDiagnostics gates the cross-engine Debug traces; every
 // _log?.Debug(...) site emits only while it's on. CombatDiagnostics gates
 // the combat-decision channel. AutoCollectLogs gates whether the on-disk
 // diagnostic writers run at all: ProgramLogFile (Data/Logs/*-program.log),
-// MemoryUsageLog (*-memory.log) and RoundDamageTracker's per-round trace
-// (*-combat.log) only open their files while it's on.
+// MemoryUsageLog (*-memory.log), RoundDamageTracker's per-round trace
+// (*-combat.log) and PerformanceMonitor (*-performance.log) only open their
+// files while it's on.
 //
 // Lives under AppServices.LogDiagnostics and is wired into
 // LogService.Diagnostics so the service can gate emission at the source
@@ -36,7 +36,7 @@ public sealed class LogDiagnosticState
     private bool _captureUnrecognizedMessages;
 
     // Master toggle for the generation-gated Debug channel. Effectively on by
-    // default (applied from LogDiagnosticsSettings on profile load); while on,
+    // default (applied from LogDiagnosticsSettings at launch); while on,
     // every _log?.Debug(...) site across the engines emits — flip it off to
     // quiet them.
     public bool DebugDiagnostics
@@ -51,7 +51,7 @@ public sealed class LogDiagnosticState
     }
 
     // Master toggle for the in-memory combat-decision channel. Effectively on
-    // by default (applied from LogDiagnosticsSettings on profile load); leave it
+    // by default (applied from LogDiagnosticsSettings at launch); leave it
     // on for the combat-decision trace, flip off to quiet it.
     public bool CombatDiagnostics
     {
@@ -96,7 +96,7 @@ public sealed class LogDiagnosticState
     }
 
     // Master toggle for Game.MessageCandidateWatcher. Effectively on by
-    // default (applied from LogDiagnosticsSettings on profile load); while on,
+    // default (applied from LogDiagnosticsSettings at launch); while on,
     // an unrecognized wire line stages a candidate in MessageCandidates and
     // logs a Warn row — flip off to stop capturing (existing candidates stay).
     public bool CaptureUnrecognizedMessages

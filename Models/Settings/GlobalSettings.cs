@@ -77,6 +77,11 @@ public sealed class GlobalSettings
     // which pushes it to MapControl.
     public NavLineStyles? NavLines { get; set; }
 
+    // The Program Log window's switches (Debug / Combat channels, Auto-collect
+    // logs, Hop timing, Capture unrecognized messages). Null until first set, which
+    // lets the first character loaded after they moved here hand over its own.
+    public LogDiagnosticsSettings? LogDiagnostics { get; set; }
+
     // The Navigation map's other floors (Settings → General, and the map's
     // Overlays chip): the floors reached through up/down exits drawn dimmed around
     // the one shown. How many up/down steps away they reach, and the share of a

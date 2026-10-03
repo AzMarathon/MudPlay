@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.4**
-> - Bug report: new Performance section with UI hitches (when, how long, what was running), work timings, CPU and memory
-> - Program log notes UI hitches of 100 ms or more
+> **Version 3.142.5**
+> - Auto-collect logs also writes a performance log: every UI hitch (how long, what was running) and a per-minute summary of work timings, CPU, memory and GC
+> - Program Log settings (Debug, Combat, Auto-collect logs, Hop timing, unrecognized messages) are saved for all characters and apply from launch
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

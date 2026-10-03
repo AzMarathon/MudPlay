@@ -75,7 +75,7 @@ public sealed class ProfileService
     // the always-on Info stream — the peer of the game-data set audit in
     // GameDataCache. Left null in tests.
     public LogService? Log { get; set; }
-    // Times saves for the bug report; set once by AppServices.
+    // Times saves for the performance log; set once by AppServices.
     public PerformanceMonitor? Performance { get; set; }
 
     private const string LogCategory = "Profile";

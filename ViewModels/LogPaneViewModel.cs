@@ -53,36 +53,36 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // Generation toggle for the Debug channel. Mirrors
     // LogDiagnosticState.DebugDiagnostics — flipping it makes every
     // _log?.Debug(...) site across the engines start (or stop) emitting, AND
-    // shows/hides the Debug rows already in the ring. Persisted per-character
-    // via AppServices. Off by default — verbose tracing is a troubleshooting
+    // shows/hides the Debug rows already in the ring. Saved globally via
+    // AppServices. Off by default — verbose tracing is a troubleshooting
     // affordance, not a per-session default.
     [ObservableProperty] private bool _debugDiagnostics;
 
     // Generation toggle for the Combat channel. Mirrors
     // LogDiagnosticState.CombatDiagnostics — flipping it gates the
     // combat-decision trace channel, and shows/hides the Combat rows already in
-    // the ring. Persisted per-character via AppServices. Off by default.
+    // the ring. Saved globally via AppServices. Off by default.
     [ObservableProperty] private bool _combatDiagnostics;
 
     // Toggle for the on-disk diagnostic files. Mirrors
     // LogDiagnosticState.AutoCollectLogs — flipping it opens/closes the
     // program, memory, and combat-trace writers under Data/Logs. Unlike the two
     // above it does NOT touch displayed rows, so it drives no Rebuild.
-    // Persisted per-character via AppServices. Off by default.
+    // Saved globally via AppServices. Off by default.
     [ObservableProperty] private bool _autoCollectLogs;
 
     // Toggle for the navigation hop-timing calibration trace. Mirrors
     // LogDiagnosticState.HopTiming — flipping it gates HopTimingCalibrator,
     // which emits one Info line per confirmed room hop. Like AutoCollectLogs it
     // doesn't touch displayed rows (the lines it emits show up through the
-    // normal Info channel), so no Rebuild. Persisted per-character. Off by default.
+    // normal Info channel), so no Rebuild. Saved globally. Off by default.
     [ObservableProperty] private bool _hopTiming;
 
     // Toggle for unrecognized-message capture. Mirrors
     // LogDiagnosticState.CaptureUnrecognizedMessages — flipping it gates
     // Game.MessageCandidateWatcher. Like AutoCollectLogs/HopTiming it doesn't
     // touch displayed rows (the Warn rows it emits show up through the normal
-    // channel), so no Rebuild. Persisted per-character. On by default.
+    // channel), so no Rebuild. Saved globally. On by default.
     [ObservableProperty] private bool _captureUnrecognizedMessages;
 
     // Reveals the Death Recovery tab's "Simulate Death" test button. Mirrors

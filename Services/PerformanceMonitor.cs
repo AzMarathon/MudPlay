@@ -9,39 +9,45 @@ namespace MudPlay.Services;
 
 // How smoothly the UI thread runs, measured in the user's own sessions: every
 // stutter (a burst of output, a window open, a save) is a stretch of time the UI
-// thread spent on something other than painting and input. The numbers land in
-// the bug report's Performance section and long stalls in the program log, so a
-// report says what was slow, how often and how badly, instead of "it felt laggy".
+// thread spent on something other than painting and input. While Auto-collect
+// logs is on, each one is written to its own Logs/{ts}-performance.log as it
+// happens, with what was running, and a summary line every minute says what the
+// regular work cost, so a session's file shows when it lagged and why.
 //
 // Stalls are found by a ping: every PingInterval a watcher thread posts a no-op at
 // the lowest dispatcher priority, which runs only once the UI thread has caught up
 // on everything ahead of it. The wait before it runs is the stall. While a ping is
 // overdue the watcher samples what the UI thread said it was doing (Measure), and
-// a window that opened during the stall is named too, so a stall carries its
-// likely cause.
+// a window that opened during the stall is named too.
 //
-// Measure also times the work items that matter (terminal feed per network
-// chunk, profile saves, game-data parses, renders) into per-name summaries.
-public sealed class PerformanceMonitor : IDisposable
+// Kept out of the program log for the same reason as MemoryUsageLog: a line per
+// hitch would bury the entries an operator reads. With collecting off (the
+// default) nothing is pinged, timed or written.
+public sealed class PerformanceMonitor : IAsyncDisposable
 {
     public const double StallMs = 50;
-    // Stalls are counted from StallMs, but only one this long reaches the program
-    // log: a 60 ms hitch in a burst of output is worth a count, not a line.
-    public const double LogStallMs = 100;
     private static readonly TimeSpan PingInterval = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan WatchInterval = TimeSpan.FromMilliseconds(20);
-    private static readonly TimeSpan LogGap = TimeSpan.FromSeconds(5);
-    private const int RecentStallCount = 25;
-    private const int SamplesPerTiming = 512;
+    private static readonly TimeSpan SummaryInterval = TimeSpan.FromMinutes(1);
+    private const int SamplesPerTiming = 1024;
 
-    private readonly LogService? _log;
+    private const string HeaderLine =
+        "# 'stall' lines: the UI thread fell behind by the time shown, while doing what follows. " +
+        "'summary' lines, every minute: stalls, then each kind of work as count/p50/p95/max ms, " +
+        "then CPU, memory and GC over that minute.";
+
+    private readonly LogDiagnosticState? _diagnostics;
     private readonly Action<Action>? _postLowPriority;
     private readonly Func<bool> _onUiThread;
     private readonly Thread? _watcher;
     private volatile bool _stopped;
-    private readonly DateTime _startedUtc = DateTime.UtcNow;
-    private readonly long _startAllocated = GC.GetTotalAllocatedBytes();
-    private readonly TimeSpan _startPause = GC.GetTotalPauseDuration();
+
+    // Where lines go: the open log file, or a test's sink. Null while not collecting.
+    private readonly object _gate = new();
+    private DebugLogWriter? _writer;
+    private Action<string>? _sink;
+    private bool _broken;
+    private volatile bool _collecting;
 
     // What the UI thread is doing, set by Measure on the UI thread and read by the
     // watcher. A plain reference write is atomic; volatile keeps it fresh.
@@ -50,36 +56,33 @@ public sealed class PerformanceMonitor : IDisposable
     // Stopwatch timestamp of the ping in flight; 0 when none is.
     private long _pingPostedAt;
     private long _lastPingAt;
-    // What the watcher saw the UI thread doing while the ping in flight was late.
     private readonly HashSet<string> _seenDuringPing = new();
     private (string Name, long At)? _lastWindowOpened;
     private readonly object _pingLock = new();
 
+    // The minute being summed up, reset by each summary.
     private readonly object _statsLock = new();
     private readonly Dictionary<string, Timing> _timings = new(StringComparer.Ordinal);
-    private readonly Queue<Stall> _recentStalls = new();
     private int _stalls, _stalls250, _stalls1000;
-    private double _stalledMs;
-    private double _worstStallMs;
-    private DateTime _lastStallLogUtc = DateTime.MinValue;
-    private int _unloggedStalls;
+    private double _stalledMs, _worstStallMs;
+    private Baseline _since = Baseline.Now();
 
-    private sealed record Stall(DateTime AtUtc, double Ms, string Cause);
-
-    // The production monitor: pings the Avalonia dispatcher from its own thread and
-    // names windows as they open.
-    public PerformanceMonitor(LogService? log)
-        : this(log, a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
+    // The production monitor: follows Auto-collect logs, pings the Avalonia
+    // dispatcher from its own thread, and names windows as they open.
+    public PerformanceMonitor(LogDiagnosticState diagnostics)
+        : this(a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
                () => Dispatcher.UIThread.CheckAccess(), startWatcher: true)
     {
+        _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
+        _diagnostics.Changed += SyncWriter;
         Window.WindowOpenedEvent.AddClassHandler<Window>(
             (window, _) => NoteWindowOpened(window.GetType().Name), RoutingStrategies.Direct);
+        SyncWriter();
     }
 
-    // Tests drive stalls and timings directly, without a watcher or dispatcher.
-    internal PerformanceMonitor(LogService? log, Action<Action>? postLowPriority, Func<bool> onUiThread, bool startWatcher)
+    // Tests drive stalls and timings directly, without a watcher, dispatcher or file.
+    internal PerformanceMonitor(Action<Action>? postLowPriority, Func<bool> onUiThread, bool startWatcher)
     {
-        _log = log;
         _postLowPriority = postLowPriority;
         _onUiThread = onUiThread;
         if (!startWatcher || postLowPriority is null) return;
@@ -87,10 +90,82 @@ public sealed class PerformanceMonitor : IDisposable
         _watcher.Start();
     }
 
+    // Collects into sink instead of a file.
+    internal void CollectTo(Action<string>? sink)
+    {
+        lock (_gate)
+        {
+            _sink = sink;
+            _collecting = sink is not null;
+        }
+        ResetMinute();
+    }
+
+    // True while the log file is open.
+    public bool IsCollecting => _collecting;
+
+    // Open or close the file to match Auto-collect logs. Once a write fails, stay
+    // closed for the session, as the other diagnostic files do.
+    private void SyncWriter()
+    {
+        bool want = _diagnostics?.AutoCollectLogs ?? false;
+        DebugLogWriter? closing = null;
+        lock (_gate)
+        {
+            if (_broken) return;
+            if (want && _writer is null)
+            {
+                try
+                {
+                    _writer = new DebugLogWriter("performance");
+                    _writer.WriteLine(HeaderLine);
+                    _sink = WriteToFile;
+                    _collecting = true;
+                }
+                catch (IOException) { _broken = true; }
+                catch (UnauthorizedAccessException) { _broken = true; }
+            }
+            else if (!want && _writer is not null)
+            {
+                closing = _writer;
+                _writer = null;
+                _sink = null;
+                _collecting = false;
+            }
+        }
+        closing?.Dispose();
+        ResetMinute();
+    }
+
+    private void WriteToFile(string line)
+    {
+        try
+        {
+            _writer?.WriteLine(line);
+        }
+        catch (IOException)
+        {
+            // Disk full or the file went away: stop, as MemoryUsageLog does. Losing
+            // the trail is acceptable; failing the UI thread over it is not.
+            _broken = true;
+            _writer?.Dispose();
+            _writer = null;
+            _sink = null;
+            _collecting = false;
+        }
+    }
+
+    private void Write(string line)
+    {
+        lock (_gate) _sink?.Invoke(line);
+    }
+
     // Times a piece of work under name. On the UI thread it is also what a stall
-    // seen meanwhile is put down to. Nested scopes restore the outer name.
+    // seen meanwhile is put down to. Nested scopes restore the outer name. Free
+    // while not collecting.
     public Scope Measure(string name)
     {
+        if (!_collecting) return default;
         bool onUi = _onUiThread();
         string? outer = null;
         if (onUi)
@@ -141,6 +216,7 @@ public sealed class PerformanceMonitor : IDisposable
 
     private void NoteWindowOpened(string name)
     {
+        if (!_collecting) return;
         lock (_pingLock) _lastWindowOpened = (name, Stopwatch.GetTimestamp());
     }
 
@@ -149,20 +225,31 @@ public sealed class PerformanceMonitor : IDisposable
         while (!_stopped)
         {
             Thread.Sleep(WatchInterval);
+            if (!_collecting)
+            {
+                Interlocked.Exchange(ref _pingPostedAt, 0);
+                continue;
+            }
             long now = Stopwatch.GetTimestamp();
             long posted = Interlocked.Read(ref _pingPostedAt);
             if (posted == 0)
             {
-                if (Stopwatch.GetElapsedTime(_lastPingAt, now) < PingInterval) continue;
-                _lastPingAt = now;
-                Interlocked.Exchange(ref _pingPostedAt, now);
-                _postLowPriority!(OnPing);
+                if (Stopwatch.GetElapsedTime(_lastPingAt, now) >= PingInterval)
+                {
+                    _lastPingAt = now;
+                    Interlocked.Exchange(ref _pingPostedAt, now);
+                    _postLowPriority!(OnPing);
+                }
             }
             else if (Stopwatch.GetElapsedTime(posted, now).TotalMilliseconds >= StallMs
                      && _activity is { } doing)
             {
                 lock (_pingLock) _seenDuringPing.Add(doing);
             }
+
+            bool due;
+            lock (_statsLock) due = DateTime.UtcNow - _since.AtUtc >= SummaryInterval;
+            if (due) Write(Summary());
         }
     }
 
@@ -184,7 +271,6 @@ public sealed class PerformanceMonitor : IDisposable
 
     internal void RecordStall(double ms, string cause)
     {
-        string? note = null;
         lock (_statsLock)
         {
             _stalls++;
@@ -192,85 +278,91 @@ public sealed class PerformanceMonitor : IDisposable
             if (ms >= 1000) _stalls1000++;
             _stalledMs += ms;
             _worstStallMs = Math.Max(_worstStallMs, ms);
-            _recentStalls.Enqueue(new Stall(DateTime.UtcNow, ms, cause));
-            while (_recentStalls.Count > RecentStallCount) _recentStalls.Dequeue();
-
-            if (ms < LogStallMs) return;
-            DateTime now = DateTime.UtcNow;
-            if (now - _lastStallLogUtc < LogGap)
-            {
-                _unloggedStalls++;
-                return;
-            }
-            note = $"UI thread stalled {ms:0} ms ({cause})"
-                + (_unloggedStalls > 0 ? $"; {_unloggedStalls} more over {LogStallMs:0} ms since the last note" : "");
-            _lastStallLogUtc = now;
-            _unloggedStalls = 0;
         }
-        _log?.Info("Performance", note);
+        Write($"stall {ms.ToString("0", CultureInfo.InvariantCulture)} ms  {cause}");
     }
 
-    // The bug report's Performance section.
-    public string Describe()
+    // One line for the minute just ended, which then starts the next.
+    internal string Summary()
     {
-        StringBuilder sb = new();
-        TimeSpan up = DateTime.UtcNow - _startedUtc;
+        Baseline now = Baseline.Now();
+        StringBuilder sb = new("summary");
         lock (_statsLock)
         {
-            sb.Append("- **Measured for:** ").Append(Duration(up)).Append('\n');
-            sb.Append("- **UI stalls:** ").Append(_stalls).Append(" over ").Append(StallMs.ToString("0", CultureInfo.InvariantCulture))
-              .Append(" ms (").Append(_stalls250).Append(" over 250 ms, ").Append(_stalls1000).Append(" over 1 s); ")
-              .Append("worst ").Append(_worstStallMs.ToString("0", CultureInfo.InvariantCulture)).Append(" ms; ")
-              .Append("stalled ").Append((_stalledMs / 1000).ToString("0.0", CultureInfo.InvariantCulture)).Append(" s in all\n");
-            sb.Append('\n');
-            if (_recentStalls.Count > 0)
+            sb.Append(" | stalls ").Append(_stalls);
+            if (_stalls > 0)
+                sb.Append(" (").Append(_stalls250).Append(" over 250 ms, ").Append(_stalls1000).Append(" over 1 s)")
+                  .Append(", worst ").Append(F0(_worstStallMs)).Append(" ms, ").Append(F0(_stalledMs)).Append(" ms in all");
+            foreach ((string name, Timing t) in _timings.OrderByDescending(kv => kv.Value.TotalMs))
             {
-                sb.Append("Recent stalls (newest last):\n\n");
-                foreach (Stall stall in _recentStalls)
-                    sb.Append("- ").Append(stall.AtUtc.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture))
-                      .Append("  ").Append(stall.Ms.ToString("0", CultureInfo.InvariantCulture)).Append(" ms  ")
-                      .Append(stall.Cause).Append('\n');
-                sb.Append('\n');
+                (double p50, double p95) = t.Percentiles();
+                sb.Append(" | ").Append(name).Append(' ').Append(t.Count).Append('/')
+                  .Append(F1(p50)).Append('/').Append(F1(p95)).Append('/').Append(F1(t.MaxMs));
             }
-            if (_timings.Count > 0)
-            {
-                sb.Append("| Work | Count | p50 ms | p95 ms | Max ms | Total s |\n|---|---|---|---|---|---|\n");
-                foreach ((string name, Timing t) in _timings.OrderByDescending(kv => kv.Value.TotalMs))
-                {
-                    (double p50, double p95) = t.Percentiles();
-                    sb.Append("| ").Append(name).Append(" | ").Append(t.Count)
-                      .Append(" | ").Append(p50.ToString("0.0", CultureInfo.InvariantCulture))
-                      .Append(" | ").Append(p95.ToString("0.0", CultureInfo.InvariantCulture))
-                      .Append(" | ").Append(t.MaxMs.ToString("0.0", CultureInfo.InvariantCulture))
-                      .Append(" | ").Append((t.TotalMs / 1000).ToString("0.0", CultureInfo.InvariantCulture)).Append(" |\n");
-                }
-                sb.Append('\n');
-            }
+            sb.Append(now.Since(_since));
+            _timings.Clear();
+            _stalls = _stalls250 = _stalls1000 = 0;
+            _stalledMs = _worstStallMs = 0;
+            _since = now;
         }
-
-        using Process process = Process.GetCurrentProcess();
-        GCMemoryInfo gc = GC.GetGCMemoryInfo();
-        double seconds = Math.Max(1, up.TotalSeconds);
-        double allocatedMb = (GC.GetTotalAllocatedBytes() - _startAllocated) / (1024.0 * 1024.0);
-        sb.Append("- **CPU:** ").Append((process.TotalProcessorTime.TotalSeconds / Math.Max(1, (DateTime.Now - process.StartTime).TotalSeconds) * 100)
-              .ToString("0.0", CultureInfo.InvariantCulture)).Append("% of one core on average since start; ")
-          .Append(process.Threads.Count).Append(" threads\n");
-        sb.Append("- **Memory:** working set ").Append(Mb(process.WorkingSet64)).Append(", private ").Append(Mb(process.PrivateMemorySize64))
-          .Append(", GC heap ").Append(Mb(gc.HeapSizeBytes)).Append(", GC committed ").Append(Mb(gc.TotalCommittedBytes)).Append('\n');
-        sb.Append("- **GC:** ").Append(GC.CollectionCount(0)).Append(" / ").Append(GC.CollectionCount(1)).Append(" / ")
-          .Append(GC.CollectionCount(2)).Append(" collections (gen 0 / 1 / 2); paused ")
-          .Append((GC.GetTotalPauseDuration() - _startPause).TotalMilliseconds.ToString("0", CultureInfo.InvariantCulture))
-          .Append(" ms in all; allocating ").Append((allocatedMb / seconds).ToString("0.00", CultureInfo.InvariantCulture)).Append(" MB/s on average\n");
         return sb.ToString();
     }
 
-    private static string Mb(long bytes) =>
-        (bytes / (1024.0 * 1024.0)).ToString("0.0", CultureInfo.InvariantCulture) + " MB";
+    private void ResetMinute()
+    {
+        lock (_statsLock)
+        {
+            _timings.Clear();
+            _stalls = _stalls250 = _stalls1000 = 0;
+            _stalledMs = _worstStallMs = 0;
+            _since = Baseline.Now();
+        }
+    }
 
-    private static string Duration(TimeSpan t) =>
-        t.TotalHours >= 1 ? $"{(int)t.TotalHours}h {t.Minutes}m" : $"{t.Minutes}m {t.Seconds}s";
+    private static string F0(double v) => v.ToString("0", CultureInfo.InvariantCulture);
+    private static string F1(double v) => v.ToString("0.0", CultureInfo.InvariantCulture);
 
-    public void Dispose() => _stopped = true;
+    public async ValueTask DisposeAsync()
+    {
+        _stopped = true;
+        if (_diagnostics is not null) _diagnostics.Changed -= SyncWriter;
+        DebugLogWriter? writer;
+        lock (_gate)
+        {
+            writer = _writer;
+            _writer = null;
+            _sink = null;
+            _collecting = false;
+        }
+        if (writer is not null) await writer.DisposeAsync();
+    }
+
+    // Process-wide counters at a moment, so a summary can report the minute's
+    // change: CPU time, GC collections and pause, bytes allocated.
+    private readonly record struct Baseline(DateTime AtUtc, TimeSpan Cpu, int Gen0, int Gen1, int Gen2,
+        TimeSpan Pause, long Allocated)
+    {
+        public static Baseline Now()
+        {
+            using Process process = Process.GetCurrentProcess();
+            return new Baseline(DateTime.UtcNow, process.TotalProcessorTime, GC.CollectionCount(0),
+                GC.CollectionCount(1), GC.CollectionCount(2), GC.GetTotalPauseDuration(), GC.GetTotalAllocatedBytes());
+        }
+
+        public string Since(Baseline then)
+        {
+            double seconds = Math.Max(0.001, (AtUtc - then.AtUtc).TotalSeconds);
+            using Process process = Process.GetCurrentProcess();
+            GCMemoryInfo gc = GC.GetGCMemoryInfo();
+            return " | cpu " + F1((Cpu - then.Cpu).TotalSeconds / seconds * 100) + "% of a core"
+                + " | ws " + Mb(process.WorkingSet64) + " heap " + Mb(gc.HeapSizeBytes) + " committed " + Mb(gc.TotalCommittedBytes)
+                + " | gc " + (Gen0 - then.Gen0) + "/" + (Gen1 - then.Gen1) + "/" + (Gen2 - then.Gen2)
+                + " pause " + F0((Pause - then.Pause).TotalMilliseconds) + " ms"
+                + " | alloc " + F1((Allocated - then.Allocated) / (1024.0 * 1024.0) / seconds) + " MB/s";
+        }
+
+        private static string Mb(long bytes) => F0(bytes / (1024.0 * 1024.0)) + "MB";
+    }
 
     // A running count, total and maximum, plus the latest SamplesPerTiming times
     // for the percentiles.
