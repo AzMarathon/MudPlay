@@ -22,9 +22,9 @@ namespace MudPlay.Game.Combat;
 // even as the Combat gate clears on the now-empty observation, and send one CR.
 // On the CR re-display one of two things happens: the summon surfaced and
 // CombatStateTracker re-asserts the Combat gate to take over the hold (the walker
-// fights it in-room), or nothing surfaced (a clean kill) and we clear on that same
-// observation so the walker steps on — a delay bounded by one CR round-trip. A
-// short timeout is the fallback for when no re-display lands. Only fires while a
+// fights it in-room), or nothing surfaced (a clean kill) and we clear when the
+// display finishes so the walker steps on — a delay bounded by one CR round-trip.
+// A short timeout is the fallback for when no re-display lands. Only fires while a
 // movement engine is actually driving, so a hand-fighting player gets no stray CR.
 // The gate lives in the engine-wait tier (like CombatRedisplaySettleGate) so it
 // never flips the toolbar Start/Pause/Stop.
@@ -123,13 +123,28 @@ public sealed class SummonOnDeathSettle : IDisposable
         return false;
     }
 
-    // The CR re-display (or any fresh room render) landed — clear the settle gate.
-    // If a summon surfaced, CombatStateTracker asserted the Combat gate on this same
-    // observation and takes over the hold; if the room is empty, the walker steps on.
-    private void OnEntitiesObserved(RoomEntitiesObservation _)
+    // The CR re-display's "Also here:" landed — clear the settle gate. If a summon
+    // surfaced, CombatStateTracker asserted the Combat gate on this same observation
+    // and takes over the hold.
+    //
+    // Only a parsed "Also here:" counts. The kill drops its own corpse from the
+    // roster in the same handler chain, which re-fires this event as a Death
+    // observation before the CR's display can arrive; releasing on that (or on a
+    // departure / arrival / room-change re-fire) lets the walker step out ahead of
+    // the summon — the race this class exists to close.
+    private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
         if (_disposed || !_asserted) return;
+        if (obs.Source != RoomObservationSource.AlsoHere) return;
         ClearGate("room re-scanned");
+    }
+
+    // A room display finished. An empty room prints no "Also here:", so nothing
+    // above fires for a clean kill — the display's end is the release there.
+    public void NoteRoomDisplayed()
+    {
+        if (_disposed || !_asserted) return;
+        ClearGate("room re-displayed");
     }
 
     private void RestartTimer()

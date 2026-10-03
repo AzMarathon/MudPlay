@@ -1,11 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.24**
-> - Player Workshop opens faster: quest data is worked out once per game-data set and readied in the background when a profile loads
-> - Performance log names windows closing as well as opening
-> - The performance monitor's watcher thread only runs while Auto-collect logs is on
-> - Auto-Get Items checks the floor after killing a monster that can drop an Auto-collect item, and the loop waits for the check
+> **Version 3.142.25**
+> - Killing a monster that summons another on death holds the loop until the room is re-read, instead of letting go on the kill itself
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
