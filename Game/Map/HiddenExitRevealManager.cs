@@ -36,6 +36,9 @@ public sealed class HiddenExitRevealManager : IDisposable
     private HiddenRequest? _current;
     private int _attempts;
     private bool _heldForBlindness;
+    private bool _heldForRest;
+    // True while the movement engines hold for a rest or a meditate. Unset → never.
+    private Func<bool>? _restHold;
     // The room the in-flight search started in (null when unknown). A confirmed move
     // to another room ends the search — see HiddenSearchResult.LeftRoom.
     private RoomKey? _searchRoom;
@@ -53,6 +56,9 @@ public sealed class HiddenExitRevealManager : IDisposable
 
     // The in-flight search is waiting for blindness to clear.
     public bool HeldForBlindness => _heldForBlindness;
+
+    // The in-flight search is waiting for a rest hold to end.
+    public bool HeldForRest => _heldForRest;
 
     public HiddenExitRevealManager(
         RoomTracker tracker,
@@ -93,6 +99,20 @@ public sealed class HiddenExitRevealManager : IDisposable
         if (!_heldForBlindness || _isBlinded()) return;
         _heldForBlindness = false;
         _log?.Info("Hidden", "can see again — resuming the held search.");
+        SendSea();
+    }
+
+    // A search stands a resting character up (GAME_MECHANICS "What ends a rest"), so
+    // the next `sea` waits out a rest hold instead of breaking the rest it would
+    // only have to start again.
+    public void SetRestHold(Func<bool> isHeld) => _restHold = isHeld;
+
+    // The rest hold changed: a search that was waiting on it goes out once it's over.
+    public void NotifyRestHoldChanged()
+    {
+        if (_disposed || !_heldForRest || _restHold?.Invoke() == true) return;
+        _heldForRest = false;
+        _log?.Info("Hidden", "rest over — resuming the held search.");
         SendSea();
     }
 
@@ -199,6 +219,7 @@ public sealed class HiddenExitRevealManager : IDisposable
             _current = null;
         }
         _heldForBlindness = false;
+        _heldForRest = false;
         while (_queue.Count > 0)
         {
             HiddenRequest q = _queue.Dequeue();
@@ -224,6 +245,14 @@ public sealed class HiddenExitRevealManager : IDisposable
         if (_isBlinded())
         {
             if (!_heldForBlindness) HoldForBlindness(cur);
+            return;
+        }
+        if (_restHold?.Invoke() == true)
+        {
+            if (!_heldForRest)
+                _log?.Info("Hidden",
+                    $"reveal {DirectionShort(cur.Direction)} held — resting; searching once the rest is over.");
+            _heldForRest = true;
             return;
         }
         _attempts++;
@@ -263,8 +292,8 @@ public sealed class HiddenExitRevealManager : IDisposable
             return;
         }
 
-        // Still not visible — retry or exhaust (a blind hold waits for sight instead).
-        if (_heldForBlindness) return;
+        // Still not visible — retry or exhaust (a blind or rest hold waits instead).
+        if (_heldForBlindness || _heldForRest) return;
         if (_attempts >= _maxAttemptsProvider())
         {
             cur.Reply(new HiddenSearchResult.Failed(
@@ -281,6 +310,7 @@ public sealed class HiddenExitRevealManager : IDisposable
         _attempts = 0;
         _searchRoom = null;
         _heldForBlindness = false;
+        _heldForRest = false;
         TryStartNext();
     }
 

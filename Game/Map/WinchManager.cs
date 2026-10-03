@@ -58,6 +58,8 @@ public sealed class WinchManager : IDisposable
     // pull attempt — lets OnWinchTurned skip the gate poll entirely for it.
     private bool _drawbridgeLowered;
     private IDisposable? _timer;
+    // True while the movement engines hold for a rest or a meditate. Unset → never.
+    private Func<bool>? _restHold;
 
     // A winch may need several pulls before it winds up; cap so a genuinely stuck
     // winch fails instead of pulling forever.
@@ -92,6 +94,20 @@ public sealed class WinchManager : IDisposable
     }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
+
+    // Pulls wait out a rest hold. Whether a pull stands a resting character up on
+    // Paradigm isn't known (on Stock a room command doesn't; GAME_MECHANICS "What
+    // ends a rest"), and nothing can cross the gate while the walk is held anyway.
+    public void SetRestHold(Func<bool> isHeld) => _restHold = isHeld;
+
+    // The rest hold changed: a pull that was waiting on it goes out once it's over.
+    public void NotifyRestHoldChanged()
+    {
+        if (_disposed || _state != WinchState.HeldForRest || _current is null) return;
+        if (_restHold?.Invoke() == true) return;
+        _log?.Info(LogCategory, "rest over — pulling the winch.");
+        SendPull();
+    }
 
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
@@ -172,6 +188,13 @@ public sealed class WinchManager : IDisposable
     private void SendPull()
     {
         if (_current is not { } cur) return;
+        if (_restHold?.Invoke() == true)
+        {
+            CancelTimer();
+            _state = WinchState.HeldForRest;
+            _log?.Info(LogCategory, $"'{cur.PullCommand}' held — resting; pulling once the rest is over.");
+            return;
+        }
         _pullAttempts++;
         _drawbridgeLowered = false;
         _state = WinchState.WaitingPull;
@@ -346,6 +369,8 @@ public sealed class WinchManager : IDisposable
         WaitingPull,
         // Winch turned; polling the gate direction until it reads open.
         WaitingGateOpen,
+        // The next pull is waiting for a rest hold to end.
+        HeldForRest,
     }
 
     private sealed record WinchRequest(

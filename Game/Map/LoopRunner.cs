@@ -1643,6 +1643,14 @@ public sealed class LoopRunner : IRecoverableEngine
         switch (result)
         {
             case DoorOpenResult.Opened:
+                if (State == LoopState.Paused && _index < _expandedSteps.Count
+                    && _expandedSteps[_index] is MoveLoopStep parkedDoorStep)
+                {
+                    // Marked open so the re-driven step crosses it rather than
+                    // opening it again.
+                    _tracker.NoteNamedDoorOpened(parkedDoorStep.Direction);
+                }
+                if (ParkClearedStepWhilePaused("door open")) return;
                 if (_loop is null || State != LoopState.Running
                     || _index >= _expandedSteps.Count
                     || _expandedSteps[_index] is not MoveLoopStep step)
@@ -1681,6 +1689,25 @@ public sealed class LoopRunner : IRecoverableEngine
         }
     }
 
+    // The way was cleared (trap down, door open, winch turned, hidden exit found)
+    // while something else holds the loop: a trap that fired first can drop HP under
+    // the rest trigger, and the retry that disarms it then lands mid-rest (report
+    // paradigm-20261003-111800). No move went out, so the step isn't in flight. Left
+    // marked, the resume read "still at the source with a move in flight" as a
+    // refused move and spent a recovery and an rm on it. Taking it out of flight
+    // makes the resume re-drive the step, which crosses if the way is still clear
+    // and clears it again if the wait outlasted it.
+    private bool ParkClearedStepWhilePaused(string what)
+    {
+        if (State != LoopState.Paused) return false;
+        _log?.Info("LoopRunner",
+            $"step {_index + 1}/{_expandedSteps.Count}: {what} while paused — crossing once the loop resumes");
+        _stepInFlight = false;
+        _expectedMoveTarget = null;
+        _expectedMoveSource = null;
+        return true;
+    }
+
     // Terminal reply from TrapDisarmManager (or a party member via
     // TrapDelegationManager) for a trapped circuit step. Mirrors
     // AutoWalkManager.OnTrapReply: disarmed or no trap there leaves the exit clear;
@@ -1702,23 +1729,9 @@ public sealed class LoopRunner : IRecoverableEngine
             FailStep($"trap disarm failed: {reply}");
             return;
         }
-        if (State == LoopState.Paused)
-        {
-            // The trap came down while something else holds the loop: a trap that
-            // fired first can drop HP under the rest trigger, and the retry that
-            // disarms it then lands mid-rest (report paradigm-20261003-111800). No
-            // move went out, so the step isn't in flight. Left marked, the resume
-            // read "still at the source with a move in flight" as a refused move and
-            // spent a recovery and an rm on it. The resume re-drives the step instead,
-            // and the disarm flow decides then whether that disarm still stands or
-            // the trap has re-armed during the wait.
-            _log?.Info("LoopRunner",
-                $"step {_index + 1}/{_expandedSteps.Count}: trap clear while paused — crossing once the loop resumes");
-            _stepInFlight = false;
-            _expectedMoveTarget = null;
-            _expectedMoveSource = null;
-            return;
-        }
+        // The disarm flow decides on the re-driven step whether that disarm still
+        // stands or the trap has re-armed during the wait.
+        if (ParkClearedStepWhilePaused("trap clear")) return;
         if (_loop is null || State != LoopState.Running
             || _index >= _expandedSteps.Count
             || _expandedSteps[_index] is not MoveLoopStep step
@@ -1747,6 +1760,7 @@ public sealed class LoopRunner : IRecoverableEngine
         switch (result)
         {
             case WinchResult.Turned:
+                if (ParkClearedStepWhilePaused("winch turned")) return;
                 if (_loop is null || State != LoopState.Running
                     || _index >= _expandedSteps.Count
                     || _expandedSteps[_index] is not MoveLoopStep step)
@@ -1784,6 +1798,7 @@ public sealed class LoopRunner : IRecoverableEngine
         switch (result)
         {
             case HiddenSearchResult.Revealed:
+                if (ParkClearedStepWhilePaused("hidden exit found")) return;
                 if (_loop is null || State != LoopState.Running
                     || _index >= _expandedSteps.Count
                     || _expandedSteps[_index] is not MoveLoopStep step)

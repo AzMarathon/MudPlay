@@ -1029,6 +1029,26 @@ How HP works from full health down through dropping and death, how monster healt
   - `HealthManager`'s confirm/interrupt latch (`_restInFlight` / `_restConfirmedByPrompt`) only recognized `PlayerPosition.Resting`, never `PlayerPosition.Meditating`. So a `meditate` send's confirmation step never fired, the interruption step's guard never tripped either, and the latch stuck `true` forever after a meditate got interrupted in place (no room move to fall back on and clear it via `NoteRoomChanged`).
   - Fixed by treating Resting and Meditating as the same "in a resting-family position" state for the confirm/interrupt check. `rest` was never affected, since its position always matched.
 
+### What ends a rest
+*Status: OBSERVED 2026-10-03 (`wccmmud.dll` 1.11p: every write that clears the resting flag, bit `0x400` of the user word at `0x6f4`, and the meditating flag, bit `0x100` at `0x7c8`) · Realm: Stock; Paradigm not recorded except where a linked topic says so*
+
+- **`rest` sets the resting flag and `meditate` the meditating flag; these commands clear both.** Where one function serves several commands (`_handle_commands`), the command was read from the calls and strings around the clear, not traced line by line.
+  - **Moving and fighting:** a move (`_move_user`); any attack command, `bash` and backstab included (`_cmd_any_attack`, `_cmd_bash`); attacking or being attacked, by a monster or a player; a monster's spell landing on you (`_monster_cast`).
+  - **Doors and exits:** `open`, `close`, `lock`, `bash`, `picklock`, `search`, and `disarm trap` (cleared in the dispatcher just before `_cmd_disarm`).
+  - **Items:** `get`, `drop`, `give`, `use`, `eat`, `drink`, `light`, `ready` / `remove` gear, the `move` command.
+  - **Shops and banks:** `list`, `buy`, `sell`, `stock`, `unstock`, `markup`, `deposit`, `withdraw`.
+  - **Other:** `sneak`, `hide`, `track`, `rob`, `follow`, `drag`, `aid`, `share`, `train`, casting a spell (`_cmd_cast`).
+  - Three more clears sit in the dispatcher beside the gang-rank calls (`_change_user_rank`); which commands they belong to wasn't traced.
+- **Casting clears resting in the per-target cast routines as well** (`_cast_no_target`, `_cast_user_target`, `_cast_monster_target`); see *Casting a spell interrupts resting / meditating*.
+- **A room command run from the room's text block does not clear either flag.** `_execute_input` hands an unrecognised command to `_perform_special_command` with no write to either flag before or inside it. That is the path a room action such as `pull winch` takes.
+  - `[NEEDS CONFIRMATION]` Winches exist on Paradigm (*Movement & navigation → Winch gates*), which is a different build. Does `pull winch` stand a resting character up there?
+- **`look` does not end a rest.** `_cmd_look` writes neither flag.
+- **Paradigm differs for gear and meditation:** see *Gear swaps interrupt resting, not meditating*.
+
+**Client use:**
+- `DoorOpenManager`, `HiddenExitRevealManager`, `TrapDisarmManager` and `WinchManager` each hold their next bash / pick, `sea`, `disarm trap` or winch pull while the movement coordinator's `HealthRecovery` or `ManaRecovery` gate is up (`SetRestHold`, `NotifyRestHoldChanged`, wired in `AppServices` off `MovementCoordinator.GatesChanged`). **Client policy** (user, 2026-10-03): a try that would interrupt a rest waits until the rest hold is clear. The winch is held too, since Paradigm's answer isn't known.
+- `LoopRunner.ParkClearedStepWhilePaused`: a trap, door, winch or hidden-exit reply that lands while the loop is paused takes the step out of flight, and the resume re-drives it (report `paradigm-20261003-111800`).
+
 ### Gear swaps interrupt resting, not meditating
 *Status: see inline tags · Realm: Paradigm observed; rest rule from the user*
 

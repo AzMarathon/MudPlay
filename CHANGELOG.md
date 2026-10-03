@@ -1,8 +1,9 @@
 # Version history
 
-## 3.142.32
+## 3.142.33
 
-- A loop that pauses to rest after a trap fires carries on across the exit when it resumes, instead of running a recovery first
+- A loop that pauses to rest after a trap fires carries on across the exit when it resumes, instead of running a recovery first; same for a door, winch or hidden exit that clears while the loop is held
+- Door, hidden-exit, trap and winch tries wait until a rest or meditate is over instead of interrupting it
 - bug reports addressed: paradigm-20261003-111800
 
 ## 3.142.31

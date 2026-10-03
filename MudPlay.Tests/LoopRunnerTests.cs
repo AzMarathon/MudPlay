@@ -2329,6 +2329,72 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
     }
 
+    // The same gap for a door: it opens while the loop is held for a rest. The resume
+    // crosses the door (marked open) with no recovery and without opening it again.
+    [Fact]
+    public void Circuit_DoorOpenedWhilePaused_ResumeCrosses_NoRecovery()
+    {
+        Harness h = NewHarness(DoorGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        int doorCalls = 0;
+        Action<DoorOpenResult>? doorReply = null;
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => { doorCalls++; doorReply = reply; });
+        h.Runner.SetDoorStopper(() => { });
+
+        h.Runner.Start(new Loop("house", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        h.Coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);
+        doorReply!(DoorOpenResult.Opened.Instance);
+        Assert.Empty(h.Sent);
+
+        h.Coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+        h.Drain();
+
+        Assert.DoesNotContain(h.Events, e => e.Detail.StartsWith("recovering", StringComparison.Ordinal));
+        Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+        Assert.Equal(1, doorCalls);
+    }
+
+    private const string HiddenGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Cellar",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2 (Hidden)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // And for a hidden exit found while the loop is held: no recovery, and the step is
+    // taken again when the loop resumes.
+    [Fact]
+    public void Circuit_HiddenExitFoundWhilePaused_ResumeRedrivesTheStep_NoRecovery()
+    {
+        Harness h = NewHarness(HiddenGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        int searches = 0;
+        Action<HiddenSearchResult>? searchReply = null;
+        h.Runner.SetHiddenSearchEnqueuer((_, _, reply) => { searches++; searchReply = reply; });
+        h.Runner.SetHiddenSearchStopper(() => { });
+
+        h.Runner.Start(new Loop("cellar", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.Equal(1, searches);
+        h.Coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);
+        searchReply!(HiddenSearchResult.Revealed.Instance);
+        Assert.Empty(h.Sent);
+
+        h.Coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+        h.Drain();
+
+        Assert.DoesNotContain(h.Events, e => e.Detail.StartsWith("recovering", StringComparison.Ordinal));
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, searches);                       // back through the reveal flow
+        searchReply!(HiddenSearchResult.Revealed.Instance);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
     [Fact]
     public void Circuit_TrappedExit_DisarmFails_FailsTheLapWithoutCrossing()
     {

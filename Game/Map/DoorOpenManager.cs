@@ -48,6 +48,8 @@ public sealed class DoorOpenManager : IDisposable
     // (tests / no wiring): bash proceeds uncapped without pausing.
     private readonly Func<bool>? _bashRestNeeded;
     private readonly Func<bool>? _bashRestRecovered;
+    // True while the movement engines hold for a rest or a meditate. Unset → never.
+    private Func<bool>? _restHold;
     private readonly LogService? _log;
     private readonly IDisposable _bashOkSub;
     private readonly IDisposable _bashFailSub;
@@ -344,6 +346,18 @@ public sealed class DoorOpenManager : IDisposable
             return;
         }
 
+        // A rest started for any other reason (a fight on the way to the door, a
+        // meditate): bash and pick both stand a resting character up (GAME_MECHANICS
+        // "What ends a rest"), so the next try waits the hold out rather than break
+        // a rest that would only have to start again.
+        if (_restHold?.Invoke() == true)
+        {
+            _state = DoorState.WaitingRestHold;
+            _log?.Info("Door", $"{_verb} {cur.DirectionShort} held — resting; trying once the rest is over.");
+            ArmWatchdog();   // periodic re-check in case the hold-change notification is missed
+            return;
+        }
+
         _verbAttempts++;
         _wire.Send($"{_verb} {cur.DirectionShort}");
         if (_verb == "bash")
@@ -362,6 +376,19 @@ public sealed class DoorOpenManager : IDisposable
         if (_current is not { } cur || _state != DoorState.WaitingBashRest) return;
         _log?.Info("Door", $"rest complete — resuming bash {cur.DirectionShort}.");
         _state = DoorState.WaitingBash;
+        SendVerb();
+    }
+
+    public void SetRestHold(Func<bool> isHeld) => _restHold = isHeld;
+
+    // The rest hold changed: a bash or pick that was waiting on it goes out once
+    // it's over.
+    public void NotifyRestHoldChanged()
+    {
+        if (_disposed || _state != DoorState.WaitingRestHold || _current is not { } cur) return;
+        if (_restHold?.Invoke() == true) return;
+        _log?.Info("Door", $"rest over — resuming {_verb} {cur.DirectionShort}.");
+        _state = _verb == "bash" ? DoorState.WaitingBash : DoorState.WaitingPick;
         SendVerb();
     }
 
@@ -421,6 +448,10 @@ public sealed class DoorOpenManager : IDisposable
                 // has climbed back to rest-max, otherwise keep waiting.
                 if (_bashRestRecovered?.Invoke() == true) ResumeBashAfterRest();
                 else ArmWatchdog();
+                return;
+            case DoorState.WaitingRestHold:
+                if (_restHold?.Invoke() == true) ArmWatchdog();
+                else NotifyRestHoldChanged();
                 return;
             case DoorState.WaitingPick:
                 int cap = _maxPickProvider();
@@ -520,6 +551,7 @@ public sealed class DoorOpenManager : IDisposable
         // next door after a successful bash on the previous one.
         if (_state is DoorState.WaitingBash
                    or DoorState.WaitingBashRest
+                   or DoorState.WaitingRestHold
                    or DoorState.WaitingPick
                    or DoorState.WaitingOpen
                    or DoorState.WaitingUseKey)
@@ -665,6 +697,9 @@ public sealed class DoorOpenManager : IDisposable
         // Bashing paused mid-sequence: HP fell to the rest trigger, resting to
         // rest-max before the next swing (NotifyHealthChanged / watchdog resumes).
         WaitingBashRest,
+        // The next bash or pick is waiting for a rest hold (not our own bash rest)
+        // to end.
+        WaitingRestHold,
         // Sent pick <dir>; awaiting success/failure line.
         WaitingPick,
         // Pick succeeded (or door was unlocked); sent open <dir>; awaiting opened line.

@@ -1599,10 +1599,14 @@ public static class BugReportBuilder
         Kv(sb, "Hidden-exit search", hidden.IsBusy
             ? $"searching dir={hidden.CurrentDirection ?? "(none)"}, queued={hidden.QueueDepth}"
                 + (hidden.HeldForBlindness ? ", held (blind)" : string.Empty)
+                + (hidden.HeldForRest ? ", held (resting)" : string.Empty)
             : hidden.QueueDepth > 0 ? $"idle, queued={hidden.QueueDepth}" : "idle");
+        Kv(sb, "Winch", $"{svc.Winch.CurrentState}"
+            + (svc.Winch.CurrentDirection is { } wd ? $", dir={wd}" : string.Empty));
         Game.TrapDisarmManager trap = svc.TrapDisarm;
         Kv(sb, "Trap disarm", $"{trap.CurrentState}"
             + (trap.CurrentDirection is { } td ? $", dir={td}" : string.Empty)
+            + (trap.HeldForRest ? ", held (resting)" : string.Empty)
             + (trap.QueueDepth > 0 ? $", queued={trap.QueueDepth}" : string.Empty)
             + $", canDisarm={trap.CanDisarm}, trapsStat={svc.PlayerStats.Traps}"
             + $", skillFromClassRace={trap.SkillInferredFromClassOrRace}"
