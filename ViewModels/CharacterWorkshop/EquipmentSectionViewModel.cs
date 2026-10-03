@@ -106,6 +106,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     [NotifyCanExecuteChangedFor(nameof(ClearAllCommand))]
     [NotifyPropertyChangedFor(nameof(ShowCombatSwapOption))]
     [NotifyPropertyChangedFor(nameof(ShowMovementOptions))]
+    [NotifyPropertyChangedFor(nameof(ShowBossingOptions))]
     private EquipmentSetRowViewModel? _selectedSetRow;
 
     // Transient one-line result of the last Apply Now press.
@@ -167,6 +168,11 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     public bool ShowCombatSwapOption =>
         SelectedSet is { Trigger: EquipTriggerType.PreRestHp or EquipTriggerType.PreRestMana };
     public bool ShowMovementOptions => SelectedSet is { Trigger: EquipTriggerType.WhileMoving };
+    public bool ShowBossingOptions => SelectedSet is { Trigger: EquipTriggerType.Bossing };
+
+    // "Keep on while heading to another boss" — mirrors
+    // EquipmentSettings.KeepBossingBetweenBosses. Bossing set only; persisted on change.
+    [ObservableProperty] private bool _keepBossingBetweenBosses;
 
     // True when the bonuses panel has at least one non-zero stat row.
     [ObservableProperty] private bool _hasBonuses;
@@ -308,6 +314,14 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         if (_suppress) return;
         if (_profile.Current?.Equipment is not { } cfg) return;
         cfg.SwapToDefaultBeforeLairs = value;
+        _profile.Save();
+    }
+
+    partial void OnKeepBossingBetweenBossesChanged(bool value)
+    {
+        if (_suppress) return;
+        if (_profile.Current?.Equipment is not { } cfg) return;
+        cfg.KeepBossingBetweenBosses = value;
         _profile.Save();
     }
 
@@ -503,6 +517,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
             SwapToDefaultBeforeLairs = false;
             WhileMovingOnManualMoves = false;
             WhileMovingManualIdleSeconds = 10;
+            KeepBossingBetweenBosses = false;
             if (_profile.Current is { } p)
             {
                 EquipmentSettings cfg = p.Equipment ??= new EquipmentSettings();
@@ -513,6 +528,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
                 SwapToDefaultBeforeLairs = cfg.SwapToDefaultBeforeLairs;
                 WhileMovingOnManualMoves = cfg.WhileMovingOnManualMoves;
                 WhileMovingManualIdleSeconds = Math.Max(1, cfg.WhileMovingManualIdleSeconds);
+                KeepBossingBetweenBosses = cfg.KeepBossingBetweenBosses;
             }
             SelectedSetRow = SetRows.FirstOrDefault();
         }

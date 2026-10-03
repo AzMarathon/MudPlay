@@ -252,6 +252,10 @@ public sealed class EquipmentManager
         return ApplySet(set, fillFromInventory: true) ? EquipResult.Applied : EquipResult.NoChange;
     }
 
+    // The gear set a keyword / name / short name refers to, or null.
+    public EquipmentSet? FindSetByKeyword(string keyword) =>
+        string.IsNullOrWhiteSpace(keyword) ? null : FindSet(keyword.Trim());
+
     private EquipmentSet? FindSet(string keyword)
     {
         EquipmentSettings cfg = _readEquipment();

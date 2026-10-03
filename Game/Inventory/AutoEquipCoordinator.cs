@@ -135,6 +135,23 @@ public sealed class AutoEquipCoordinator : IDisposable
     private bool _inManualMovementSet;
     private IDisposable? _manualIdleRevert;
 
+    // Whether the trip we're on leads to another boss room (EquipmentSettings
+    // .KeepBossingBetweenBosses). Null (unwired / tests) means "no".
+    // The argument is the boss room just left (it doesn't count as "another").
+    private readonly Func<Game.Map.RoomKey?, BossTravel>? _bossTravel;
+    private Game.Map.RoomKey? _keptBossingFrom;
+
+    // True while the Bossing set is being kept on between boss rooms. Cleared when
+    // another set takes over, the trip turns out not to lead to a boss, or it ends.
+    private bool _keptBossing;
+
+    // The set the user picked from the Equip menu and wants left on: every automatic
+    // swap is held until they deselect it. Session-only.
+    public EquipTriggerType? HeldSet { get; private set; }
+    public event Action? HeldSetChanged;
+
+    public bool IsKeepingBossing => _keptBossing;
+
     public AutoEquipCoordinator(
         PlayerState player,
         Func<EquipmentSettings> readEquipment,
@@ -151,7 +168,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         Func<Action, IDisposable>? scheduleCombatGearSwap = null,
         Func<bool>? navIdle = null,
         Func<TimeSpan, Action, IDisposable>? scheduleAfter = null,
-        Func<bool>? restJustEnded = null)
+        Func<bool>? restJustEnded = null,
+        Func<Game.Map.RoomKey?, BossTravel>? bossTravel = null)
     {
         ArgumentNullException.ThrowIfNull(player);
         ArgumentNullException.ThrowIfNull(readEquipment);
@@ -174,6 +192,7 @@ public sealed class AutoEquipCoordinator : IDisposable
         _restJustEnded = restJustEnded;
         _navIdle = navIdle;
         _scheduleAfter = scheduleAfter;
+        _bossTravel = bossTravel;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
 
@@ -357,6 +376,12 @@ public sealed class AutoEquipCoordinator : IDisposable
         // A nav engine takes over from hand movement — its own stop owns the revert now.
         EndManualMovement();
         if (_inMovementSet) return;
+        // The Bossing set is staying on for the trip to the next boss.
+        if (_keptBossing)
+        {
+            if (TravelLeadsToBoss()) return;
+            _keptBossing = false;
+        }
         // We deliberately swapped to Default for a lair (swap-before-lairs) and this is
         // the loop resuming the step once the swap gate cleared — re-wearing the movement
         // set here would instantly undo the lair loadout (report paradigm-20260915-124359).
@@ -454,6 +479,15 @@ public sealed class AutoEquipCoordinator : IDisposable
             _inLairDefault = false;
             return;
         }
+        // The trip the Bossing set was kept on for ended somewhere that isn't a boss room.
+        if (_keptBossing)
+        {
+            _keptBossing = false;
+            if (_player.InCombat || _hpGateAsserted() || _maGateAsserted() || CurrentRoomIsBoss()) return;
+            _log?.Info(EquipmentManager.LogCategory, "movement stopped short of a boss room — reverting the Bossing set to Default");
+            Fire(EquipTriggerType.Default);
+            return;
+        }
         if (!_inMovementSet) return;
         _inMovementSet = false;
         if (_player.InCombat || _hpGateAsserted() || _maGateAsserted() || CurrentRoomIsBoss()) return;
@@ -473,6 +507,7 @@ public sealed class AutoEquipCoordinator : IDisposable
         {
             // Backstop for a boss room entered without a pre-step swap (the pre-move
             // hook usually wore Bossing already; ApplySet no-ops if it's on).
+            _keptBossing = false;
             if (EnabledSet(EquipTriggerType.Bossing) is not null)
             {
                 _inMovementSet = false;
@@ -488,18 +523,104 @@ public sealed class AutoEquipCoordinator : IDisposable
         // such a room mid-walk (report paradigm-20260915-061646 / -061734).
         if (prevBoss && EnabledSet(EquipTriggerType.Bossing) is not null)
         {
-            // Stepping out of a boss room always reverts to Default FIRST (clears the
-            // boss loadout), then re-layers the movement set if we're still travelling.
-            _inMovementSet = false;
-            _log?.Info(EquipmentManager.LogCategory, "left the boss room — reverting to Default");
-            Fire(EquipTriggerType.Default);
-            if (MovementSetActive() && (_isMoving?.Invoke() ?? false) && !_player.InCombat)
+            // Opt-in: on the way to another boss the Bossing set stays on. A follower's
+            // answer comes from its leader a moment later (Asking), so it's kept
+            // meanwhile and OnBossTravelResolved reverts it if the answer is no.
+            if (_readEquipment().KeepBossingBetweenBosses && HeldSet is null
+                && _bossTravel?.Invoke(previous) is { } travel and not BossTravel.No)
             {
-                _inMovementSet = true;
-                _log?.Info(EquipmentManager.LogCategory, "still travelling — back to the While Moving set");
-                Fire(EquipTriggerType.WhileMoving);
+                _inMovementSet = false;
+                _keptBossing = true;
+                _keptBossingFrom = previous;
+                _log?.Info(EquipmentManager.LogCategory, travel == BossTravel.Yes
+                    ? "left the boss room heading for another boss — keeping the Bossing set on"
+                    : "left the boss room — keeping the Bossing set on while the leader says where it's going");
+                return;
             }
+            RevertFromBossing("left the boss room — reverting to Default");
         }
+    }
+
+    // Stepping out of boss gear always reverts to Default FIRST (clears the boss
+    // loadout), then re-layers the movement set if we're still travelling.
+    private void RevertFromBossing(string why)
+    {
+        _keptBossing = false;
+        _inMovementSet = false;
+        _log?.Info(EquipmentManager.LogCategory, why);
+        Fire(EquipTriggerType.Default);
+        if (MovementSetActive() && (_isMoving?.Invoke() ?? false) && !_player.InCombat)
+        {
+            _inMovementSet = true;
+            _log?.Info(EquipmentManager.LogCategory, "still travelling — back to the While Moving set");
+            Fire(EquipTriggerType.WhileMoving);
+        }
+    }
+
+    private bool TravelLeadsToBoss() => _bossTravel?.Invoke(_keptBossingFrom) is { } t and not BossTravel.No;
+
+    // The leader answered (or didn't) where it's going. Not to a boss: the Bossing
+    // set we kept on comes off, unless a fight, a rest or a boss room owns the gear.
+    public void OnBossTravelResolved(bool headingToBoss)
+    {
+        if (!_keptBossing || headingToBoss) return;
+        if (CurrentRoomIsBoss()) { _keptBossing = false; return; }
+        if (_player.InCombat || _hpGateAsserted() || _maGateAsserted())
+        {
+            // Their own handlers swap the gear; just stop keeping it.
+            _keptBossing = false;
+            return;
+        }
+        RevertFromBossing("the trip isn't to a boss room — reverting the Bossing set to Default");
+    }
+
+    // ----- a set held from the Equip menu ---------------------------------
+
+    // The user picked a set from the Equip menu: leave it on. Every automatic swap is
+    // held (Fire) until ReleaseHeldSet.
+    public void HoldSet(EquipTriggerType type)
+    {
+        if (type == EquipTriggerType.Default || HeldSet == type) return;
+        HeldSet = type;
+        CancelPendingMovingCombatSwap();
+        EndManualMovement();
+        _inMovementSet = false;
+        _inLairDefault = false;
+        _keptBossing = false;
+        _log?.Info(EquipmentManager.LogCategory, $"'{type}' held from the Equip menu — automatic gear swaps are off until it's deselected");
+        HeldSetChanged?.Invoke();
+    }
+
+    // The user deselected the held set: automatic swaps resume, starting with the
+    // set the moment calls for (boss room, rest, travel, else Default). quiet skips
+    // that swap, for a profile change where the held state just ends.
+    public void ReleaseHeldSet(bool quiet = false)
+    {
+        if (HeldSet is not { } was) return;
+        HeldSet = null;
+        _log?.Info(EquipmentManager.LogCategory, $"'{was}' deselected — automatic gear swaps resume");
+        HeldSetChanged?.Invoke();
+        if (quiet) return;
+
+        if (CurrentRoomIsBoss() && EnabledSet(EquipTriggerType.Bossing) is not null)
+        {
+            Fire(EquipTriggerType.Bossing);
+            return;
+        }
+        if (!_player.InCombat
+            && ClassifyRest(_player.Position, _hpGateAsserted(), _maGateAsserted()) is { } rest
+            && ResolveTarget(_readEquipment(), rest) is not null)
+        {
+            Fire(rest);
+            return;
+        }
+        if (!_player.InCombat && MovementSetActive() && (_isMoving?.Invoke() ?? false))
+        {
+            _inMovementSet = true;
+            Fire(EquipTriggerType.WhileMoving);
+            return;
+        }
+        Fire(EquipTriggerType.Default);
     }
 
     // About to send a step INTO `next`. Swap BEFORE the wire move so we land already
@@ -514,12 +635,17 @@ public sealed class AutoEquipCoordinator : IDisposable
         {
             if (EnabledSet(EquipTriggerType.Bossing) is not null)
             {
+                _keptBossing = false;
                 _inMovementSet = false;
                 _log?.Info(EquipmentManager.LogCategory, "about to enter a boss room — wearing the Bossing set before the step");
                 Fire(EquipTriggerType.Bossing);
             }
             return;
         }
+        // The route changed under a kept Bossing set and no longer ends at a boss.
+        if (_keptBossing && !TravelLeadsToBoss())
+            RevertFromBossing("no longer heading for a boss room — reverting the Bossing set to Default");
+        if (_keptBossing) return;
         // Lair gear swap (opt-in "swap to default before lairs"): wear the Default set in
         // game-data lair rooms and the While Moving set in the transit rooms between them.
         // Both directions fire on the pre-move hook so we land already geared for the room
@@ -664,6 +790,12 @@ public sealed class AutoEquipCoordinator : IDisposable
         // Now", "Equip All", @equip <set>) don't flow through here, so they still
         // work with the kill-switch on.
         if (!_isAutoEnabled()) return false;
+        if (HeldSet is { } held)
+        {
+            _log?.Debug(EquipmentManager.LogCategory,
+                $"auto-equip '{type}' held: '{held}' was picked from the Equip menu and stays on until deselected");
+            return false;
+        }
         // An item-cast buff swap just borrowed an equip slot and restores it itself
         // (see _lastItemCastSwapAt) — often the very rest-break that swap caused is
         // what fired this. Hold so the sequencer's own restore isn't doubled.
@@ -687,6 +819,8 @@ public sealed class AutoEquipCoordinator : IDisposable
         // Stamp a real Default swap so the stand-up that follows a recovery-
         // complete revert doesn't fire a second one (report -125103).
         if (type == EquipTriggerType.Default) _lastDefaultAppliedAt = _now();
+        // Another set went on (a rest on the way, say): the Bossing set isn't kept any more.
+        if (type != EquipTriggerType.Bossing) _keptBossing = false;
         _log?.Info(EquipmentManager.LogCategory, $"auto-equip '{type}' applied its set");
         return true;
     }

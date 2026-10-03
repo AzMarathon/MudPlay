@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.38**
-> - Monster Intel: Hide 0 exp checkbox beside Hide regen timers drops monsters that give no experience
+> **Version 3.142.40**
+> - Bossing set: new "Keep on while heading to another boss" checkbox; a follower asks the leader's client (`@path`) whether the party is going to a boss room
+> - Action → Equip: any set but Default now stays on, ticked, with automatic gear swaps off until you deselect it; the terminal says so when you pick one
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

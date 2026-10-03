@@ -104,7 +104,8 @@
 
             <!-- Per-set behavior options — each shows only when its own set is
                  selected (combat-swap for the pre-rest sets; lair-swap and hand-movement
-                 for the While Moving set), so they never clash. -->
+                 for the While Moving set; boss-to-boss for the Bossing set), so they
+                 never clash. -->
             <StackPanel Grid.Row="2" Margin="0,14,0,0" Spacing="10">
                 <!-- Combat-swap behavior (resting sets). Checked (default) = keep the
                      pre-rest loadout through a rest-interrupting fight; unchecked opts
@@ -114,6 +115,13 @@
                           ToolTip.Tip="Checked (default): if a fight interrupts a rest you keep your pre-rest gear until you've recovered.&#10;Unchecked: as soon as monsters enter, swap to your Default set to fight; once the room is clear — if you haven't yet reached your rest-max HP/mana — swap back to the rest set and resume resting.">
                     <TextBlock Text="Don't swap to default upon entering combat"
                                TextWrapping="Wrap"/>
+                </CheckBox>
+                <!-- Boss-to-boss travel (Bossing set). Checked = leaving a boss room
+                     keeps this set on while the trip leads to another boss room. -->
+                <CheckBox IsChecked="{Binding KeepBossingBetweenBosses, Mode=TwoWay}"
+                          IsVisible="{Binding ShowBossingOptions}"
+                          ToolTip.Tip="Checked: when you leave a boss room and you're heading for another one, this set stays on for the trip instead of swapping to Default (and While Moving) and back.&#10;On your own or leading, that's a walk-to or Auto-Lair run whose destination is a boss room, or a loop that passes through another boss room. Following a leader, MudPlay asks the leader's client where it's going (@path) and keeps the set on only if that's a boss room; the leader has to be running MudPlay for that.&#10;Unchecked (default): leaving a boss room always goes back to Default.">
+                    <TextBlock Text="Keep on while heading to another boss" TextWrapping="Wrap"/>
                 </CheckBox>
                 <!-- Lair-swap behavior (While Moving set). Checked = swap to Default
                      before stepping into a known lair; unchecked = enter in the movement
