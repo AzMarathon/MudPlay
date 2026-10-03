@@ -266,12 +266,14 @@ What the game prints on the wire, including the prompt/statline, the command rat
   - The delay is a counter that the fast character update counts down by one per pass; the waiting commands run when it reaches zero. The pass's length is a sysop timer setting, not in the DLL.
   - **Commands that add a delay:** `move` (each step), `search` 1, `sneak` 1, `hide` 1, `track` 1, `rob` 1, `open` / `close` / `lock` 1, `picklock` 2, `bash` 1–2, `drag` 1, `quit` 6, and a confusion fumble 1.
   - **`drop`, `get`, `sell` and `buy` add none.** A burst of them only queues when a delay is already running (right after a move or a sneak) or other commands are waiting. That is how the 26-get Roomba batch above was lost, after a move. A `hide` sweep queues behind itself.
-- [NEEDS CONFIRMATION] **Paradigm.** The user will test whether Paradigm's limit works the same way (a burst of `drop`/`get` with no delay running, the same burst right after a move, and a `hide` burst).
+- **Paradigm runs a long burst of item commands with no delay running** *([OBSERVED] 2026-10-02, the user's test, report `paradigm-20261002-174951`; Realm: Paradigm)*. Standing in a shop, typed `;` lines sent bursts of 15 `buy`, 15 `sell`, 15 `drop`, 17 `get`, then **60 `buy`** and **45 `drop`** within about two seconds each. Every one was answered (`You just bought torch…`, `You dropped torch.`, `You took torch.`), and no rate-limit line appeared.
+  - So *Paradigm realms give no early warning… burst of more than ~10 lines* above does not hold for these commands with no action delay running. Which input draws `Too many messages sent…` is not settled; chat/telepath traffic is the likely one. [NEEDS CONFIRMATION]
+  - [NEEDS CONFIRMATION] Not yet tested on Paradigm: the same burst right after a move (an action delay running), and a `hide` burst.
 
 **Client use:**
 - Every telepath passes `TelepathPacer`'s 100 ms floor; bulk reply bursts (e.g. `@roomba sync`) go ~800 ms apart via `PacedReplySender`. See *Talk & chat channels → Telepath throttle and per-telepath acknowledgement*.
 - Roomba releases `get`/`drop` at most one per wire prompt AND no faster than an 800 ms floor (`GhSweepManager.MinCommandInterval`). The game's own prompt acts as the meter, so no rate has to be guessed. Because the prompt alone is not sufficient, it is used as a gate on top of a time floor.
-- Get All / Drop All / Hide All, and Chest Offload's drops, go through `BulkCommandPacer`: at most 6 unanswered (two short of the nudge), one more per prompt, 150 ms apart. On a rate-limit line it waits 3 s and re-sends nothing, since a second `drop` of a stack would drop another copy. Both realms until Paradigm is measured.
+- Get All / Drop All / Hide All, and Chest Offload's drops, go through `BulkCommandPacer`: at most 6 unanswered (two short of the nudge), one more per prompt, 150 ms apart. On a rate-limit line it waits 3 s and re-sends nothing, since a second `drop` of a stack would drop another copy. Both realms; Paradigm keeps it until the after-a-move and `hide` tests are in, though idle bursts there need none.
 
 ### Message catalogue (lines the client parses)
 *Status: rows Unrated; realm rule CONFIRMED 2026-09-28 (user); the Thorns/ShockShield row is CONFIRMED 2026-08-15 (user)*

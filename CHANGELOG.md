@@ -9,7 +9,7 @@
 - Drop All / Drop Everything / Hide All leave out what the game won't let go of: no-drop items (tokens, the deck of cards) and cursed gear you're wearing
 - Get All / Drop All / Hide All send their commands a few at a time, so a long sweep can't overflow the game's command limit
 - Chest Offload's Drop All and per-item Drop are paced the same way
-- bug reports addressed: paradigm-20261002-170259
+- bug reports addressed: paradigm-20261002-170259, paradigm-20261002-174951
 
 ## 3.141.9
 
