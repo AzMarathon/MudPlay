@@ -3,8 +3,8 @@ using MudPlay.Services;
 namespace MudPlay.Game.Map;
 
 // Always-alive, headless control surface over the three movement engines
-// (AutoWalkManager, LoopRunner, AutoLairManager) and their shared
-// MovementCoordinator. Exposes a single coalesced run-state (State) plus
+// (AutoWalkManager, LoopRunner, AutoLairManager), the puzzle solvers the walker
+// hands off to, and their shared MovementCoordinator. Exposes a single coalesced run-state (State) plus
 // Pause / Resume / Stop actions that pick the right engine automatically.
 //
 // Why it exists. The toolbar's Start / Pause / Stop buttons need an
@@ -199,6 +199,24 @@ public sealed class MovementController : IDisposable
         SuspendedErrandChanged?.Invoke();
     }
 
+    // ----- Puzzle solvers ----------------------------------------------
+    // The Great Pyramid climb and the asylum maze solve take a walk-to over from the
+    // walker, which goes idle for them. Without these the toolbar read a solve as
+    // nothing running: Stop and Pause did nothing, and gear, party and combat rules
+    // keyed to "navigation is running" stood down for the whole of it.
+    private readonly List<(Func<bool> Active, Func<bool> Held, Action<string> Stop)> _solvers = new();
+
+    public void AddSolver(Func<bool> active, Func<bool> held, Action<string> stop)
+    {
+        ArgumentNullException.ThrowIfNull(active);
+        ArgumentNullException.ThrowIfNull(held);
+        ArgumentNullException.ThrowIfNull(stop);
+        _solvers.Add((active, held, stop));
+    }
+
+    // A solver started, ended, or went into or out of a hold.
+    public void NoteSolverStateChanged() => StateChanged?.Invoke();
+
     public MovementController(
         AutoWalkManager walker,
         LoopRunner loops,
@@ -244,6 +262,9 @@ public sealed class MovementController : IDisposable
                 return MovementEngineState.Running;
             if (_walker.State == WalkState.Paused) return MovementEngineState.Paused;
             if (_walker.State == WalkState.Walking) return MovementEngineState.Running;
+            foreach ((Func<bool> active, Func<bool> held, _) in _solvers)
+                if (active())
+                    return held() ? MovementEngineState.Paused : MovementEngineState.Running;
             return MovementEngineState.Idle;
         }
     }
@@ -326,6 +347,8 @@ public sealed class MovementController : IDisposable
         if (_loops.State != LoopState.Idle) _loops.Stop("user stop from toolbar");
         if (_walker.State is WalkState.Walking or WalkState.Paused)
             _walker.Stop("user stop from toolbar");
+        foreach ((Func<bool> active, _, Action<string> stop) in _solvers)
+            if (active()) stop("user stop from toolbar");
         _coordinator.ClearGate(MovementCoordinator.UserGate, nameof(MovementController));
     }
 

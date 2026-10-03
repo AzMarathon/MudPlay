@@ -151,8 +151,19 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     // TryBegin.
     private readonly Dictionary<RoomKey, bool> _reachGoalCache = new();
 
+    // The user's own holds — the toolbar's Pause and the Auto-All switch. The solve
+    // waits on these before each move it sends; fights and rests it walks through,
+    // as before. _heldMove is the move that was about to go out.
+    private readonly MovementCoordinator? _coordinator;
+    private Action? _heldMove;
+
+    // Raised when the solve starts, ends, or goes into or out of a hold, so the
+    // toolbar's run-state follows it.
+    public event Action? StateChanged;
+
     // ----- bug-report surface ----------------------------------------
     public bool Active { get; private set; }
+    public bool IsHeld => Active && _heldMove is not null;
     public RoomKey? Goal => Active ? _goal : (RoomKey?)null;
     public int Attempts => _attempts;
     public string PhaseName => _phase.ToString();
@@ -183,8 +194,9 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         Func<bool>? isParadigm = null,
         ParadigmPositionResolver? paradigmResolver = null,
         Func<bool>? enabled = null,
-        Action<Direction, Action<bool>>? openDoor = null)
-        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled, openDoor) { }
+        Action<Direction, Action<bool>>? openDoor = null,
+        MovementCoordinator? coordinator = null)
+        : this(index, graph, tracker, bfs, walker, log, useTimer: true, post: null, isParadigm, paradigmResolver, enabled, openDoor, coordinator) { }
 
     internal TeleportMazeSolver(
         TeleportMazeIndex index,
@@ -198,7 +210,8 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         Func<bool>? isParadigm = null,
         ParadigmPositionResolver? paradigmResolver = null,
         Func<bool>? enabled = null,
-        Action<Direction, Action<bool>>? openDoor = null)
+        Action<Direction, Action<bool>>? openDoor = null,
+        MovementCoordinator? coordinator = null)
     {
         ArgumentNullException.ThrowIfNull(index);
         ArgumentNullException.ThrowIfNull(graph);
@@ -217,8 +230,10 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _paradigmResolver = paradigmResolver;
         _enabled = enabled ?? (() => true);
         _openDoor = openDoor;
+        _coordinator = coordinator;
 
         _walker.Event += OnWalkerEvent;
+        if (_coordinator is not null) _coordinator.GatesChanged += OnGatesChanged;
         if (_paradigmResolver is not null)
             _paradigmResolver.PositionResolved += OnParadigmPositionResolved;
 
@@ -254,8 +269,10 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         _lookQueue.Clear();
         _finalRoute.Clear();
         _reachGoalCache.Clear();
+        _heldMove = null;
         Active = true;
         _log?.Log(LogSeverity.Info, LogSource, $"engaging maze solver for {destination}");
+        StateChanged?.Invoke();
         // Defer off the walker's call stack — TryBegin runs inside WalkToImmediate.
         _post(Start);
         return true;
@@ -337,6 +354,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     private void CrossEntrance()
     {
+        if (HoldIfPaused(CrossEntrance)) return;
         _log?.Log(LogSeverity.Info, LogSource,
             $"crossing maze entrance {_entranceDir.ToLongName()} (fires random teleport)");
         SendMove(_entranceDir);
@@ -399,6 +417,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
             return;
         }
 
+        if (HoldIfPaused(StepFinalWalk)) return;
         Direction dir = _finalRoute.Dequeue();
         _phase = Phase.Walking;
         _log?.Debug(LogSource, $"final walk: step {dir.ToLongName()} ({_finalRoute.Count} left)");
@@ -408,6 +427,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     private void Reshuffle(RoomKey here)
     {
+        if (HoldIfPaused(() => Reshuffle(here))) return;
         if (++_attempts > MaxReshuffleAttempts)
         {
             FailSolve($"exceeded {MaxReshuffleAttempts} reshuffle attempts");
@@ -674,6 +694,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     private void BlindReshuffle()
     {
+        if (HoldIfPaused(BlindReshuffle)) return;
         if (++_attempts > MaxReshuffleAttempts)
         {
             FailSolve($"exceeded {MaxReshuffleAttempts} reshuffle attempts");
@@ -691,6 +712,36 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         }
 
         FailSolve("blind reshuffle: landing room has no exit to walk");
+    }
+
+    // ----- user holds ------------------------------------------------
+
+    private bool UserHold()
+        => _coordinator is { } c
+           && (c.IsGateAsserted(MovementCoordinator.UserGate) || c.IsGateAsserted(MovementCoordinator.AutoAllGate));
+
+    // Park the move that was about to be sent while the user has navigation paused.
+    // True when it was parked; it runs again when the hold lifts.
+    private bool HoldIfPaused(Action move)
+    {
+        if (!UserHold()) return false;
+        bool wasHeld = _heldMove is not null;
+        _heldMove = move;
+        if (!wasHeld)
+        {
+            _log?.Log(LogSeverity.Info, LogSource, "navigation is paused — holding the next move");
+            StateChanged?.Invoke();
+        }
+        return true;
+    }
+
+    private void OnGatesChanged()
+    {
+        if (!Active || _heldMove is not { } move || UserHold()) return;
+        _heldMove = null;
+        _log?.Log(LogSeverity.Info, LogSource, "pause lifted — carrying on");
+        StateChanged?.Invoke();
+        move();
     }
 
     // ----- walker delegation callbacks -------------------------------
@@ -715,17 +766,15 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     private void Finish()
     {
         _log?.Log(LogSeverity.Info, LogSource, $"maze solve complete → {_goal}");
-        StopTimers();
         RoomKey dest = _goal;
-        _phase = Phase.Idle;
-        Active = false;
+        End();
         // We drove the final leg ourselves, so the walker never raised its own
         // Finished — surface arrival through it so every WalkTo caller (and the
         // UI) sees the maze solve complete like any other route.
         _walker.ReportMazeSolveSucceeded(dest);
     }
 
-    // Reset States: drop the solve (its own moves and timers) where it stands.
+    // Stop or Reset States: drop the solve (its own moves and timers) where it stands.
     public void Cancel(string reason)
     {
         if (Active) Abandon(reason);
@@ -734,19 +783,24 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
     private void Abandon(string reason)
     {
         _log?.Log(LogSeverity.Info, LogSource, $"maze solve abandoned: {reason}");
-        StopTimers();
-        _phase = Phase.Idle;
-        Active = false;   // the walker already raised Stopped for the UI
+        End();
     }
 
     private void FailSolve(string reason)
     {
         _log?.Log(LogSeverity.Warn, LogSource, $"maze solve failed: {reason}");
-        StopTimers();
         RoomKey dest = _goal;
+        End();
+        _walker.ReportMazeSolveFailed(dest, reason);
+    }
+
+    private void End()
+    {
+        StopTimers();
+        _heldMove = null;
         _phase = Phase.Idle;
         Active = false;
-        _walker.ReportMazeSolveFailed(dest, reason);
+        StateChanged?.Invoke();
     }
 
     // ----- timers ----------------------------------------------------
@@ -831,7 +885,14 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
 
     // ----- wire ------------------------------------------------------
 
-    private void SendMove(Direction d) => Send(AutoWalkManager.EncodeMove(d));
+    // Announced to the tracker as ours first: the bytes come back through the
+    // outbound observer, and an unannounced move reads as a hand-typed step, which
+    // pauses navigation.
+    private void SendMove(Direction d)
+    {
+        _tracker.NoteMoveSent(d);
+        Send(AutoWalkManager.EncodeMove(d));
+    }
 
     private void SendLook(Direction d)
         => Send(Encoding.Latin1.GetBytes("look " + d.ToLongName() + "\r"));
@@ -868,6 +929,7 @@ public sealed class TeleportMazeSolver : IMazeSolver, IDisposable
         if (_disposed) return;
         _disposed = true;
         _walker.Event -= OnWalkerEvent;
+        if (_coordinator is not null) _coordinator.GatesChanged -= OnGatesChanged;
         if (_paradigmResolver is not null)
             _paradigmResolver.PositionResolved -= OnParadigmPositionResolved;
         StopTimers();

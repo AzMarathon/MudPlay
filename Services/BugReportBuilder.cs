@@ -1707,10 +1707,12 @@ public static class BugReportBuilder
         Kv(sb, "Phase", maze.PhaseName);
         Kv(sb, "Goal", maze.Goal is { } mg ? $"{mg.Map}/{mg.Room}" : "(none)");
         Kv(sb, "Reshuffle attempts", maze.Attempts.ToString());
+        Kv(sb, "Held by a pause", maze.IsHeld.ToString());
 
         // Great Pyramid climb solver — a "walker won't climb the pyramid / scattered
         // out" report needs whether it engaged, which floor + phase it reached, its
-        // goal, and how many steps it drove before halting.
+        // goal, how many commands it sent before halting, what it is waiting on, and
+        // how often it had to recover its place.
         sb.Append("\n**Pyramid solver**\n\n");
         Game.Map.PyramidSolver pyr = svc.PyramidSolver;
         Kv(sb, "Enabled", pyr.Enabled.ToString());
@@ -1718,9 +1720,19 @@ public static class BugReportBuilder
         Kv(sb, "Floor", pyr.FloorName);
         Kv(sb, "Phase", pyr.PhaseName);
         Kv(sb, "Goal", pyr.Goal is { } pg ? $"{pg.Map}/{pg.Room}" : "(none)");
-        Kv(sb, "Steps driven", pyr.StepsDriven.ToString());
+        Kv(sb, "Commands sent", pyr.StepsDriven.ToString());
         Kv(sb, "Script step", $"{pyr.ScriptStep} of {pyr.ScriptSteps}"
             + (pyr.ExpectedRoom is { } er ? $" (scripted from {er.Map}/{er.Room})" : ""));
+        Kv(sb, "Move in flight", pyr.MoveInFlightTo is { } mf ? $"to {mf.Map}/{mf.Room}" : "(none)");
+        Kv(sb, "Holding on", pyr.HoldReasonText ?? "(nothing)");
+        Kv(sb, "Running through (floors 1-2)", pyr.IsRunningThrough.ToString());
+        Kv(sb, "Refused-move retries", pyr.MoveRetries.ToString());
+        Kv(sb, "Gate rewinds", pyr.GateRewinds.ToString());
+        Kv(sb, "Landings taken on trust", pyr.AssumedLandings.ToString());
+        Kv(sb, "Door with the door manager", pyr.DoorWithManager.ToString());
+        Kv(sb, "Door watched (s)", pyr.DoorWatchSeconds.ToString());
+        Kv(sb, "Golden lion key", pyr.KeyStatus);
+        Kv(sb, "Key respawn trips", pyr.KeyRespawns.ToString());
 
         return sb.ToString();
     }

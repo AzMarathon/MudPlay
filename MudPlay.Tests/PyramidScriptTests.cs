@@ -39,11 +39,13 @@ public sealed class PyramidScriptTests
         => Assert.Equal(expected, PyramidScript.IsScatterRoom(map, room));
 
     [Fact]
-    public void F1_Is125MovesFivePushBlocksThenFireSphinx()
+    public void F1_Is126MovesFivePushBlocksThenFireSphinx()
     {
         var steps = PyramidScript.Steps(PyramidFloor.F1);
-        Assert.Equal(125, steps.Count(s => s.Kind == PyramidStepKind.Move));
+        Assert.Equal(PyramidScript.Floor1MoveCount, steps.Count(s => s.Kind == PyramidStepKind.Move));
         Assert.Equal(5, steps.Count(s => s.Kind == PyramidStepKind.PushBlock));
+        Assert.Equal(PyramidScript.Floor1ActionCount,
+            steps.Count(s => s.Kind is PyramidStepKind.PushBlock or PyramidStepKind.AskSphinx));
         PyramidStep last = steps[^1];
         Assert.Equal(PyramidStepKind.AskSphinx, last.Kind);
         Assert.Equal("fire", last.Word);
@@ -79,15 +81,111 @@ public sealed class PyramidScriptTests
         Assert.Equal(PyramidStepKind.KeyDoor, doorKinds[21].Kind);  // step 22
     }
 
-    [Fact]
-    public void F3_FromRooms_AlignWithTheScript()
+    // Walks each floor's script through the game data's exits from the floor's entry
+    // room: every step must have an exit to take, start in the room the table says it
+    // does, and the last one must land on the next floor. A script that is one move
+    // out anywhere fails here rather than in the pyramid.
+    [Theory]
+    [InlineData(PyramidFloor.F1, 1800)]
+    [InlineData(PyramidFloor.F2, 1921)]
+    [InlineData(PyramidFloor.F3, 2002)]
+    [InlineData(PyramidFloor.F4, 2052)]
+    [InlineData(PyramidFloor.F5, 2077)]
+    public void Script_WalksTheGameDataFromEntryToTheNextFloor(PyramidFloor floor, int entry)
     {
+        var steps = PyramidScript.Steps(floor);
+        IReadOnlyList<int> from = PyramidScript.FromRooms(floor)!;
+        Assert.Equal(steps.Count, from.Count);
+
+        int room = entry;
+        for (int i = 0; i < steps.Count; i++)
+        {
+            Assert.True(from[i] == room, $"{floor} step {i + 1}: table says 12/{from[i]}, the walk is in 12/{room}");
+            Assert.Equal(floor, PyramidScript.FloorOf(PyramidScript.PyramidMap, room));
+            if (steps[i].Kind == PyramidStepKind.PushBlock) continue;
+            int? next = PyramidRooms.Target(room, steps[i].Dir);
+            Assert.True(next is not null, $"{floor} step {i + 1}: no {steps[i].Dir} exit from 12/{room}");
+            room = next!.Value;
+        }
+        Assert.Equal(PyramidScript.EndRoom(floor), room);
+    }
+
+    // Each push block is sent from a room that carries the block's action, and each
+    // sphinx is asked in a room that has one.
+    [Fact]
+    public void PushBlocksAndSphinxes_SitInTheRightRooms()
+    {
+        foreach (PyramidFloor floor in new[] { PyramidFloor.F1, PyramidFloor.F2, PyramidFloor.F3 })
+        {
+            var steps = PyramidScript.Steps(floor);
+            IReadOnlyList<int> from = PyramidScript.FromRooms(floor)!;
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (steps[i].Kind == PyramidStepKind.PushBlock)
+                    Assert.Contains(PyramidRooms.ExitCells[from[i]].Values, c => c.Contains("push block"));
+                if (steps[i].Kind == PyramidStepKind.AskSphinx)
+                    Assert.Contains("Hidden/Needs 1 Actions", PyramidRooms.ExitCells[from[i]]["U"]);
+            }
+        }
+    }
+
+    // The moves marked as gates are exactly the route's hidden exits, and from each
+    // one the script can be walked backwards to the block that opens it — the way the
+    // solver goes when it finds the gate shut.
+    [Fact]
+    public void F1_Gates_AreTheHiddenExits_AndCanBeWalkedBackToTheirBlock()
+    {
+        var steps = PyramidScript.Steps(PyramidFloor.F1);
+        IReadOnlyList<int> from = PyramidScript.FromRooms(PyramidFloor.F1)!;
+        int gates = 0;
+        for (int i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].Kind != PyramidStepKind.Move) continue;
+            bool hidden = PyramidRooms.ExitCells[from[i]][steps[i].Dir.ToString()].Contains("Hidden/Needs");
+            Assert.Equal(hidden, steps[i].Gate);
+            if (!hidden) continue;
+            gates++;
+
+            int push = i - 1;
+            while (push >= 0 && steps[push].Kind != PyramidStepKind.PushBlock) push--;
+            Assert.True(push >= 0, $"gate at step {i + 1} has no push block before it");
+            int room = from[i];
+            for (int j = i - 1; j > push; j--)
+            {
+                Assert.Equal(PyramidStepKind.Move, steps[j].Kind);
+                Assert.False(steps[j].Gate);
+                int? back = PyramidRooms.Target(room, steps[j].Dir.Opposite());
+                Assert.True(back == from[j], $"step {j + 1} can't be walked back from 12/{room}");
+                room = back!.Value;
+            }
+            Assert.Equal(from[push], room);
+        }
+        Assert.Equal(5, gates);
+    }
+
+    // The door classes the F3 script assigns are the game data's: a wait door is a
+    // 1000-picklock door, the key door takes the golden lion key, the rest are plain.
+    [Fact]
+    public void F3_DoorKinds_MatchTheGameData()
+    {
+        var steps = PyramidScript.Steps(PyramidFloor.F3);
         IReadOnlyList<int> from = PyramidScript.FromRooms(PyramidFloor.F3)!;
-        Assert.Equal(PyramidScript.Steps(PyramidFloor.F3).Count, from.Count);
-        Assert.Equal(2002, from[0]);                                  // floor entry
-        Assert.Equal(2051, from[^1]);                                 // stars sphinx
-        Assert.All(from, r => Assert.Equal(PyramidFloor.F3, PyramidScript.FloorOf(12, r)));
-        Assert.Null(PyramidScript.FromRooms(PyramidFloor.F4));
+        for (int i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].Kind == PyramidStepKind.AskSphinx) continue;
+            string cell = PyramidRooms.ExitCells[from[i]][steps[i].Dir.ToString()];
+            if (steps[i].Kind == PyramidStepKind.KeyDoor) Assert.Contains("(Key: 1175", cell);
+            else if (steps[i].Bashable) Assert.EndsWith("(Door)", cell);
+            else Assert.Contains("(Door [1000 picklocks/strength])", cell);
+        }
+    }
+
+    [Fact]
+    public void FromRooms_OnlyOnTheClimbedFloors()
+    {
+        Assert.Null(PyramidScript.FromRooms(PyramidFloor.Firepit));
+        Assert.Null(PyramidScript.FromRooms(PyramidFloor.Top));
+        Assert.Equal(2051, PyramidScript.FromRooms(PyramidFloor.F3)![^1]);   // stars sphinx
     }
 
     [Fact]
@@ -108,12 +206,12 @@ public sealed class PyramidScriptTests
     }
 
     [Fact]
-    public void BlindFast_OnlyFloors1And2()
+    public void KeepsMoving_OnlyFloors1And2()
     {
-        Assert.True(PyramidScript.IsBlindFast(PyramidFloor.F1));
-        Assert.True(PyramidScript.IsBlindFast(PyramidFloor.F2));
-        Assert.False(PyramidScript.IsBlindFast(PyramidFloor.F3));
-        Assert.False(PyramidScript.IsBlindFast(PyramidFloor.F4));
-        Assert.False(PyramidScript.IsBlindFast(PyramidFloor.F5));
+        Assert.True(PyramidScript.KeepsMoving(PyramidFloor.F1));
+        Assert.True(PyramidScript.KeepsMoving(PyramidFloor.F2));
+        Assert.False(PyramidScript.KeepsMoving(PyramidFloor.F3));
+        Assert.False(PyramidScript.KeepsMoving(PyramidFloor.F4));
+        Assert.False(PyramidScript.KeepsMoving(PyramidFloor.F5));
     }
 }

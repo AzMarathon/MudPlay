@@ -33,6 +33,23 @@ public static class DirectionExtensions
     // this before encoding: it has no way to cross a teleport and must not try.
     public static bool IsCardinal(this Direction d) => d <= Direction.D;
 
+    // The direction that leads back the way d came. Teleport has none and is
+    // returned unchanged.
+    public static Direction Opposite(this Direction d) => d switch
+    {
+        Direction.N  => Direction.S,
+        Direction.S  => Direction.N,
+        Direction.E  => Direction.W,
+        Direction.W  => Direction.E,
+        Direction.NE => Direction.SW,
+        Direction.SW => Direction.NE,
+        Direction.NW => Direction.SE,
+        Direction.SE => Direction.NW,
+        Direction.U  => Direction.D,
+        Direction.D  => Direction.U,
+        _ => d,
+    };
+
     // The abbreviation the client sends on the wire for a cardinal move — "n",
     // "ne", "u". The short forms `TryFromToken` accepts, going the other way; used
     // by the route step list to show the exact command each hop executes.

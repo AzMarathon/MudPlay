@@ -1,8 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.41**
-> - A stale "held" state now clears as soon as a move goes through, so navigation resumes and the hold cure stops re-casting
+> **Version 3.143.0**
+> - Pyramid climb: floor 1 route fixed — it stopped one room short of the fire sphinx
+> - Pyramid climb sends one move at a time and waits to see where it led, on both realms, instead of pacing on a timer
+> - Pyramid climb checks every step against the room you're in; a climb picked up part-way along a floor starts from there
+> - A shut gate on floor 1 sends the climb back to push its block again; a refused move is retried
+> - Toolbar Pause and Stop now work on a pyramid climb; floors 3–5 wait for fights, rests, pickups and party holds like any walk
+> - Floors 1–2 switch Auto Combat, Nuke, Rest, Get Items, Get Cash, Search, Hide and Light off and restore them at floor 3; switch one back on to override
+> - A pyramid walk-to to a room on the route stops there instead of climbing to the top
+> - Floor 3 doors: open ones are walked without a look, shut ones go through the normal door opener (rests when hurt), timer doors are waited for
+> - Golden lion key: the climb waits for it in the floating key's room, asks a member who picked it up, and steps out and back in when nothing dropped
+> - Asylum maze solver: the toolbar shows it as navigation running; Pause holds its next move and Stop ends the solve
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

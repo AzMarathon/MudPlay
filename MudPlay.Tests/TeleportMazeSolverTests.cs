@@ -213,6 +213,8 @@ public sealed class TeleportMazeSolverTests : IDisposable
         public required AutoWalkManager Walker { get; init; }
         public required TeleportMazeIndex Index { get; init; }
         public required TeleportMazeSolver Solver { get; init; }
+        public required MovementCoordinator Coord { get; init; }
+        public int ManualMoves;
         public List<byte[]> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
         // Door-open requests the solver made via its openDoor delegate (when the
@@ -256,17 +258,26 @@ public sealed class TeleportMazeSolverTests : IDisposable
         // and the settle / look timers are driven manually via test seams.
         TeleportMazeSolver solver = new(index, graph, tracker, bfs, walker,
             log: null, useTimer: false, post: a => a(),
-            isParadigm: isParadigm ? () => true : null, openDoor: opener);
+            isParadigm: isParadigm ? () => true : null, openDoor: opener, coordinator: coord);
 
         Harness h = new()
         {
             Graph = graph, Bfs = bfs, Tracker = tracker,
-            Walker = walker, Index = index, Solver = solver, DoorOpens = doorOpens,
+            Walker = walker, Index = index, Solver = solver, DoorOpens = doorOpens, Coord = coord,
         };
+        tracker.ManualMoveObserved += () => h.ManualMoves++;
         walker.SetWireSender(h.Sent.Add);
         walker.SetMazeSolver(solver);
         walker.Event += h.Events.Add;
-        if (bindWire) solver.SetWireSender(h.Sent.Add);
+        // Through the outbound observer, as in the app: a move the solver didn't
+        // announce to the tracker first would be read as hand-typed.
+        OutboundMovementObserver outbound = new(tracker);
+        if (bindWire)
+            solver.SetWireSender(bytes =>
+            {
+                h.Sent.Add(bytes);
+                outbound.ObserveOutbound(bytes);
+            });
         return h;
     }
 
@@ -548,6 +559,79 @@ public sealed class TeleportMazeSolverTests : IDisposable
         Assert.Equal(sentBeforeArrival, h.Sent.Count);   // no walk-back-out
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void UserPause_HoldsTheNextMove_AndResumeSendsIt()
+    {
+        // Same 2-step drive as the fast-walk test (E then S from 1/10 to 1/12).
+        Harness h = NewHarness(SplitMaze);
+        int changes = 0;
+        h.Solver.StateChanged += () => changes++;
+
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 12)));
+        Assert.Equal(1, changes);                        // started
+        h.Solver.OnRoomObserved(Asylum(Direction.E, Direction.D));
+        h.Solver.FireSettleForTests();
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.S, Direction.D));
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));
+        Assert.Equal("e\r", h.SentText[^1]);
+
+        // Paused between the two moves: the pacing tick sends nothing.
+        h.Coord.AssertGate(MovementCoordinator.UserGate, "test");
+        int sent = h.Sent.Count;
+        h.Solver.FireSettleForTests();
+        Assert.Equal(sent, h.Sent.Count);
+        Assert.True(h.Solver.IsHeld);
+        Assert.True(h.Solver.Active);
+        Assert.Equal(2, changes);                        // went into the hold
+
+        // Resume: the held move goes out, and the solve finishes as usual.
+        h.Coord.ClearGate(MovementCoordinator.UserGate, "test");
+        Assert.False(h.Solver.IsHeld);
+        Assert.Equal("s\r", h.SentText[^1]);
+        h.Solver.FireSettleForTests();
+
+        Assert.False(h.Solver.Active);
+        Assert.Equal(new RoomKey(1, 12), h.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(4, changes);                        // out of the hold, then finished
+    }
+
+    [Fact]
+    public void Cancel_WhileHeld_DropsTheHeldMove()
+    {
+        Harness h = NewHarness(SplitMaze);
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 12)));
+        h.Solver.OnRoomObserved(Asylum(Direction.E, Direction.D));
+        h.Solver.FireSettleForTests();
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.S, Direction.D));
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));
+        h.Coord.AssertGate(MovementCoordinator.UserGate, "test");
+        h.Solver.FireSettleForTests();
+        Assert.True(h.Solver.IsHeld);
+
+        h.Solver.Cancel("stopped");
+        int sent = h.Sent.Count;
+        h.Coord.ClearGate(MovementCoordinator.UserGate, "test");
+
+        Assert.False(h.Solver.Active);
+        Assert.Equal(sent, h.Sent.Count);
+    }
+
+    [Fact]
+    public void ItsOwnMoves_AreNeverReadAsHandTyped()
+    {
+        Harness h = NewHarness(SplitMaze);
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 12)));
+        h.Solver.OnRoomObserved(Asylum(Direction.E, Direction.D));
+        h.Solver.FireSettleForTests();
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.S, Direction.D));
+        h.Solver.OnRoomObserved(Asylum(Direction.W, Direction.D));
+        h.Solver.FireSettleForTests();
+        h.Solver.FireSettleForTests();
+
+        Assert.False(h.Solver.Active);
+        Assert.Equal(0, h.ManualMoves);
     }
 
     [Fact]

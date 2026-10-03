@@ -645,4 +645,41 @@ public sealed class MovementControllerTests : IDisposable
         Assert.Equal(0, e.Abandoned);
         Assert.Equal("the stash transfer", h.Controller.SuspendedErrand);
     }
+
+    // ----- puzzle solvers --------------------------------------------
+
+    [Fact]
+    public void Solver_CountsAsNavigationRunning_AndStopEndsIt()
+    {
+        using Harness h = NewHarness();
+        bool active = false, held = false;
+        string? stopped = null;
+        bool otherStopped = false;
+        h.Controller.AddSolver(() => false, () => false, _ => otherStopped = true);   // an idle one alongside
+        h.Controller.AddSolver(() => active, () => held, reason => { stopped = reason; active = false; });
+        int changes = 0;
+        h.Controller.StateChanged += () => changes++;
+
+        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+
+        active = true;
+        h.Controller.NoteSolverStateChanged();
+        Assert.Equal(1, changes);
+        Assert.Equal(MovementEngineState.Running, h.Controller.State);
+
+        held = true;
+        Assert.Equal(MovementEngineState.Paused, h.Controller.State);
+        held = false;
+
+        // Pause is the user gate, which the solvers hold on.
+        h.Controller.Pause();
+        Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate));
+        Assert.True(h.Controller.IsUserPaused);
+
+        h.Controller.Stop();
+        Assert.NotNull(stopped);
+        Assert.False(otherStopped);
+        Assert.False(h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate));
+        Assert.Equal(MovementEngineState.Idle, h.Controller.State);
+    }
 }

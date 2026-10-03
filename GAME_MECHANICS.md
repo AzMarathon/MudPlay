@@ -1503,6 +1503,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 - **Identifying a guard from imported data.** The game's monster-`Type` field distinguishes an ordinary NPC from a law-enforcing *guard*, but that distinction is **not exported into the MDB we import** — the imported `Type` only carries Solo / Leader / Follower / Stationary (0–3), never the guard value. So guard-ness can't be read off the type.
   - **The reliable proxy:** a monster that **casts spell 583 (`jail`)** is a guard, and it attacks us when our title is **Outlaw or worse**. Detection = the monster references spell `583` in any of its castable-spell fields (`AttHitSpell-*`, `MidSpell-*`, `DeathSpell`, `CreateSpell`).
   - In the shipped set that flags the guardsmen (#13/#14/#905/#538), Sheriff Lionheart (#40), and elite guardsman (#757).
+  - **The engine's own marker is the monster's group:** group 5 is named `Guard` and group 37 `Angel` in the DLL, and neither is in the MDB (*Monsters, lairs & spawns → Monster roaming and following*; [OBSERVED] 2026-10-03, `wccmmud.dll` 1.11p and `wccknms2.dat`, Stock). Group 5 holds Sheriff Lionheart, Templar and elite guardsman, but also the woodelves, storm giants and Pastor Lander; group 37 holds guardsman and bounty hunter. *[NEEDS CONFIRMATION]: whether group membership, rather than the `jail` spell, is what makes a monster attack the evil-titled.*
   - This is a **partial** list — other mobs aggro the evil-titled without casting `jail` (e.g. Templar is a guard yet has no `jail`); those get added here as they're recognised.
 - **A monster that opens on you unprovoked is an enemy, not a neutral** — e.g. storm giants. The client models those as the `Enemy` relationship (see *Neutral monsters and kill-on-sight*).
 
@@ -1538,7 +1539,7 @@ How one weapon hit (normal, bash or smash) is built, by realm.
   2. **No lock → spread pick** among the aggroed players in room / terminal order: each rolls `genrdn(0,100) < 50 − 5 × (hits they're already taking this beat)`; **first to pass** is hit; if none pass, the **last eligible** player is hit (fallback). The mob drifts toward whoever *isn't* already piled on — a player taking ≥10 hits this beat hits a 0% threshold and is skipped by fresh rolls.
   3. **After swinging it rolls `genrdn(1,100) < Follow%`** (Monsters `Follow%`; the roll is 1–99, so Follow% `F` passes `(F − 1)` times in 99 — never at 1 or below, always at 100): pass → **lock** onto the just-hit player; fail on an **aggressive** align (∉ {0,3,4}) → **clear** the lock and re-spread next beat; fail on a **passive** align ({0,3,4}) → **keep** the lock.
   - **The mirror roll when a *player* hits the mob re-points the lock to that attacker** — the "attack last" behaviour. Follow% is the stickiness dial.
-  - **Special types** (engine-internal type, not the imported `Type` column)**:** summoned (type `0x25`) never manage a lock this way; a type-5 monster only acquires a lock when currently untargeted.
+  - **Special groups** (the monster's group number, not the imported `Type` column — *Monsters, lairs & spawns → Monster roaming and following*)**:** group 37 (`0x25`, the engine's `Angel`) monsters never manage a lock this way; a group 5 (`Guard`) monster only acquires a lock when currently untargeted. (An earlier note called these an engine-internal type, with `0x25` as "summoned"; superseded 2026-10-03 — the field is the group copied at spawn.)
   - **Carve-out:** an evil NPC won't spread onto a fellow-evil player (`EvilPoints > 39`).
 - **Paradigm** *([CONFIRMED] — user writeup, Paradigm only)*. Paradigm rewrote target selection into a **weighted lottery** with no locked-target mechanic. Each player scores from a base **150**: `+ (10 − Charm/5)` (higher Charm lowers the score), `+` party position (frontrank 60 / midrank 30 / backrank 0; **solo = frontrank 60**), `+` recent aggro (last hitter **+30 × players-in-fight**, everyone else **−5 × players-in-fight**), **floored at 50**. The monster rolls a weighted lottery over the summed scores — bigger score = bigger slice, never a guarantee, never impossible.
 - **Charm and party position have no effect on stock target selection** — they are Paradigm-only.
@@ -1688,7 +1689,7 @@ Recorded for future PvP settings; the client doesn't act on any of it yet.
      - otherwise, your levels must be within the config #57 range (1–100; the DLL's built-in value is 10) → refused if they're further apart.
 
      PvP attacks use the same check, with the wording `Such an attack would result in a very unbalanced combat round.` An engine-side per-user exemption flag skips it; that flag wasn't identified.
-  4. **`You are overcome with a feeling of guilt and return your hands to your own pockets`** (no trailing period) — you're standing in a **Protected** room (a room flag), or in an **Arena** room while arenas are in normal mode. Normal mode is where death doesn't count; the sysop switches modes with `SYSOP ARENA [status/normal/combat]`. In an arena in combat mode you can rob.
+  4. **`You are overcome with a feeling of guilt and return your hands to your own pockets`** (no trailing period) — you're standing in a **Protected** room (a room flag), or in an **Arena** room while arenas are in normal mode. The room type the engine tests is 5, which it names `Colliseum` — the training grounds and arena practice rooms, not the three type-2 `Arena` rooms (*Monsters, lairs & spawns → Monster roaming and following*, Room type; [OBSERVED] 2026-10-03, `_rob_user` @ `0x41f59d`). Normal mode is where death doesn't count; the sysop switches modes with `SYSOP ARENA [status/normal/combat]`. In an arena in combat mode you can rob.
 - **The roll.** Roll `genrdn(1,100)` — 1–99 — against your **Thievery** (see *Character stats & progression → Utility skills — Perception + the thief four*). With no Thievery, a success is impossible.
   - **Roll > Thievery + 10: caught.** You see `You bump <victim> as you try to rob <him/her>.` The victim sees `<you> bumps you as <he/she> tries to rob you!`. **This is the only outcome that tells the victim.**
   - **Thievery < roll ≤ Thievery + 10: a quiet fail.** You see `Your skills fail as you try to rob <victim>.`, and the victim sees nothing.
@@ -3011,6 +3012,129 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 - With Settings → Combat **Cap at monster HP** on, the round ledger caps each monster's damage taken, and the dealer's damage dealt, at the HP estimate the hit found it at (`RoundDamageTracker.Hits`). An estimate already at 0 that still takes a hit was wrong, so that hit counts in full. *Client policy (user, 2026-09-30, report `paradigm-20260930-104446`): the cap is opt-in, off by default; off, the ledger counts each line's printed number.*
 - `MonsterHpTracker` keeps a running estimate per monster in the room (max HP less the round ledger's damage, plus its regen every 30 s on both realms), re-times the regen cycle when a look shows a tick fired, and pulls the estimate into each look's band (see *Health, resting & recovery → Looking at a monster — coarse wound bands*).
 
+### Monster roaming and following
+
+*Status: OBSERVED 2026-10-03 (`wccmmud.dll` 1.11p disassembly, `wccknms2.dat` and `wccmp002.dat`; not confirmed in play) · Realm: Stock (Paradigm not recorded)*
+
+How a live monster changes rooms on its own. Offsets are in-memory offsets: active monster record, known-monster record, room (disk record minus 2).
+
+**This topic is informational** *(user, 2026-10-03)*. The monster's group and pack number, the room's group, type and flags, and most exit type codes are in the server's own files and not in the imported game data, so the client can't work them out for a room or monster and nothing in the client relies on these rules.
+
+**Terms used in this topic**
+
+- **`genrdn(0,100)`** — the engine's random roll; it never reaches its upper bound, so this one is 0–99 and `< N` passes `N` times in 100 (*Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*).
+- **Ticks** — the engine's three background passes: fast (1 s), medium (3 s), slow (30 s). The lengths are the character ones (*Health, resting & recovery → Rest and meditate tick timing*; *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*; *Monster HP regen*); the monster passes hang off the same background routines.
+- **`Follow%`** — the Monsters-table column (active record `+0x108`), 0–100. High means the monster sticks to a player; it also sets how seldom the monster roams.
+- **`Type`** — the Monsters-table column (active record `+0x148`): 0 Solo, 1 Leader, 2 Follower, 3 Stationary. Leaders and Followers form packs; Stationary monsters never leave their room.
+- **Group** — a number on every monster (active record `+0x12c`, copied at spawn from the known-monster record's `+0x54`, `_generate_monster` @ `0x4247f9`) and on every room (`+0x560`). A room spawns monsters of its group (*`Summoned By` spawn tokens*), and the same number fences where a monster may walk. The MDB carries neither. The engine has a name for each number (the table at `0x480020`, printed as `Group: %s` by the sysop room dump): 0 `Lair`, 1 `Wanderer`, 2 `NPC`, 3 `Living`, 4 `Random`, 5 `Guard`, 6–35 `Group 1`–`Group 30`, 36 `Arena`, 37 `Angel`, 38 `Quest`. Stock's monsters use 30 of them; the movement code singles out five, shown with their members in `wccknms2.dat`:
+  - **group 0 `Lair`** — 25 monsters: the practice dummies and quest NPCs (Vashti, Mayor Delanon, the old hermit);
+  - **group 2 `NPC`** — 95: shopkeepers, trainers and other townsfolk (Aiken, Guildmaster, the healer, the boatman);
+  - **group 5 `Guard`** — 18: Sheriff Lionheart, Templar, elite guardsman, the woodelves, the storm giants, Pastor Lander. These patrol (below);
+  - **group 37 `Angel`** (`0x25`) — 15: guardsman, bounty hunter, warlock mercenary, greater hellion, Zanthus the Lich, Kai Master, Dark Mage;
+  - **group 38 `Quest`** (`0x26`) — 40: huge gruesome creation, Demoness Irikani, necromancer, Great Hydra, Majestic Dragon, Demon Lord.
+- **Pack number** — a second number on every monster (known-monster `+0x6c`; not in the MDB, and only `_move_monster` reads it). Leaders and Followers with the same pack number travel together. Most monsters are pack 1 (741 of the 876 matched to the MDB) and 62 are pack 0; the rest are small families: 6 kobold / kobold warrior / kobold king; 4 saracen raider / leader / zealot / high priest; 3 the rakshasha and the dwarven merchant with his bodyguard; 9 troglodyte / troglodyte leader; 10 the quaggoth, hydra / hydra head, Great Hydra / massive hydra head; 25 the nanati. "Pack number" is this file's name for it; the engine's own name isn't known.
+- **`ExpMulti`** — the Monsters-table exp multiplier (known-monster `+0x58`, copied to the active record's `+0x8` at spawn, @ `0x424734`; *Monster exp multiplier*). Between two Leaders of one pack it works as rank: the higher multiplier is the senior.
+- **Tied to a player** — the active record holds a player's name (`+0x1a`): the monster has that player as its target, from a fight or a charm. A tied monster follows and chases; an untied one roams.
+- **Monster flags** (`+0x128`): bit 1 = in a fight; bit 2 = attacked or was attacked since its last medium update (set by `_attack_user_monster` @ `0x42d126` and `_attack_monster_user` @ `0x42e71b`, cleared at the end of each medium update @ `0x421f16`); bit 8 = knocked down.
+- **Player states the chase reads**, named by the tokens the engine's debug prompt prints for them (`_prf_prompt` @ `0x47360f`: `Snk `, `JstEnt `, `Hdn `):
+  - **sneaking** — flag 4 of `+0x6f4`, set by `_cmd_sneak`;
+  - **hidden** — the byte at `+0x5f6`, set by `_cmd_hide`;
+  - **just entered** — flag `0x40` of `+0x6f4`, set by `_move_user` when the player's move goes through and cleared by the player's next medium update or energy update, or by an attack command. A sneaking player who has just entered can't be attacked by a monster yet (`_monster_could_attack` @ `0x420b79`).
+- **Room flags** (`+0x564`), named by the sysop room dump (*Sysop commands → `SYSOP STATUS` — room dump format*; `_display_debug_room_stats` @ `0x43c524`): 1 `Protected`, 2 `Patrollable`, 8 `Specific Monster is Alive`, `0x40` `Ganghouse`. Bits 4, `0x10` and `0x20` are set on some rooms and aren't named there. 1,211 Stock rooms are `Patrollable`.
+- **Room type** (`+0x43c`), with the engine's names (the table at `0x47ffc4`): 0 `Normal` (an assigned-spawn room), 1 `Shop` (a set-monster room refilled only by the room reset), 2 `Arena` (the three fast-spawn arena rooms), 3 `Lair`, 4 `Hotel` (4 rooms: two `Kitchen`, two `Inn Room`), 5 `Colliseum`, 6 `Jail` (the 2 `Jail Cell` rooms). *`Summoned By` spawn tokens*, *Random spawns in assigned rooms* and *Lair respawn timers* cover 0–3.
+  - **`Colliseum` (type 5) is the player-fighting ground**: 118 Stock rooms — the 64 `Training Grounds`, map 11's 42 rooms (the Crimson / Ebony / Golden passages and chambers), the 11 `Arena Practice Room`, the `Dwarven Arena`. The engine tests the type wherever players fight players (`_attack_user_user`, `_check_kill_user`, `_add_experience`, `_is_valid_target`, the three cast routines, `_rob_user`, `_cmd_drag`, `_cmd_get`, `_cmd_suicide`), each time with the arena-mode switch at `0x4790e8` (*Combat → Robbing players (`rob`)*, the guilt line). Seen so far with the switch on: HP is saved on walking in from outside (@ `0x416bd8`) and put back by `_check_kill_user` (@ `0x419c33`), robbing is refused, and `suicide` prints `You may not suicide or reroll in this room!` (@ `0x469346`). The other sites aren't decoded.
+- **Abilities named below** (the ability numbers of the imported data): 57 SeeHidden, 68 Slowness, 74 HoldPerson. A monster has one from its own record or from a spell on it (`_monster_has_ability` @ `0x43d969`).
+- **Forced move** — a `_move_monster` call that skips the pack rule: a pack being pulled after its Leader, or a trapdoor.
+- **Exit types** — each of a room's ten exits has a type code in the room record (`+0x360`), which decides what a player needs to pass. The names are the engine's own (the table at `0x47ff5c`); the MDB shows a type as the exit's text (`Door`, `Key: n`, `Toll: n` …) or not at all:
+
+  | code | engine name | for a player |
+  |---|---|---|
+  | 0 | `Normal` | walks through |
+  | 1 | `Spell` | no Stock room uses it |
+  | 2 | `Key` | needs the key item or a picklock; has a lock state |
+  | 3 | `Item` | needs an item carried |
+  | 4 | `Toll` | pays coin |
+  | 5 | `Action` | walks through, with the exit's own movement message |
+  | 6 | `Hidden` | must be searched for or opened by room actions |
+  | 7 | `Door` | open / closed / locked |
+  | 8 | `Map Change` | walks through, lands on another map |
+  | 9 | `Trap` | walks through; an armed trap does damage |
+  | 10 | `Text` | passed by typing a phrase (`go path`) |
+  | 11 | `Gate` | a door by another name |
+  | 12 | `Remote Action` | not an exit: a typed command that acts on another exit |
+  | 13 | `Class` | only (or all but) one class |
+  | 14 | `Race` | only (or all but) one race |
+  | 15 | `Level` | a level range |
+  | 16 | `Timed` | open and closed on a clock |
+  | 17 | `Ticket` | not gated by the engine |
+  | 18 | `User Count` | no Stock room uses it |
+  | 19 | `Block Guard` | walks through; bars `Guard` (group 5) monsters |
+  | 20 | `Alignment` | an alignment range |
+  | 21 | `Delay` | no Stock room uses it |
+  | 22 | `Cast` | a spell is cast on the way through |
+  | 23 | `Ability` | needs an ability value in a range |
+  | 24 | `Spell Trap` | a trap that casts a spell instead of rolling damage |
+
+**When a monster roams**
+
+- **Roaming is decided on the medium tick, once per monster** (`_background_medium` → `_medium_update_monsters` @ `0x421b31` → `_medium_update_monster` @ `0x421cbc`). A monster doesn't roam while:
+  - it is tied to a player — it chases instead (*Following and chasing a player*, below);
+  - its flags have bit 1 (in a fight) or bit 2 (fought since its last medium update) set;
+  - it is in group 0 (`Lair`) or group 2 (`NPC`) (@ `0x421dff`, the group jump table).
+- **An ordinary monster roams on `genrdn(0,100) < (100 − Follow%) / 2`** (@ `0x421eaf`; the division truncates). Follow% 0 roams on 50 rolls in 100, Follow% 50 on 25, Follow% 100 never.
+- **A `Guard` (group 5) monster skips the roll and tries every tick** (@ `0x421e1c`).
+- **At most 3 roam attempts per medium pass, across all monsters** (counter `0x47fb90`, zeroed by `_medium_update_monsters`). An ordinary monster checks the cap before its roll and counts only when the roll passes; a `Guard` counts every try, and ignores the cap when its record is flagged changed (`+0x140`). Monsters are walked in slot order, so low slots claim the attempts first.
+- **A confused monster may not move** (`_check_monster_confusion` @ `0x429812`, run before every self-move; not decoded here).
+
+**Which way it goes**
+
+- **The direction is picked by one scan of the ten exits in order N, S, E, W, NE, NW, SE, SW, U, D** (`_pick_valid_random_direction` @ `0x46e8d2`), by exit type:
+  - `Normal` (0), `Key` (2), `Action` (5), `Door` (7), `Gate` (11), `Block Guard` (19) and `Spell Trap` (24) exits are taken when nothing is held yet, and otherwise replace the held pick on `genrdn(0,100) < 40`;
+  - `Spell` (1), `Item` (3), `Toll` (4), `Hidden` (6), `Map Change` (8), `Trap` (9), `Text` (10), `Remote Action` (12), `Class` (13), `Race` (14), `Level` (15), `Timed` (16), `Ticket` (17) and `User Count` (18) exits are taken only on `genrdn(0,100) < 40`;
+  - `Alignment` (20), `Delay` (21), `Cast` (22) and `Ability` (23) exits are never picked;
+  - so later directions are favoured, and the pick can be an exit `_move_monster` then refuses — the monster stays put that tick;
+  - a pick equal to the direction of the monster's last move (`+0x132`) is dropped. The slow tick resets that to none (`_slow_update_monster` @ `0x421c60`), and "no exit picked" is the same value, so a room with nothing picked also ends the attempt.
+
+**What stops a move** — `_move_monster` @ `0x4252f3` carries out every monster move and can refuse it:
+
+- **A Stationary monster never moves**, even on a forced move.
+- **A monster with HoldPerson (74) never moves; one with Slowness (68) fails on `genrdn(0,100) < 50`.**
+- **A knocked-down monster stays** until its counter (`+0x168`) runs out; the fast update prints `Slightly dazed the %s rises from the floor.` when it does.
+- **The destination room's group must equal the monster's group** (@ `0x42551d`–`0x42558e`). This is what keeps a monster in its own area. Exceptions:
+  - `Quest` (38) monsters enter any room;
+  - `Angel` (37) monsters enter a room that has no room flags set and isn't a `Colliseum`;
+  - `Guard` (5) monsters enter a `Patrollable` room, but not through a `Block Guard` exit.
+- **By exit type** (@ `0x4255b2`, the jump table):
+  - `Spell` (1), `Item` (3), `Toll` (4), `Hidden` (6), `Map Change` (8) and `Remote Action` (12) exits always refuse;
+  - `Door` (7) and `Gate` (11) exits refuse unless open, except for `Guard` and `Quest` monsters;
+  - a `Key` (2) exit refuses unless open, except for `Quest` monsters;
+  - a `Trap` (9) lets the monster through; in trap state 0, 2 or 3 it first takes `genrdn(max/2, max+1)` off its HP, and a monster left below 0 HP dies on its next medium update (`_check_kill_monster`). A `Spell Trap` (24) does the same with its first parameter and stops the HP at 0;
+  - every other type passes, including the `Text`, `Class`, `Race`, `Level`, `Alignment`, `Cast` and `Ability` exits that gate a player.
+- **Packs** (@ `0x4253b5`–`0x425491` before the move, `0x42593b`–`0x425a47` after it):
+  - **A Follower won't leave on its own while a Leader of its pack number is in the room.**
+  - **A Leader won't leave while a Leader of its pack number with a higher `ExpMulti` is in the room.**
+  - **When a Leader moves, its pack comes too:** every Follower of its pack number left in the old room, and every Leader of its pack number with a lower `ExpMulti`, is moved through the same exit as a forced move — so each of them still meets the group fence and exit refusals, but not the pack rule.
+  - Solo monsters neither hold nor follow. Since most monsters are pack 1, any pack-1 Leader holds and pulls any pack-1 Follower sharing its room; the group fence is what keeps unrelated packs apart.
+- A move that goes through prints the leave and arrival lines of *Monster movement lines*.
+
+**Following and chasing a player**
+
+- **Leaving a room gives each monster tied to you one roll to come along** (`_handle_following_monsters` @ `0x4295c4`, called from `_move_user`): `genrdn(0,100) < Follow%`, then a `_move_monster` through the exit you took, with all the refusals above. This is a separate roll from the target lock of *Combat → Monster target selection — who it swings at once fighting*.
+- **A monster tied to a player in another room chases on the fast tick** (`_fast_update_monster` @ `0x421f24`):
+  - the player must be on the same map;
+  - a hidden or sneaking player is chased only by a monster with SeeHidden (57);
+  - a player who has just entered a room isn't chased until that state clears;
+  - a monster that isn't in a fight rolls `genrdn(0,100) < Follow%` again;
+  - the direction comes from `_dir_player_travelling_coord` @ `0x41d95d` (not decoded);
+  - a failed roll, no direction, a refused move or a player who is offline adds 1 to the monster's lost counter (`+0x124`). Past 15 the monster drops the player and its in-a-fight flag, and some of its spell effects are ended (@ `0x4220f0`, not decoded). An `Angel` (group 37) monster goes to the routine @ `0x4298ec` instead, which touches the room's live count, the area count and the monster's active count — it reads as the monster being removed.
+- A charmed monster doesn't roam and moves with its caster: *Spells, buffs & conditions → Spell targeting: monster type tags*.
+
+**Other moves through `_move_monster`**
+
+- A monster whose target is another monster (`+0x88`) walks toward it (`_dir_monster_travelling_coord` @ `0x41dbfb`), from both the medium update and the monster attack pass (@ `0x423afa`).
+- A spell effect on the monster moves it in a picked random direction when its value beats `genrdn(0,100)` (`_perform_routine_spell_monster_upkeep` @ `0x44a37b`).
+- A trapdoor action pushes every monster in the room through the exit as a forced move (@ `0x46c86a`).
+
 ### Monster movement lines
 
 *Status: CONFIRMED 2026-09-09 (user) for yellow-indexed arrival names; CONFIRMED 2026-09-24 (user + contributor capture, PR #690) for generic movement lines*
@@ -3145,6 +3269,12 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - Cross-checked against the falls-below-cap points: quickness 15 → 16% enc, 100 → 67%, 200 → 97%.
 - **Lag rides on top of that timer** *([CONFIRMED] 2026-09-30, user)*: a character at the 1.0s cap really walks **~1.08–1.15s** a room — 80–150 ms of lag. *([OBSERVED] 2026-09-30, a contributor's program log: a priest with gear quickness 0 at 32% encumbrance has a formula timer of 1.305s, and the log shows a 1.37s median over 5,454 back-to-back moves.)*
 - **Stock has no such floor.** Empirical captures (8 sessions, 199 moves) show a true-speed floor around **0.25s** unencumbered, medians ~0.6–0.7s at light/medium loads rising to ~1.65s when Heavy (≈67%+ enc), with wide lag-driven variance per hop. A comparable character therefore moves roughly **2–4× faster per hop on stock** than the Paradigm 1.0s cap.
+- **Stock charges each move an action delay in whole units** *([OBSERVED] 2026-10-03, `wccmmud.dll` 1.11p `_cmd_move` / `_add_delay`; Realm: Stock)*. The delay is the counter described under *Wire, prompt & command output → Command rate limit (typing/sending too fast)*: further commands wait in the queue until it runs out.
+  - **Base 1 unit**, 2 while dragging someone (`_cmd_drag` sets the flag).
+  - **Above 66% encumbrance the base is added again** (2 units, 4 dragging). Above 100% the move is refused: `You are too heavy to move anywhere!`
+  - Two character flags set from abilities double it and halve it (`_update_dynamic_with_ability`; which abilities was not traced). The result is never below 1.
+  - **From the third move on, each move costs 1 unit more.** A per-character move counter goes up with every move and is cleared by the energy, medium and slow character updates; a move made while it is above 2 adds a unit.
+  - The unit is one pass of the fast character update, whose length is a sysop timer setting, not in the DLL. [NEEDS CONFIRMATION]: how long is a pass? The captures in this topic's ~0.25s floor and ~0.6–0.7s medians would fit 1- and 2-unit moves at roughly 0.3s a pass, but the ~1.65s Heavy figure (3 units by this rule) would not.
 - **Design consequence — the dark-room settle window (and any fixed inter-move timer) is realm-coupled.** At 1.0s it ≈ the Paradigm server cadence, so on Paradigm it costs almost nothing on an empty room; on stock the same 1.0s nearly doubles the natural ~0.6s hop — a heavy tax.
 - **Overshoot (stepping before a dark pursuer reveals) is a fast-mover problem:** it only bites a character near the Paradigm cap or a quick stock character; a slow/heavy mover has ample reveal margin. This argues for making dark-room room-clear detection **event-driven** (step once the room is confirmed clear via the attack→"no effect" + combat-line-silence signals) rather than a single global duration.
 
@@ -4433,18 +4563,39 @@ Among protectable hazards, a further split governs whether the navigator may off
   cluster). A secondary path, `dao scatter` (742, cast only from `12/2251`
   `Elemental Plane of Earth`), drops to the single desert room `12/335` `Scorching Desert, Pyramid`. **Detection:** landing in a
   `Scorched Cavern` room (`12/1239–1278`) or `12/335` mid-climb = failed → halt+report.
-- **F1 — timed, blind-fast.** Entry: `You have a strange feeling that time is running out!`; finish
+- **F1 — timed.** Entry: `You have a strange feeling that time is running out!`; finish
   within ~5 min of the first firepit `up` or scatter. Lateral gates open with `push block` (encoded
   `push block, push square block, move block`; broadcast
   `<leader> pushes the stone block, and it slides into the wall.`). Never stop on F1.
-- **F1 timing budget.** F1 ≈ **126 moves + 6 actions** (5 push-blocks + `ask sphinx fire`), ~250
+  [NEEDS CONFIRMATION]: what does the pusher see, and what does a second push of a block already
+  pushed print?
+- **F1 route** *([OBSERVED] 2026-10-03, game data — `data-Paradigm-1.9.1`, `data-v1.11p` and two other
+  imported sets identical; MegaMUD's own path file for the leg agrees)*. From `1800`: **126 moves and 5
+  push blocks**, ending `…w,w,s,s,w,n` into the fire sphinx's room `1920`
+  (`1913 S→1914 S→1918 W→1919 N→1920`). The hand-drawn map's line ends `…w,w,s,w,n`, one `s` short; an
+  earlier script copied it and stopped a room short of the sphinx (superseded 2026-10-03).
+  - **Blocks and the gates they open** (block room → gate room and exit): `1808` → `1811 N`, `1835` →
+    `1833 W`, `1856` → `1851 N`, `1888` → `1872 S`, `1908` → `1904 W`. Each gate is
+    `Hidden/Needs 1 Actions` until its block is pushed. Five more blocks (`1826`, `1841`, `1861`, `1891`,
+    `1917`) open the same gates from their far side and aren't needed on the way up.
+  - **The timer is spell 685** (cast by the firepit's `up`, `Dur 80`); its `EndCast 686` runs TB 2510, the
+    teleport out. `ask sphinx fire` runs TB 2518, whose `cast 687` removes spell 685, so the timer ends
+    at the sphinx's answer and the ascent after it isn't on the clock.
+  - F1 rooms are `Light -200` with room spell 691. **F1 is not permanently dark** — it is dark only
+    without enough light *([CONFIRMED] 2026-10-03, user)*.
+- **F1 timing budget.** F1 = **126 moves + 6 actions** (5 push-blocks + `ask sphinx fire`), ~250
   ms/action, under 5 min. **Stock:** a `Heavy` (>66%) leader = guaranteed timeout. **Paradigm:** the
   estimate `126·per-move + 6·250 ms` goes over 5 min at roughly >80% enc with no quickness.
-- **F2 — chaos, blind-fast.** Pitch-black (`The room is pitch black - you can't see anything`), wall
+- **F2 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 33 moves from `1921` to the sun
+  sphinx's room `2001`, the same path MegaMUD's file walks. Every F2 room is `Light -999` with room
+  spell 692, whose TB 2519 runs `cast 687:random 2520` (the darts and blades, behind `testskill traps 20`).
+  **Only F2 has that very high darkness ceiling, and even it can be overcome with a lot of effort**
+  *([CONFIRMED] 2026-10-03, user)*, so a room display on F2 is possible, just unusual.
+- **F2 — chaos.** Pitch-black (`The room is pitch black - you can't see anything`), wall
   darts/blades (poison), room spells whose damage **scales the longer you dwell** → keep everyone healed,
   don't stop for blind/poison/confuse. Undead priests may `hold person` a member; moving on leaves a held
   member behind (party cohesion is human-managed here in v1).
-- **F3 — door-maze, paced.** Doors cycle on spell 700 → TB 2528/2529 (weighted
+- **F3 — door-maze.** Doors cycle on spell 700 → TB 2528/2529 (weighted
   `remoteaction … 0 0 2/1` = open/close); timer broadcast `Doors on this level creak and thump!`,
   per-door `The door to <dir> just opened.`, exits carry state (`open/closed door <dir>`). **Per-door:**
   `(Door [1000 picklocks/strength])` = unbashable → **wait** for the timer; lesser door on-path = **bash
@@ -4456,11 +4607,22 @@ Among protectable hazards, a further split governs whether the navigator may off
   - Golden lion key drops from the neutral `floating key` monster (**#598**).
   - **No-drop bug** — a bugged kill drops nothing → exit E, re-enter W to respawn.
   - Key door: `unlock` → `The key breaks and crumbles apart.` → `open` → move.
+- **F3 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 25 door moves from `2002` to the
+  stars sphinx's room `2051`. The four `Door [1000 picklocks/strength]` exits on it are `2004 N`,
+  `2017 E`, `2022 S` and `2032 S`; the key door is `2034 W` (`Key: 1175`, the golden lion key). The
+  route steps west from `2032` into `2005` and straight back east, which is the floating key's room.
+  MegaMUD's Paradigm path file is two rooms shorter between `2018` and `2020` (`2018 S→2019 E→2020`).
+- **F4 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 21 moves and the `u`, from `2052` and
+  back through `2052` once more on the way (`2072 S→2052`, cast 733) before `2058 W→2073` (cast 735)
+  and `2074 U→2077`. `2052 N→2072` is a fail exit (cast 702), as a backtrack would be. A fall is spell
+  709, 75–150 damage.
+- **F5 route** *([OBSERVED] 2026-10-03, game data, both realms)*: `n,w,w,s,e` from `2077` through
+  `2084`, `2083`, `2082`, `2081` to `2085`.
 - **F4 — footpath, forward-only.** Spell "fourteen" by walking the correct arches (`ask sphinx riddle` @
   2052 gives the clue). Each arch casts **701 (pass)** / **702 (fail)**; **702 → TB 2640→2641** =
   weighted teleport down; a **backtrack also falls** (backtracking = unsolved). Pass internally gates on
   ability 134 = 9 (Dao/Sunstone flag) — climbers already hold it.
-- **F5 — standard, paced.** `go shaft`/`go pit` (room CMD textblocks, e.g. 1800/2524, 1857/2521) escape
+- **F5 — standard.** `go shaft`/`go pit` (room CMD textblocks, e.g. 1800/2524, 1857/2521) escape
   **down** to the firepit.
 - **[CONFIRMED 2026-07-30] Undead-priest holds.** The pyramid undead priest is monster **#770**; it casts
   `MidSpell-0 = 66` — **spell #66 `hold person`, the SAME spell ID the player casts** (25% at level 20;
@@ -4481,21 +4643,53 @@ Among protectable hazards, a further split governs whether the navigator may off
     so the climb runs a **canned per-floor script**; game-data room numbers position / detect floor /
     read door state.
   - Scatter detection (**Fall/scatter**) halts the climb and reports.
+  - `PyramidSolver` **sends one move and waits for the room tracker's answer** (arrival, refusal, or an
+    unexpected room) before the next, on every floor. Sending ahead gains nothing: each move's own delay
+    holds the next command at the server on both realms (*Movement & navigation → Per-hop movement
+    speed*), and a queued move can't be taken back when the one before it fails. `PyramidScript` carries
+    the room every step starts from, so each step is checked against the tracked room first.
+  - **Client policy — what the climb waits for.** Every floor: the user's Pause, Auto-All, being held,
+    mortally wounded or afraid. The firepit and F3–F5: every movement gate the walker honours (combat,
+    rests, party waits, pickups). F1 and F2 walk on through those (**F1 — timed**, **F2 — chaos**).
+  - **Client policy — autos on F1 and F2** *(user, 2026-10-03)*. Coming onto F1 the climb switches the
+    Auto Combat, Nuke, Rest, Get Items, Get Cash, Search, Hide and Light toggles off, if on, and
+    switches back on the ones it turned off at F3 or when it ends; Heal, Bless and Sneak are left
+    alone. A toggle the player switches back on during those floors overrides this: the climb no longer
+    restores it, and waits on that engine's movement gates (`PyramidRunThrough.GateEngineOn`).
+  - **A shut gate on F1** (the move through it is refused) sends the climb back along the script to the
+    block, to push again; twice per climb, then it fails.
+  - The climb reads an arrival either way: off the room display where the floor is lit, off the
+    darkness line where it isn't (*Fall/scatter* aside, nothing in it assumes a floor is dark).
+  - **A move that draws neither an arrival nor a refusal** is asked about: Paradigm's `rm`
+    (*Movement & navigation → `rm` — authoritative position (Paradigm only)*) or a sysop's locate. With
+    neither, or no reply, the move is taken as landed, since the game answers every refused move with a
+    line; five such guesses end the climb.
   - **Pre-flight timer gate:** **Stock:** `Heavy` (>66%) leader → refuse. **Paradigm:** estimate
     `126·per-move + 6·250 ms` via `MovementSpeedCalculator` (live enc% + quickness, floored at the 1 s
     cap); over 5 min → refuse (crosses ~>80% enc, no quickness). Drives **leader/solo only**.
   - F3 key: the `floating key` monster's (#598) default client relationship was `Flee` in the Paradigm
     overlay (stock was already `Enemy`); set to **`Enemy`** so party auto-combat clears it for the key
-    (the solver needs no kill logic). The client tracks who grabs it (`<name> picks up golden lion key`)
-    and forces a bare `@party give golden lion key to <leader>` (no leading `.` — see *Item-use
-    teleports*) at the key-door unless the leader grabbed it.
-    The no-drop respawn (exit E, re-enter W) is not yet automated.
-  - F4: runs the footpath strictly forward (never back up); paces slower than the other floors for
-    reaction time. The client doesn't check/encode the ability-134 pass gate.
-  - **Hold handling per floor:** F1 (timed) and F2 (deadly-to-linger) keep moving through a hold; **F3/F4
-    wait it out** — pause until a freedom/cure cast frees the member (multiple can be held) or a wear-off
-    cap (~hold person Dur 4) elapses. Combat and a **held leader** ride the shared `MovementCoordinator`
-    `Combat`/`Held` gates (the solver waits on those on the paced floors); F1/F2 never gate.
+    (the solver needs no kill logic). `PyramidSolver` won't leave the floating key's room `2005` until
+    the golden lion key is in the leader's pack (inventory, or our own `You took golden lion key.`): it
+    sends `get golden lion key` itself, and when a member's client got there first
+    (`<name> picks up golden lion key`) it asks for it with a bare
+    `@party give golden lion key to <leader>` (no leading `.` — see *Item-use teleports*). After eight
+    idle seconds with no key it walks on, and one room later turns back in — the **No-drop bug**
+    respawn — up to three times.
+  - F3 doors: an exit the room display shows open is walked. A shut plain door goes to `DoorOpenManager`
+    (bash or pick, resting as HP needs); a `Door [1000 picklocks/strength]` is waited for, re-checked on
+    any door line (`The door to <dir> just opened.`) and by a `look` every five seconds, three minutes at
+    most. The key door goes to `DoorOpenManager` with key 1175, which sends `use golden lion key <dir>`
+    then `open <dir>` (MegaMUD's Stock path file opens it with `use lion key west`, `op w`). In a dark
+    room, where no exits print, the move itself is tried and its refusal is the answer.
+  - F4: runs the footpath strictly forward (never back up), each move confirmed before the next, and
+    waits a second after every arrival for reaction time. The client doesn't check/encode the ability-134 pass gate.
+  - **Hold handling per floor:** F1 (timed) and F2 (deadly-to-linger) keep moving through a member's
+    hold; **F3/F4 wait it out** — pause until a freedom/cure cast frees the member (multiple can be held)
+    or a wear-off cap (~hold person Dur 4) elapses. A **held leader** can't move at all, so every floor
+    waits on the shared `MovementCoordinator` `Held` gate (an earlier note said F1/F2 never gate;
+    superseded 2026-10-03). Combat rides the `Combat` gate on the paced floors only; the full list is
+    under **Client policy — what the climb waits for** in this topic.
 
 ---
 
