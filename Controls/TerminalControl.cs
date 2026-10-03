@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using MudPlay.Services;
 using MudPlay.Terminal;
 
 namespace MudPlay.Controls;
@@ -586,6 +587,7 @@ public sealed class TerminalControl : Control
 
     public override void Render(DrawingContext context)
     {
+        using PerformanceMonitor.Scope? timing = AppServices.CurrentOrNull?.Performance.Measure("terminal render");
         base.Render(context);
         var em = Emulator;
         var bounds = new Rect(Bounds.Size);

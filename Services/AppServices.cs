@@ -220,6 +220,8 @@ public sealed class AppServices
     // session leaves a trail that tells a managed-heap leak from working-set creep.
     // Only writes while LogDiagnostics.AutoCollectLogs is on (default off).
     public MemoryUsageLog MemoryLog { get; }
+    // UI-thread stall probe and work timings, for the bug report's Performance section.
+    public PerformanceMonitor Performance { get; }
 
     // Background memory hygiene: compacts the LOH once a game-data set settles
     // (reclaiming the startup JSON-parse fragmentation) and periodically returns
@@ -2534,6 +2536,7 @@ public sealed class AppServices
         // Same gating for the memory-footprint sampler: the timer runs for the
         // whole process, but samples land on disk only while AutoCollectLogs is on.
         MemoryLog = new MemoryUsageLog(LogDiagnostics);
+        Performance = new PerformanceMonitor(Log);
         // Self-update checker. Constructed early (only needs Log); the startup check
         // itself is kicked off at the end of construction, gated on the setting.
         Update = new Services.Update.UpdateService(Log);
@@ -2545,11 +2548,13 @@ public sealed class AppServices
         // audit entries (load / unload / swap) without coupling the
         // cache to AppServices construction order.
         GameData.Log = bootstrapLog;
+        GameData.Performance = Performance;
         Settings = new SettingsService();
         Profile = new ProfileService();
         // Same late-bind pattern as GameData.Log above: the profile-lifecycle
         // audit (load / swap / close / re-home) rides the always-on Info stream.
         Profile.Log = bootstrapLog;
+        Profile.Performance = Performance;
         Bbs = new BbsProfileStore(() => Settings.Current.DefaultGameDataSet, bootstrapLog);
         Realms = new RealmCatalog(Bbs, Profile, bootstrapLog);
 

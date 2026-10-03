@@ -3148,6 +3148,7 @@ public partial class MainWindowViewModel : ObservableObject
             // keeps them aligned within one dispatch tick.
             Dispatcher.UIThread.Post(() =>
             {
+                using PerformanceMonitor.Scope feed = AppServices.Current.Performance.Measure("terminal feed");
                 if (ShowSplash) ShowSplash = false;   // real content now — dismiss the splash
                 AppServices.Current.PromptScanner.Append(copy);
                 AppServices.Current.Cleanup.Append(copy);

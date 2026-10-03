@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.3**
-> - Session Stats → Time Analysis → Other: new Disarm Trap row, traps disarmed and the disarm success rate
-> - Paradigm: "The trap is already disarmed." clears the exit at once instead of stalling 8 seconds per retry
-> - A trap you disarmed is crossed without disarming again until it re-arms (5 min Stock, 2 min Paradigm)
+> **Version 3.142.4**
+> - Bug report: new Performance section with UI hitches (when, how long, what was running), work timings, CPU and memory
+> - Program log notes UI hitches of 100 ms or more
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

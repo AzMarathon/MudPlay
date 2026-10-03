@@ -1,5 +1,10 @@
 # Version history
 
+## 3.142.4
+
+- Bug report: new Performance section with UI hitches (when, how long, what was running), work timings, CPU and memory
+- Program log notes UI hitches of 100 ms or more
+
 ## 3.142.3
 
 - Session Stats → Time Analysis → Other: new Disarm Trap row, traps disarmed and the disarm success rate

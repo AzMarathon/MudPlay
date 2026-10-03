@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using MudPlay.Game.Map;
+using MudPlay.Services;
 using MudPlay.Models.Settings;
 
 namespace MudPlay.Controls;
@@ -1647,6 +1648,7 @@ public sealed class MapControl : Control
     private void DrawStaticLayer(DrawingContext context)
     {
         if (Layout is null || Layout.CoordToRoom.Count == 0) return;
+        using PerformanceMonitor.Scope? timing = AppServices.CurrentOrNull?.Performance.Measure("map redraw");
 
         double tilePixels = TileWorldSize * _staticZoom;
         if (tilePixels < MinTilePixels) return;
