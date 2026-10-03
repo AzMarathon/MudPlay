@@ -1,5 +1,10 @@
 # Version history
 
+## 3.142.29
+
+- Map's Other floors chip cycles all floors, up only, down only, off
+- Other floors on/off checkbox removed from Settings → General; the chip is the control
+
 ## 3.142.28
 
 - A party member's knockdown chip clears when the knockdown ends, not after three minutes

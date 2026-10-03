@@ -20,6 +20,11 @@ namespace MudPlay.Game.Map;
 // mixing it in only clutters the map, so past maxOverlap it is left out (user,
 // 2026-10-02). It is weighed on its own: a mountain path is a chain of small
 // floors, and dropping everything beyond one crowded landing would cut the path.
+//
+// Showing only the floors above (or below) still searches through both: a floor
+// above can be reached by a path that dips first. The other side is dropped
+// before it claims any cell. A floor level with the current one (up, then back
+// down somewhere else) is on neither side and is drawn either way.
 public static class OtherLevels
 {
     public const int MaxRooms = 6000;
@@ -39,11 +44,12 @@ public static class OtherLevels
     // by, that may land on drawn cells before it's left out; 1 keeps every floor.
     public static RoomLayout? Build(RoomLayout current, Func<RoomKey, Room?> roomOf,
         Func<RoomKey, RoomLayout> layoutFrom, int maxLevels, double maxOverlap,
-        CancellationToken cancel = default)
+        OtherFloorsMode show = OtherFloorsMode.Both, CancellationToken cancel = default)
     {
         ArgumentNullException.ThrowIfNull(current);
         ArgumentNullException.ThrowIfNull(roomOf);
         ArgumentNullException.ThrowIfNull(layoutFrom);
+        if (show == OtherFloorsMode.Off) return null;
 
         // A room belongs to the first floor that reaches it.
         HashSet<RoomKey> reached = new(current.Positions.Keys);
@@ -86,6 +92,8 @@ public static class OtherLevels
         foreach (Floor floor in found.OrderBy(f => f.Rank))
         {
             cancel.ThrowIfCancellationRequested();
+            if (floor.Elevation > 0 ? show == OtherFloorsMode.Down
+                : floor.Elevation < 0 && show == OtherFloorsMode.Up) continue;
             int weighed = 0, covered = 0;
             foreach (RoomKey k in floor.Rooms)
             {

@@ -36,7 +36,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // the map without reopening the window.
         _navLineStyles = _services.Settings.Current.NavLines;
         _mapRecenterHoldSeconds = _services.Settings.Current.MapRecenterHoldSeconds;
-        _showOtherLevels = _services.Settings.Current.MapShowOtherFloors;
+        _otherLevelsMode = _services.Settings.Current.MapOtherFloors;
         _otherFloorsLevels = _services.Settings.Current.MapOtherFloorsLevels;
         _otherFloorsMaxOverlapPercent = _services.Settings.Current.MapOtherFloorsMaxOverlapPercent;
         _routeLinesOnOtherFloors = _services.Settings.Current.MapRouteLinesOnOtherFloors;
@@ -235,7 +235,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _otherFloorsLevels = settings.MapOtherFloorsLevels;
         _otherFloorsMaxOverlapPercent = settings.MapOtherFloorsMaxOverlapPercent;
         RouteLinesOnOtherFloors = settings.MapRouteLinesOnOtherFloors;
-        if (ShowOtherLevels != settings.MapShowOtherFloors) ShowOtherLevels = settings.MapShowOtherFloors;
+        if (OtherLevelsMode != settings.MapOtherFloors) OtherLevelsMode = settings.MapOtherFloors;
         else if (reach) RebuildOtherLevels(Layout);
     }
 
@@ -860,9 +860,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // The floors reached through up/down exits, drawn dimmed around the current one
     // (Game.Map.OtherLevels). Built off the UI thread: a realm's stairs and ladders
-    // can chain through thousands of rooms. Global tier (Settings → General); the
-    // Overlays chip flips the same setting.
-    [ObservableProperty] private bool _showOtherLevels = true;
+    // can chain through thousands of rooms. Global tier; the Overlays chip is the
+    // only control for which side is drawn (Settings → General holds the reach).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowOtherLevels))]
+    [NotifyPropertyChangedFor(nameof(OtherLevelsButtonLabel))]
+    private OtherFloorsMode _otherLevelsMode = OtherFloorsMode.Both;
+
+    public bool ShowOtherLevels => OtherLevelsMode != OtherFloorsMode.Off;
+
+    public string OtherLevelsButtonLabel => OtherLevelsMode switch
+    {
+        OtherFloorsMode.Up   => "Other floors: up",
+        OtherFloorsMode.Down => "Other floors: down",
+        OtherFloorsMode.Off  => "Other floors: off",
+        _                    => "Other floors",
+    };
     [ObservableProperty] private RoomLayout? _otherLevelsLayout;
     [ObservableProperty] private bool _routeLinesOnOtherFloors = true;
     private int _otherFloorsLevels;
@@ -871,15 +884,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // Each layout's other floors, kept with it while it lives: a town's take most of
     // a second to work out, and the map goes back and forth between the same few
-    // layouts. Keyed with the reach settings they were built under.
+    // layouts. Keyed with the mode and reach settings they were built under.
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<RoomLayout, OtherFloorsBuilt> _otherFloorsByLayout = new();
-    private sealed record OtherFloorsBuilt(int Levels, double MaxOverlap, RoomLayout? Floors);
+    private sealed record OtherFloorsBuilt(OtherFloorsMode Mode, int Levels, double MaxOverlap, RoomLayout? Floors);
 
-    partial void OnShowOtherLevelsChanged(bool value)
+    partial void OnOtherLevelsModeChanged(OtherFloorsMode value)
     {
         RebuildOtherLevels(Layout);
-        if (_services.Settings.Current.MapShowOtherFloors == value) return;
-        _services.Settings.Current.MapShowOtherFloors = value;
+        if (_services.Settings.Current.MapOtherFloors == value) return;
+        _services.Settings.Current.MapOtherFloors = value;
         _services.Settings.Save();
     }
 
@@ -890,7 +903,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // The old floors sit on the old layout's grid; drawn against the new one
         // until the build lands they'd be misplaced.
         OtherLevelsLayout = null;
-        if (!ShowOtherLevels || layout is null) return;
+        OtherFloorsMode mode = OtherLevelsMode;
+        if (mode == OtherFloorsMode.Off || layout is null) return;
         CancellationTokenSource build = new();
         _otherLevelsBuild = build;
         CancellationToken cancel = build.Token;
@@ -899,7 +913,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         int levels = Math.Clamp(_otherFloorsLevels, 1, MudPlay.Models.Settings.GlobalSettings.MaxMapOtherFloorsLevels);
         double maxOverlap = Math.Clamp(_otherFloorsMaxOverlapPercent, 0, 100) / 100.0;
         if (_otherFloorsByLayout.TryGetValue(layout, out OtherFloorsBuilt? built)
-            && built.Levels == levels && built.MaxOverlap == maxOverlap)
+            && built.Mode == mode && built.Levels == levels && built.MaxOverlap == maxOverlap)
         {
             OtherLevelsLayout = built.Floors;
             return;
@@ -910,7 +924,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             try
             {
                 result = Game.Map.OtherLevels.Build(layout, graph.GetRoom, k => bfs.BuildLayout(k, remember: false),
-                    levels, maxOverlap, cancel);
+                    levels, maxOverlap, mode, cancel);
             }
             catch (OperationCanceledException)
             {
@@ -925,15 +939,22 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             Dispatcher.UIThread.Post(() =>
             {
                 if (cancel.IsCancellationRequested) return;
-                _otherFloorsByLayout.AddOrUpdate(layout, new OtherFloorsBuilt(levels, maxOverlap, result));
+                _otherFloorsByLayout.AddOrUpdate(layout, new OtherFloorsBuilt(mode, levels, maxOverlap, result));
                 if (!ReferenceEquals(Layout, layout)) return;
                 OtherLevelsLayout = result;
                 if (result is { } r)
                     _services.Log?.Info("Navigation",
-                        $"other floors drawn — {r.Positions.Count} room(s) within {levels} floor(s) up and down");
+                        $"other floors drawn — {r.Positions.Count} room(s) within {levels} floor(s) {OtherFloorsReach(mode)}");
             });
         }, cancel);
     }
+
+    private static string OtherFloorsReach(OtherFloorsMode mode) => mode switch
+    {
+        OtherFloorsMode.Up   => "up",
+        OtherFloorsMode.Down => "down",
+        _                    => "up and down",
+    };
 
     partial void OnShowLevelGatesChanged(bool value)
     {
@@ -985,7 +1006,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _                       => SpellDisplayMode.Mono,
     };
     [RelayCommand] private void ToggleLevelGates() => ShowLevelGates = !ShowLevelGates;
-    [RelayCommand] private void ToggleOtherLevels() => ShowOtherLevels = !ShowOtherLevels;
+    [RelayCommand] private void ToggleOtherLevels() => OtherLevelsMode = OtherLevelsMode switch
+    {
+        OtherFloorsMode.Both => OtherFloorsMode.Up,
+        OtherFloorsMode.Up   => OtherFloorsMode.Down,
+        OtherFloorsMode.Down => OtherFloorsMode.Off,
+        _                    => OtherFloorsMode.Both,
+    };
     [RelayCommand] private void ToggleLegend() => LegendVisible   = !LegendVisible;
 
     // ----- Map binding ----------------------------------------------

@@ -619,10 +619,10 @@
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                             ToolTip.Tip="Mark rooms holding a level gate, with an amber corner wedge — a room you can still walk into whose way onward is shut unless you are inside the gate's level window. Covers gated exits, level-gated room teleports, and level-restricted boat sailings. On by default; your choice is saved per character."
                                             Classes.LevelGateFill="{Binding ShowLevelGates}"/>
-                                    <Button Classes="ToggleChip" Content="Other floors"
+                                    <Button Classes="ToggleChip" Content="{Binding OtherLevelsButtonLabel}"
                                             Command="{Binding ToggleOtherLevelsCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                            ToolTip.Tip="Show the floors you reach by up and down exits, dimmed, around the floor you're on, wherever they don't cover it. A climbing path shows end to end, and those rooms can be hovered, clicked and walked to like any other. How many floors up and down, and when a crowded floor is left out, are in Settings → General. On by default; applies to every character."
+                                            ToolTip.Tip="Show the floors you reach by up and down exits, dimmed, around the floor you're on, wherever they don't cover it. Click to cycle all floors → only the floors above → only the floors below → off. A climbing path shows end to end, and those rooms can be hovered, clicked and walked to like any other. How many floors up and down, and when a crowded floor is left out, are in Settings → General. All floors by default; applies to every character."
                                             Classes.LevelGateFill="{Binding ShowOtherLevels}"/>
                                     <Button Classes="ToggleChip" Content="Legend"
                                             Command="{Binding ToggleLegendCommand}"

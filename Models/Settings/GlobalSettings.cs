@@ -82,12 +82,22 @@ public sealed class GlobalSettings
     // lets the first character loaded after they moved here hand over its own.
     public LogDiagnosticsSettings? LogDiagnostics { get; set; }
 
-    // The Navigation map's other floors (Settings → General, and the map's
-    // Overlays chip): the floors reached through up/down exits drawn dimmed around
-    // the one shown. How many up/down steps away they reach, and the share of a
-    // floor that may land on rooms already drawn before it's left out as a
-    // different place stacked under or over this one (100 keeps every floor).
-    public bool MapShowOtherFloors { get; set; } = true;
+    // The Navigation map's other floors: the floors reached through up/down exits
+    // drawn dimmed around the one shown. Which side is drawn is the map's Overlays
+    // chip alone. Settings → General holds how many up/down steps away they reach,
+    // and the share of a floor that may land on rooms already drawn before it's
+    // left out as a different place stacked under or over this one (100 keeps
+    // every floor).
+    public Game.Map.OtherFloorsMode MapOtherFloors { get; set; } = Game.Map.OtherFloorsMode.Both;
+
+    // Settings saved before the chip had up-only / down-only carry an on/off flag.
+    // Reading an off turns the floors off; it is never written back.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? MapShowOtherFloors
+    {
+        get => null;
+        set { if (value == false) MapOtherFloors = Game.Map.OtherFloorsMode.Off; }
+    }
     public const int MaxMapOtherFloorsLevels = 99;
     public int MapOtherFloorsLevels { get; set; } = 10;
     public int MapOtherFloorsMaxOverlapPercent { get; set; } = 50;

@@ -221,4 +221,37 @@ public sealed class OtherLevelsTests : IDisposable
         RoomLayout ground = bfs.BuildLayout(K(1));
         Assert.Null(OtherLevels.Build(ground, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0));
     }
+
+    // Middle: 1/1 (up to 1/10, down to 1/20)
+    // Above:  1/10 ─E─ 1/11
+    // Below:  1/21 ─E─ 1/20
+    private static readonly string AboveAndBelow = "[" + string.Join(",",
+        Room(1, u: "1/10", d: "1/20"),
+        Room(10, e: "1/11", d: "1/1"),
+        Room(11, w: "1/10"),
+        Room(20, w: "1/21", u: "1/1"),
+        Room(21, e: "1/20")) + "]";
+
+    [Theory]
+    [InlineData(OtherFloorsMode.Both, true, true)]
+    [InlineData(OtherFloorsMode.Up, true, false)]
+    [InlineData(OtherFloorsMode.Down, false, true)]
+    public void Only_the_chosen_side_is_drawn(OtherFloorsMode show, bool above, bool below)
+    {
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(AboveAndBelow);
+        RoomLayout middle = bfs.BuildLayout(K(1));
+        RoomLayout? other = OtherLevels.Build(middle, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0, show);
+
+        Assert.NotNull(other);
+        Assert.Equal(above, other.Positions.ContainsKey(K(11)));
+        Assert.Equal(below, other.Positions.ContainsKey(K(21)));
+    }
+
+    [Fact]
+    public void Off_draws_nothing()
+    {
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(AboveAndBelow);
+        RoomLayout middle = bfs.BuildLayout(K(1));
+        Assert.Null(OtherLevels.Build(middle, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0, OtherFloorsMode.Off));
+    }
 }

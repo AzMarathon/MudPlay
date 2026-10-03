@@ -451,10 +451,11 @@
                 </StackPanel>
 
                 <TextBlock Classes="SectionHeader" Text="Navigation map: other floors"/>
-                <CheckBox IsChecked="{Binding MapShowOtherFloors, Mode=TwoWay}"
-                          Content="Show other floors shadowed around the one on the map"
-                          ToolTip.Tip="When checked (default), the Navigation map also draws the floors you reach by up and down exits, dimmed, wherever they don't cover the floor shown, so a path that climbs or drops reads as one path. Those rooms can be hovered, clicked and walked to like any other. The map's Overlays → Other floors chip flips this same setting. Install-wide; applies on Apply."/>
-                <StackPanel Margin="22,4,0,0" Spacing="4" IsEnabled="{Binding MapShowOtherFloors}">
+                <TextBlock Text="How far the map's shadowed floors reach. Which floors are drawn (all, up only, down only, off) is the map's Overlays → Other floors chip."
+                           Foreground="{StaticResource ChromeFgSecBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <StackPanel Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="8"
                                 ToolTip.Tip="How many floors up and down are drawn, counted in up/down steps from the floor shown (1–99, default 10). A mountain path climbs one step per floor (the Barren Hills climb is over 40), so raise this to see a long climb end to end; lower it to keep the map quiet.">
                         <TextBlock Text="Floors drawn up and down" VerticalAlignment="Center"

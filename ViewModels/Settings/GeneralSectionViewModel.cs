@@ -170,10 +170,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _recentProfilesShown = 5;
     public int MaxRecentProfilesShown => GlobalSettings.MaxRecentProfilesShown;
 
-    // Install-global (GlobalSettings.MapShowOtherFloors / MapOtherFloorsLevels /
+    // Install-global (GlobalSettings.MapOtherFloorsLevels /
     // MapOtherFloorsMaxOverlapPercent): the Navigation map's shadowed other floors.
     // The open map picks them up off GlobalSettingsChanged.
-    [ObservableProperty] private bool _mapShowOtherFloors = true;
     [ObservableProperty] private int _mapOtherFloorsLevels = 10;
     [ObservableProperty] private int _mapOtherFloorsMaxOverlapPercent = 50;
     [ObservableProperty] private bool _mapRouteLinesOnOtherFloors = true;
@@ -492,7 +491,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         _globalSettings.Current.LocalApiAllowDestructive = LocalApiAllowDestructive;
         _globalSettings.Current.RecentProfilesShown =
             System.Math.Clamp(RecentProfilesShown, 0, GlobalSettings.MaxRecentProfilesShown);
-        _globalSettings.Current.MapShowOtherFloors = MapShowOtherFloors;
         _globalSettings.Current.MapOtherFloorsLevels =
             System.Math.Clamp(MapOtherFloorsLevels, 1, GlobalSettings.MaxMapOtherFloorsLevels);
         _globalSettings.Current.MapOtherFloorsMaxOverlapPercent =
@@ -574,7 +572,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         LocalApiAllowDestructive = _globalSettings.Current.LocalApiAllowDestructive;
         RefreshLocalApiStatus();
         RecentProfilesShown = _globalSettings.Current.RecentProfilesShown;
-        MapShowOtherFloors = _globalSettings.Current.MapShowOtherFloors;
         MapOtherFloorsLevels = _globalSettings.Current.MapOtherFloorsLevels;
         MapOtherFloorsMaxOverlapPercent = _globalSettings.Current.MapOtherFloorsMaxOverlapPercent;
         MapRouteLinesOnOtherFloors = _globalSettings.Current.MapRouteLinesOnOtherFloors;
@@ -728,7 +725,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnLocalApiPortChanged(int value)                    => Dirty();
     partial void OnLocalApiAllowDestructiveChanged(bool value)       => Dirty();
     partial void OnRecentProfilesShownChanged(int value)             => Dirty();
-    partial void OnMapShowOtherFloorsChanged(bool value)             => Dirty();
     partial void OnMapOtherFloorsLevelsChanged(int value)            => Dirty();
     partial void OnMapOtherFloorsMaxOverlapPercentChanged(int value) => Dirty();
     partial void OnMapRouteLinesOnOtherFloorsChanged(bool value)     => Dirty();
