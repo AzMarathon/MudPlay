@@ -38,7 +38,7 @@ public sealed class InventoryActionHandlerTests
         public required List<byte[]> WireSent { get; init; }
     }
 
-    private static Harness Setup(bool paradigm = false)
+    private static Harness Setup(bool paradigm = false, Func<string, bool, bool>? cannotDrop = null)
     {
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
@@ -53,7 +53,7 @@ public sealed class InventoryActionHandlerTests
         CashSettings cash = new();
         List<byte[]> wire = new();
         InventoryActionHandler handler = new(engine, inv, ground, party, () => cash, new CurrencyNaming(),
-            isParadigm: () => paradigm);
+            isParadigm: () => paradigm, cannotDrop: cannotDrop);
         handler.SetWireSender(wire.Add);
         return new Harness
         {
@@ -241,6 +241,32 @@ public sealed class InventoryActionHandlerTests
         h.Engine.DispatchForTests(Telepath("Bob", "@drop-all"));
 
         Assert.Equal(expected, Wire(h));
+    }
+
+    // The game refuses a no-drop item ("You may not drop that item!"), and a cursed
+    // item while it is worn. Sending those only fills the game's command queue, so
+    // the sweep leaves them out and says which it kept.
+    [Fact]
+    public void DropAllFull_LeavesOutWhatTheGameWontDrop_AndSaysSo()
+    {
+        Harness h = Setup(paradigm: true, cannotDrop: (name, worn) =>
+            name == "token of Silvermere" || (worn && name == "cursed ring"));
+        SeedPlayer(h.Players, "Bob", PlayerRemoteControls.ExecuteCommands);
+        Feed(h.Lines, "You are carrying a rusty dagger, token of Silvermere, cursed ring (Finger), "
+                    + "padded vest (Torso).");
+        Feed(h.Lines, "You have no keys.");
+        Feed(h.Lines, "Wealth:    0 copper farthings");
+        Feed(h.Lines, "Encumbrance:    36/2880  -  Light  [1%]");
+
+        h.Engine.DispatchForTests(Telepath("Bob", "@drop-all full"));
+
+        string[] sent = Wire(h).ToArray();
+        Assert.Contains("drop rusty dagger", sent);
+        Assert.Contains("drop padded vest", sent);
+        Assert.DoesNotContain("drop token of Silvermere", sent);
+        Assert.DoesNotContain("drop cursed ring", sent);
+        Assert.EndsWith("(keeping 2 that can't be dropped: token of Silvermere, cursed ring)",
+            Assert.Single(Replies(h.Engine)));
     }
 
     [Fact]

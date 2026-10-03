@@ -261,10 +261,17 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **Every rate-limit line the game emits carries its own prompt** *(2026-09-03, observed)*. So the prompt alone is NOT sufficient as a rate signal. Gating purely on prompts speeds the client up in exactly the condition that should slow it down: the nudge arrives with a prompt, the prompt releases another command, and that command earns another nudge. This was observed as bursts of five nudges inside 200ms, repeating on every back-off.
 - **Pace on a time floor, with the prompt as a gate on top of it, never as the sole trigger.**
 - **This is not the outbound-write interleaving bug.** That was a client-side concurrency defect in `TelnetClient`, not a game rate limit.
+- **How Stock's limit works** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_execute_input` / `_add_delayed_command` / `_add_delay` / `_fast_update_character`)*:
+  - It is a **queue length, not a time window.** Input runs at once unless the character has an action delay running or commands already waiting; then it joins a per-character queue. With **8** waiting the game prints the nudge; from **12** it drops the new command with the "command ignored" line.
+  - The delay is a counter that the fast character update counts down by one per pass; the waiting commands run when it reaches zero. The pass's length is a sysop timer setting, not in the DLL.
+  - **Commands that add a delay:** `move` (each step), `search` 1, `sneak` 1, `hide` 1, `track` 1, `rob` 1, `open` / `close` / `lock` 1, `picklock` 2, `bash` 1–2, `drag` 1, `quit` 6, and a confusion fumble 1.
+  - **`drop`, `get`, `sell` and `buy` add none.** A burst of them only queues when a delay is already running (right after a move or a sneak) or other commands are waiting. That is how the 26-get Roomba batch above was lost, after a move. A `hide` sweep queues behind itself.
+- [NEEDS CONFIRMATION] **Paradigm.** The user will test whether Paradigm's limit works the same way (a burst of `drop`/`get` with no delay running, the same burst right after a move, and a `hide` burst).
 
 **Client use:**
 - Every telepath passes `TelepathPacer`'s 100 ms floor; bulk reply bursts (e.g. `@roomba sync`) go ~800 ms apart via `PacedReplySender`. See *Talk & chat channels → Telepath throttle and per-telepath acknowledgement*.
 - Roomba releases `get`/`drop` at most one per wire prompt AND no faster than an 800 ms floor (`GhSweepManager.MinCommandInterval`). The game's own prompt acts as the meter, so no rate has to be guessed. Because the prompt alone is not sufficient, it is used as a gate on top of a time floor.
+- Get All / Drop All / Hide All go through `BulkCommandPacer`: at most 6 unanswered (two short of the nudge), one more per prompt, 150 ms apart. On a rate-limit line it waits 3 s and re-sends nothing, since a second `drop` of a stack would drop another copy. Both realms until Paradigm is measured.
 
 ### Message catalogue (lines the client parses)
 *Status: rows Unrated; realm rule CONFIRMED 2026-09-28 (user); the Thorns/ShockShield row is CONFIRMED 2026-08-15 (user)*
@@ -4548,14 +4555,20 @@ A `get <item>` that can't succeed replies with one of these shapes:
   - **Had the collision landed on something droppable, the wrong item would have been dropped with no complaint at all.**
   - So a drop for an item you may no longer hold is never safe to send blind. Either confirm you hold it, or be ready to treat any refusal as "verify against a real `i` before doing anything else".
 - **A worn item drops with a plain `drop <item>`** *([CONFIRMED] 2026-09-26, user)*: no `rem` first. The game takes it off and drops it in one command.
+- **What the game refuses to drop or hide** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_drop` and `_cmd_hide`, the same two checks in each; Realm: Stock)*. Either one answers `You may not drop that item!`:
+  - an item with the no-drop flag (game data `Not Droppable` = 1). Both realms' data flag Paradigm's tokens of (place), the Gypsy's deck of cards and the Mercy / Balance / Hate tokens;
+  - a cursed item (ability 82 Cursed or 83 CursedMajor) **while it is worn**. A carried cursed item drops. (If two worn slots hold the same item number the check is skipped; an edge case.)
+- [CONFLICT — ask the user] **Loyal items (ability 100).** The user said 2026-10-02 that loyal items can't be dropped. Stock's `_cmd_drop` and `_cmd_hide` don't check ability 100, and the data has many loyal items without the no-drop flag (70 on Stock, 111 on Paradigm, e.g. the emblems). Is a loyal-only item refused on Paradigm, on Stock, or neither?
 
 **Client use:**
 - Roomba treats any drop refusal as "verify against a real `i` before doing anything else". It also drops its belief in a carried item the moment anything else is seen dropping it.
 - `@drop-all full` / Drop Everything drops worn gear with the same `drop` it uses for the pack (InventoryActionHandler).
+- Drop All / Drop Everything / Hide All leave out what the game refuses (`ItemDropRule`, `AppServices.GameRefusesToDrop`) and name it in their reply. Loyal-only items are still sent until the conflict above is settled.
 
 ### Hiding items in a room (stashing)
 *Status: CONFIRMED 2026-09-26 (user) · Realm: both; the counted form is Paradigm-only*
 
+- **`hide` refuses the same items `drop` does, and each hide adds a 1-unit action delay** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_hide`; Realm: Stock)*. See *`drop`: targeting, refusals and worn items* and *Wire, prompt & command output → Command rate limit (typing/sending too fast)*.
 - **`hide <item>` stashes an item in the room; a bare `hide` hides the player instead.** A stashed item
   can't be seen again until someone actively searches the room for it. `hid <item>` is the shorthand.
 - **Worn gear hides directly**, like `drop`: `hide <item>` on a worn piece takes it off and stashes it

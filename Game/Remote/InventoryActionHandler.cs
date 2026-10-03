@@ -46,6 +46,12 @@ public sealed class InventoryActionHandler : IDisposable
     // Paradigm batches a counted item command ("drop 3 black star key"); Stock needs
     // one command per copy (CountedCommand). Unwired reads as Stock — the safe form.
     private readonly Func<bool> _isParadigm;
+    // True when the game would refuse to drop or hide the named item (worn or not).
+    // Unwired: nothing is skipped.
+    private readonly Func<string, bool, bool> _cannotDrop;
+    // Paces the sweeps (BulkCommandPacer). Null when no scheduler is wired (tests):
+    // every command then goes straight out.
+    private readonly BulkCommandPacer? _pacer;
     private Action<byte[]>? _wireSender;
     // A get-all that found an empty ground cache sent a re-survey CR and is waiting
     // for the next "You notice" survey to grab on. One-shot; reset on that survey.
@@ -59,9 +65,14 @@ public sealed class InventoryActionHandler : IDisposable
         PartyState party,
         Func<CashSettings> readCash,
         CurrencyNaming naming,
-        Func<bool>? isParadigm = null)
+        Func<bool>? isParadigm = null,
+        Func<string, bool, bool>? cannotDrop = null,
+        Action<TimeSpan, Action>? scheduleAfter = null,
+        Services.LogService? log = null)
     {
         _isParadigm = isParadigm ?? (() => false);
+        _cannotDrop = cannotDrop ?? ((_, _) => false);
+        if (scheduleAfter is not null) _pacer = new BulkCommandPacer(Send, scheduleAfter, log: log);
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(ground);
@@ -149,15 +160,27 @@ public sealed class InventoryActionHandler : IDisposable
 
     private string GrabGround()
     {
-        int sent = 0;
+        List<string> commands = new();
         foreach (string item in _ground.Items)
         {
             string name = StripArticle(item);
             if (name.Length == 0) continue;
-            Send($"get {name}");
-            sent++;
+            commands.Add($"get {name}");
         }
-        return $"getting {sent} ground item{(sent == 1 ? "" : "s")}";
+        Dispatch(commands);
+        return $"getting {commands.Count} ground item{(commands.Count == 1 ? "" : "s")}";
+    }
+
+    // The game answered a command with a prompt; the sweep pacer counts it.
+    public void NotePrompt() => _pacer?.NotePrompt();
+
+    // The game ignored a command for coming too fast.
+    public void NoteRateLimited() => _pacer?.NoteRateLimited();
+
+    private void Dispatch(List<string> commands)
+    {
+        if (_pacer is { } pacer) pacer.Enqueue(commands);
+        else foreach (string command in commands) Send(command);
     }
 
     // What a drop-all / hide-all sweep takes. Unworn is the original @drop-all: the
@@ -219,30 +242,35 @@ public sealed class InventoryActionHandler : IDisposable
         if (!_inventory.IsLoaded) return "inventory not parsed yet (type i)";
         InventorySnapshot snap = _inventory.Snapshot;
 
+        List<string> commands = new();
+        List<string> kept = new();
         int items = 0;
         if (scope is DropScope.Unworn or DropScope.Full)
-            foreach (string item in snap.CarriedItems) items += SweepNamed(verb, item);
+            foreach (string item in snap.CarriedItems) items += SweepNamed(commands, kept, verb, item, worn: false);
         if (scope == DropScope.Full)
         {
-            foreach (EquippedItem worn in snap.EquippedItems) items += SweepNamed(verb, worn.Name);
-            if (snap.ReadiedLight is { } light) items += SweepNamed(verb, light.Name);
+            foreach (EquippedItem worn in snap.EquippedItems) items += SweepNamed(commands, kept, verb, worn.Name, worn: true);
+            if (snap.ReadiedLight is { } light) items += SweepNamed(commands, kept, verb, light.Name, worn: true);
         }
         if (scope is DropScope.Full or DropScope.Keys && snap.Keys is { } keys)
-            foreach (string key in keys) items += SweepNamed(verb, key);
+            foreach (string key in keys) items += SweepNamed(commands, kept, verb, key, worn: false);
 
         int coinKinds = 0;
         if (scope is DropScope.Full or DropScope.Coins)
         {
             CurrencyHoldings c = snap.Currency;
-            coinKinds += SweepCoins(verb, c.Copper, "copper");
-            coinKinds += SweepCoins(verb, c.Silver, "silver");
-            coinKinds += SweepCoins(verb, c.Gold, "gold");
-            coinKinds += SweepCoins(verb, c.Platinum, "platinum");
-            coinKinds += SweepCoins(verb, c.Runic, _naming.RunicName);
+            coinKinds += SweepCoins(commands, verb, c.Copper, "copper");
+            coinKinds += SweepCoins(commands, verb, c.Silver, "silver");
+            coinKinds += SweepCoins(commands, verb, c.Gold, "gold");
+            coinKinds += SweepCoins(commands, verb, c.Platinum, "platinum");
+            coinKinds += SweepCoins(commands, verb, c.Runic, _naming.RunicName);
         }
+        Dispatch(commands);
 
-        if (items == 0 && coinKinds == 0) return $"nothing to {verb}";
-        return scope switch
+        // Wire replies are ASCII-only; the list of kept items is short.
+        string keeping = kept.Count == 0 ? "" : $" (keeping {kept.Count} that can't be {verb}ped: {string.Join(", ", kept)})";
+        if (items == 0 && coinKinds == 0) return $"nothing to {verb}{keeping}";
+        string status = scope switch
         {
             DropScope.Unworn => $"{doing} {items} carried item{Plural(items)}",
             DropScope.Keys => $"{doing} {items} key{Plural(items)}",
@@ -250,24 +278,32 @@ public sealed class InventoryActionHandler : IDisposable
             _ => $"{doing} everything: {items} item{Plural(items)}"
                  + (coinKinds > 0 ? $" and all coins ({coinKinds} denomination{Plural(coinKinds)})" : ""),
         };
+        return status + keeping;
     }
 
     // Drop / hide one pack / ring entry, which may be a stack ("43 black diamond"):
     // one counted command on Paradigm, one per copy on Stock (no item batching
-    // there). Returns how many copies it covered.
-    private int SweepNamed(string verb, string item)
+    // there). Returns how many copies it covered. An item the game won't let go of
+    // (no-drop, or a cursed item worn) is left out: sending it only earns "You may not
+    // drop that item!" and spends a place in the game's command queue.
+    private int SweepNamed(List<string> commands, List<string> kept, string verb, string item, bool worn)
     {
         (int count, string raw) = CountedCommand.SplitLeadingCount(item.Trim());
         string name = StripArticle(raw);
         if (name.Length == 0) return 0;
-        CountedCommand.Emit(Send, verb, count, name, _isParadigm());
+        if (_cannotDrop(name, worn))
+        {
+            kept.Add(name);
+            return 0;
+        }
+        CountedCommand.Emit(commands.Add, verb, count, name, _isParadigm());
         return count;
     }
 
-    private int SweepCoins(string verb, long count, string currency)
+    private int SweepCoins(List<string> commands, string verb, long count, string currency)
     {
         if (count <= 0) return 0;
-        Send($"{verb} {count} {_naming.WireNoun(currency)}");
+        commands.Add($"{verb} {count} {_naming.WireNoun(currency)}");
         return 1;
     }
 
