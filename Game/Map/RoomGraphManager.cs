@@ -347,46 +347,26 @@ public sealed class RoomGraphManager
         var actionCells = new List<(RoomKey Source, MultiActionExitData.ActionCell Cell)>();
         var perRoomModifiers = new Dictionary<RoomKey, Dictionary<Direction, string>>();
 
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
+        // Each row is read on its own (ReadRow touches nothing shared), so the
+        // 57,000 of a full realm are spread over every core: read on one thread they
+        // were over a second of the launch freeze. The results are folded in below in
+        // row order, as a plain loop would have.
+        JsonElement[] rows = doc.RootElement.EnumerateArray().ToArray();
+        RowRead[] read = new RowRead[rows.Length];
+        Parallel.For(0, rows.Length, i => read[i] = ReadRow(rows[i]));
+        foreach (RowRead row in read)
         {
-            if (!TryReadRoom(row, out Room? room))
+            if (row.Room is not { } room)
             {
                 skipped++;
                 continue;
             }
             _rooms[room.Key] = room;
             parsed++;
-
-            // Pre-cache MultiAction modifier strings + scan for
-            // Action#N cells living in non-exit slots of the same row.
-            if (row.ValueKind == JsonValueKind.Object)
-            {
-                Dictionary<Direction, string>? modBucket = null;
-                foreach (Direction dir in s_directions)
-                {
-                    string? cell = TryReadString(row, s_exitPropertyNames[(int)dir]);
-                    if (string.IsNullOrWhiteSpace(cell)) continue;
-                    // "Action#N [on the …]" (multi-step variant) and the
-                    // step-less "Action [on the …]" (single-action variant)
-                    // both start with "Action" + a non-word character. Hand
-                    // both forms to the parser; non-matching cells return
-                    // null and are silently skipped.
-                    if (cell.StartsWith("Action", StringComparison.OrdinalIgnoreCase)
-                        && cell.Length > 6
-                        && (cell[6] == '#' || cell[6] == ' ' || cell[6] == '['))
-                    {
-                        MultiActionExitData.ActionCell? action = MultiActionExitData.ParseActionCell(cell);
-                        if (action is not null)
-                            actionCells.Add((room.Key, action));
-                    }
-                    else if (cell.Contains("Hidden/Needs", StringComparison.OrdinalIgnoreCase))
-                    {
-                        modBucket ??= new();
-                        modBucket[dir] = cell;
-                    }
-                }
-                if (modBucket is not null) perRoomModifiers[room.Key] = modBucket;
-            }
+            if (row.Actions is not null)
+                foreach (MultiActionExitData.ActionCell action in row.Actions)
+                    actionCells.Add((room.Key, action));
+            if (row.Modifiers is not null) perRoomModifiers[room.Key] = row.Modifiers;
         }
 
         // Second pass: attach gathered action cells to the right
@@ -742,9 +722,16 @@ public sealed class RoomGraphManager
         int bracket = rawLairTag.IndexOf('[', start);
         int end = bracket >= 0 ? bracket : rawLairTag.Length;
         if (end <= start) yield break;
-        foreach (string part in rawLairTag[start..end].Split(',', StringSplitOptions.RemoveEmptyEntries))
+        // Scanned in place: three load passes ask this of every room, and slicing
+        // and splitting the cell each time was a tenth of the graph build.
+        int pos = start;
+        while (pos < end)
         {
-            if (int.TryParse(part.Trim(), out int id) && id > 0) yield return id;
+            int comma = rawLairTag.IndexOf(',', pos, end - pos);
+            int stop = comma >= 0 ? comma : end;
+            bool parsed = int.TryParse(rawLairTag.AsSpan(pos, stop - pos).Trim(), out int id) && id > 0;
+            pos = stop + 1;
+            if (parsed) yield return id;
         }
     }
 
@@ -1281,6 +1268,42 @@ public sealed class RoomGraphManager
             }
         }
         _lairSizeByMonster = lairSize;
+    }
+
+    // One Rooms row: the typed room, the Action#N cells living in its exit slots,
+    // and its MultiAction modifier strings.
+    private readonly record struct RowRead(
+        Room? Room, List<MultiActionExitData.ActionCell>? Actions, Dictionary<Direction, string>? Modifiers);
+
+    private static RowRead ReadRow(JsonElement row)
+    {
+        if (!TryReadRoom(row, out Room room)) return default;
+
+        List<MultiActionExitData.ActionCell>? actions = null;
+        Dictionary<Direction, string>? modBucket = null;
+        foreach (Direction dir in s_directions)
+        {
+            string? cell = TryReadString(row, s_exitPropertyNames[(int)dir]);
+            if (string.IsNullOrWhiteSpace(cell)) continue;
+            // "Action#N [on the …]" (multi-step variant) and the
+            // step-less "Action [on the …]" (single-action variant)
+            // both start with "Action" + a non-word character. Hand
+            // both forms to the parser; non-matching cells return
+            // null and are silently skipped.
+            if (cell.StartsWith("Action", StringComparison.OrdinalIgnoreCase)
+                && cell.Length > 6
+                && (cell[6] == '#' || cell[6] == ' ' || cell[6] == '['))
+            {
+                if (MultiActionExitData.ParseActionCell(cell) is { } action)
+                    (actions ??= new()).Add(action);
+            }
+            else if (cell.Contains("Hidden/Needs", StringComparison.OrdinalIgnoreCase))
+            {
+                modBucket ??= new();
+                modBucket[dir] = cell;
+            }
+        }
+        return new RowRead(room, actions, modBucket);
     }
 
     private static bool TryReadRoom(JsonElement row, out Room room)

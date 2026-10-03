@@ -382,11 +382,22 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // Value of an ability code in the monster's Abil-0..9 slots (0 if absent). Monster
     // Dodge (code 34) and hitmag level (code 28 "Magical") are stored as abilities, not
     // base columns, so both surface through here.
+    // The numbered slot columns' names, built once: these are read for every monster
+    // on each load, and formatting the name per read was a tenth of the table's
+    // allocation.
+    private static readonly string[] AbilSlots = SlotNames("Abil-", 10);
+    private static readonly string[] AbilValSlots = SlotNames("AbilVal-", 10);
+    private static readonly string[] MidSpellSlots = SlotNames("MidSpell-", 5);
+    private static readonly string[] DropItemSlots = SlotNames("DropItem-", 10);
+
+    private static string[] SlotNames(string prefix, int count) =>
+        Enumerable.Range(0, count).Select(i => prefix + i.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+
     private static int ReadAbilValue(JsonElement el, int code)
     {
-        for (int i = 0; i < 10; i++)
-            if (ReadInt(el, $"Abil-{i}") == code)
-                return ReadInt(el, $"AbilVal-{i}");
+        for (int i = 0; i < AbilSlots.Length; i++)
+            if (ReadInt(el, AbilSlots[i]) == code)
+                return ReadInt(el, AbilValSlots[i]);
         return 0;
     }
 
@@ -395,24 +406,24 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
     // presence.
     private static bool HasAbil(JsonElement el, int code)
     {
-        for (int i = 0; i < 10; i++)
-            if (ReadInt(el, $"Abil-{i}") == code) return true;
+        for (int i = 0; i < AbilSlots.Length; i++)
+            if (ReadInt(el, AbilSlots[i]) == code) return true;
         return false;
     }
 
     // True when the monster casts a between-rounds spell (any MidSpell-0..4 slot set).
     private static bool HasMidSpell(JsonElement el)
     {
-        for (int i = 0; i < 5; i++)
-            if (ReadInt(el, $"MidSpell-{i}") > 0) return true;
+        for (int i = 0; i < MidSpellSlots.Length; i++)
+            if (ReadInt(el, MidSpellSlots[i]) > 0) return true;
         return false;
     }
 
     // True when the monster drops at least one item (any DropItem-0..9 slot set).
     private static bool HasDrop(JsonElement el)
     {
-        for (int i = 0; i < 10; i++)
-            if (ReadInt(el, $"DropItem-{i}") > 0) return true;
+        for (int i = 0; i < DropItemSlots.Length; i++)
+            if (ReadInt(el, DropItemSlots[i]) > 0) return true;
         return false;
     }
 

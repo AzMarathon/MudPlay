@@ -647,8 +647,8 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         System.Text.StringBuilder sb = new();
         foreach (string column in Columns)
             if (row.Get(column) is { Length: > 0 } value) sb.Append(value).Append('\u0001');
-        foreach (GameDataCell cell in row.Cells)
-            if (cell.Value is { Length: > 0 } display) sb.Append(display).Append('\u0001');
+        for (int i = 0; i < row.CellCount; i++)
+            if (row.DisplayAt(i) is { Length: > 0 } display) sb.Append(display).Append('\u0001');
         return sb.ToString();
     }
 
@@ -777,15 +777,32 @@ public abstract class JsonTableSectionViewModel : GameDataTableSectionViewModel
     protected virtual IReadOnlyDictionary<string, string?>? ComputeRowCells(JsonElement element) => null;
 }
 
-// One row loaded from a game-data source. Holds the column-name → string-rendered-value
-// dictionary. Numbers / nulls / nested objects are all collapsed to strings at parse time so
-// the view only has to deal with one shape.
+// One row loaded from a game-data source: each column's value as a string. Numbers /
+// nulls / nested objects are all collapsed to strings at parse time so the view only
+// has to deal with one shape.
+//
+// Kept lean, because a table is tens of thousands of these (57,000 rooms): a row is
+// two arrays, the raw values and the displayed ones (the same array when no formatter
+// changed anything), indexed by a column map every row of the table shares. A
+// dictionary and a cell object per value per row was 100 MB for Rooms alone, and
+// building it kept the garbage collector pausing the whole client while a table
+// loaded. Cell objects are made only for the rows the grid actually shows.
 public sealed class GameDataRow
 {
-    private readonly IReadOnlyDictionary<string, string?> _values;
+    private readonly RowShape _shape;
+    private readonly string?[] _raw;
+    private readonly string?[] _display;
+    private GameDataCell[]? _cells;
 
-    // Data cells in display order; the trailing "Use" virtual cell is appended by the view.
-    public IReadOnlyList<GameDataCell> Cells { get; }
+    // Data cells in display order; the trailing "Use" virtual cell is appended by the
+    // view. Built on first use: the grid binds these for the rows it realizes. Code
+    // that walks every row (sorting, the search index) reads DisplayAt instead.
+    public IReadOnlyList<GameDataCell> Cells => _cells ??= BuildCells();
+
+    public int CellCount => _display.Length;
+
+    // The displayed (formatter-applied) value of the cell at index, in Cells order.
+    public string? DisplayAt(int index) => _display[index];
 
     // Highest-priority tier that owns this record. Drives the Game Data Browser's "Use" column
     // label and the edit dialog's "Use:" dropdown initial value.
@@ -804,26 +821,30 @@ public sealed class GameDataRow
     // table shows "Lines/Preview" summaries, not the raw message text the Id is hashed from).
     public object? Tag { get; set; }
 
-    private GameDataRow(IReadOnlyDictionary<string, string?> values, IReadOnlyList<GameDataCell> cells)
+    private GameDataRow(RowShape shape, string?[] raw, string?[] display)
     {
-        _values = values;
-        Cells = cells;
+        _shape = shape;
+        _raw = raw;
+        _display = display;
     }
 
     // Read a column value by name. Returns null if the column wasn't in the source row.
     public string? Get(string column)
-        => _values.TryGetValue(column, out string? value) ? value : null;
+        => _shape.Index.TryGetValue(column, out int i) ? _raw[i] : null;
 
     // Read a column's *display* value (formatter-applied), as shown in the grid.
     // Category filters match on this so their dropdowns show "Living"/"Undead" or
     // "Lawful Good" rather than the raw MDB codes; range filters use Get (raw
-    // numeric) instead. Falls back to the raw value when the column has no cell.
+    // numeric) instead.
     public string? GetDisplay(string column)
+        => _shape.Index.TryGetValue(column, out int i) ? _display[i] : null;
+
+    private GameDataCell[] BuildCells()
     {
-        foreach (GameDataCell cell in Cells)
-            if (string.Equals(cell.Column, column, StringComparison.OrdinalIgnoreCase))
-                return cell.Value;
-        return Get(column);
+        GameDataCell[] cells = new GameDataCell[_display.Length];
+        for (int i = 0; i < cells.Length; i++)
+            cells[i] = new GameDataCell(_shape.Columns[i], _display[i]);
+        return cells;
     }
 
     // Build a row from a JSON element. Columns missing from the source render as null in the
@@ -836,25 +857,18 @@ public sealed class GameDataRow
         IReadOnlyDictionary<string, Func<string?, string?>>? formatters = null,
         IReadOnlyDictionary<string, string?>? computedCells = null)
     {
-        Dictionary<string, string?> values = new(StringComparer.OrdinalIgnoreCase);
-        List<GameDataCell> cells = new(columns.Count);
-
-        foreach (string column in columns)
+        string?[] raw = new string?[columns.Count];
+        for (int i = 0; i < raw.Length; i++)
         {
             // Computed cells take precedence over raw JSON when present —
             // sections use this to surface synthesised columns ("Abilities")
             // that aren't backed by a real MDB field.
-            string? raw = computedCells is not null
-                          && computedCells.TryGetValue(column, out string? computed)
+            string column = columns[i];
+            raw[i] = computedCells is not null && computedCells.TryGetValue(column, out string? computed)
                 ? computed
                 : ReadValue(element, column);
-            values[column] = raw;
-            string? display = (formatters is not null && formatters.TryGetValue(column, out Func<string?, string?>? fmt))
-                ? fmt(raw)
-                : raw;
-            cells.Add(new GameDataCell(column, display));
         }
-        return new GameDataRow(values, cells);
+        return new GameDataRow(RowShape.Of(columns), raw, Format(raw, columns, formatters));
     }
 
     // Build a row from an arbitrary column-name → raw-value dictionary (engine-backed tabs
@@ -865,19 +879,30 @@ public sealed class GameDataRow
         IReadOnlyList<string> columns,
         IReadOnlyDictionary<string, Func<string?, string?>>? formatters = null)
     {
-        Dictionary<string, string?> values = new(StringComparer.OrdinalIgnoreCase);
-        List<GameDataCell> cells = new(columns.Count);
-
-        foreach (string column in columns)
+        string?[] raw = new string?[columns.Count];
+        for (int i = 0; i < raw.Length; i++)
         {
-            source.TryGetValue(column, out string? raw);
-            values[column] = raw;
-            string? display = (formatters is not null && formatters.TryGetValue(column, out Func<string?, string?>? fmt))
-                ? fmt(raw)
-                : raw;
-            cells.Add(new GameDataCell(column, display));
+            source.TryGetValue(columns[i], out string? value);
+            raw[i] = value;
         }
-        return new GameDataRow(values, cells);
+        return new GameDataRow(RowShape.Of(columns), raw, Format(raw, columns, formatters));
+    }
+
+    // The displayed values: raw itself unless a formatter gives a column something else.
+    private static string?[] Format(
+        string?[] raw, IReadOnlyList<string> columns, IReadOnlyDictionary<string, Func<string?, string?>>? formatters)
+    {
+        if (formatters is null || formatters.Count == 0) return raw;
+        string?[]? display = null;
+        for (int i = 0; i < raw.Length; i++)
+        {
+            if (!formatters.TryGetValue(columns[i], out Func<string?, string?>? format)) continue;
+            string? shown = format(raw[i]);
+            if (ReferenceEquals(shown, raw[i])) continue;
+            display ??= (string?[])raw.Clone();
+            display[i] = shown;
+        }
+        return display ?? raw;
     }
 
     private static string? ReadValue(JsonElement row, string column)
@@ -888,11 +913,46 @@ public sealed class GameDataRow
             JsonValueKind.Null      => null,
             JsonValueKind.Undefined => null,
             JsonValueKind.String    => el.GetString(),
-            JsonValueKind.Number    => el.ToString(),
+            JsonValueKind.Number    => NumberText(el),
             JsonValueKind.True      => "true",
             JsonValueKind.False     => "false",
             _                        => el.ToString(),
         };
+    }
+
+    // Most cells are small whole numbers, and most of those are 0: one shared string
+    // each instead of a new one per cell.
+    private static readonly string[] SmallNumbers = Enumerable.Range(0, 1024)
+        .Select(n => n.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+
+    private static string NumberText(JsonElement number)
+    {
+        if (number.TryGetInt32(out int n) && n >= 0 && n < SmallNumbers.Length)
+        {
+            string text = SmallNumbers[n];
+            // Only when the JSON wrote it the plain way ("7", not "7.0" or "7e0").
+            if (System.Runtime.InteropServices.JsonMarshal.GetRawUtf8Value(number).Length == text.Length) return text;
+        }
+        return number.ToString();
+    }
+
+    // A table's columns and where each sits, shared by all its rows. Keyed by the
+    // column list itself: a section hands every row the same list.
+    private sealed class RowShape
+    {
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<string>, RowShape> Shapes = new();
+
+        public IReadOnlyList<string> Columns { get; }
+        public Dictionary<string, int> Index { get; }
+
+        private RowShape(IReadOnlyList<string> columns)
+        {
+            Columns = columns;
+            Index = new Dictionary<string, int>(columns.Count, StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < columns.Count; i++) Index.TryAdd(columns[i], i);
+        }
+
+        public static RowShape Of(IReadOnlyList<string> columns) => Shapes.GetValue(columns, c => new RowShape(c));
     }
 }
 

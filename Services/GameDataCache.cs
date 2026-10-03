@@ -75,6 +75,12 @@ public sealed class GameDataCache
     private readonly Dictionary<string, long> _lastRead = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<(string Set, string Table), long> _prewarmedAt = new();
 
+    // Prewarm parses still running. A lookup that arrives before one finishes waits
+    // for it (Lazy lets one thread run the parse and the other block on it) rather
+    // than parsing the same file a second time on its own thread. Guarded by the
+    // _tables lock.
+    private readonly Dictionary<(string Set, string Table), Lazy<JsonDocument?>> _prewarming = new();
+
     // Results worked out from the active set's tables (Derived), and a count bumped
     // whenever the set's tables are dropped for re-reading, so a result built from
     // the old ones is never kept. Guarded by the _tables lock.
@@ -241,6 +247,10 @@ public sealed class GameDataCache
         // a table that happened never to be read.)
         lock (_tables)
         {
+            foreach ((string Set, string Table) key in _prewarming.Keys
+                         .Where(k => string.Equals(k.Set, ActiveSet, StringComparison.OrdinalIgnoreCase))
+                         .ToList())
+                _prewarming.Remove(key);
             foreach ((string Set, string Table) key in _prewarmed.Keys
                          .Where(k => string.Equals(k.Set, ActiveSet, StringComparison.OrdinalIgnoreCase))
                          .ToList())
@@ -267,6 +277,7 @@ public sealed class GameDataCache
         string set;
         string? path;
         long generation;
+        Lazy<JsonDocument?>? inFlight;
         lock (_tables)
         {
             if (_tables.TryGetValue(tableName, out JsonDocument? cached))
@@ -292,6 +303,7 @@ public sealed class GameDataCache
             path = ResolveTablePath(set, tableName);
             if (path is null || !File.Exists(path)) return null;
             generation = _generation;
+            _prewarming.Remove((set, tableName), out inFlight);
         }
 
         // Read and parse outside the lock: Rooms takes half a second, and holding the
@@ -302,9 +314,18 @@ public sealed class GameDataCache
         // FileStream while Parse walks the buffer.
         JsonDocument? parsed = null;
         JsonException? failure = null;
-        int kilobytes;
-        using (PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}"))
+        int kilobytes = 0;
+        // A prewarm is already parsing this table: take its result. A failed one
+        // (null) falls through to the read below, which reports the failure.
+        if (inFlight is not null)
         {
+            using PerformanceMonitor.Scope? wait = Performance?.Measure($"await prewarm {tableName}");
+            parsed = inFlight.Value;
+        }
+        bool fromPrewarm = parsed is not null;
+        if (!fromPrewarm)
+        {
+            using PerformanceMonitor.Scope? parse = Performance?.Measure($"parse {tableName}");
             byte[] bytes = File.ReadAllBytes(path);
             kilobytes = bytes.Length / 1024;
             try { parsed = JsonDocument.Parse(bytes); }
@@ -326,8 +347,9 @@ public sealed class GameDataCache
                 result = parsed;
                 _tables[tableName] = result;
                 _lastRead[tableName] = Environment.TickCount64;
-                Log?.Log(LogSeverity.Debug, "GameData",
-                    $"'{tableName}' loaded for '{set}' ({kilobytes} KB).");
+                Log?.Log(LogSeverity.Debug, "GameData", fromPrewarm
+                    ? $"'{tableName}' taken from the prewarm in flight for '{set}'."
+                    : $"'{tableName}' loaded for '{set}' ({kilobytes} KB).");
             }
             else if (failure is { } ex)
             {
@@ -373,30 +395,45 @@ public sealed class GameDataCache
         ArgumentNullException.ThrowIfNull(setName);
         ArgumentNullException.ThrowIfNull(tableNames);
 
-        return Task.WhenAll(tableNames.Select(tableName => Task.Run(() =>
+        return Task.WhenAll(tableNames.Select(tableName =>
             {
                 string? path = ResolveTablePath(setName, tableName);
-                if (path is null || !File.Exists(path)) return;
+                if (path is null || !File.Exists(path)) return Task.CompletedTask;
 
-                JsonDocument doc;
-                try
+                Lazy<JsonDocument?> parse = new(() =>
                 {
-                    byte[] bytes = File.ReadAllBytes(path);
-                    doc = JsonDocument.Parse(bytes);
-                }
-                catch
-                {
-                    return;
-                }
-
+                    try
+                    {
+                        return JsonDocument.Parse(File.ReadAllBytes(path));
+                    }
+                    catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+                    {
+                        return null;
+                    }
+                });
                 lock (_tables)
                 {
-                    if (_tables.ContainsKey(tableName) || _prewarmed.ContainsKey((setName, tableName)))
-                        return;
-                    _prewarmed[(setName, tableName)] = doc;
-                    _prewarmedAt[(setName, tableName)] = Environment.TickCount64;
+                    if (_tables.ContainsKey(tableName) || _prewarmed.ContainsKey((setName, tableName))
+                        || !_prewarming.TryAdd((setName, tableName), parse))
+                        return Task.CompletedTask;
                 }
-            })));
+                return Task.Run(() =>
+                {
+                    JsonDocument? doc = parse.Value;
+                    lock (_tables)
+                    {
+                        // Still ours to file: a lookup that claimed it meanwhile
+                        // publishes it itself.
+                        if (!_prewarming.TryGetValue((setName, tableName), out Lazy<JsonDocument?>? pending)
+                            || !ReferenceEquals(pending, parse))
+                            return;
+                        _prewarming.Remove((setName, tableName));
+                        if (doc is null) return;
+                        _prewarmed[(setName, tableName)] = doc;
+                        _prewarmedAt[(setName, tableName)] = Environment.TickCount64;
+                    }
+                });
+            }));
     }
 
     // True when tableName is held parsed right now; never reads it.
