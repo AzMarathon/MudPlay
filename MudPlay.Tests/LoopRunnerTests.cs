@@ -1813,6 +1813,25 @@ public sealed class LoopRunnerTests : IDisposable
 
     // ----- PR C: lap timing + ReachedFirstWaypoint ---------------------
 
+    // Report paradigm-20261002-170259: the current lap read zero while a fight held
+    // the loop. The lap goes on through the pause, so its clock does too.
+    [Fact]
+    public void CurrentLapTime_KeepsCounting_WhileAFightPausesTheLoop()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        System.Threading.Thread.Sleep(20);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.True(h.Runner.CurrentLapTime >= TimeSpan.FromMilliseconds(20));
+
+        h.Runner.Stop("done");
+        Assert.Equal(TimeSpan.Zero, h.Runner.CurrentLapTime);
+    }
+
     [Fact]
     public void Start_FiresReachedFirstWaypoint_OnceWhenNoApproachNeeded()
     {

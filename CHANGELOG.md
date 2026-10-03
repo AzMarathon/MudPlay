@@ -1,10 +1,12 @@
 # Version history
 
-## 3.141.10
+## 3.141.11
 
 - Terminal draws each colour run as one glyph run instead of one call per character: about ten times less drawing work per frame, pixel-identical
 - Scrolling the history window no longer re-lays out every character and timestamp on each wheel tick
 - Zoomed CP437 font: the enlarged screen is only re-rendered when something on it changed
+- Session Stats: the current lap time keeps counting through a fight instead of dropping to zero
+- bug reports addressed: paradigm-20261002-170259
 
 ## 3.141.9
 

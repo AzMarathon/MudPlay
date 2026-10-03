@@ -338,13 +338,17 @@ public sealed class LoopRunner : IRecoverableEngine
     // pane to render per-step rows. Empty between runs.
     public IReadOnlyList<LoopStep> ExpandedSteps => _expandedSteps;
 
-    // Time elapsed in the current lap. Zero when not running. Computed on each read
-    // so VM bindings can poll via a periodic tick.
+    // Time elapsed in the current lap. Zero when no loop is running or the first
+    // waypoint hasn't been reached. Computed on each read so VM bindings can poll via
+    // a periodic tick. A fight, a rest or a recovery pauses the loop mid-lap without
+    // restarting the lap, so the clock keeps counting through it (the lap's recorded
+    // time includes it too); showing zero there blanked the readout on every fight
+    // (report paradigm-20261002-170259).
     public TimeSpan CurrentLapTime
     {
         get
         {
-            if (State != LoopState.Running) return TimeSpan.Zero;
+            if (State == LoopState.Idle) return TimeSpan.Zero;
             if (_lapStartedAt == default) return TimeSpan.Zero;
             return DateTimeOffset.UtcNow - _lapStartedAt;
         }
