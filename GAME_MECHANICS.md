@@ -3017,6 +3017,8 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
 
 How a live monster changes rooms on its own. Offsets are in-memory offsets: active monster record, known-monster record, room (disk record minus 2).
 
+**This topic is informational** *(user, 2026-10-03)*. The monster's group and pack number, the room's group, type and flags, and most exit type codes are in the server's own files and not in the imported game data, so the client can't work them out for a room or monster and nothing in the client relies on these rules.
+
 **Terms used in this topic**
 
 - **`genrdn(0,100)`** — the engine's random roll; it never reaches its upper bound, so this one is 0–99 and `< N` passes `N` times in 100 (*Armour, defence & to-hit → To-hit floor — the minimum chance a monster can ever land, by realm and armour type*).
@@ -3032,7 +3034,11 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 - **Pack number** — a second number on every monster (known-monster `+0x6c`; not in the MDB, and only `_move_monster` reads it). Leaders and Followers with the same pack number travel together. Most monsters are pack 1 (741 of the 876 matched to the MDB) and 62 are pack 0; the rest are small families: 6 kobold / kobold warrior / kobold king; 4 saracen raider / leader / zealot / high priest; 3 the rakshasha and the dwarven merchant with his bodyguard; 9 troglodyte / troglodyte leader; 10 the quaggoth, hydra / hydra head, Great Hydra / massive hydra head; 25 the nanati. "Pack number" is this file's name for it; the engine's own name isn't known.
 - **`ExpMulti`** — the Monsters-table exp multiplier (known-monster `+0x58`, copied to the active record's `+0x8` at spawn, @ `0x424734`; *Monster exp multiplier*). Between two Leaders of one pack it works as rank: the higher multiplier is the senior.
 - **Tied to a player** — the active record holds a player's name (`+0x1a`): the monster has that player as its target, from a fight or a charm. A tied monster follows and chases; an untied one roams.
-- **Monster flags** (`+0x128`): bit 1 = in a fight; bit 2 = not decoded (cleared at the end of each medium update); bit 8 = knocked down.
+- **Monster flags** (`+0x128`): bit 1 = in a fight; bit 2 = attacked or was attacked since its last medium update (set by `_attack_user_monster` @ `0x42d126` and `_attack_monster_user` @ `0x42e71b`, cleared at the end of each medium update @ `0x421f16`); bit 8 = knocked down.
+- **Player states the chase reads**, named by the tokens the engine's debug prompt prints for them (`_prf_prompt` @ `0x47360f`: `Snk `, `JstEnt `, `Hdn `):
+  - **sneaking** — flag 4 of `+0x6f4`, set by `_cmd_sneak`;
+  - **hidden** — the byte at `+0x5f6`, set by `_cmd_hide`;
+  - **just entered** — flag `0x40` of `+0x6f4`, set by `_move_user` when the player's move goes through and cleared by the player's next medium update or energy update, or by an attack command. A sneaking player who has just entered can't be attacked by a monster yet (`_monster_could_attack` @ `0x420b79`).
 - **Room flags** (`+0x564`), named by the sysop room dump (*Sysop commands → `SYSOP STATUS` — room dump format*; `_display_debug_room_stats` @ `0x43c524`): 1 `Protected`, 2 `Patrollable`, 8 `Specific Monster is Alive`, `0x40` `Ganghouse`. Bits 4, `0x10` and `0x20` are set on some rooms and aren't named there. 1,211 Stock rooms are `Patrollable`.
 - **Room type** (`+0x43c`), with the engine's names (the table at `0x47ffc4`): 0 `Normal` (an assigned-spawn room), 1 `Shop` (a set-monster room refilled only by the room reset), 2 `Arena` (the three fast-spawn arena rooms), 3 `Lair`, 4 `Hotel` (4 rooms: two `Kitchen`, two `Inn Room`), 5 `Colliseum`, 6 `Jail` (the 2 `Jail Cell` rooms). *`Summoned By` spawn tokens*, *Random spawns in assigned rooms* and *Lair respawn timers* cover 0–3.
   - **`Colliseum` (type 5) is the player-fighting ground**: 118 Stock rooms — the 64 `Training Grounds`, map 11's 42 rooms (the Crimson / Ebony / Golden passages and chambers), the 11 `Arena Practice Room`, the `Dwarven Arena`. The engine tests the type wherever players fight players (`_attack_user_user`, `_check_kill_user`, `_add_experience`, `_is_valid_target`, the three cast routines, `_rob_user`, `_cmd_drag`, `_cmd_get`, `_cmd_suicide`), each time with the arena-mode switch at `0x4790e8` (*Combat → Robbing players (`rob`)*, the guilt line). Seen so far with the switch on: HP is saved on walking in from outside (@ `0x416bd8`) and put back by `_check_kill_user` (@ `0x419c33`), robbing is refused, and `suicide` prints `You may not suicide or reroll in this room!` (@ `0x469346`). The other sites aren't decoded.
@@ -3072,7 +3078,7 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 
 - **Roaming is decided on the medium tick, once per monster** (`_background_medium` → `_medium_update_monsters` @ `0x421b31` → `_medium_update_monster` @ `0x421cbc`). A monster doesn't roam while:
   - it is tied to a player — it chases instead (*Following and chasing a player*, below);
-  - its flags have bit 1 (in a fight) or bit 2 set;
+  - its flags have bit 1 (in a fight) or bit 2 (fought since its last medium update) set;
   - it is in group 0 (`Lair`) or group 2 (`NPC`) (@ `0x421dff`, the group jump table).
 - **An ordinary monster roams on `genrdn(0,100) < (100 − Follow%) / 2`** (@ `0x421eaf`; the division truncates). Follow% 0 roams on 50 rolls in 100, Follow% 50 on 25, Follow% 100 never.
 - **A `Guard` (group 5) monster skips the roll and tries every tick** (@ `0x421e1c`).
@@ -3114,7 +3120,9 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 
 - **Leaving a room gives each monster tied to you one roll to come along** (`_handle_following_monsters` @ `0x4295c4`, called from `_move_user`): `genrdn(0,100) < Follow%`, then a `_move_monster` through the exit you took, with all the refusals above. This is a separate roll from the target lock of *Combat → Monster target selection — who it swings at once fighting*.
 - **A monster tied to a player in another room chases on the fast tick** (`_fast_update_monster` @ `0x421f24`):
-  - the player must be on the same map; a player with `+0x5f6` set or flag 4 of `+0x6f4` needs the monster to have SeeHidden (57); a player with flag `0x40` of `+0x6f4` isn't chased. *[NEEDS CONFIRMATION]: these player fields aren't decoded — the SeeHidden gate suggests hidden / sneaking.*
+  - the player must be on the same map;
+  - a hidden or sneaking player is chased only by a monster with SeeHidden (57);
+  - a player who has just entered a room isn't chased until that state clears;
   - a monster that isn't in a fight rolls `genrdn(0,100) < Follow%` again;
   - the direction comes from `_dir_player_travelling_coord` @ `0x41d95d` (not decoded);
   - a failed roll, no direction, a refused move or a player who is offline adds 1 to the monster's lost counter (`+0x124`). Past 15 the monster drops the player and its in-a-fight flag, and some of its spell effects are ended (@ `0x4220f0`, not decoded). An `Angel` (group 37) monster goes to the routine @ `0x4298ec` instead, which touches the room's live count, the area count and the monster's active count — it reads as the monster being removed.
