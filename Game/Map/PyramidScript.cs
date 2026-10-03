@@ -84,7 +84,7 @@ public static class PyramidScript
 
     // Floors climbed without stopping for fights or rests: F1 is timed (must
     // sprint) and F2's room spells deal escalating damage the longer you dwell.
-    public static bool IsBlindFast(PyramidFloor floor)
+    public static bool KeepsMoving(PyramidFloor floor)
         => floor is PyramidFloor.F1 or PyramidFloor.F2;
 
     // The canned scripts, in the source form of the hand-drawn map. A bare cardinal

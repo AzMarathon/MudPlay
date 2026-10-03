@@ -832,7 +832,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // Floors where the climb holds for everything the walker would. F1/F2 walk on
     // through fights, rests and party waits: F1 is on a timer and standing in F2
     // hurts more the longer it lasts.
-    private static bool HoldsForEverything(PyramidFloor f) => !PyramidScript.IsBlindFast(f);
+    private static bool HoldsForEverything(PyramidFloor f) => !PyramidScript.KeepsMoving(f);
 
     // Why the next step must wait, or null when it may go.
     private string? HoldReason()

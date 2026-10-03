@@ -4563,7 +4563,7 @@ Among protectable hazards, a further split governs whether the navigator may off
   cluster). A secondary path, `dao scatter` (742, cast only from `12/2251`
   `Elemental Plane of Earth`), drops to the single desert room `12/335` `Scorching Desert, Pyramid`. **Detection:** landing in a
   `Scorched Cavern` room (`12/1239–1278`) or `12/335` mid-climb = failed → halt+report.
-- **F1 — timed, blind-fast.** Entry: `You have a strange feeling that time is running out!`; finish
+- **F1 — timed.** Entry: `You have a strange feeling that time is running out!`; finish
   within ~5 min of the first firepit `up` or scatter. Lateral gates open with `push block` (encoded
   `push block, push square block, move block`; broadcast
   `<leader> pushes the stone block, and it slides into the wall.`). Never stop on F1.
@@ -4588,11 +4588,11 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **F2 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 33 moves from `1921` to the sun
   sphinx's room `2001`, the same path MegaMUD's file walks. Every F2 room is `Light -999` with room
   spell 692, whose TB 2519 runs `cast 687:random 2520` (the darts and blades, behind `testskill traps 20`).
-- **F2 — chaos, blind-fast.** Pitch-black (`The room is pitch black - you can't see anything`), wall
+- **F2 — chaos.** Pitch-black (`The room is pitch black - you can't see anything`), wall
   darts/blades (poison), room spells whose damage **scales the longer you dwell** → keep everyone healed,
   don't stop for blind/poison/confuse. Undead priests may `hold person` a member; moving on leaves a held
   member behind (party cohesion is human-managed here in v1).
-- **F3 — door-maze, paced.** Doors cycle on spell 700 → TB 2528/2529 (weighted
+- **F3 — door-maze.** Doors cycle on spell 700 → TB 2528/2529 (weighted
   `remoteaction … 0 0 2/1` = open/close); timer broadcast `Doors on this level creak and thump!`,
   per-door `The door to <dir> just opened.`, exits carry state (`open/closed door <dir>`). **Per-door:**
   `(Door [1000 picklocks/strength])` = unbashable → **wait** for the timer; lesser door on-path = **bash
@@ -4619,7 +4619,7 @@ Among protectable hazards, a further split governs whether the navigator may off
   2052 gives the clue). Each arch casts **701 (pass)** / **702 (fail)**; **702 → TB 2640→2641** =
   weighted teleport down; a **backtrack also falls** (backtracking = unsolved). Pass internally gates on
   ability 134 = 9 (Dao/Sunstone flag) — climbers already hold it.
-- **F5 — standard, paced.** `go shaft`/`go pit` (room CMD textblocks, e.g. 1800/2524, 1857/2521) escape
+- **F5 — standard.** `go shaft`/`go pit` (room CMD textblocks, e.g. 1800/2524, 1857/2521) escape
   **down** to the firepit.
 - **[CONFIRMED 2026-07-30] Undead-priest holds.** The pyramid undead priest is monster **#770**; it casts
   `MidSpell-0 = 66` — **spell #66 `hold person`, the SAME spell ID the player casts** (25% at level 20;

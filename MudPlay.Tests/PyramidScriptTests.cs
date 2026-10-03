@@ -206,12 +206,12 @@ public sealed class PyramidScriptTests
     }
 
     [Fact]
-    public void BlindFast_OnlyFloors1And2()
+    public void KeepsMoving_OnlyFloors1And2()
     {
-        Assert.True(PyramidScript.IsBlindFast(PyramidFloor.F1));
-        Assert.True(PyramidScript.IsBlindFast(PyramidFloor.F2));
-        Assert.False(PyramidScript.IsBlindFast(PyramidFloor.F3));
-        Assert.False(PyramidScript.IsBlindFast(PyramidFloor.F4));
-        Assert.False(PyramidScript.IsBlindFast(PyramidFloor.F5));
+        Assert.True(PyramidScript.KeepsMoving(PyramidFloor.F1));
+        Assert.True(PyramidScript.KeepsMoving(PyramidFloor.F2));
+        Assert.False(PyramidScript.KeepsMoving(PyramidFloor.F3));
+        Assert.False(PyramidScript.KeepsMoving(PyramidFloor.F4));
+        Assert.False(PyramidScript.KeepsMoving(PyramidFloor.F5));
     }
 }
