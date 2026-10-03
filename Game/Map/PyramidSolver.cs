@@ -38,6 +38,9 @@ public interface IPyramidSolver
 // would. It stops at 12/2085 — the `e` sphinx into the Tomb, Pharaoh Rastep, and the
 // Dao Lord are player-handled.
 //
+// Shut F3 doors go to the shared door manager; the golden lion key is waited for in
+// the floating key's room and asked for when a member picked it up.
+//
 // It drives the LEADER only; heals and the floating-key kill stay party-handled. A
 // scatter (landing back in a Scorched Cavern / desert room), a death, or a position
 // it can't recover halts the climb and reports through the walker like any other
@@ -91,16 +94,30 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private static readonly TimeSpan SphinxTimeout = TimeSpan.FromSeconds(4);
     private const int MaxSphinxRetries = 3;
 
-    // A single door that never opens (wait door whose timer we keep missing, or a
-    // bash that never lands) gets this many look/bash cycles before failing.
-    private static readonly TimeSpan DoorPoll = TimeSpan.FromMilliseconds(700);
-    private const int MaxDoorPolls = 40;
+    // A door we can't open ourselves is watched once a second. Its opening line
+    // re-checks at once; a `look` every few seconds catches one that was missed.
+    // In the dark neither shows, so the move itself is tried on the same beat.
+    private static readonly TimeSpan DoorWatch = TimeSpan.FromMilliseconds(1000);
+    private const int DoorLookEvery = 5;
+    private const int MaxDoorWatchTicks = 180;   // ~3 min of a door that never opens
+
+    // The door manager gets this many goes at one door before the climb gives up.
+    private static readonly TimeSpan DoorRetryDelay = TimeSpan.FromMilliseconds(1500);
+    private const int MaxDoorOpenAttempts = 3;
+
+    // In the floating key's room with no key in hand: this long for the kill and the
+    // pickup to finish (fights and pickups hold the climb on their own gates, so
+    // this only counts idle seconds), then out and back in to respawn a key that
+    // didn't drop, this many times.
+    private const int KeyWaitTicks = 8;
+    private const int KeyGiveTicks = 6;
+    private const int MaxKeyRespawns = 3;
 
     // Whole-climb runaway guard — the real climb is ~230 commands; well past that
     // means something is going round in circles.
     private const int MaxTotalSends = 700;
 
-    private enum Phase { Idle, Climbing, AwaitingMove, AwaitingSphinx, AwaitingDoor, Held, Resyncing, Done }
+    private enum Phase { Idle, Climbing, AwaitingMove, AwaitingSphinx, AwaitingDoor, AwaitingKey, Held, Resyncing, Done }
 
     // One move outside the script: the entry `up`, or a step back toward a block.
     private readonly record struct Detour(Direction Dir, int From, int To);
@@ -119,6 +136,10 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // Asks the game where we are (Paradigm `rm`, a sysop's locate): reason, answer,
     // no-answer. False when it couldn't ask.
     private readonly Func<string, Action<RoomKey>, Action, bool>? _askPosition;
+    // The shared door manager's Enqueue: direction, stat requirement, bashable, key
+    // item, sender, reply.
+    private readonly Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? _openDoor;
+    private readonly Func<int, bool>? _holdsItem;
     private readonly Action<Action> _post;
 
     private readonly DispatcherTimer? _settleTimer;
@@ -132,7 +153,6 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private PyramidFloor _floor = PyramidFloor.None;
     private int _stepIndex;
     private int _sphinxRetries;
-    private int _doorPolls;
     private int _totalSends;
 
     // The one move on the wire whose outcome we're waiting for, and the room it
@@ -155,15 +175,24 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // "what happens next" explicit per schedule instead of guessing from phase.
     private Action? _settleCont;
 
-    // F3 door polling: true only between sending a door `look` and consuming its
-    // render, so a stray re-render (e.g. a bash echo) doesn't double-fire the decision.
-    private bool _awaitingDoorLook;
-    private Direction _doorDir;
-    private bool _doorBashable;
+    // The F3 door being worked: which step it belongs to, whether a move into it has
+    // been refused, how long it has been watched, and the door manager's goes at it.
+    private int _doorStep = -1;
+    private bool _doorRefused;
+    private int _doorWatchTicks;
+    private int _doorOpenAttempts;
+    private string? _doorFailure;
+    // A request is with the door manager; its reply carries this ticket.
+    private bool _doorOpening;
+    private int _doorTicket;
 
-    // Who last picked up the golden lion key this climb (name, or null). If it's
-    // not the leader, the key-door step forces it over to the leader first.
+    // The golden lion key: seen going into our own pack, or which member picked it
+    // up (they are asked to hand it over).
+    private bool _selfTookKey;
     private string? _keyGrabber;
+    private bool _keyGiveAsked;
+    private int _keyWaitTicks;
+    private int _keyRespawns;
 
     // Party members currently held by an undead-priest hold person (more than one
     // can be held at once). A member is added on the cast, removed on a
@@ -201,6 +230,12 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     public int MoveRetries => _moveRetries;
     public int GateRewinds => _gateRewinds;
     public int AssumedLandings => _assumedLandings;
+    public bool DoorWithManager => _doorOpening;
+    public int DoorWatchSeconds => _doorWatchTicks;
+    public string KeyStatus => HaveKey() ? "in hand"
+        : _keyGrabber is { } g ? $"picked up by {g}" + (_keyGiveAsked ? " (hand-over asked)" : "")
+        : "not seen";
+    public int KeyRespawns => _keyRespawns;
 
     // Raised when the climb starts, ends, or goes into or out of a hold, so the
     // toolbar's run-state follows it.
@@ -218,9 +253,12 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<bool>? enabled = null,
         MovementCoordinator? coordinator = null,
         Func<string, bool>? isPartyMember = null,
-        Func<string, Action<RoomKey>, Action, bool>? askPosition = null)
+        Func<string, Action<RoomKey>, Action, bool>? askPosition = null,
+        Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? openDoor = null,
+        Func<int, bool>? holdsItem = null)
         : this(tracker, walker, snapshot, quickness, log, useTimer: true, post: null,
-               isParadigm, canDrive, leaderName, enabled, coordinator, isPartyMember, askPosition) { }
+               isParadigm, canDrive, leaderName, enabled, coordinator, isPartyMember, askPosition,
+               openDoor, holdsItem) { }
 
     internal PyramidSolver(
         RoomTracker tracker,
@@ -236,7 +274,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<bool>? enabled = null,
         MovementCoordinator? coordinator = null,
         Func<string, bool>? isPartyMember = null,
-        Func<string, Action<RoomKey>, Action, bool>? askPosition = null)
+        Func<string, Action<RoomKey>, Action, bool>? askPosition = null,
+        Action<Direction, int, bool, int, string, Action<DoorOpenResult>>? openDoor = null,
+        Func<int, bool>? holdsItem = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(walker);
@@ -256,6 +296,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _coordinator = coordinator;
         _isPartyMember = isPartyMember ?? (_ => false);
         _askPosition = askPosition;
+        _openDoor = openDoor;
+        _holdsItem = holdsItem;
 
         _tracker.StateChanged += OnTrackerStateChanged;
         _tracker.MoveBlocked += OnTrackerMoveBlocked;
@@ -301,11 +343,16 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _floor = PyramidFloor.None;
         _stepIndex = 0;
         _sphinxRetries = 0;
-        _doorPolls = 0;
         _totalSends = 0;
         _settleCont = null;
-        _awaitingDoorLook = false;
+        _doorStep = -1;
+        _doorOpening = false;
+        _doorTicket++;
+        _selfTookKey = false;
         _keyGrabber = null;
+        _keyGiveAsked = false;
+        _keyWaitTicks = 0;
+        _keyRespawns = 0;
         _heldMembers.Clear();
         _selfHeld = false;
         _holdTicks = 0;
@@ -396,7 +443,14 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
             // climb on to the floor its end room belongs to.
             bool here = cur.Key.Map == PyramidScript.PyramidMap && cur.Key.Room == ExpectedRoomNumber()
                 && (_detour.Count > 0 || _stepIndex < PyramidScript.Steps(_floor).Count);
+            PyramidFloor was = _floor;
             if (!here && !AnchorTo(cur.Key)) return;
+            // A new floor can hold for things the one below walked through.
+            if (_floor != was && HoldReason() is { } onArrival)
+            {
+                EnterHold(onArrival);
+                return;
+            }
             if (cur.Key == _goal)
             {
                 Finish();
@@ -422,6 +476,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
             return;
         }
 
+        if (_floor == PyramidFloor.F3 && !KeySettled(cur.Key.Room)) return;
+
         PyramidStep step = PyramidScript.Steps(_floor)[_stepIndex];
         switch (step.Kind)
         {
@@ -444,11 +500,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
                 break;
 
             case PyramidStepKind.Door:
-                BeginDoor(step.Dir, step.Bashable);
-                break;
-
             case PyramidStepKind.KeyDoor:
-                DriveKeyDoor(step.Dir);
+                DriveDoor(step, cur);
                 break;
         }
     }
@@ -602,7 +655,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         if (_detour.Count > 0) _detour.Dequeue();
         else _stepIndex++;
 
-        TimeSpan dwell = DwellFor(_floor);
+        // By the floor we landed on: the step up out of F2 arrives on F3.
+        TimeSpan dwell = DwellFor(PyramidScript.FloorOf(PyramidScript.PyramidMap, _flightTarget));
         _phase = Phase.Climbing;
         if (dwell > TimeSpan.Zero) ScheduleSettle(dwell, Drive);
         else Drive();
@@ -642,8 +696,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         }
         if (step is { Kind: PyramidStepKind.Door or PyramidStepKind.KeyDoor })
         {
-            // The door shut again between the look and the move; work it afresh.
-            ScheduleSettle(DoorPoll, Drive);
+            // Shut after all (or shut again since it was last shown): work the door.
+            _doorRefused = true;
+            Drive();
             return;
         }
 
@@ -900,105 +955,182 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     // ----- F3 doors --------------------------------------------------
 
-    private void BeginDoor(Direction dir, bool bashable)
+    // Every F3 exit is a door on a timer that swings it open and shut. One shown
+    // open is walked; a plain one that is shut goes to the door manager (which
+    // bashes or picks it, resting between swings as HP needs); a 1000-picklock one
+    // can only be waited for; the key door goes to the door manager with its key.
+    private void DriveDoor(PyramidStep step, Room here)
+    {
+        if (_doorStep != _stepIndex)
+        {
+            _doorStep = _stepIndex;
+            _doorRefused = false;
+            _doorWatchTicks = 0;
+            _doorOpenAttempts = 0;
+            _doorFailure = null;
+        }
+        if (_doorOpening)
+        {
+            // Back here (a hold came and went) with the door manager still at it.
+            _phase = Phase.AwaitingDoor;
+            return;
+        }
+
+        Direction dir = step.Dir;
+        RoomState st = _tracker.State;
+        // A dark room lists no exits, so what the tracker holds about its doors is
+        // left over from somewhere else.
+        bool dark = _tracker.IsInDarkRoom;
+        bool shownOpen = !dark && st.OpenDoorDirections?.Contains(dir) == true;
+        bool shownShut = !dark && st.ClosedDoorDirections?.Contains(dir) == true;
+        if (shownOpen || (!shownShut && !_doorRefused))
+        {
+            SendStepMove(dir, RoomAfter(_stepIndex));
+            return;
+        }
+
+        bool ours = step.Kind == PyramidStepKind.KeyDoor || step.Bashable;
+        if (ours && _openDoor is not null) OpenDoor(step, here);
+        else WatchDoor(dir, here, dark);
+    }
+
+    private void OpenDoor(PyramidStep step, Room here)
+    {
+        Direction dir = step.Dir;
+        if (!here.Exits.TryGetValue(dir, out RoomExit exit))
+        {
+            FailSolve($"12/{here.Key.Room} has no {dir.ToLongName()} exit in the game data");
+            return;
+        }
+        if (++_doorOpenAttempts > MaxDoorOpenAttempts)
+        {
+            FailSolve(step.Kind == PyramidStepKind.KeyDoor
+                ? $"the key door {dir.ToLongName()} out of 12/{here.Key.Room} stays locked ({_doorFailure}) — golden lion key: {KeyStatus}"
+                : $"couldn't open the door {dir.ToLongName()} out of 12/{here.Key.Room} ({_doorFailure})");
+            return;
+        }
+
+        _phase = Phase.AwaitingDoor;
+        _doorOpening = true;
+        int ticket = ++_doorTicket;
+        _log?.Log(LogSeverity.Info, LogSource,
+            $"F3 step {_stepIndex + 1}: opening the door {dir.ToLongName()} out of 12/{here.Key.Room}"
+            + (exit.KeyItemId > 0 ? $" with key {exit.KeyItemId}" : "")
+            + (_doorOpenAttempts > 1 ? $" (go {_doorOpenAttempts}/{MaxDoorOpenAttempts})" : ""));
+        _openDoor!(dir, exit.StatRequirement, exit.CanBash, exit.KeyItemId, "pyramid",
+            result => OnDoorReply(ticket, dir, result));
+    }
+
+    private void OnDoorReply(int ticket, Direction dir, DoorOpenResult result)
+    {
+        if (!Active || !_doorOpening || ticket != _doorTicket) return;
+        _doorOpening = false;
+        if (result is DoorOpenResult.Failed failed)
+        {
+            _doorFailure = failed.Reason;
+            _log?.Log(LogSeverity.Warn, LogSource, $"door {dir.ToLongName()} didn't open: {failed.Reason}");
+            _phase = Phase.Climbing;
+            ScheduleSettle(DoorRetryDelay, Drive);
+            return;
+        }
+        // The manager saw it open; the tracker hears it from us, as it does from the
+        // walker. The move is still refused if the timer shuts it again first.
+        _tracker.NoteNamedDoorOpened(dir);
+        _doorRefused = false;
+        _phase = Phase.Climbing;
+        Drive();
+    }
+
+    private void WatchDoor(Direction dir, Room here, bool dark)
     {
         _phase = Phase.AwaitingDoor;
-        _doorPolls = 0;
-        _doorDir = dir;
-        _doorBashable = bashable;
-        PollDoor();
-    }
-
-    // Look to refresh door state; the render lands in OnRoomObserved → ContinueDoor.
-    private void PollDoor()
-    {
-        if (!Active || _phase != Phase.AwaitingDoor) return;
-        if (++_doorPolls > MaxDoorPolls)
-        {
-            FailSolve($"door {_doorDir.ToLongName()} never opened after {MaxDoorPolls} polls");
-            return;
-        }
-        if (!CountSend()) return;
-        _awaitingDoorLook = true;
-        SendCommand("look");
-    }
-
-    private void ContinueDoor(RoomObservation obs)
-    {
-        // The look just rendered where we really are — if that isn't this door's
-        // room, or something now holds us, let Drive sort it out rather than bash
-        // the wrong door.
-        RoomState st = _tracker.State;
-        bool elsewhere = st.Confidence == RoomConfidence.Confirmed && st.CurrentRoom is { } cur
-            && (cur.Key.Map != PyramidScript.PyramidMap || cur.Key.Room != ExpectedRoomNumber());
-        if (elsewhere || HoldReason() is not null)
-        {
-            _phase = Phase.Climbing;
-            Drive();
-            return;
-        }
-
-        if (obs.OpenDoorDirections?.Contains(_doorDir) == true)
-        {
-            _log?.Debug(LogSource, $"door {_doorDir.ToLongName()} open → move");
-            SendStepMove(_doorDir, RoomAfter(_stepIndex));
-            return;
-        }
-
-        // Closed: bash a lesser door; a 1000-picklock door can only be waited out.
-        if (_doorBashable)
-        {
-            _log?.Debug(LogSource, $"door {_doorDir.ToLongName()} closed → bash");
-            if (!CountSend()) return;
-            SendCommand("bash " + _doorDir.ToLongName());
-        }
-        else
-        {
-            _log?.Debug(LogSource, $"door {_doorDir.ToLongName()} closed (unbashable) → wait for timer");
-        }
-        ScheduleSettle(DoorPoll, PollDoor);
-    }
-
-    // ----- F3 golden-lion-key door -----------------------------------
-
-    private void DriveKeyDoor(Direction dir)
-    {
-        // The floating-key kill + auto-grab is party-handled (the key monster is now
-        // Enemy in game data). If a party member grabbed the golden lion key — or we
-        // never saw the leader grab it — force it onto the leader before unlocking.
-        string? leader = _leaderName();
-        bool leaderHasKey = _keyGrabber is { } g
-            && string.Equals(g, leader, StringComparison.OrdinalIgnoreCase);
-        if (!leaderHasKey && leader is { Length: > 0 })
-        {
+        if (_doorWatchTicks == 0)
             _log?.Log(LogSeverity.Info, LogSource,
-                $"forcing golden lion key to leader (grabber: {_keyGrabber ?? "unknown"})");
-            SendCommand($"@party give golden lion key to {leader}");
+                $"F3 step {_stepIndex + 1}: the door {dir.ToLongName()} out of 12/{here.Key.Room} is shut and not ours to open — waiting for its timer");
+        if (++_doorWatchTicks > MaxDoorWatchTicks)
+        {
+            FailSolve($"the door {dir.ToLongName()} out of 12/{here.Key.Room} never opened");
+            return;
         }
-        SendCommand("unlock " + dir.ToLongName());
-        SendCommand("open " + dir.ToLongName());
-        SendStepMove(dir, RoomAfter(_stepIndex));
+        if (_doorWatchTicks % DoorLookEvery == 0)
+        {
+            if (dark)
+            {
+                // Nothing to see: let the move ask.
+                _doorRefused = false;
+                Drive();
+                return;
+            }
+            if (!CountSend()) return;
+            SendCommand("look");
+        }
+        ScheduleSettle(DoorWatch, Drive);
+    }
+
+    // ----- F3 golden lion key ----------------------------------------
+
+    private bool HaveKey()
+        => _selfTookKey || _holdsItem?.Invoke(PyramidScript.GoldenLionKeyItem) == true;
+
+    // Whether the step at hand may go ahead as far as the key is concerned. False
+    // when it has scheduled a wait instead. The floating key's room is left only
+    // once the key is in the leader's pack or the wait for it has run out; a room
+    // later, a climb still without one turns back in, which is what respawns a key
+    // that failed to drop.
+    private bool KeySettled(int room)
+    {
+        int leave = PyramidScript.LeaveKeyRoomStep;
+        if (_stepIndex == leave && room == PyramidScript.FloatingKeyRoom)
+        {
+            if (HaveKey()) return true;
+
+            if (_keyGrabber is { } grabber)
+            {
+                // A member's client picked it up. Ask for it, and give the hand-over
+                // a few seconds to show in our pack.
+                if (!_keyGiveAsked && _leaderName() is { Length: > 0 } leader)
+                {
+                    _keyGiveAsked = true;
+                    _keyWaitTicks = 0;
+                    _log?.Log(LogSeverity.Info, LogSource, $"golden lion key went to {grabber} — asking for it");
+                    SendCommand($"@party give golden lion key to {leader}");
+                }
+                if (++_keyWaitTicks > KeyGiveTicks) return true;
+            }
+            else
+            {
+                if (_keyWaitTicks == 0)
+                    _log?.Log(LogSeverity.Info, LogSource, "no golden lion key yet — waiting in the floating key's room");
+                // Nobody's client may be set to pick it up; ask for it ourselves, now
+                // and once more for a kill that finishes late.
+                if (_keyWaitTicks % (KeyWaitTicks / 2) == 0 && CountSend())
+                    SendCommand("get golden lion key");
+                if (++_keyWaitTicks > KeyWaitTicks) return true;
+            }
+            _phase = Phase.AwaitingKey;
+            ScheduleSettle(HoldRecheck, Drive);
+            return false;
+        }
+
+        if (_stepIndex == leave + 1 && !HaveKey() && _keyGrabber is null && _keyRespawns < MaxKeyRespawns)
+        {
+            _keyRespawns++;
+            _keyWaitTicks = 0;
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"left the floating key's room without a key — back in to respawn it ({_keyRespawns}/{MaxKeyRespawns})");
+            _stepIndex = leave - 1;
+        }
+        return true;
     }
 
     // ----- feeds -----------------------------------------------------
 
     // Fed every parsed room display (RoomDisplayParser.RoomParsed). Catches a
-    // scatter by room name and drives the F3 door decision.
+    // scatter by room name.
     public void OnRoomObserved(RoomObservation obs)
     {
-        if (!Active) return;
-
-        if (IsScatterName(obs.Name))
-        {
+        if (Active && IsScatterName(obs.Name))
             FailSolve($"scattered to '{obs.Name}' — climb failed");
-            return;
-        }
-
-        if (_phase == Phase.AwaitingDoor && _awaitingDoorLook)
-        {
-            _awaitingDoorLook = false;
-            ContinueDoor(obs);
-        }
     }
 
     private void OnLine(LineExtractor.EmittedLine line)
@@ -1013,16 +1145,27 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
             return;
         }
 
-        // Golden lion key pickup — remember who grabbed it so the key-door can force
-        // it to the leader if a party member auto-grabbed it first.
+        // Golden lion key pickup — ours, or a member's client getting there first.
         if (t.Contains("golden lion key", StringComparison.OrdinalIgnoreCase))
         {
-            if (t.Contains("You picked up golden lion key", StringComparison.OrdinalIgnoreCase)
-                || t.Contains("You get golden lion key", StringComparison.OrdinalIgnoreCase))
-                _keyGrabber = _leaderName();
+            if (t.Contains("You took golden lion key", StringComparison.OrdinalIgnoreCase))
+            {
+                _selfTookKey = true;
+                if (_phase == Phase.AwaitingKey) _post(Drive);
+            }
             else if (Before(t, " picks up golden lion key") is { } grabber)
+            {
                 _keyGrabber = grabber;
+                _keyWaitTicks = 0;
+                if (_phase == Phase.AwaitingKey) _post(Drive);
+            }
         }
+
+        // A door changed while we watch one. The tracker reads the same line; look
+        // again once it has.
+        if (_phase == Phase.AwaitingDoor && !_doorOpening
+            && t.Contains("door", StringComparison.OrdinalIgnoreCase))
+            _post(Drive);
 
         // Leader (us) held by hold person — set on our own applied line, cleared on
         // our own wear-off (both are lines we see for ourselves).
@@ -1119,6 +1262,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         StopTimer();
         _heldMembers.Clear();
         _detour.Clear();
+        _doorOpening = false;
+        _doorTicket++;
         _moveInFlight = false;
         _holdReason = null;
         _phase = phase;

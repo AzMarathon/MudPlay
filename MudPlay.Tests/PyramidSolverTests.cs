@@ -39,7 +39,17 @@ public sealed class PyramidSolverTests : IDisposable
         public int Room = 1239;                      // where the character really is
         public int Processed;                        // commands the game has answered
         public HashSet<(int Room, string Dir)> OpenGates { get; } = new();
-        public bool DoorsOpen = true;                // every F3 door stands open
+        public bool PlainDoorsOpen = true;           // F3's plain doors stand open
+        public bool WaitDoorsOpen = true;            // so do its 1000-picklock doors
+        public bool AllDark;                         // no floor shows its rooms
+        public HashSet<(int Room, string Dir)> OpenedDoors { get; } = new();   // opened by the door manager
+        public List<(int Room, Direction Dir, int Key)> DoorRequests { get; } = new();
+        public bool DoorsJammed;                     // the door manager can open nothing
+        public int SlamDoors;                        // the next N open doors shut as we step
+        public bool LeaderHasKey;
+        public int KeyRoomVisits;
+        public int KeyDropsOnVisit = 1;              // the floating key drops on this visit to its room
+        public bool MemberGrabsKey;                  // …into a member's pack, not ours
         public int IgnorePushes;                     // the next N push blocks do nothing
         public int RefuseMoves;                      // the next N moves are refused outright
         public int SilentMoves;                      // the next N moves land without a word
@@ -97,7 +107,21 @@ public sealed class PyramidSolverTests : IDisposable
                 made.PositionAnswer = resolved;
                 made.PositionNoAnswer = failed;
                 return true;
-            });
+            },
+            openDoor: (doorDir, statRequirement, canBash, keyItemId, sender, reply) =>
+            {
+                Harness g = made!;
+                g.DoorRequests.Add((g.Room, doorDir, keyItemId));
+                bool opens = !g.DoorsJammed && (keyItemId > 0 ? g.LeaderHasKey : statRequirement < 1000);
+                if (!opens)
+                {
+                    reply(new DoorOpenResult.Failed("test: it won't budge"));
+                    return;
+                }
+                g.OpenedDoors.Add((g.Room, doorDir.ToString()));
+                reply(DoorOpenResult.Opened.Instance);
+            },
+            holdsItem: id => id == PyramidScript.GoldenLionKeyItem && made!.LeaderHasKey);
 
         Harness h = new() { Tracker = tracker, Walker = walker, Coord = coord, Solver = solver };
         made = h;
@@ -132,7 +156,34 @@ public sealed class PyramidSolverTests : IDisposable
         return h;
     }
 
-    private static readonly IReadOnlySet<Direction> NoDirs = new HashSet<Direction>();
+    private static bool IsDoor(string cell) => cell.Contains("(Door") || cell.Contains("(Key");
+
+    private static bool DoorOpen(Harness h, int room, string column)
+    {
+        string cell = PyramidRooms.ExitCells[room][column];
+        if (h.OpenedDoors.Contains((room, column))) return true;
+        if (cell.Contains("(Key")) return false;
+        return cell.Contains("[1000") ? h.WaitDoorsOpen : h.PlainDoorsOpen;
+    }
+
+    // The room display the game would print for where the character stands.
+    private static RoomObservation Observation(Harness h)
+    {
+        var cells = PyramidRooms.ExitCells[h.Room];
+        HashSet<Direction> exits = new(), open = new(), shut = new();
+        foreach ((string column, string cell) in cells)
+        {
+            Direction d = Enum.Parse<Direction>(column);
+            if (PyramidRooms.Target(h.Room, d) is null) continue;
+            if (cell.Contains("Hidden/Needs") && !h.OpenGates.Contains((h.Room, column))) continue;
+            exits.Add(d);
+            if (!IsDoor(cell)) continue;
+            if (DoorOpen(h, h.Room, column)) open.Add(d); else shut.Add(d);
+        }
+        return new RoomObservation("Great Pyramid", exits, open, shut);
+    }
+
+    private static bool Lit(Harness h) => !h.AllDark && h.Room >= 2002;   // F1 and F2 are walked in the dark
 
     // The game answers the oldest unanswered command. Returns false when there was
     // none to answer.
@@ -150,20 +201,49 @@ public sealed class PyramidSolverTests : IDisposable
             string column = dir.ToString();
             PyramidRooms.ExitCells[h.Room].TryGetValue(column, out string? cell);
             int? target = PyramidRooms.Target(h.Room, dir);
-            bool shut = cell is not null
-                && ((cell.Contains("Hidden/Needs") && !h.OpenGates.Contains((h.Room, column)))
-                    || ((cell.Contains("(Door") || cell.Contains("(Key")) && !h.DoorsOpen));
-            if (target is null || shut || h.RefuseMoves > 0)
+            bool gateShut = cell is not null && cell.Contains("Hidden/Needs") && !h.OpenGates.Contains((h.Room, column));
+            bool isDoor = cell is not null && IsDoor(cell);
+            bool doorShut = isDoor && !DoorOpen(h, h.Room, column);
+            if (isDoor && !doorShut && h.SlamDoors > 0)
+            {
+                h.SlamDoors--;
+                h.OpenedDoors.Remove((h.Room, column));
+                if (!cell!.Contains("(Key") && !cell.Contains("[1000")) h.PlainDoorsOpen = false;
+                doorShut = true;
+            }
+            if (target is null || gateShut || doorShut || h.RefuseMoves > 0)
             {
                 if (h.RefuseMoves > 0) h.RefuseMoves--;
                 h.Refused++;
-                h.Tracker.NoteMoveBlocked();
+                if (doorShut) h.Tracker.NoteDoorClosed();   // "The door is closed!"
+                else h.Tracker.NoteMoveBlocked();
                 return true;
             }
             h.Room = target.Value;
             if (h.SilentMoves > 0) { h.SilentMoves--; return true; }
-            // The pitch-black line: the one arrival the tracker takes on the move alone.
-            h.Tracker.NoteDarkRoomEntered();
+
+            if (h.Room == PyramidScript.FloatingKeyRoom && ++h.KeyRoomVisits >= h.KeyDropsOnVisit
+                && !h.LeaderHasKey)
+            {
+                // The floating key dies and its key is picked up as we walk in.
+                if (h.MemberGrabsKey) h.Solver.FeedLineForTests("Jroc picks up golden lion key");
+                else
+                {
+                    h.LeaderHasKey = true;
+                    h.Solver.FeedLineForTests("You took golden lion key.");
+                }
+            }
+
+            // In the dark the pitch-black line is the whole arrival, taken on the move
+            // alone; a lit room prints itself, doors and all, a hop's time later.
+            if (Lit(h)) h.Tracker.NoteRoomObserved(Observation(h), DateTimeOffset.UtcNow.AddSeconds(1));
+            else h.Tracker.NoteDarkRoomEntered();
+            return true;
+        }
+
+        if (cmd.StartsWith("@party give golden lion key to ", StringComparison.Ordinal))
+        {
+            if (h.MemberGrabsKey) h.LeaderHasKey = true;
             return true;
         }
 
@@ -191,18 +271,11 @@ public sealed class PyramidSolverTests : IDisposable
 
         if (cmd == "look")
         {
-            var doors = PyramidRooms.ExitCells[h.Room]
-                .Where(kv => kv.Value.Contains("(Door") || kv.Value.Contains("(Key"))
-                .Select(kv => Enum.Parse<Direction>(kv.Key)).ToHashSet();
-            var exits = PyramidRooms.ExitCells[h.Room].Keys
-                .Where(k => PyramidRooms.Target(h.Room, Enum.Parse<Direction>(k)) is not null)
-                .Select(Enum.Parse<Direction>).ToHashSet();
-            h.Solver.OnRoomObserved(new RoomObservation("Great Pyramid", exits,
-                h.DoorsOpen ? doors : NoDirs, h.DoorsOpen ? NoDirs : doors));
+            if (Lit(h)) h.Tracker.NoteRoomObserved(Observation(h), DateTimeOffset.UtcNow.AddSeconds(1));
             return true;
         }
 
-        return true;   // bash / unlock / open / @party: nothing the solver waits on
+        return true;   // get: nothing the solver waits on
     }
 
     // One turn of the world: the game answers a command, or — with nothing left to
@@ -314,7 +387,6 @@ public sealed class PyramidSolverTests : IDisposable
         Assert.Contains("ask sphinx sun", h.SentText);
         Assert.Contains("ask sphinx stars", h.SentText);
         Assert.Equal(5, h.SentText.Count(t => t == "push block"));
-        Assert.Contains("@party give golden lion key to MudPlay", h.SentText);
     }
 
     [Fact]
@@ -716,72 +788,207 @@ public sealed class PyramidSolverTests : IDisposable
         AssertFinished(h);
     }
 
-    // ----- F3 doors and key ------------------------------------------
+    // ----- F3 doors ---------------------------------------------------
 
     [Fact]
-    public void KeyGrabber_LeaderGrabbed_SkipsForcedGive()
+    public void F3_OpenDoors_AreWalkedWithoutLookingOrOpening()
     {
         using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
-        h.Solver.FeedLineForTests("You picked up golden lion key.");   // leader grabbed it
         RunToEnd(h);
 
         AssertFinished(h);
-        // Leader already holds the key, so no forced consolidation was sent.
-        Assert.DoesNotContain(h.SentText, t => t.StartsWith("@party give golden lion key", StringComparison.Ordinal));
+        Assert.DoesNotContain("look", h.SentText);
+        // Only the key door needed the door manager.
+        Assert.Equal(new[] { (2034, Direction.W, PyramidScript.GoldenLionKeyItem) }, h.DoorRequests);
     }
 
     [Fact]
-    public void F3_ClosedBashableDoor_IsBashedThenWalkedOnceOpen()
+    public void F3_ShutPlainDoors_GoToTheDoorManager()
     {
         using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
-        h.DoorsOpen = false;
-        DriveUntilFloor(h, "F3");
-        RunUntil(h, () => h.SentText.Contains("bash east"));
-        Assert.Equal(2002, h.Room);                  // didn't walk into the shut door
+        h.PlainDoorsOpen = false;
+        RunToEnd(h);
 
-        h.DoorsOpen = true;
+        AssertFinished(h);
+        Assert.Equal(0, h.Refused);                  // shown shut, so never walked into
+        Assert.Contains((2002, Direction.E, 0), h.DoorRequests);
+        Assert.DoesNotContain(h.SentText, t => t.StartsWith("bash", StringComparison.Ordinal));   // the manager's to send
+    }
+
+    [Fact]
+    public void F3_WaitDoor_IsWaitedFor_NeverHandedToTheDoorManager()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.WaitDoorsOpen = false;
+        RunUntil(h, () => h.Room == 2004 && h.Solver.PhaseName == "AwaitingDoor");
+
+        for (int i = 0; i < 40; i++) Pump(h);
+        Assert.Equal(2004, h.Room);
+        Assert.Equal(0, h.Refused);
+        Assert.DoesNotContain(h.DoorRequests, r => r.Room == 2004);
+        Assert.Contains("look", h.SentText);         // the periodic refresh
+
+        // The timer swings it open; the game says so.
+        h.WaitDoorsOpen = true;
+        h.Tracker.NoteNamedDoorOpened(Direction.N);
+        h.Solver.FeedLineForTests("The door to the north just opened.");
+        Assert.Equal("n", h.SentText[^1]);
+
         RunToEnd(h);
         AssertFinished(h);
+    }
+
+    [Fact]
+    public void F3_WaitDoorThatNeverOpens_Fails()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.WaitDoorsOpen = false;
+        RunToEnd(h);
+
+        Assert.False(h.Solver.Active);
+        Assert.Contains("never opened", h.Events[^1].Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2004, h.Room);
+    }
+
+    [Fact]
+    public void F3_DoorThatShutsAsWeStep_IsWorkedAgain()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        DriveUntilFloor(h, "F3");
+        h.SlamDoors = 1;
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.Equal(1, h.Refused);
+        Assert.Contains((2002, Direction.E, 0), h.DoorRequests);
+    }
+
+    [Fact]
+    public void F3_DoorTheManagerCannotOpen_FailsWithItsReason()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.PlainDoorsOpen = false;
+        h.DoorsJammed = true;
+        RunToEnd(h);
+
+        Assert.False(h.Solver.Active);
+        Assert.Contains("won't budge", h.Events[^1].Detail);
+        Assert.Equal(3, h.DoorRequests.Count(r => r.Room == 2002));
+    }
+
+    [Fact]
+    public void F3_InTheDark_TheMoveItselfFindsOutAboutEachDoor()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.AllDark = true;
+        h.PlainDoorsOpen = false;
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.True(h.Refused >= 20);                // one bump per shut door, then the manager
+        Assert.DoesNotContain("look", h.SentText);
+    }
+
+    [Fact]
+    public void F3_InTheDark_AWaitDoorIsTriedAgainEveryFewSeconds()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.AllDark = true;
+        h.WaitDoorsOpen = false;
+        RunUntil(h, () => h.Room == 2004 && h.Refused == 3);
+
+        h.WaitDoorsOpen = true;
+        RunToEnd(h);
+        AssertFinished(h);
+    }
+
+    [Fact]
+    public void F3_AnchorsOnTheTrackedRoomInsteadOfWorkingTheWrongDoor()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.WaitDoorsOpen = false;
+        RunUntil(h, () => h.Room == 2004 && h.Solver.PhaseName == "AwaitingDoor");   // step 3: the north wait door
+
+        // We're really in 2006 (step 4 — the west door).
+        Locate(h, 2006);
+        h.WaitDoorsOpen = true;
+        RunUntil(h, () => h.Room != 2006);
+
+        Assert.Equal(2013, h.Room);                  // took step 4's west door
         Assert.Equal(0, h.Refused);
     }
 
+    // ----- F3 golden lion key ----------------------------------------
+
     [Fact]
-    public void F3_DoorDecision_AnchorsOnTheTrackedRoomInsteadOfBashingTheWrongDoor()
+    public void Key_TakenByTheLeader_NoHandOverIsAsked()
     {
         using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
-        h.DoorsOpen = false;
-        DriveUntilFloor(h, "F3");
-        RunUntil(h, () => h.Solver.PhaseName == "AwaitingDoor");   // step 1: door east from 2002
-        int bashes = h.SentText.Count(t => t == "bash east");
+        RunToEnd(h);
 
-        // We're really in 2006 (step 4 — the west door). Without the anchor the solver
-        // answers step 1's look with another `bash east`.
-        Locate(h, 2006);
-        h.DoorsOpen = true;
-        RunUntil(h, () => h.Room != 2006);
-
-        Assert.Equal(bashes, h.SentText.Count(t => t == "bash east"));
-        Assert.Equal(2013, h.Room);                  // took step 4's west door
+        AssertFinished(h);
+        Assert.Equal(0, h.Solver.KeyRespawns);
+        Assert.DoesNotContain(h.SentText, t => t.StartsWith("@party give golden lion key", StringComparison.Ordinal));
+        Assert.DoesNotContain("get golden lion key", h.SentText);
     }
 
     [Fact]
-    public void F3_InTheFloatingKeyRoom_DrivesItsOwnStep()
+    public void Key_PickedUpByAMember_IsAskedForBeforeLeavingItsRoom()
     {
-        // The party is in 2005 (the floating-key room) while the solver is on another
-        // step. It anchors on 2005's step (20, door east back to 2032) instead of
-        // working the wrong door; 2005's other doors are 1000-picklock.
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay", partyMembers: new[] { "Jroc" }));
+        h.MemberGrabsKey = true;
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.Equal(1, h.SentText.Count(t => t == "@party give golden lion key to MudPlay"));
+        Assert.Equal(0, h.Solver.KeyRespawns);
+    }
+
+    [Fact]
+    public void Key_NotDropped_StepsOutAndBackInUntilItDoes()
+    {
         using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
-        h.DoorsOpen = false;
-        DriveUntilFloor(h, "F3");
-        RunUntil(h, () => h.Solver.PhaseName == "AwaitingDoor");
+        h.KeyDropsOnVisit = 3;
+        RunToEnd(h);
 
-        Locate(h, 2005);
-        RunUntil(h, () => h.Solver.ScriptStep == 20);
-        Assert.Equal(new RoomKey(12, 2005), h.Solver.ExpectedRoom);
+        AssertFinished(h);
+        Assert.Equal(2, h.Solver.KeyRespawns);
+        Assert.Equal(3, h.KeyRoomVisits);
+        Assert.Contains("get golden lion key", h.SentText);   // asked for it while waiting
+    }
 
-        h.DoorsOpen = true;
-        RunUntil(h, () => h.Room != 2005);
-        Assert.Equal(2032, h.Room);
+    [Fact]
+    public void Key_NeverDropped_FailsAtTheKeyDoorSayingSo()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.KeyDropsOnVisit = 99;
+        RunToEnd(h);
+
+        Assert.False(h.Solver.Active);
+        Assert.Equal(2034, h.Room);
+        Assert.Equal(3, h.Solver.KeyRespawns);
+        Assert.Contains("key door", h.Events[^1].Detail);
+        Assert.Contains("golden lion key: not seen", h.Events[^1].Detail);
+    }
+
+    [Fact]
+    public void Key_WaitsInItsRoomRatherThanWalkingOut()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.KeyDropsOnVisit = 99;
+        RunUntil(h, () => h.Solver.PhaseName == "AwaitingKey");
+        Assert.Equal(PyramidScript.FloatingKeyRoom, h.Room);
+
+        // The key lands in our pack a few seconds in: the wait ends at once.
+        Pump(h);
+        Pump(h);
+        h.LeaderHasKey = true;
+        h.Solver.FeedLineForTests("You took golden lion key.");
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.Equal(0, h.Solver.KeyRespawns);
+        Assert.Equal(1, h.KeyRoomVisits);
     }
 
     public void Dispose()

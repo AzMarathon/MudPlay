@@ -6551,7 +6551,10 @@ public sealed class AppServices
             // Paradigm's `rm`, or a sysop's locate where that is the power to hand.
             askPosition: (reason, resolved, failed) =>
                 ParadigmResync.RequestResyncOnce(reason, resolved, failed)
-                || SysopLocate.RequestLocateOnce(reason, resolved, failed, forRecovery: true));
+                || SysopLocate.RequestLocateOnce(reason, resolved, failed, forRecovery: true),
+            openDoor: (dir, statRequirement, canBash, keyItemId, sender, reply) =>
+                Door.Enqueue(dir, statRequirement, canBash, keyItemId, sender, reply),
+            holdsItem: HoldsKeyItem);
         Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land

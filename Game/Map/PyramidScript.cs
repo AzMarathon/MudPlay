@@ -50,6 +50,11 @@ public static class PyramidScript
     public const int ActionMillis = 250;             // ~ per non-move action
     public static readonly System.TimeSpan Floor1Budget = System.TimeSpan.FromMinutes(5);
 
+    // The F3 key door takes the golden lion key, which the floating key drops in
+    // its own room; the route steps into that room and straight back out.
+    public const int GoldenLionKeyItem = 1175;
+    public const int FloatingKeyRoom = 2005;
+
     // Firepit / Scorched Cavern landing range — a chance-cast scatter drops a
     // failed climber into a random room here (12/1239-1278). Plus the desert
     // secondary 12/335. Landing in either mid-climb means the climb failed.
@@ -151,6 +156,9 @@ public static class PyramidScript
     };
 
     private static readonly int[] F5FromRooms = { 2077, 2084, 2083, 2082, 2081 };
+
+    // The F3 step taken from the floating key's room (the door back out of it).
+    public static int LeaveKeyRoomStep { get; } = System.Array.IndexOf(F3FromRooms, FloatingKeyRoom);
 
     // Per-step source rooms for a floor, index-aligned with Steps(floor); null off the
     // five climbed floors.

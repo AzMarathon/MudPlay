@@ -8,6 +8,8 @@
 - A shut gate on floor 1 sends the climb back to push its block again; a refused move is retried
 - Toolbar Pause and Stop now work on a pyramid climb; floors 3–5 wait for fights, rests, pickups and party holds like any walk
 - A pyramid walk-to to a room on the route stops there instead of climbing to the top
+- Floor 3 doors: open ones are walked without a look, shut ones go through the normal door opener (rests when hurt), timer doors are waited for
+- Golden lion key: the climb waits for it in the floating key's room, asks a member who picked it up, and steps out and back in when nothing dropped
 
 ## 3.142.40
 

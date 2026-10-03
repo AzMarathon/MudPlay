@@ -1727,6 +1727,10 @@ public static class BugReportBuilder
         Kv(sb, "Refused-move retries", pyr.MoveRetries.ToString());
         Kv(sb, "Gate rewinds", pyr.GateRewinds.ToString());
         Kv(sb, "Landings taken on trust", pyr.AssumedLandings.ToString());
+        Kv(sb, "Door with the door manager", pyr.DoorWithManager.ToString());
+        Kv(sb, "Door watched (s)", pyr.DoorWatchSeconds.ToString());
+        Kv(sb, "Golden lion key", pyr.KeyStatus);
+        Kv(sb, "Key respawn trips", pyr.KeyRespawns.ToString());
 
         return sb.ToString();
     }

@@ -4658,16 +4658,27 @@ Among protectable hazards, a further split governs whether the navigator may off
     cap); over 5 min → refuse (crosses ~>80% enc, no quickness). Drives **leader/solo only**.
   - F3 key: the `floating key` monster's (#598) default client relationship was `Flee` in the Paradigm
     overlay (stock was already `Enemy`); set to **`Enemy`** so party auto-combat clears it for the key
-    (the solver needs no kill logic). The client tracks who grabs it (`<name> picks up golden lion key`)
-    and forces a bare `@party give golden lion key to <leader>` (no leading `.` — see *Item-use
-    teleports*) at the key-door unless the leader grabbed it.
-    The no-drop respawn (exit E, re-enter W) is not yet automated.
-  - F4: runs the footpath strictly forward (never back up); paces slower than the other floors for
-    reaction time. The client doesn't check/encode the ability-134 pass gate.
-  - **Hold handling per floor:** F1 (timed) and F2 (deadly-to-linger) keep moving through a hold; **F3/F4
-    wait it out** — pause until a freedom/cure cast frees the member (multiple can be held) or a wear-off
-    cap (~hold person Dur 4) elapses. Combat and a **held leader** ride the shared `MovementCoordinator`
-    `Combat`/`Held` gates (the solver waits on those on the paced floors); F1/F2 never gate.
+    (the solver needs no kill logic). `PyramidSolver` won't leave the floating key's room `2005` until
+    the golden lion key is in the leader's pack (inventory, or our own `You took golden lion key.`): it
+    sends `get golden lion key` itself, and when a member's client got there first
+    (`<name> picks up golden lion key`) it asks for it with a bare
+    `@party give golden lion key to <leader>` (no leading `.` — see *Item-use teleports*). After eight
+    idle seconds with no key it walks on, and one room later turns back in — the **No-drop bug**
+    respawn — up to three times.
+  - F3 doors: an exit the room display shows open is walked. A shut plain door goes to `DoorOpenManager`
+    (bash or pick, resting as HP needs); a `Door [1000 picklocks/strength]` is waited for, re-checked on
+    any door line (`The door to <dir> just opened.`) and by a `look` every five seconds, three minutes at
+    most. The key door goes to `DoorOpenManager` with key 1175, which sends `use golden lion key <dir>`
+    then `open <dir>` (MegaMUD's Stock path file opens it with `use lion key west`, `op w`). In a dark
+    room, where no exits print, the move itself is tried and its refusal is the answer.
+  - F4: runs the footpath strictly forward (never back up), each move confirmed before the next, and
+    waits a second after every arrival for reaction time. The client doesn't check/encode the ability-134 pass gate.
+  - **Hold handling per floor:** F1 (timed) and F2 (deadly-to-linger) keep moving through a member's
+    hold; **F3/F4 wait it out** — pause until a freedom/cure cast frees the member (multiple can be held)
+    or a wear-off cap (~hold person Dur 4) elapses. A **held leader** can't move at all, so every floor
+    waits on the shared `MovementCoordinator` `Held` gate (an earlier note said F1/F2 never gate;
+    superseded 2026-10-03). Combat rides the `Combat` gate on the paced floors only; the full list is
+    under **Client policy — what the climb waits for** in this topic.
 
 ---
 
