@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Tracing;
 using System.Globalization;
 using System.Text;
 using Avalonia.Controls;
@@ -34,7 +35,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private const string HeaderLine =
         "# 'stall' lines: the UI thread fell behind by the time shown, while doing what follows. " +
         "'summary' lines, every minute: stalls, then each kind of work as count/p50/p95/max ms, " +
-        "then CPU, memory and GC over that minute.";
+        "then CPU, memory and GC over that minute, then the types most allocated (sampled).";
 
     private readonly LogDiagnosticState? _diagnostics;
     private readonly Action<Action>? _postLowPriority;
@@ -47,6 +48,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private DebugLogWriter? _writer;
     private Action<string>? _sink;
     private bool _broken;
+    private AllocationSampler? _allocations;
     private volatile bool _collecting;
 
     // What the UI thread is doing, set by Measure on the UI thread and read by the
@@ -121,6 +123,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                     _writer.WriteLine(HeaderLine);
                     _sink = WriteToFile;
                     _collecting = true;
+                    _allocations = new AllocationSampler();
                 }
                 catch (IOException) { _broken = true; }
                 catch (UnauthorizedAccessException) { _broken = true; }
@@ -131,6 +134,8 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                 _writer = null;
                 _sink = null;
                 _collecting = false;
+                _allocations?.Dispose();
+                _allocations = null;
             }
         }
         closing?.Dispose();
@@ -300,6 +305,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                   .Append(F1(p50)).Append('/').Append(F1(p95)).Append('/').Append(F1(t.MaxMs));
             }
             sb.Append(now.Since(_since));
+            if (_allocations?.TakeTop(8) is { Length: > 0 } top) sb.Append(" | allocated ").Append(top);
             _timings.Clear();
             _stalls = _stalls250 = _stalls1000 = 0;
             _stalledMs = _worstStallMs = 0;
@@ -325,6 +331,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _stopped = true;
+        _allocations?.Dispose();
         if (_diagnostics is not null) _diagnostics.Changed -= SyncWriter;
         DebugLogWriter? writer;
         lock (_gate)
@@ -335,6 +342,64 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             _collecting = false;
         }
         if (writer is not null) await writer.DisposeAsync();
+    }
+
+    // What the program allocates most, by type, from the runtime's own sampling: an
+    // allocation-tick event roughly every 100 KB allocated, naming the type of the
+    // object that crossed the line. A steady 30 MB/s of garbage is what drives the
+    // collections that show up as unattributed stalls; the types point at the code
+    // making it. Listens only while collecting.
+    private sealed class AllocationSampler : EventListener
+    {
+        // Initialised before EventListener's constructor runs, which already calls
+        // OnEventSourceCreated for the sources that exist.
+        private readonly Dictionary<string, long> _bytesByType = new(StringComparer.Ordinal);
+        private long _total;
+
+        protected override void OnEventSourceCreated(EventSource source)
+        {
+            // GC keyword at Verbose: the level the allocation tick is raised at.
+            if (source.Name == "Microsoft-Windows-DotNETRuntime")
+                EnableEvents(source, EventLevel.Verbose, (EventKeywords)0x1);
+        }
+
+        protected override void OnEventWritten(EventWrittenEventArgs e)
+        {
+            if (e.EventName is null || !e.EventName.StartsWith("GCAllocationTick", StringComparison.Ordinal)
+                || e.PayloadNames is not { } names || e.Payload is not { } payload)
+                return;
+            string type = "?";
+            long bytes = 0;
+            for (int i = 0; i < names.Count; i++)
+            {
+                switch (names[i])
+                {
+                    case "TypeName": type = payload[i] as string ?? "?"; break;
+                    case "AllocationAmount64": bytes = Convert.ToInt64(payload[i], CultureInfo.InvariantCulture); break;
+                    case "AllocationAmount" when bytes == 0: bytes = Convert.ToInt64(payload[i], CultureInfo.InvariantCulture); break;
+                }
+            }
+            lock (_bytesByType)
+            {
+                _bytesByType[type] = _bytesByType.GetValueOrDefault(type) + bytes;
+                _total += bytes;
+            }
+        }
+
+        // The top types since the last call, as shares of what was sampled.
+        public string TakeTop(int count)
+        {
+            lock (_bytesByType)
+            {
+                if (_total == 0) return string.Empty;
+                long total = _total;
+                string top = string.Join(", ", _bytesByType.OrderByDescending(kv => kv.Value).Take(count)
+                    .Select(kv => $"{kv.Key} {kv.Value * 100.0 / total:0}%"));
+                _bytesByType.Clear();
+                _total = 0;
+                return top;
+            }
+        }
     }
 
     // Process-wide counters at a moment, so a summary can report the minute's

@@ -376,7 +376,9 @@ public sealed class RoomGraphManagerTests : IDisposable
         graph.OnActiveSetChanged("alpha");
 
         // Memory-hygiene pattern: typed Rooms collection is the source
-        // of truth; the raw JsonDocument is dropped from the cache.
+        // of truth; the raw JsonDocument is released, and gone at the cache's
+        // next idle sweep since nothing reads it again.
+        cache.EvictIdle(GameDataCache.IdleEvictAfter);
         Assert.DoesNotContain("Rooms", cache.LoadedTables);
     }
 

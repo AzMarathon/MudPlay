@@ -4065,7 +4065,7 @@ Not a Settings tab — these five toggles live in the **Program Log** window (de
 
 **Default:** Off
 **What it does:** When on, MudPlay writes out full on-disk diagnostic files (program log, memory log, combat-trace log, performance log) for the session, under the data folder's `Logs/` directory, instead of only keeping recent lines in memory.
-**The performance log** (`…-performance.log`) is for lag and stutters. MudPlay keeps checking whether its window is keeping up. Every moment it fell behind by 50 ms or more gets a `stall` line saying how long it lasted and what it was busy with: incoming game text, opening a window (named), saving your profile, reading game data, or drawing the terminal or the map. Once a minute a `summary` line adds up that minute: the stalls, how long each kind of work took, and the client's CPU, memory and garbage-collection activity. Nothing is measured while the setting is off.
+**The performance log** (`…-performance.log`) is for lag and stutters. MudPlay keeps checking whether its window is keeping up. Every moment it fell behind by 50 ms or more gets a `stall` line saying how long it lasted and what it was busy with: incoming game text, opening a window (named), saving your profile, reading game data, or drawing the terminal or the map. Once a minute a `summary` line adds up that minute: the stalls, how long each kind of work took, the client's CPU, memory and garbage-collection activity, and which kinds of objects it allocated most (sampled) — the churn that causes garbage-collection pauses. Nothing is measured while the setting is off.
 **When you might change it:** Turn on before a play session where you're trying to reproduce and capture an intermittent bug, or one where the client felt laggy.
 
 ### Hop timing

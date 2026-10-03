@@ -90,7 +90,7 @@ public sealed class SettingsResolver
         Overlay(merged, _activeBbs?.Settings,        tabName);
         Overlay(merged, _profile.Current?.Settings,  tabName);
 
-        return JsonSerializer.Deserialize<T>(merged.ToJsonString(), JsonStore.Options)
+        return merged.Deserialize<T>(JsonStore.Options)
             ?? throw new InvalidOperationException(
                 $"Resolve<{typeof(T).Name}>('{tabName}') produced a null deserialization result.");
     }
@@ -196,7 +196,7 @@ public sealed class SettingsResolver
         if (set is null)
         {
             // No active set → no per-set override files to read.
-            return JsonSerializer.Deserialize<T>(merged.ToJsonString(), JsonStore.Options)
+            return merged.Deserialize<T>(JsonStore.Options)
                 ?? throw new InvalidOperationException(
                     $"ResolveGameData<{typeof(T).Name}>('{table}', '{recordId}') produced null.");
         }
@@ -205,7 +205,7 @@ public sealed class SettingsResolver
         Overlay(merged, ReadOverride(SettingsTier.Bbs,       ActiveRealmFolder(),           table, set, recordId));
         Overlay(merged, ReadOverride(SettingsTier.Character, _profile.CurrentProfileName,   table, set, recordId));
 
-        return JsonSerializer.Deserialize<T>(merged.ToJsonString(), JsonStore.Options)
+        return merged.Deserialize<T>(JsonStore.Options)
             ?? throw new InvalidOperationException(
                 $"ResolveGameData<{typeof(T).Name}>('{table}', '{recordId}') produced null.");
     }
@@ -324,8 +324,19 @@ public sealed class SettingsResolver
     // BBS tier's game-data overrides ("only for this realm"). null with no BBS.
     private string? ActiveRealmFolder() =>
         _activeBbs is { } bbs && bbs.RealmFor(_profile.Current?.Realm) is { } realm
-            ? AppPaths.RealmFolder(bbs.Name, realm.Name)
+            ? _realmFolders.GetOrAdd((bbs.Name, realm.Name), k => AppPaths.RealmFolder(k.Bbs, k.Realm))
             : null;
+
+    // The override files' paths, by what names them. A monster's game-data record is
+    // resolved for every combat line, three tiers at a time, and rebuilding the
+    // paths each time was a steady stream of throwaway strings.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Bbs, string Realm), string> _realmFolders = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<
+        (SettingsTier Tier, string? Scope, string Table, string Set, string? Bbs), string> _overridePaths = new();
+
+    private string OverridePath(SettingsTier tier, string? scope, string table, string set) =>
+        _overridePaths.GetOrAdd((tier, scope, table, set, CharacterBbs(tier)),
+            k => AppPaths.OverrideFile(k.Tier, k.Scope, k.Table, k.Set, k.Bbs));
 
     private BbsProfile RequireActiveBbs() => _activeBbs
         ?? throw new InvalidOperationException(
@@ -388,8 +399,7 @@ public sealed class SettingsResolver
         // when no BBS is pinned, Char tier when no named profile).
         if (tier != SettingsTier.Global && string.IsNullOrEmpty(scope)) return null;
 
-        string path = AppPaths.OverrideFile(tier, scope, table, set, CharacterBbs(tier));
-        Dictionary<string, JsonElement>? records = GetCachedOverrideFile(path);
+        Dictionary<string, JsonElement>? records = GetCachedOverrideFile(OverridePath(tier, scope, table, set));
         if (records is null) return null;
         return records.TryGetValue(recordId, out JsonElement v) ? v : null;
     }
@@ -444,10 +454,7 @@ public sealed class SettingsResolver
     // ----- Merge plumbing ------------------------------------------------
 
     private static JsonObject ToJsonObject<T>(T value) where T : class
-    {
-        string json = JsonSerializer.Serialize(value, JsonStore.Options);
-        return JsonNode.Parse(json)!.AsObject();
-    }
+        => JsonSerializer.SerializeToNode(value, JsonStore.Options)!.AsObject();
 
     private static void Overlay(JsonObject merged, Dictionary<string, JsonElement>? deltas, string tabName)
     {

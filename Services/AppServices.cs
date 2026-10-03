@@ -2681,12 +2681,12 @@ public sealed class AppServices
         // lines) and resolves a captured presence name — which on some boards is
         // the account name, not the character name — back to a given name via the
         // player account-name overrides.
-        Party.DisconnectPatternProvider = () => ResolveActiveBbs()?.DisconnectPattern;
+        Party.DisconnectPatternProvider = ActiveDisconnectPattern;
         Party.PresenceNameResolver = Players.ResolveGivenNameFromPresenceName;
         // Same custom-disconnect source feeds the conversation window's realm
         // category — otherwise a board with a non-standard logoff line evicts the
         // roster member but never logs the disconnect in the conversation.
-        Chat.DisconnectPatternProvider = () => ResolveActiveBbs()?.DisconnectPattern;
+        Chat.DisconnectPatternProvider = ActiveDisconnectPattern;
         // Known-player gate for others'-POV actions/emotes: the actor of a room-local
         // social is a player in our room's entity list. Rejects room names, monsters
         // and ambient flavour that share the action-green colour.
@@ -8504,7 +8504,9 @@ public sealed class AppServices
         if (!profile.Settings.TryGetValue(key, out System.Text.Json.JsonElement json)) return new T();
         try
         {
-            return System.Text.Json.JsonSerializer.Deserialize<T>(json.GetRawText()) ?? new T();
+            // Straight from the element: copying it out as text first cost a string
+            // the size of the section on every read, and engines read on every line.
+            return System.Text.Json.JsonSerializer.Deserialize<T>(json) ?? new T();
         }
         catch
         {
@@ -8632,11 +8634,52 @@ public sealed class AppServices
     // General → Auto-Combat (or the toolbar Toggle button) takes
     // effect immediately — no event subscription needed since each
     // engine queries on every tick / classifier emit.
+    // The auto-mode flags are read by engines on every line; deserializing the
+    // General section each time was a sixth of the line-handling time. The DTO is
+    // kept privately (the selector only reads it) and re-read whenever the profile's
+    // General entry is replaced, which is how every write to it lands.
+    private (Models.Profile.CharacterProfile? Profile, System.Text.Json.JsonElement Entry, Models.Profile.GeneralSettings Dto)? _generalForFlags;
+
     private bool ReadAutoModeFlag(Func<Models.Profile.AutoActionDefaults, bool> selector)
     {
-        Models.Profile.GeneralSettings general =
-            ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General");
-        return selector(general.AutoMode);
+        Models.Profile.CharacterProfile? profile = Profile.Current;
+        System.Text.Json.JsonElement entry = default;
+        bool present = profile?.Settings?.TryGetValue("General", out entry) == true;
+        if (_generalForFlags is not { } cached || !ReferenceEquals(cached.Profile, profile)
+            || !JsonEntryIdentity.Same(cached.Entry, present ? entry : default))
+        {
+            cached = (profile, present ? entry : default,
+                ReadSection<Models.Profile.GeneralSettings>(profile, "General"));
+            _generalForFlags = cached;
+        }
+        return selector(cached.Dto.AutoMode);
+    }
+
+    // The pinned BBS's custom disconnect line, read by the chat and party routers on
+    // every line. Each read used to load and parse bbs.json from disk, a quarter of
+    // all line handling. It's kept until the file's write time changes, so an edit
+    // from Settings (or from another running client) is still picked up; even the
+    // write-time check costs a file-system call, so it's made at most every two
+    // seconds.
+    private (string Name, DateTime Written, long CheckedAt, string? Pattern)? _disconnectPattern;
+    private const long DisconnectPatternRecheckMs = 2000;
+
+    private string? ActiveDisconnectPattern()
+    {
+        string? name = Profile.CurrentBbsName;
+        if (string.IsNullOrEmpty(name)) return ResolveActiveBbs()?.DisconnectPattern;
+        long now = Environment.TickCount64;
+        if (_disconnectPattern is { } recent && recent.Name == name && now - recent.CheckedAt < DisconnectPatternRecheckMs)
+            return recent.Pattern;
+        DateTime written = File.GetLastWriteTimeUtc(AppPaths.BbsProfileFile(name));
+        if (_disconnectPattern is { } memo && memo.Name == name && memo.Written == written)
+        {
+            _disconnectPattern = memo with { CheckedAt = now };
+            return memo.Pattern;
+        }
+        string? pattern = ResolveActiveBbs()?.DisconnectPattern;
+        _disconnectPattern = (name, written, now, pattern);
+        return pattern;
     }
 
     // @status / @path movement snapshot with the specific pause reason attached.

@@ -546,11 +546,26 @@ public sealed class GameDataCache
     private bool IsCurrent(string tableName, JsonDocument doc)
         => _tables.TryGetValue(tableName, out JsonDocument? cached) && ReferenceEquals(cached, doc);
 
-    // Drop the cached JsonDocument for one table. Used by per-tab consumers after
-    // they've folded the raw JSON into typed model collections.
+    // A consumer is done with tableName: it has folded the rows into an index of its
+    // own. The table is left for the idle sweep to drop at its next pass (within a
+    // minute) unless something reads it before then. Dropping it outright made the
+    // tables other code reads on every line (Monsters, Items, Spells) parse again
+    // straight after each index build — Monsters nine times in a session's first
+    // minute. Returns whether the table was loaded.
     public bool EvictTable(string tableName)
     {
         ArgumentNullException.ThrowIfNull(tableName);
+        lock (_tables)
+        {
+            if (!_tables.ContainsKey(tableName)) return false;
+            _lastRead[tableName] = long.MinValue / 2;   // older than any idle window
+            return true;
+        }
+    }
+
+    // Drop the cached JsonDocument for one table now.
+    private bool DropTable(string tableName)
+    {
         lock (_tables)
         {
             _failedTables.Remove(tableName);
@@ -573,7 +588,7 @@ public sealed class GameDataCache
             foreach ((string table, long at) in _lastRead.ToList())
             {
                 if (at > cutoff) continue;
-                if (EvictTable(table)) dropped.Add(table);
+                if (DropTable(table)) dropped.Add(table);
             }
             foreach (((string Set, string Table) key, long at) in _prewarmedAt.ToList())
             {
