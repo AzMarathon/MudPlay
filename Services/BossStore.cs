@@ -56,12 +56,20 @@ public sealed class BossStore
             if (ov is not null)
                 foreach (BossDef b in ov) _overlay[b.Name] = b;
         }
+        _current = null;
         Changed?.Invoke();   // fire even when cleared to null, so derived markers clear
     }
 
     // The merged boss list. Overlay wins per Name; a Removed overlay entry hides the
     // seed boss; an overlay entry with no seed match is user-added. Returns clones so
     // the UI can edit rows without mutating stored instances.
+    // The resolved list for callers that only read it (the boss timers, on every
+    // room observation): built once per change of the store
+    // instead of cloning every boss on each call. Never modify what it returns —
+    // Resolve hands out copies for that.
+    public IReadOnlyList<BossDef> Current => _current ??= Resolve();
+    private IReadOnlyList<BossDef>? _current;
+
     public IReadOnlyList<BossDef> Resolve()
     {
         var byName = new Dictionary<string, BossDef>(StringComparer.OrdinalIgnoreCase);
@@ -139,6 +147,7 @@ public sealed class BossStore
         foreach (BossDef b in overlay) _overlay[b.Name] = b;
         JsonStore.Save(AppPaths.BossesFile(ActiveSet), overlay);
         _log?.Debug("Bosses", $"saved {overlay.Count} overlay delta(s) for set {ActiveSet}");
+        _current = null;
         Changed?.Invoke();
     }
 }

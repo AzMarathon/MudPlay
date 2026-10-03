@@ -246,7 +246,7 @@ public sealed class GameDataCacheTests : IDisposable
     }
 
     [Fact]
-    public void EvictTable_DropsCachedDoc()
+    public void EvictTable_LeavesTheTableForTheNextIdleSweep()
     {
         SeedSet("alpha", ("Monsters", "[]"));
         GameDataCache cache = NewCache();
@@ -254,10 +254,30 @@ public sealed class GameDataCacheTests : IDisposable
         _ = cache.GetRawTable("Monsters");
 
         Assert.True(cache.EvictTable("Monsters"));
+        Assert.Single(cache.LoadedTables);
+
+        cache.EvictIdle(GameDataCache.IdleEvictAfter);
         Assert.Empty(cache.LoadedTables);
 
         // Subsequent eviction is a no-op return value.
         Assert.False(cache.EvictTable("Monsters"));
+    }
+
+    // A table another reader still uses survives an index builder's eviction: read
+    // after it, it counts as in use again.
+    [Fact]
+    public void EvictTable_then_a_read_keeps_the_table()
+    {
+        SeedSet("alpha", ("Monsters", "[]"));
+        GameDataCache cache = NewCache();
+        cache.SwitchSet("alpha");
+        _ = cache.GetRawTable("Monsters");
+
+        cache.EvictTable("Monsters");
+        _ = cache.GetRawTable("Monsters");
+        cache.EvictIdle(GameDataCache.IdleEvictAfter);
+
+        Assert.Single(cache.LoadedTables);
     }
 
     [Fact]

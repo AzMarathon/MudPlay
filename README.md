@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.13**
-> - Navigation opens faster: its trainer, teleport and level-gate rooms are worked out once per game-data set, not on every open
-> - Settings opens faster: the bank, trainer and time-zone lists are built once instead of on every open
-> - Reading a game-data table no longer holds up other lookups while it parses
+> **Version 3.142.16**
+> - Game text is handled with a quarter of the memory churn: the BBS file is no longer re-read for every line, and settings and boss lists are no longer rebuilt per line
+> - Game-data tables stay loaded while in use instead of being re-read after each index build (Monsters was read nine times in a session's first minute)
+> - Performance log: each minute's summary lists the object types allocated most
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

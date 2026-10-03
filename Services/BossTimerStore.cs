@@ -215,7 +215,7 @@ public sealed class BossTimerStore
     {
         if (key is not { } here) return;   // can't confirm placement
 
-        foreach (BossDef def in _bosses.Resolve())
+        foreach (BossDef def in _bosses.Current)
         {
             if (!RoomsContain(def, here)) continue;
             if (!(NameMatches(def.Name, engagedName)
@@ -295,7 +295,7 @@ public sealed class BossTimerStore
             _log?.Info("Bosses",
                 $"boss '{name}' vanished from a re-parse of {pending.Room} — marking killed (roster fallback)");
             MarkKilled(name);
-            foreach (BossDef def in _bosses.Resolve())
+            foreach (BossDef def in _bosses.Current)
                 if (NameMatches(def.Name, name)) { BossKilled?.Invoke(def); break; }
         }
     }
@@ -305,7 +305,7 @@ public sealed class BossTimerStore
     private HashSet<string> BossesPresent(RoomEntitiesObservation obs, RoomKey here)
     {
         HashSet<string> present = new(StringComparer.OrdinalIgnoreCase);
-        foreach (BossDef def in _bosses.Resolve())
+        foreach (BossDef def in _bosses.Current)
         {
             if (!RoomsContain(def, here)) continue;
             foreach (RoomEntity e in obs.Entities)
