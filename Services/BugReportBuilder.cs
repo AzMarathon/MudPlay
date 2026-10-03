@@ -1707,6 +1707,7 @@ public static class BugReportBuilder
         Kv(sb, "Phase", maze.PhaseName);
         Kv(sb, "Goal", maze.Goal is { } mg ? $"{mg.Map}/{mg.Room}" : "(none)");
         Kv(sb, "Reshuffle attempts", maze.Attempts.ToString());
+        Kv(sb, "Held by a pause", maze.IsHeld.ToString());
 
         // Great Pyramid climb solver — a "walker won't climb the pyramid / scattered
         // out" report needs whether it engaged, which floor + phase it reached, its

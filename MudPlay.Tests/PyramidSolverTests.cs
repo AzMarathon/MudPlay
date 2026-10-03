@@ -42,6 +42,7 @@ public sealed class PyramidSolverTests : IDisposable
         public bool PlainDoorsOpen = true;           // F3's plain doors stand open
         public bool WaitDoorsOpen = true;            // so do its 1000-picklock doors
         public bool AllDark;                         // no floor shows its rooms
+        public bool AllLit;                          // every floor does (enough light carried)
         public HashSet<(int Room, string Dir)> OpenedDoors { get; } = new();   // opened by the door manager
         public List<(int Room, Direction Dir, int Key)> DoorRequests { get; } = new();
         public bool DoorsJammed;                     // the door manager can open nothing
@@ -183,7 +184,8 @@ public sealed class PyramidSolverTests : IDisposable
         return new RoomObservation("Great Pyramid", exits, open, shut);
     }
 
-    private static bool Lit(Harness h) => !h.AllDark && h.Room >= 2002;   // F1 and F2 are walked in the dark
+    // By default F1 and F2 are walked in the dark and the floors above them lit.
+    private static bool Lit(Harness h) => h.AllLit || (!h.AllDark && h.Room >= 2002);
 
     // The game answers the oldest unanswered command. Returns false when there was
     // none to answer.
@@ -387,6 +389,34 @@ public sealed class PyramidSolverTests : IDisposable
         Assert.Contains("ask sphinx sun", h.SentText);
         Assert.Contains("ask sphinx stars", h.SentText);
         Assert.Equal(5, h.SentText.Count(t => t == "push block"));
+    }
+
+    [Fact]
+    public void FullClimb_WithEveryFloorLit_ReadsEachArrivalOffItsRoomDisplay()
+    {
+        // F1 is only dark without a light, and enough light shows even F2: every
+        // arrival then comes as a room display, gates and doors listed, not as the
+        // darkness line.
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.AllLit = true;
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.Equal(0, h.Refused);
+        Assert.Equal(0, h.Solver.AssumedLandings);
+        Assert.False(h.Tracker.IsInDarkRoom);
+    }
+
+    [Fact]
+    public void FullClimb_Lit_ShutGateStillGoesBackToItsBlock()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.AllLit = true;
+        h.IgnorePushes = 1;
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.Equal(1, h.Solver.GateRewinds);
     }
 
     [Fact]

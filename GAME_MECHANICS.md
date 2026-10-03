@@ -4581,13 +4581,16 @@ Among protectable hazards, a further split governs whether the navigator may off
   - **The timer is spell 685** (cast by the firepit's `up`, `Dur 80`); its `EndCast 686` runs TB 2510, the
     teleport out. `ask sphinx fire` runs TB 2518, whose `cast 687` removes spell 685, so the timer ends
     at the sphinx's answer and the ascent after it isn't on the clock.
-  - F1 rooms are `Light -200` with room spell 691.
+  - F1 rooms are `Light -200` with room spell 691. **F1 is not permanently dark** — it is dark only
+    without enough light *([CONFIRMED] 2026-10-03, user)*.
 - **F1 timing budget.** F1 = **126 moves + 6 actions** (5 push-blocks + `ask sphinx fire`), ~250
   ms/action, under 5 min. **Stock:** a `Heavy` (>66%) leader = guaranteed timeout. **Paradigm:** the
   estimate `126·per-move + 6·250 ms` goes over 5 min at roughly >80% enc with no quickness.
 - **F2 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 33 moves from `1921` to the sun
   sphinx's room `2001`, the same path MegaMUD's file walks. Every F2 room is `Light -999` with room
   spell 692, whose TB 2519 runs `cast 687:random 2520` (the darts and blades, behind `testskill traps 20`).
+  **Only F2 has that very high darkness ceiling, and even it can be overcome with a lot of effort**
+  *([CONFIRMED] 2026-10-03, user)*, so a room display on F2 is possible, just unusual.
 - **F2 — chaos.** Pitch-black (`The room is pitch black - you can't see anything`), wall
   darts/blades (poison), room spells whose damage **scales the longer you dwell** → keep everyone healed,
   don't stop for blind/poison/confuse. Undead priests may `hold person` a member; moving on leaves a held
@@ -4650,6 +4653,8 @@ Among protectable hazards, a further split governs whether the navigator may off
     rests, party waits, pickups). F1 and F2 walk on through those (**F1 — timed**, **F2 — chaos**).
   - **A shut gate on F1** (the move through it is refused) sends the climb back along the script to the
     block, to push again; twice per climb, then it fails.
+  - The climb reads an arrival either way: off the room display where the floor is lit, off the
+    darkness line where it isn't (*Fall/scatter* aside, nothing in it assumes a floor is dark).
   - **A move that draws neither an arrival nor a refusal** is asked about: Paradigm's `rm`
     (*Movement & navigation → `rm` — authoritative position (Paradigm only)*) or a sysop's locate. With
     neither, or no reply, the move is taken as landed, since the game answers every refused move with a

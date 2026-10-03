@@ -6524,6 +6524,7 @@ public sealed class AppServices
             isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
             paradigmResolver: ParadigmResync,
             enabled: () => Settings.Current.AsylumSolverEnabled,
+            coordinator: MovementCoordinator,
             // Open a closed door/gate blocking a relocalization peek before looking
             // through it, via the shared door FSM. Asylum barriers are plain-bashable
             // (no key, no strength gate the resolver can read while Lost), so request
@@ -7277,11 +7278,14 @@ public sealed class AppServices
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
-        // A pyramid climb counts as navigation running: the toolbar's Pause holds it
-        // on the user gate and Stop ends it.
-        MovementControl.SetClimbHooks(
+        // A pyramid climb or an asylum maze solve counts as navigation running: the
+        // toolbar's Pause holds it on the user gate and Stop ends it.
+        MovementControl.AddSolver(
             active: () => PyramidSolver.Active, held: () => PyramidSolver.IsHeld, stop: PyramidSolver.Cancel);
-        PyramidSolver.StateChanged += MovementControl.NoteClimbStateChanged;
+        PyramidSolver.StateChanged += MovementControl.NoteSolverStateChanged;
+        MovementControl.AddSolver(
+            active: () => MazeSolver.Active, held: () => MazeSolver.IsHeld, stop: MazeSolver.Cancel);
+        MazeSolver.StateChanged += MovementControl.NoteSolverStateChanged;
 
         // Gear driven by movement + room, for the While Moving / Bossing sets. Both
         // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).
