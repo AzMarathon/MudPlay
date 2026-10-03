@@ -22,7 +22,8 @@ public static class RouteDetailsLauncher
     // The RouteDetailRow list for a route's room-key polyline (source-first). Empty
     // when the polyline is trivial. Each monster link carries its live Hits-You-% so
     // the window can colour names by danger without recomputing.
-    public static IReadOnlyList<RouteDetailRow> BuildRows(AppServices services, IReadOnlyList<RoomKey>? polyline)
+    public static IReadOnlyList<RouteDetailRow> BuildRows(
+        AppServices services, IReadOnlyList<RoomKey>? polyline, IReadOnlyList<WalkStep>? walk = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         if (polyline is not { Count: > 1 }) return Array.Empty<RouteDetailRow>();
@@ -35,21 +36,23 @@ public static class RouteDetailsLauncher
             key => RoomHazard(services, key),
             id => ItemLink(services, id),
             services.PlayerState.MaxHp,
-            services.TrapDisarm.DisarmOdds);
+            services.TrapDisarm.DisarmOdds,
+            walk);
     }
 
     // The fully-wired browse VM for a polyline: rows + the persisted hit-% colour
     // state + a Global-tier persist callback. The single construction path so both
     // openers (nav header + route picker) get identical settings + persistence.
     public static RouteDetailsDialogViewModel BuildViewModel(
-        AppServices services, string title, IReadOnlyList<RoomKey>? polyline)
+        AppServices services, string title, IReadOnlyList<RoomKey>? polyline,
+        IReadOnlyList<WalkStep>? walk = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         MonsterHitColorSettings colors =
             services.Profile.Current?.MonsterHitColors ?? new MonsterHitColorSettings();
         return new RouteDetailsDialogViewModel(
             TitleWithEta(services, title, polyline),
-            BuildRows(services, polyline),
+            BuildRows(services, polyline, walk),
             colors.Enabled, colors.GreenMax, colors.YellowMax,
             (enabled, greenMax, yellowMax) =>
             {
@@ -69,10 +72,11 @@ public static class RouteDetailsLauncher
     // Open the browse window for a polyline (modeless, fire-and-forget). Returns the
     // VM so a caller can toggle it closed (RequestClose) on a re-press.
     public static RouteDetailsDialogViewModel Open(
-        AppServices services, string title, IReadOnlyList<RoomKey>? polyline)
+        AppServices services, string title, IReadOnlyList<RoomKey>? polyline,
+        IReadOnlyList<WalkStep>? walk = null)
     {
         ArgumentNullException.ThrowIfNull(services);
-        var vm = BuildViewModel(services, title, polyline);
+        var vm = BuildViewModel(services, title, polyline, walk);
         _ = services.Dialogs.OpenWindowAsync<RouteDetailsDialogViewModel, bool?>(vm);
         return vm;
     }

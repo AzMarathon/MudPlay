@@ -1,5 +1,10 @@
 # Version history
 
+## 3.142.37
+
+- Route picker opens when a lever needed on your route sits behind a hazard or item gate: obtain the counter or cross unprotected, and the walk runs the whole lever detour
+- bug reports addressed: paradigm-20261003-132224
+
 ## 3.142.36
 
 - A party cure that doesn't clear the ailment is no longer recast every 5 seconds: the wait doubles each time, from 15 seconds up to 2 minutes

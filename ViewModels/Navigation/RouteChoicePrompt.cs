@@ -259,6 +259,10 @@ public static class RouteChoicePrompt
 
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
             services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
+        // The route itself is clear, but an exit on it opens from rooms the crosser
+        // can't reach without crossing a gate: offer that walk as the sole route.
+        choice ??= RouteChoicePlanner.EvaluateLeverDetour(
+            services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
         if (choice is null)
         {
             // No shorter gated route. If the route is fully blocked but the destination
@@ -289,6 +293,8 @@ public static class RouteChoicePrompt
 
         string reqSummary = string.Join(", ", choice.Requirements.Select(r =>
             $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"));
+        if (choice.GatedWalk is not null)
+            avoidAltNote += " (the gates are on a lever detour, not the route itself)";
         string shortcutNote = choice.ShortcutItems is { Count: > 0 } sc
             ? $" (+optional shortcut via CarryItem[{string.Join("/", sc)}] saving "
               + $"{choice.GatedStepCount - choice.ShortcutStepCount} room(s))"
@@ -528,7 +534,10 @@ public static class RouteChoicePrompt
                 RouteChoiceResult.AvoidOverrideAlt when choice.AvoidAlternativePath is { } ap => ap,
                 RouteChoiceResult.Shortcut when choice.ShortcutPath is { } sp => sp,
                 _ => choice.GatedPath,
-            });
+            },
+            r is RouteChoiceResult.Free or RouteChoiceResult.AvoidOverrideAlt or RouteChoiceResult.Shortcut
+                ? null
+                : choice.GatedWalk);
 
         RouteChoiceResult? result;
         try

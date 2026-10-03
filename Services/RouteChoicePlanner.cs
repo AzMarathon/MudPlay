@@ -130,7 +130,12 @@ public sealed record RouteChoice(
     // For a Teleport choice: the per-person copper fare the teleport route's paid
     // transports charge (an NPC ask-transport), so the card can state the cost
     // before the user commits. Zero when the teleports are free.
-    long TeleportFareCopper = 0)
+    long TeleportFareCopper = 0,
+    // For a route whose lever detour crosses the gates (EvaluateLeverDetour): the
+    // walk already expanded, lever trips included. GatedPath is then the rooms that
+    // walk passes, in order, with revisits, so re-expanding it would detour twice;
+    // the step list is built from this instead. Null on every other choice.
+    IReadOnlyList<WalkStep>? GatedWalk = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -272,6 +277,64 @@ public static class RouteChoicePlanner
             free.Count, gated.Count, reqs,
             BuildKeyPath(graph, source, free),
             BuildKeyPath(graph, source, gated));
+    }
+
+    // A route that walks plainly but whose lever detour doesn't: an exit on it opens
+    // from other rooms, and the trip to one of them crosses an acquirable gate (a
+    // hazard room with no counter carried, an item or key gate). BFS sees the route
+    // as free, so Evaluate offers nothing, and the walk then fails at plan time.
+    // Returns that walk as a sole gated choice, with the gates the lever trips
+    // cross as its requirements, so the picker offers the same ways across it does
+    // for a gate on the route itself: obtain the counter, or cross unprotected. Null
+    // when the plain route expands fine, or when the detour can't be walked even
+    // with every gate item in hand.
+    public static RouteChoice? EvaluateLeverDetour(
+        BfsMapper bfs,
+        MovementFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination,
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        IReadOnlyList<Direction>? free = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
+        if (free is null || free.Count == 0) return null;
+        if (RemoteActionPathExpander.ReachesDestination(
+                RemoteActionPathExpander.Expand(graph, source, free, bfs, filter), destination))
+            return null;
+
+        IReadOnlyList<WalkStep> walk;
+        using (filter.SuspendAcquirableGates())
+        {
+            IReadOnlyList<Direction>? gated = bfs.FindPath(source, destination, filter);
+            if (gated is null || gated.Count == 0) return null;
+            walk = RemoteActionPathExpander.Expand(graph, source, gated, bfs, filter);
+        }
+        if (!RemoteActionPathExpander.ReachesDestination(walk, destination)) return null;
+
+        // Gating is live again: every hop of the walk the filter blocks is a gate
+        // the lever trips cross.
+        var keys = new List<RoomKey> { source };
+        var reqs = new List<RouteRequirement>();
+        RoomKey cur = source;
+        foreach (WalkStep step in walk)
+        {
+            if (step is not MoveStep move) continue;
+            if (graph.GetRoom(cur) is { } room
+                && room.Exits.TryGetValue(move.Direction, out RoomExit exit)
+                && filter.IsExitBlocked(in exit)
+                && Classify(filter, in exit) is { } req
+                && !AlreadyHave(reqs, req))
+                reqs.Add(req);
+            cur = move.ExpectedTarget;
+            keys.Add(cur);
+        }
+        if (reqs.Count == 0) return null;
+
+        return new RouteChoice(0, keys.Count - 1, reqs, Array.Empty<RoomKey>(), keys) { GatedWalk = walk };
     }
 
     // Compares the shortest route (teleport hops allowed — BFS treats an item /

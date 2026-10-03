@@ -1819,4 +1819,67 @@ public sealed class RouteChoicePlannerTests
         => Assert.Empty(RouteChoicePlanner.SourceableGateItems(
             Array.Empty<RouteRequirement>(), NoSummons));
 
+    // 1/5 (host) ──E (opens from 1/2)── 1/9.  The lever room 1/2 is reached from the
+    // host only through hazard room 1/7 (Spell 700); 1/2 ──E→ 1/5 leads back.
+    private const string LeverBehindHazardRoomsJson = """
+        [
+          { "Map Number": 1, "Room Number": 5, "Name": "Host", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/7", "S": "0", "E": "1/9 (Hidden/Needs 1 Actions, specific order)", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7, "Name": "Hazard", "Spell": 700, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "1/2", "S": "1/5", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Lever", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "1/5", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "Action#1 [on the E exit of room 1/5]: pull lever" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "N": "0", "S": "0", "E": "0", "W": "1/5", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // Report paradigm-20261003-132224: the route was one clear hop, so no fork was
+    // offered, and the walk then failed because the lever trip crossed a hazard.
+    [Fact]
+    public void LeverDetourThroughHazard_IsOfferedAsTheSoleRoute()
+    {
+        WithGraph(LeverBehindHazardRoomsJson, (bfs, graph, filter) =>
+        {
+            RoomKey host = new(1, 5), vault = new(1, 9);
+            Assert.Null(RouteChoicePlanner.Evaluate(bfs, filter, graph, host, vault));
+
+            RouteChoice? choice = RouteChoicePlanner.EvaluateLeverDetour(bfs, filter, graph, host, vault);
+
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+            Assert.Equal(new[] { 42 }, req.ItemIds);
+            Assert.Equal(
+                new[] { host, new RoomKey(1, 7), new RoomKey(1, 2), host, vault },
+                choice.GatedPath);
+            Assert.Equal(4, choice.GatedStepCount);
+            Assert.Contains(choice.GatedWalk!, s => s is CommandStep { Command: "pull lever" });
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 7) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = _ => false;
+        });
+    }
+
+    [Fact]
+    public void LeverDetourThroughHazard_NoOfferWhenTheCounterIsCarried()
+    {
+        WithGraph(LeverBehindHazardRoomsJson, (bfs, graph, filter) =>
+        {
+            Assert.Null(RouteChoicePlanner.EvaluateLeverDetour(
+                bfs, filter, graph, new RoomKey(1, 5), new RoomKey(1, 9)));
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 7) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = id => id == 42;
+        });
+    }
 }
