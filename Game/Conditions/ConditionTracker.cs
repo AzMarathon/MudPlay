@@ -203,6 +203,24 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _log?.Info(LogCategory, $"all conditions cleared ({reason})");
     }
 
+    // Drop every active record carrying any of the given flags. For outside proof
+    // that an ailment is gone when its wear-off line never arrived (a move going
+    // through while MovementPrevented is latched). Like ClearAll it is a safe
+    // over-clear: a condition that is really still on re-latches on its next line.
+    // No ConditionEnded fires — the buff timers that event feeds anchor on a
+    // record's own wear-off line, same as the collateral clears in OnLine.
+    public void ClearFlag(MessageFlags flags, string reason)
+    {
+        if ((ActiveFlags & flags) == MessageFlags.None) return;
+        List<string> names = new();
+        foreach (MessageRecord r in _messages.Messages)
+            if ((r.Flags & flags) != MessageFlags.None && _active.Remove(r.Id))
+                names.Add(r.Name);
+        RecomputeFlags();
+        _log?.Info(LogCategory,
+            $"{flags} cleared ({reason}) — dropped {names.Count} record(s): {string.Join(", ", names)}");
+    }
+
     // The store fires one Reset for a bulk (re)load, so this rebuilds once per set
     // switch rather than once per record — see BulkObservableCollection.
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildIndex();

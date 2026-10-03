@@ -136,6 +136,30 @@ public sealed class ConditionTrackerTests
         Assert.False(h.Tracker.IsFeared);
     }
 
+    // A hold whose wear-off line never arrives is dropped on outside proof (a move
+    // that landed), leaving unrelated conditions latched. (report paradigm-20261003-161904)
+    [Fact]
+    public void ClearFlag_DropsOnlyRecordsCarryingThatFlag()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("hold person", MessageFlags.MovementPrevented,
+            applied: "Your legs are paralyzed!", endsWith: "You can move again!"));
+        h.Messages.Messages.Add(MakeRecord("Poison", MessageFlags.Poisoned,
+            applied: "You have been poisoned!", endsWith: "The poison wears off."));
+        h.Feed("Your legs are paralyzed!");
+        h.Feed("You have been poisoned!");
+
+        h.Tracker.ClearFlag(MessageFlags.MovementPrevented, "test");
+
+        Assert.False(h.Tracker.IsMovementPrevented);
+        Assert.True(h.Tracker.IsPoisoned);
+        Assert.Empty(h.Ended);
+
+        // The record is free to latch again on its next applied line.
+        h.Feed("Your legs are paralyzed!");
+        Assert.True(h.Tracker.IsMovementPrevented);
+    }
+
     [Fact]
     public void AbsentSentinelLine_CompilesNoPattern()
     {
