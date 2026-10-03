@@ -1,5 +1,9 @@
 # Version history
 
+## 3.142.25
+
+- Killing a monster that summons another on death holds the loop until the room is re-read, instead of letting go on the kill itself
+
 ## 3.142.24
 
 - Player Workshop opens faster: quest data is worked out once per game-data set and readied in the background when a profile loads
