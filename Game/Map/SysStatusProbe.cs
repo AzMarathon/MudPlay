@@ -34,6 +34,7 @@ public sealed class SysStatusProbe : IDisposable
 
     private readonly SysRoomStatusParser _parser;
     private readonly Func<bool> _capabilityEnabled;
+    private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
     private Action<byte[]>? _wireSender;
@@ -54,7 +55,7 @@ public sealed class SysStatusProbe : IDisposable
     // stop hammering an account that lacks the privilege, and one retry every few
     // minutes does that just as well while surviving a hiccup.
     public bool AutoDisabled
-        => !_provenAvailable && _disabledUntilUtc is { } until && DateTimeOffset.UtcNow < until;
+        => !_provenAvailable && _disabledUntilUtc is { } until && _now() < until;
 
     // Set the first time a probe actually returns a room block. That answers the
     // only question auto-disable exists to ask — does this account have the
@@ -73,12 +74,16 @@ public sealed class SysStatusProbe : IDisposable
     // Whether a probe would actually be sent right now.
     public bool Available => !_disposed && !AutoDisabled && _wireSender is not null && _capabilityEnabled();
 
-    public SysStatusProbe(SysRoomStatusParser parser, Func<bool> capabilityEnabled, LogService? log = null)
+    // now is a test seam, like DelayProvider: the back-off window is measured
+    // against it, so a test can step past the window without waiting it out.
+    public SysStatusProbe(SysRoomStatusParser parser, Func<bool> capabilityEnabled,
+        Func<DateTimeOffset>? now = null, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(parser);
         ArgumentNullException.ThrowIfNull(capabilityEnabled);
         _parser = parser;
         _capabilityEnabled = capabilityEnabled;
+        _now = now ?? (() => DateTimeOffset.UtcNow);
         _log = log;
         _parser.StatusParsed += OnStatusParsed;
     }
@@ -141,7 +146,7 @@ public sealed class SysStatusProbe : IDisposable
                     + "session, so this is a hiccup — staying enabled.");
                 return null;
             }
-            _disabledUntilUtc = DateTimeOffset.UtcNow + AutoDisableFor;
+            _disabledUntilUtc = _now() + AutoDisableFor;
             _log?.Log(LogSeverity.Info, LogCategory,
                 $"No room block within {Timeout.TotalSeconds:0}s and none has ever come back — sysop "
                 + $"status off for {AutoDisableFor.TotalMinutes:0} minute(s), then retried.");

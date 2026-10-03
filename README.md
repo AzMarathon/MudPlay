@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.19**
-> - Startup is about a third faster: rooms are read on every core, spell matchers use an index, and housekeeping waits until the client is idle
-> - Game Data tables use far less memory and load with fewer pauses: Rooms holds about 40 MB instead of 100 MB
+> **Version 3.142.20**
+> - Sysop-status back-off test runs on a fake clock, so it no longer fails at random under a loaded test run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

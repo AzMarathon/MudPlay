@@ -15,13 +15,17 @@ public sealed class SysStatusProbeTests
         public List<string> Sent { get; } = new();
         public bool CapabilityEnabled { get; set; } = true;
 
+        // The probe's clock. It moves only when a test moves it, so the back-off
+        // window can't open or close on scheduler timing.
+        public DateTimeOffset Now { get; set; } = new(2026, 10, 2, 12, 0, 0, TimeSpan.Zero);
+
         // Fresh per probe: a reused completion source would leave the second
         // query pre-timed-out by the first.
         private TaskCompletionSource _currentDelay = new();
 
         public Harness()
         {
-            Probe = new SysStatusProbe(Parser, () => CapabilityEnabled)
+            Probe = new SysStatusProbe(Parser, () => CapabilityEnabled, () => Now)
             {
                 // The "timeout" completes only when a test fires it explicitly,
                 // so a slow machine can never flake these.
@@ -151,7 +155,6 @@ public sealed class SysStatusProbeTests
         // reply that arrived slightly late — the same command answered fine 16
         // minutes later. It backs off now, then retries.
         Harness h = new();
-        h.Probe.AutoDisableFor = TimeSpan.FromMilliseconds(50);
 
         Task<SysRoomStatus?> first = h.Probe.QueryAsync();
         h.FireTimeout();
@@ -159,8 +162,13 @@ public sealed class SysStatusProbeTests
         Assert.True(h.Probe.AutoDisabled);
         Assert.False(h.Probe.Available);
 
-        await Task.Delay(80);
+        // Still off right up to the end of the window...
+        h.Now += h.Probe.AutoDisableFor - TimeSpan.FromTicks(1);
+        Assert.True(h.Probe.AutoDisabled);
+        Assert.False(h.Probe.Available);
 
+        // ...and back on the moment it has run out.
+        h.Now += TimeSpan.FromTicks(1);
         Assert.False(h.Probe.AutoDisabled);
         Assert.True(h.Probe.Available);
         Task<SysRoomStatus?> second = h.Probe.QueryAsync();
