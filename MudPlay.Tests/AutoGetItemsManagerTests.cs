@@ -763,6 +763,57 @@ public sealed class AutoGetItemsManagerTests
         Assert.Empty(h.Sent);
     }
 
+    // The kill clears the Combat gate in the same pass, so the walker has to be held
+    // from the re-look until the room display it asked for has been read.
+    [Fact]
+    public void RequestDropReLook_HoldsTheWalkerUntilTheRoomDisplays()
+    {
+        using Harness h = new();
+        MudPlay.Game.Map.MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        h.Items.SetAcquisitionGate(gate);
+
+        h.Items.RequestDropReLook();
+        Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
+
+        h.Items.NoteRoomDisplayed();
+        Assert.False(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
+    }
+
+    [Fact]
+    public void RequestDropReLook_DropOnTheFloor_HoldsUntilItIsTaken()
+    {
+        using Harness h = new();
+        h.Flags["black star key"] = true;
+        MudPlay.Game.Map.MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        h.Items.SetAcquisitionGate(gate);
+
+        h.Items.RequestDropReLook();
+        h.Feed("You notice black star key here.");
+        h.Items.NoteRoomDisplayed();
+
+        Assert.Equal(new[] { "", "get black star key" }, h.SentText);
+        Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
+
+        h.Feed("You took black star key.");
+        Assert.False(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
+    }
+
+    [Fact]
+    public void RoomDisplay_WithNoReLookOut_LeavesTheGateAlone()
+    {
+        using Harness h = new();
+        MudPlay.Game.Map.MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        h.Items.SetAcquisitionGate(gate);
+        gate.NoteDeferredPending(1);        // someone else's hold
+
+        h.Items.NoteRoomDisplayed();
+
+        Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
+    }
+
     [Fact]
     public void Disposed_StopsSending()
     {

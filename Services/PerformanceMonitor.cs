@@ -23,7 +23,7 @@ namespace MudPlay.Services;
 //
 // Kept out of the program log for the same reason as MemoryUsageLog: a line per
 // hitch would bury the entries an operator reads. With collecting off (the
-// default) nothing is pinged, timed or written.
+// default) nothing is pinged, timed or written, and the watcher thread doesn't exist.
 public sealed class PerformanceMonitor : IAsyncDisposable
 {
     public const double StallMs = 50;
@@ -40,8 +40,10 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private readonly LogDiagnosticState? _diagnostics;
     private readonly Action<Action>? _postLowPriority;
     private readonly Func<bool> _onUiThread;
-    private readonly Thread? _watcher;
-    private volatile bool _stopped;
+    // The watcher thread only exists while the log file is open. Each start takes a
+    // new run number; a thread leaves its loop once it's no longer the current run
+    // (collecting was turned off, or off and on again).
+    private int _watcherRun;
 
     // Where lines go: the open log file, or a test's sink. Null while not collecting.
     private readonly object _gate = new();
@@ -73,7 +75,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // dispatcher from its own thread, and names windows as they open.
     public PerformanceMonitor(LogDiagnosticState diagnostics)
         : this(a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
-               () => Dispatcher.UIThread.CheckAccess(), startWatcher: true)
+               () => Dispatcher.UIThread.CheckAccess())
     {
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _diagnostics.Changed += SyncWriter;
@@ -85,14 +87,20 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     }
 
     // Tests drive stalls and timings directly, without a watcher, dispatcher or file.
-    internal PerformanceMonitor(Action<Action>? postLowPriority, Func<bool> onUiThread, bool startWatcher)
+    internal PerformanceMonitor(Action<Action>? postLowPriority, Func<bool> onUiThread)
     {
         _postLowPriority = postLowPriority;
         _onUiThread = onUiThread;
-        if (!startWatcher || postLowPriority is null) return;
-        _watcher = new Thread(Watch) { IsBackground = true, Name = "UI stall probe", Priority = ThreadPriority.AboveNormal };
-        _watcher.Start();
     }
+
+    private void StartWatcher()
+    {
+        int run = Interlocked.Increment(ref _watcherRun);
+        new Thread(() => Watch(run)) { IsBackground = true, Name = "UI stall probe", Priority = ThreadPriority.AboveNormal }
+            .Start();
+    }
+
+    private void StopWatcher() => Interlocked.Increment(ref _watcherRun);
 
     // Collects into sink instead of a file.
     internal void CollectTo(Action<string>? sink)
@@ -126,6 +134,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                     _sink = WriteToFile;
                     _collecting = true;
                     _allocations = new AllocationSampler();
+                    StartWatcher();
                 }
                 catch (IOException) { _broken = true; }
                 catch (UnauthorizedAccessException) { _broken = true; }
@@ -138,6 +147,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                 _collecting = false;
                 _allocations?.Dispose();
                 _allocations = null;
+                StopWatcher();
             }
         }
         closing?.Dispose();
@@ -159,6 +169,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             _writer = null;
             _sink = null;
             _collecting = false;
+            StopWatcher();
         }
     }
 
@@ -227,16 +238,11 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         lock (_pingLock) _lastWindowEvent = (what, Stopwatch.GetTimestamp());
     }
 
-    private void Watch()
+    private void Watch(int run)
     {
-        while (!_stopped)
+        while (Volatile.Read(ref _watcherRun) == run)
         {
             Thread.Sleep(WatchInterval);
-            if (!_collecting)
-            {
-                Interlocked.Exchange(ref _pingPostedAt, 0);
-                continue;
-            }
             long now = Stopwatch.GetTimestamp();
             long posted = Interlocked.Read(ref _pingPostedAt);
             if (posted == 0)
@@ -332,7 +338,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _stopped = true;
+        StopWatcher();
         _allocations?.Dispose();
         if (_diagnostics is not null) _diagnostics.Changed -= SyncWriter;
         DebugLogWriter? writer;

@@ -4479,6 +4479,9 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 - **A plain `get <item>` collects it**, exactly like any other ground item.
 - **The drop isn't announced on the kill line.** To see and auto-collect it, the room must be re-surveyed: a bare `look` re-renders the `You notice … here.` list that the auto-get engine already parses.
 
+**Client use:**
+- `AppServices.ReLookForDrops` (on each death): when the dead monster's `DropItem-N` list holds an item flagged Auto-collect, `AutoGetItemsManager.RequestDropReLook` sends a bare Enter (which re-renders the survey as `look` does, without the room description) and holds the walker through `AcquisitionGate` until the room display's exits line. Report `paradigm-20261003-005951` (the call had been left unwired, so the last kill in a room was never checked).
+
 ### Ground stack counts in the room survey
 *Status: CONFIRMED 2026-07-20 (user)*
 

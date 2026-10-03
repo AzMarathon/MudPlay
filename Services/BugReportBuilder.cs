@@ -1320,6 +1320,7 @@ public static class BugReportBuilder
             : "none yet — using the gear estimate");
         Kv(sb, "Party @ok held for gear", svc.Health.IsPartyOkHeldForGear.ToString());
         Kv(sb, "Auto-sell", svc.AutoSell.IsSelling ? "selling here" : "idle");
+        Kv(sb, "Floor check after a kill", svc.AutoGetItems.IsReLookHeld ? "waiting on the room display" : "idle");
         // Roomba Mode (GhSweepManager) — a "sweep won't start / got stuck"
         // report needs the phase, lap count, and how much of the sort queue
         // is still outstanding.

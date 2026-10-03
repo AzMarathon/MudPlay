@@ -7,7 +7,7 @@ public sealed class PerformanceMonitorTests
 {
     private static (PerformanceMonitor Monitor, List<string> Lines) Collecting()
     {
-        PerformanceMonitor monitor = new(null, () => true, startWatcher: false);
+        PerformanceMonitor monitor = new(null, () => true);
         List<string> lines = new();
         monitor.CollectTo(lines.Add);
         return (monitor, lines);
@@ -16,7 +16,7 @@ public sealed class PerformanceMonitorTests
     [Fact]
     public void Nothing_is_timed_while_not_collecting()
     {
-        PerformanceMonitor monitor = new(null, () => true, startWatcher: false);
+        PerformanceMonitor monitor = new(null, () => true);
         using (monitor.Measure("terminal feed")) { }
 
         Assert.DoesNotContain("terminal feed", monitor.Summary());

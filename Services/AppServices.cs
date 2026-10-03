@@ -4051,6 +4051,11 @@ public sealed class AppServices
             currentTargetName: () => Combat.DeathAttributionTarget,
             movementActive: () => MovementControl.IsActive,
             log: Log);
+        // A drop lands on the ground with no line of its own, so the kill of a monster
+        // that can drop something flagged for auto-collect re-displays the room. Wired
+        // ahead of the roster resync below for the reason the summon settle is: the
+        // walker hold has to be up before the resync clears the Combat gate.
+        MonsterDeath.MonsterDied += ReLookForDrops;
         MonsterDeath.MonsterDied += evt =>
         {
             // Every death is the exp + *Combat Off* signal (no per-monster identity,
@@ -9731,16 +9736,54 @@ public sealed class AppServices
     // (seeded "^M^M" = two carriage returns) to nudge the engine past the stall. Identity is
     // best-effort — the event's Candidates plus the engaged target (the exp-only death path
     // carries no candidates); a stray extra CR is harmless. Fires at most one response per death.
-    private void FireTempDeathResponse(Game.Combat.MonsterDeathEvent evt)
+    // The Monsters-table Numbers a death could belong to: the event's own candidates,
+    // plus the monster we were fighting. That one is read off the room roster first,
+    // which knows the Number behind a flavoured name ("fierce kobold thief") and
+    // which same-named record lives in this room; the name lookup is the fallback.
+    // Only valid before the roster resync drops the dead entity.
+    private HashSet<int> DyingMonsterNumbers(Game.Combat.MonsterDeathEvent evt)
     {
-        if (_engineWireSend is null) return;
         HashSet<int> numbers = new();
         foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
             if (id.Number is { } n) numbers.Add(n);
-        if (Combat.DeathAttributionTarget is { Length: > 0 } dying
-            && ResolveMonsterNumberByName(dying) is { } cur) numbers.Add(cur);
+        if (Combat.DeathAttributionTarget is not { Length: > 0 } dying) return numbers;
 
-        foreach (int num in numbers)
+        if (RoomClassifier.Current is { } roster)
+            foreach (Game.Combat.RoomEntity e in roster.Entities)
+                if (e.Kind == Game.Combat.EntityKind.Monster && e.MonsterNumber is { } inRoom
+                    && (string.Equals(e.RawName, dying, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(e.ResolvedName, dying, StringComparison.OrdinalIgnoreCase)))
+                    numbers.Add(inRoom);
+        if (ResolveMonsterNumberByName(dying) is { } byName) numbers.Add(byName);
+        return numbers;
+    }
+
+    // Re-display the room after a kill when the dead monster can drop an item the
+    // auto-get engine would pick up. Nothing is sent for a monster with no such drop,
+    // so ordinary kills cost no extra Enter.
+    private void ReLookForDrops(Game.Combat.MonsterDeathEvent evt)
+    {
+        if (!ReadAutoModeFlag(d => d.AutoGetItems)) return;
+        foreach (int number in DyingMonsterNumbers(evt))
+        {
+            if (MonsterCatalog.Get(number) is not { } monster) continue;
+            foreach (Game.Combat.MonsterDropSlot drop in monster.Drops)
+            {
+                Models.GameData.ItemOverlay overlay = ResolveItemOverlay(drop.ItemId);
+                if (!(overlay.AutoCollect ?? false) || (overlay.CannotBeTaken ?? false)) continue;
+                Log.Debug(Game.Inventory.AutoGetItemsManager.LogCategory,
+                    $"killed '{monster.Name}' (#{number}), which can drop "
+                    + $"'{ItemNames.GetName(drop.ItemId)}' — checking the floor");
+                AutoGetItems.RequestDropReLook();
+                return;
+            }
+        }
+    }
+
+    private void FireTempDeathResponse(Game.Combat.MonsterDeathEvent evt)
+    {
+        if (_engineWireSend is null) return;
+        foreach (int num in DyingMonsterNumbers(evt))
         {
             int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;
             if (deathSpell <= 0) continue;
