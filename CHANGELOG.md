@@ -1,5 +1,10 @@
 # Version history
 
+## 3.142.28
+
+- A party member's knockdown chip clears when the knockdown ends, not after three minutes
+- Ailment chips time out by the monster the line names
+
 ## 3.142.27
 
 - Fixed a crash at launch in release builds: the installed-font scan could kill the client with no error

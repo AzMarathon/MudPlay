@@ -83,7 +83,8 @@ public sealed class PartyAilmentTracker : IDisposable
     // duration resolver. Null when apply-witnessing is disabled (tests that only
     // exercise the cure/say paths). See AppServices for the production bindings.
     private readonly Func<IReadOnlyList<ApplyCastMatcher>>? _readApplyMatchers;
-    private readonly Func<int, double?>? _resolveDurationSeconds;
+    // (spell number, the caster the witness line named or null) → seconds.
+    private readonly Func<int, string?, double?>? _resolveDurationSeconds;
     private readonly Func<long> _now;
     // Chips with an armed expiry, keyed by member given-name + flag → absolute
     // expiry (monotonic ms). The "duration timed out" clear: SweepExpiredChips
@@ -101,7 +102,7 @@ public sealed class PartyAilmentTracker : IDisposable
         PartyEssentialHandlers essentials,
         Func<IReadOnlyList<CureCastMatcher>> readCureMatchers,
         Func<IReadOnlyList<ApplyCastMatcher>>? readApplyMatchers = null,
-        Func<int, double?>? resolveDurationSeconds = null,
+        Func<int, string?, double?>? resolveDurationSeconds = null,
         Func<long>? nowMs = null,
         LogService? log = null)
     {
@@ -323,20 +324,56 @@ public sealed class PartyAilmentTracker : IDisposable
             if (!line.Text.Contains(given, StringComparison.OrdinalIgnoreCase)
                 && !line.Text.Contains(m.Name, StringComparison.OrdinalIgnoreCase))
                 continue;
+            // Several records can share one witness line (two knockdown spells both
+            // print "{target} is knocked flat!"), and only the one a monster in the
+            // room carries resolves a duration. Keep the longest resolved per ailment
+            // so an unresolved twin can't overwrite it with the fallback cap.
+            Dictionary<MessageFlags, (double? Secs, string Spell)>? hits = null;
             foreach (ApplyCastMatcher am in matchers)
             {
-                if (!am.Witness.ConfirmsSpellTarget(line.Text, am.SpellName, m.Name)
-                    && !am.Witness.ConfirmsSpellTarget(line.Text, am.SpellName, given))
-                    continue;
-                _party.SetMemberAilment(m.Name, am.Ailment, true);
-                double secs = _resolveDurationSeconds?.Invoke(am.SpellNumber) ?? FallbackDurationSeconds;
-                if (secs <= 0) secs = FallbackDurationSeconds;
-                _expiryAtMs[(given, am.Ailment)] = _now() + (long)(secs * 1000);
+                if (!NamesMember(am, line.Text, m.Name, given, out string? source)) continue;
+                double? secs = _resolveDurationSeconds?.Invoke(am.SpellNumber, source);
+                if (secs is <= 0) secs = null;
+                hits ??= new();
+                if (!hits.TryGetValue(am.Ailment, out (double? Secs, string Spell) best)
+                    || (secs ?? 0) > (best.Secs ?? 0))
+                    hits[am.Ailment] = (secs, am.SpellName);
+            }
+            if (hits is null) continue;
+            foreach ((MessageFlags ailment, (double? resolved, string spell)) in hits)
+            {
+                _party.SetMemberAilment(m.Name, ailment, true);
+                double secs = resolved ?? FallbackDurationSeconds;
+                _expiryAtMs[(given, ailment)] = _now() + (long)(secs * 1000);
                 _log?.Info(LogCategory,
-                    $"witnessed {am.Ailment} on {m.Name} (spell '{am.SpellName}') — chip set, clears in ~{secs:0}s");
+                    $"witnessed {ailment} on {m.Name} (spell '{spell}') — chip set, clears in ~{secs:0}s"
+                    + (resolved is null ? " (no caster in the room resolved a duration, fallback cap)" : string.Empty));
             }
         }
     }
+
+    // Whether the witness line is this apply landing on the member, and who cast it
+    // when the template names a caster. A template that pins {target} is matched on
+    // its own slots: the spell name is checked only when the template carries one,
+    // because an on-hit effect's line names nobody but the victim ("{target} is
+    // knocked flat!"). Legacy {s}-only templates still need spell + target captures.
+    private static bool NamesMember(
+        ApplyCastMatcher am, string text, string name, string given, out string? source)
+    {
+        source = null;
+        if (!am.Witness.PinsTarget)
+            return am.Witness.ConfirmsSpellTarget(text, am.SpellName, name)
+                || am.Witness.ConfirmsSpellTarget(text, am.SpellName, given);
+
+        if (!am.Witness.TryMatchCaptures(text, out MessageCaptures caps)) return false;
+        if (!Same(caps.Target, name) && !Same(caps.Target, given)) return false;
+        if (caps.Spell is not null && !Same(caps.Spell, am.SpellName)) return false;
+        source = caps.Source;
+        return true;
+    }
+
+    private static bool Same(string? a, string b) =>
+        string.Equals(a?.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
 
     // Clear a member's chip when we witness a cure land on them — the fastest clear
     // path, before any par/@status reconcile. Requires BOTH the cure spell's name

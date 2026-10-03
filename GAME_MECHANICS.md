@@ -5420,6 +5420,8 @@ This covers how a client learns which ailments afflict itself and its party memb
   - So an observer that witnessed the apply computes the exact duration (`Dur` rounds × spell-round seconds, at the caster's cast level) and auto-clears the chip when it elapses, with no fudge beyond clock jitter.
 - **Client use:**
   - MudPlay reads its own ailments with `ConditionTracker`, matched against the Messages table.
+  - `PartyAilmentTracker.WitnessApplies` lights a member's chip from the ailment record's witness line and arms its duration. A line that names only the victim (`{target} is knocked flat!`) counts, since an on-hit effect names nobody else. `AppServices.ResolveAilmentDurationSeconds` takes the length from the monster the line names when one of that name in the room carries the spell, otherwise the longest among in-room monsters that carry it; an on-hit effect runs the spell's base `Dur` (*Combat → Monster on-hit procs (`AttHitSpell-N`) are physical attacks, not casts*). With nothing resolved the chip keeps a 180 s cap.
+  - A chip clears on a witnessed cure only when the game data lists that spell as curing the ailment (`CureSpellIndex`), whatever sits in the cure slots (**Client policy**, user 2026-10-03). `merciful grace` (#804) is Heal + CurePoison + DispellMagic(BlindUser) in both sets, so it clears poison and blind chips and never a held one. *[NEEDS CONFIRMATION]: a player reports it cures the ultangir's knockdown (#318) on Paradigm; the 1.9.1 data shows nothing on it that removes a hold.*
 
 ### `@wait` / `@ok` party pause
 *Status: CONFIRMED 2026-09-12 (user); pause-flag detail CONFIRMED*

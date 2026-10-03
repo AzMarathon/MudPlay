@@ -161,6 +161,16 @@ public sealed record MonsterCatalogEntry(
         return best;
     }
 
+    // Whether a physical attack that can land carries this spell as its on-hit
+    // effect. Kept apart from CastLevelFor because a proc has no cast level.
+    public bool HasHitSpell(int spellNumber)
+    {
+        if (spellNumber <= 0) return false;
+        foreach (MonsterAttackSlot a in Attacks)
+            if (a.HitSpell == spellNumber && a.Percent > 0) return true;
+        return false;
+    }
+
     // The physical-attack accuracy summary: (majority, max) across every
     // physical/rob slot (Type 1 or 3) with a positive Percent — "majority" is
     // the slot with the highest TruePercent chance, "max" the highest Accuracy

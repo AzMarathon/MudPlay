@@ -9519,29 +9519,48 @@ public sealed class AppServices
 
     // Duration (seconds) a witnessed ailment spell will last on a party member —
     // deterministic from the CASTING monster's cast level (a "resist" prints no
-    // apply line, so never reaches here). We can't pin which in-room monster cast
-    // it from the witness line, so take the LONGEST cast level among in-room
-    // monsters that cast this spell — clearing a chip late is safe, clearing it
-    // early (stopping a still-needed cure) is not. Null when no in-room caster has
-    // the spell or it has no duration formula — the tracker falls back to its cap.
-    private double? ResolveAilmentDurationSeconds(int spellNumber)
+    // apply line, so never reaches here). When the witness line named its caster
+    // and a monster of that name in the room carries the spell, that monster alone
+    // decides. Otherwise take the LONGEST among in-room monsters that carry it —
+    // clearing a chip late is safe, clearing it early (stopping a still-needed
+    // cure) is not. An on-hit effect has no cast level, so it runs the spell's base
+    // duration (GAME_MECHANICS "Monster on-hit procs (`AttHitSpell-N`) are physical
+    // attacks, not casts"). Null when no in-room monster carries the spell or it
+    // has no duration — the tracker falls back to its cap.
+    private double? ResolveAilmentDurationSeconds(int spellNumber, string? source)
     {
         if (SpellFormulaFor(spellNumber) is not { } formula) return null;
-        int bestLevel = 0;
-        if (RoomClassifier.Current is { } obs)
-            foreach (Game.Combat.RoomEntity e in obs.Entities)
-            {
-                if (e.MonsterNumber is not { } mn) continue;
-                if (MonsterCatalog.Get(mn) is not { } entry) continue;
-                // Slot-type handling lives on the entry — Accuracy only means a spell
-                // number on an AttType-2 slot, and reading it off a physical slot used
-                // to match unrelated spells and feed their damage in as a cast level.
-                if (entry.CastLevelFor(spellNumber) is var level && level > bestLevel)
-                    bestLevel = level;
-            }
-        if (bestLevel <= 0) return null;
-        long rounds = Game.Spells.SpellCalculator.Duration(formula, bestLevel);
-        return rounds > 0 ? rounds * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock : null;
+        if (RoomClassifier.Current is not { } obs) return null;
+
+        long bestRounds = 0, namedRounds = 0;
+        foreach (Game.Combat.RoomEntity e in obs.Entities)
+        {
+            if (e.MonsterNumber is not { } mn) continue;
+            if (MonsterCatalog.Get(mn) is not { } entry) continue;
+            // Slot-type handling lives on the entry — Accuracy only means a spell
+            // number on an AttType-2 slot, and reading it off a physical slot used
+            // to match unrelated spells and feed their damage in as a cast level.
+            long rounds = entry.CastLevelFor(spellNumber) is var level and > 0
+                ? Game.Spells.SpellCalculator.Duration(formula, level)
+                : entry.HasHitSpell(spellNumber) ? formula.Dur : 0;
+            if (rounds <= 0) continue;
+            if (rounds > bestRounds) bestRounds = rounds;
+            if (rounds > namedRounds && IsNamed(e, source)) namedRounds = rounds;
+        }
+        long chosen = namedRounds > 0 ? namedRounds : bestRounds;
+        return chosen > 0 ? chosen * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock : null;
+    }
+
+    // Whether a witness line's caster capture is this room monster. The capture can
+    // carry the article the template didn't swallow ("The kobold shaman").
+    private static bool IsNamed(Game.Combat.RoomEntity e, string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source)) return false;
+        string s = source.Trim();
+        foreach (string article in new[] { "the ", "a ", "an " })
+            if (s.StartsWith(article, StringComparison.OrdinalIgnoreCase)) { s = s[article.Length..]; break; }
+        return s.Equals(e.ResolvedName, StringComparison.OrdinalIgnoreCase)
+            || s.Equals(e.RawName, StringComparison.OrdinalIgnoreCase);
     }
 
     // Cure-confirmation matchers for the party ailment tracker's chip-clear path.

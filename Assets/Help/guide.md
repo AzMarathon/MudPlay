@@ -942,9 +942,9 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 A member's chip clears on the first of:
 
 - the member broadcasting they're clear (`@ok`);
-- the effect's duration lapsing;
+- the effect's duration lapsing, counted from the moment you see it land on them. The length comes from the game's spell data for the monster that did it (the one the line names when it names one), and covers effects that ride a physical hit, such as a knockdown. When the client can't work out a length it falls back to three minutes;
 - the `par` `P` flag dropping (poison);
-- **you witnessing any cure land on them** — including one cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, and heal+cures like curing wind). Cure recognition reads the game's own spell data, so it doesn't depend on you having that cure configured.
+- **you witnessing any cure land on them** — including one cast by a party-mate using a spell your own class can't cast (a Priest's cure poison, antidote, freedom, cure disease, and heal+cures like curing wind). Cure recognition reads the game's own spell data, so it doesn't depend on you having that cure configured. The reverse holds too: a spell the game data doesn't list as curing an ailment won't clear that chip, even if you put it in that ailment's cure slot.
 
 ## Reconnecting
 
