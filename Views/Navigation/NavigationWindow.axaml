@@ -619,6 +619,11 @@
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                             ToolTip.Tip="Mark rooms holding a level gate, with an amber corner wedge — a room you can still walk into whose way onward is shut unless you are inside the gate's level window. Covers gated exits, level-gated room teleports, and level-restricted boat sailings. On by default; your choice is saved per character."
                                             Classes.LevelGateFill="{Binding ShowLevelGates}"/>
+                                    <Button Classes="ToggleChip" Content="Other floors"
+                                            Command="{Binding ToggleOtherLevelsCommand}"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            ToolTip.Tip="Show the floors you reach by up and down exits, dimmed, around the floor you're on, wherever they don't cover it. A climbing path shows end to end, and those rooms can be hovered, clicked and walked to like any other. How many floors up and down, and when a crowded floor is left out, are in Settings → General. On by default; applies to every character."
+                                            Classes.LevelGateFill="{Binding ShowOtherLevels}"/>
                                     <Button Classes="ToggleChip" Content="Legend"
                                             Command="{Binding ToggleLegendCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
@@ -778,6 +783,7 @@
                                  LoopApproachPreviewPath="{Binding LoopApproachPreviewPath}"
                                  AvoidedRooms="{Binding AvoidedRooms}"
                                  LevelGatedRooms="{Binding LevelGatedRooms}"
+                                 OtherLevels="{Binding OtherLevelsLayout}"
                                  StashRooms="{Binding StashRooms}"
                                  GhRooms="{Binding GhRooms}"
                                  GhFullRooms="{Binding GhFullRooms}"
@@ -891,6 +897,9 @@
                         <Separator/>
                         <MenuItem Header="Center on Player"
                                   Command="{Binding CenterOnPlayerCommand}"/>
+                        <MenuItem Header="Center on this room"
+                                  Command="{Binding CenterOnContextRoomCommand}"
+                                  ToolTip.Tip="Redraw the map from this room as if you were standing in it: its floor bright, the floors above and below shadowed around it."/>
                         <MenuItem Header="Center on Destination"
                                   Command="{Binding CenterOnDestinationCommand}"
                                   IsVisible="{Binding CanCenterOnDestination}"/>

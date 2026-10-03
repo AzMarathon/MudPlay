@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using MudPlay.Game.Map;
 using MudPlay.Models.Settings;
 
@@ -27,6 +28,12 @@ public sealed class MapControl : Control
 {
     public static readonly StyledProperty<RoomLayout?> LayoutProperty =
         AvaloniaProperty.Register<MapControl, RoomLayout?>(nameof(Layout));
+
+    // The floors reached through up/down exits from Layout, already placed on its
+    // grid where they don't cover it (OtherLevels.Build). Drawn dimmed under the
+    // current floor; their rooms hover, click and route like the current floor's.
+    public static readonly StyledProperty<RoomLayout?> OtherLevelsProperty =
+        AvaloniaProperty.Register<MapControl, RoomLayout?>(nameof(OtherLevels));
 
     public static readonly StyledProperty<RoomKey?> CurrentRoomKeyProperty =
         AvaloniaProperty.Register<MapControl, RoomKey?>(nameof(CurrentRoomKey));
@@ -272,6 +279,28 @@ public sealed class MapControl : Control
     {
         get => GetValue(LayoutProperty);
         set => SetValue(LayoutProperty, value);
+    }
+
+    public RoomLayout? OtherLevels
+    {
+        get => GetValue(OtherLevelsProperty);
+        set => SetValue(OtherLevelsProperty, value);
+    }
+
+    // The layout the exit-line and room-node drawing reads: Layout, or OtherLevels
+    // while the static layer draws the dimmed floors (the same drawing, a different
+    // set of cells).
+    private RoomLayout? _drawingOtherLevels;
+    private RoomLayout? DrawLayout => _drawingOtherLevels ?? Layout;
+
+    // Where a room sits on the map: on the current floor, else on another floor
+    // that shows.
+    private bool TryGetCoord(RoomKey key, out (int X, int Y) coord)
+    {
+        if (Layout is { } layout && layout.Positions.TryGetValue(key, out coord)) return true;
+        if (OtherLevels is { } other && other.Positions.TryGetValue(key, out coord)) return true;
+        coord = default;
+        return false;
     }
 
     public RoomKey? CurrentRoomKey
@@ -525,6 +554,13 @@ public sealed class MapControl : Control
 
     // World tile size in layout units. Multiplied by _zoom to get screen pixels.
     private const double TileWorldSize = 24.0;
+    // Zoomed out to MinZoom a cell is under 4 px: rooms read as dots, enough to see
+    // a whole area's shape and pick where to go.
+    private const double MinZoom = 0.15;
+    private const double MinTilePixels = 3.0;
+    // Below this a room is too small to read a marker or an arrowhead on, and
+    // drawing thousands of them is what made a zoomed-out redraw slow.
+    private const double MinDetailTilePixels = 8.0;
 
     private double _zoom = 1.2;
     private double _panX;
@@ -955,6 +991,15 @@ public sealed class MapControl : Control
                 if (_hoverRoom is { } k) RoomHovered?.Invoke(k, _hoverPos);
             });
         _hoverTimer.Stop();
+        _staticLayer = new MapLayer(DrawStaticLayer)
+        {
+            CacheMode = new BitmapCache(),
+            RenderTransformOrigin = RelativePoint.TopLeft,
+        };
+        _dynamicLayer = new MapLayer(DrawDynamicLayer);
+        VisualChildren.Add(_staticLayer);
+        VisualChildren.Add(_dynamicLayer);
+        InvalidateStatic();
         AffectsRender<MapControl>(LayoutProperty, CurrentRoomKeyProperty, DestinationRoomKeyProperty, GraphProperty,
             LairModeProperty, LairRespawnSecondsProperty, LairMaxRespawnSecondsProperty, LairMonsterCountsProperty,
             HighlightShopsProperty, SpellModeProperty,
@@ -984,8 +1029,8 @@ public sealed class MapControl : Control
         // TryStepSelection / TryStepFloor since those can step off
         // the visible window.
         // When the layout itself rebuilds, re-centre on its origin —
-        // the room it was built around. Two kinds of rebuild reach
-        // here, distinguished by whether that origin is our live room:
+        // the room it was built around. Three kinds of rebuild reach
+        // here, told apart by that origin:
         //   - Movement rebuild (walked onto a new floor, reconnect,
         //     party-follow drag / leader loop): origin == CurrentRoomKey.
         //     Re-centre on it, but honour the browse-suppression window
@@ -999,10 +1044,13 @@ public sealed class MapControl : Control
         //     for the suppression interval, then rebounds to the player —
         //     mirroring a pan-drag. Without this a search jump re-rooted the
         //     layout off the player permanently and never rebounded.
-        LayoutProperty.Changed.AddClassHandler<MapControl>((c, _) =>
+        //   - A redraw of the same map (blacklist edit, graph reload): same origin.
+        //     The view stays exactly where the user left it.
+        LayoutProperty.Changed.AddClassHandler<MapControl>((c, e) =>
         {
             if (c.Layout is not { } layout) return;
             RoomKey origin = layout.Origin;
+            if (e.OldValue is RoomLayout previous && previous.Origin.Equals(origin)) return;
             if (c.CurrentRoomKey is { } cur && cur.Equals(origin))
             {
                 if (c.IsAutoFollowSuppressed) return;
@@ -1037,7 +1085,7 @@ public sealed class MapControl : Control
         Point cursor = e.GetPosition(this);
         double zoomBefore = _zoom;
         double factor = e.Delta.Y > 0 ? 1.1 : 1.0 / 1.1;
-        double zoomAfter = Math.Clamp(zoomBefore * factor, 0.4, 4.0);
+        double zoomAfter = Math.Clamp(zoomBefore * factor, MinZoom, 4.0);
         if (Math.Abs(zoomAfter - zoomBefore) < 1e-6) return;
 
         // Reverse-project the cursor into world space at the old zoom,
@@ -1046,8 +1094,9 @@ public sealed class MapControl : Control
         double cxOld = (cursor.X - Bounds.Width  / 2 - _panX) / (TileWorldSize * zoomBefore);
         double cyOld = (cursor.Y - Bounds.Height / 2 - _panY) / (TileWorldSize * zoomBefore);
         _zoom = zoomAfter;
-        _panX = cursor.X - Bounds.Width  / 2 - cxOld * TileWorldSize * _zoom;
-        _panY = cursor.Y - Bounds.Height / 2 - cyOld * TileWorldSize * _zoom;
+        _panX = Math.Round(cursor.X - Bounds.Width  / 2 - cxOld * TileWorldSize * _zoom);
+        _panY = Math.Round(cursor.Y - Bounds.Height / 2 - cyOld * TileWorldSize * _zoom);
+        ViewMoved();
         // Zooming is active browsing — arm the suppression window so a
         // live move doesn't yank the view out from under the user.
         SuppressAutoFollow();
@@ -1120,7 +1169,7 @@ public sealed class MapControl : Control
             {
                 _chipDragPoint = now;
                 _chipDropTarget = TryHitTestRoom(now, out RoomKey over) ? over : null;
-                InvalidateVisual();
+                _dynamicLayer?.InvalidateVisual();
                 // No room tooltips while a chip is held — the room under the cursor
                 // changes constantly, same as a pan.
                 if (_hoverRoom is not null)
@@ -1134,9 +1183,9 @@ public sealed class MapControl : Control
 
             if (_isDragging)
             {
-                _panX = _panStartX + dx;
-                _panY = _panStartY + dy;
-                InvalidateVisual();
+                _panX = Math.Round(_panStartX + dx);
+                _panY = Math.Round(_panStartY + dy);
+                ViewMoved();
 
                 // Arm the auto-follow suppression window — the user
                 // is actively browsing; don't yank back to live
@@ -1360,7 +1409,7 @@ public sealed class MapControl : Control
         _chipDragFrom = null;
         _chipDragging = false;
         _chipDropTarget = null;
-        InvalidateVisual();
+        _dynamicLayer?.InvalidateVisual();
     }
 
     // Losing the pointer mid-drag (a window stealing focus) drops the chip back. Our
@@ -1381,10 +1430,10 @@ public sealed class MapControl : Control
     public void CenterOnRoom(RoomKey key)
     {
         if (Layout is null) return;
-        if (!Layout.Positions.TryGetValue(key, out (int X, int Y) coord)) return;
-        _panX = -coord.X * TileWorldSize * _zoom;
-        _panY = -coord.Y * TileWorldSize * _zoom;
-        InvalidateVisual();
+        if (!TryGetCoord(key, out (int X, int Y) coord)) return;
+        _panX = Math.Round(-coord.X * TileWorldSize * _zoom);
+        _panY = Math.Round(-coord.Y * TileWorldSize * _zoom);
+        ViewMoved();
     }
 
     // Re-centre on the player's current room (Home key / explicit recenter).
@@ -1424,91 +1473,321 @@ public sealed class MapControl : Control
     public override void Render(DrawingContext context)
     {
         context.FillRectangle(Bg, new Rect(Bounds.Size));
-
         if (Layout is null || Layout.CoordToRoom.Count == 0)
-        {
             DrawCenteredMessage(context, "No room data loaded. Import game data first.");
-            return;
+    }
+
+    // ----- Layers ----------------------------------------------------------
+    // The map is drawn as two child layers. The static one holds what only changes
+    // when the layout or a room class does: every tile, exit line and room node with
+    // its markers. The dynamic one holds what moves as you play: the current and
+    // destination rooms, the selection, the routes and the waypoints. Avalonia keeps
+    // each layer's drawing until that layer is invalidated, so a step, a route update
+    // or a pan no longer walks and redraws the whole layout; a pan only shifts the
+    // static layer's transform.
+    //
+    // The static layer is also cached as a bitmap, so the renderer draws one picture
+    // for it rather than replaying every tile and line each frame. It reaches
+    // _staticMargin past each window edge (the bitmap covers the layer's own bounds,
+    // so it is arranged that much larger) and is redrawn once a pan has used that up.
+    // Pans are whole pixels, so the shifted bitmap lines up exactly with the dynamic
+    // layer drawn over it.
+    private MapLayer? _staticLayer;
+    private MapLayer? _dynamicLayer;
+    private double _staticPanX, _staticPanY, _staticZoom;
+    private double _staticMargin;
+
+    // A quarter of the longer side: a 1920x1080 map caches about 24 MB, and a pan that
+    // uses the margin up costs one static redraw (about 10 ms on a 6,500-room layout).
+    // How strongly the other floors show under the current one.
+    private const double OtherLevelsOpacity = 0.26;
+    // A shadow room's markers fade further than its node: a red halt ring or a
+    // skull at the floor's shade still out-shouts the dim rooms around it.
+    private const double OtherLevelsMarkerOpacity = 0.6;
+
+    private static double MarginFor(Size size) => Math.Round(Math.Max(size.Width, size.Height) * 0.25);
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        double margin = MarginFor(finalSize);
+        if (margin != _staticMargin)
+        {
+            _staticMargin = margin;
+            InvalidateStatic();
+        }
+        _staticLayer?.Arrange(new Rect(-margin, -margin, finalSize.Width + 2 * margin, finalSize.Height + 2 * margin));
+        _dynamicLayer?.Arrange(new Rect(finalSize));
+        return finalSize;
+    }
+
+    private sealed class MapLayer : Control
+    {
+        private readonly Action<DrawingContext> _draw;
+
+        public MapLayer(Action<DrawingContext> draw)
+        {
+            _draw = draw;
+            IsHitTestVisible = false;
         }
 
+        public override void Render(DrawingContext context) => _draw(context);
+    }
+
+    // Room-class properties: what the static layer draws.
+    private static readonly HashSet<AvaloniaProperty> StaticLayerProperties = new()
+    {
+        LayoutProperty, GraphProperty, LairModeProperty, LairRespawnSecondsProperty,
+        LairMaxRespawnSecondsProperty, LairMonsterCountsProperty, HighlightShopsProperty, SpellModeProperty,
+        AvoidedRoomsProperty, LevelGatedRoomsProperty, StashRoomsProperty, GhRoomsProperty, GhFullRoomsProperty,
+        LoopSequenceNumbersProperty, AutoLairRoomsProperty, TeleportRoomsProperty, DeathRoomsProperty,
+        BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty, NavLineStylesProperty,
+        OtherLevelsProperty,
+    };
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        bool resized = change.Property == BoundsProperty;
+        if (resized || StaticLayerProperties.Contains(change.Property)) InvalidateStatic();
+        // Everything that affects drawing at all reaches the dynamic layer: the
+        // current and destination rooms are redrawn there over their static nodes.
+        if (resized || StaticLayerProperties.Contains(change.Property) || DynamicLayerProperties.Contains(change.Property))
+            _dynamicLayer?.InvalidateVisual();
+    }
+
+    private static readonly HashSet<AvaloniaProperty> DynamicLayerProperties = new()
+    {
+        CurrentRoomKeyProperty, DestinationRoomKeyProperty, WalkPathProperty, LoopPathProperty,
+        LoopBuilderPathProperty, LoopBuilderWaypointsProperty, LoopRunningWaypointsProperty,
+        AutoLairWaypointsProperty, AutoLairApproachPathProperty, LoopApproachPreviewPathProperty,
+        WalkPathIsAutoLairProperty, SelectedRoomKeyProperty, PreviewPathProperty, LeaderRoutePathProperty,
+        WhereTargetRoomsProperty, ComparisonRecordedPathProperty, ComparisonConvertedPathProperty,
+        ComparisonStuckRoomsProperty,
+    };
+
+    // The view moved (pan, zoom, re-centre). The cached static layer stands in
+    // straight away, shifted for a pan and stretched for a zoom, and is redrawn at
+    // the new view only when that stops being good enough: a zoom once the wheel
+    // rests, a pan past the margin at most every StaticRedrawGap. A redraw of a
+    // town and its other floors takes tens of milliseconds; one per wheel tick or
+    // per drag step is what piled up into seconds of lag.
+    private void ViewMoved()
+    {
+        double dx = _panX - _staticPanX, dy = _panY - _staticPanY;
+        if (_zoom != _staticZoom)
+            ScheduleStaticRedraw(debounce: true);
+        else if (Math.Abs(dx) > _staticMargin || Math.Abs(dy) > _staticMargin)
+            ScheduleStaticRedraw(debounce: false);
+        ApplyStaticTransform();
+        _dynamicLayer?.InvalidateVisual();
+    }
+
+    // Maps the static layer, drawn at _staticZoom / _staticPan, onto the view as it is
+    // now. A world point sits at (W/2 + pan + w * zoom) on screen, so moving from the
+    // drawn view to this one scales about the drawn centre by zoom / _staticZoom and
+    // shifts by the change of centre. The layer's origin is its top-left corner,
+    // _staticMargin up and left of the map's.
+    private void ApplyStaticTransform()
+    {
+        if (_staticLayer is not { } layer || _staticZoom <= 0) return;
+        double scale = _zoom / _staticZoom;
+        double m = _staticMargin;
+        double ox = Bounds.Width / 2 + _panX + m - scale * (Bounds.Width / 2 + _staticPanX + m);
+        double oy = Bounds.Height / 2 + _panY + m - scale * (Bounds.Height / 2 + _staticPanY + m);
+        layer.RenderTransform = scale == 1.0
+            ? new TranslateTransform(ox, oy)
+            : new MatrixTransform(new Matrix(scale, 0, 0, scale, ox, oy));
+    }
+
+    private static readonly TimeSpan StaticRedrawGap = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan ZoomRestDelay = TimeSpan.FromMilliseconds(150);
+    private DispatcherTimer? _staticRedrawTimer;
+    private DateTime _lastStaticRedraw;
+
+    private void ScheduleStaticRedraw(bool debounce)
+    {
+        _staticRedrawTimer ??= new DispatcherTimer(TimeSpan.Zero, DispatcherPriority.Background, (_, _) =>
+        {
+            _staticRedrawTimer!.Stop();
+            InvalidateStatic();
+        });
+        if (debounce)
+        {
+            _staticRedrawTimer.Stop();
+            _staticRedrawTimer.Interval = ZoomRestDelay;
+            _staticRedrawTimer.Start();
+            return;
+        }
+        if (_staticRedrawTimer.IsEnabled) return;
+        TimeSpan since = DateTime.UtcNow - _lastStaticRedraw;
+        if (since >= StaticRedrawGap)
+        {
+            InvalidateStatic();
+            return;
+        }
+        _staticRedrawTimer.Interval = StaticRedrawGap - since;
+        _staticRedrawTimer.Start();
+    }
+
+    // Redraw the static layer at the view as it is now. The view it is drawn at is
+    // taken here, not in the render: a visual can't change its own transform while
+    // it renders, and a pan before that render lands as a shift from this view.
+    private void InvalidateStatic()
+    {
+        _staticRedrawTimer?.Stop();
+        _lastStaticRedraw = DateTime.UtcNow;
+        _staticPanX = _panX;
+        _staticPanY = _panY;
+        _staticZoom = _zoom;
+        if (_staticLayer is not { } layer) return;
+        layer.RenderTransform = null;
+        layer.InvalidateVisual();
+    }
+
+    private void DrawStaticLayer(DrawingContext context)
+    {
+        if (Layout is null || Layout.CoordToRoom.Count == 0) return;
+
+        double tilePixels = TileWorldSize * _staticZoom;
+        if (tilePixels < MinTilePixels) return;
+
+        // The layer starts _staticMargin up and left of the map.
+        double cx = Bounds.Width  / 2 + _staticPanX + _staticMargin;
+        double cy = Bounds.Height / 2 + _staticPanY + _staticMargin;
+        Rect area = new(new Size(Bounds.Width + 2 * _staticMargin, Bounds.Height + 2 * _staticMargin));
+
+        // The other floors first, dimmed, so the current floor reads on top.
+        if (OtherLevels is { CoordToRoom.Count: > 0 } other)
+        {
+            _drawingOtherLevels = other;
+            try
+            {
+                using (context.PushOpacity(OtherLevelsOpacity))
+                    DrawFloor(context, other, tilePixels, cx, cy, area);
+            }
+            finally
+            {
+                _drawingOtherLevels = null;
+            }
+        }
+        DrawFloor(context, Layout, tilePixels, cx, cy, area);
+    }
+
+    // One floor of the static layer: cell tiles, exit lines, then the room nodes
+    // with what sits on them, every node drawn as neither current nor destination
+    // (the dynamic layer draws those two on top).
+    private void DrawFloor(DrawingContext context, RoomLayout floor, double tilePixels, double cx, double cy, Rect area)
+    {
+        foreach (KeyValuePair<(int X, int Y), RoomKey> kvp in floor.CoordToRoom)
+        {
+            Rect cell = ComputeCellRect(kvp.Key, tilePixels, cx, cy);
+            if (!cell.Intersects(area)) continue;
+            context.FillRectangle(TileBg, cell);
+            context.DrawRectangle(null, TileBorderPen, cell);
+        }
+
+        DrawAllExitLines(context, tilePixels, cx, cy, area);
+
+        // Markers are left off once rooms are too small to read them on.
+        bool details = tilePixels >= MinDetailTilePixels;
+        foreach (KeyValuePair<(int X, int Y), RoomKey> kvp in floor.CoordToRoom)
+        {
+            Rect cell = ComputeCellRect(kvp.Key, tilePixels, cx, cy);
+            if (!cell.Intersects(area)) continue;
+            if (details) DrawCellContents(context, cell, kvp.Value, tilePixels, staticPass: true);
+            else DrawRoomNode(context, cell, kvp.Value, staticPass: true);
+        }
+    }
+
+    // A room's node and the per-cell markers on it.
+    private void DrawCellContents(DrawingContext context, Rect cell, RoomKey key, double tilePixels, bool staticPass)
+    {
+        DrawRoomNode(context, cell, key, staticPass);
+        if (_drawingOtherLevels is null)
+        {
+            DrawCellMarkers(context, cell, key, tilePixels);
+            return;
+        }
+        using (context.PushOpacity(OtherLevelsMarkerOpacity))
+            DrawCellMarkers(context, cell, key, tilePixels);
+    }
+
+    private void DrawCellMarkers(DrawingContext context, Rect cell, RoomKey key, double tilePixels)
+    {
+        if (LevelGatedRooms is { } gated && gated.Contains(key))
+            DrawLevelGateMarker(context, cell);
+
+        if (AvoidedRooms is not null && AvoidedRooms.Contains(key))
+            DrawAvoidX(context, cell);
+
+        if (StashRooms is not null && StashRooms.Contains(key))
+            DrawStashX(context, cell);
+
+        if (GhRooms is not null && GhRooms.Contains(key))
+            DrawRobotIcon(context, cell,
+                full: GhFullRooms is not null && GhFullRooms.Contains(key));
+
+        if (DeathRooms is not null && DeathRooms.Contains(key))
+            DrawSkull(context, cell);
+
+        if (BossRooms is not null && BossRooms.Contains(key))
+            DrawBossCrown(context, cell,
+                stopBefore: StopBeforeBossRooms is not null && StopBeforeBossRooms.Contains(key));
+
+        if (TrainerRooms is not null && TrainerRooms.Contains(key))
+            DrawTrainerIcon(context, cell);
+
+        if (LoopSequenceNumbers is not null
+            && LoopSequenceNumbers.TryGetValue(key, out int seq)
+            && tilePixels >= 16)
+            DrawSequenceNumber(context, cell, seq);
+
+        if (LairMode is LairDisplayMode.Count or LairDisplayMode.HeatCount
+            && LairMonsterCounts is not null
+            && LairMonsterCounts.TryGetValue(key, out int lairCount)
+            && tilePixels >= 16)
+            DrawSequenceNumber(context, cell, lairCount);
+    }
+
+    private void DrawDynamicLayer(DrawingContext context)
+    {
+        if (Layout is null || Layout.CoordToRoom.Count == 0) return;
+
         double tilePixels = TileWorldSize * _zoom;
-        if (tilePixels < 4) return;
+        if (tilePixels < MinTilePixels) return;
 
         double cx = Bounds.Width  / 2 + _panX;
         double cy = Bounds.Height / 2 + _panY;
         Rect viewport = new(Bounds.Size);
 
-        // Pass 1: cell backgrounds + borders.
-        foreach (KeyValuePair<(int X, int Y), RoomKey> kvp in Layout.CoordToRoom)
+        // The current and destination rooms, over the plain nodes the static layer
+        // drew for them.
+        void DrawOnTop(RoomKey key)
         {
-            Rect cell = ComputeCellRect(kvp.Key, tilePixels, cx, cy);
-            if (!cell.Intersects(viewport)) continue;
-            context.FillRectangle(TileBg, cell);
-            context.DrawRectangle(null, TileBorderPen, cell);
+            if (!TryGetCoord(key, out (int X, int Y) coord)) return;
+            Rect cell = ComputeCellRect(coord, tilePixels, cx, cy);
+            if (!cell.Intersects(viewport)) return;
+            // A room on another floor keeps that floor's up/down hints.
+            _drawingOtherLevels = Layout.Positions.ContainsKey(key) ? null : OtherLevels;
+            try { DrawCellContents(context, cell, key, tilePixels, staticPass: false); }
+            finally { _drawingOtherLevels = null; }
         }
+        if (CurrentRoomKey is { } current) DrawOnTop(current);
+        if (DestinationRoomKey is { } destination && !destination.Equals(CurrentRoomKey)) DrawOnTop(destination);
 
-        // Pass 2: exit lines, deduplicated. Full continuous line
-        // when both endpoints are placed (no overlap seam, no
-        // bump); a single half-stub when the destination is
-        // dangling.
-        DrawAllExitLines(context, tilePixels, cx, cy, viewport);
+        // @where target — a transient green flash the VM clears after ~12s.
+        // Drawn right on the node so it reads as a marked square.
+        if (WhereTargetRooms is { Count: > 0 } whereRooms)
+            foreach (RoomKey key in whereRooms)
+                if (TryGetCoord(key, out (int X, int Y) coord)
+                    && ComputeCellRect(coord, tilePixels, cx, cy) is var cell && cell.Intersects(viewport))
+                    DrawWhereHighlight(context, cell);
 
-        // Pass 3: room nodes + per-cell overlays.
-        foreach (KeyValuePair<(int X, int Y), RoomKey> kvp in Layout.CoordToRoom)
-        {
-            Rect cell = ComputeCellRect(kvp.Key, tilePixels, cx, cy);
-            if (!cell.Intersects(viewport)) continue;
-
-            DrawRoomNode(context, cell, kvp.Value);
-
-            if (LevelGatedRooms is { } gated && gated.Contains(kvp.Value))
-                DrawLevelGateMarker(context, cell);
-
-            // @where target — a transient green flash the VM clears after ~12s.
-            // Drawn right on the node so it reads as a marked square.
-            if (WhereTargetRooms is { } whereRooms && whereRooms.Contains(kvp.Value))
-                DrawWhereHighlight(context, cell);
-
-            if (AvoidedRooms is not null && AvoidedRooms.Contains(kvp.Value))
-                DrawAvoidX(context, cell);
-
-            if (StashRooms is not null && StashRooms.Contains(kvp.Value))
-                DrawStashX(context, cell);
-
-            if (GhRooms is not null && GhRooms.Contains(kvp.Value))
-                DrawRobotIcon(context, cell,
-                    full: GhFullRooms is not null && GhFullRooms.Contains(kvp.Value));
-
-            if (DeathRooms is not null && DeathRooms.Contains(kvp.Value))
-                DrawSkull(context, cell);
-
-            if (BossRooms is not null && BossRooms.Contains(kvp.Value))
-                DrawBossCrown(context, cell,
-                    stopBefore: StopBeforeBossRooms is not null && StopBeforeBossRooms.Contains(kvp.Value));
-
-            if (TrainerRooms is not null && TrainerRooms.Contains(kvp.Value))
-                DrawTrainerIcon(context, cell);
-
-            if (LoopSequenceNumbers is not null
-                && LoopSequenceNumbers.TryGetValue(kvp.Value, out int seq)
-                && tilePixels >= 16)
-                DrawSequenceNumber(context, cell, seq);
-
-            if (LairMode is LairDisplayMode.Count or LairDisplayMode.HeatCount
-                && LairMonsterCounts is not null
-                && LairMonsterCounts.TryGetValue(kvp.Value, out int lairCount)
-                && tilePixels >= 16)
-                DrawSequenceNumber(context, cell, lairCount);
-
-            // Crawler selection ring — drawn inside the cell with a
-            // small inset so it sits between the cell border and the
-            // room node, distinct from the amber current-room ring.
-            if (SelectedRoomKey is { } sel && sel.Equals(kvp.Value))
-            {
-                Rect ring = cell.Deflate(1);
-                context.DrawRectangle(null, SelectionPen, ring);
-            }
-        }
+        // Crawler selection ring — drawn inside the cell with a
+        // small inset so it sits between the cell border and the
+        // room node, distinct from the amber current-room ring.
+        if (SelectedRoomKey is { } sel && TryGetCoord(sel, out (int X, int Y) selCoord))
+            context.DrawRectangle(null, SelectionPen, ComputeCellRect(selCoord, tilePixels, cx, cy).Deflate(1));
 
         // Pass 4: top-of-stack polylines. Loop-builder preview and the
         // loop-approach preview both draw in red with the same pen
@@ -1542,18 +1821,20 @@ public sealed class MapControl : Control
         // travel polylines just drawn. A preview / active route running along a trap
         // would otherwise hide it — and merely thickening the trap line isn't enough
         // when the route pen is as wide (or wider). Re-drawing the red on top makes the
-        // trap read through the route unconditionally.
-        DrawAllExitLines(context, tilePixels, cx, cy, viewport, trapOverlay: true);
+        // trap read through the route unconditionally. With no route drawn the static
+        // layer's own trap lines already show, and this pass walks the whole layout.
+        if (AnyRouteDrawn())
+            DrawAllExitLines(context, tilePixels, cx, cy, viewport, trapOverlay: true);
 
         // The import review's comparison sits over every other route.
         DrawPathPolyline(context, ComparisonRecordedPath,  ComparisonRecordedPen,  tilePixels, cx, cy);
         DrawPathPolyline(context, ComparisonConvertedPath, ComparisonConvertedPen, tilePixels, cx, cy);
-        if (ComparisonStuckRooms is { Count: > 0 } stuck && Layout is not null)
+        if (ComparisonStuckRooms is { Count: > 0 } stuck)
         {
             double arm = Math.Max(3, tilePixels * 0.3);
             foreach (RoomKey k in stuck)
             {
-                if (!Layout.Positions.TryGetValue(k, out (int X, int Y) c)) continue;
+                if (!TryGetCoord(k, out (int X, int Y) c)) continue;
                 Point m = new(cx + c.X * tilePixels, cy + c.Y * tilePixels);
                 context.DrawLine(ComparisonStuckPen, new Point(m.X - arm, m.Y - arm), new Point(m.X + arm, m.Y + arm));
                 context.DrawLine(ComparisonStuckPen, new Point(m.X - arm, m.Y + arm), new Point(m.X + arm, m.Y - arm));
@@ -1576,12 +1857,18 @@ public sealed class MapControl : Control
         DrawChipDrag(context, tilePixels, cx, cy);
     }
 
+    private bool AnyRouteDrawn() =>
+        LoopBuilderPath is { Count: > 1 } || LoopApproachPreviewPath is { Count: > 1 }
+        || PreviewPath is { Count: > 1 } || LeaderRoutePath is { Count: > 1 } || LoopPath is { Count: > 1 }
+        || AutoLairApproachPath is { Count: > 1 } || WalkPath is { Count: > 1 }
+        || ComparisonRecordedPath is { Count: > 1 } || ComparisonConvertedPath is { Count: > 1 };
+
     // The chip being dragged, under the cursor, with the room it would land on ringed.
     private void DrawChipDrag(DrawingContext ctx, double tilePixels, double cx, double cy)
     {
         if (!_chipDragging || _chipDragFrom is not { } from || LoopBuilderWaypoints is not { } wps) return;
         if (_chipDropTarget is { } target && !target.Equals(from) && Layout is not null
-            && Layout.Positions.TryGetValue(target, out var coord))
+            && TryGetCoord(target, out var coord))
             ctx.DrawRectangle(null, ChipDropPen, ComputeCellRect(coord, tilePixels, cx, cy).Inflate(2));
 
         double radius = Math.Clamp(tilePixels * 0.34, 7.0, 15.0);
@@ -1626,22 +1913,130 @@ public sealed class MapControl : Control
     // visible under a route. The full pass (trapOverlay false) draws everything.
     private void DrawAllExitLines(DrawingContext ctx, double tilePixels, double cx, double cy, Rect viewport, bool trapOverlay = false)
     {
-        if (Layout is null) return;
+        if (DrawLayout is not { } layout) return;
 
+        // Arrowheads and spell bars are skipped once rooms shrink past reading them.
+        bool details = tilePixels >= MinDetailTilePixels;
+        foreach (Connector c in ConnectorsOf(layout))
+        {
+            Point srcPt = new(cx + c.Source.X * tilePixels, cy + c.Source.Y * tilePixels);
+            // Nothing of a connector whose box (padded by a cell for arrowheads,
+            // stubs and spell bars) misses the drawn area can show.
+            Point farPt = new(cx + c.Far.X * tilePixels, cy + c.Far.Y * tilePixels);
+            if (!new Rect(srcPt, farPt).Inflate(tilePixels).Intersects(viewport)) continue;
+
+            bool isTrap = c.SrcTrap || c.TgtTrap;
+            if (trapOverlay && !isTrap) continue;   // overlay pass draws only trap segments
+            switch (c.Kind)
+            {
+                case ConnectionKind.Adjacent:
+                {
+                    // Grid-adjacent — clean continuous connector.
+                    if (trapOverlay)
+                    {
+                        DrawTrapOverlay(ctx, srcPt, farPt, TrapOverlayPen, c.SrcTrap, c.TgtTrap, tilePixels);
+                        break;
+                    }
+                    IPen basePen = c.IsAction ? ActionPen : c.IsHidden ? HiddenPen : ExitPen;
+                    DrawExitConnector(ctx, srcPt, farPt, basePen, TrapPen, c.SrcTrap, c.TgtTrap);
+                    if (!details) break;
+                    if (c.OneWay) DrawOneWayArrow(ctx, isTrap ? TrapPen : basePen, srcPt, farPt, tilePixels);
+                    if (c.IsSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, farPt), c.Dir, tilePixels);
+                    break;
+                }
+                case ConnectionKind.Bridge:
+                {
+                    // Connected but not grid-adjacent — dashed direct
+                    // line between the two room centres, angled along
+                    // the real connection instead of a stub into space.
+                    if (trapOverlay)
+                    {
+                        DrawTrapOverlay(ctx, srcPt, farPt, TrapBridgePen, c.SrcTrap, c.TgtTrap, tilePixels);
+                        break;
+                    }
+                    IPen baseBridge = c.IsAction ? ActionBridgePen
+                             : c.IsHidden ? HiddenBridgePen : ExitBridgePen;
+                    DrawExitConnector(ctx, srcPt, farPt, baseBridge, TrapBridgePen, c.SrcTrap, c.TgtTrap);
+                    if (!details) break;
+                    if (c.OneWay) DrawOneWayArrow(ctx, isTrap ? TrapBridgePen : baseBridge, srcPt, farPt, tilePixels);
+                    if (c.IsSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, farPt), c.Dir, tilePixels);
+                    break;
+                }
+                default:
+                {
+                    if (trapOverlay) break;   // stubs go to unplaced rooms — no route runs along one
+                    // Target genuinely unplaced (dropped / blacklisted, a
+                    // one-way cast pocket mouth, or too far to bridge) — stub
+                    // to the cell edge. The spell-wall bar sits ON the cell
+                    // divider (the stub's edge point), exactly where it lands
+                    // between two placed rooms, rather than halfway down the
+                    // stub. A one-way exit keeps its directional arrowhead —
+                    // slightly enlarged and tipped at the divider — so a
+                    // cut-off pocket still reads as "out this way, no return".
+                    IPen pen = isTrap ? TrapPen : c.IsAction ? ActionPen : c.IsHidden ? HiddenPen : ExitPen;
+                    Rect cell = ComputeCellRect(c.Source, tilePixels, cx, cy);
+                    if (StubEndpoint(cell, srcPt.X, srcPt.Y, c.Dir) is not { } endPt) break;
+                    ctx.DrawLine(pen, srcPt, endPt);
+                    if (!details) break;
+                    if (c.OneWay) DrawOneWayArrow(ctx, pen, srcPt, endPt, tilePixels, scale: 1.3, tipBack: 0.0);
+                    if (c.IsSpell) DrawSpellWall(ctx, SpellWallPen, endPt, c.Dir, tilePixels);
+                    break;
+                }
+            }
+        }
+    }
+
+    // One connection as DrawAllExitLines draws it, in grid cells. Far is the target's
+    // cell for a placed target, else the cell the exit points at.
+    private readonly record struct Connector(
+        (int X, int Y) Source, (int X, int Y) Far, Direction Dir, ConnectionKind Kind,
+        bool SrcTrap, bool TgtTrap, bool IsAction, bool IsHidden, bool IsSpell, bool OneWay);
+
+    // Every connection of a layout, classified once and kept with it. Nothing here
+    // depends on the view, and working it out (each exit's real target, its way back,
+    // trap / action / hidden / spell on both sides) was most of what a static-layer
+    // redraw cost: 10–20 ms over a town and its other floors, on every pan past the
+    // margin and every zoom step.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<RoomLayout, ConnectorSet> _connectors = new();
+
+    private sealed record ConnectorSet(RoomGraphManager? Graph, List<Connector> Connectors);
+
+    private List<Connector> ConnectorsOf(RoomLayout layout)
+    {
+        if (_connectors.TryGetValue(layout, out ConnectorSet? set) && ReferenceEquals(set.Graph, Graph))
+            return set.Connectors;
+        List<Connector> connectors = ClassifyConnectors(layout);
+        _connectors.AddOrUpdate(layout, new ConnectorSet(Graph, connectors));
+        return connectors;
+    }
+
+    // Walks RoomLayout.EdgesFromCoord once and keeps each connection exactly
+    // once. Three cases per exit, resolved against the exit's REAL target room
+    // (not just the grid-adjacent cell):
+    //   - Grid-adjacent — target sits on the expected neighbouring cell: a
+    //     clean continuous line between the two centres (no overlap seam, no
+    //     thickness bump).
+    //   - Gap-bridge — target is placed but NOT adjacent (the map data
+    //     wouldn't tile flat): a dashed direct line between the two room
+    //     centres, up to BridgeMaxCells apart, so the connection is visible
+    //     instead of vanishing into a stub-to-nowhere.
+    //   - Stub — target genuinely unplaced (dropped collision / blacklisted)
+    //     or beyond the bridge distance: a short stub from the source centre
+    //     to its cell edge.
+    // Reads the edge hints through DrawLayout, so the caller has it set to layout.
+    private List<Connector> ClassifyConnectors(RoomLayout layout)
+    {
+        List<Connector> connectors = new();
         var drawn = new HashSet<((int X, int Y) A, (int X, int Y) B)>();
-
-        foreach (KeyValuePair<(int X, int Y), IReadOnlySet<Direction>> entry in Layout.EdgesFromCoord)
+        foreach (KeyValuePair<(int X, int Y), IReadOnlySet<Direction>> entry in layout.EdgesFromCoord)
         {
             (int X, int Y) source = entry.Key;
-            double srcX = cx + source.X * tilePixels;
-            double srcY = cy + source.Y * tilePixels;
-            Point srcPt = new(srcX, srcY);
 
             // Resolve the room sitting at the source cell once — its exit
             // table tells us where each exit ACTUALLY lands, which may
             // differ from the grid-adjacent cell when the layout couldn't
             // place the pair flat.
-            bool haveSrcKey = Layout.CoordToRoom.TryGetValue(source, out RoomKey srcKey);
+            bool haveSrcKey = layout.CoordToRoom.TryGetValue(source, out RoomKey srcKey);
             Room? sourceRoom = Graph is not null && haveSrcKey ? Graph.GetRoom(srcKey) : null;
 
             foreach (Direction dir in entry.Value)
@@ -1663,7 +2058,7 @@ public sealed class MapControl : Control
                     // (dropped collision / blacklisted), this is a genuine
                     // dangling stub — don't fall back to the adjacent-cell
                     // heuristic, which could connect to the wrong room.
-                    targetPlaced = Layout.Positions.TryGetValue(exit.Target, out (int X, int Y) ac);
+                    targetPlaced = layout.Positions.TryGetValue(exit.Target, out (int X, int Y) ac);
                     actual = targetPlaced ? ac : expected;
 
                     // One-way when the destination carries no exit back to
@@ -1683,7 +2078,7 @@ public sealed class MapControl : Control
                 {
                     // No graph wired — legacy heuristic: trust whatever
                     // occupies the expected adjacent cell.
-                    targetPlaced = Layout.CoordToRoom.ContainsKey(expected);
+                    targetPlaced = layout.CoordToRoom.ContainsKey(expected);
                     actual = expected;
                 }
 
@@ -1710,7 +2105,6 @@ public sealed class MapControl : Control
                 bool srcTrap = IsTrapEdge(source, dir);
                 bool tgtTrap = IsTrapEdge(bCoord, Opposite(dir));
                 bool isTrap = srcTrap || tgtTrap;
-                if (trapOverlay && !isTrap) continue;   // overlay pass draws only trap segments
                 bool isAction = IsActionRequiredEdge(source, dir)
                              || IsActionRequiredEdge(bCoord, Opposite(dir));
                 bool isHidden = !isAction
@@ -1724,65 +2118,12 @@ public sealed class MapControl : Control
                 bool isSpell = IsSpellEdge(source, dir)
                             || IsSpellEdge(bCoord, Opposite(dir));
 
-                switch (ClassifyConnection(targetPlaced, source, expected, actual, BridgeMaxCells))
-                {
-                    case ConnectionKind.Adjacent:
-                    {
-                        // Grid-adjacent — clean continuous connector.
-                        Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
-                        if (trapOverlay)
-                        {
-                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapOverlayPen, srcTrap, tgtTrap, tilePixels);
-                            break;
-                        }
-                        IPen basePen = isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
-                        DrawExitConnector(ctx, srcPt, tgtPt, basePen, TrapPen, srcTrap, tgtTrap);
-                        if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapPen : basePen, srcPt, tgtPt, tilePixels);
-                        if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
-                        break;
-                    }
-                    case ConnectionKind.Bridge:
-                    {
-                        // Connected but not grid-adjacent — dashed direct
-                        // line between the two room centres, angled along
-                        // the real connection instead of a stub into space.
-                        Point tgtPt = new(cx + actual.X * tilePixels, cy + actual.Y * tilePixels);
-                        if (trapOverlay)
-                        {
-                            DrawTrapOverlay(ctx, srcPt, tgtPt, TrapBridgePen, srcTrap, tgtTrap, tilePixels);
-                            break;
-                        }
-                        IPen baseBridge = isAction ? ActionBridgePen
-                                 : isHidden ? HiddenBridgePen : ExitBridgePen;
-                        DrawExitConnector(ctx, srcPt, tgtPt, baseBridge, TrapBridgePen, srcTrap, tgtTrap);
-                        if (oneWay) DrawOneWayArrow(ctx, isTrap ? TrapBridgePen : baseBridge, srcPt, tgtPt, tilePixels);
-                        if (isSpell) DrawSpellWall(ctx, SpellWallPen, Midpoint(srcPt, tgtPt), dir, tilePixels);
-                        break;
-                    }
-                    default:
-                    {
-                        if (trapOverlay) break;   // stubs go to unplaced rooms — no route runs along one
-                        // Target genuinely unplaced (dropped / blacklisted, a
-                        // one-way cast pocket mouth, or too far to bridge) — stub
-                        // to the cell edge. The spell-wall bar sits ON the cell
-                        // divider (the stub's edge point), exactly where it lands
-                        // between two placed rooms, rather than halfway down the
-                        // stub. A one-way exit keeps its directional arrowhead —
-                        // slightly enlarged and tipped at the divider — so a
-                        // cut-off pocket still reads as "out this way, no return".
-                        IPen pen = isTrap ? TrapPen : isAction ? ActionPen : isHidden ? HiddenPen : ExitPen;
-                        Rect cell = ComputeCellRect(source, tilePixels, cx, cy);
-                        DrawStub(ctx, pen, cell, srcX, srcY, dir);
-                        if (StubEndpoint(cell, srcX, srcY, dir) is { } endPt)
-                        {
-                            if (oneWay) DrawOneWayArrow(ctx, pen, srcPt, endPt, tilePixels, scale: 1.3, tipBack: 0.0);
-                            if (isSpell) DrawSpellWall(ctx, SpellWallPen, endPt, dir, tilePixels);
-                        }
-                        break;
-                    }
-                }
+                connectors.Add(new Connector(source, bCoord, dir,
+                    ClassifyConnection(targetPlaced, source, expected, actual, BridgeMaxCells),
+                    srcTrap, tgtTrap, isAction, isHidden, isSpell, oneWay));
             }
         }
+        return connectors;
     }
 
     // Draw one room-to-room connector, colouring each HALF by whether the exit
@@ -1859,8 +2200,8 @@ public sealed class MapControl : Control
 
     private bool IsTrapEdge((int X, int Y) coord, Direction dir)
     {
-        if (Layout?.TrapEdgesFromCoord is null) return false;
-        return Layout.TrapEdgesFromCoord.TryGetValue(coord, out IReadOnlySet<Direction>? set)
+        if (DrawLayout?.TrapEdgesFromCoord is not { } traps) return false;
+        return traps.TryGetValue(coord, out IReadOnlySet<Direction>? set)
             && set.Contains(dir);
     }
 
@@ -1869,8 +2210,8 @@ public sealed class MapControl : Control
     // pre-computed-set lookup as IsTrapEdge.
     private bool IsSpellEdge((int X, int Y) coord, Direction dir)
     {
-        if (Layout?.SpellEdgesFromCoord is null) return false;
-        return Layout.SpellEdgesFromCoord.TryGetValue(coord, out IReadOnlySet<Direction>? set)
+        if (DrawLayout?.SpellEdgesFromCoord is not { } spells) return false;
+        return spells.TryGetValue(coord, out IReadOnlySet<Direction>? set)
             && set.Contains(dir);
     }
 
@@ -1883,8 +2224,8 @@ public sealed class MapControl : Control
     // set through RoomLayout.
     private bool IsActionRequiredEdge((int X, int Y) coord, Direction dir)
     {
-        if (Graph is null || Layout is null) return false;
-        if (!Layout.CoordToRoom.TryGetValue(coord, out RoomKey key)) return false;
+        if (Graph is null || DrawLayout is not { } layout) return false;
+        if (!layout.CoordToRoom.TryGetValue(coord, out RoomKey key)) return false;
         if (Graph.GetRoom(key) is not { } room) return false;
         if (!room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
         // Both shapes read to the player as "you can't just walk this direction —
@@ -1900,8 +2241,8 @@ public sealed class MapControl : Control
     // IsActionRequiredEdge.
     private bool IsHiddenEdge((int X, int Y) coord, Direction dir)
     {
-        if (Graph is null || Layout is null) return false;
-        if (!Layout.CoordToRoom.TryGetValue(coord, out RoomKey key)) return false;
+        if (Graph is null || DrawLayout is not { } layout) return false;
+        if (!layout.CoordToRoom.TryGetValue(coord, out RoomKey key)) return false;
         if (Graph.GetRoom(key) is not { } room) return false;
         if (!room.Exits.TryGetValue(dir, out RoomExit exit)) return false;
         return exit.Hint == RoomExitHint.SearchableHidden;
@@ -1948,7 +2289,7 @@ public sealed class MapControl : Control
         RoomKey? prevKey = null;
         foreach (RoomKey key in path)
         {
-            if (!Layout.Positions.TryGetValue(key, out (int X, int Y) coord))
+            if (!TryGetCoord(key, out (int X, int Y) coord))
             {
                 prev = null;                                  // gap — skip until next placed room
                 prevKey = null;
@@ -2251,7 +2592,7 @@ public sealed class MapControl : Control
         for (int i = 0; i < waypoints.Count; i++)
         {
             RoomKey key = waypoints[i];
-            if (!Layout.Positions.TryGetValue(key, out var coord)) continue;
+            if (!TryGetCoord(key, out var coord)) continue;
             Rect cell = ComputeCellRect(coord, tilePixels, cx, cy);
             Point centre = new(
                 cell.X + cell.Width  / 2.0,
@@ -2271,15 +2612,9 @@ public sealed class MapControl : Control
     // dangling-exit branch in DrawAllExitLines — full lines between two placed
     // cells are drawn end-to-end without overlap. No StubOverlap here: there's
     // no adjacent stub to meet, so the segment ends flush at the cell edge.
-    private static void DrawStub(DrawingContext ctx, IPen pen, Rect cell, double mx, double my, Direction dir)
-    {
-        if (StubEndpoint(cell, mx, my, dir) is { } end)
-            ctx.DrawLine(pen, new Point(mx, my), end);
-    }
-
     // Where a stub connector from the cell centre (mx, my) meets the cell edge
     // for a planar direction. Null for U / D (not rendered as stubs). Shared by
-    // DrawStub and the spell-wall placement so both agree on the stub geometry.
+    // the stub line and the spell-wall placement so both agree on the stub geometry.
     private static Point? StubEndpoint(Rect cell, double mx, double my, Direction dir) => dir switch
     {
         Direction.N  => new Point(mx, cell.Top),
@@ -2391,15 +2726,16 @@ public sealed class MapControl : Control
         return result;
     }
 
-    private void DrawRoomNode(DrawingContext ctx, Rect cell, RoomKey key)
+    // staticPass: drawn for the static layer, as neither current nor destination.
+    private void DrawRoomNode(DrawingContext ctx, Rect cell, RoomKey key, bool staticPass)
     {
         double nodeSize = Math.Max(cell.Width * 0.45, 3.0);
         double nx = cell.X + (cell.Width  - nodeSize) / 2;
         double ny = cell.Y + (cell.Height - nodeSize) / 2;
         Rect node = new(nx, ny, nodeSize, nodeSize);
 
-        bool isCurrent = CurrentRoomKey is { } current && current.Equals(key);
-        bool isDestination = !isCurrent && DestinationRoomKey is { } dest && dest.Equals(key);
+        bool isCurrent = !staticPass && CurrentRoomKey is { } current && current.Equals(key);
+        bool isDestination = !staticPass && !isCurrent && DestinationRoomKey is { } dest && dest.Equals(key);
         bool isAutoLair = AutoLairRooms is not null && AutoLairRooms.Contains(key);
         Room? room = Graph?.GetRoom(key);
 
@@ -2452,7 +2788,7 @@ public sealed class MapControl : Control
                 pen = SpellBorderPen;
             }
         }
-        else if (Layout?.VerticalHints is { } vhints && vhints.TryGetValue(key, out VerticalHint hint))
+        else if (DrawLayout?.VerticalHints is { } vhints && vhints.TryGetValue(key, out VerticalHint hint))
         {
             (fill, pen) = hint switch
             {
@@ -2490,7 +2826,7 @@ public sealed class MapControl : Control
         // IS the whole-node fill, the badge is redundant (same hue on itself) and
         // skipped — otherwise a rimmed triangle sits on a matching square.
         if (!verticalFillIsPrimary
-            && Layout?.VerticalHints is { } vh
+            && DrawLayout?.VerticalHints is { } vh
             && vh.TryGetValue(key, out VerticalHint vhint)
             && vhint != VerticalHint.None)
         {
@@ -2528,7 +2864,7 @@ public sealed class MapControl : Control
         if (Layout is null) return;
         void Draw(RoomKey? key, bool current)
         {
-            if (key is not { } k || !Layout.Positions.TryGetValue(k, out (int X, int Y) coord)) return;
+            if (key is not { } k || !TryGetCoord(k, out (int X, int Y) coord)) return;
             Rect cell = ComputeCellRect(coord, tilePixels, cx, cy);
             if (cell.Intersects(viewport)) DrawEndpointMarker(ctx, cell, current);
         }
@@ -2634,7 +2970,8 @@ public sealed class MapControl : Control
         double centerY = cy + gy * tilePixels;
         if (Math.Abs(position.X - centerX) <= half
             && Math.Abs(position.Y - centerY) <= half
-            && Layout.CoordToRoom.TryGetValue((gx, gy), out hit))
+            && (Layout.CoordToRoom.TryGetValue((gx, gy), out hit)
+                || (OtherLevels?.CoordToRoom.TryGetValue((gx, gy), out hit) ?? false)))
         {
             return true;
         }

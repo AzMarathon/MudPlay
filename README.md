@@ -1,15 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.141.15**
-> - Terminal draws each colour run as one glyph run instead of one call per character: about ten times less drawing work per frame, pixel-identical
-> - Scrolling the history window no longer re-lays out every character and timestamp on each wheel tick
-> - Zoomed CP437 font: the enlarged screen is only re-rendered when something on it changed
-> - Session Stats: the current lap time keeps counting through a fight instead of dropping to zero
-> - Drop All / Drop Everything / Hide All leave out what the game won't let go of: no-drop items (tokens, the deck of cards), loyal items, and cursed gear you're wearing
-> - Get All / Drop All / Hide All send their commands a few at a time, so a long sweep can't overflow the game's command limit
-> - Chest Offload's Drop All and per-item Drop are paced the same way
-> - Get All leaves cursed items on the floor
+> **Version 3.142.0**
+> - Map: rooms, exits and markers are drawn once and only moved when you pan; walking redraws just the player marker and routes, and off-screen exits are no longer drawn
+> - Map shows the floors above and below, dimmed, around the one shown: hover, click and walk to them like any other room
+> - Floors above are drawn before floors below, and a floor landing mostly on drawn rooms is left out
+> - Settings → General: other floors on/off, how many floors up and down, and the overlap cut-off
+> - Right-click → Center on this room redraws the map from that room
+> - Blacklisting a room redraws the map in place instead of jumping back to your room
+> - Jumping the map to another area no longer freezes the window, and going back to an area is instant
+> - Map zooms out much further; zooming and panning a big area stay smooth (redrawn once the wheel rests, exit lines worked out once per map)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

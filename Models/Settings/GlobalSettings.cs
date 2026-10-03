@@ -77,6 +77,16 @@ public sealed class GlobalSettings
     // which pushes it to MapControl.
     public NavLineStyles? NavLines { get; set; }
 
+    // The Navigation map's other floors (Settings → General, and the map's
+    // Overlays chip): the floors reached through up/down exits drawn dimmed around
+    // the one shown. How many up/down steps away they reach, and the share of a
+    // floor that may land on rooms already drawn before it's left out as a
+    // different place stacked under or over this one (100 keeps every floor).
+    public bool MapShowOtherFloors { get; set; } = true;
+    public const int MaxMapOtherFloorsLevels = 99;
+    public int MapOtherFloorsLevels { get; set; } = 10;
+    public int MapOtherFloorsMaxOverlapPercent { get; set; } = 50;
+
     // Map legend overlay's user-dragged position, in pixels from the top-left of
     // the map viewport. Null (the default) parks it bottom-left. Install-wide
     // (Global tier), persisted on drop and re-clamped into the visible map when

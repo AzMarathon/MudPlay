@@ -36,6 +36,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // the map without reopening the window.
         _navLineStyles = _services.Settings.Current.NavLines;
         _mapRecenterHoldSeconds = _services.Settings.Current.MapRecenterHoldSeconds;
+        _showOtherLevels = _services.Settings.Current.MapShowOtherFloors;
+        _otherFloorsLevels = _services.Settings.Current.MapOtherFloorsLevels;
+        _otherFloorsMaxOverlapPercent = _services.Settings.Current.MapOtherFloorsMaxOverlapPercent;
         _services.Settings.GlobalSettingsChanged += OnGlobalSettingsChanged;
 
         // Reopen in the collapse mode the user last left. Set the backing field
@@ -226,6 +229,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         NavLineStyles = settings.NavLines;
         MapRecenterHoldSeconds = settings.MapRecenterHoldSeconds;
+        bool reach = settings.MapOtherFloorsLevels != _otherFloorsLevels
+            || settings.MapOtherFloorsMaxOverlapPercent != _otherFloorsMaxOverlapPercent;
+        _otherFloorsLevels = settings.MapOtherFloorsLevels;
+        _otherFloorsMaxOverlapPercent = settings.MapOtherFloorsMaxOverlapPercent;
+        if (ShowOtherLevels != settings.MapShowOtherFloors) ShowOtherLevels = settings.MapShowOtherFloors;
+        else if (reach) RebuildOtherLevels(Layout);
     }
 
     // Bound to MapControl.AutoFollowHoldSeconds — the Settings → Other hold time.
@@ -847,6 +856,82 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _showLevelGates = true;
 
+    // The floors reached through up/down exits, drawn dimmed around the current one
+    // (Game.Map.OtherLevels). Built off the UI thread: a realm's stairs and ladders
+    // can chain through thousands of rooms. Global tier (Settings → General); the
+    // Overlays chip flips the same setting.
+    [ObservableProperty] private bool _showOtherLevels = true;
+    [ObservableProperty] private RoomLayout? _otherLevelsLayout;
+    private int _otherFloorsLevels;
+    private int _otherFloorsMaxOverlapPercent;
+    private CancellationTokenSource? _otherLevelsBuild;
+
+    // Each layout's other floors, kept with it while it lives: a town's take most of
+    // a second to work out, and the map goes back and forth between the same few
+    // layouts. Keyed with the reach settings they were built under.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<RoomLayout, OtherFloorsBuilt> _otherFloorsByLayout = new();
+    private sealed record OtherFloorsBuilt(int Levels, double MaxOverlap, RoomLayout? Floors);
+
+    partial void OnShowOtherLevelsChanged(bool value)
+    {
+        RebuildOtherLevels(Layout);
+        if (_services.Settings.Current.MapShowOtherFloors == value) return;
+        _services.Settings.Current.MapShowOtherFloors = value;
+        _services.Settings.Save();
+    }
+
+    private void RebuildOtherLevels(RoomLayout? layout)
+    {
+        _otherLevelsBuild?.Cancel();
+        _otherLevelsBuild = null;
+        // The old floors sit on the old layout's grid; drawn against the new one
+        // until the build lands they'd be misplaced.
+        OtherLevelsLayout = null;
+        if (!ShowOtherLevels || layout is null) return;
+        CancellationTokenSource build = new();
+        _otherLevelsBuild = build;
+        CancellationToken cancel = build.Token;
+        Game.Map.RoomGraphManager graph = _services.RoomGraph;
+        Game.Map.BfsMapper bfs = _services.Bfs;
+        int levels = Math.Clamp(_otherFloorsLevels, 1, MudPlay.Models.Settings.GlobalSettings.MaxMapOtherFloorsLevels);
+        double maxOverlap = Math.Clamp(_otherFloorsMaxOverlapPercent, 0, 100) / 100.0;
+        if (_otherFloorsByLayout.TryGetValue(layout, out OtherFloorsBuilt? built)
+            && built.Levels == levels && built.MaxOverlap == maxOverlap)
+        {
+            OtherLevelsLayout = built.Floors;
+            return;
+        }
+        _ = Task.Run(() =>
+        {
+            RoomLayout? result;
+            try
+            {
+                result = Game.Map.OtherLevels.Build(layout, graph.GetRoom, k => bfs.BuildLayout(k, remember: false),
+                    levels, maxOverlap, cancel);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // A game-data swap mid-build; the swap rebuilds the layout and this.
+                _services.Log?.Warn("Navigation", $"other floors not drawn: {ex.Message}");
+                return;
+            }
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (cancel.IsCancellationRequested) return;
+                _otherFloorsByLayout.AddOrUpdate(layout, new OtherFloorsBuilt(levels, maxOverlap, result));
+                if (!ReferenceEquals(Layout, layout)) return;
+                OtherLevelsLayout = result;
+                if (result is { } r)
+                    _services.Log?.Info("Navigation",
+                        $"other floors drawn — {r.Positions.Count} room(s) within {levels} floor(s) up and down");
+            });
+        }, cancel);
+    }
+
     partial void OnShowLevelGatesChanged(bool value)
     {
         RefreshLevelGatedRooms();
@@ -897,6 +982,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _                       => SpellDisplayMode.Mono,
     };
     [RelayCommand] private void ToggleLevelGates() => ShowLevelGates = !ShowLevelGates;
+    [RelayCommand] private void ToggleOtherLevels() => ShowOtherLevels = !ShowOtherLevels;
     [RelayCommand] private void ToggleLegend() => LegendVisible   = !LegendVisible;
 
     // ----- Map binding ----------------------------------------------
@@ -912,6 +998,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     partial void OnLayoutChanged(RoomLayout? value)
     {
         RebuildLairRespawnSeconds(value);
+        RebuildOtherLevels(value);
         if (value is not { } l) return;
         int rooms = l.Positions.Count;
         string msg = $"map drawn — seed {l.LayoutRoot}, {rooms} room{(rooms == 1 ? "" : "s")}";
@@ -2778,6 +2865,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnFloorChangeRequested(dest);
     }
 
+    // Right-click → "Center on this room": redraw the map from the clicked room as
+    // if standing there, its floor drawn bright and the others shadowed around it.
+    [RelayCommand]
+    private void CenterOnContextRoom()
+    {
+        if (ContextRoomKey is not { } k) return;
+        _services.Log?.Info("Navigation", $"map centred on {k}");
+        OnFloorChangeRequested(k);
+    }
+
     // Right-click → "Center on…". Opens the two-int (map / room) input
     // dialog; on commit, routes through OnFloorChangeRequested so the BFS
     // layout rebuilds from the chosen room and the map centres on it.
@@ -3172,7 +3269,30 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // the new layout) and the centre call would no-op. Selection-
         // change has no auto-centre on its own, so the order matters.
         SelectedRoomKey = newOrigin;
-        Layout = _services.Bfs.BuildLayout(newOrigin);
+        _ = ReRootAsync(newOrigin);
+    }
+
+    // Builds the layout off the UI thread: a first visit to a big area (a town of
+    // 6,500 rooms) takes a few hundred milliseconds, which froze the window on a
+    // jump. The newest request wins; an older one finishing late is dropped.
+    private int _reRootRequest;
+
+    private async Task ReRootAsync(RoomKey origin)
+    {
+        int request = ++_reRootRequest;
+        Game.Map.BfsMapper bfs = _services.Bfs;
+        RoomLayout layout;
+        try
+        {
+            layout = await Task.Run(() => bfs.BuildLayout(origin));
+        }
+        catch (Exception ex)
+        {
+            _services.Log?.Warn("Navigation", $"map not moved to {origin}: {ex.Message}");
+            return;
+        }
+        if (request != _reRootRequest) return;
+        Layout = layout;
     }
 
     // Open-and-inspect entry used by the Game Data room chips (a monster's
@@ -3778,6 +3898,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         Graph = _services.RoomGraph;
 
         // Origin priority:
+        //   0. The root of the map already shown. A refresh (a blacklist edit, a
+        //      graph reload) redraws the view the user is looking at rather than
+        //      jumping back to the player: they may be browsing another area. Kept
+        //      unless that root is now blacklisted and isn't the player's room.
         //   1. Tracker's current room (live in-game).
         //   2. Profile.LastKnownRoom (where the player was at end of
         //      the last session). Lets the map open already centred
@@ -3792,7 +3916,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // position, so they must not anchor — and thereby exempt — a
         // blacklisted room: blacklisting the parked / last-known room
         // should hide it at once, not keep it visible until a live move.
-        RoomKey? key = _services.RoomTracker.State.CurrentRoom?.Key;
+        RoomKey? here = _services.RoomTracker.State.CurrentRoom?.Key;
+        RoomKey? key = Layout is { } shown
+            && _services.RoomGraph.GetRoom(shown.Origin) is not null
+            && (!_services.RoomBlacklist.IsBlacklisted(shown.Origin) || shown.Origin.Equals(here))
+            ? shown.Origin : here;
         if (key is null && _services.Profile.Current?.LastKnownRoom is { } last
             && _services.RoomGraph.GetRoom(new RoomKey(last.Map, last.Room)) is not null)
         {

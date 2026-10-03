@@ -1,5 +1,16 @@
 # Version history
 
+## 3.142.0
+
+- Map: rooms, exits and markers are drawn once and only moved when you pan; walking redraws just the player marker and routes, and off-screen exits are no longer drawn
+- Map shows the floors above and below, dimmed, around the one shown: hover, click and walk to them like any other room
+- Floors above are drawn before floors below, and a floor landing mostly on drawn rooms is left out
+- Settings → General: other floors on/off, how many floors up and down, and the overlap cut-off
+- Right-click → Center on this room redraws the map from that room
+- Blacklisting a room redraws the map in place instead of jumping back to your room
+- Jumping the map to another area no longer freezes the window, and going back to an area is instant
+- Map zooms out much further; zooming and panning a big area stay smooth (redrawn once the wheel rests, exit lines worked out once per map)
+
 ## 3.141.15
 
 - Terminal draws each colour run as one glyph run instead of one call per character: about ten times less drawing work per frame, pixel-identical

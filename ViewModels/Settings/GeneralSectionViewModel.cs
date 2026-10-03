@@ -170,6 +170,14 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _recentProfilesShown = 5;
     public int MaxRecentProfilesShown => GlobalSettings.MaxRecentProfilesShown;
 
+    // Install-global (GlobalSettings.MapShowOtherFloors / MapOtherFloorsLevels /
+    // MapOtherFloorsMaxOverlapPercent): the Navigation map's shadowed other floors.
+    // The open map picks them up off GlobalSettingsChanged.
+    [ObservableProperty] private bool _mapShowOtherFloors = true;
+    [ObservableProperty] private int _mapOtherFloorsLevels = 10;
+    [ObservableProperty] private int _mapOtherFloorsMaxOverlapPercent = 50;
+    public int MaxMapOtherFloorsLevels => GlobalSettings.MaxMapOtherFloorsLevels;
+
     // Buff Watchdog window layout — where the config table sits relative to the timer
     // bars. Persisted on the top-level CharacterProfile.BuffWatchdogLayout; the Buff
     // Watchdog reads it live (ProfileMutated) and reflows.
@@ -483,6 +491,11 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         _globalSettings.Current.LocalApiAllowDestructive = LocalApiAllowDestructive;
         _globalSettings.Current.RecentProfilesShown =
             System.Math.Clamp(RecentProfilesShown, 0, GlobalSettings.MaxRecentProfilesShown);
+        _globalSettings.Current.MapShowOtherFloors = MapShowOtherFloors;
+        _globalSettings.Current.MapOtherFloorsLevels =
+            System.Math.Clamp(MapOtherFloorsLevels, 1, GlobalSettings.MaxMapOtherFloorsLevels);
+        _globalSettings.Current.MapOtherFloorsMaxOverlapPercent =
+            System.Math.Clamp(MapOtherFloorsMaxOverlapPercent, 0, 100);
         _globalSettings.Save();
 
         // A plain profile Save fires neither ProfileLoaded nor ProfileMutated, so the
@@ -559,6 +572,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         LocalApiAllowDestructive = _globalSettings.Current.LocalApiAllowDestructive;
         RefreshLocalApiStatus();
         RecentProfilesShown = _globalSettings.Current.RecentProfilesShown;
+        MapShowOtherFloors = _globalSettings.Current.MapShowOtherFloors;
+        MapOtherFloorsLevels = _globalSettings.Current.MapOtherFloorsLevels;
+        MapOtherFloorsMaxOverlapPercent = _globalSettings.Current.MapOtherFloorsMaxOverlapPercent;
 
         // Buff Watchdog layout is a top-level per-character field (not in the DTO).
         BuffWatchdogLayout layout = _profile.Current?.BuffWatchdogLayout ?? BuffWatchdogLayout.ConfigTop;
@@ -709,6 +725,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnLocalApiPortChanged(int value)                    => Dirty();
     partial void OnLocalApiAllowDestructiveChanged(bool value)       => Dirty();
     partial void OnRecentProfilesShownChanged(int value)             => Dirty();
+    partial void OnMapShowOtherFloorsChanged(bool value)             => Dirty();
+    partial void OnMapOtherFloorsLevelsChanged(int value)            => Dirty();
+    partial void OnMapOtherFloorsMaxOverlapPercentChanged(int value) => Dirty();
     partial void OnSelectedBuffWatchdogLayoutChanged(BuffLayoutOption? value) => Dirty();
     // Live preview: push straight to the terminal canvas as the picker
     // changes, before Save/Cancel commit the choice. Discard reverts by
