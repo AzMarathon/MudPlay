@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.31**
-> - Conversation window opens about twice as fast with a long history: it builds only the newest rows instead of the top of the log first
-> - Conversation window: Clear All button beside Auto-scroll wipes the log and its saved copy, after one confirming click
+> **Version 3.142.32**
+> - A loop that pauses to rest after a trap fires carries on across the exit when it resumes, instead of running a recovery first
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

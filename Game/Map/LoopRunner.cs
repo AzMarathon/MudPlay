@@ -1702,6 +1702,23 @@ public sealed class LoopRunner : IRecoverableEngine
             FailStep($"trap disarm failed: {reply}");
             return;
         }
+        if (State == LoopState.Paused)
+        {
+            // The trap came down while something else holds the loop: a trap that
+            // fired first can drop HP under the rest trigger, and the retry that
+            // disarms it then lands mid-rest (report paradigm-20261003-111800). No
+            // move went out, so the step isn't in flight. Left marked, the resume
+            // read "still at the source with a move in flight" as a refused move and
+            // spent a recovery and an rm on it. The resume re-drives the step instead,
+            // and the disarm flow decides then whether that disarm still stands or
+            // the trap has re-armed during the wait.
+            _log?.Info("LoopRunner",
+                $"step {_index + 1}/{_expandedSteps.Count}: trap clear while paused — crossing once the loop resumes");
+            _stepInFlight = false;
+            _expectedMoveTarget = null;
+            _expectedMoveSource = null;
+            return;
+        }
         if (_loop is null || State != LoopState.Running
             || _index >= _expandedSteps.Count
             || _expandedSteps[_index] is not MoveLoopStep step

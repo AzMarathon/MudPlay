@@ -2298,6 +2298,37 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Single(trap.Disarms);
     }
 
+    // Report paradigm-20261003-111800: the trap fired twice, HP fell under the rest
+    // trigger and the loop paused; the third try disarmed it mid-rest. The resume then
+    // took the step for a refused move and went through a recovery. It should just
+    // carry on with the step.
+    [Fact]
+    public void Circuit_TrapDisarmedWhilePaused_ResumeRedrivesTheStep_NoRecovery()
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        TrapCalls trap = BindTrapHandling(h);
+
+        h.Runner.Start(new Loop("trap", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.Equal(new[] { "east" }, trap.Disarms);
+
+        h.Coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);   // resting
+        trap.Reply()!("Trap to the east disarmed.");
+        Assert.Empty(h.Sent);                            // nothing crosses mid-rest
+
+        h.Coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+        h.Drain();
+
+        // Not treated as a refused move: no recovery, so none of its tries is spent.
+        Assert.DoesNotContain(h.Events, e => e.Detail.StartsWith("recovering", StringComparison.Ordinal));
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        // The step goes back through the disarm flow, which knows whether its own
+        // disarm still stands; here it answers that it does.
+        Assert.Equal(new[] { "east", "east" }, trap.Disarms);
+        trap.Reply()!("Trap to the east disarmed.");
+        Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
     [Fact]
     public void Circuit_TrappedExit_DisarmFails_FailsTheLapWithoutCrossing()
     {
