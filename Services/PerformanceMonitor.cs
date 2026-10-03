@@ -19,7 +19,7 @@ namespace MudPlay.Services;
 // the lowest dispatcher priority, which runs only once the UI thread has caught up
 // on everything ahead of it. The wait before it runs is the stall. While a ping is
 // overdue the watcher samples what the UI thread said it was doing (Measure), and
-// a window that opened during the stall is named too.
+// a window that opened or closed during the stall is named too.
 //
 // Kept out of the program log for the same reason as MemoryUsageLog: a line per
 // hitch would bury the entries an operator reads. With collecting off (the
@@ -59,7 +59,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private long _pingPostedAt;
     private long _lastPingAt;
     private readonly HashSet<string> _seenDuringPing = new();
-    private (string Name, long At)? _lastWindowOpened;
+    private (string What, long At)? _lastWindowEvent;
     private readonly object _pingLock = new();
 
     // The minute being summed up, reset by each summary.
@@ -78,7 +78,9 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _diagnostics.Changed += SyncWriter;
         Window.WindowOpenedEvent.AddClassHandler<Window>(
-            (window, _) => NoteWindowOpened(window.GetType().Name), RoutingStrategies.Direct);
+            (window, _) => NoteWindowEvent($"opening {window.GetType().Name}"), RoutingStrategies.Direct);
+        Window.WindowClosedEvent.AddClassHandler<Window>(
+            (window, _) => NoteWindowEvent($"closing {window.GetType().Name}"), RoutingStrategies.Direct);
         SyncWriter();
     }
 
@@ -219,10 +221,10 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         }
     }
 
-    private void NoteWindowOpened(string name)
+    private void NoteWindowEvent(string what)
     {
         if (!_collecting) return;
-        lock (_pingLock) _lastWindowOpened = (name, Stopwatch.GetTimestamp());
+        lock (_pingLock) _lastWindowEvent = (what, Stopwatch.GetTimestamp());
     }
 
     private void Watch()
@@ -268,8 +270,8 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         {
             causes = _seenDuringPing.ToList();
             _seenDuringPing.Clear();
-            if (_lastWindowOpened is { } opened && opened.At >= posted)
-                causes.Add($"opening {opened.Name}");
+            if (_lastWindowEvent is { } window && window.At >= posted)
+                causes.Add(window.What);
         }
         if (ms >= StallMs) RecordStall(ms, causes.Count == 0 ? "unattributed" : string.Join(", ", causes));
     }

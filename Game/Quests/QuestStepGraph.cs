@@ -30,10 +30,20 @@ public static class QuestStepGraph
     // advances or gates the flag via any give/add/check/test directive, ordered by
     // the ability value it lands on — the shape of an addability-advanced quest
     // (MageBane) whose later tiers carry no giveability of their own.
+    //
+    // Built once per game-data set for each flag and axis (GameDataCache.Derived): it
+    // walks every TBInfo block, and the Quest tab asks for each of its quests every
+    // time the Workshop opens.
     public static IReadOnlyList<QuestStep> Build(GameDataCache cache, int flag, bool byAbilityValue = false)
     {
         ArgumentNullException.ThrowIfNull(cache);
+        return cache.Derived(
+            string.Create(System.Globalization.CultureInfo.InvariantCulture, $"quest steps {flag} {byAbilityValue}"),
+            () => BuildSteps(cache, flag, byAbilityValue));
+    }
 
+    private static IReadOnlyList<QuestStep> BuildSteps(GameDataCache cache, int flag, bool byAbilityValue)
+    {
         JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
         if (tbinfo is null) return Array.Empty<QuestStep>();
 

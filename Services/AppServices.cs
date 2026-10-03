@@ -3477,6 +3477,14 @@ public sealed class AppServices
         // map's right-click menu show, off the UI thread, so the first open doesn't
         // pay for them (the trainer list alone re-read the 22 MB Rooms table).
         RoomGraph.GraphReloaded += () => Task.Run(WarmGameDataLists);
+        // The Workshop's Quest tab needs every quest and its steps for the character's
+        // class, and is built with the window: crawled here, off the UI thread, once
+        // the class is known, the first open doesn't pay for it.
+        Profile.ProfileLoaded += profile =>
+        {
+            string? className = profile.LastKnownStats?.Class;
+            Task.Run(() => WarmQuestData(className));
+        };
         GameData.ActiveSetChanged += RoomGraph.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             RoomGraph.OnActiveSetChanged(GameData.ActiveSet);
@@ -8383,6 +8391,13 @@ public sealed class AppServices
             // that reload warms its own lists, and nothing half-built is kept.
             Log.Debug("GameData", $"list warm-up overtaken by a set switch ({ex.Message})");
         }
+    }
+
+    private void WarmQuestData(string? className)
+    {
+        int? classId = Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, className);
+        foreach (Game.Quests.CrawledQuest quest in Game.Quests.QuestCrawler.Crawl(GameData, classId))
+            Game.Quests.QuestStepGraph.Build(GameData, quest.Flag, quest.ProgressByValue);
     }
 
     private void ApplyLogDiagnostics(Models.Settings.LogDiagnosticsSettings dto)
