@@ -1,5 +1,9 @@
 # Version history
 
+## 3.143.1
+
+- Map other floors: a floor reachable by more than one chain of stairs is placed by the one that crosses the least ground, so the old world sits beside the lands below the Frozen Cavern instead of on top of them
+
 ## 3.143.0
 
 - Pyramid climb: floor 1 route fixed — it stopped one room short of the fire sphinx

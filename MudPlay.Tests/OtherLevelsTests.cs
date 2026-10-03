@@ -247,6 +247,91 @@ public sealed class OtherLevelsTests : IDisposable
         Assert.Equal(below, other.Positions.ContainsKey(K(21)));
     }
 
+    // Ground:  1 ─E─ 2.   1 goes down into a cave; 2 goes up a shaft.
+    // Cave:    10 ─E─ 11 ─ … ─ 16, six rooms east of where it was entered; 16 goes up to 30.
+    // Shaft:   20, 21, 22, single rooms stacked on 2; 22 goes up to 31.
+    // Far:     30 ─E─ 31, 31 ─N─ 32 ─N─ 33.
+    // The two ways up to the far floor disagree about where it sits: by the cave it
+    // is six rooms east, by the shaft it is straight over the ground floor.
+    private static readonly string TwoChains = "[" + string.Join(",",
+        Room(1, e: "1/2", d: "1/10"),
+        Room(2, w: "1/1", u: "1/20"),
+        Room(10, e: "1/11", u: "1/1"),
+        Room(11, w: "1/10", e: "1/12"),
+        Room(12, w: "1/11", e: "1/13"),
+        Room(13, w: "1/12", e: "1/14"),
+        Room(14, w: "1/13", e: "1/15"),
+        Room(15, w: "1/14", e: "1/16"),
+        Room(16, w: "1/15", u: "1/30"),
+        Room(20, u: "1/21", d: "1/2"),
+        Room(21, u: "1/22", d: "1/20"),
+        Room(22, u: "1/31", d: "1/21"),
+        Room(30, e: "1/31", d: "1/16"),
+        Room(31, w: "1/30", north: "1/32", d: "1/22"),
+        Room(32, s: "1/31", north: "1/33"),
+        Room(33, s: "1/32")) + "]";
+
+    [Fact]
+    public void A_floor_hangs_from_the_chain_that_crosses_the_least_ground_not_the_fewest_floors()
+    {
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(TwoChains);
+        RoomLayout ground = bfs.BuildLayout(K(1));
+        RoomLayout? other = OtherLevels.Build(ground, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0);
+
+        Assert.NotNull(other);
+        // By the shaft, 31 is straight over 2, so 32 and 33 run north from 2's column.
+        (int X, int Y) two = ground.Positions[K(2)];
+        Assert.Equal((two.X, two.Y - 1), other!.Positions[K(32)]);
+        Assert.Equal((two.X, two.Y - 2), other.Positions[K(33)]);
+        // The cave itself still hangs under the room that leads down into it.
+        Assert.Equal((ground.Positions[K(1)].X + 6, ground.Positions[K(1)].Y), other.Positions[K(16)]);
+    }
+
+    [Fact]
+    public void The_placing_chain_may_run_through_floors_too_far_up_to_draw()
+    {
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(TwoChains);
+        RoomLayout ground = bfs.BuildLayout(K(1));
+        // One level: the far floor is level with the ground by the cave (down, up),
+        // but three up by the shaft.
+        RoomLayout? other = OtherLevels.Build(ground, graph.GetRoom, k => bfs.BuildLayout(k), 1, 1.0);
+
+        Assert.NotNull(other);
+        (int X, int Y) two = ground.Positions[K(2)];
+        Assert.Equal((two.X, two.Y - 1), other!.Positions[K(32)]);      // drawn, and placed by the shaft
+        Assert.DoesNotContain(K(21), other.Positions.Keys);             // the shaft's upper rooms are not
+        Assert.DoesNotContain(K(22), other.Positions.Keys);
+    }
+
+    [Fact]
+    public void Showing_only_floors_above_still_counts_the_far_floor_as_level()
+    {
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(TwoChains);
+        RoomLayout ground = bfs.BuildLayout(K(1));
+        RoomLayout? below = OtherLevels.Build(ground, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0, OtherFloorsMode.Down);
+
+        // Its elevation is the fewest steps (down, then up: level), not the shaft's
+        // three up, so it is drawn on either side.
+        Assert.NotNull(below);
+        Assert.Contains(K(32), below!.Positions.Keys);
+        Assert.Contains(K(12), below.Positions.Keys);                   // the cave is below
+        Assert.DoesNotContain(K(21), below.Positions.Keys);             // the shaft is above
+    }
+
+    [Fact]
+    public void With_no_search_allowed_a_floor_stays_on_the_fewest_floors_chain()
+    {
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(TwoChains);
+        RoomLayout ground = bfs.BuildLayout(K(1));
+        RoomLayout? other = OtherLevels.Build(ground, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0,
+            maxExploredRooms: 0);
+
+        Assert.NotNull(other);
+        // By the cave: 30 over 16, so 31's column is seven east of 1.
+        (int X, int Y) one = ground.Positions[K(1)];
+        Assert.Equal((one.X + 7, one.Y - 1), other!.Positions[K(32)]);
+    }
+
     [Fact]
     public void Off_draws_nothing()
     {
