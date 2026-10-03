@@ -28,6 +28,10 @@ namespace MudPlay.Game.Inventory;
 //     still a resolution) — so the engines call NoteGetConfirmed as each lands
 //     and the gate releases the instant the last one is accounted for. Movement
 //     resumes as soon as looting is actually done, not on a fixed timer.
+//   - Pending re-look: the item engine asked for a room re-display after a kill
+//     (a drop isn't announced, so the floor has to be read again) and that
+//     display hasn't arrived. Asserted on the kill, before the Combat gate
+//     clears, for the same race the deferred items close.
 //   - Settle window: a fallback ceiling on the wait. A get that never confirms
 //     (a failure line we don't yet parse) would otherwise strand the hold, so
 //     once gets stop flowing for SettleWindow the gate releases regardless.
@@ -49,6 +53,7 @@ public sealed class AcquisitionGate : IDisposable
 
     private int _pendingDeferred;
     private int _outstandingGets;   // dispatched but not yet confirmed
+    private bool _reLookPending;
     private bool _asserted;
     private bool _disposed;
 
@@ -96,8 +101,24 @@ public sealed class AcquisitionGate : IDisposable
         if (_outstandingGets == 0 && _pendingDeferred == 0)
         {
             _settle.Stop();
-            Release("gets-confirmed");
+            if (!_reLookPending) Release("gets-confirmed");
         }
+    }
+
+    // The item engine asked for a room re-display after a kill and is waiting on it.
+    public void NoteReLookPending()
+    {
+        _reLookPending = true;
+        Assert("re-look-pending");
+    }
+
+    // That re-display arrived, or was given up on. Gets it led to keep the hold
+    // until they confirm or settle.
+    public void NoteReLookDone()
+    {
+        if (!_reLookPending) return;
+        _reLookPending = false;
+        if (_pendingDeferred == 0 && _outstandingGets == 0) Release("re-look-done");
     }
 
     // The deferred queue was flushed or discarded — no items wait on combat
@@ -107,7 +128,7 @@ public sealed class AcquisitionGate : IDisposable
     public void NoteDeferredCleared()
     {
         _pendingDeferred = 0;
-        if (!_settle.IsEnabled) Release("deferred-cleared");
+        if (!_settle.IsEnabled && !_reLookPending) Release("deferred-cleared");
     }
 
     private void OnSettleElapsed(object? sender, EventArgs e)
@@ -116,6 +137,7 @@ public sealed class AcquisitionGate : IDisposable
         if (_pendingDeferred > 0) return;   // still waiting on combat — keep held
         // Fallback: gets that never confirmed are presumed done — drop them.
         _outstandingGets = 0;
+        if (_reLookPending) return;         // the re-look's own release follows
         Release("settle-elapsed");
     }
 

@@ -1,5 +1,13 @@
 # Version history
 
+## 3.142.24
+
+- Player Workshop opens faster: quest data is worked out once per game-data set and readied in the background when a profile loads
+- Performance log names windows closing as well as opening
+- The performance monitor's watcher thread only runs while Auto-collect logs is on
+- Auto-Get Items checks the floor after killing a monster that can drop an Auto-collect item, and the loop waits for the check
+- bug reports addressed: paradigm-20261003-005951
+
 ## 3.142.20
 
 - Sysop-status back-off test runs on a fake clock, so it no longer fails at random under a loaded test run

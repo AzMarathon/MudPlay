@@ -19,11 +19,11 @@ namespace MudPlay.Services;
 // the lowest dispatcher priority, which runs only once the UI thread has caught up
 // on everything ahead of it. The wait before it runs is the stall. While a ping is
 // overdue the watcher samples what the UI thread said it was doing (Measure), and
-// a window that opened during the stall is named too.
+// a window that opened or closed during the stall is named too.
 //
 // Kept out of the program log for the same reason as MemoryUsageLog: a line per
 // hitch would bury the entries an operator reads. With collecting off (the
-// default) nothing is pinged, timed or written.
+// default) nothing is pinged, timed or written, and the watcher thread doesn't exist.
 public sealed class PerformanceMonitor : IAsyncDisposable
 {
     public const double StallMs = 50;
@@ -40,8 +40,10 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private readonly LogDiagnosticState? _diagnostics;
     private readonly Action<Action>? _postLowPriority;
     private readonly Func<bool> _onUiThread;
-    private readonly Thread? _watcher;
-    private volatile bool _stopped;
+    // The watcher thread only exists while the log file is open. Each start takes a
+    // new run number; a thread leaves its loop once it's no longer the current run
+    // (collecting was turned off, or off and on again).
+    private int _watcherRun;
 
     // Where lines go: the open log file, or a test's sink. Null while not collecting.
     private readonly object _gate = new();
@@ -59,7 +61,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     private long _pingPostedAt;
     private long _lastPingAt;
     private readonly HashSet<string> _seenDuringPing = new();
-    private (string Name, long At)? _lastWindowOpened;
+    private (string What, long At)? _lastWindowEvent;
     private readonly object _pingLock = new();
 
     // The minute being summed up, reset by each summary.
@@ -73,24 +75,32 @@ public sealed class PerformanceMonitor : IAsyncDisposable
     // dispatcher from its own thread, and names windows as they open.
     public PerformanceMonitor(LogDiagnosticState diagnostics)
         : this(a => Dispatcher.UIThread.Post(a, DispatcherPriority.Background),
-               () => Dispatcher.UIThread.CheckAccess(), startWatcher: true)
+               () => Dispatcher.UIThread.CheckAccess())
     {
         _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
         _diagnostics.Changed += SyncWriter;
         Window.WindowOpenedEvent.AddClassHandler<Window>(
-            (window, _) => NoteWindowOpened(window.GetType().Name), RoutingStrategies.Direct);
+            (window, _) => NoteWindowEvent($"opening {window.GetType().Name}"), RoutingStrategies.Direct);
+        Window.WindowClosedEvent.AddClassHandler<Window>(
+            (window, _) => NoteWindowEvent($"closing {window.GetType().Name}"), RoutingStrategies.Direct);
         SyncWriter();
     }
 
     // Tests drive stalls and timings directly, without a watcher, dispatcher or file.
-    internal PerformanceMonitor(Action<Action>? postLowPriority, Func<bool> onUiThread, bool startWatcher)
+    internal PerformanceMonitor(Action<Action>? postLowPriority, Func<bool> onUiThread)
     {
         _postLowPriority = postLowPriority;
         _onUiThread = onUiThread;
-        if (!startWatcher || postLowPriority is null) return;
-        _watcher = new Thread(Watch) { IsBackground = true, Name = "UI stall probe", Priority = ThreadPriority.AboveNormal };
-        _watcher.Start();
     }
+
+    private void StartWatcher()
+    {
+        int run = Interlocked.Increment(ref _watcherRun);
+        new Thread(() => Watch(run)) { IsBackground = true, Name = "UI stall probe", Priority = ThreadPriority.AboveNormal }
+            .Start();
+    }
+
+    private void StopWatcher() => Interlocked.Increment(ref _watcherRun);
 
     // Collects into sink instead of a file.
     internal void CollectTo(Action<string>? sink)
@@ -124,6 +134,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                     _sink = WriteToFile;
                     _collecting = true;
                     _allocations = new AllocationSampler();
+                    StartWatcher();
                 }
                 catch (IOException) { _broken = true; }
                 catch (UnauthorizedAccessException) { _broken = true; }
@@ -136,6 +147,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
                 _collecting = false;
                 _allocations?.Dispose();
                 _allocations = null;
+                StopWatcher();
             }
         }
         closing?.Dispose();
@@ -157,6 +169,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
             _writer = null;
             _sink = null;
             _collecting = false;
+            StopWatcher();
         }
     }
 
@@ -219,22 +232,17 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         }
     }
 
-    private void NoteWindowOpened(string name)
+    private void NoteWindowEvent(string what)
     {
         if (!_collecting) return;
-        lock (_pingLock) _lastWindowOpened = (name, Stopwatch.GetTimestamp());
+        lock (_pingLock) _lastWindowEvent = (what, Stopwatch.GetTimestamp());
     }
 
-    private void Watch()
+    private void Watch(int run)
     {
-        while (!_stopped)
+        while (Volatile.Read(ref _watcherRun) == run)
         {
             Thread.Sleep(WatchInterval);
-            if (!_collecting)
-            {
-                Interlocked.Exchange(ref _pingPostedAt, 0);
-                continue;
-            }
             long now = Stopwatch.GetTimestamp();
             long posted = Interlocked.Read(ref _pingPostedAt);
             if (posted == 0)
@@ -268,8 +276,8 @@ public sealed class PerformanceMonitor : IAsyncDisposable
         {
             causes = _seenDuringPing.ToList();
             _seenDuringPing.Clear();
-            if (_lastWindowOpened is { } opened && opened.At >= posted)
-                causes.Add($"opening {opened.Name}");
+            if (_lastWindowEvent is { } window && window.At >= posted)
+                causes.Add(window.What);
         }
         if (ms >= StallMs) RecordStall(ms, causes.Count == 0 ? "unattributed" : string.Join(", ", causes));
     }
@@ -330,7 +338,7 @@ public sealed class PerformanceMonitor : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _stopped = true;
+        StopWatcher();
         _allocations?.Dispose();
         if (_diagnostics is not null) _diagnostics.Changed -= SyncWriter;
         DebugLogWriter? writer;

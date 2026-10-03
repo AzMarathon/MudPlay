@@ -1110,6 +1110,8 @@ public partial class MainWindowViewModel : ObservableObject
         // matching prompt — a prompt that never matches is the very thing it
         // watches for.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.StatlineReconcile.NoteRoomDisplayed();
+        // Ends the walker hold a post-kill floor check put up.
+        _roomDisplayParser.RoomParsed += _ => AppServices.Current.AutoGetItems.NoteRoomDisplayed();
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine);

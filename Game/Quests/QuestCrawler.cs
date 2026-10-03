@@ -59,10 +59,19 @@ public static class QuestCrawler
     // Crawl every quest in the active set, resolving reward bonuses to classId
     // (Classes-table Number); pass null for the no-class default. Returns ordered
     // by flag, then band level. Empty when no set is active or TBInfo is missing.
+    // Crawled once per game-data set and class (GameDataCache.Derived): the result
+    // depends on nothing else, and the Quest tab, the quest editor, the eligibility
+    // check and the login flag sync each asked for it afresh, parsing every TBInfo
+    // action chain each time.
     public static IReadOnlyList<CrawledQuest> Crawl(GameDataCache cache, int? classId)
     {
         ArgumentNullException.ThrowIfNull(cache);
+        string key = "quest crawl " + (classId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "any class");
+        return cache.Derived(key, () => CrawlSet(cache, classId));
+    }
 
+    private static IReadOnlyList<CrawledQuest> CrawlSet(GameDataCache cache, int? classId)
+    {
         JsonDocument? tbinfo = cache.GetRawTable("TBInfo");
         if (tbinfo is null) return Array.Empty<CrawledQuest>();
 

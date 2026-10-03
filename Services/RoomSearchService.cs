@@ -480,6 +480,7 @@ public sealed class RoomSearchService
     {
         if (_roomsByMonsterIdCache is not null) return _roomsByMonsterIdCache;
         Dictionary<int, List<RoomKey>> map = new();
+        Dictionary<int, HashSet<RoomKey>> seen = new();
 
         // Source 1: lair tag on each room (pre-1.83 monster-list or
         // NMR 1.83+ group reference parsed via RoomTooltipBuilder).
@@ -487,7 +488,7 @@ public sealed class RoomSearchService
         {
             if (string.IsNullOrEmpty(room.RawLairTag)) continue;
             RoomTooltipBuilder.ParseLairTag(room.RawLairTag, out _, out IReadOnlyList<int> ids);
-            foreach (int id in ids) AddMonsterRoom(map, id, room.Key);
+            foreach (int id in ids) AddMonsterRoom(map, seen, id, room.Key);
         }
 
         // Source 2: Monsters.json "Summoned By" — boss / script spawns
@@ -508,7 +509,7 @@ public sealed class RoomSearchService
                 {
                     if (!int.TryParse(m.Groups[1].Value, out int mn) || mn <= 0) continue;
                     if (!int.TryParse(m.Groups[2].Value, out int rn) || rn <= 0) continue;
-                    AddMonsterRoom(map, id, new RoomKey(mn, rn));
+                    AddMonsterRoom(map, seen, id, new RoomKey(mn, rn));
                 }
             }
         }
@@ -517,11 +518,17 @@ public sealed class RoomSearchService
         return map;
     }
 
-    private static void AddMonsterRoom(Dictionary<int, List<RoomKey>> map, int monsterId, RoomKey key)
+    // seen dedupes each monster's rooms: a monster listed in thousands of them made
+    // checking the list itself for every addition quadratic.
+    private static void AddMonsterRoom(Dictionary<int, List<RoomKey>> map,
+        Dictionary<int, HashSet<RoomKey>> seen, int monsterId, RoomKey key)
     {
         if (!map.TryGetValue(monsterId, out List<RoomKey>? rooms))
+        {
             map[monsterId] = rooms = new List<RoomKey>();
-        if (!rooms.Contains(key)) rooms.Add(key);
+            seen[monsterId] = new HashSet<RoomKey>();
+        }
+        if (seen[monsterId].Add(key)) rooms.Add(key);
     }
 
     // Where a quest guide's kill step sends you: the room(s) the quest places its
@@ -538,10 +545,11 @@ public sealed class RoomSearchService
     {
         if (_questKillRoomsCache is not null) return _questKillRoomsCache;
         Dictionary<int, List<RoomKey>> placed = new();
+        Dictionary<int, HashSet<RoomKey>> seen = new();
 
         // Primary: the room's NPC field statically places the monster there.
         foreach (Room room in _graph.Rooms)
-            if (room.Npc > 0) AddMonsterRoom(placed, room.Npc, room.Key);
+            if (room.Npc > 0) AddMonsterRoom(placed, seen, room.Npc, room.Key);
 
         JsonDocument? doc = _gameData.GetRawTable("Monsters");
         if (doc is not null)
@@ -574,7 +582,7 @@ public sealed class RoomSearchService
                     if (int.TryParse(m.Groups[1].Value, out int mn) && mn > 0
                         && int.TryParse(m.Groups[2].Value, out int rn) && rn > 0)
                     {
-                        AddMonsterRoom(placed, id, new RoomKey(mn, rn));
+                        AddMonsterRoom(placed, seen, id, new RoomKey(mn, rn));
                         addedRoom = true;
                     }
                 }
@@ -586,7 +594,7 @@ public sealed class RoomSearchService
                     if (!summonerBySpell.TryGetValue(sp, out List<int>? owners)) continue;
                     foreach (int owner in owners)
                         if (placed.TryGetValue(owner, out List<RoomKey>? ownerRooms))
-                            foreach (RoomKey k in ownerRooms) AddMonsterRoom(placed, id, k);
+                            foreach (RoomKey k in ownerRooms) AddMonsterRoom(placed, seen, id, k);
                 }
             }
         }

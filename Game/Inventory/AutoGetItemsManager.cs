@@ -1,4 +1,5 @@
 using System.Text;
+using Avalonia.Threading;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 
@@ -64,6 +65,14 @@ public sealed class AutoGetItemsManager : IDisposable
     // re-surveys the room once, not once per corpse.
     private const int ReLookCooldownMs = 750;
     private DateTime _lastReLookAt = DateTime.MinValue;
+
+    // True from a post-kill re-look until the room display it asked for arrives.
+    // The walker is held meanwhile; the timer gives up on a display that never
+    // comes (a dark room prints no exits line). Overridable in tests.
+    private bool _reLookHeld;
+    public bool IsReLookHeld => _reLookHeld;
+    private DispatcherTimer? _reLookRelease;
+    internal int ReLookReleaseMs { get; set; } = 1500;
 
     private Terminal.LineExtractor? _lines;
     private string? _noticeBuffer;            // multi-line continuation
@@ -196,6 +205,7 @@ public sealed class AutoGetItemsManager : IDisposable
     // dedup ledger — both belonged to the room we just left.
     public void OnRoomChanged()
     {
+        ReleaseReLookHold();
         _floorInFlight.Clear();
         CancelDeferredCollect("room changed");
     }
@@ -227,6 +237,9 @@ public sealed class AutoGetItemsManager : IDisposable
         DateTime now = DateTime.UtcNow;
         if ((now - _lastReLookAt).TotalMilliseconds < ReLookCooldownMs) return;
         _lastReLookAt = now;
+        // The kill clears the Combat gate in this same pass, and a loop's next move
+        // would leave before the survey lands. Held even when Cash sends the Enter.
+        HoldForReLook();
         // On the last kill, Cash's combat-clear re-display fires the same instant —
         // one bare Enter re-renders the room for both engines (they read the same
         // "You notice" survey). Defer to the shared coordinator so the room isn't
@@ -235,6 +248,36 @@ public sealed class AutoGetItemsManager : IDisposable
         if (_redisplay is not null && !_redisplay.ShouldSend()) return;
         _log?.Info(LogCategory, "re-look after kill (monster drops a flagged item)");
         Send("");
+    }
+
+    // A room display finished (its exits line). The "You notice" line comes before
+    // the exits line, so any gets the re-look led to have already gone out and
+    // carry the hold from here.
+    public void NoteRoomDisplayed() => ReleaseReLookHold();
+
+    private void HoldForReLook()
+    {
+        if (_gate is null) return;
+        _reLookHeld = true;
+        _gate.NoteReLookPending();
+        if (_reLookRelease is null)
+        {
+            _reLookRelease = new DispatcherTimer();
+            _reLookRelease.Tick += OnReLookReleaseElapsed;
+        }
+        _reLookRelease.Interval = TimeSpan.FromMilliseconds(ReLookReleaseMs);
+        _reLookRelease.Stop();
+        _reLookRelease.Start();
+    }
+
+    private void OnReLookReleaseElapsed(object? sender, EventArgs e) => ReleaseReLookHold();
+
+    private void ReleaseReLookHold()
+    {
+        if (!_reLookHeld) return;
+        _reLookHeld = false;
+        _reLookRelease?.Stop();
+        _gate?.NoteReLookDone();
     }
 
     // ----- notice parsing ----------------------------------------------
@@ -624,6 +667,12 @@ public sealed class AutoGetItemsManager : IDisposable
         _disposed = true;
         _noticeSub.Dispose();
         _gotSub.Dispose();
+        if (_reLookRelease is not null)
+        {
+            _reLookRelease.Stop();
+            _reLookRelease.Tick -= OnReLookReleaseElapsed;
+            _reLookRelease = null;
+        }
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

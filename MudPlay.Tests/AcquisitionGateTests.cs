@@ -161,4 +161,60 @@ public sealed class AcquisitionGateTests
 
         Assert.False(Asserted(coord));
     }
+
+    [Fact]
+    public void ReLookPending_HoldsUntilTheDisplayArrives()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+
+        gate.NoteReLookPending();
+        Assert.True(Asserted(coord));
+
+        gate.NoteReLookDone();
+        Assert.False(Asserted(coord));
+    }
+
+    [Fact]
+    public void ReLookDone_WithAGetOut_StaysHeldUntilItConfirms()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        gate.NoteReLookPending();
+        gate.NoteGetSent();                 // the survey listed a flagged drop
+
+        gate.NoteReLookDone();
+        Assert.True(Asserted(coord));
+
+        gate.NoteGetConfirmed();
+        Assert.False(Asserted(coord));
+    }
+
+    [Fact]
+    public void ReLookPending_OutlastsAnotherEnginesRelease()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        gate.NoteDeferredPending(1);        // the cash engine's own hold
+        gate.NoteReLookPending();
+
+        gate.NoteDeferredCleared();
+        Assert.True(Asserted(coord));       // the floor check is still out
+
+        gate.NoteReLookDone();
+        Assert.False(Asserted(coord));
+    }
+
+    [Fact]
+    public void ReLookDone_LeavesDeferredItemsHolding()
+    {
+        MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        gate.NoteReLookPending();
+        gate.NoteDeferredPending(2);        // a monster is still here; gets wait on it
+
+        gate.NoteReLookDone();
+
+        Assert.True(Asserted(coord));
+    }
 }
