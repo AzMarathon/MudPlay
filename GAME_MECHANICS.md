@@ -2184,7 +2184,7 @@ How one damage spell cast against a monster is worked out.
     - So the flag cleared in about the same time with and without the cure. That doesn't fit the cure ending the poison in one cast.
     - Stacking can't explain it (one instance per poison spell, below), and nothing was re-applying it: the depth dwellers were left behind by 13:16:36 and the party sat in a room with no poison source.
     - *[NEEDS CONFIRMATION]: why did `mgra` not clear bee poison? The user can't say from one point of view (2026-10-03). Does a cure whose value (8) is below the poison's amount (12–20) do nothing on Paradigm? One tentacle hit, one `mgra`, then `par` would settle it.*
-  - **On Paradigm a player carries at most one instance of each poison spell** *([CONFIRMED] 2026-10-03, user)*: bee poison on you is one record however many hits landed. Once cured it can be re-applied at once by the next hit.
+  - **On Paradigm a player carries at most one instance of each poison spell** *([CONFIRMED] 2026-10-03, user)*: bee poison on you is one record however many hits landed. Once cured it can be re-applied at once by the next hit. *[NEEDS CONFIRMATION]: when the same poison lands on someone who already has it, does the new cast fail, or refresh the duration? The user doesn't know (2026-10-03). On Stock a monster's repeat cast refreshes only on a strictly higher roll (**Recasting the same spell on someone who has it**, above).*
 - **Where it shows:** `You are Poisoned!` in the status display, a `P` flag in `par`, and `%s is poisoned!` when someone looks at you.
 - **Resting and meditating are refused while poisoned** — see *Health, resting & recovery → Poison prevents resting*.
 
