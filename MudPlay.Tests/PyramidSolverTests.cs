@@ -20,25 +20,6 @@ public sealed class PyramidSolverTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "pyr_" + Guid.NewGuid().ToString("N"));
 
-    // Just the two rooms the solver's tracker locate touches (firepit start,
-    // 12/2085 terminal); the climb itself dead-reckons off the canned script.
-    private const string Rooms = """
-        [
-          { "Map Number": 12, "Room Number": 1239, "Name": "Scorched Cavern, Firepit",
-            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 12, "Room Number": 2085, "Name": "Great Pyramid",
-            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 12, "Room Number": 2006, "Name": "Great Pyramid",
-            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 12, "Room Number": 2005, "Name": "Great Pyramid",
-            "Light": 0, "Shop": 0, "Spell": 0, "CMD": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
-        ]
-        """;
-
     private sealed class Harness : IDisposable
     {
         public required RoomTracker Tracker { get; init; }
@@ -59,7 +40,7 @@ public sealed class PyramidSolverTests : IDisposable
     {
         string dir = Path.Combine(_root, "alpha");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "Rooms.json"), Rooms);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), PyramidRooms.Json());
         File.WriteAllText(Path.Combine(dir, "Spells.json"), "[]");
         File.WriteAllText(Path.Combine(dir, "TBInfo.json"), "[]");
 
@@ -274,6 +255,21 @@ public sealed class PyramidSolverTests : IDisposable
         Assert.Contains("ask sphinx stars", h.SentText);
         Assert.Equal(5, h.SentText.Count(t => t == "push block"));
         Assert.Contains("@party give golden lion key to MudPlay", h.SentText);
+    }
+
+    [Fact]
+    public void StartedPartWayAlongAFloor_ResumesAtTheStepScriptedFromThatRoom()
+    {
+        // 1853 is walked twice on F1 (out to the third block and back); a climb picked
+        // up there takes the first pass, so the block still gets pushed.
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(12, 1853));
+        Assert.True(h.Solver.TryBegin(new RoomKey(12, 2085)));
+
+        IReadOnlyList<int> from = PyramidScript.FromRooms(PyramidFloor.F1)!;
+        int first = from.ToList().IndexOf(1853);
+        Assert.Equal(first + 1, h.Solver.ScriptStep);
+        Assert.Equal(PyramidScript.Steps(PyramidFloor.F1)[first].Dir.ToString().ToLowerInvariant(), h.SentText[0]);
     }
 
     // ----- combat / hold gating -------------------------------------

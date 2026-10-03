@@ -148,8 +148,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     public int StepsDriven => _totalSteps;
     public int ScriptStep => _stepIndex + 1;
     public int ScriptSteps => PyramidScript.Steps(_floor).Count;
-    // The room the current step is scripted to start from (F3 only), to set against
-    // the tracker's room in a report.
+    // The room the current step is scripted to start from, to set against the
+    // tracker's room in a report.
     public RoomKey? ExpectedRoom => PyramidScript.FromRooms(_floor) is { } from && _stepIndex < from.Count
         ? new RoomKey(PyramidScript.PyramidMap, from[_stepIndex])
         : null;
@@ -315,7 +315,11 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _stepIndex = 0;
         _doorPolls = 0;
         _phase = Phase.Climbing;
-        _log?.Log(LogSeverity.Info, LogSource, $"driving {floor}");
+        // A climb picked up part-way along a floor starts at the step scripted from
+        // the room we're standing in, not at the floor's entry.
+        ResyncToTrackedRoom(floorStart: true);
+        _log?.Log(LogSeverity.Info, LogSource,
+            _stepIndex == 0 ? $"driving {floor}" : $"driving {floor} from step {_stepIndex + 1}");
         // Surface the per-step pace for the timed/blind floors so a bug report can be
         // checked against the movetime the solver actually used (report -133835).
         if (PyramidScript.IsBlindFast(floor))
@@ -405,16 +409,19 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         }
     }
 
-    // Re-anchor the script on the tracker's confirmed room, on floors that carry a
-    // per-step room table (F3). Steps advance on a settle timer without confirming the
-    // move landed, so a door move that didn't go through (or went through when the
-    // solver thought it hadn't) leaves the index off by one. Only acts on a Confirmed
-    // room that the script visits; a pending move or an off-path room leaves the index
-    // alone. Where the room recurs (2032), the occurrence nearest the current index
-    // wins, earlier on a tie — being back at an already-driven step's room means that
-    // step's move didn't land. Returns true when the index moved.
-    private bool ResyncToTrackedRoom()
+    // Re-anchor the script on the tracker's confirmed room. Steps advance on a settle
+    // timer without confirming the move landed, so a move that didn't go through (or
+    // went through when the solver thought it hadn't) leaves the index off by one.
+    // Only acts on a Confirmed room that the script visits; a pending move or an
+    // off-path room leaves the index alone. Where the room recurs, the occurrence
+    // nearest the current index wins, earlier on a tie — being back at an
+    // already-driven step's room means that step's move didn't land. Between steps
+    // this is for the paced floors only: the blind floors send ahead of the tracker,
+    // whose room is then several moves behind the script by design. Returns true when
+    // the index moved.
+    private bool ResyncToTrackedRoom(bool floorStart = false)
     {
+        if (!floorStart && PyramidScript.IsBlindFast(_floor)) return false;
         if (PyramidScript.FromRooms(_floor) is not { } from) return false;
         RoomState st = _tracker.State;
         if (st.Confidence != RoomConfidence.Confirmed || st.CurrentRoom is not { } cur

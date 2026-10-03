@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.40**
-> - Bossing set: new "Keep on while heading to another boss" checkbox for walk-to's; a follower asks the leader's client (`@path`) whether it's walking to a boss room
-> - Action → Equip: any set but Default now stays on, ticked, with automatic gear swaps off until you deselect it; the terminal says so when you pick one
+> **Version 3.143.0**
+> - Pyramid climb: floor 1 route fixed — it stopped one room short of the fire sphinx
+> - Pyramid climb picked up part-way along any floor starts from the room you're in
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

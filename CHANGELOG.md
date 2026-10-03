@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.0
+
+- Pyramid climb: floor 1 route fixed — it stopped one room short of the fire sphinx
+- Pyramid climb picked up part-way along any floor starts from the room you're in
+
 ## 3.142.40
 
 - Bossing set: new "Keep on while heading to another boss" checkbox for walk-to's; a follower asks the leader's client (`@path`) whether it's walking to a boss room

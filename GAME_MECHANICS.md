@@ -3144,6 +3144,12 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - Cross-checked against the falls-below-cap points: quickness 15 → 16% enc, 100 → 67%, 200 → 97%.
 - **Lag rides on top of that timer** *([CONFIRMED] 2026-09-30, user)*: a character at the 1.0s cap really walks **~1.08–1.15s** a room — 80–150 ms of lag. *([OBSERVED] 2026-09-30, a contributor's program log: a priest with gear quickness 0 at 32% encumbrance has a formula timer of 1.305s, and the log shows a 1.37s median over 5,454 back-to-back moves.)*
 - **Stock has no such floor.** Empirical captures (8 sessions, 199 moves) show a true-speed floor around **0.25s** unencumbered, medians ~0.6–0.7s at light/medium loads rising to ~1.65s when Heavy (≈67%+ enc), with wide lag-driven variance per hop. A comparable character therefore moves roughly **2–4× faster per hop on stock** than the Paradigm 1.0s cap.
+- **Stock charges each move an action delay in whole units** *([OBSERVED] 2026-10-03, `wccmmud.dll` 1.11p `_cmd_move` / `_add_delay`; Realm: Stock)*. The delay is the counter described under *Wire, prompt & command output → Command rate limit (typing/sending too fast)*: further commands wait in the queue until it runs out.
+  - **Base 1 unit**, 2 while dragging someone (`_cmd_drag` sets the flag).
+  - **Above 66% encumbrance the base is added again** (2 units, 4 dragging). Above 100% the move is refused: `You are too heavy to move anywhere!`
+  - Two character flags set from abilities double it and halve it (`_update_dynamic_with_ability`; which abilities was not traced). The result is never below 1.
+  - **From the third move on, each move costs 1 unit more.** A per-character move counter goes up with every move and is cleared by the energy, medium and slow character updates; a move made while it is above 2 adds a unit.
+  - The unit is one pass of the fast character update, whose length is a sysop timer setting, not in the DLL. [NEEDS CONFIRMATION]: how long is a pass? The captures in this topic's ~0.25s floor and ~0.6–0.7s medians would fit 1- and 2-unit moves at roughly 0.3s a pass, but the ~1.65s Heavy figure (3 units by this rule) would not.
 - **Design consequence — the dark-room settle window (and any fixed inter-move timer) is realm-coupled.** At 1.0s it ≈ the Paradigm server cadence, so on Paradigm it costs almost nothing on an empty room; on stock the same 1.0s nearly doubles the natural ~0.6s hop — a heavy tax.
 - **Overshoot (stepping before a dark pursuer reveals) is a fast-mover problem:** it only bites a character near the Paradigm cap or a quick stock character; a slow/heavy mover has ample reveal margin. This argues for making dark-room room-clear detection **event-driven** (step once the room is confirmed clear via the attack→"no effect" + combat-line-silence signals) rather than a single global duration.
 
@@ -4436,9 +4442,25 @@ Among protectable hazards, a further split governs whether the navigator may off
   within ~5 min of the first firepit `up` or scatter. Lateral gates open with `push block` (encoded
   `push block, push square block, move block`; broadcast
   `<leader> pushes the stone block, and it slides into the wall.`). Never stop on F1.
-- **F1 timing budget.** F1 ≈ **126 moves + 6 actions** (5 push-blocks + `ask sphinx fire`), ~250
+- **F1 route** *([OBSERVED] 2026-10-03, game data — `data-Paradigm-1.9.1`, `data-v1.11p` and two other
+  imported sets identical; MegaMUD's own path file for the leg agrees)*. From `1800`: **126 moves and 5
+  push blocks**, ending `…w,w,s,s,w,n` into the fire sphinx's room `1920`
+  (`1913 S→1914 S→1918 W→1919 N→1920`). The hand-drawn map's line ends `…w,w,s,w,n`, one `s` short; an
+  earlier script copied it and stopped a room short of the sphinx (superseded 2026-10-03).
+  - **Blocks and the gates they open** (block room → gate room and exit): `1808` → `1811 N`, `1835` →
+    `1833 W`, `1856` → `1851 N`, `1888` → `1872 S`, `1908` → `1904 W`. Each gate is
+    `Hidden/Needs 1 Actions` until its block is pushed. Five more blocks (`1826`, `1841`, `1861`, `1891`,
+    `1917`) open the same gates from their far side and aren't needed on the way up.
+  - **The timer is spell 685** (cast by the firepit's `up`, `Dur 80`); its `EndCast 686` runs TB 2510, the
+    teleport out. `ask sphinx fire` runs TB 2518, whose `cast 687` removes spell 685, so the timer ends
+    at the sphinx's answer and the ascent after it isn't on the clock.
+  - F1 rooms are `Light -200` with room spell 691.
+- **F1 timing budget.** F1 = **126 moves + 6 actions** (5 push-blocks + `ask sphinx fire`), ~250
   ms/action, under 5 min. **Stock:** a `Heavy` (>66%) leader = guaranteed timeout. **Paradigm:** the
   estimate `126·per-move + 6·250 ms` goes over 5 min at roughly >80% enc with no quickness.
+- **F2 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 33 moves from `1921` to the sun
+  sphinx's room `2001`, the same path MegaMUD's file walks. Every F2 room is `Light -999` with room
+  spell 692, whose TB 2519 runs `cast 687:random 2520` (the darts and blades, behind `testskill traps 20`).
 - **F2 — chaos, blind-fast.** Pitch-black (`The room is pitch black - you can't see anything`), wall
   darts/blades (poison), room spells whose damage **scales the longer you dwell** → keep everyone healed,
   don't stop for blind/poison/confuse. Undead priests may `hold person` a member; moving on leaves a held
@@ -4455,6 +4477,17 @@ Among protectable hazards, a further split governs whether the navigator may off
   - Golden lion key drops from the neutral `floating key` monster (**#598**).
   - **No-drop bug** — a bugged kill drops nothing → exit E, re-enter W to respawn.
   - Key door: `unlock` → `The key breaks and crumbles apart.` → `open` → move.
+- **F3 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 25 door moves from `2002` to the
+  stars sphinx's room `2051`. The four `Door [1000 picklocks/strength]` exits on it are `2004 N`,
+  `2017 E`, `2022 S` and `2032 S`; the key door is `2034 W` (`Key: 1175`, the golden lion key). The
+  route steps west from `2032` into `2005` and straight back east, which is the floating key's room.
+  MegaMUD's Paradigm path file is two rooms shorter between `2018` and `2020` (`2018 S→2019 E→2020`).
+- **F4 route** *([OBSERVED] 2026-10-03, game data, both realms)*: 21 moves and the `u`, from `2052` and
+  back through `2052` once more on the way (`2072 S→2052`, cast 733) before `2058 W→2073` (cast 735)
+  and `2074 U→2077`. `2052 N→2072` is a fail exit (cast 702), as a backtrack would be. A fall is spell
+  709, 75–150 damage.
+- **F5 route** *([OBSERVED] 2026-10-03, game data, both realms)*: `n,w,w,s,e` from `2077` through
+  `2084`, `2083`, `2082`, `2081` to `2085`.
 - **F4 — footpath, forward-only.** Spell "fourteen" by walking the correct arches (`ask sphinx riddle` @
   2052 gives the clue). Each arch casts **701 (pass)** / **702 (fail)**; **702 → TB 2640→2641** =
   weighted teleport down; a **backtrack also falls** (backtracking = unsolved). Pass internally gates on
