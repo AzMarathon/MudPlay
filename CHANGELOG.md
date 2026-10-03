@@ -1,9 +1,9 @@
 # Version history
 
-## 3.142.26
+## 3.142.27
 
 - Fixed a crash at launch in release builds: the installed-font scan could kill the client with no error
-- Conversation font list no longer offers a few non-Latin fonts that can't show chat text
+- Conversation font list offers every installed font, not only ones with Latin letters
 
 ## 3.142.25
 

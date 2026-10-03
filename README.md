@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.26**
+> **Version 3.142.27**
 > - Fixed a crash at launch in release builds: the installed-font scan could kill the client with no error
-> - Conversation font list no longer offers a few non-Latin fonts that can't show chat text
+> - Conversation font list offers every installed font, not only ones with Latin letters
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -24,17 +24,17 @@ public sealed class InstalledFontCatalogTests
     [Theory]
     [InlineData("JetBrainsMono-Regular.ttf")]
     [InlineData("Mx437_IBM_VGA_8x16.ttf")]
-    public void Probe_FixedPitchFont_IsTextAndMonospace(string file)
+    public void FixedPitchFont_ReadsAsFixedPitch(string file)
     {
         using SKTypeface face = BundledFont(file);
-        Assert.Equal((true, true), InstalledFontCatalog.Probe(face));
+        Assert.True(InstalledFontCatalog.IsFixedPitch(face));
     }
 
     [Fact]
-    public void Probe_ProportionalFont_IsTextButNotMonospace()
+    public void ProportionalFont_DoesNotReadAsFixedPitch()
     {
         using SKTypeface face = BundledFont("IBMPlexSans-Regular.ttf");
-        Assert.Equal((true, false), InstalledFontCatalog.Probe(face));
+        Assert.False(InstalledFontCatalog.IsFixedPitch(face));
     }
 
     [Fact]
