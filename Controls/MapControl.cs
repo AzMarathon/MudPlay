@@ -955,6 +955,11 @@ public sealed class MapControl : Control
                 if (_hoverRoom is { } k) RoomHovered?.Invoke(k, _hoverPos);
             });
         _hoverTimer.Stop();
+        _staticLayer = new MapLayer(DrawStaticLayer) { CacheMode = new BitmapCache() };
+        _dynamicLayer = new MapLayer(DrawDynamicLayer);
+        VisualChildren.Add(_staticLayer);
+        VisualChildren.Add(_dynamicLayer);
+        InvalidateStatic();
         AffectsRender<MapControl>(LayoutProperty, CurrentRoomKeyProperty, DestinationRoomKeyProperty, GraphProperty,
             LairModeProperty, LairRespawnSecondsProperty, LairMaxRespawnSecondsProperty, LairMonsterCountsProperty,
             HighlightShopsProperty, SpellModeProperty,
@@ -1046,8 +1051,9 @@ public sealed class MapControl : Control
         double cxOld = (cursor.X - Bounds.Width  / 2 - _panX) / (TileWorldSize * zoomBefore);
         double cyOld = (cursor.Y - Bounds.Height / 2 - _panY) / (TileWorldSize * zoomBefore);
         _zoom = zoomAfter;
-        _panX = cursor.X - Bounds.Width  / 2 - cxOld * TileWorldSize * _zoom;
-        _panY = cursor.Y - Bounds.Height / 2 - cyOld * TileWorldSize * _zoom;
+        _panX = Math.Round(cursor.X - Bounds.Width  / 2 - cxOld * TileWorldSize * _zoom);
+        _panY = Math.Round(cursor.Y - Bounds.Height / 2 - cyOld * TileWorldSize * _zoom);
+        ViewMoved();
         // Zooming is active browsing — arm the suppression window so a
         // live move doesn't yank the view out from under the user.
         SuppressAutoFollow();
@@ -1120,7 +1126,7 @@ public sealed class MapControl : Control
             {
                 _chipDragPoint = now;
                 _chipDropTarget = TryHitTestRoom(now, out RoomKey over) ? over : null;
-                InvalidateVisual();
+                _dynamicLayer?.InvalidateVisual();
                 // No room tooltips while a chip is held — the room under the cursor
                 // changes constantly, same as a pan.
                 if (_hoverRoom is not null)
@@ -1134,9 +1140,9 @@ public sealed class MapControl : Control
 
             if (_isDragging)
             {
-                _panX = _panStartX + dx;
-                _panY = _panStartY + dy;
-                InvalidateVisual();
+                _panX = Math.Round(_panStartX + dx);
+                _panY = Math.Round(_panStartY + dy);
+                ViewMoved();
 
                 // Arm the auto-follow suppression window — the user
                 // is actively browsing; don't yank back to live
@@ -1360,7 +1366,7 @@ public sealed class MapControl : Control
         _chipDragFrom = null;
         _chipDragging = false;
         _chipDropTarget = null;
-        InvalidateVisual();
+        _dynamicLayer?.InvalidateVisual();
     }
 
     // Losing the pointer mid-drag (a window stealing focus) drops the chip back. Our
@@ -1382,9 +1388,9 @@ public sealed class MapControl : Control
     {
         if (Layout is null) return;
         if (!Layout.Positions.TryGetValue(key, out (int X, int Y) coord)) return;
-        _panX = -coord.X * TileWorldSize * _zoom;
-        _panY = -coord.Y * TileWorldSize * _zoom;
-        InvalidateVisual();
+        _panX = Math.Round(-coord.X * TileWorldSize * _zoom);
+        _panY = Math.Round(-coord.Y * TileWorldSize * _zoom);
+        ViewMoved();
     }
 
     // Re-centre on the player's current room (Home key / explicit recenter).
@@ -1424,25 +1430,133 @@ public sealed class MapControl : Control
     public override void Render(DrawingContext context)
     {
         context.FillRectangle(Bg, new Rect(Bounds.Size));
-
         if (Layout is null || Layout.CoordToRoom.Count == 0)
-        {
             DrawCenteredMessage(context, "No room data loaded. Import game data first.");
-            return;
+    }
+
+    // ----- Layers ----------------------------------------------------------
+    // The map is drawn as two child layers. The static one holds what only changes
+    // when the layout or a room class does: every tile, exit line and room node with
+    // its markers. The dynamic one holds what moves as you play: the current and
+    // destination rooms, the selection, the routes and the waypoints. Avalonia keeps
+    // each layer's drawing until that layer is invalidated, so a step, a route update
+    // or a pan no longer walks and redraws the whole layout; a pan only shifts the
+    // static layer's transform.
+    //
+    // The static layer is also cached as a bitmap, so the renderer draws one picture
+    // for it rather than replaying every tile and line each frame. It reaches
+    // _staticMargin past each window edge (the bitmap covers the layer's own bounds,
+    // so it is arranged that much larger) and is redrawn once a pan has used that up.
+    // Pans are whole pixels, so the shifted bitmap lines up exactly with the dynamic
+    // layer drawn over it.
+    private MapLayer? _staticLayer;
+    private MapLayer? _dynamicLayer;
+    private double _staticPanX, _staticPanY, _staticZoom;
+    private double _staticMargin;
+
+    // A quarter of the longer side: a 1920x1080 map caches about 24 MB, and a pan that
+    // uses the margin up costs one static redraw (about 10 ms on a 6,500-room layout).
+    private static double MarginFor(Size size) => Math.Round(Math.Max(size.Width, size.Height) * 0.25);
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        double margin = MarginFor(finalSize);
+        if (margin != _staticMargin)
+        {
+            _staticMargin = margin;
+            InvalidateStatic();
+        }
+        _staticLayer?.Arrange(new Rect(-margin, -margin, finalSize.Width + 2 * margin, finalSize.Height + 2 * margin));
+        _dynamicLayer?.Arrange(new Rect(finalSize));
+        return finalSize;
+    }
+
+    private sealed class MapLayer : Control
+    {
+        private readonly Action<DrawingContext> _draw;
+
+        public MapLayer(Action<DrawingContext> draw)
+        {
+            _draw = draw;
+            IsHitTestVisible = false;
         }
 
-        double tilePixels = TileWorldSize * _zoom;
+        public override void Render(DrawingContext context) => _draw(context);
+    }
+
+    // Room-class properties: what the static layer draws.
+    private static readonly HashSet<AvaloniaProperty> StaticLayerProperties = new()
+    {
+        LayoutProperty, GraphProperty, LairModeProperty, LairRespawnSecondsProperty,
+        LairMaxRespawnSecondsProperty, LairMonsterCountsProperty, HighlightShopsProperty, SpellModeProperty,
+        AvoidedRoomsProperty, LevelGatedRoomsProperty, StashRoomsProperty, GhRoomsProperty, GhFullRoomsProperty,
+        LoopSequenceNumbersProperty, AutoLairRoomsProperty, TeleportRoomsProperty, DeathRoomsProperty,
+        BossRoomsProperty, StopBeforeBossRoomsProperty, TrainerRoomsProperty, NavLineStylesProperty,
+    };
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        bool resized = change.Property == BoundsProperty;
+        if (resized || StaticLayerProperties.Contains(change.Property)) InvalidateStatic();
+        // Everything that affects drawing at all reaches the dynamic layer: the
+        // current and destination rooms are redrawn there over their static nodes.
+        if (resized || StaticLayerProperties.Contains(change.Property) || DynamicLayerProperties.Contains(change.Property))
+            _dynamicLayer?.InvalidateVisual();
+    }
+
+    private static readonly HashSet<AvaloniaProperty> DynamicLayerProperties = new()
+    {
+        CurrentRoomKeyProperty, DestinationRoomKeyProperty, WalkPathProperty, LoopPathProperty,
+        LoopBuilderPathProperty, LoopBuilderWaypointsProperty, LoopRunningWaypointsProperty,
+        AutoLairWaypointsProperty, AutoLairApproachPathProperty, LoopApproachPreviewPathProperty,
+        WalkPathIsAutoLairProperty, SelectedRoomKeyProperty, PreviewPathProperty, LeaderRoutePathProperty,
+        WhereTargetRoomsProperty, ComparisonRecordedPathProperty, ComparisonConvertedPathProperty,
+        ComparisonStuckRoomsProperty,
+    };
+
+    // The view moved (pan, zoom, re-centre). A pan within the margin only shifts the
+    // static layer; anything else redraws it.
+    private void ViewMoved()
+    {
+        double dx = _panX - _staticPanX, dy = _panY - _staticPanY;
+        if (_zoom != _staticZoom || Math.Abs(dx) > _staticMargin || Math.Abs(dy) > _staticMargin)
+            InvalidateStatic();
+        else if (_staticLayer is { } layer)
+            layer.RenderTransform = new TranslateTransform(dx, dy);
+        _dynamicLayer?.InvalidateVisual();
+    }
+
+    // Redraw the static layer at the view as it is now. The view it is drawn at is
+    // taken here, not in the render: a visual can't change its own transform while
+    // it renders, and a pan before that render lands as a shift from this view.
+    private void InvalidateStatic()
+    {
+        _staticPanX = _panX;
+        _staticPanY = _panY;
+        _staticZoom = _zoom;
+        if (_staticLayer is not { } layer) return;
+        layer.RenderTransform = null;
+        layer.InvalidateVisual();
+    }
+
+    private void DrawStaticLayer(DrawingContext context)
+    {
+        if (Layout is null || Layout.CoordToRoom.Count == 0) return;
+
+        double tilePixels = TileWorldSize * _staticZoom;
         if (tilePixels < 4) return;
 
-        double cx = Bounds.Width  / 2 + _panX;
-        double cy = Bounds.Height / 2 + _panY;
-        Rect viewport = new(Bounds.Size);
+        // The layer starts _staticMargin up and left of the map.
+        double cx = Bounds.Width  / 2 + _staticPanX + _staticMargin;
+        double cy = Bounds.Height / 2 + _staticPanY + _staticMargin;
+        Rect area = new(new Size(Bounds.Width + 2 * _staticMargin, Bounds.Height + 2 * _staticMargin));
 
         // Pass 1: cell backgrounds + borders.
         foreach (KeyValuePair<(int X, int Y), RoomKey> kvp in Layout.CoordToRoom)
         {
             Rect cell = ComputeCellRect(kvp.Key, tilePixels, cx, cy);
-            if (!cell.Intersects(viewport)) continue;
+            if (!cell.Intersects(area)) continue;
             context.FillRectangle(TileBg, cell);
             context.DrawRectangle(null, TileBorderPen, cell);
         }
@@ -1451,64 +1565,93 @@ public sealed class MapControl : Control
         // when both endpoints are placed (no overlap seam, no
         // bump); a single half-stub when the destination is
         // dangling.
-        DrawAllExitLines(context, tilePixels, cx, cy, viewport);
+        DrawAllExitLines(context, tilePixels, cx, cy, area);
 
-        // Pass 3: room nodes + per-cell overlays.
+        // Pass 3: room nodes + per-cell overlays, every room drawn as neither current
+        // nor destination (the dynamic layer draws those two on top).
         foreach (KeyValuePair<(int X, int Y), RoomKey> kvp in Layout.CoordToRoom)
         {
             Rect cell = ComputeCellRect(kvp.Key, tilePixels, cx, cy);
-            if (!cell.Intersects(viewport)) continue;
-
-            DrawRoomNode(context, cell, kvp.Value);
-
-            if (LevelGatedRooms is { } gated && gated.Contains(kvp.Value))
-                DrawLevelGateMarker(context, cell);
-
-            // @where target — a transient green flash the VM clears after ~12s.
-            // Drawn right on the node so it reads as a marked square.
-            if (WhereTargetRooms is { } whereRooms && whereRooms.Contains(kvp.Value))
-                DrawWhereHighlight(context, cell);
-
-            if (AvoidedRooms is not null && AvoidedRooms.Contains(kvp.Value))
-                DrawAvoidX(context, cell);
-
-            if (StashRooms is not null && StashRooms.Contains(kvp.Value))
-                DrawStashX(context, cell);
-
-            if (GhRooms is not null && GhRooms.Contains(kvp.Value))
-                DrawRobotIcon(context, cell,
-                    full: GhFullRooms is not null && GhFullRooms.Contains(kvp.Value));
-
-            if (DeathRooms is not null && DeathRooms.Contains(kvp.Value))
-                DrawSkull(context, cell);
-
-            if (BossRooms is not null && BossRooms.Contains(kvp.Value))
-                DrawBossCrown(context, cell,
-                    stopBefore: StopBeforeBossRooms is not null && StopBeforeBossRooms.Contains(kvp.Value));
-
-            if (TrainerRooms is not null && TrainerRooms.Contains(kvp.Value))
-                DrawTrainerIcon(context, cell);
-
-            if (LoopSequenceNumbers is not null
-                && LoopSequenceNumbers.TryGetValue(kvp.Value, out int seq)
-                && tilePixels >= 16)
-                DrawSequenceNumber(context, cell, seq);
-
-            if (LairMode is LairDisplayMode.Count or LairDisplayMode.HeatCount
-                && LairMonsterCounts is not null
-                && LairMonsterCounts.TryGetValue(kvp.Value, out int lairCount)
-                && tilePixels >= 16)
-                DrawSequenceNumber(context, cell, lairCount);
-
-            // Crawler selection ring — drawn inside the cell with a
-            // small inset so it sits between the cell border and the
-            // room node, distinct from the amber current-room ring.
-            if (SelectedRoomKey is { } sel && sel.Equals(kvp.Value))
-            {
-                Rect ring = cell.Deflate(1);
-                context.DrawRectangle(null, SelectionPen, ring);
-            }
+            if (!cell.Intersects(area)) continue;
+            DrawCellContents(context, cell, kvp.Value, tilePixels, staticPass: true);
         }
+    }
+
+    // A room's node and the per-cell markers on it.
+    private void DrawCellContents(DrawingContext context, Rect cell, RoomKey key, double tilePixels, bool staticPass)
+    {
+        DrawRoomNode(context, cell, key, staticPass);
+
+        if (LevelGatedRooms is { } gated && gated.Contains(key))
+            DrawLevelGateMarker(context, cell);
+
+        if (AvoidedRooms is not null && AvoidedRooms.Contains(key))
+            DrawAvoidX(context, cell);
+
+        if (StashRooms is not null && StashRooms.Contains(key))
+            DrawStashX(context, cell);
+
+        if (GhRooms is not null && GhRooms.Contains(key))
+            DrawRobotIcon(context, cell,
+                full: GhFullRooms is not null && GhFullRooms.Contains(key));
+
+        if (DeathRooms is not null && DeathRooms.Contains(key))
+            DrawSkull(context, cell);
+
+        if (BossRooms is not null && BossRooms.Contains(key))
+            DrawBossCrown(context, cell,
+                stopBefore: StopBeforeBossRooms is not null && StopBeforeBossRooms.Contains(key));
+
+        if (TrainerRooms is not null && TrainerRooms.Contains(key))
+            DrawTrainerIcon(context, cell);
+
+        if (LoopSequenceNumbers is not null
+            && LoopSequenceNumbers.TryGetValue(key, out int seq)
+            && tilePixels >= 16)
+            DrawSequenceNumber(context, cell, seq);
+
+        if (LairMode is LairDisplayMode.Count or LairDisplayMode.HeatCount
+            && LairMonsterCounts is not null
+            && LairMonsterCounts.TryGetValue(key, out int lairCount)
+            && tilePixels >= 16)
+            DrawSequenceNumber(context, cell, lairCount);
+    }
+
+    private void DrawDynamicLayer(DrawingContext context)
+    {
+        if (Layout is null || Layout.CoordToRoom.Count == 0) return;
+
+        double tilePixels = TileWorldSize * _zoom;
+        if (tilePixels < 4) return;
+
+        double cx = Bounds.Width  / 2 + _panX;
+        double cy = Bounds.Height / 2 + _panY;
+        Rect viewport = new(Bounds.Size);
+
+        // The current and destination rooms, over the plain nodes the static layer
+        // drew for them.
+        void DrawOnTop(RoomKey key)
+        {
+            if (!Layout.Positions.TryGetValue(key, out (int X, int Y) coord)) return;
+            Rect cell = ComputeCellRect(coord, tilePixels, cx, cy);
+            if (cell.Intersects(viewport)) DrawCellContents(context, cell, key, tilePixels, staticPass: false);
+        }
+        if (CurrentRoomKey is { } current) DrawOnTop(current);
+        if (DestinationRoomKey is { } destination && !destination.Equals(CurrentRoomKey)) DrawOnTop(destination);
+
+        // @where target — a transient green flash the VM clears after ~12s.
+        // Drawn right on the node so it reads as a marked square.
+        if (WhereTargetRooms is { Count: > 0 } whereRooms)
+            foreach (RoomKey key in whereRooms)
+                if (Layout.Positions.TryGetValue(key, out (int X, int Y) coord)
+                    && ComputeCellRect(coord, tilePixels, cx, cy) is var cell && cell.Intersects(viewport))
+                    DrawWhereHighlight(context, cell);
+
+        // Crawler selection ring — drawn inside the cell with a
+        // small inset so it sits between the cell border and the
+        // room node, distinct from the amber current-room ring.
+        if (SelectedRoomKey is { } sel && Layout.Positions.TryGetValue(sel, out (int X, int Y) selCoord))
+            context.DrawRectangle(null, SelectionPen, ComputeCellRect(selCoord, tilePixels, cx, cy).Deflate(1));
 
         // Pass 4: top-of-stack polylines. Loop-builder preview and the
         // loop-approach preview both draw in red with the same pen
@@ -1542,13 +1685,15 @@ public sealed class MapControl : Control
         // travel polylines just drawn. A preview / active route running along a trap
         // would otherwise hide it — and merely thickening the trap line isn't enough
         // when the route pen is as wide (or wider). Re-drawing the red on top makes the
-        // trap read through the route unconditionally.
-        DrawAllExitLines(context, tilePixels, cx, cy, viewport, trapOverlay: true);
+        // trap read through the route unconditionally. With no route drawn the static
+        // layer's own trap lines already show, and this pass walks the whole layout.
+        if (AnyRouteDrawn())
+            DrawAllExitLines(context, tilePixels, cx, cy, viewport, trapOverlay: true);
 
         // The import review's comparison sits over every other route.
         DrawPathPolyline(context, ComparisonRecordedPath,  ComparisonRecordedPen,  tilePixels, cx, cy);
         DrawPathPolyline(context, ComparisonConvertedPath, ComparisonConvertedPen, tilePixels, cx, cy);
-        if (ComparisonStuckRooms is { Count: > 0 } stuck && Layout is not null)
+        if (ComparisonStuckRooms is { Count: > 0 } stuck)
         {
             double arm = Math.Max(3, tilePixels * 0.3);
             foreach (RoomKey k in stuck)
@@ -1575,6 +1720,12 @@ public sealed class MapControl : Control
             AutoLairWaypointFill, AutoLairWaypointRing, tilePixels, cx, cy);
         DrawChipDrag(context, tilePixels, cx, cy);
     }
+
+    private bool AnyRouteDrawn() =>
+        LoopBuilderPath is { Count: > 1 } || LoopApproachPreviewPath is { Count: > 1 }
+        || PreviewPath is { Count: > 1 } || LeaderRoutePath is { Count: > 1 } || LoopPath is { Count: > 1 }
+        || AutoLairApproachPath is { Count: > 1 } || WalkPath is { Count: > 1 }
+        || ComparisonRecordedPath is { Count: > 1 } || ComparisonConvertedPath is { Count: > 1 };
 
     // The chip being dragged, under the cursor, with the room it would land on ringed.
     private void DrawChipDrag(DrawingContext ctx, double tilePixels, double cx, double cy)
@@ -1692,6 +1843,12 @@ public sealed class MapControl : Control
                 (int X, int Y) bCoord = targetPlaced ? actual : expected;
                 ((int X, int Y) A, (int X, int Y) B) pair = SortPair(source, bCoord);
                 if (!drawn.Add(pair)) continue;
+
+                // Nothing of a connector whose box (padded by a cell for arrowheads,
+                // stubs and spell bars) misses the drawn area can show; skipping it
+                // spares the edge lookups and the drawing for the rest of the layout.
+                Point farPt = new(cx + bCoord.X * tilePixels, cy + bCoord.Y * tilePixels);
+                if (!new Rect(srcPt, farPt).Inflate(tilePixels).Intersects(viewport)) continue;
 
                 // Classify against the source side AND the real target
                 // side (its reciprocal exit carries the same hint).
@@ -2391,15 +2548,16 @@ public sealed class MapControl : Control
         return result;
     }
 
-    private void DrawRoomNode(DrawingContext ctx, Rect cell, RoomKey key)
+    // staticPass: drawn for the static layer, as neither current nor destination.
+    private void DrawRoomNode(DrawingContext ctx, Rect cell, RoomKey key, bool staticPass)
     {
         double nodeSize = Math.Max(cell.Width * 0.45, 3.0);
         double nx = cell.X + (cell.Width  - nodeSize) / 2;
         double ny = cell.Y + (cell.Height - nodeSize) / 2;
         Rect node = new(nx, ny, nodeSize, nodeSize);
 
-        bool isCurrent = CurrentRoomKey is { } current && current.Equals(key);
-        bool isDestination = !isCurrent && DestinationRoomKey is { } dest && dest.Equals(key);
+        bool isCurrent = !staticPass && CurrentRoomKey is { } current && current.Equals(key);
+        bool isDestination = !staticPass && !isCurrent && DestinationRoomKey is { } dest && dest.Equals(key);
         bool isAutoLair = AutoLairRooms is not null && AutoLairRooms.Contains(key);
         Room? room = Graph?.GetRoom(key);
 

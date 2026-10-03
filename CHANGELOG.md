@@ -1,5 +1,9 @@
 # Version history
 
+## 3.141.16
+
+- Map: rooms, exits and markers are drawn once and only moved when you pan; walking redraws just the player marker and routes, and off-screen exits are no longer drawn
+
 ## 3.141.15
 
 - Terminal draws each colour run as one glyph run instead of one call per character: about ten times less drawing work per frame, pixel-identical
