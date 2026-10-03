@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.142.40**
-> - Bossing set: new "Keep on while heading to another boss" checkbox for walk-to's; a follower asks the leader's client (`@path`) whether it's walking to a boss room
-> - Action → Equip: any set but Default now stays on, ticked, with automatic gear swaps off until you deselect it; the terminal says so when you pick one
+> **Version 3.142.41**
+> - A stale "held" state now clears as soon as a move goes through, so navigation resumes and the hold cure stops re-casting
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

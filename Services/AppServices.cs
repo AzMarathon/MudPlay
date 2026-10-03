@@ -7394,6 +7394,14 @@ public sealed class AppServices
         // concern is the movement engines) since the reset spans all conditions.
         RoomTracker.PlayerDeathObserved += () => Conditions.ClearAll("death");
 
+        // A held or knocked-down character can't walk and isn't dragged by a leader,
+        // so a move that lands proves a latched hold is stale (its wear-off line was
+        // missed). Without this the walker sits "Paused by: Held" and the hold cure
+        // re-casts every window for as long as the session lasts (report
+        // paradigm-20261003-161904).
+        RoomTracker.MoveConfirmed += () =>
+            Conditions.ClearFlag(Models.GameData.MessageFlags.MovementPrevented, "a move went through");
+
         // Same reasoning as the condition reset above, for the attack-spell
         // cascade and buff-duration tracking: death is a full server-side reset
         // (every buff drops, whatever spell was mid-flight is moot), but nothing

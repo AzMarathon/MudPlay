@@ -1,5 +1,10 @@
 # Version history
 
+## 3.142.41
+
+- A stale "held" state now clears as soon as a move goes through, so navigation resumes and the hold cure stops re-casting
+- bug reports addressed: paradigm-20261003-161904
+
 ## 3.142.40
 
 - Bossing set: new "Keep on while heading to another boss" checkbox for walk-to's; a follower asks the leader's client (`@path`) whether it's walking to a boss room
