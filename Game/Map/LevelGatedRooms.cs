@@ -15,9 +15,15 @@ namespace MudPlay.Game.Map;
 // by a door nobody can pick is not gated by level and is not marked here.
 public static class LevelGatedRooms
 {
+    // Built once per graph (RoomGraphManager.Derived).
     public static IReadOnlySet<RoomKey> Compute(RoomGraphManager graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
+        return graph.Derived("level-gated rooms", () => Build(graph));
+    }
+
+    private static HashSet<RoomKey> Build(RoomGraphManager graph)
+    {
 
         HashSet<RoomKey> gated = [];
 

@@ -231,7 +231,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
 
     // Every system time-zone id (auto-detected local zone included), sorted — the
     // options for the cleanup-zone dropdown.
-    public IReadOnlyList<string> TimeZoneIds { get; } = BuildTimeZoneIds();
+    public IReadOnlyList<string> TimeZoneIds => AllTimeZoneIds.Value;
+
+    // Listing the system's time zones reads the whole tz database (a third of a
+    // second), so it's done once per run rather than on every Settings open.
+    private static readonly Lazy<IReadOnlyList<string>> AllTimeZoneIds = new(BuildTimeZoneIds);
 
     private static IReadOnlyList<string> BuildTimeZoneIds()
     {

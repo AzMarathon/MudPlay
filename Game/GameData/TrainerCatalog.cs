@@ -63,15 +63,21 @@ public static class TrainerCatalog
     // MaxLVL sentinel marking a non-reachable / placeholder trainer to ignore.
     public const int IgnoredMaxLevel = 999;
 
+    // Built once per game-data set (GameDataCache.Derived).
     public static IReadOnlyList<TrainerShop> Enumerate(GameDataCache gameData)
     {
         ArgumentNullException.ThrowIfNull(gameData);
+        return gameData.Derived("trainers", () => Build(gameData));
+    }
+
+    private static List<TrainerShop> Build(GameDataCache gameData)
+    {
         var trainers = new List<TrainerShop>();
 
         JsonDocument? doc = gameData.GetRawTable("Shops");
         if (doc is null) return trainers;
 
-        Dictionary<(int, int), string> roomNames = BuildRoomNameIndex(gameData);
+        IReadOnlyDictionary<(int Map, int Room), string> roomNames = RoomNameIndex.For(gameData);
 
         foreach (JsonElement el in doc.RootElement.EnumerateArray())
         {
@@ -201,25 +207,6 @@ public static class TrainerCatalog
             if (cheapest is null || t.Markup < cheapest) cheapest = t.Markup;
         }
         return cheapest;
-    }
-
-    // Build a (map, room) → room-name index from the active set's Rooms table.
-    // Used only for the display label; an absent/odd Rooms table just yields
-    // empty names (the row still lists by shop name + coords).
-    private static Dictionary<(int, int), string> BuildRoomNameIndex(GameDataCache gameData)
-    {
-        var index = new Dictionary<(int, int), string>();
-        JsonDocument? rooms = gameData.GetRawTable("Rooms");
-        if (rooms is null) return index;
-
-        foreach (JsonElement el in rooms.RootElement.EnumerateArray())
-        {
-            int map = GetInt(el, "Map Number");
-            int room = GetInt(el, "Room Number");
-            if (map <= 0 || room <= 0) continue;
-            index[(map, room)] = GetString(el, "Name");
-        }
-        return index;
     }
 
     private static int GetInt(JsonElement el, string prop) =>

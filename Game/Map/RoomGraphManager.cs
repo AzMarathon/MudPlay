@@ -325,7 +325,7 @@ public sealed class RoomGraphManager
         if (string.IsNullOrWhiteSpace(setName))
         {
             _log?.Log(LogSeverity.Info, "RoomGraph", "No active game-data set; room graph cleared.");
-            GraphReloaded?.Invoke();
+            Reloaded();
             return;
         }
 
@@ -334,7 +334,7 @@ public sealed class RoomGraphManager
         {
             _log?.Log(LogSeverity.Warn, "RoomGraph",
                 $"Active set '{setName}' has no Rooms.json; room graph is empty.");
-            GraphReloaded?.Invoke();
+            Reloaded();
             return;
         }
 
@@ -495,7 +495,7 @@ public sealed class RoomGraphManager
             $"Loaded {parsed} room(s) from '{setName}' Rooms.json"
             + (skipped > 0 ? $" ({skipped} malformed row(s) skipped)." : "."));
 
-        GraphReloaded?.Invoke();
+        Reloaded();
     }
 
     // Newhaven's Arena (1/2150) admits only levels 1-3. That block lives on the
@@ -534,8 +534,54 @@ public sealed class RoomGraphManager
     private static readonly RoomKey Arena = new(1, 2150);
     private static readonly RoomKey ArenaApproach = new(1, 2146);
 
+    // Results worked out from the whole graph (the rooms with level gates, with
+    // teleports), kept until it's rebuilt. Each took 150 ms on a 57,000-room graph
+    // and was redone by every Navigation open; the graph only changes when the
+    // game-data set loads. build runs outside the lock (a background warm-up may
+    // ask too); a result built across a rebuild is returned but not kept.
+    private readonly object _derivedLock = new();
+    private readonly Dictionary<string, object> _derived = new(StringComparer.Ordinal);
+    private long _derivedGeneration;
+
+    public T Derived<T>(string key, Func<T> build) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        long generation;
+        lock (_derivedLock)
+        {
+            if (_derived.TryGetValue(key, out object? hit)) return (T)hit;
+            generation = _derivedGeneration;
+        }
+        T value = build();
+        lock (_derivedLock)
+        {
+            if (generation != _derivedGeneration) return value;
+            if (_derived.TryGetValue(key, out object? won)) return (T)won;
+            _derived[key] = value;
+            return value;
+        }
+    }
+
+    private void ForgetDerived()
+    {
+        lock (_derivedLock)
+        {
+            _derived.Clear();
+            _derivedGeneration++;
+        }
+    }
+
+    // The graph is whole again: anything worked out while it was being rebuilt is
+    // dropped before listeners rebuild theirs.
+    private void Reloaded()
+    {
+        ForgetDerived();
+        GraphReloaded?.Invoke();
+    }
+
     private void Clear()
     {
+        ForgetDerived();
         _rooms.Clear();
         _byName.Clear();
         _byNameAndExits.Clear();

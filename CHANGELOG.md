@@ -1,5 +1,11 @@
 # Version history
 
+## 3.142.13
+
+- Navigation opens faster: its trainer, teleport and level-gate rooms are worked out once per game-data set, not on every open
+- Settings opens faster: the bank, trainer and time-zone lists are built once instead of on every open
+- Reading a game-data table no longer holds up other lookups while it parses
+
 ## 3.142.10
 
 - Auto-collect logs also writes a performance log: every UI hitch (how long, what was running) and a per-minute summary of work timings, CPU, memory and GC
