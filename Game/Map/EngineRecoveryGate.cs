@@ -925,7 +925,7 @@ public sealed class EngineRecoveryGate
 
         Direction lastSent = _executedSinceAnchor[^1];
         _executedSinceAnchor.RemoveAt(_executedSinceAnchor.Count - 1);
-        _lastBacktrackReverse = Reverse(lastSent);
+        _lastBacktrackReverse = lastSent.Opposite();
         _tier3Phase = Tier3Phase.AwaitingLanding;
 
         _log?.Log(LogSeverity.Info, LogSource,
@@ -1147,21 +1147,6 @@ public sealed class EngineRecoveryGate
             $"tier {prev} → {target} ({reason}); engine={_engine?.Name ?? "?"} anchor={(_anchor?.ToString() ?? "(none)")} executed={_executedSinceAnchor.Count}");
         TierChanged?.Invoke(new RecoveryTierChangedEvent(prev, target, reason));
     }
-
-    private static Direction Reverse(Direction d) => d switch
-    {
-        Direction.N  => Direction.S,
-        Direction.S  => Direction.N,
-        Direction.E  => Direction.W,
-        Direction.W  => Direction.E,
-        Direction.NE => Direction.SW,
-        Direction.SW => Direction.NE,
-        Direction.NW => Direction.SE,
-        Direction.SE => Direction.NW,
-        Direction.U  => Direction.D,
-        Direction.D  => Direction.U,
-        _ => d,
-    };
 }
 
 // Three tiers the gate cycles through.

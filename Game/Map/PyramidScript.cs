@@ -27,12 +27,14 @@ public enum PyramidStepKind
 
 // One scripted step. Dir is the travel direction (ignored for PushBlock).
 // Word is the sphinx keyword (AskSphinx only). Bashable distinguishes an F3
-// door you can bash from one you must wait out (the 1000-picklock doors).
+// door you can bash from one you must wait out (the 1000-picklock doors). Gate
+// marks an F1 move through a gate that only the push block before it opens.
 public readonly record struct PyramidStep(
     PyramidStepKind Kind,
     Direction Dir = Direction.N,
     string? Word = null,
-    bool Bashable = false);
+    bool Bashable = false,
+    bool Gate = false);
 
 public static class PyramidScript
 {
@@ -75,22 +77,25 @@ public static class PyramidScript
         };
     }
 
-    // Floors climbed blind/fast with no per-step confirmation: F1 is timed (must
+    // Floors climbed without stopping for fights or rests: F1 is timed (must
     // sprint) and F2's room spells deal escalating damage the longer you dwell.
     public static bool IsBlindFast(PyramidFloor floor)
         => floor is PyramidFloor.F1 or PyramidFloor.F2;
 
     // The canned scripts, in the source form of the hand-drawn map. A bare cardinal
-    // is a Move (or, on F3, a bashable Door); `PB` = push block; `W<dir>` = an F3
-    // wait-for-timer door (1000 picklocks, unbashable); `K<dir>` = the F3
-    // golden-lion-key door; `sphinx:<word>` = ask the sphinx then ascend.
+    // is a Move (or, on F3, a bashable Door); `PB` = push block; `G<dir>` = the move
+    // through the gate the last push block opened; `W<dir>` = an F3 wait-for-timer
+    // door (1000 picklocks, unbashable); `K<dir>` = the F3 golden-lion-key door;
+    // `sphinx:<word>` = ask the sphinx then ascend.
     // Floor 1 ends `s,s,w,n`: the map's own line drops one `s` there, and following it
     // stops a room short of the fire sphinx.
     private const string F1Raw =
-        "s,w,n,n,n,e,s,e,PB,w,n,w,s,s,s,e,n,e,s,e,n,n,n,n,e,n,PB,s,w,s,w,n,n,w,n,w,n,n,n,n,e,e,PB," +
-        "w,w,s,s,e,s,e,s,e,n,n,w,n,e,n,e,e,e,e,e,s,e,n,e,s,s,w,w,w,n,w,w,s,w,s,s,e,n,e,e,e,PB," +
-        "w,w,w,s,w,n,n,e,n,e,e,s,e,e,s,s,e,s,s,s,s,s,s,w,w,n,e,n,n,w,s,w,PB," +
-        "e,n,e,n,w,n,n,w,w,s,s,w,n,sphinx:fire";
+        "s,w,n,n,n,e,s,e,PB," +
+        "w,n,w,s,s,s,e,n,e,s,e,Gn,n,n,n,e,n,PB," +
+        "s,w,s,w,n,n,Gw,n,w,n,n,n,n,e,e,PB," +
+        "w,w,s,s,e,s,e,s,e,n,n,w,Gn,e,n,e,e,e,e,e,s,e,n,e,s,s,w,w,w,n,w,w,s,w,s,s,e,n,e,e,e,PB," +
+        "w,w,w,s,w,n,n,e,n,e,e,s,e,e,Gs,s,e,s,s,s,s,s,s,w,w,n,e,n,n,w,s,w,PB," +
+        "e,n,e,n,Gw,n,n,w,w,s,s,w,n,sphinx:fire";
 
     private const string F2Raw =
         "s,e,s,e,e,n,w,n,n,n,e,n,e,n,w,w,w,w,s,w,n,w,w,w,s,s,s,e,e,s,s,w,n,sphinx:sun";
@@ -199,6 +204,11 @@ public static class PyramidScript
             if (tok.Length == 2 && tok[0] == 'W')   // wait-door: unbashable, wait for the timer
             {
                 steps.Add(new PyramidStep(PyramidStepKind.Door, ParseDir(tok[1]), Bashable: false));
+                continue;
+            }
+            if (tok.Length == 2 && tok[0] == 'G')   // through a pushed-block gate
+            {
+                steps.Add(new PyramidStep(PyramidStepKind.Move, ParseDir(tok[1]), Gate: true));
                 continue;
             }
             if (tok.Length == 2 && tok[0] == 'K')   // golden-lion-key door

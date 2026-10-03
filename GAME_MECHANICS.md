@@ -4558,6 +4558,8 @@ Among protectable hazards, a further split governs whether the navigator may off
   within ~5 min of the first firepit `up` or scatter. Lateral gates open with `push block` (encoded
   `push block, push square block, move block`; broadcast
   `<leader> pushes the stone block, and it slides into the wall.`). Never stop on F1.
+  [NEEDS CONFIRMATION]: what does the pusher see, and what does a second push of a block already
+  pushed print?
 - **F1 route** *([OBSERVED] 2026-10-03, game data — `data-Paradigm-1.9.1`, `data-v1.11p` and two other
   imported sets identical; MegaMUD's own path file for the leg agrees)*. From `1800`: **126 moves and 5
   push blocks**, ending `…w,w,s,s,w,n` into the fire sphinx's room `1920`
@@ -4629,6 +4631,20 @@ Among protectable hazards, a further split governs whether the navigator may off
     so the climb runs a **canned per-floor script**; game-data room numbers position / detect floor /
     read door state.
   - Scatter detection (**Fall/scatter**) halts the climb and reports.
+  - `PyramidSolver` **sends one move and waits for the room tracker's answer** (arrival, refusal, or an
+    unexpected room) before the next, on every floor. Sending ahead gains nothing: each move's own delay
+    holds the next command at the server on both realms (*Movement & navigation → Per-hop movement
+    speed*), and a queued move can't be taken back when the one before it fails. `PyramidScript` carries
+    the room every step starts from, so each step is checked against the tracked room first.
+  - **Client policy — what the climb waits for.** Every floor: the user's Pause, Auto-All, being held,
+    mortally wounded or afraid. The firepit and F3–F5: every movement gate the walker honours (combat,
+    rests, party waits, pickups). F1 and F2 walk on through those (**F1 — timed**, **F2 — chaos**).
+  - **A shut gate on F1** (the move through it is refused) sends the climb back along the script to the
+    block, to push again; twice per climb, then it fails.
+  - **A move that draws neither an arrival nor a refusal** is asked about: Paradigm's `rm`
+    (*Movement & navigation → `rm` — authoritative position (Paradigm only)*) or a sysop's locate. With
+    neither, or no reply, the move is taken as landed, since the game answers every refused move with a
+    line; five such guesses end the climb.
   - **Pre-flight timer gate:** **Stock:** `Heavy` (>66%) leader → refuse. **Paradigm:** estimate
     `126·per-move + 6·250 ms` via `MovementSpeedCalculator` (live enc% + quickness, floored at the 1 s
     cap); over 5 min → refuse (crosses ~>80% enc, no quickness). Drives **leader/solo only**.

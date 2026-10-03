@@ -6547,7 +6547,11 @@ public sealed class AppServices
             leaderName: () => PartyState.SelfIsLeader ? PartyState.LeaderName : null,
             enabled: () => Settings.Current.PyramidSolverEnabled,
             coordinator: MovementCoordinator,
-            isPartyMember: IsPartyMemberName);
+            isPartyMember: IsPartyMemberName,
+            // Paradigm's `rm`, or a sysop's locate where that is the power to hand.
+            askPosition: (reason, resolved, failed) =>
+                ParadigmResync.RequestResyncOnce(reason, resolved, failed)
+                || SysopLocate.RequestLocateOnce(reason, resolved, failed, forRecovery: true));
         Walker.SetPyramidSolver(PyramidSolver);
         // Data-driven boat routing. When a walk's goal is cheaper (or only)
         // reachable by a sea-captain sailing, the planner stitches the two land
@@ -7270,6 +7274,11 @@ public sealed class AppServices
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
+        // A pyramid climb counts as navigation running: the toolbar's Pause holds it
+        // on the user gate and Stop ends it.
+        MovementControl.SetClimbHooks(
+            active: () => PyramidSolver.Active, held: () => PyramidSolver.IsHeld, stop: PyramidSolver.Cancel);
+        PyramidSolver.StateChanged += MovementControl.NoteClimbStateChanged;
 
         // Gear driven by movement + room, for the While Moving / Bossing sets. Both
         // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).

@@ -129,6 +129,40 @@ public sealed class PyramidScriptTests
         }
     }
 
+    // The moves marked as gates are exactly the route's hidden exits, and from each
+    // one the script can be walked backwards to the block that opens it — the way the
+    // solver goes when it finds the gate shut.
+    [Fact]
+    public void F1_Gates_AreTheHiddenExits_AndCanBeWalkedBackToTheirBlock()
+    {
+        var steps = PyramidScript.Steps(PyramidFloor.F1);
+        IReadOnlyList<int> from = PyramidScript.FromRooms(PyramidFloor.F1)!;
+        int gates = 0;
+        for (int i = 0; i < steps.Count; i++)
+        {
+            if (steps[i].Kind != PyramidStepKind.Move) continue;
+            bool hidden = PyramidRooms.ExitCells[from[i]][steps[i].Dir.ToString()].Contains("Hidden/Needs");
+            Assert.Equal(hidden, steps[i].Gate);
+            if (!hidden) continue;
+            gates++;
+
+            int push = i - 1;
+            while (push >= 0 && steps[push].Kind != PyramidStepKind.PushBlock) push--;
+            Assert.True(push >= 0, $"gate at step {i + 1} has no push block before it");
+            int room = from[i];
+            for (int j = i - 1; j > push; j--)
+            {
+                Assert.Equal(PyramidStepKind.Move, steps[j].Kind);
+                Assert.False(steps[j].Gate);
+                int? back = PyramidRooms.Target(room, steps[j].Dir.Opposite());
+                Assert.True(back == from[j], $"step {j + 1} can't be walked back from 12/{room}");
+                room = back!.Value;
+            }
+            Assert.Equal(from[push], room);
+        }
+        Assert.Equal(5, gates);
+    }
+
     // The door classes the F3 script assigns are the game data's: a wait door is a
     // 1000-picklock door, the key door takes the golden lion key, the rest are plain.
     [Fact]

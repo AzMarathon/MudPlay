@@ -26,44 +26,65 @@ public interface IPyramidSolver
 // sphinx `remoteaction` teleports BfsMapper never plans through (see
 // GAME_MECHANICS.md "Great Pyramid puzzle climb" and PyramidScript).
 //
-// The route is a canned per-floor script (PyramidScript), validated move-for-move
-// against game data. The solver plays it floor by floor from wherever the tracker
-// currently sits, pacing by floor: F1/F2 are blind-fast (F1 is timed; F2's room
-// spells escalate the longer you dwell), F3/F4/F5 are paced. F3 doors are walked
-// when open, bashed when a lesser door is closed, or waited out when a 1000-picklock
-// door is closed. It stops at 12/2085 — the `e` sphinx into the Tomb, Pharaoh
-// Rastep, and the Dao Lord are player-handled.
+// The route is a canned per-floor script (PyramidScript) that also names the room
+// each step starts from. The solver sends one move and waits for the room tracker to
+// say where it led — the arrival, a refusal, or a room it didn't expect — before the
+// next. Waiting costs nothing: the game holds each further command until the last
+// move's own delay has run out, on both realms, so sending ahead only queues moves
+// that can no longer be taken back when one of them fails.
 //
-// v1 drives the LEADER only; party recovery (heals, the floating-key kill, F4
-// hold-person) stays human/party-handled. A scatter (landing back in a Scorched
-// Cavern / desert room) or an exhausted step budget halts the climb and reports
-// through the walker like any other route failure.
+// F1 is timed and F2's room spells hurt more the longer you stand in them, so those
+// two walk on through fights and rests; F3/F4/F5 hold for everything the walker
+// would. It stops at 12/2085 — the `e` sphinx into the Tomb, Pharaoh Rastep, and the
+// Dao Lord are player-handled.
+//
+// It drives the LEADER only; heals and the floating-key kill stay party-handled. A
+// scatter (landing back in a Scorched Cavern / desert room), a death, or a position
+// it can't recover halts the climb and reports through the walker like any other
+// route failure.
 public sealed class PyramidSolver : IPyramidSolver, IDisposable
 {
     private const string LogSource = "Pyramid";
 
-    // Per-step pacing. Blind-fast floors fire the next step after a short settle;
-    // paced floors wait a round-time before advancing.
-    //
-    // BlindSettle is the STOCK blind-floor pace — stock's below-heavy hop is ~0.5-0.6s
-    // (and the stock preflight refuses Heavy leaders outright, so every stock climber
-    // is in that band), so 400ms stays a touch under the real hop for a small
-    // type-ahead lead without flooding. Paradigm doesn't use this — its ~1s hop floor
-    // made a fixed short settle fire ~3x too fast and desync (report -133835), so it
-    // paces at the real per-hop time in SettleFor instead.
-    private static readonly TimeSpan BlindSettle = TimeSpan.FromMilliseconds(400);
-    private static readonly TimeSpan PacedSettle = TimeSpan.FromMilliseconds(700);
+    // After an arrival on a held floor the next step waits this long, so the room's
+    // occupants and a hold cast on a member are read — and their gates raised —
+    // before we walk on. F4 waits longer: a member left behind on the footpath can't
+    // simply follow. F1/F2 don't wait at all.
+    private static readonly TimeSpan PacedDwell = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan Floor4Dwell = TimeSpan.FromMilliseconds(1000);
 
-    // Floor 4 (the footpath) steps slower than the other paced floors for react
-    // time — undead-priest holds and hostiles need room to be handled between moves.
-    private static readonly TimeSpan Floor4Settle = TimeSpan.FromMilliseconds(1200);
+    // A push block draws no line the pusher is known to see, so the step after it
+    // simply follows a beat later.
+    private static readonly TimeSpan ActionSettle = TimeSpan.FromMilliseconds(PyramidScript.ActionMillis);
 
-    // While a paced step is blocked (combat / held / party-hold) the solver
-    // re-checks on this interval, up to a cap (a genuinely stuck climb fails
-    // rather than hanging — but the cap is generous so a real fight/hold rides out).
-    private static readonly TimeSpan BlockedRecheck = TimeSpan.FromMilliseconds(1000);
-    private const int MaxBlockedTicks = 240;   // ~4 min of continuous block
+    // While held (a gate, a held member) the solver re-checks on this interval; a
+    // gate change re-checks at once. A member's hold wears off on a private line we
+    // never see, so it is taken as gone after the cap.
+    private static readonly TimeSpan HoldRecheck = TimeSpan.FromMilliseconds(1000);
     private const int HoldCapTicks = 20;       // ~20 s: hold person #66 (Dur 4) has worn off by now
+
+    // A refused move is tried again after this, up to the cap.
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(1000);
+    private const int MaxMoveRetries = 5;
+
+    // A gate that stays shut sends us back to its block to push again, this often.
+    private const int MaxGateRewinds = 2;
+
+    // A move that draws neither an arrival nor a refusal within this is stalled.
+    // Paradigm stretches it for a heavy character's slow hop.
+    private static readonly TimeSpan MinStall = TimeSpan.FromSeconds(4);
+    private const double StallHops = 3;
+
+    // With nothing to ask, a stalled move is taken as landed (the game answers
+    // every refused move with a line). That is a guess, so only this many per climb.
+    private const int MaxAssumedLandings = 5;
+
+    // A throttled `rm` is asked once more after the resolver's own spacing.
+    private static readonly TimeSpan ResyncRetryDelay = TimeSpan.FromMilliseconds(2200);
+
+    // A tracker still mid-move with nothing of ours in flight (a hand-typed step)
+    // gets this many short waits to settle before we ask where we are.
+    private const int MaxPendingWaits = 6;
 
     // A sphinx that never opens the ceiling within this window gets its `ask`
     // re-sent (a dropped line), up to a small retry cap, before the climb gives up.
@@ -72,13 +93,17 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     // A single door that never opens (wait door whose timer we keep missing, or a
     // bash that never lands) gets this many look/bash cycles before failing.
+    private static readonly TimeSpan DoorPoll = TimeSpan.FromMilliseconds(700);
     private const int MaxDoorPolls = 40;
 
-    // Whole-climb runaway guard — the real climb is ~190 steps; well past that means
-    // something desynced.
-    private const int MaxTotalSteps = 400;
+    // Whole-climb runaway guard — the real climb is ~230 commands; well past that
+    // means something is going round in circles.
+    private const int MaxTotalSends = 700;
 
-    private enum Phase { Idle, Climbing, AwaitingSphinx, AwaitingDoor, Done }
+    private enum Phase { Idle, Climbing, AwaitingMove, AwaitingSphinx, AwaitingDoor, Held, Resyncing, Done }
+
+    // One move outside the script: the entry `up`, or a step back toward a block.
+    private readonly record struct Detour(Direction Dir, int From, int To);
 
     private readonly RoomTracker _tracker;
     private readonly AutoWalkManager _walker;
@@ -89,8 +114,11 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private readonly Func<bool> _canDrive;      // leader or solo — else the solver must not steer
     private readonly Func<string?> _leaderName; // for the F3 @party give consolidation
     private readonly Func<bool> _enabled;       // Settings → Other master toggle
-    private readonly MovementCoordinator? _coordinator; // combat / self-held movement gate
+    private readonly MovementCoordinator? _coordinator;
     private readonly Func<string, bool> _isPartyMember; // is this name a party member (for hold detection)
+    // Asks the game where we are (Paradigm `rm`, a sysop's locate): reason, answer,
+    // no-answer. False when it couldn't ask.
+    private readonly Func<string, Action<RoomKey>, Action, bool>? _askPosition;
     private readonly Action<Action> _post;
 
     private readonly DispatcherTimer? _settleTimer;
@@ -105,7 +133,23 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private int _stepIndex;
     private int _sphinxRetries;
     private int _doorPolls;
-    private int _totalSteps;
+    private int _totalSends;
+
+    // The one move on the wire whose outcome we're waiting for, and the room it
+    // should lead to.
+    private bool _moveInFlight;
+    private int _flightTarget;
+
+    // The floor whose sphinx has opened its ceiling and whose `up` is still to take.
+    private PyramidFloor _ceilingOpenOn = PyramidFloor.None;
+
+    private readonly Queue<Detour> _detour = new();
+    private int _moveRetries;
+    private int _gateRewinds;
+    private int _assumedLandings;
+    private int _pendingWaits;
+    private bool _resyncRetried;
+    private string? _holdReason;
 
     // Set when the settle timer ticks — the one continuation to run then. Keeps the
     // "what happens next" explicit per schedule instead of guessing from phase.
@@ -132,10 +176,6 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // cleared on "You can move again!" (both are lines we DO see for ourselves).
     private bool _selfHeld;
 
-    // Re-check ticks while a paced step is blocked (combat / held). Caps how long we
-    // wait before failing rather than spinning forever.
-    private int _blockedTicks;
-
     // Re-check ticks a party-member hold has persisted; at the cap we assume it wore
     // off (we can't see a member's private wear-off) and clear the held set.
     private int _holdTicks;
@@ -145,15 +185,26 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     public RoomKey? Goal => Active ? _goal : (RoomKey?)null;
     public string FloorName => _floor.ToString();
     public string PhaseName => _phase.ToString();
-    public int StepsDriven => _totalSteps;
+    public int StepsDriven => _totalSends;
     public int ScriptStep => _stepIndex + 1;
     public int ScriptSteps => PyramidScript.Steps(_floor).Count;
-    // The room the current step is scripted to start from, to set against the
-    // tracker's room in a report.
-    public RoomKey? ExpectedRoom => PyramidScript.FromRooms(_floor) is { } from && _stepIndex < from.Count
-        ? new RoomKey(PyramidScript.PyramidMap, from[_stepIndex])
+    // The room the next move is scripted to start from, to set against the tracker's
+    // room in a report.
+    public RoomKey? ExpectedRoom => ExpectedRoomNumber() is var room and > 0
+        ? new RoomKey(PyramidScript.PyramidMap, room)
         : null;
     public bool Enabled => _enabled();
+    // Waiting on a gate or a held member rather than walking.
+    public bool IsHeld => Active && _phase == Phase.Held;
+    public string? HoldReasonText => IsHeld ? _holdReason : null;
+    public RoomKey? MoveInFlightTo => _moveInFlight ? new RoomKey(PyramidScript.PyramidMap, _flightTarget) : null;
+    public int MoveRetries => _moveRetries;
+    public int GateRewinds => _gateRewinds;
+    public int AssumedLandings => _assumedLandings;
+
+    // Raised when the climb starts, ends, or goes into or out of a hold, so the
+    // toolbar's run-state follows it.
+    public event Action? StateChanged;
 
     public PyramidSolver(
         RoomTracker tracker,
@@ -166,9 +217,10 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<string?>? leaderName = null,
         Func<bool>? enabled = null,
         MovementCoordinator? coordinator = null,
-        Func<string, bool>? isPartyMember = null)
+        Func<string, bool>? isPartyMember = null,
+        Func<string, Action<RoomKey>, Action, bool>? askPosition = null)
         : this(tracker, walker, snapshot, quickness, log, useTimer: true, post: null,
-               isParadigm, canDrive, leaderName, enabled, coordinator, isPartyMember) { }
+               isParadigm, canDrive, leaderName, enabled, coordinator, isPartyMember, askPosition) { }
 
     internal PyramidSolver(
         RoomTracker tracker,
@@ -183,7 +235,8 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         Func<string?>? leaderName = null,
         Func<bool>? enabled = null,
         MovementCoordinator? coordinator = null,
-        Func<string, bool>? isPartyMember = null)
+        Func<string, bool>? isPartyMember = null,
+        Func<string, Action<RoomKey>, Action, bool>? askPosition = null)
     {
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(walker);
@@ -202,6 +255,12 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _enabled = enabled ?? (() => true);
         _coordinator = coordinator;
         _isPartyMember = isPartyMember ?? (_ => false);
+        _askPosition = askPosition;
+
+        _tracker.StateChanged += OnTrackerStateChanged;
+        _tracker.MoveBlocked += OnTrackerMoveBlocked;
+        _tracker.PlayerDeathObserved += OnPlayerDied;
+        if (_coordinator is not null) _coordinator.GatesChanged += OnGatesChanged;
 
         if (useTimer)
         {
@@ -243,16 +302,25 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _stepIndex = 0;
         _sphinxRetries = 0;
         _doorPolls = 0;
-        _totalSteps = 0;
+        _totalSends = 0;
         _settleCont = null;
         _awaitingDoorLook = false;
         _keyGrabber = null;
         _heldMembers.Clear();
         _selfHeld = false;
-        _blockedTicks = 0;
         _holdTicks = 0;
+        _moveInFlight = false;
+        _ceilingOpenOn = PyramidFloor.None;
+        _detour.Clear();
+        _moveRetries = 0;
+        _gateRewinds = 0;
+        _assumedLandings = 0;
+        _pendingWaits = 0;
+        _resyncRetried = false;
+        _holdReason = null;
         Active = true;
         _log?.Log(LogSeverity.Info, LogSource, $"engaging pyramid solver for {destination.Map}/{destination.Room}");
+        StateChanged?.Invoke();
         // Defer off the walker's call stack — TryBegin runs inside WalkToImmediate.
         _post(Start);
         return true;
@@ -292,111 +360,87 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
             _log?.Log(LogSeverity.Info, LogSource, $"pre-flight ok: {pre.Reason}");
         }
 
-        _phase = Phase.Climbing;
+        _floor = at;
+        _stepIndex = 0;
+        _log?.Log(LogSeverity.Info, LogSource, $"climb starts at 12/{room} ({at})");
         if (at == PyramidFloor.Firepit)
         {
             // Enter the pyramid: `up` casts the timer and drops us on F1.
             _log?.Log(LogSeverity.Info, LogSource, "entering pyramid from firepit (up)");
-            SendMove(Direction.U);
-            ScheduleSettle(PacedSettle, () => StartFloor(PyramidFloor.F1));
+            _detour.Enqueue(new Detour(Direction.U, room, PyramidScript.FromRooms(PyramidFloor.F1)![0]));
         }
-        else
-        {
-            StartFloor(at);
-        }
+        Drive();
     }
 
     // ----- step driving ----------------------------------------------
 
-    private void StartFloor(PyramidFloor floor)
+    // Take the next step from where the tracker has us: hold if something says to,
+    // re-anchor the script if the room isn't the one the step starts from, then send.
+    private void Drive()
     {
         if (!Active) return;
-        _floor = floor;
-        _stepIndex = 0;
-        _doorPolls = 0;
-        _phase = Phase.Climbing;
-        // A climb picked up part-way along a floor starts at the step scripted from
-        // the room we're standing in, not at the floor's entry.
-        ResyncToTrackedRoom(floorStart: true);
-        _log?.Log(LogSeverity.Info, LogSource,
-            _stepIndex == 0 ? $"driving {floor}" : $"driving {floor} from step {_stepIndex + 1}");
-        // Surface the per-step pace for the timed/blind floors so a bug report can be
-        // checked against the movetime the solver actually used (report -133835).
-        if (PyramidScript.IsBlindFast(floor))
+        StopTimer();
+
+        if (HoldReason() is { } hold)
         {
-            TimeSpan pace = SettleFor(floor);
-            _log?.Log(LogSeverity.Info, LogSource,
-                $"{floor} blind pace = {pace.TotalMilliseconds:0} ms/step"
-                + (_isParadigm()
-                    ? $" (Paradigm hop for carry {_snapshot().Encumbrance.Percentage}%, quickness {_quickness()}, +10% lag buffer)"
-                    : " (stock fixed)"));
+            EnterHold(hold);
+            return;
         }
-        DriveCurrent();
-    }
+        LeaveHold();
 
-    // Drive the step at _stepIndex (does not advance). Floor complete → next floor.
-    private void DriveCurrent()
-    {
-        if (!Active) return;
-
-        // Paced floors (F3/F4/F5) wait out combat, a held leader, or held party
-        // members before stepping. F1/F2 never wait — F1 is timed and F2's room
-        // spells escalate the longer you linger, so both rush blind.
-        if (IsPacedFloor(_floor) && MovementBlocked())
+        RoomState st = _tracker.State;
+        if (st.Confidence == RoomConfidence.Confirmed && st.CurrentRoom is { } cur)
         {
-            // A party member's hold wears off on a private line we never see, so
-            // after the cap assume it's gone rather than burn the whole block budget.
-            if (_heldMembers.Count > 0 && ++_holdTicks >= HoldCapTicks)
+            _pendingWaits = 0;
+            // A floor whose script is spent is anchored too: that is what moves the
+            // climb on to the floor its end room belongs to.
+            bool here = cur.Key.Map == PyramidScript.PyramidMap && cur.Key.Room == ExpectedRoomNumber()
+                && (_detour.Count > 0 || _stepIndex < PyramidScript.Steps(_floor).Count);
+            if (!here && !AnchorTo(cur.Key)) return;
+            if (cur.Key == _goal)
             {
-                _log?.Log(LogSeverity.Info, LogSource,
-                    $"held member(s) [{string.Join(", ", _heldMembers)}] assumed freed after cap");
-                _heldMembers.Clear();
-                _holdTicks = 0;
-            }
-            if (MovementBlocked())   // still blocked (combat / self-held / other holds)?
-            {
-                if (++_blockedTicks > MaxBlockedTicks)
-                {
-                    FailSolve("movement blocked too long (combat / hold)");
-                    return;
-                }
-                ScheduleSettle(BlockedRecheck, DriveCurrent);
+                Finish();
                 return;
             }
         }
-        _blockedTicks = 0;
-        if (_heldMembers.Count == 0) _holdTicks = 0;
-
-        ResyncToTrackedRoom();
-
-        if (++_totalSteps > MaxTotalSteps)
+        else if (st.Confidence == RoomConfidence.Pending && ++_pendingWaits <= MaxPendingWaits)
         {
-            FailSolve("step budget exhausted");
+            // A move that isn't ours is still landing (a hand-typed step). Let it.
+            ScheduleSettle(RetryDelay, Drive);
+            return;
+        }
+        else
+        {
+            BeginResync($"position is {st.Confidence}");
             return;
         }
 
-        var steps = PyramidScript.Steps(_floor);
-        if (_stepIndex >= steps.Count)
+        if (_detour.Count > 0)
         {
-            AdvanceFloor();
+            Detour d = _detour.Peek();
+            SendStepMove(d.Dir, d.To);
             return;
         }
 
-        PyramidStep step = steps[_stepIndex];
+        PyramidStep step = PyramidScript.Steps(_floor)[_stepIndex];
         switch (step.Kind)
         {
             case PyramidStepKind.Move:
-                SendMove(step.Dir);
-                ScheduleSettle(SettleFor(_floor), AdvanceAndDrive);
+                SendStepMove(step.Dir, RoomAfter(_stepIndex));
                 break;
 
             case PyramidStepKind.PushBlock:
+                _phase = Phase.Climbing;
+                if (!CountSend()) return;
+                _log?.Log(LogSeverity.Info, LogSource, $"{_floor} step {_stepIndex + 1}: push block at 12/{cur.Key.Room}");
                 SendCommand("push block");
-                ScheduleSettle(SettleFor(_floor), AdvanceAndDrive);
+                ScheduleSettle(ActionSettle, AdvanceAndDrive);
                 break;
 
             case PyramidStepKind.AskSphinx:
-                BeginSphinx(step.Word!);
+                // A hold that began after the sphinx answered left the way up open.
+                if (_ceilingOpenOn == _floor) SendStepMove(Direction.U, PyramidScript.EndRoom(_floor));
+                else BeginSphinx(step.Word!);
                 break;
 
             case PyramidStepKind.Door:
@@ -409,40 +453,72 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         }
     }
 
-    // Re-anchor the script on the tracker's confirmed room. Steps advance on a settle
-    // timer without confirming the move landed, so a move that didn't go through (or
-    // went through when the solver thought it hadn't) leaves the index off by one.
-    // Only acts on a Confirmed room that the script visits; a pending move or an
-    // off-path room leaves the index alone. Where the room recurs, the occurrence
-    // nearest the current index wins, earlier on a tie — being back at an
-    // already-driven step's room means that step's move didn't land. Between steps
-    // this is for the paced floors only: the blind floors send ahead of the tracker,
-    // whose room is then several moves behind the script by design. Returns true when
-    // the index moved.
-    private bool ResyncToTrackedRoom(bool floorStart = false)
+    // The room the next move starts from: the detour's when one is queued, the
+    // script's otherwise, the floor's end room once its script is spent. 0 where the
+    // floor has no script (the firepit, before the entry move is queued).
+    private int ExpectedRoomNumber()
     {
-        if (!floorStart && PyramidScript.IsBlindFast(_floor)) return false;
-        if (PyramidScript.FromRooms(_floor) is not { } from) return false;
-        RoomState st = _tracker.State;
-        if (st.Confidence != RoomConfidence.Confirmed || st.CurrentRoom is not { } cur
-            || cur.Key.Map != PyramidScript.PyramidMap)
+        if (_detour.Count > 0) return _detour.Peek().From;
+        if (PyramidScript.FromRooms(_floor) is not { } from) return 0;
+        return _stepIndex < from.Count ? from[_stepIndex] : PyramidScript.EndRoom(_floor);
+    }
+
+    // The room step i's move leads to.
+    private int RoomAfter(int i)
+    {
+        IReadOnlyList<int> from = PyramidScript.FromRooms(_floor)!;
+        return i + 1 < from.Count ? from[i + 1] : PyramidScript.EndRoom(_floor);
+    }
+
+    // Put the script on the room we're actually in: its floor, and the step scripted
+    // from it. Where a room recurs on the floor we were already driving, the
+    // occurrence nearest the current step wins, earlier on a tie — being back in an
+    // already-driven step's room means that step's move didn't land, and on F1 the
+    // earlier pass is the one that still pushes the block. Returns false when the
+    // climb ended here instead (the top, a scatter room, a room off the route).
+    private bool AnchorTo(RoomKey key)
+    {
+        if (PyramidScript.IsScatterRoom(key.Map, key.Room))
+        {
+            FailSolve($"scattered to {key.Map}/{key.Room} — climb failed");
             return false;
+        }
+        PyramidFloor floor = PyramidScript.FloorOf(key.Map, key.Room);
+        if (floor == PyramidFloor.Top)
+        {
+            Finish();
+            return false;
+        }
+        if (PyramidScript.FromRooms(floor) is not { } from)
+        {
+            FailSolve($"left the pyramid at {key.Map}/{key.Room}");
+            return false;
+        }
 
-        int room = cur.Key.Room;
-        if (_stepIndex < from.Count && from[_stepIndex] == room) return false;
-
+        int near = floor == _floor ? _stepIndex : 0;
         int best = -1;
         for (int i = 0; i < from.Count; i++)
         {
-            if (from[i] != room) continue;
-            if (best < 0 || Math.Abs(i - _stepIndex) < Math.Abs(best - _stepIndex)) best = i;
+            if (from[i] != key.Room) continue;
+            if (best < 0 || Math.Abs(i - near) < Math.Abs(best - near)) best = i;
         }
-        if (best < 0) return false;
+        if (best < 0)
+        {
+            FailSolve($"12/{key.Room} is off the climb's route on {floor}");
+            return false;
+        }
 
-        string expected = _stepIndex < from.Count ? $"12/{from[_stepIndex]}" : "the floor's end";
-        _log?.Log(LogSeverity.Info, LogSource,
-            $"{_floor} step {_stepIndex + 1} expected {expected} but the tracker has us at 12/{room} — resuming at step {best + 1}");
+        if (floor != _floor)
+            _log?.Log(LogSeverity.Info, LogSource,
+                best == 0 ? $"driving {floor}" : $"driving {floor} from step {best + 1} (12/{key.Room})");
+        else if (best != _stepIndex || _detour.Count > 0)
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"{floor} step {_stepIndex + 1} expected 12/{ExpectedRoomNumber()} but the tracker has us at 12/{key.Room} — resuming at step {best + 1}");
+
+        _floor = floor;
         _stepIndex = best;
+        _detour.Clear();
+        _moveRetries = 0;
         return true;
     }
 
@@ -450,62 +526,313 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private void AdvanceAndDrive()
     {
         _stepIndex++;
-        DriveCurrent();
+        Drive();
     }
 
-    // Completed every step on this floor. The ascension move (sphinx `u`, or F4's
-    // final `u`) already carried us up, so just re-anchor onto the next floor.
-    private void AdvanceFloor()
-    {
-        PyramidFloor next = _floor switch
-        {
-            PyramidFloor.F1 => PyramidFloor.F2,
-            PyramidFloor.F2 => PyramidFloor.F3,
-            PyramidFloor.F3 => PyramidFloor.F4,
-            PyramidFloor.F4 => PyramidFloor.F5,
-            _ => PyramidFloor.Top,
-        };
+    // ----- one move at a time ----------------------------------------
 
-        if (next == PyramidFloor.Top)
+    private bool CountSend()
+    {
+        if (++_totalSends <= MaxTotalSends) return true;
+        FailSolve("step budget exhausted");
+        return false;
+    }
+
+    private void SendStepMove(Direction dir, int target)
+    {
+        if (!CountSend()) return;
+        _moveInFlight = true;
+        _flightTarget = target;
+        _phase = Phase.AwaitingMove;
+        _log?.Debug(LogSource, $"{_floor} step {_stepIndex + 1}: {dir.ToToken()} → 12/{target}");
+        // Announce it as ours, so its echo isn't read as a hand-typed step that
+        // pauses navigation.
+        _tracker.NoteMoveSent(dir);
+        Send(AutoWalkManager.EncodeMove(dir));
+        if (_moveInFlight) ScheduleSettle(StallAfter(), OnMoveStalled);
+    }
+
+    private TimeSpan StallAfter()
+    {
+        if (!_isParadigm()) return MinStall;
+        double hop = PyramidPreflight.PacedPerMoveMs(_snapshot().Encumbrance.Percentage, _quickness());
+        return TimeSpan.FromMilliseconds(Math.Max(MinStall.TotalMilliseconds, hop * StallHops));
+    }
+
+    private void OnTrackerStateChanged(RoomTransition t)
+    {
+        if (!Active || _phase == Phase.Resyncing) return;
+        // Between moves the next Drive reads the room for itself.
+        if (!_moveInFlight || t.NewConfidence == RoomConfidence.Pending) return;
+
+        if (t.NewConfidence == RoomConfidence.Confirmed && t.NewRoom is { } now)
         {
-            Finish();   // F5 done → delivered to 2085
+            if (now.Key.Map == PyramidScript.PyramidMap && now.Key.Room == _flightTarget)
+            {
+                OnMoveLanded();
+                return;
+            }
+            // Back to sure of the room we sent it from: the move wasn't taken. A
+            // refusal raises MoveBlocked next, which handles it; a move the game
+            // dropped raises nothing more and is picked up when the stall wait ends.
+            if (t.PreviousRoom is { } was && was.Key == now.Key) return;
+            // Somewhere else. Drive re-anchors on it.
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"{_floor} step {_stepIndex + 1}: headed for 12/{_flightTarget}, landed in {now.Key.Map}/{now.Key.Room}");
+            _moveInFlight = false;
+            Drive();
             return;
         }
-        StartFloor(next);
+
+        if (t.NewConfidence == RoomConfidence.PendingRespawn) return;   // OnPlayerDied ends the climb
+        BeginResync($"the tracker went {t.NewConfidence} mid-move");
     }
 
-    private TimeSpan SettleFor(PyramidFloor floor)
+    private void OnTrackerMoveBlocked()
     {
-        if (floor == PyramidFloor.F4) return Floor4Settle;
-        if (!PyramidScript.IsBlindFast(floor)) return PacedSettle;
-        // Blind/timed floor (F1 timed, F2 damage-escalating — both fire ahead with no
-        // per-step confirmation). Paradigm's ~1s hop floor made the old fixed short
-        // settle fire ~3x too fast, flooding the type-ahead into a desync (report
-        // paradigm-20260827-133835), so Paradigm paces at the character's real
-        // lag-buffered hop time — the SAME value the F1 preflight sized its 5-min timer
-        // estimate against. Stock isn't formula-tracked, but its below-heavy hop is
-        // ~0.5-0.6s (Heavy leaders are preflight-refused), so the flat BlindSettle
-        // (400ms) stays a touch under it without flooding.
-        if (!_isParadigm()) return BlindSettle;
-        double ms = PyramidPreflight.PacedPerMoveMs(_snapshot().Encumbrance.Percentage, _quickness());
-        return TimeSpan.FromMilliseconds(ms);
+        if (!Active || _phase == Phase.Resyncing || !_moveInFlight) return;
+        OnMoveRefused();
     }
 
-    // Floors where the solver waits on combat / holds (F1/F2 rush blind).
-    private static bool IsPacedFloor(PyramidFloor f)
-        => f is PyramidFloor.F3 or PyramidFloor.F4 or PyramidFloor.F5;
+    private void OnMoveLanded()
+    {
+        StopTimer();
+        _moveInFlight = false;
+        _moveRetries = 0;
+        if (_detour.Count > 0) _detour.Dequeue();
+        else _stepIndex++;
 
-    // Movement should pause: in combat, the leader held, or any party member held.
-    // Combat + leader-held ride the shared MovementCoordinator gates (the walker's
-    // combat gate + SelfHeldResponder's Held gate); party-member holds are the
-    // solver's own line-driven set. _selfHeld is a belt-and-suspenders read of our
-    // own hold-person applied line in case the gate isn't asserted.
-    private bool MovementBlocked()
-        => _selfHeld
-        || _heldMembers.Count > 0
-        || (_coordinator is { } c
-            && (c.IsGateAsserted(MovementCoordinator.CombatGate)
-             || c.IsGateAsserted(MovementCoordinator.HeldGate)));
+        TimeSpan dwell = DwellFor(_floor);
+        _phase = Phase.Climbing;
+        if (dwell > TimeSpan.Zero) ScheduleSettle(dwell, Drive);
+        else Drive();
+    }
+
+    private static TimeSpan DwellFor(PyramidFloor floor) => floor switch
+    {
+        PyramidFloor.F4 => Floor4Dwell,
+        PyramidFloor.F3 or PyramidFloor.F5 => PacedDwell,
+        _ => TimeSpan.Zero,
+    };
+
+    // The game refused the move (or dropped it). The tracker has un-counted it, so
+    // we still stand where it was sent from.
+    private void OnMoveRefused()
+    {
+        StopTimer();
+        _moveInFlight = false;
+        _phase = Phase.Climbing;
+
+        // Held, paused, paralysed: Drive waits it out and sends the step again.
+        if (HoldReason() is not null)
+        {
+            Drive();
+            return;
+        }
+
+        var steps = PyramidScript.Steps(_floor);
+        PyramidStep? step = _detour.Count == 0 && _stepIndex < steps.Count ? steps[_stepIndex] : null;
+        // The way up shut again before we took it: the retry asks the sphinx afresh.
+        if (step is { Kind: PyramidStepKind.AskSphinx }) _ceilingOpenOn = PyramidFloor.None;
+
+        if (step is { Kind: PyramidStepKind.Move, Gate: true })
+        {
+            RewindToBlock();
+            return;
+        }
+        if (step is { Kind: PyramidStepKind.Door or PyramidStepKind.KeyDoor })
+        {
+            // The door shut again between the look and the move; work it afresh.
+            ScheduleSettle(DoorPoll, Drive);
+            return;
+        }
+
+        if (++_moveRetries > MaxMoveRetries)
+        {
+            FailSolve($"{_floor} step {_stepIndex + 1}: the move out of 12/{ExpectedRoomNumber()} keeps being refused");
+            return;
+        }
+        _log?.Log(LogSeverity.Info, LogSource,
+            $"{_floor} step {_stepIndex + 1}: move refused — retry {_moveRetries}/{MaxMoveRetries}");
+        ScheduleSettle(RetryDelay, Drive);
+    }
+
+    // The gate ahead is shut: its block's push didn't take. Walk the script
+    // backwards to the block and play it forward again from the push.
+    private void RewindToBlock()
+    {
+        var steps = PyramidScript.Steps(_floor);
+        IReadOnlyList<int> from = PyramidScript.FromRooms(_floor)!;
+        int push = _stepIndex - 1;
+        while (push >= 0 && steps[push].Kind != PyramidStepKind.PushBlock) push--;
+        if (push < 0 || ++_gateRewinds > MaxGateRewinds)
+        {
+            FailSolve($"the gate out of 12/{from[_stepIndex]} stays shut after pushing its block");
+            return;
+        }
+
+        _log?.Log(LogSeverity.Warn, LogSource,
+            $"{_floor} step {_stepIndex + 1}: gate out of 12/{from[_stepIndex]} is shut — back to the block at 12/{from[push]} to push again");
+        _detour.Clear();
+        for (int i = _stepIndex - 1; i > push; i--)
+            _detour.Enqueue(new Detour(steps[i].Dir.Opposite(), from[i + 1], from[i]));
+        _stepIndex = push;
+        Drive();
+    }
+
+    private void OnMoveStalled()
+    {
+        if (!Active || !_moveInFlight) return;
+        _log?.Log(LogSeverity.Warn, LogSource,
+            $"{_floor} step {_stepIndex + 1}: no arrival or refusal for the move to 12/{_flightTarget}");
+        BeginResync("a move drew no answer");
+    }
+
+    // ----- finding ourselves again -----------------------------------
+
+    // We no longer know which room we're in. Ask the game where it can tell us
+    // (Paradigm's `rm`, a sysop's locate); otherwise, or when that goes unanswered,
+    // fall back on what the tracker and the script say.
+    private void BeginResync(string why)
+    {
+        if (!Active) return;
+        StopTimer();
+        _phase = Phase.Resyncing;
+        if (_askPosition is { } ask)
+        {
+            if (ask($"pyramid climb: {why}", OnPositionResolved, OnPositionUnresolved))
+            {
+                _log?.Log(LogSeverity.Info, LogSource, $"asking the game where we are ({why})");
+                return;
+            }
+            // Paradigm always has `rm`; a refusal there is its spacing between asks.
+            if (_isParadigm() && !_resyncRetried)
+            {
+                _resyncRetried = true;
+                ScheduleSettle(ResyncRetryDelay, () => BeginResync(why));
+                return;
+            }
+        }
+        ResolveWithoutAsking(why);
+    }
+
+    private void OnPositionResolved(RoomKey key)
+    {
+        if (!Active || _phase != Phase.Resyncing) return;
+        _resyncRetried = false;
+        _moveInFlight = false;
+        RoomState st = _tracker.State;
+        if (st.Confidence != RoomConfidence.Confirmed || st.CurrentRoom?.Key != key)
+            _tracker.SetLocated(key);
+        _phase = Phase.Climbing;
+        _log?.Log(LogSeverity.Info, LogSource, $"the game has us at {key.Map}/{key.Room}");
+        Drive();
+    }
+
+    private void OnPositionUnresolved()
+    {
+        if (!Active || _phase != Phase.Resyncing) return;
+        ResolveWithoutAsking("`rm` went unanswered");
+    }
+
+    private void ResolveWithoutAsking(string why)
+    {
+        _resyncRetried = false;
+        RoomState st = _tracker.State;
+        bool trackerSure = st.Confidence == RoomConfidence.Confirmed && st.CurrentRoom is not null;
+        if (!trackerSure)
+        {
+            // The game answers every refused move with a line, so a move that drew
+            // none went through; with none in flight we are where the script left us.
+            int room = _moveInFlight ? _flightTarget : ExpectedRoomNumber();
+            if (room <= 0 || ++_assumedLandings > MaxAssumedLandings)
+            {
+                FailSolve($"lost our place on {_floor} ({why})");
+                return;
+            }
+            _log?.Log(LogSeverity.Warn, LogSource,
+                $"{why} — taking 12/{room} as where we are ({_assumedLandings}/{MaxAssumedLandings})");
+            _tracker.SetLocated(new RoomKey(PyramidScript.PyramidMap, room));
+        }
+        _moveInFlight = false;
+        _phase = Phase.Climbing;
+        Drive();
+    }
+
+    // ----- holds -----------------------------------------------------
+
+    // Gates every floor waits on: the user's own pause, Auto-All, and the states in
+    // which a move can't be made or wouldn't go where it's aimed.
+    private static readonly string[] AlwaysGates =
+    {
+        MovementCoordinator.UserGate,
+        MovementCoordinator.AutoAllGate,
+        MovementCoordinator.HeldGate,
+        MovementCoordinator.MortallyWoundedGate,
+        MovementCoordinator.FearGate,
+    };
+
+    // Floors where the climb holds for everything the walker would. F1/F2 walk on
+    // through fights, rests and party waits: F1 is on a timer and standing in F2
+    // hurts more the longer it lasts.
+    private static bool HoldsForEverything(PyramidFloor f) => !PyramidScript.IsBlindFast(f);
+
+    // Why the next step must wait, or null when it may go.
+    private string? HoldReason()
+    {
+        if (_selfHeld) return "held";
+        if (_coordinator is { } c)
+        {
+            foreach (string gate in AlwaysGates)
+                if (c.IsGateAsserted(gate)) return gate;
+            if (HoldsForEverything(_floor) && c.IsPaused)
+                return string.Join(", ", c.AssertedGates);
+        }
+        if (HoldsForEverything(_floor) && _heldMembers.Count > 0)
+            return $"held member(s) {string.Join(", ", _heldMembers)}";
+        return null;
+    }
+
+    private void EnterHold(string reason)
+    {
+        bool wasHeld = _phase == Phase.Held;
+        if (!wasHeld || reason != _holdReason)
+            _log?.Log(LogSeverity.Info, LogSource, $"{_floor} step {_stepIndex + 1}: holding — {reason}");
+        _phase = Phase.Held;
+        _holdReason = reason;
+
+        // A party member's hold wears off on a private line we never see, so after
+        // the cap assume it's gone rather than wait on it forever.
+        if (_heldMembers.Count > 0 && ++_holdTicks >= HoldCapTicks)
+        {
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"held member(s) [{string.Join(", ", _heldMembers)}] assumed freed after cap");
+            _heldMembers.Clear();
+            _holdTicks = 0;
+        }
+        ScheduleSettle(HoldRecheck, Drive);
+        if (!wasHeld) StateChanged?.Invoke();
+    }
+
+    private void LeaveHold()
+    {
+        if (_heldMembers.Count == 0) _holdTicks = 0;
+        if (_phase != Phase.Held) return;
+        _log?.Log(LogSeverity.Info, LogSource, $"hold cleared ({_holdReason}) — climbing on");
+        _phase = Phase.Climbing;
+        _holdReason = null;
+        StateChanged?.Invoke();
+    }
+
+    private void OnGatesChanged()
+    {
+        if (Active && _phase == Phase.Held) Drive();
+    }
+
+    private void OnPlayerDied()
+    {
+        if (Active) FailSolve("died during the climb");
+    }
 
     // ----- settle timer ----------------------------------------------
 
@@ -516,6 +843,12 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _settleTimer.Stop();
         _settleTimer.Interval = interval;
         _settleTimer.Start();
+    }
+
+    private void StopTimer()
+    {
+        _settleTimer?.Stop();
+        _settleCont = null;
     }
 
     private void OnSettleTick()
@@ -531,6 +864,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     private void BeginSphinx(string word)
     {
+        if (!CountSend()) return;
         _phase = Phase.AwaitingSphinx;
         _sphinxRetries = 0;
         _log?.Log(LogSeverity.Info, LogSource, $"ask sphinx {word} → awaiting ceiling");
@@ -543,12 +877,11 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private void OnCeilingOpened()
     {
         if (!Active || _phase != Phase.AwaitingSphinx) return;
-        _settleTimer?.Stop();
-        _settleCont = null;
+        StopTimer();
+        _ceilingOpenOn = _floor;
         _log?.Log(LogSeverity.Info, LogSource, "ceiling opened → ascending (u)");
-        SendMove(Direction.U);
         _phase = Phase.Climbing;
-        ScheduleSettle(PacedSettle, AdvanceAndDrive);   // consume the sphinx step, land on next floor
+        Drive();
     }
 
     private void OnSphinxTimeout()
@@ -579,11 +912,13 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // Look to refresh door state; the render lands in OnRoomObserved → ContinueDoor.
     private void PollDoor()
     {
+        if (!Active || _phase != Phase.AwaitingDoor) return;
         if (++_doorPolls > MaxDoorPolls)
         {
             FailSolve($"door {_doorDir.ToLongName()} never opened after {MaxDoorPolls} polls");
             return;
         }
+        if (!CountSend()) return;
         _awaitingDoorLook = true;
         SendCommand("look");
     }
@@ -591,20 +926,22 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private void ContinueDoor(RoomObservation obs)
     {
         // The look just rendered where we really are — if that isn't this door's
-        // room, re-drive from the step that is, rather than bash the wrong door.
-        if (ResyncToTrackedRoom())
+        // room, or something now holds us, let Drive sort it out rather than bash
+        // the wrong door.
+        RoomState st = _tracker.State;
+        bool elsewhere = st.Confidence == RoomConfidence.Confirmed && st.CurrentRoom is { } cur
+            && (cur.Key.Map != PyramidScript.PyramidMap || cur.Key.Room != ExpectedRoomNumber());
+        if (elsewhere || HoldReason() is not null)
         {
             _phase = Phase.Climbing;
-            DriveCurrent();
+            Drive();
             return;
         }
 
         if (obs.OpenDoorDirections?.Contains(_doorDir) == true)
         {
             _log?.Debug(LogSource, $"door {_doorDir.ToLongName()} open → move");
-            SendMove(_doorDir);
-            _phase = Phase.Climbing;
-            ScheduleSettle(PacedSettle, AdvanceAndDrive);
+            SendStepMove(_doorDir, RoomAfter(_stepIndex));
             return;
         }
 
@@ -612,13 +949,14 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         if (_doorBashable)
         {
             _log?.Debug(LogSource, $"door {_doorDir.ToLongName()} closed → bash");
+            if (!CountSend()) return;
             SendCommand("bash " + _doorDir.ToLongName());
         }
         else
         {
             _log?.Debug(LogSource, $"door {_doorDir.ToLongName()} closed (unbashable) → wait for timer");
         }
-        ScheduleSettle(PacedSettle, PollDoor);
+        ScheduleSettle(DoorPoll, PollDoor);
     }
 
     // ----- F3 golden-lion-key door -----------------------------------
@@ -639,9 +977,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         }
         SendCommand("unlock " + dir.ToLongName());
         SendCommand("open " + dir.ToLongName());
-        SendMove(dir);
-        _phase = Phase.Climbing;
-        ScheduleSettle(PacedSettle, AdvanceAndDrive);
+        SendStepMove(dir, RoomAfter(_stepIndex));
     }
 
     // ----- feeds -----------------------------------------------------
@@ -693,11 +1029,14 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         if (t.Contains("Your legs are paralyzed", StringComparison.OrdinalIgnoreCase))
             _selfHeld = true;
         else if (t.Contains("You can move again", StringComparison.OrdinalIgnoreCase))
+        {
             _selfHeld = false;
+            if (_phase == Phase.Held) Drive();
+        }
 
         // Party-member hold person — only tracked (and waited on) where we ride it
         // out: F3/F4. A cure/freedom cast naming the member frees them; a natural
-        // wear-off is a private line we never see (the DriveCurrent cap covers it).
+        // wear-off is a private line we never see (the EnterHold cap covers it).
         if (_floor is PyramidFloor.F3 or PyramidFloor.F4)
         {
             if (After(t, "casts hold person on ") is { } held && _isPartyMember(held))
@@ -720,8 +1059,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     private void ClearHeld(string member)
     {
-        if (_heldMembers.Remove(member))
-            _log?.Log(LogSeverity.Info, LogSource, $"party member '{member}' freed");
+        if (!_heldMembers.Remove(member)) return;
+        _log?.Log(LogSeverity.Info, LogSource, $"party member '{member}' freed");
+        if (_phase == Phase.Held) Drive();
     }
 
     // The target after a "…<marker><target>!" spell line (e.g. "casts hold person
@@ -750,52 +1090,50 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
 
     // ----- terminal transitions --------------------------------------
 
-    // Reset States: drop the climb (its own moves and timers) where it stands.
+    // Stop or Reset States: drop the climb (its own moves and timers) where it stands.
     public void Cancel(string reason)
     {
         if (!Active) return;
         _log?.Log(LogSeverity.Info, LogSource, $"pyramid climb cancelled: {reason}");
-        StopTimers();
-        _heldMembers.Clear();
-        _phase = Phase.Idle;
-        Active = false;
+        End(Phase.Idle);
     }
 
     private void Finish()
     {
         _log?.Log(LogSeverity.Info, LogSource, $"pyramid climb complete → {_goal.Map}/{_goal.Room}");
-        StopTimers();
         RoomKey dest = _goal;
-        _phase = Phase.Done;
-        Active = false;
-        _tracker.SetLocated(new RoomKey(PyramidScript.PyramidMap, PyramidScript.TargetRoom));
+        End(Phase.Done);
         _walker.ReportPyramidSolveSucceeded(dest);
     }
 
     private void FailSolve(string reason)
     {
         _log?.Log(LogSeverity.Warn, LogSource, $"pyramid climb failed: {reason}");
-        StopTimers();
         RoomKey dest = _goal;
-        _phase = Phase.Idle;
-        Active = false;
+        End(Phase.Idle);
         _walker.ReportPyramidSolveFailed(dest, reason);
     }
 
-    private void StopTimers()
+    private void End(Phase phase)
     {
-        _settleTimer?.Stop();
-        _settleCont = null;
+        StopTimer();
+        _heldMembers.Clear();
+        _detour.Clear();
+        _moveInFlight = false;
+        _holdReason = null;
+        _phase = phase;
+        Active = false;
+        StateChanged?.Invoke();
     }
 
     // ----- wire ------------------------------------------------------
 
-    private void SendMove(Direction d) => Send(AutoWalkManager.EncodeMove(d));
     private void SendCommand(string cmd) => Send(Encoding.Latin1.GetBytes(cmd + "\r"));
     private void Send(byte[] bytes) => _wireSender?.Invoke(bytes);
 
     // ----- test seams ------------------------------------------------
     internal void FireSettleForTests() => OnSettleTick();
+    internal bool HasSettlePendingForTests => _settleCont is not null;
     internal void FeedLineForTests(string text)
         => OnLine(new LineExtractor.EmittedLine(
             text, Array.Empty<MudPlay.Terminal.CellAttributes>(), DateTimeOffset.UnixEpoch, IsPromptLine: false));
@@ -805,6 +1143,10 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         if (_disposed) return;
         _disposed = true;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
-        StopTimers();
+        _tracker.StateChanged -= OnTrackerStateChanged;
+        _tracker.MoveBlocked -= OnTrackerMoveBlocked;
+        _tracker.PlayerDeathObserved -= OnPlayerDied;
+        if (_coordinator is not null) _coordinator.GatesChanged -= OnGatesChanged;
+        _settleTimer?.Stop();
     }
 }

@@ -3,7 +3,11 @@
 ## 3.143.0
 
 - Pyramid climb: floor 1 route fixed — it stopped one room short of the fire sphinx
-- Pyramid climb picked up part-way along any floor starts from the room you're in
+- Pyramid climb sends one move at a time and waits to see where it led, on both realms, instead of pacing on a timer
+- Pyramid climb checks every step against the room you're in; a climb picked up part-way along a floor starts from there
+- A shut gate on floor 1 sends the climb back to push its block again; a refused move is retried
+- Toolbar Pause and Stop now work on a pyramid climb; floors 3–5 wait for fights, rests, pickups and party holds like any walk
+- A pyramid walk-to to a room on the route stops there instead of climbing to the top
 
 ## 3.142.40
 
