@@ -382,6 +382,50 @@ public sealed class RegenTrackerTests
         tracker.Dispose();
     }
 
+    // The Grail card of a deck heals as it is dealt: +2 at 02:56:48.492, again
+    // 0.19 s later and again 3 s after that, none of them on a round (live log,
+    // 2026-10-04). Regen is paid on the round, so those aren't regen.
+    [Fact]
+    public void GainsBetweenRounds_AreNotRegen()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        int ticks = 0;
+        tracker.HpTickObserved += _ => ticks++;
+        state.Hp = 93;
+        tracker.NoteRound(clock.Now);
+
+        clock.Advance(TimeSpan.FromSeconds(2.19)); state.Hp = 95;
+        clock.Advance(TimeSpan.FromSeconds(0.19)); state.Hp = 97;
+        clock.Advance(TimeSpan.FromSeconds(3.03)); state.Hp = 99;   // 5.41 s after the round
+        Assert.Equal(1, ticks);                                      // only the last sits on a round
+        clock.Advance(TimeSpan.FromSeconds(4.6));  state.Hp = 100;  // the real gain, on the next round
+        Assert.Equal(2, ticks);
+        tracker.Dispose();
+    }
+
+    // The game makes up a whole second in one jump every couple of minutes. The
+    // first gain after it looks a second early; the next one, a whole number of
+    // rounds later, shows the grid itself moved.
+    [Fact]
+    public void GridMovingASecond_IsFollowedOnTheSecondGain()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        int ticks = 0;
+        tracker.HpTickObserved += _ => ticks++;
+        state.Hp = 100;
+        tracker.NoteRound(clock.Now);
+
+        clock.Advance(TimeSpan.FromSeconds(9.0));  state.Hp = 101;  // a second early
+        Assert.Equal(0, ticks);
+        clock.Advance(TimeSpan.FromSeconds(10.05)); state.Hp = 102; // two rounds after it
+        Assert.Equal(1, ticks);
+        clock.Advance(TimeSpan.FromSeconds(10.05)); state.Hp = 103;
+        Assert.Equal(2, ticks);
+        tracker.Dispose();
+    }
+
     // The gains of a real Paradigm session (report paradigm-20261004-024314: five
     // minutes of standing, then resting, with a fight at each end), as milliseconds
     // from the first event: R a round seen, H / M an HP / mana change from-to, P a

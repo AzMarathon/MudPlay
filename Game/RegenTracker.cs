@@ -43,6 +43,16 @@ public sealed class RegenTracker : IDisposable
     // The game's tick runs a shade over a second and makes up a whole second in one
     // jump every couple of minutes, so a second and a bit covers an honest drift.
     private static readonly TimeSpan GridTolerance = TimeSpan.FromMilliseconds(1250);
+    // The last moment known to be on the round grid: a round seen, or a regen gain
+    // taken as one. A gain is judged against it only while it is this fresh.
+    private DateTimeOffset? _gridReference;
+    private static readonly TimeSpan GridReferenceTrusted = TimeSpan.FromSeconds(60);
+    // How far off the grid a gain may be and still be regen.
+    private static readonly TimeSpan OnGridWithin = TimeSpan.FromMilliseconds(750);
+    // The last gain turned away as off the grid. A second one a whole number of
+    // rounds after it is the grid itself having moved (the game making up a second).
+    private DateTimeOffset? _lastOffGridGain;
+    private static readonly TimeSpan SameGridWithin = TimeSpan.FromMilliseconds(300);
 
     public RegenCycle HpNatural { get; } = new("HP natural", RegenConstants.SeedStandingInterval);
     public RegenCycle HpRest    { get; } = new("HP rest",    RegenConstants.SeedRestingInterval);
@@ -93,6 +103,8 @@ public sealed class RegenTracker : IDisposable
     public void NoteRound(DateTimeOffset at)
     {
         _lastRoundAt = at;
+        _gridReference = at;
+        _lastOffGridGain = null;
         HpNatural.AlignTo(at, RoundStep, GridTolerance);
         MpNatural.AlignTo(at, RoundStep, GridTolerance);
         if (_cadence.RestingOnRoundGrid) HpRest.AlignTo(at, RoundStep, GridTolerance);
@@ -149,6 +161,7 @@ public sealed class RegenTracker : IDisposable
 
         if (delta <= 0) return;                  // damage / no change.
         if (IsInArtifactWindow(now)) return;     // heal-shaped event recently.
+        if (HpGainIsOnRoundGrid(_state.Position) && !OnTheRoundGrid(now)) return;
 
         // Credit whichever active HP cycle is closer to its boundary. If
         // both rest + natural look due, both get advanced (a 60 s mark
@@ -198,6 +211,7 @@ public sealed class RegenTracker : IDisposable
 
         if (delta <= 0) return;
         if (IsInArtifactWindow(now)) return;
+        if (_state.Position != PlayerPosition.Meditating && !OnTheRoundGrid(now)) return;
 
         bool mediClaimed = ClaimIfDue(MpMedi, now, delta);
         bool natClaimed  = ClaimIfDue(MpNatural, now, delta);
@@ -252,6 +266,38 @@ public sealed class RegenTracker : IDisposable
         {
             MpMedi.Stop();
         }
+    }
+
+    // Regen is paid on a combat round, so a gain that falls between rounds is a heal
+    // the artifact window didn't know of — the engine's own cast, a card dealt from a
+    // deck, a heal over time — and is left out of the cycles. Judged only while the
+    // grid reference is fresh; with none, every gain counts as before. A gain taken
+    // as regen becomes the reference in turn.
+    private bool OnTheRoundGrid(DateTimeOffset now)
+    {
+        if (_gridReference is not { } reference || now - reference > GridReferenceTrusted)
+        {
+            _gridReference = now;
+            _lastOffGridGain = null;
+            return true;
+        }
+        if (OffGrid(now - reference) <= OnGridWithin
+            || (_lastOffGridGain is { } earlier && now - earlier >= RoundStep - SameGridWithin
+                && OffGrid(now - earlier) <= SameGridWithin))
+        {
+            _gridReference = now;
+            _lastOffGridGain = null;
+            return true;
+        }
+        _lastOffGridGain = now;
+        return false;
+    }
+
+    // How far a span is from a whole number of rounds.
+    private static TimeSpan OffGrid(TimeSpan span)
+    {
+        long off = span.Ticks % RoundStep.Ticks;
+        return TimeSpan.FromTicks(Math.Min(off, RoundStep.Ticks - off));
     }
 
     // The latest round-grid point at or before now, from the last round seen or,

@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.18**
+> **Version 3.143.19**
 > - Tick countdowns run on one clock: a round seen on the wire sets the regen countdowns, and a regen gain keeps the round countdown true between fights
 > - Paradigm regen countdowns match the game: HP every 10 s, mana every 30 s, a rest gain every 5 s on the round (was 10 s for all three)
+> - A heal that lands between rounds (a deck's Grail card, the engine's own heals) is no longer counted as a regen tick
 > - Bug report: a Tick timing section — the last 400 combat rounds, HP / mana gains and posture changes to the millisecond; the Debug regen line says how long after a round each gain came
 > - Auto-rest no longer sends `rest` or `meditate` to a character already doing it, which restarted the wait for the next tick
 >
