@@ -510,6 +510,82 @@ public sealed class StealthManagerTests
         Assert.Empty(off.Sent);
     }
 
+    // ----- Followed: monsters coming in right behind us ------------------------
+    // Backscroll 2026-10-04 14:50: a sprint whose sneak broke picked up two followers.
+    // They arrived a few ms after each room display, so every step sent sn (before the
+    // step and again on arrival), drew "You may not sneak right now!", and the cooldown
+    // hold stood us still under attack.
+
+    private static (AutoHarness H, Game.Map.MovementCoordinator Coord, Func<DateTimeOffset> Clock, Action<double> Advance) Chase()
+    {
+        AutoHarness h = new() { AutoSneakOn = true };
+        Game.Map.MovementCoordinator coord = new(h.Log);
+        h.Stealth.SetMovementCoordinator(coord);
+        DateTimeOffset now = new(2026, 10, 4, 14, 50, 0, TimeSpan.Zero);
+        h.Stealth.NowProvider = () => now;
+        return (h, coord, () => now, ms => now = now.AddMilliseconds(ms));
+    }
+
+    [Fact]
+    public void Followed_NoSnAndNoHold_UntilWeLeaveARoomNobodyFollowedUsInto()
+    {
+        var (h, coord, _, advance) = Chase();
+        using AutoHarness _h = h;
+
+        h.Stealth.NoteRoomChanged();                     // sneak lost on the way in: arrival sn
+        advance(5);
+        h.Stealth.NoteMonsterArrival();                  // the zombie walks in behind us
+        h.Feed("You may not sneak right now!");
+        Assert.True(h.Stealth.IsFollowed);
+        Assert.False(coord.IsGateAsserted(Game.Map.MovementCoordinator.SneakCooldownGate));
+        h.Sent.Clear();
+
+        advance(1200);
+        Assert.True(h.Stealth.ReadyToMoveSneaking());    // step out unsneaked, no sn
+        h.Stealth.NoteRoomChanged();                     // next room
+        advance(10);
+        h.Stealth.NoteMonsterArrival();                  // still behind us
+        advance(1200);
+        Assert.True(h.Stealth.ReadyToMoveSneaking());
+        h.Stealth.NoteRoomChanged();                     // nothing follows into this one
+        Assert.Empty(h.Sent);
+
+        advance(1200);
+        h.Stealth.NoteRoomChanged();                     // left a room nobody followed us into
+        Assert.False(h.Stealth.IsFollowed);
+        Assert.Equal("sn", h.LastSent());
+    }
+
+    [Fact]
+    public void AMonsterWanderingInLater_IsNotAFollower()
+    {
+        var (h, _, _, advance) = Chase();
+        using AutoHarness _h = h;
+
+        h.Stealth.NoteRoomChanged();
+        advance(3000);
+        h.Stealth.NoteMonsterArrival();
+
+        Assert.False(h.Stealth.IsFollowed);
+    }
+
+    [Fact]
+    public void Followed_AFightOverInTheRoom_LiftsIt_ButAFreshRoomDisplayDoesNot()
+    {
+        var (h, _, _, advance) = Chase();
+        using AutoHarness _h = h;
+        h.Stealth.NoteRoomChanged();
+        advance(5);
+        h.Stealth.NoteMonsterArrival();
+
+        h.Stealth.NoteCombatEndedStealthReset();         // just the new room reading clear
+        Assert.True(h.Stealth.IsFollowed);
+
+        advance(8000);
+        h.Stealth.NoteCombatEndedStealthReset();         // fought it out here
+        Assert.False(h.Stealth.IsFollowed);
+    }
+
     // Report paradigm-20260926-233357: "You may not sneak right now!" is a post-combat
     // cooldown. Hold the route and retry sn instead of walking on unsneaked.
     [Fact]
