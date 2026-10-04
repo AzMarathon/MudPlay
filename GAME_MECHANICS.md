@@ -2102,7 +2102,9 @@ How one damage spell cast against a monster is worked out.
     for a player on Stock** (`cmp edx,0x61`; a monster target caps at 98), so the chance is that figure
     in 99. MMUD-Explorer's sim caps it at 98 (MR 196), which
     the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
+  - **Paradigm prints `You negate <monster>'s cast of <spell>!`** for a monster spell that does nothing to you *([OBSERVED] 2026-10-03, reports `paradigm-20261003-194358` / `paradigm-20261003-201253`: `You negate vengeful spirit's cast of necromantic beam!`, 94 times across the two captures)*. `[NEEDS CONFIRMATION]`: is this the same full-resist roll as Stock's `You resisted…` line, or a separate anti-magic negate?
 - **Client use:**
+  - The `UserMisses` pattern skips any `You … 's cast of …!` line. Before 2026-10-03 the Paradigm negate line counted as a miss of our own and as a confirmed cast of our attack spell (`CombatManager.OnAttackCastConfirmed`), spending its cast cap (report `paradigm-20261003-194358`).
   - Character Info's Magic Res tooltip (`CharacterInfoSectionViewModel.ComputeMagicResTip`) and Monster
     Intel's per-spell note on the Attacks rows (`MonsterIntelViewModel.SpellResistNote`) show the cut and
     the full-resist chance for the character's current Magic Res, via
@@ -3250,6 +3252,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Over the max means no moving at all, and `i` is where it shows.** *([CONFIRMED] 2026-10-03, user.)* Current weight above the max shown by `i` is the whole condition; the refusal line only appears when a move is tried.
 - **Weakness works the same way: it is a carry-capacity debuff, not a hold.** *([CONFIRMED] 2026-10-03, user; data [OBSERVED] Paradigm 1.9.1 and Stock 1.11p.)* **weakness #424** carries **Encum% (96) −25**, Accuracy −10 and MaxDamage, `Dur` 40, and no HoldPerson / Paralyze code. `cure paralysis` and `freedom` do not remove it. It only stops a character already near the max. This is the reason for the 90% encumbrance pickup limits on coin and items (user, 2026-10-03).
   - Its lines are the frail ones: `You feel weak and powerless` / `You feel your strength return`. Eight records share that applied line (weakness #424, weakness touch #127, frail #949 / #956 / #5445, red beam #1067 / #1191, red wave #1072), so the wire can't say which landed.
+  - **globe of darkness #440** was the same case in the Paradigm seed: flagged `MovementPrevented` with no hold code (IlluTarget −9999, Illu −9999, AC −5, Accuracy −15). Unmarked 2026-10-03 (user). The Stock seed flags it `Blinded`.
   - The seeds flagged weakness `MovementPrevented` until 2026-10-03 (a flag carried in with the record, backed by no ability code). Because the applied line is shared, every frail read as a hold: the loop stood for the whole duration and cast `cure paralysis` into it (report `paradigm-20261003-201253`).
 - **The Stock refusal is `You are too heavy to move anywhere!`** — see *Per-hop movement speed*.
 - **It clears one of two ways:** drop items until the weight is under the (lowered) max shown by `i`, or wait for the debuff that lowered the max to wear off.

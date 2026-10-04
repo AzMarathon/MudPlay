@@ -238,8 +238,13 @@ public static class DefaultPatterns
         // self-emotes that end in "!" ("You feel much better!"), so
         // CombatSessionTracker only counts a UserMisses line while combat is
         // engaged — see its CombatStatus gate.
+        // "You negate <monster>'s cast of <spell>!" is Paradigm's line for shrugging
+        // off a MONSTER's spell. It names our target and ends in "!", so it read as
+        // our own swing: a miss in the stats, and a confirmed cast of our attack
+        // spell toward its cast cap (report paradigm-20261003-194358). Excluded on
+        // the "'s cast of" phrase, which no swing of ours carries.
         yield return new RegexPattern(KnownPatterns.UserMisses,
-            @"^You (?![^\n]*\bfor \d+ damage\b)[^!]+!");
+            @"^You (?![^\n]*\bfor \d+ damage\b)(?![^\n]*'s cast of )[^!]+!");
         // Local player dodges an incoming mob attack. The dodge line ("The
         // kobold thief lunges at you, but you dodge!") also
         // satisfies MobMisses, so CombatSessionTracker de-dupes by skipping

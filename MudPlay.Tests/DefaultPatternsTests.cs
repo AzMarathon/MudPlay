@@ -184,6 +184,18 @@ public sealed class DefaultPatternsTests
         Assert.False(p.TryMatch(Line("The barmaid has a letter for your brother."), out _));
     }
 
+    // Shrugging off a monster's spell is not a swing of ours, though the line starts
+    // "You", names the monster and ends in "!".
+    [Fact]
+    public void UserMissesRegex_SkipsANegatedMonsterCast()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.UserMisses);
+
+        Assert.False(p.TryMatch(Line("You negate vengeful spirit's cast of necromantic beam!"), out _));
+        Assert.True(p.TryMatch(Line("You punch acid slime!"), out _));
+        Assert.True(p.TryMatch(Line("You swing at the kobold, but miss!"), out _));
+    }
+
     [Fact]
     public void UserDodgesRegex_MatchesArticlelessBlankVerbDodge()
     {

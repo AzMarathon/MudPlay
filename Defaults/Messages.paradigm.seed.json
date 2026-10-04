@@ -2519,8 +2519,8 @@
   {
     "Id": "5f02526e3e1460a8",
     "Name": "globe of darkness",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
+    "Flags": "None",
+    "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "A bubble of pure darkness appears and begins to expand!",
     "WitnessMessage": "The {source} makes a clutching gesture!",

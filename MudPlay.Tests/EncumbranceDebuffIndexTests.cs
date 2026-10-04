@@ -50,6 +50,10 @@ public sealed class EncumbranceDebuffIndexTests
 
             Assert.NotEmpty(weak);
             Assert.All(weak, r => Assert.False(r.Flags.HasFlag(MessageFlags.MovementPrevented), r.Name));
+
+            // Globe of darkness darkens; it carries no hold code either.
+            Assert.All(records.Where(r => r.Name == "globe of darkness"),
+                r => Assert.False(r.Flags.HasFlag(MessageFlags.MovementPrevented), r.Name));
         }
         finally
         {
