@@ -24,7 +24,7 @@ public sealed class WorkshopItemRow
     // A carried container (chest, box) gets a treasure-chest icon that opens the
     // Chest Offload window.
     public bool IsContainer { get; }
-    public ICommand OpenChestOffload { get; } = new AsyncRelayCommand(ChestOffloadViewModel.OpenOrRaise);
+    public ICommand OpenChestOffload { get; } = new AsyncRelayCommand(ChestOffloadViewModel.OpenRaiseOrClose);
 
     public WorkshopItemRow(string name, string slot, int itemNumber, string charges = "", bool isContainer = false)
     {

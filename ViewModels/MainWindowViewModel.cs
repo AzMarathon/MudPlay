@@ -804,8 +804,7 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
         AppServices.Current.SetGoWalkOpener(GoWalkToRoom);
-        AppServices.Current.SetErrandWalkOpener(
-            key => _ = EnsureNavigationWindow()?.QueueAndStartWalkTo(key, askOnlyOverAvoids: true));
+        AppServices.Current.SetErrandWalkOpener(ErrandWalkToRoom);
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetLeaderRouteOpener(ShowLeaderRouteIfOpen);
@@ -5182,6 +5181,18 @@ public partial class MainWindowViewModel : ObservableObject
     // "Walk here" path), rather than only arming it like QueueWalkToRoom.
     private void GoWalkToRoom(Game.Map.RoomKey key)
         => _ = EnsureNavigationWindow()?.QueueAndStartWalkTo(key);
+
+    // A walk started on the player's behalf (a Sell Tour stop). True once the walker
+    // is heading for the room or the character already stands in it; false when the
+    // walk was called off (the route picker cancelled, a held trip not resumed).
+    private async Task<bool> ErrandWalkToRoom(Game.Map.RoomKey key)
+    {
+        if (EnsureNavigationWindow() is not { } navigation) return false;
+        await navigation.QueueAndStartWalkTo(key, askOnlyOverAvoids: true);
+        AppServices services = AppServices.Current;
+        return (services.Walker.State != Game.Map.WalkState.Idle && services.Walker.Destination == key)
+            || services.RoomTracker.State.CurrentRoom?.Key == key;
+    }
 
     // Room-detail exit clicks re-root the popup on the neighbour and let an
     // already-open map follow — but must not summon the map if it's closed,

@@ -9,8 +9,8 @@ namespace MudPlay.Game.Inventory;
 // Tracks every chest the player opens — from the Chest Offload window's Open button
 // or by typing `open <chest>` — whether or not the window is up. An open reads the
 // inventory (`i`), opens, and reads it again; only what that one open added joins
-// the list (ChestLootLedger), and its contents and coin are said to the room so
-// everyone there knows what dropped. Chests opened back to back add up without
+// the list (ChestLootLedger), and — when the character has it switched on — its
+// contents and coin are said to the room so everyone there knows what dropped. Chests opened back to back add up without
 // double counting: each open's before is the read after the last one. A second Open
 // click while one is in flight waits its turn; a second chest typed open mid-flight
 // joins whichever diff will see its loot. The list is saved on the character profile and
@@ -93,6 +93,20 @@ public sealed class ChestOpenTracker : IDisposable
     public CurrencyHoldings Coin => _coin;
 
     public bool IsOpening => _step != Step.Idle;
+
+    // Whether each open's contents are said to the room. Kept on the character
+    // profile; off until the player ticks the window's checkbox.
+    public bool SayLootToRoom
+    {
+        get => _profile.Current?.SayChestLootToRoom == true;
+        set
+        {
+            if (_profile.Current is not { } prof || prof.SayChestLootToRoom == value) return;
+            prof.SayChestLootToRoom = value;
+            _log?.Info(LogCategory, $"say chest loot to the room: {(value ? "on" : "off")}");
+            _profile.Save();
+        }
+    }
 
     // The list as it stands, each count capped at what's carried right now.
     public IReadOnlyList<(string Name, int Count)> Loot(IReadOnlyList<string> carried) => _ledger.Current(carried);
@@ -259,6 +273,7 @@ public sealed class ChestOpenTracker : IDisposable
 
     private void Announce(string label, IReadOnlyList<(string Name, int Count)> items, CurrencyHoldings coin)
     {
+        if (!SayLootToRoom) return;
         var coins = new List<string>();
         if (coin.Runic > 0) coins.Add($"{coin.Runic:N0} {_runicName()}");
         if (coin.Platinum > 0) coins.Add($"{coin.Platinum:N0} platinum");

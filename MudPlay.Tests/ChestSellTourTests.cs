@@ -21,6 +21,9 @@ public sealed class ChestSellTourTests : IDisposable
     private readonly List<RoomKey> _walks = new();
     private readonly List<Action> _scheduled = new();
     private int? _shopHere;
+    // Whether a walk the tour asks for gets under way (false: the route picker was
+    // cancelled, a held trip wasn't resumed).
+    private bool _walksStart = true;
     private readonly ChestSellTour _tour;
 
     public ChestSellTourTests()
@@ -28,7 +31,7 @@ public sealed class ChestSellTourTests : IDisposable
         _inv.AttachLineExtractor(_lines);
         _tour = new ChestSellTour(
             currentShop: () => _shopHere,
-            goWalk: _walks.Add,
+            goWalk: room => { _walks.Add(room); return System.Threading.Tasks.Task.FromResult(_walksStart); },
             chestCount: name => _fromChests.GetValueOrDefault(name),
             sendPaced: _sent.AddRange,
             isParadigm: () => true,
@@ -56,6 +59,22 @@ public sealed class ChestSellTourTests : IDisposable
     {
         _shopHere = shop;
         _tour.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "", room));
+    }
+
+    // The route picker cancelled (or a held trip not resumed): no walker event ever
+    // comes, and the tour used to sit on "walking to…" until someone cancelled it.
+    [Fact]
+    public void AWalkThatNeverStarts_EndsTheTour()
+    {
+        _fromChests["moonstone"] = 2;
+        _walksStart = false;
+
+        _tour.Start(new[] { new ChestSellTour.Stop(Jeweler, 1, "Jeweler", new[] { ("moonstone", 2) }) });
+
+        Assert.Equal(new[] { Jeweler }, _walks);
+        Assert.False(_tour.IsRunning);
+        Assert.Equal("The walk to Jeweler didn't start — nothing more sold.", _tour.Status);
+        Assert.Empty(_sent);
     }
 
     [Fact]

@@ -1271,6 +1271,7 @@ public static class BugReportBuilder
         sb.Append("\n**Chest Offload list** (").Append(chestLoot.Count)
           .Append(svc.ChestOpens.IsOpening ? ", an open in progress" : "")
           .Append(", coin ").Append(svc.ChestOpens.Coin.TotalCopperValue).Append("c")
+          .Append(svc.ChestOpens.SayLootToRoom ? "; said to the room" : "; not said to the room")
           .Append(svc.ChestSellTour.IsRunning ? "; sell tour running" : "")
           .Append(svc.ChestSellTour.Status.Length > 0 ? $" — {svc.ChestSellTour.Status}" : "")
           .Append(")\n\n");

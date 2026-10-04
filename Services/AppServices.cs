@@ -103,10 +103,11 @@ public sealed class AppServices
 
     // The same walk started on the player's behalf (a Sell Tour stop): it takes the
     // default route without the route picker, which shows only when the player's
-    // avoid rooms are in the way. No-op until the main VM binds it.
-    private Action<Game.Map.RoomKey>? _errandWalkOpener;
-    public void SetErrandWalkOpener(Action<Game.Map.RoomKey> opener) => _errandWalkOpener = opener;
-    public void ErrandWalkTo(Game.Map.RoomKey key) => _errandWalkOpener?.Invoke(key);
+    // avoid rooms are in the way. The task ends once the walk is under way or was
+    // called off, and says which. Not under way until the main VM binds it.
+    private Func<Game.Map.RoomKey, Task<bool>>? _errandWalkOpener;
+    public void SetErrandWalkOpener(Func<Game.Map.RoomKey, Task<bool>> opener) => _errandWalkOpener = opener;
+    public Task<bool> ErrandWalkTo(Game.Map.RoomKey key) => _errandWalkOpener?.Invoke(key) ?? Task.FromResult(false);
 
     // Type text at the game through the SAME path the terminal / Conversation input
     // uses — macro split, alias expansion, and the outbound cast/attack/chat/movement

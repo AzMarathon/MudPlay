@@ -9,6 +9,7 @@ namespace MudPlay.Game.Inventory;
 // Sells the Chest Offload list shop by shop: walk to each stop by the default route
 // (AppServices.ErrandWalkTo — the route picker shows only when the player's avoid rooms
 // are in the way), sell its items, wait for the game to confirm, then on to the next.
+// A walk that is called off before it starts ends the tour.
 // A single shop's Sell All, or one item's Sell, is just a one-stop tour.
 //
 // It never sells what the player already owned. Every quantity is capped, right before
@@ -32,7 +33,7 @@ public sealed class ChestSellTour : IDisposable
     private enum Phase { Idle, Walking, Selling }
 
     private readonly Func<int?> _currentShop;
-    private readonly Action<RoomKey> _goWalk;
+    private readonly Func<RoomKey, Task<bool>> _goWalk;
     private readonly Func<string, int> _chestCount;
     private readonly Action<IReadOnlyList<string>> _sendPaced;
     private readonly Func<bool> _isParadigm;
@@ -53,7 +54,7 @@ public sealed class ChestSellTour : IDisposable
     public event Action? Changed;
 
     public ChestSellTour(
-        Func<int?> currentShop, Action<RoomKey> goWalk, Func<string, int> chestCount,
+        Func<int?> currentShop, Func<RoomKey, Task<bool>> goWalk, Func<string, int> chestCount,
         Action<IReadOnlyList<string>> sendPaced, Func<bool> isParadigm, InventoryManager inventory,
         Action<int, Action> schedule, Action<Action> post, LogService? log = null)
     {
@@ -110,7 +111,30 @@ public sealed class ChestSellTour : IDisposable
         _phase = Phase.Walking;
         SetStatus($"{StopLabel()}walking to {stop.ShopName} ({stop.Room.Map}/{stop.Room.Room}) to sell…");
         _log?.Info(LogCategory, $"walking to '{stop.ShopName}' {stop.Room.Map}/{stop.Room.Room} to sell there");
-        _goWalk(stop.Room);
+        _ = WatchWalkStart(_goWalk(stop.Room), _generation, stop);
+    }
+
+    // A walk can be called off before it starts — the route picker cancelled, a held
+    // trip not resumed, no route — and then no walker event ever comes. The request
+    // says whether the walk got under way; when it didn't, the tour ends here instead
+    // of sitting on "walking to…" until someone cancels it.
+    private async Task WatchWalkStart(Task<bool> request, int generation, Stop stop)
+    {
+        bool underWay;
+        try
+        {
+            underWay = await request.ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _log?.Warn(LogCategory, $"starting the walk to '{stop.ShopName}' threw {ex.GetType().Name}: {ex.Message}");
+            underWay = false;
+        }
+        _post(() =>
+        {
+            if (underWay || generation != _generation || _phase != Phase.Walking) return;
+            Finish($"The walk to {stop.ShopName} didn't start — nothing more sold.");
+        });
     }
 
     // The walk this tour started: sell when it arrives; stop if it's stopped, fails,

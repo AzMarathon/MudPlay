@@ -103,6 +103,16 @@ public sealed class DialogService
         return true;
     }
 
+    // The re-press of a command that opens viewModel's window: close it when it's
+    // already in front, bring it forward when it's buried; false when it isn't open.
+    public bool RaiseOrCloseIfOpen(object viewModel)
+    {
+        ArgumentNullException.ThrowIfNull(viewModel);
+        if (!_openByViewModel.TryGetValue(viewModel, out Window? window)) return false;
+        RaiseOrClose(window);
+        return true;
+    }
+
     // Bring an open window to the front: un-minimize first (a minimized window can't take
     // focus), then activate. Several Linux WMs won't restack an owned window above its
     // siblings on Activate alone, so a momentary Topmost flip forces the raise (as

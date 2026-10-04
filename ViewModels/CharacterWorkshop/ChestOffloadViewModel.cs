@@ -23,15 +23,16 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogViewModel<bool>, IDisposable
 {
     // The one open Chest Offload window. Two would both read the inventory and diff
-    // the same chest opens, so every way in raises this one instead.
+    // the same chest opens, so every way in toggles this one instead.
     private static ChestOffloadViewModel? _openWindow;
 
-    // Open the window, or bring it forward when it's already open — the Bosses tab
-    // button and the Character Info panel's chest icon both come through here.
-    public static async System.Threading.Tasks.Task OpenOrRaise()
+    // Open the window; pressed again, bring it forward when it's buried or close it
+    // when it's already in front — the Bosses tab button and the Character Info
+    // panel's chest icon both come through here.
+    public static async System.Threading.Tasks.Task OpenRaiseOrClose()
     {
         DialogService dialogs = AppServices.Current.Dialogs;
-        if (_openWindow is { } open && dialogs.RaiseIfOpen(open)) return;
+        if (_openWindow is { } open && dialogs.RaiseOrCloseIfOpen(open)) return;
         var vm = new ChestOffloadViewModel();
         _openWindow = vm;
         try { await dialogs.OpenWindowAsync<ChestOffloadViewModel, bool>(vm); }
@@ -77,6 +78,8 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSellStatus))] private string _sellStatus = "";
     public bool HasSellStatus => SellStatus.Length > 0;
     [ObservableProperty] private bool _isTourRunning;
+    // Say each opened chest's contents to the room. The tracker keeps it on the profile.
+    [ObservableProperty] private bool _sayLootToRoom;
     // Coin the chest gave, one denomination per line, most-expensive first.
     public ObservableCollection<string> CoinGains { get; } = new();
     public ObservableCollection<ChestContainerRow> Containers { get; } = new();
@@ -131,6 +134,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _tour.Changed += OnTourChanged;
         _sellStatus = _tour.Status;
         _isTourRunning = _tour.IsRunning;
+        _sayLootToRoom = _chests.SayLootToRoom;
         // Reconcile the list against the game's OWN confirmed sell/drop lines, so a
         // refused sale changes nothing and a partial one reduces only that item.
         _inventory.ItemSold += OnItemSold;
@@ -179,8 +183,11 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     // moves survive. Simulated chests keep their own view.
     private void OnChestsChanged()
     {
+        SayLootToRoom = _chests.SayLootToRoom;   // a profile swap brings its own setting
         if (!_simulating) RebuildLoot();
     }
+
+    partial void OnSayLootToRoomChanged(bool value) => _chests.SayLootToRoom = value;
 
     // The containers held can change any time (a chest picked up or opened).
     private void OnInventoryChanged() => Dispatcher.UIThread.Post(() => RebuildContainers(_inventory.Snapshot));

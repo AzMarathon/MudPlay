@@ -6,7 +6,7 @@
 - Chest Offload: Sell All and Sell walk to the shop first when you aren't standing in it, then sell on arrival
 - Character Info: a carried chest has a treasure-chest icon that opens the Chest Offload window
 - Chest Offload: the list keeps after the window closes (saved with the character) until each item is sold, dropped or taken off with ✕; Clear list empties it
-- Chest Offload: each chest's contents and coin are said to the room when it's opened
+- Chest Offload: a **Say loot to the room** box (off by default) says each opened chest's contents and coin to the room
 - Chest Offload: Sell Tour walks to every shop and sells the list after you confirm exactly what goes; every sale is capped at what the chests gave, so items you already had are never sold
 - Chest Offload: shop headers and the Sell Tour prompt show each shop's steps and walking time, and the prompt each shop's sale value and the whole tour's walk
 - Chest Offload: Sell Tour skips a shop whose items were all taken off the list, sold or dropped, instead of walking there for nothing

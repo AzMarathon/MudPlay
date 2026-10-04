@@ -25,6 +25,7 @@ public sealed class ChestOpenTrackerTests : IDisposable
         _inv.AttachLineExtractor(_lines);
         _profile.LoadBlank();
         _tracker = NewTracker();
+        _tracker.SayLootToRoom = true;   // most tests read the room line; off is the default
     }
 
     private ChestOpenTracker NewTracker() => new(
@@ -84,6 +85,24 @@ public sealed class ChestOpenTrackerTests : IDisposable
         Assert.Equal(new[] { ("moonstone", 2), ("ruby", 1) },
                      _tracker.Loot(_inv.Snapshot.CarriedItems));
         Assert.Equal(5, _tracker.Coin.Gold);
+    }
+
+    // Out of the box nothing is said to the room: the list and the coin are kept all
+    // the same.
+    [Fact]
+    public void SayingLootToTheRoom_IsOffUntilTicked()
+    {
+        _profile.LoadBlank();
+        Assert.False(_tracker.SayLootToRoom);
+
+        OpenOakChest();
+
+        Assert.Equal(new[] { "i", "open oak chest", "i" }, _sent);
+        Assert.Equal(new[] { ("moonstone", 2), ("ruby", 1) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
+        Assert.Equal(5, _tracker.Coin.Gold);
+
+        _tracker.SayLootToRoom = true;
+        Assert.True(_profile.Current!.SayChestLootToRoom);   // kept on the character
     }
 
     [Fact]

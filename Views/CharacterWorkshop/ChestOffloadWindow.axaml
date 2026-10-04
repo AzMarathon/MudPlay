@@ -88,6 +88,9 @@
                         <Button Content="Cancel tour" Command="{Binding CancelTourCommand}" Margin="12,0,0,0"
                                 IsVisible="{Binding IsTourRunning}"
                                 ToolTip.Tip="Stop the sell tour. A walk already under way keeps going; nothing more is sold."/>
+                        <CheckBox Content="Say loot to the room" IsChecked="{Binding SayLootToRoom, Mode=TwoWay}"
+                                  Margin="12,0,0,0" VerticalAlignment="Center"
+                                  ToolTip.Tip="Ticked: after each chest is opened (from this window or by typing), its items and coin are said to the room, so everyone there knows what came out. Off unless you tick it; saved with the character."/>
                         <Button Content="Clear list" Command="{Binding ClearListCommand}" Margin="6,0,0,0"
                                 ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped or taken off with ✕, even if you close this window."/>
                     </StackPanel>
