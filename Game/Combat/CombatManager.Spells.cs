@@ -218,27 +218,54 @@ public sealed partial class CombatManager
         _cast.CastFailed += OnCombatCastFailed;
     }
 
-    // A cast the engine sent failed on the wire. We only care about a DEBUFF rejected
-    // with "already cast this round" — its optimistic MarkCast tagged the mob debuffed,
-    // but the cast never landed, so undo the mark and let the next round re-fire it.
-    // Other reasons / non-matching codes are left to the buff path (CastingDirector)
-    // and the attack path (which owes-and-retries its own blocked send).
+    // A cast the engine sent failed on the wire. Two rejections matter here, both for
+    // a DEBUFF whose optimistic MarkCast tagged the mob(s) debuffed though the cast
+    // never landed: "already cast this round", and the room-wide "no effect in this
+    // room" (nothing was there to debuff). Undo the mark so a later round re-fires it.
+    // The room-wide refusal also ends a room-attack channel. Other reasons /
+    // non-matching codes are left to the buff path (CastingDirector) and the attack
+    // path (which owes-and-retries its own blocked send).
     private void OnCombatCastFailed(CastFailureReason reason, string detail, string? spell)
     {
-        if (reason != CastFailureReason.AlreadyCastThisRound) return;
-        if (_debuffAwaitingConfirm is not { } pending) return;
-        if (_now() - pending.At > DebuffRejectionWindow) { _debuffAwaitingConfirm = null; return; }
+        if (reason is not (CastFailureReason.AlreadyCastThisRound or CastFailureReason.NoTargets)) return;
+        if (TryRollBackRejectedDebuff(reason, spell)) return;
+        if (reason == CastFailureReason.NoTargets) EndRoomChannelOnNoTargets();
+    }
+
+    private bool TryRollBackRejectedDebuff(CastFailureReason reason, string? spell)
+    {
+        if (_debuffAwaitingConfirm is not { } pending) return false;
+        if (_now() - pending.At > DebuffRejectionWindow) { _debuffAwaitingConfirm = null; return false; }
         // The rejection line never names the spell; CastCoordinator attributes it to
         // the last code it sent. Only roll back when that matches the debuff we're
         // awaiting — otherwise a later attack's rejection could wrongly unmark it.
         if (!string.IsNullOrEmpty(spell)
             && !string.Equals(spell, pending.Decision.Spell, StringComparison.OrdinalIgnoreCase))
-            return;
+            return false;
         _spellChooser.UnmarkCast(pending.Decision, pending.Target, pending.RoomKeys);
         _debuffAwaitingConfirm = null;
+        string why = reason == CastFailureReason.NoTargets
+            ? "nothing in the room to hit" : "already cast this round";
         _log?.Combat(LogCategory,
-            $"pre-attack debuff {pending.Decision.Spell} rejected (already cast this round) — "
-            + "un-marked so it re-fires next round");
+            $"pre-attack debuff {pending.Decision.Spell} rejected ({why}) — un-marked so it re-fires");
+        return true;
+    }
+
+    // A running room attack keeps its round queued after it kills everything, and
+    // that round prints "Your spell has no effect in this room!" and queues no other
+    // (GAME_MECHANICS "Room-attack spells: cast bare, persistent channel"): the channel is over with no
+    // *Combat Off* to say so. Drop the marker and the announce latch with it, or a
+    // monster that roams in afterwards is re-anchored "without recast" onto a channel
+    // that no longer exists and is never attacked.
+    private void EndRoomChannelOnNoTargets()
+    {
+        if (_roomChannelSpell is not { } ended) return;
+        _roomChannelSpell = null;
+        if (string.Equals(_announcedSpellCode, ended, StringComparison.OrdinalIgnoreCase))
+            _announcedSpellCode = null;
+        _log?.Info(LogCategory,
+            $"room-attack channel '{ended}' ended — the game found nothing in the room to hit; "
+            + "it is cast again when a monster is here");
     }
 
     // Opt into monster-type spell eligibility. monsterLife reports each monster's

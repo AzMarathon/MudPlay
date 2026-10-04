@@ -328,6 +328,13 @@ public static class DefaultPatterns
         // attack spell.
         yield return new RegexPattern(KnownPatterns.SpellNoEffect,
             @"^Your spell has no effect on (?<target>.+?)\.");
+        // The room-wide refusal names no target, so the pattern above never sees it.
+        yield return new RegexPattern(KnownPatterns.SpellNoEffectInRoom,
+            @"^Your spell has no effect in this room!");
+        // The three room-facing fumble wordings on record; a confusion source with
+        // its own message prints another, which joins this list once it's captured.
+        yield return new RegexPattern(KnownPatterns.OtherFumbled,
+            @"^(?<who>[\w' -]+?) (?:retches uncontrollably|fumbles about dazedly|looks around stupidly and foams at the mouth)!");
 
         // ----- Cash ----------------------------------------------------
         // Stock MajorMUD wording for cash on the ground. Singular form

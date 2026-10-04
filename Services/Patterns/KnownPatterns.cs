@@ -221,6 +221,19 @@ public static class KnownPatterns
     // rest of the room.
     public const string SpellNoEffect        = "spell.no-effect";
 
+    // "Your spell has no effect in this room!" — a room-wide spell found nothing in
+    // the room to act on: a room attack's round with every monster gone, or an area
+    // debuff cast after its targets left. The cast did nothing, so the caster's
+    // bookkeeping for it rolls back.
+    public const string SpellNoEffectInRoom  = "spell.no-effect-in-room";
+
+    // "<name> retches uncontrollably!" and its siblings — the room's view of a
+    // confused monster or player losing an action. The first-person wordings are
+    // data (a Confused record's ConfuseFumbleLine) because a fumble eats our own
+    // command; the room's view gates nothing and is recognized only so it isn't
+    // staged as an unrecognized line.
+    public const string OtherFumbled         = "spell.other-fumbled";
+
     // ----- Cash --------------------------------------------------------
     // "There are N <coin> pieces here." / singular variant. Fired on room
     // display when cash is on the ground. CashManager subscribes to react per

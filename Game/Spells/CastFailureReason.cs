@@ -23,4 +23,8 @@ public enum CastFailureReason
     // Server: "You lost your concentration on the spell!" — mid-cast interrupt
     // (took damage during prep, broke stealth, etc.).
     Interrupted,
+
+    // Server: "Your spell has no effect in this room!" — a room-wide spell found
+    // nothing to act on.
+    NoTargets,
 }
