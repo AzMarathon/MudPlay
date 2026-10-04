@@ -340,6 +340,67 @@ public sealed class RegenTrackerTests
         tracker.Dispose();
     }
 
+    // On Paradigm the standing gain comes two rounds after the last HP gain, a rest
+    // gain included (live log 2026-10-04: last rest gain 02:53:41.5, standing gains
+    // from 02:53:51.6, while the mana pass sat at :25.9 / :56.0). Three rest gains
+    // move it a round off where it was before the rest.
+    [Fact]
+    public void ParaMud_StandingUp_PlacesTheStandingGainTenSecondsAfterTheLastRestGain()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Hp = 101;                             // a standing gain, at T0
+        clock.Advance(TimeSpan.FromSeconds(2));
+        state.Position = PlayerPosition.Resting;
+        clock.Advance(TimeSpan.FromSeconds(3));
+        state.Hp = 102;                             // rest gains at T0+5, +10, +15
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 103;
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 104;
+        clock.Advance(TimeSpan.FromSeconds(2));
+        state.Position = PlayerPosition.Standing;   // T0+17
+
+        AssertSeconds(8, tracker.GetTimeToNextHpNaturalTick());   // T0+25, not T0+20
+        tracker.Dispose();
+    }
+
+    // The same log: a mana pass 5 s after a standing HP gain. It is not an HP gain's
+    // moment, and the HP countdown the gains have placed stays where it is.
+    [Fact]
+    public void ParaMud_ManaPassOffTheHpCycle_LeavesTheHpCountdownAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Ma = 50;
+        state.Hp = 101;                             // T0
+        clock.Advance(TimeSpan.FromSeconds(10));
+        state.Hp = 102;                             // T0+10
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Ma = 54;                              // the mana pass, at T0+15
+
+        AssertSeconds(5, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // At max HP no HP gain is seen, so the mana pass is the only sign of the grid and
+    // still starts the HP countdown.
+    [Fact]
+    public void ParaMud_NoHpGainsSeen_ManaPassStartsTheHpCountdown()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Ma = 50;
+        clock.Advance(TimeSpan.FromSeconds(40));
+        state.Ma = 54;
+
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
     // On Paradigm a meditate gain comes every 15 s on a grid the 30 s mana pass sits
     // on (143 timed stretches: every gap between gains was 14-15 s, so the pass never
     // landed apart from a meditate gain). Meditating 22 s after a pass, the next gain
