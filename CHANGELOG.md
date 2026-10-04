@@ -3,6 +3,7 @@
 ## 3.144.1
 
 - Auto-Sneak: when monsters follow you from room to room it stops sending `sn` and walks on unsneaked (no hold, no stopping to cast) until you leave a room nothing followed you into, then sneaks again
+- bug reports addressed: backscroll-20261004-145718
 
 ## 3.144.0
 

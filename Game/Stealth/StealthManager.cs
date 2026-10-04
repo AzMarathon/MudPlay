@@ -88,8 +88,8 @@ public sealed class StealthManager : IDisposable
     // and the cooldown hold stood us still under attack (backscroll 2026-10-04 14:50).
     // A monster arriving within FollowWindow of our room change marks us followed:
     // no sn and no stopping to cast while it lasts, since a sneak can't take with a
-    // monster in the room (GAME_MECHANICS "NPCs and sneaking"). It lifts when we leave
-    // a room nobody followed us into — they've lost us, so the next room sneaks again.
+    // monster in the room (GAME_MECHANICS "Sneaking…"). It lifts when we leave a
+    // room nobody followed us into — they've lost us, so the next room sneaks again.
     private static readonly TimeSpan FollowWindow = TimeSpan.FromMilliseconds(1500);
     private DateTimeOffset _roomChangedAt = DateTimeOffset.MinValue;
     private bool _followed;
