@@ -78,6 +78,26 @@ public sealed class TickEngineTests
         tick.Dispose();
     }
 
+    // A healer's between-round heal lands about half a second after the round and
+    // was fine-tuning the grid onto itself (a Priest's live log, 2026-10-04: heals
+    // 0.25-0.75 s after a seen round taken as HP gains).
+    [Fact]
+    public void GainInsideTheRoundJustSeen_LeavesTheSeenRoundAlone()
+    {
+        var (router, tick, now, advance) = SetupClocked();
+        router.Dispatch(Line("Forged slashes Goblin for 17 damage!"));
+        DateTimeOffset seen = now();
+
+        advance(0.49);
+        tick.NoteGridTick(now(), authoritative: false);
+        Assert.Equal(seen, tick.LastCombatTick);
+
+        advance(0.2);
+        tick.NoteGridTick(now(), authoritative: true);
+        Assert.Equal(seen, tick.LastCombatTick);
+        tick.Dispose();
+    }
+
     // The projection running a little late for a round the gain has just marked:
     // the timer fires that round at once and lands on the gain.
     [Fact]

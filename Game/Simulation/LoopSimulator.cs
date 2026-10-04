@@ -903,9 +903,13 @@ public static class LoopSimulator
 
             long since = _step - _postureSince;
             bool resting = _posture == Posture.Resting;
-            if (_step > 0 && _step % _standingSteps == 0 && (!resting || !r.RestReplacesStanding))
-                _hp += r.HpStanding(hpBonus);
-            if (_step > 0 && _step % _manaSteps == 0) _ma += r.MaStanding(manaBonus);
+            bool standingHp = _step > 0 && _step % _standingSteps == 0 && (!resting || !r.RestReplacesStanding);
+            if (standingHp) _hp += r.HpStanding(hpBonus);
+            if (_step > 0 && _step % _manaSteps == 0)
+            {
+                _ma += r.MaStanding(manaBonus);
+                if (standingHp) _hp += r.StandingPassExtra(hpBonus);
+            }
             if (resting && r.Cadence.RestingOnRoundGrid)
             {
                 // The gains fall on the game's own grid; only their count runs from

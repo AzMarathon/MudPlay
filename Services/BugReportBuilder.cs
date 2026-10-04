@@ -69,7 +69,10 @@ public static class BugReportBuilder
             new("Live engine state", SafeSection(() => BuildEngineState(svc))),
             new("Room combat assessment", SafeSection(() => BuildRoomCombatAssessment(svc))),
             new("Combat rounds (last 10)", SafeSection(() => BuildCombatRounds(svc))),
-            new("Tick timing (last 400 events)", SafeSection(() => svc.TickTiming.Render())),
+            new("Tick timing (last 400 events)", SafeSection(() =>
+                $"HP regen expected per gain: {svc.HpRegenExpected.Current?.ToString() ?? "(no `stat` read yet — gains judged on timing alone)"}"
+                + (svc.HpRegenExpected.Current is { } expected ? $"; a gain above +{expected.Largest} is a heal." : string.Empty)
+                + "\n\n" + svc.TickTiming.Render())),
             new("Session combat stats", SafeSection(() => BuildSessionCombat(svc))),
             new("Session activity", SafeSection(() => BuildSessionActivity(svc))),
             new("Monster HP estimates", SafeSection(() => BuildMonsterHpEstimates(svc))),
