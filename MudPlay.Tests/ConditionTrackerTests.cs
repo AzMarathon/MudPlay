@@ -71,6 +71,49 @@ public sealed class ConditionTrackerTests
             AppliedEndsWith: endsWith);
     }
 
+    // A wear-off line whose OWN record was never latched left the flag stuck for
+    // the session. Reported from play (shard creature, Paradigm): its mid-combat
+    // spell 479 "zaps" carries HoldPerson, its message is worded as a stun ("You
+    // are stunned by electrical shock!" / "The shock wears off!"), it came up as
+    // the wrong condition, and "even once it cleared, it never detected the
+    // cleared state, it just sat there."
+    //
+    // The topology that does it: the applied line latches record A, the wear-off
+    // text belongs to record B, and both carry the same flag. `_endsIndex` finds
+    // B, `_active.Remove(B)` returns false because A is what latched, and the
+    // `continue` skips the group and flag-wide clears below it — so A is never
+    // released. There is no time-based expiry anywhere in the tracker, so nothing
+    // else ever clears it: only ClearAll (disconnect / death / Reset States).
+    //
+    // This is the same shape as the two reports already generalized for in
+    // OnLine — a confusion fumble sibling (-092219) and 8 "You are blind."
+    // aliases (paradigm-20260904-214452) — one step further out: there the
+    // wear-off's own record WAS active and siblings were stranded; here the
+    // wear-off's record was not active at all.
+    [Fact]
+    public void WearOff_WhoseOwnRecordNeverLatched_StillClearsTheFlag()
+    {
+        using Harness h = new();
+        // A: what the applied line actually latches. Its own wear-off never arrives.
+        h.Messages.Messages.Add(MakeRecord("shock (stun wording)",
+            MessageFlags.MovementPrevented,
+            applied: "You are stunned by electrical shock!",
+            endsWith: "You shake off the stun."));
+        // B: carries the wear-off the game really prints, under the same flag.
+        h.Messages.Messages.Add(MakeRecord("shock (wear-off)",
+            MessageFlags.MovementPrevented,
+            applied: "A jolt courses through you!",
+            endsWith: "The shock wears off!"));
+
+        h.Feed("You are stunned by electrical shock!");
+        Assert.True(h.Tracker.IsMovementPrevented, "the stun latched");
+
+        h.Feed("The shock wears off!");
+        Assert.False(h.Tracker.IsMovementPrevented,
+            "a wear-off under the same flag must release it even though its own "
+            + "record was not the one latched — otherwise it sticks for the session");
+    }
+
     // ----- applied / ends pair ---------------------------------------
 
     [Fact]

@@ -1,5 +1,9 @@
 # Version history
 
+## 3.144.4
+
+- A condition the game has ended is no longer left showing as still on you: a wear-off line now clears its flag even when the line belongs to a different message record than the one that set it, which is how a stun, hold or blind could sit there for the rest of the session
+
 ## 3.144.3
 
 - `Your spell has no effect in this room!` is recognized: a debuff cast at an emptied room is no longer counted as landed, and a room attack that ran out of monsters is cast again for the next ones

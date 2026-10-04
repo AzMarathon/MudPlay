@@ -307,12 +307,46 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         // state when they re-evaluate.
         List<MessageRecord> endedThisLine = new();
         List<MessageRecord> appliedThisLine = new();
+        // RecomputeFlags used to be gated solely on those two lists, so a clear that
+        // released records WITHOUT raising a ConditionEnded left the aggregate flags
+        // reading the old state — `_active` was correct and `IsMovementPrevented`
+        // still said true. Any movement of the active set has to recompute.
+        bool activeTouched = false;
 
         foreach ((string pattern, MessageRecord r) in _endsIndex)
         {
             if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
-            if (!_active.Remove(r.Id)) continue;
-            endedThisLine.Add(r);   // PRIMARY: its OWN wear-off line fired
+
+            // THE WEAR-OFF LINE ARRIVING IS THE EVENT, not whether this record
+            // happened to be the one latched. This used to `continue` when its own
+            // id was not active, which skipped BOTH generalized clears below and
+            // left the flag set for the session — there is no time-based expiry in
+            // this tracker, so nothing else ever released it short of ClearAll
+            // (disconnect / death / Reset States).
+            //
+            // The topology that does it: the applied line latches record A, the
+            // wear-off text belongs to record B, and both carry the same flag.
+            // Reported from play (shard creature, Paradigm) — its mid-combat spell
+            // 479 "zaps" carries HoldPerson while its message is worded as a stun
+            // ("You are stunned by electrical shock!" / "The shock wears off!"), it
+            // surfaced as the wrong condition, and once it really ended the client
+            // "never detected the cleared state, it just sat there."
+            //
+            // Same shape as the two reports already generalized for here — the
+            // confusion fumble sibling (-092219) and the 8 "You are blind." aliases
+            // (paradigm-20260904-214452) — one step further out: there the wear-off's
+            // own record WAS active and siblings were stranded, here it was not
+            // active at all. Consistent with the flag model stated below: a flag is
+            // a single toggle state, not a per-source stack.
+            bool wasOwnLatch = _active.Remove(r.Id);
+            if (wasOwnLatch) activeTouched = true;
+
+            // ConditionEnded STAYS gated on the record having actually been latched.
+            // Its only consumer is the self-buff recast timers, which anchor on each
+            // buff's own cast code, so firing it for a record we never latched would
+            // tear down a timer for a buff that is still up.
+            if (wasOwnLatch)
+                endedThisLine.Add(r);   // PRIMARY: its OWN wear-off line fired
 
             // Collateral clears below drop co-latched siblings from _active so the
             // recomputed flags (and the nav pause they drive) stay honest — but they
@@ -334,7 +368,8 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 && _appliedAliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
             {
                 foreach (MessageRecord alias in group)
-                    if (alias.Id != r.Id) _active.Remove(alias.Id);
+                    if (alias.Id != r.Id && _active.Remove(alias.Id))
+                        activeTouched = true;
             }
 
             // Every flag is a single toggle state, not a per-source stack: any
@@ -356,7 +391,9 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (r.Flags != MessageFlags.None)
             {
                 foreach (MessageRecord other in _messages.Messages)
-                    if ((other.Flags & r.Flags) != MessageFlags.None) _active.Remove(other.Id);
+                    if ((other.Flags & r.Flags) != MessageFlags.None
+                        && _active.Remove(other.Id))
+                        activeTouched = true;
             }
         }
 
@@ -393,7 +430,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (norm.Length > 0) actionFailed = MatchConfuseFumble(norm);
         }
 
-        if (endedThisLine.Count > 0 || appliedThisLine.Count > 0)
+        if (endedThisLine.Count > 0 || appliedThisLine.Count > 0 || activeTouched)
             RecomputeFlags();
 
         // Log the batch collapsed, then fan out the per-record events unchanged —
