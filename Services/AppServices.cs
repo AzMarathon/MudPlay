@@ -503,6 +503,10 @@ public sealed class AppServices
     // window shows, saved on the profile, and the room announcement of what dropped.
     public Game.Inventory.ChestOpenTracker ChestOpens { get; private set; } = null!;
 
+    // Walks and sells the Chest Offload list shop by shop, never selling more of an
+    // item than the chests gave.
+    public Game.Inventory.ChestSellTour ChestSellTour { get; private set; } = null!;
+
     // Realm-aware charge lookup over the two trackers above, shared by Character Info
     // and the @uses remote query so their readouts never diverge.
     public Game.Inventory.CarriedChargeReadout CarriedCharges { get; private set; } = null!;
@@ -6976,6 +6980,24 @@ public sealed class AppServices
             log: Log);
         AutoLightProvisioner.SetProvisioner(AutoLightShopRouter.OnBuyRequested);
         Walker.Event += AutoLightShopRouter.OnWalkEvent;
+
+        ChestSellTour = new Game.Inventory.ChestSellTour(
+            currentShop: () => RoomTracker.State.CurrentRoom?.Shop,
+            goWalk: GoWalkTo,
+            chestCount: name => ChestOpens.Loot(Inventory.Snapshot.CarriedItems)
+                .FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase)).Count,
+            sendPaced: cmds => InventoryAction.SendPaced(cmds),
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            inventory: Inventory,
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            log: Log);
+        Walker.Event += ChestSellTour.OnWalkerEvent;
         Inventory.Changed += AutoLightShopRouter.OnInventoryChanged;
         // Reorder poll: an `i` dump is the only moment the readied light's charge
         // refreshes, so the provisioner catches a dwindling supply here and hands

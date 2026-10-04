@@ -82,7 +82,13 @@
                         <TextBlock Text="Charm" VerticalAlignment="Center"/>
                         <NumericUpDown Width="120" Minimum="0" Maximum="255" Increment="1" FormatString="0"
                                        Value="{Binding Charm, Mode=TwoWay}"/>
-                        <Button Content="Clear list" Command="{Binding ClearListCommand}" Margin="12,0,0,0"
+                        <Button Content="Sell Tour" Command="{Binding SellTourCommand}" Margin="12,0,0,0"
+                                IsVisible="{Binding !IsTourRunning}"
+                                ToolTip.Tip="Walk to every shop below in turn and sell each one's items. Shows exactly what will be sold first; only what the chests gave is ever sold, never more — anything you already had stays."/>
+                        <Button Content="Cancel tour" Command="{Binding CancelTourCommand}" Margin="12,0,0,0"
+                                IsVisible="{Binding IsTourRunning}"
+                                ToolTip.Tip="Stop the sell tour. A walk already under way keeps going; nothing more is sold."/>
+                        <Button Content="Clear list" Command="{Binding ClearListCommand}" Margin="6,0,0,0"
                                 ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped or taken off with ✕, even if you close this window."/>
                     </StackPanel>
 
@@ -143,7 +149,7 @@
                                                        Foreground="{StaticResource AccentAmberBrush}"/>
                                             <Button Grid.Column="2" Content="Sell All" Command="{Binding SellCommand}"
                                                     Margin="0,0,6,0"
-                                                    ToolTip.Tip="Sell every item's quantity below at this shop — walks there first when you aren't standing in it"/>
+                                                    ToolTip.Tip="Sell every item's quantity below at this shop — walks there first when you aren't standing in it. Never sells more than the chests gave."/>
                                             <Button Grid.Column="3" Content="Drop All" Command="{Binding DropAllCommand}"
                                                     ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan"/>
                                         </Grid>
