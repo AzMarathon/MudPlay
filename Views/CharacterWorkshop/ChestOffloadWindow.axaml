@@ -82,6 +82,8 @@
                         <TextBlock Text="Charm" VerticalAlignment="Center"/>
                         <NumericUpDown Width="120" Minimum="0" Maximum="255" Increment="1" FormatString="0"
                                        Value="{Binding Charm, Mode=TwoWay}"/>
+                        <Button Content="Clear list" Command="{Binding ClearListCommand}" Margin="12,0,0,0"
+                                ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped or taken off with ✕, even if you close this window."/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
@@ -148,7 +150,7 @@
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ChestOffloadItemRow">
-                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
                                                         <Panel Grid.Column="0" VerticalAlignment="Center">
                                                             <Button x:Name="ShopBtn" Command="{Binding OpenShopMenuCommand}"
                                                                     IsEnabled="{Binding CanChangeShop}"
@@ -205,7 +207,10 @@
                                                                 Margin="0,0,6,0"
                                                                 ToolTip.Tip="Sell the quantity picked above at this item's shop — walks there first when you aren't standing in it. The row updates when the game confirms the sale — a refused sale changes nothing."/>
                                                         <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
+                                                                Margin="0,0,6,0"
                                                                 ToolTip.Tip="Drop this item's whole held stack. The row updates when the game confirms the drop."/>
+                                                        <Button Grid.Column="7" Content="✕" Command="{Binding RemoveCommand}"
+                                                                ToolTip.Tip="Take this item off the list — it stays in your pack"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -222,7 +227,12 @@
                             <ItemsControl ItemsSource="{Binding Unsellable}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:ChestOffloadItemRow">
-                                        <TextBlock Text="{Binding Name}" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                            <Button Content="✕" Command="{Binding RemoveCommand}"
+                                                    ToolTip.Tip="Take this item off the list — it stays in your pack"/>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

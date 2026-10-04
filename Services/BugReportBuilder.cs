@@ -1255,6 +1255,18 @@ public static class BugReportBuilder
             foreach (string item in locActive)
                 sb.Append("- ").Append(item).Append('\n');
 
+        // Chest Offload list (ChestOpenTracker): what's still listed after the opens,
+        // capped at what's carried, and whether an open is mid-flight.
+        var chestLoot = svc.ChestOpens.Loot(svc.Inventory.Snapshot.CarriedItems);
+        sb.Append("\n**Chest Offload list** (").Append(chestLoot.Count)
+          .Append(svc.ChestOpens.IsOpening ? ", an open in progress" : "")
+          .Append(", coin ").Append(svc.ChestOpens.Coin.TotalCopperValue).Append("c)\n\n");
+        if (chestLoot.Count == 0)
+            sb.Append("_(empty)_\n");
+        else
+            foreach ((string name, int count) in chestLoot)
+                sb.Append("- ").Append(count).Append(' ').Append(name).Append('\n');
+
         var plan = profile.CharacterPlan;
         sb.Append("\n**CP allocation plan (CharacterPlan)** (").Append(plan?.Count ?? 0).Append(")\n\n");
         sb.Append(plan is { Count: > 0 } ? Json(plan) : "_(none)_\n");

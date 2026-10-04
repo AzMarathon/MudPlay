@@ -1,10 +1,12 @@
 # Version history
 
-## 3.143.25
+## 3.143.27
 
 - Chest Offload: each open is read against a fresh `i` taken just before it, so items already carried or picked up between chests no longer show as chest loot; a chest opened by typing `open <chest>` counts too
 - Chest Offload: Sell All and Sell walk to the shop first when you aren't standing in it, then sell on arrival
 - Character Info: a carried chest has a treasure-chest icon that opens the Chest Offload window
+- Chest Offload: the list keeps after the window closes (saved with the character) until each item is sold, dropped or taken off with ✕; Clear list empties it
+- Chest Offload: each chest's contents and coin are said to the room when it's opened
 
 ## 3.143.20
 

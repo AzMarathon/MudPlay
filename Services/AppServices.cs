@@ -499,6 +499,10 @@ public sealed class AppServices
     // opened from the terminal.
     public Game.Inventory.OutboundOpenObserver OutboundOpen { get; } = new();
 
+    // Every chest opened (window button or typed): the loot list the Chest Offload
+    // window shows, saved on the profile, and the room announcement of what dropped.
+    public Game.Inventory.ChestOpenTracker ChestOpens { get; private set; } = null!;
+
     // Realm-aware charge lookup over the two trackers above, shared by Character Info
     // and the @uses remote query so their readouts never diverge.
     public Game.Inventory.CarriedChargeReadout CarriedCharges { get; private set; } = null!;
@@ -5587,6 +5591,21 @@ public sealed class AppServices
                 timer.Tick += (_, _) => { timer.Stop(); action(); };
                 timer.Start();
             },
+            log: Log);
+
+        ChestOpens = new Game.Inventory.ChestOpenTracker(
+            Inventory, Profile, OutboundOpen,
+            isContainer: name => ItemNames.FindByName(name) is int n
+                && ItemNames.ItemTypeOf(n) == Game.Inventory.ChestOffloadPlanner.ContainerItemType,
+            send: cmd => SendGameCommand(cmd),
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            runicName: () => Currency.RunicName,
             log: Log);
 
         // One realm-aware charge lookup shared by Character Info and @uses.
