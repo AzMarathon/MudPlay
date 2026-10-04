@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.143.21**
-> - Only auto-invite while navigation is running: a flagged player already standing with you is invited when a walk or loop starts, not only when you walk into their room
+> - Only auto-invite while navigation is running: a flagged player already standing with you is invited when a walk, loop or trip (deposit, sell, train, stash) starts, not only when you walk into their room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

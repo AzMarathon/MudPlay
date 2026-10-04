@@ -7938,6 +7938,14 @@ public sealed class AppServices
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
         SellDetour.DetouringChanged += MovementControl.NoteErrandStateChanged;
         AutoDeposit.ReroutingChanged += MovementControl.NoteErrandStateChanged;
+        // The same errands count as navigation for "Only auto-invite while navigation
+        // is running", and one can start with no walk or loop under it: its own start
+        // is what releases a held invite then. Train funding only ever begins inside
+        // a train trip.
+        StashTransfer.StateChanged += AutoParty.OnNavigationStateChanged;
+        TrainerWalk.StateChanged += AutoParty.OnNavigationStateChanged;
+        SellDetour.DetouringChanged += AutoParty.OnNavigationStateChanged;
+        AutoDeposit.ReroutingChanged += AutoParty.OnNavigationStateChanged;
         MovementControl.SuspendedErrandChanged += () =>
         {
             if (MovementControl.SuspendedErrand is { } held)
