@@ -157,6 +157,19 @@ public sealed class CastCoordinatorTests
         Assert.Equal(CastFailureReason.NotEnoughMana, h.Failures[0].Reason);
     }
 
+    // The room-wide refusal is also what a running room attack prints on a round with
+    // nothing left to hit, so it reports the failure without latching the block.
+    [Fact]
+    public void NoEffectInRoom_FiresNoTargetsWithoutBlocking()
+    {
+        using Harness h = new();
+        h.Cast.TryCast("stnk");
+        h.Feed("Your spell has no effect in this room!");
+
+        Assert.Contains(h.Failures, f => f.Reason == CastFailureReason.NoTargets);
+        Assert.True(h.Cast.TryCast("hsto", bypassRoundCooldown: true));
+    }
+
     [Fact]
     public void AlreadyCastThisRound_OnAttackSlot_BlocksAndFiresFailure()
     {

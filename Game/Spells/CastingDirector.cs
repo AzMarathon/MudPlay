@@ -1268,6 +1268,10 @@ public sealed class CastingDirector : IDisposable
     private void OnCastFailed(CastFailureReason reason, string detail, string? spell)
     {
         if (reason == CastFailureReason.Blocked) return;
+        // Only a room-wide spell aimed at monsters draws the empty-room refusal, and
+        // those are the combat engine's (its debuff mark, its room-attack channel) —
+        // never a self-buff timer, whatever code the coordinator last sent.
+        if (reason == CastFailureReason.NoTargets) return;
         if (reason == CastFailureReason.AlreadyCastThisRound)
             _betweenRoundSlotUsedAt = _now();
         if (_pendingSelfBuffShort is not { } shortCode) return;

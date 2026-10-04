@@ -402,6 +402,29 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal(2, h.AllSent.Count(s => s == "blast"));   // re-cast — the channel was broken
     }
 
+    // A room attack keeps its round queued after it kills everything; that round prints
+    // "Your spell has no effect in this room!" and queues no other, with no *Combat Off*.
+    // Monsters seen after it must draw a fresh cast, not a re-anchor onto the dead channel.
+    [Fact]
+    public void RoomChannel_EndedByNoEffectInRoom_RecastsForTheNextMonsters()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+        h.AddMonster(3, "muckworm");
+
+        h.Feed("Also here: giant rat, dark stalker, muckworm.");
+        Assert.Single(h.AllSent, s => s == "blast");
+
+        h.Combat.NoteMonsterDied("giant rat");
+        h.Feed("Your spell has no effect in this room!");
+        h.Feed("Also here: dark stalker, muckworm.");
+
+        Assert.Equal(2, h.AllSent.Count(s => s == "blast"));
+    }
+
     // The channel ends the moment a cast condition fails. Kill down below MinEnemies and
     // the room attack is over — the round falls through to the normal single-target chain.
     [Fact]

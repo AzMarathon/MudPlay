@@ -1,5 +1,11 @@
 # Version history
 
+## 3.144.3
+
+- `Your spell has no effect in this room!` is recognized: a debuff cast at an emptied room is no longer counted as landed, and a room attack that ran out of monsters is cast again for the next ones
+- `<name> retches uncontrollably!` and the other room-side confusion lines no longer show up as unrecognized
+- bug reports addressed: unrecognized-lines-20261004-122235
+
 ## 3.144.1
 
 - Auto-Sneak: when monsters follow you from room to room it stops sending `sn` and walks on unsneaked (no hold, no stopping to cast) until you leave a room nothing followed you into, then sneaks again

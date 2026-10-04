@@ -63,6 +63,7 @@ public sealed class CastCoordinator : IDisposable
     private readonly IDisposable _noManaSub;
     private readonly IDisposable _alreadySub;
     private readonly IDisposable _interruptSub;
+    private readonly IDisposable _noTargetsSub;
 
     private Action<byte[]>? _wireSender;
     // Attack-spell dispatches (CombatManager, always bypassRoundCooldown) and
@@ -126,6 +127,7 @@ public sealed class CastCoordinator : IDisposable
         _noManaSub    = router.Subscribe(KnownPatterns.CastNoMana,           OnNoMana);
         _alreadySub   = router.Subscribe(KnownPatterns.CastAlreadyThisRound, OnAlreadyThisRound);
         _interruptSub = router.Subscribe(KnownPatterns.CastInterrupted,      OnInterrupted);
+        _noTargetsSub = router.Subscribe(KnownPatterns.SpellNoEffectInRoom,  OnNoTargets);
     }
 
     // Bind the wire sender — typically the TelnetClient.SendAsync wrapper exposed
@@ -322,6 +324,16 @@ public sealed class CastCoordinator : IDisposable
     private void OnInterrupted(MatchResult _) =>
         BlockAndLog(CastFailureReason.Interrupted, "concentration-lost");
 
+    // The room-wide refusal comes back before the engine does anything with the
+    // cast, and a room attack's own round prints it too when the room has emptied, so
+    // it isn't proof a cast slot was spent: report it without latching the block.
+    private void OnNoTargets(MatchResult _)
+    {
+        _log?.Info(LogCategory,
+            $"cast failed reason=NoTargets (nothing in the room to act on) spell={_lastSpellSent ?? "<unknown>"}");
+        CastFailed?.Invoke(CastFailureReason.NoTargets, "no-targets-in-room", _lastSpellSent);
+    }
+
     private void BlockAndLog(CastFailureReason reason, string detail)
     {
         _castBlocked = true;
@@ -338,5 +350,6 @@ public sealed class CastCoordinator : IDisposable
         _noManaSub.Dispose();
         _alreadySub.Dispose();
         _interruptSub.Dispose();
+        _noTargetsSub.Dispose();
     }
 }

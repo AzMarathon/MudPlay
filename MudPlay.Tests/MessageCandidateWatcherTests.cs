@@ -577,6 +577,19 @@ public sealed class MessageCandidateWatcherTests
         Assert.Empty(h.Candidates.Candidates);
     }
 
+    [Theory]
+    [InlineData("Your spell has no effect in this room!")]
+    [InlineData("short orc warrior retches uncontrollably!")]
+    [InlineData("Raijin fumbles about dazedly!")]
+    public void RoomSpellRefusalAndWitnessedFumble_AreNotStaged(string line)
+    {
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed(line);
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
     // ----- Monster death flavour ------------------------------------------
 
     [Theory]
