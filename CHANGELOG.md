@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.13
+
+- Unrecognized Lines: a deck of cards' eight card readings are no longer listed (a line now counts as recognized whenever a message's applied text appears in it)
+- Unrecognized Lines: the Blood God cultists' cry is attributed to them, on both realms
+
 ## 3.143.11
 
 - A spell your `spells` list shows is marked learned even when the client's last-seen alignment would hide it, so it can be picked in the Buff Watchdog

@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.11**
-> - A spell your `spells` list shows is marked learned even when the client's last-seen alignment would hide it, so it can be picked in the Buff Watchdog
-> - Spell Book: lists every spell the class can learn, with Good / Neutral / Evil boxes to filter by alignment
-> - Priest `word` spells: the one you've learned is the one the client casts and reports, and the other two are no longer listed as spells still to learn
-> - Bug report: the Spell Book's class, alignment gate and counts, and learned buffs that have no Buff Watchdog slot
+> **Version 3.143.13**
+> - Unrecognized Lines: a deck of cards' eight card readings are no longer listed (a line now counts as recognized whenever a message's applied text appears in it)
+> - Unrecognized Lines: the Blood God cultists' cry is attributed to them, on both realms
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

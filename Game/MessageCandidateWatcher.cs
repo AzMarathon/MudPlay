@@ -100,12 +100,14 @@ public sealed class MessageCandidateWatcher : IDisposable
     // to stage known casts ("Raijin casts minor healing on Raijin!") for review.
     private MessageTemplateIndex _templates;
 
-    // Literal AppliedEndsWith wordings, matched as SUBSTRINGS to mirror what
-    // ConditionTracker actually does with them. The stored wording omits the
-    // server's trailing punctuation ("The effects of way of the tiger wear off"
-    // vs the wire's "… wear off!"), so an exact test never fires and every
-    // buff-expiry line in the game looked unrecognized.
-    private List<string> _appliedEndsWith = new();
+    // Literal AppliedMessage / AppliedEndsWith wordings, matched as SUBSTRINGS to
+    // mirror what ConditionTracker actually does with them: a line it latches or
+    // clears a condition on is a recognized line. The stored wording often omits
+    // the server's trailing punctuation ("The effects of way of the tiger wear off"
+    // vs the wire's "… wear off!"), or is only the opening of a longer line (a
+    // gypsy card's reading: `"The Knight is both protector and aggressor. Strength
+    // and vigilance shall`), so an exact test never fires.
+    private List<string> _conditionWordings = new();
 
     private LineExtractor? _lines;
     private bool _disposed;
@@ -231,7 +233,7 @@ public sealed class MessageCandidateWatcher : IDisposable
     private void RebuildIndex()
     {
         HashSet<string> known = new(StringComparer.Ordinal);
-        List<string> endsWith = new();
+        List<string> wordings = new();
         foreach (MessageRecord r in _messages.Messages)
         {
             AddIfNotEmpty(known, r.CasterMessage);
@@ -244,12 +246,11 @@ public sealed class MessageCandidateWatcher : IDisposable
                 foreach (string wording in r.WitnessMessage.Split('\n'))
                     AddIfNotEmpty(known, wording);
             AddIfNotEmpty(known, r.AppliedMessage);
-            // Substring, not exact — see _appliedEndsWith. Templated wordings are
-            // the template index's job; only literals land here.
-            if (!MessageRecord.IsBlankOrAbsent(r.AppliedEndsWith)
-                && r.AppliedEndsWith!.Trim() is { Length: > 0 } ends
-                && !ends.Contains('{'))
-                endsWith.Add(ends);
+            // Substring, not exact — see _conditionWordings. Templated wordings are
+            // the template index's job; only literals land here. A wording too short
+            // for ConditionTracker to index is too short to recognize a line by.
+            AddConditionWording(wordings, r.AppliedMessage);
+            AddConditionWording(wordings, r.AppliedEndsWith);
             // ConfuseFumbleLine is a recognized wire line too (it drives
             // MovementRefusalDetector via ConditionTracker.IsConfuseFumbleLine),
             // but it reaches the app through a predicate, NOT a router pattern —
@@ -261,7 +262,7 @@ public sealed class MessageCandidateWatcher : IDisposable
                     AddIfNotEmpty(known, wording);
         }
         _knownLines = known;
-        _appliedEndsWith = endsWith;
+        _conditionWordings = wordings;
         _templates = new MessageTemplateIndex(_messages.Messages);
     }
 
@@ -274,11 +275,18 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (!trimmed.Contains('{')) set.Add(trimmed);
     }
 
-    // True when a literal AppliedEndsWith wording appears in the line, matching
-    // ConditionTracker's own Contains semantics for these.
-    private bool MatchesAppliedEndsWith(string text)
+    private static void AddConditionWording(List<string> wordings, string? text)
     {
-        foreach (string wording in _appliedEndsWith)
+        if (MessageRecord.IsBlankOrAbsent(text) || MessageRecord.IsTooShortToMatch(text)) return;
+        string trimmed = text!.Trim();
+        if (!trimmed.Contains('{')) wordings.Add(trimmed);
+    }
+
+    // True when a literal applied or wear-off wording appears in the line, matching
+    // ConditionTracker's own Contains semantics for these.
+    private bool MatchesConditionWording(string text)
+    {
+        foreach (string wording in _conditionWordings)
             if (text.Contains(wording, StringComparison.Ordinal)) return true;
         return false;
     }
@@ -533,7 +541,7 @@ public sealed class MessageCandidateWatcher : IDisposable
         || IsKnownRoomName(text)
         || BenignChatterMatcher.IsBenign(text)
         || EngineReplyLines.Matches(text)
-        || MatchesAppliedEndsWith(text)
+        || MatchesConditionWording(text)
         || _templates.Matches(text)
         || _router.AnyPatternMatches(line);
 

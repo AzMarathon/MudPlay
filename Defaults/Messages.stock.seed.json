@@ -22683,5 +22683,80 @@
     ],
     "ConfuseFumbleLine": "",
     "CastResponse": ""
+  },
+  {
+    "Id": "7a4e5a098d54b5ee",
+    "Name": "blood god cultists' cry",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "The fanatic screams \"Death to those who oppose the Blood God!\"",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Monsters",
+        "Number": 29
+      },
+      {
+        "Table": "Monsters",
+        "Number": 142
+      },
+      {
+        "Table": "Monsters",
+        "Number": 143
+      },
+      {
+        "Table": "Monsters",
+        "Number": 144
+      },
+      {
+        "Table": "Monsters",
+        "Number": 145
+      },
+      {
+        "Table": "Monsters",
+        "Number": 146
+      },
+      {
+        "Table": "Monsters",
+        "Number": 147
+      },
+      {
+        "Table": "Monsters",
+        "Number": 149
+      },
+      {
+        "Table": "Monsters",
+        "Number": 150
+      },
+      {
+        "Table": "Monsters",
+        "Number": 151
+      },
+      {
+        "Table": "Monsters",
+        "Number": 1099
+      },
+      {
+        "Table": "Monsters",
+        "Number": 1100
+      },
+      {
+        "Table": "Monsters",
+        "Number": 1101
+      },
+      {
+        "Table": "Monsters",
+        "Number": 1102
+      },
+      {
+        "Table": "Monsters",
+        "Number": 1104
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   }
 ]

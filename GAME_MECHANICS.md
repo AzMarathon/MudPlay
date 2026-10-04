@@ -3145,6 +3145,23 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 - A spell effect on the monster moves it in a picked random direction when its value beats `genrdn(0,100)` (`_perform_routine_spell_monster_upkeep` @ `0x44a37b`).
 - A trapdoor action pushes every monster in the room through the exit as a forced move (@ `0x46c86a`).
 
+### Monster flavor lines
+*Status: [OBSERVED] 2026-10-03, Stock `wccmmud.dll` 1.11p (`_background_slow`, `_perform_random_event`) and the Stock monster and textblock files; the cultists' line CONFIRMED on both realms 2026-10-03 (user) · Realm: both (the engine detail is Stock)*
+
+- **A monster record can name a textblock of things it says, and the engine prints a line from it on the slow tick.** The field sits at offset `0x19c` of the monster record, 128 bytes past the greet textblock. The imported game data has no column for it.
+- **How a line gets printed** (`_perform_random_event`, called once per slow tick — every 30 s, see *Monster HP regen*):
+  - The tick rolls 0–100 and does nothing on 95 or more.
+  - It walks the online players. In each player's room it looks through the fifteen monster slots for a monster whose record has the textblock.
+  - For that monster it rolls 0–100 again and reads the textblock line by line. Each line is `<threshold> <text>`; the first line whose threshold is above the roll is printed to the whole room.
+  - **One line per tick at most.** The routine returns as soon as it has printed one, and gives up after looking at 20 monsters.
+- **The Blood God cultists share textblock 9108, a single line:** `100 The fanatic screams "Death to those who oppose the Blood God!"`. The wire line is `The fanatic screams "Death to those who oppose the Blood God!"` whichever of them says it *(Paradigm: seen twice in the dark cultist #29 lair at 1/1139, unrecognized-lines export 2026-10-03)*.
+  - Fifteen Stock monsters carry it: dark cultist #29 / #142, dark cleric #143 / #1101, dark priest #144, dark paladin #145, dark warrior #146 / #1104, dark warlock #147, dark mage #149 / #1102, elite guard #150 / #1100, guard captain #151 / #1099.
+  - Paradigm has the same fifteen monsters by number and name. Its own monster file isn't available, so which of them carry the textblock there is taken from Stock.
+- Stock textblock 9230 holds four more fanatic lines behind `random 9230` (textblock 9229): `I will sacrifice you to the Blood God!`, `The hellhounds shall feast on your bones!`, `Glory to the Blood God!` and `Taste my holy steel vile infidel!`, each as `The fanatic screams "…"`. No Stock monster record points at 9229; where it is used was not traced.
+
+**Client use:**
+- Both message seeds carry the cultists' line as one record linked to the fifteen monsters (`WitnessMessage`), so `MessageCandidateWatcher` no longer stages it. Nothing acts on the line.
+
 ### Monster movement lines
 
 *Status: CONFIRMED 2026-09-09 (user) for yellow-indexed arrival names; CONFIRMED 2026-09-24 (user + contributor capture, PR #690) for generic movement lines*
@@ -5077,6 +5094,7 @@ There is no room to drop amethyst pendant here.
   - death `A deathly curse be upon you! The shadow of death hovers at your door`; fool `Fools often wander the land in ignorant bliss`; swamp `The Swamp swallows life and slows travel`; demon `as a Demon hovers about you`; void `Unending darkness is the hallmark of the Void`.
 - **Client use:**
   - The message seeds key each card record on its own quote, and the shared `The gaze of luck is upon you` line sits on the deck's own record (`card deck draw` / `card-draw`). With all thirteen records on the shared line, one draw latched every card and the void's Confused flag held navigation (report `paradigm-20261002-120516`).
+  - `MessageCandidateWatcher` treats a line as recognized when a record's applied (or wear-off) wording appears anywhere in it, the same test `ConditionTracker` uses. The card records hold only the opening of each quote, and the wire line begins with a `"` and runs on past it, so until 2026-10-03 every draw was staged as an unrecognized line while the card itself was being recognised.
   - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*.
   - `SpellEffectFormatter` leaves ability 15 out of a spell's effect text: it is a marker, not an effect.
   - `TerminalEmulator.CompleteRowBeforeLeaving` completes a written row when the cursor is moved off it, so the row naming the card reaches `ConditionTracker`. Before that only LF-ended rows were emitted, no card was ever recognised, and the Buff Watchdog drew again over a wanted card (report `paradigm-20261002-140334`). `MessageCandidateWatcher` drops the picture's rows.
