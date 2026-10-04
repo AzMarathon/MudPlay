@@ -187,9 +187,13 @@ public static class DefaultPatterns
         // Trailing punctuation varies per realm — real output uses ".", "!",
         // ",", and ";" depending on whether the miss line continues with a
         // dodge / parry / "but misses!" follow-up. Use a word boundary after
-        // "you" so any non-letter delimiter classifies.
+        // "you" so any non-letter delimiter classifies. A miss is worded per
+        // attack: most swing "at you", a touch attack "reaches for you". Without
+        // the second form a room of spirits that only missed never woke the
+        // re-engage or the empty-room refresh (reports paradigm-20261003-194358,
+        // paradigm-20261003-201253).
         yield return new RegexPattern(KnownPatterns.MobMisses,
-            @"^The (?<target>[\w -]+) \w+ at you\b");
+            @"^The (?<target>[\w -]+) \w+ (?:at|for) you\b");
         yield return new RegexPattern(KnownPatterns.MobHits,
             @"^The (?<target>[\w -]+) \w+ you for (?<damage>\d+) damage!");
         // Broad "the mob just attacked us" activity signal — see

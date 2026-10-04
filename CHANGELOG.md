@@ -1,10 +1,13 @@
 # Version history
 
-## 3.143.4
+## 3.143.6
 
 - Combat: bashing a door open is no longer taken for an attack you typed, so a buff cast on entering the next room no longer leaves the monsters un-attacked
 - Combat: after an attack you really did type, an attack spell stopped by the engine's own heal or buff is re-cast on the next round instead of waiting for a monster to land a hit
-- bug reports addressed: paradigm-20261003-194358
+- Weakness is no longer treated as a hold: no standing still or casting cure paralysis through every weakness or frail
+- A monster that misses by reaching for you now counts as a swing, so the client attacks back instead of waiting for a hit to land
+- Too heavy to move: a weakness or frail reads `i` straight away, and a character over its max waits (hold chip **Too heavy**) until it wears off or you shed weight; leaders and solo characters included
+- bug reports addressed: paradigm-20261003-194358, paradigm-20261003-201253
 
 ## 3.143.3
 

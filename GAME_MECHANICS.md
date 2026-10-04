@@ -322,7 +322,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 | Room too dark to see (starves name + exits + Also-here) | `The room is very dark - you can't see anything.` |
 | Room considerably darker (same starving) | `The room is pitch black...` |
 | Guard interposes for a guarded monster (no trailing period, no prefix) | `<guard> moves to protect <protected>` |
-| Incoming mob attack — miss (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> at you` |
+| Incoming mob attack — miss (dark cyan; reveals a mob in a dark room). The wording is per attack: most swing `at you`; a touch attack `reaches for you` (`The vengeful spirit reaches for you!`, [OBSERVED] Paradigm, reports `paradigm-20261003-194358` / `paradigm-20261003-201253`) | `The <monster> <verb> at you` / `The <monster> <verb> for you` |
 | Incoming mob attack — hit (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> you for N damage!` |
 | Thorns / ShockShield reflect (**white** line, follows the **red** hit that triggered it, inside a *Combat Engaged*…*Combat Off* window) | `The <item-wording> stab <attacker> for N damage!` — see *Armour, defence & to-hit → Thorns / ShockShield reflect damage* |
 | Monster leaves the room (e.g. dragged out by a fleeing player) | `<name> walks out of the room to <dir>.` **or** `<name> exits the room to <dir>.` — both confirmed; the "exits" form (no leading article) was the paradigm drag-out capture |
@@ -3247,6 +3247,11 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 - **A character carrying more than their max encumbrance can't move and sees `You are too heavy to move`.** *([CONFIRMED] user; trailing punctuation not recorded — the client matches the phrase `too heavy to move` on an unquoted line.)*
 - **It is not a hold.** `freedom` / `cure paralysis` don't clear it.
+- **Over the max means no moving at all, and `i` is where it shows.** *([CONFIRMED] 2026-10-03, user.)* Current weight above the max shown by `i` is the whole condition; the refusal line only appears when a move is tried.
+- **Weakness works the same way: it is a carry-capacity debuff, not a hold.** *([CONFIRMED] 2026-10-03, user; data [OBSERVED] Paradigm 1.9.1 and Stock 1.11p.)* **weakness #424** carries **Encum% (96) −25**, Accuracy −10 and MaxDamage, `Dur` 40, and no HoldPerson / Paralyze code. `cure paralysis` and `freedom` do not remove it. It only stops a character already near the max. This is the reason for the 90% encumbrance pickup limits on coin and items (user, 2026-10-03).
+  - Its lines are the frail ones: `You feel weak and powerless` / `You feel your strength return`. Eight records share that applied line (weakness #424, weakness touch #127, frail #949 / #956 / #5445, red beam #1067 / #1191, red wave #1072), so the wire can't say which landed.
+  - The seeds flagged weakness `MovementPrevented` until 2026-10-03 (a flag carried in with the record, backed by no ability code). Because the applied line is shared, every frail read as a hold: the loop stood for the whole duration and cast `cure paralysis` into it (report `paradigm-20261003-201253`).
+- **The Stock refusal is `You are too heavy to move anywhere!`** — see *Per-hop movement speed*.
 - **It clears one of two ways:** drop items until the weight is under the (lowered) max shown by `i`, or wait for the debuff that lowered the max to wear off.
 - **A debuff can lower the max mid-fight.** *([OBSERVED] Paradigm 1.9.1 data, 2026-09-26.)* **frail #949** carries **Encum% (96) −5**, beside AC −10, Accuracy −10, AlterDR% −15, Crits −5 and MaxDamage −2, with `Dur` 15.
   - Its apply and wear-off lines are target-only: `You feel weak and powerless` / `You feel your strength return`. The caster, target-seen and witness lines are all `{null}`, so nobody else sees it land.
@@ -3254,7 +3259,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A follower in this state is left behind when the leader moves** (see *Party → A follower who can't move is left behind*).
 
 **Client use:**
-- `TooHeavyWaitSignal` (follower side): on the line it telepaths the leader `@wait (too heavy to move)` (`WaitReason.TooHeavy`) and sends `i` every 15 s. It sends `@ok` once a fresh `i` shows current ≤ max.
+- `TooHeavyWaitSignal`: a capacity debuff landing (`EncumbranceDebuffIndex`: any linked spell with a negative Encum%) sends `i` at once; a read showing current > max, or the refusal line itself, starts the wait. While it lasts our own walk / loop / auto-lair holds on `MovementCoordinator.TooHeavyGate`, a follower telepaths the leader `@wait (too heavy to move)` (`WaitReason.TooHeavy`), and `i` goes out every 15 s. The debuff's wear-off line prompts a read straight away. A fresh `i` showing current ≤ max ends it (`@ok` for a follower), whether the debuff wore off or the player shed weight. **Client policy** (user, 2026-10-03): wait the debuff out; nothing is dropped automatically.
+- `MovementRefusalDetector` reverts the pending move on either refusal wording.
 - `ComebackRequester` counts the line as a left-behind cause.
 
 ### Per-hop movement speed

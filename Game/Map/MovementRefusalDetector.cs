@@ -160,6 +160,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         TooImpairedToMove(),
         CantSeeWellEnoughToMove(),
         TooEncumberedToMove(),
+        TooHeavyToMove(),
         FlatOnYourBack(),
         AlignmentBlocksExit(),
     };
@@ -230,6 +231,13 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*You are too encumbered to move[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TooEncumberedToMove();
+
+    // The over-max-encumbrance refusal: "…to move anywhere!" on Stock, the shorter
+    // form on Paradigm (GAME_MECHANICS "Too heavy to move (over max encumbrance)").
+    [GeneratedRegex(
+        @"^\s*You are too heavy to move(?: anywhere)?[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TooHeavyToMove();
 
     // Knocked down — the server refuses the move with this while we're held.
     // SelfHeldResponder normally holds the loop before a move goes out, but a

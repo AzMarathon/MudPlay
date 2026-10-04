@@ -224,6 +224,11 @@ public sealed class MovementCoordinator
     // through obvious exits, so our own moves wait for it to wear off.
     public const string FearGate = "Fear";
 
+    // Asserted by TooHeavyWaitSignal while we carry more than our max encumbrance —
+    // every move is refused until the weight is back under it, usually when the
+    // debuff that cut the max wears off (GAME_MECHANICS "Too heavy to move (over max encumbrance)").
+    public const string TooHeavyGate = "TooHeavy";
+
     private const int HistoryCapacity = 200;
 
     private readonly LogService? _log;
