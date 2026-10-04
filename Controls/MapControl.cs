@@ -1586,19 +1586,48 @@ public sealed class MapControl : Control
 
     // The view moved (pan, zoom, re-centre). The cached static layer stands in
     // straight away, shifted for a pan and stretched for a zoom, and is redrawn at
-    // the new view only when that stops being good enough: a zoom once the wheel
-    // rests, a pan past the margin at most every StaticRedrawGap. A redraw of a
-    // town and its other floors takes tens of milliseconds; one per wheel tick or
-    // per drag step is what piled up into seconds of lag.
+    // the new view only when that stops being good enough. While it still serves, a
+    // zoom is redrawn once the wheel rests: a redraw of a town and its other floors
+    // takes tens of milliseconds, and one per wheel tick or per drag step is what
+    // piled up into seconds of lag. Once it no longer serves (see StandInServes) it
+    // is redrawn at once, at most every StaticRedrawGap, wheel still turning or not:
+    // the routes are drawn live over it, and on a long zoom out they ran across
+    // blank space around a picture shrunk to the middle of the view until the wheel
+    // stopped.
     private void ViewMoved()
     {
-        double dx = _panX - _staticPanX, dy = _panY - _staticPanY;
-        if (_zoom != _staticZoom)
-            ScheduleStaticRedraw(debounce: true);
-        else if (Math.Abs(dx) > _staticMargin || Math.Abs(dy) > _staticMargin)
+        if (!StandInServes())
             ScheduleStaticRedraw(debounce: false);
+        else if (_zoom != _staticZoom)
+            ScheduleStaticRedraw(debounce: true);
         ApplyStaticTransform();
         _dynamicLayer?.InvalidateVisual();
+    }
+
+    // A stand-in stretched past this shows rooms as blurred blocks the live routes
+    // no longer read against.
+    private const double MaxStandInStretch = 2.0;
+
+    private bool StandInServes() => StandInServes(
+        _zoom, _panX, _panY, _staticZoom, _staticPanX, _staticPanY, _staticMargin, Bounds.Size);
+
+    // Whether a static layer drawn at one view, moved onto another, still covers all
+    // of it and isn't stretched out of recognition. For a plain pan that is the
+    // margin; zooming out shrinks the picture, so it gives out after about one and a
+    // half times.
+    internal static bool StandInServes(double zoom, double panX, double panY,
+        double drawnZoom, double drawnPanX, double drawnPanY, double margin, Size view)
+    {
+        if (drawnZoom <= 0) return false;
+        double scale = zoom / drawnZoom;
+        if (scale > MaxStandInStretch) return false;
+        double w = view.Width, h = view.Height;
+        // The layer's top-left corner on screen, as ApplyStaticTransform places it.
+        double left = w / 2 + panX - scale * (w / 2 + drawnPanX + margin);
+        double top = h / 2 + panY - scale * (h / 2 + drawnPanY + margin);
+        return left <= 0 && top <= 0
+            && left + scale * (w + 2 * margin) >= w
+            && top + scale * (h + 2 * margin) >= h;
     }
 
     // Maps the static layer, drawn at _staticZoom / _staticPan, onto the view as it is
@@ -1637,13 +1666,15 @@ public sealed class MapControl : Control
             _staticRedrawTimer.Start();
             return;
         }
-        if (_staticRedrawTimer.IsEnabled) return;
         TimeSpan since = DateTime.UtcNow - _lastStaticRedraw;
         if (since >= StaticRedrawGap)
         {
-            InvalidateStatic("pan");
+            InvalidateStatic(_zoom != _staticZoom ? "zoom" : "pan");
             return;
         }
+        // Whatever was pending (a zoom's wait for the wheel to rest among them)
+        // gives way: this redraw is owed as soon as the gap allows.
+        _staticRedrawTimer.Stop();
         _staticRedrawTimer.Interval = StaticRedrawGap - since;
         _staticRedrawTimer.Start();
     }
