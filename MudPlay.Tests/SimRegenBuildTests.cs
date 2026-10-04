@@ -48,6 +48,27 @@ public sealed class SimRegenBuildTests : IDisposable
         Assert.Equal(RealmRegenProfile.ParaMud, regen.Cadence);
     }
 
+    // A second character, with HP-regen gear (report paradigm-20261004-140923: level
+    // 28, Health 71, +25% from a ring). The wire showed +2 +2 +3 standing, the +3 with
+    // the mana tick, and resting +2 +2 +3 +7 +7 +7: thirds of the amount before the
+    // bonus, the bonus's one point on the last of each three, and 6 + 1 as the full gain.
+    [Fact]
+    public void Paradigm_RegenBonus_ComesOnTheLastOfEachThree()
+    {
+        PlayerStats stats = new() { Level = 28, Health = 71 };
+        SimRegen regen = SimCharacterBuilder.BuildRegen(
+            stats, Array.Empty<EquippedItem>(), _cache, questBonuses: null, RealmType.ParaMud);
+
+        Assert.Equal(2, regen.HpStanding(25));
+        Assert.Equal(1, regen.StandingPassExtra(25));
+        Assert.Equal(new[] { 2.0, 2.0, 3.0, 7.0, 7.0, 7.0, 2.0, 2.0, 3.0, 7.0 },
+            Enumerable.Range(1, 10).Select(t => regen.RestTickHp(t, 25)));
+
+        // Without the ring: 2 a gain and 6 as the full gain, nothing extra.
+        Assert.Equal(0, regen.StandingPassExtra(0));
+        Assert.Equal(new[] { 2.0, 2.0, 2.0, 6.0 }, Enumerable.Range(1, 4).Select(t => regen.RestTickHp(t)));
+    }
+
     [Fact]
     public void Stock_PaysTheIdleAmountAndAFullRestTickEveryTime()
     {
@@ -58,8 +79,8 @@ public sealed class SimRegenBuildTests : IDisposable
         Assert.False(regen.RestReplacesStanding);
     }
 
-    // Paradigm's standing gain and low rest gain: a third of the 30 s amount, the
-    // fraction dropped, never under 1.
+    // Paradigm's standing gain and low rest gain: a third of the 30 s amount before
+    // any regen bonus, the fraction dropped, never under 1.
     [Theory]
     [InlineData(1, 1)]
     [InlineData(2, 1)]

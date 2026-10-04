@@ -114,10 +114,11 @@ public static class CharacterCalculator
     }
 
     // Paradigm pays the idle HP amount in thirds: one standing gain every 10 s, and
-    // the low gains of a rest. The fraction is dropped and the third is kept to at
-    // least 1, as the idle amount itself is. The regen percent is already in the idle
-    // amount (GAME_MECHANICS "Rest and meditate tick timing").
-    public static int ParadigmHpRegenThird(int idleAmount) => Math.Max(1, idleAmount / 3);
+    // the low gains of a rest. The third is of the amount before any regen percent,
+    // with the fraction dropped, and is kept to at least 1 as the amount itself is.
+    // What the percent adds to the whole amount comes on the last gain of each three
+    // (GAME_MECHANICS "Rest and meditate tick timing").
+    public static int ParadigmHpRegenThird(int baseAmount) => Math.Max(1, baseAmount / 3);
 
     // ----- Mana / Kai ------------------------------------------------------
 

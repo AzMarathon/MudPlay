@@ -378,11 +378,17 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         if (realm == RealmType.ParaMud)
         {
             // Paradigm pays the 30 s amount in thirds, and a rest's full gain is that
-            // whole amount, not three times it.
-            int third = CharacterCalculator.ParadigmHpRegenThird(idle);
+            // whole amount, not three times it. The thirds are of the amount before
+            // the HP-regen bonus; what the bonus adds comes on the last of each three.
+            int unscaled = CharacterCalculator.CalcHpRegen(level, _stats.Health, 0, isResting: false, realm);
+            int third = CharacterCalculator.ParadigmHpRegenThird(unscaled);
+            int extra = idle - unscaled;
+            string lows = extra != 0 ? $"+{third}, +{third}, +{third + extra}" : $"three of +{third}";
             HpRegen = $"+{third} / +{idle}";
-            HpRegenTip = $"Standing: +{third} HP every 10 s.\n"
-                + $"Resting: a gain every 5 s — three of +{third}, then three of +{idle}, and round again. "
+            HpRegenTip = (extra != 0
+                    ? $"Standing: {lows} over 30 s, one every 10 s (the last with the mana tick).\n"
+                    : $"Standing: +{third} HP every 10 s.\n")
+                + $"Resting: a gain every 5 s — {lows}, then three of +{idle}, and round again. "
                 + "It counts from when you lie down, so resting again starts back at the small gains.";
         }
         else

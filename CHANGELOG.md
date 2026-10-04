@@ -1,9 +1,11 @@
 # Version history
 
-## 3.143.27
+## 3.143.28
 
 - Character Info: Paradigm HP Regen shows the measured ticks — a third of the amount every 10 s standing, and resting every 5 s in three small then three full gains (the tooltip still described the old 10 s cycle)
 - Paradigm meditate is timed: a mana gain every 15 s (was taken as 10), on the same grid as the 30 s tick — the meditate countdown, Mana Regen tooltip and Exp/Hr estimate follow
+- Paradigm HP-regen gear is measured: the small gains are thirds of the amount before the bonus, and the bonus's extra comes on the third one — the Exp/Hr estimate and HP Regen tooltip no longer run a point short per 30 s
+- bug reports addressed: paradigm-20261004-140923
 
 ## 3.143.25
 

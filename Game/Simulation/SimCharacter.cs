@@ -38,21 +38,30 @@ public sealed record SimBuff(
 // Paradigm: rest takes the standing HP gain's place and rides the round grid, and
 // the amount runs in threes counted from lying down — RestRun gains of HpRestingLow,
 // then RestRun of HpResting, and round again (GAME_MECHANICS "Rest and meditate
-// tick timing").
+// tick timing"). The low and standing gains are thirds of the amount before the
+// regen percent; HpLowExtra is what the percent adds to the whole amount, paid on
+// the last low gain of a run and on the standing gain that comes with the mana pass.
 //
 // MaMeditating always adds on top of the standing mana tick.
 public sealed record SimRegen(
     Func<int, double> HpStanding, Func<int, double> HpResting,
     Func<int, double> MaStanding, double MaMeditating,
     RealmRegenProfile Cadence, bool RestReplacesStanding,
-    Func<int, double>? HpRestingLow = null, int RestRun = 1)
+    Func<int, double>? HpRestingLow = null, int RestRun = 1,
+    Func<int, double>? HpLowExtra = null)
 {
     // HP paid by the tick-th rest tick since lying down (1-based), with extra HP-regen
     // percent from active buffs.
-    public double RestTickHp(long tick, int extra = 0) =>
-        HpRestingLow is { } low && (tick - 1) / Math.Max(1, RestRun) % 2 == 0
-            ? low(extra)
-            : HpResting(extra);
+    public double RestTickHp(long tick, int extra = 0)
+    {
+        int run = Math.Max(1, RestRun);
+        if (HpRestingLow is not { } low || (tick - 1) / run % 2 != 0) return HpResting(extra);
+        bool lastOfRun = (tick - 1) % run == run - 1;
+        return low(extra) + (lastOfRun ? StandingPassExtra(extra) : 0);
+    }
+
+    // What the regen percent adds to the standing gain that lands on the mana pass.
+    public double StandingPassExtra(int extra = 0) => HpLowExtra?.Invoke(extra) ?? 0;
 }
 
 // Everything the loop simulator plays by: the character's pools, offense, defense

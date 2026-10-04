@@ -103,8 +103,10 @@ public static class SimCharacterBuilder
     // Paradigm, as measured (GAME_MECHANICS "Rest and meditate tick timing"): mana
     // whole every 30 s; standing HP a third of the idle amount, fraction dropped,
     // every 10 s; resting a gain every 5 s, three of that third and then three of the
-    // whole idle amount. A third is kept to at least 1, as the idle amount itself is:
-    // no capture has shown a character whose idle amount is under 3.
+    // whole idle amount. The third is of the amount before the regen percent, and
+    // what the percent adds comes on the last gain of each three. A third is kept to
+    // at least 1, as the idle amount itself is: no capture has shown a character
+    // whose idle amount is under 3.
     internal static SimRegen BuildRegen(
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
         IReadOnlyList<QuestBonus>? questBonuses, RealmType realm)
@@ -126,7 +128,9 @@ public static class SimCharacterBuilder
         int level = stats.Level, health = stats.Health, intel = stats.Intellect, wil = stats.Willpower, cha = stats.Charm;
         bool paradigm = realm == RealmType.ParaMud;
         double Idle(int extra) => CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, false, realm);
-        double IdleThird(int extra) => CharacterCalculator.ParadigmHpRegenThird((int)Idle(extra));
+        int idleBase = CharacterCalculator.CalcHpRegen(level, health, 0, false, realm);
+        double IdleThird(int extra) => CharacterCalculator.ParadigmHpRegenThird(idleBase);
+        double PercentExtra(int extra) => Idle(extra) - idleBase;
         double Mana(int extra) => CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
             mageryType, mageryLevel, mpPct + extra, false, realm);
         double meditating = CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
@@ -135,7 +139,7 @@ public static class SimCharacterBuilder
             ? new SimRegen(
                 HpStanding: IdleThird, HpResting: Idle, MaStanding: Mana, MaMeditating: meditating,
                 RealmRegenProfile.ParaMud, RestReplacesStanding: true,
-                HpRestingLow: IdleThird, RestRun: 3)
+                HpRestingLow: IdleThird, RestRun: 3, HpLowExtra: PercentExtra)
             : new SimRegen(
                 HpStanding: Idle,
                 HpResting: extra => CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, true, realm),
