@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.25
+
+- Stat Breakpoints: **Mana / tick** column under your class's mana stat (Mage INT, Priest WIL, Bard CHA, Druid INT and WIL); none for Mystics or classes without mana
+- Stat Breakpoints: **Max HP** (Health), **Carry weight** (Strength) and **Energy / swing** (Agility, for your wielded weapon and load) columns
+
 ## 3.143.23
 
 - Emergency heal no longer loses the round to a Major heal picked on a half-landed round: a mid-round HP read is always held until the round settles, whichever part of the client asks first

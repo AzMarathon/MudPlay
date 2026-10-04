@@ -947,7 +947,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             DialogService.RaiseExisting(window);
             return;
         }
-        _breakpointsWindow = new StatBreakpointsWindow { DataContext = new StatBreakpointsViewModel(_stats, _gameData, stat) };
+        _breakpointsWindow = new StatBreakpointsWindow { DataContext = new StatBreakpointsViewModel(_stats, _gameData, _inventory, stat) };
         _breakpointsWindow.Closed += (_, _) => _breakpointsWindow = null;
         _breakpointsWindow.Show();
     }

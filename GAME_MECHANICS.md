@@ -228,6 +228,9 @@ how many swings or spell fires a player or monster gets inside one round.
 - **Leftover player energy rolls over** the same way as a monster's (see *Monster swings per round: energy budget and rollover*): `CombatCalculator`
   uses `remaining = (remaining % energy) + 1000`.
 
+**Client use:**
+- The Stat Breakpoints window's Agility table has an Energy / swing column for the wielded weapon (or a punch), at the character's load and strength (`StatBreakpoints`, `CombatCalculator.CalcEnergyUsed`).
+
 ### Monster swings per round: energy budget and rollover
 *Status: CONFIRMED 2026-09-03 (user); attacks/round readout CONFIRMED 2026-08-22 (user)*
 
@@ -705,6 +708,9 @@ How a character is named, how it earns and spends character points (CP), how exp
 
 - **Formula:** `STR*48`, plus `STR*36 - 3600` once STR > 100 (steeper past 100). So +48/pt (more above 100).
 
+**Client use:**
+- The Stat Breakpoints window's Strength table has a Carry weight column (`StatBreakpoints`).
+
 ### Magic resistance
 *Status: CONFIRMED Stock (via `dll-stats-map.md`); Paradigm [OBSERVED] 2026-09-30, MMUD-Explorer `CalcMR` (no realm branch) · Realm: both*
 
@@ -723,6 +729,7 @@ How a character is named, how it earns and spends character points (CP), how exp
 
 **Client use:**
 - The CP tooltip shows the current-value max-HP marginal and the next HEA that ticks regen up.
+- The Stat Breakpoints window's Health table shows HEA's share of max HP at the character's level, `HEA/2 + (HEA-50)*level/16` (`StatBreakpoints`).
 
 ### Mana regen — one stat per class; max mana is not stat-driven
 *Status: CONFIRMED (user + `CharacterCalculator.CalcManaRegen`)*
@@ -735,6 +742,7 @@ How a character is named, how it earns and spends character points (CP), how exp
 
 **Client use:**
 - The CP tooltip lists mana regen only under the character's actual casting stat(s).
+- The Stat Breakpoints window shows the base tick amount as a Mana / tick column under the same stat(s) (`StatBreakpoints`); a Druid's two columns each hold the other stat at the character's own value. Mystics and non-casters get no column.
 
 ### Spellcasting skill (spellLvl, 0x604)
 *Status: CONFIRMED Stock (RE'd DLL `dll-stats-map.md`, verified asm 0x41aae0); Paradigm: MMUD-Explorer uses the same five blends on both realms [OBSERVED] 2026-09-28*

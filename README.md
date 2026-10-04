@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.23**
-> - Emergency heal no longer loses the round to a Major heal picked on a half-landed round: a mid-round HP read is always held until the round settles, whichever part of the client asks first
-> - A heal sent off a round's hits keeps that round's cast slot, so a second heal isn't sent into `You have already cast a spell this round!`
-> - New **Cure after combat** box beside each cure spell (Settings → Spells): ticked, that cure waits until the fight is over, on you or a party member, so the round's cast stays free for healing
+> **Version 3.143.25**
+> - Stat Breakpoints: **Mana / tick** column under your class's mana stat (Mage INT, Priest WIL, Bard CHA, Druid INT and WIL); none for Mystics or classes without mana
+> - Stat Breakpoints: **Max HP** (Health), **Carry weight** (Strength) and **Energy / swing** (Agility, for your wielded weapon and load) columns
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

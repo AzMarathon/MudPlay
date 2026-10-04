@@ -118,6 +118,6 @@
         </ScrollViewer>
 
         <TextBlock Grid.Row="3" Classes="Muted" Margin="0,8,0,0" TextWrapping="Wrap"
-                   Text="{Binding EveryPointNote}"/>
+                   Text="{Binding Note}"/>
     </Grid>
 </Window>

@@ -13,16 +13,27 @@ public static class StatBreakpoints
     public const int MinStat = 30;
     public const int DefaultMaxStat = 200;
 
-    // Columns for one stat, in the loaded realm's formulas. level only feeds HP regen.
-    // ctx gates the class-specific columns the same way the CP tooltips do: a thief
-    // skill shows only when the class or race has it, spellcasting only under the
-    // class's casting stats. maxStat stretches the table past 200 for a stat above it.
+    // Columns for one stat, in the loaded realm's formulas. level feeds HP, HP regen,
+    // mana regen and swing energy. ctx gates the class-specific columns the same way
+    // the CP tooltips do: a thief skill shows only when the class or race has it,
+    // spellcasting and mana regen only under the class's casting stats. maxStat
+    // stretches the table past 200 for a stat above it. stats is the character's own
+    // six, for the columns that hold the other stats still (a Druid's second mana
+    // stat, the strength under a swing); swing is what the character swings with, and
+    // without it Agility has no swing-energy column.
     public static IReadOnlyList<StatBreakpointColumn> For(BaseStat stat, StatContext ctx, int level,
-                                                          int maxStat = DefaultMaxStat)
+                                                          int maxStat = DefaultMaxStat,
+                                                          StatBlock stats = default, SwingBasis? swing = null)
     {
         bool para = ctx.Realm == RealmType.ParaMud;
         int hi = Math.Max(maxStat, DefaultMaxStat);
         var cols = new List<StatBreakpointColumn>();
+        int manaFactor = ctx.MageryLevel + 2;
+        bool hasMana = ctx.MageryLevel > 0;
+
+        // What a 30 s mana tick pays before ManaRgn%, with this one stat stepped.
+        int Mana(int intellect, int willpower, int charm) => CharacterCalculator.CalcManaRegen(
+            level, intellect, willpower, charm, ctx.MageryType, ctx.MageryLevel, 0, false, ctx.Realm);
 
         void Add(string label, string formula, Func<int, int> term, bool approx = false,
                  bool stockOnParadigm = false, string unit = "", bool signed = true)
@@ -36,6 +47,13 @@ public static class StatBreakpoints
                 if (para) Add("Accuracy", "(AGI − 50) ÷ 3", v => (v - 50) / 3);
                 Add(para ? "Bash accuracy" : "Accuracy", "(AGI − 50) ÷ 6", v => (v - 50) / 6);
                 Add("Crit", "(AGI − 50) ÷ 20", v => (v - 50) / 20);
+                if (swing is { Speed: > 0 } sw && ctx.ClassCombatLvl > 0)
+                    Add("Energy / swing",
+                        $"{sw.Speed} × 1000 ÷ (({level} × {ctx.ClassCombatLvl} + 45) × (AGI + 150) ÷ 6), "
+                        + $"{sw.Source}, at {sw.EncumPercent}% load; 1000 ÷ energy = swings a round",
+                        v => CombatCalculator.CalcEnergyUsed(ctx.ClassCombatLvl, level, sw.Speed, v,
+                            stats.Strength, sw.StrReq, sw.EncumPercent),
+                        signed: false);
                 if (para) Add("Stealth", "AGI ÷ 4, rounded with INT and CHA", v => v / 4, approx: true);
                 else Add("Stealth", "AGI ÷ 4", v => v / 4);
                 if (para) Add("BS accuracy", "(AGI − 50 + level) ÷ 2", v => (v - 50) / 2, approx: true);
@@ -61,6 +79,8 @@ public static class StatBreakpoints
                 if (ctx.HasThievery) Add("Thievery", "CHA ÷ 6", v => v / 6, approx: true, stockOnParadigm: true);
                 if (ctx.HasTracking) Add("Tracking", "CHA ÷ 8", v => v / 8, approx: true, stockOnParadigm: true);
                 if (ctx.MageryType == 4) Add("Spellcasting", "CHA × 3 ÷ 6", v => v / 2, approx: true);
+                if (ctx.MageryType == 4 && hasMana)
+                    Add("Mana / tick", $"({level} + 20) × CHA × {manaFactor} ÷ 1650", v => Mana(0, 0, v), signed: false);
                 if (para) Add("Aggro weight", "10 − CHA ÷ 5 (lower: picked less)", v => 10 - v / 5, signed: false);
                 Add("Buy price", "−(CHA ÷ 5 − 10)%", v => -(v / 5 - 10), unit: "%");
                 if (para) Add("Sell price", "half value, ± (CHA − 50) ÷ 5 %", v => (v - 50) / 5, unit: "%");
@@ -88,6 +108,9 @@ public static class StatBreakpoints
                     case 2: Add("Spellcasting", "INT ÷ 6", v => v / 6, approx: true); break;
                     case 3: Add("Spellcasting", "INT ÷ 3", v => v / 3, approx: true); break;
                 }
+                if (ctx.MageryType == 1 && hasMana)
+                    Add("Mana / tick", $"({level} + 20) × INT × {manaFactor} ÷ 1650", v => Mana(v, 0, 0), signed: false);
+                if (ctx.MageryType == 3 && hasMana) AddDruidMana("INT", "WIL", stats.Willpower, v => Mana(v, stats.Willpower, 0));
                 break;
 
             case BaseStat.Strength:
@@ -103,12 +126,15 @@ public static class StatBreakpoints
                     Add("Min damage", "2 × ((STR − 100) ÷ 10), never below 0", v => Math.Max(0, (v - 100) / 10 * 2));
                     Add("Max damage", "(STR − 50) ÷ 10", v => (v - 50) / 10);
                 }
+                Add("Carry weight", "STR × 48, plus STR × 36 − 3600 above 100",
+                    CharacterCalculator.CalcMaxEncumbrance, signed: false);
                 break;
 
             case BaseStat.Health:
                 int divisor = para ? 500 : 750;
                 Add("HP / tick", $"({level} + 20) × HEA ÷ {divisor}, at least 1",
                     v => Math.Max(1, (level + 20) * v / divisor), signed: false);
+                Add("Max HP", $"HEA ÷ 2 + (HEA − 50) × {level} ÷ 16", v => v / 2 + (v - 50) * level / 16);
                 break;
 
             case BaseStat.Willpower:
@@ -121,21 +147,38 @@ public static class StatBreakpoints
                     case 2: Add("Spellcasting", "WIL × 3 ÷ 6", v => v / 2, approx: true); break;
                     case 3: Add("Spellcasting", "WIL ÷ 3", v => v / 3, approx: true); break;
                 }
+                if (ctx.MageryType == 2 && hasMana)
+                    Add("Mana / tick", $"({level} + 20) × WIL × {manaFactor} ÷ 1650", v => Mana(0, v, 0), signed: false);
+                if (ctx.MageryType == 3 && hasMana) AddDruidMana("WIL", "INT", stats.Intellect, v => Mana(stats.Intellect, v, 0));
                 break;
         }
         return cols;
+
+        // A Druid's mana stat is the average of INT and WIL, so one stat's column
+        // holds the other at the character's own value. Before a `stat` read there is
+        // no other value, and the column shows this stat's half alone.
+        void AddDruidMana(string name, string otherName, int other, Func<int, int> term) =>
+            Add("Mana / tick",
+                other > 0
+                    ? $"({level} + 20) × (({name} + {otherName}) ÷ 2) × {manaFactor} ÷ 1650, at your {otherName} {other}"
+                    : $"({level} + 20) × ({name} ÷ 2) × {manaFactor} ÷ 1650",
+                term, approx: other <= 0, signed: false);
     }
 
-    // What each stat feeds that changes on every point, so it has no table.
-    public static string EveryPointNote(BaseStat stat, RealmType realm) => stat switch
+    // A line under the tables: what a column there leaves unsaid.
+    public static string Note(BaseStat stat, StatContext ctx) => stat switch
     {
-        BaseStat.Strength => "Also: carry weight, +48 a point up to 100 STR and +84 a point above.",
-        BaseStat.Health => "Also: max HP, which rises nearly every point, faster the higher your level.",
-        BaseStat.Intellect => "Also: mana regen for mages and druids.",
-        BaseStat.Willpower => "Also: mana regen for priests and druids. WIL adds nothing to combat.",
-        BaseStat.Charm => "Also: mana regen for bards.",
+        BaseStat.Willpower => "WIL adds nothing to combat." + ManaNote(ctx, 2, 3),
+        BaseStat.Intellect => ManaNote(ctx, 1, 3).TrimStart(),
+        BaseStat.Charm => ManaNote(ctx, 4).TrimStart(),
+        BaseStat.Health => "Max HP is HEA's own share; your class and race hit points per level come on top.",
         _ => "",
     };
+
+    private static string ManaNote(StatContext ctx, params int[] mageryTypes) =>
+        ctx.MageryLevel > 0 && mageryTypes.Contains(ctx.MageryType)
+            ? " Mana / tick is the base amount: the 30-second tick pays it scaled by your mana-regen bonus (ManaRgn%), and a meditate tick pays it as it is."
+            : "";
 
     private static List<StatBreakpointColumn.Step> Steps(Func<int, int> term, int hi)
     {
