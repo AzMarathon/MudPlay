@@ -1,9 +1,9 @@
 namespace MudPlay.Game;
 
 // Per-realm regen tick cadence as the Exp/Hr simulator plays it (SimRegen). The
-// live countdowns run on RegenTickCadence, which follows a timed capture; this one
-// still plays ParaMud rest as the 10-second cycle the user described. Their 30 s
-// totals agree.
+// live countdowns run on RegenTickCadence, which follows a timed capture: ParaMud
+// rest is really a gain every 5 s, three low then three high. This one still plays
+// it as a 10-second tick in threes; the HP per 30 s comes out the same.
 //
 // Stock uses the engine's own tick intervals (natural 30 s / rest 21 s /
 // meditate 15 s), one uptick per interval paying the full per-tick amount.

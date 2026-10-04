@@ -12,9 +12,9 @@ namespace MudPlay.Game;
 // on the same grid as the combat round, whenever the character lay down. Meditate is
 // the user's figure; no capture has timed it yet.
 //
-// RealmRegenProfile is the simulator's model of the same thing and still plays
-// Paradigm rest as the 10-second cycle the user described; the two meet once that
-// is settled against this capture.
+// RealmRegenProfile is the Exp/Hr simulator's model of the same thing. It still
+// plays Paradigm rest as a 10-second tick in threes, an earlier impression the
+// capture replaced; the HP per 30 s comes out the same.
 public readonly record struct RegenTickCadence(
     TimeSpan HpStanding,
     TimeSpan MpStanding,
