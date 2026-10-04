@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.13**
-> - Unrecognized Lines: a deck of cards' eight card readings are no longer listed (a line now counts as recognized whenever a message's applied text appears in it)
-> - Unrecognized Lines: the Blood God cultists' cry is attributed to them, on both realms
+> **Version 3.143.14**
+> - Map: toggling an overlay (lairs, shops, spells, level gates) shows at once instead of waiting for the view to be moved
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
