@@ -1555,7 +1555,23 @@ public sealed class HealthManager : IDisposable
             // `rest` follows once the swap has streamed (the swap-done re-evaluate sends
             // it, the gear already worn). Meditation survives a swap, so it goes out now
             // and its gear follows the sit.
-            if (command == "rest" && _wearRestGearFirst?.Invoke() == true)
+            // Already in the posture this command asks for: the player lay down by
+            // hand, or the engine was switched off and back on mid-rest. Sending it
+            // again restarts the game's count toward the next rest / meditate tick
+            // (GAME_MECHANICS "Rest and meditate tick timing"), so take the rest
+            // under way as ours instead.
+            bool alreadyThere = command == "rest"
+                ? _state.Position == PlayerPosition.Resting
+                : _state.Position == PlayerPosition.Meditating;
+            if (alreadyThere)
+            {
+                _restInFlight = true;
+                _restConfirmedByPrompt = true;
+                _log?.Combat(LogCategory,
+                    $"already {(command == "rest" ? "resting" : "meditating")}{restReason} — not sending {command} again " +
+                    $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            }
+            else if (command == "rest" && _wearRestGearFirst?.Invoke() == true)
             {
                 _log?.Combat(LogCategory,
                     $"rest held — wearing the rest gear first so the swap can't break the rest " +

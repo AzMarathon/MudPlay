@@ -47,7 +47,9 @@ public sealed class LoopSimulatorTests
             DamageResist: 0),
         WeaponHitMagic: 10,
         Defense: new PlayerDefenseProfile(0, 0, 0, 0, false, 0, EvilLevel.Saint, 0, AcExact: 0),
-        Regen: regen ?? new SimRegen(_ => 1, _ => 30, extra => extra / 10.0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true),
+        // 15 HP a rest gain (every 5 s) and extra × 0.3 mana a pass (every 30 s): the same
+        // rates per minute the fixture had on the 10-second cadence it was written for.
+        Regen: regen ?? new SimRegen(_ => 1, _ => 15, extra => extra * 0.3, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true),
         Spells: spells ?? new Dictionary<string, SimSpell>(),
         Combat: combat ?? new CombatSettings(),
         Health: health ?? new HealthSettings { UseMeditateAbility = false },
@@ -458,26 +460,26 @@ public sealed class LoopSimulatorTests
     }
 
     [Fact]
-    public void ParadigmRestPaysFullOnlyOnEveryThirdTick()
+    public void ParadigmRestPaysThreeLowThenThreeHigh_CountedFromLyingDown()
     {
-        // Counted from lying down, each cycle pays a third, a third, then in full.
-        var cycle = new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true,
-            RestFullEvery: 3, RestReducedShare: 1.0 / 3);
-        Assert.Equal(new[] { 10.0, 10.0, 30.0, 10.0, 10.0, 30.0 },
-            Enumerable.Range(1, 6).Select(t => Math.Round(cycle.RestTickHp(t), 6)));
+        // The measured cycle (report paradigm-20261004-024314): +1 +1 +1 +4 +4 +4 …
+        var cycle = new SimRegen(_ => 1, _ => 4, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true,
+            HpRestingLow: _ => 1, RestRun: 3);
+        Assert.Equal(new[] { 1.0, 1.0, 1.0, 4.0, 4.0, 4.0, 1.0, 1.0, 1.0, 4.0 },
+            Enumerable.Range(1, 10).Select(t => cycle.RestTickHp(t)));
 
         // Played out — same seed, same fight, same damage taken — that cycle takes
-        // longer to rest back up than one paying in full every tick.
+        // longer to rest back up than one paying the high gain every tick.
         var health = new HealthSettings { RestIfBelowHp = 99, RestMaxHp = 100, UseMeditateAbility = false };
         LoopSimRun Rest(SimRegen regen) => LoopSimulator.Run(Character(maxHp: 200, health: health, regen: regen),
             new[] { Lair(1, 1, 7200, 7), Empty(2) },
             World(Mob(7, hp: 1500, exp: 100, align: 1, Hit(25, 25))), secondsPerStep: 1, hours: 0.5, seed: 1);
 
         LoopSimRun cycled = Rest(cycle);
-        LoopSimRun full = Rest(new SimRegen(_ => 0, _ => 30, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true));
+        LoopSimRun high = Rest(new SimRegen(_ => 1, _ => 4, _ => 0, 0, RealmRegenProfile.ParaMud, RestReplacesStanding: true));
 
-        Assert.True(full.RestingSeconds > 0);
-        Assert.True(cycled.RestingSeconds > full.RestingSeconds);
+        Assert.True(high.RestingSeconds > 0);
+        Assert.True(cycled.RestingSeconds > high.RestingSeconds);
     }
 
     [Fact]

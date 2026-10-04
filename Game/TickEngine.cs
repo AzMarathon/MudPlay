@@ -136,6 +136,46 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         LastCombatTick = _now();
     }
 
+    // How far a gain that only fine-tunes may sit from the projected round.
+    private static readonly TimeSpan GridFineTune = TimeSpan.FromMilliseconds(600);
+    // A round seen this recently outranks any regen gain.
+    private static readonly TimeSpan SeenRoundHolds = TimeSpan.FromSeconds(6);
+    private DateTimeOffset? _lastSeenRound;
+
+    // A passive regen gain was seen at `at`. The game pays regen on a round boundary
+    // (GAME_MECHANICS "The engine clock — one fast tick drives every timer"), so the
+    // gain says where the round grid is while no fight is printing damage lines. The
+    // projection otherwise coasts on nominal seconds, and the game's own tick wanders
+    // up to a second against those.
+    //
+    // authoritative: a mana gain, which nothing but the regen pass produces — it may
+    // move the grid by any amount and start it. An HP gain only fine-tunes: a heal
+    // over time pays on the 3-second spell round and would drag the grid off.
+    //
+    // No tick is fired from here: a round the projection hadn't reached yet is left
+    // for the timer's next poll, so subscribers keep running off the timer or a
+    // damage line as before.
+    public void NoteGridTick(DateTimeOffset at, bool authoritative)
+    {
+        if (_disposed) return;
+        if (LastCombatTick is not { } last)
+        {
+            if (authoritative) LastCombatTick = at;
+            return;
+        }
+        if (_lastSeenRound is { } seen && at - seen < SeenRoundHolds) authoritative = false;
+
+        double period = CombatTickInterval.TotalMilliseconds;
+        double since = (at - last).TotalMilliseconds;
+        double rounds = Math.Round(since / period);
+        if (rounds < 0) return;
+        double error = since - rounds * period;
+        if (!authoritative && Math.Abs(error) > GridFineTune.TotalMilliseconds) return;
+        // rounds >= 1: the projection is a little late for this round. Anchor one
+        // period back so the timer fires it at once and lands on `at`.
+        LastCombatTick = rounds >= 1 ? at - CombatTickInterval : at;
+    }
+
     // Damage-line callback. Stamps LastCombatTick at now and fires
     // CombatTickElapsed the first time per debounce window. Subsequent damage
     // hits for the same physical line (the UserHits regex is broad enough to
@@ -147,6 +187,7 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         bool fresh = LastCombatTick is null
             || now - LastCombatTick.Value >= TimeSpan.FromMilliseconds(250);
         LastCombatTick = now;
+        _lastSeenRound = now;
         if (fresh)
         {
             LastCombatTickWasDamageDriven = true;
