@@ -1761,6 +1761,12 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
   - With talk slow **off**, the unrecognised command is spoken: `a kobold thief` → `You say "a kobold thief"`.
   - With talk slow **on** it's `Your command had no effect.` — whether or not anyone else is in the room.
 - **Both mean the target is gone** — typically a monster a party member killed, whose death gives us no exp line and so is never seen (report `stock-20260924-013525`).
+- **The line names no command — only the echo ahead of it says what it answers** *([OBSERVED] 2026-10-04, report `stock-20261004-150645`, Stock)*.
+  - A spell mnemonic the character can't cast draws the same line: `[HP=32/MA=39]:swan` → `Your command had no effect.` (a Druid sending the Kai spell way of the swan).
+  - That refused cast printed no `*Combat Off*`; the fight's rounds carried on.
+
+**Client use:**
+- `CombatManager.OnCommandNoEffect` and `DarkRoomCombatWatcher.OnCommandNoEffect` drop the target only when the echoed command ahead of the line names it (`MessageRouter.ReplyIsForCommandNotNaming`). With no echo read (a custom statline the line splitter can't split) the line still drops the target. Report `stock-20261004-150645`: a refused heal cast was read as a refused attack, which dropped a cave bear mid-fight in a dark room, attacked a kobold thief left in the previous room, and let a `rest` through.
 
 ### Robbing players (`rob`)
 *Status: OBSERVED 2026-09-28 (`wccmmud.dll` 1.11p: `_cmd_rob`, `_rob_user`, `_rob_monster`, `_add_evil_points`, the PvP-eligibility check at `0x46c417`, the evil-timer routines) · Realm: Stock (Paradigm not recorded)*

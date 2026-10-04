@@ -1,6 +1,6 @@
 # Version history
 
-## 3.143.32
+## 3.143.38
 
 - Character Info: Paradigm HP Regen shows the measured ticks — a third of the amount every 10 s standing, and resting every 5 s in three small then three full gains (the tooltip still described the old 10 s cycle)
 - Paradigm meditate is timed: a mana gain every 15 s (was taken as 10), on the same grid as the 30 s tick — the meditate countdown, Mana Regen tooltip and Exp/Hr estimate follow
@@ -10,6 +10,11 @@
 - A heal landing just after a combat round no longer nudges the round countdown
 - HP regen countdown tells regen from heals and heal-over-time buffs by the amount regen can pay your character, so a healer's countdown stops jumping onto them
 - bug reports addressed: paradigm-20261004-140923, paradigm-20261004-142359, stock-20261004-150847
+
+## 3.143.31
+
+- A cast the game answers with `Your command had no effect.` no longer drops the monster you're fighting: the fight held, no swing at a monster left in the last room, no rest under its attacks
+- bug reports addressed: stock-20261004-150645
 
 ## 3.143.25
 

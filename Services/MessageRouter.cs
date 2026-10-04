@@ -33,6 +33,45 @@ public sealed class MessageRouter
     // catch-all pattern.
     public event Action<Terminal.LineExtractor.EmittedLine>? LineDispatched;
 
+    // The command the server echoed on the prompt row directly before the line
+    // now being dispatched, or null when that line didn't follow an echo. A
+    // generic reply such as "Your command had no effect." names nothing, so the
+    // echo ahead of it is the only way to tell which command drew it: the game
+    // prints "[HP=..]:swan" and then the reply. LineExtractor splits that row into
+    // the prompt and its trailing text, both carrying the row's timestamp. A
+    // custom statline it can't split leaves this null, and callers then treat the
+    // reply as they did before.
+    public string? CommandEchoedBeforeLine { get; private set; }
+
+    private string? _echoOnPreviousLine;
+    private bool _previousLineWasPrompt;
+    private DateTimeOffset _previousPromptAt;
+
+    private void TrackCommandEcho(LineExtractor.EmittedLine line)
+    {
+        if (line.IsPromptLine)
+        {
+            _previousLineWasPrompt = true;
+            _previousPromptAt = line.Timestamp;
+            _echoOnPreviousLine = null;
+            CommandEchoedBeforeLine = null;
+            return;
+        }
+
+        bool isEcho = _previousLineWasPrompt && line.Timestamp == _previousPromptAt;
+        _previousLineWasPrompt = false;
+        CommandEchoedBeforeLine = _echoOnPreviousLine;
+        _echoOnPreviousLine = isEcho ? line.Text.Trim() : null;
+    }
+
+    // True when the line being dispatched answers an echoed command that doesn't
+    // name target — the reply belongs to something else we (or the user) sent, such
+    // as a between-round cast, and says nothing about target. False when no echo was
+    // read, so an unattributable reply keeps its old meaning.
+    public bool ReplyIsForCommandNotNaming(string target)
+        => CommandEchoedBeforeLine is { Length: > 0 } echo
+           && !echo.EndsWith(target, StringComparison.OrdinalIgnoreCase);
+
     // Known patterns indexed by id. Populated by callers via RegisterPattern
     // (typically the DefaultPatterns.Seed bootstrap). Consumers query this
     // catalog through TryGetPattern or subscribe to a known id via Subscribe.
@@ -112,6 +151,8 @@ public sealed class MessageRouter
         // not see it, or a player could quote server text in a gossip / broadcast and
         // trigger that handler as if the server had sent it.
         bool chatLine = line.IsChat;
+
+        if (!chatLine) TrackCommandEcho(line);
 
         if (!chatLine) LineDispatched?.Invoke(line);
 
