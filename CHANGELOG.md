@@ -3,7 +3,7 @@
 ## 3.143.13
 
 - Unrecognized Lines: a deck of cards' eight card readings are no longer listed (a line now counts as recognized whenever a message's applied text appears in it)
-- Unrecognized Lines: the dark cultists' cry is attributed to them
+- Unrecognized Lines: the Blood God cultists' cry is attributed to them, on both realms
 
 ## 3.143.11
 

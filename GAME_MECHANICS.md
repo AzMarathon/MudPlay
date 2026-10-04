@@ -3146,14 +3146,21 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 - A trapdoor action pushes every monster in the room through the exit as a forced move (@ `0x46c86a`).
 
 ### Monster flavor lines
-*Status: CONFIRMED 2026-10-03 (user) · Realm: Paradigm (not recorded for Stock)*
+*Status: [OBSERVED] 2026-10-03, Stock `wccmmud.dll` 1.11p (`_background_slow`, `_perform_random_event`) and the Stock monster and textblock files; the cultists' line CONFIRMED on both realms 2026-10-03 (user) · Realm: both (the engine detail is Stock)*
 
-- **A monster can print a flavor line of its own that is no attack, spell or movement.** The dark cultists' is `The fanatic screams "Death to those who oppose the Blood God!"` *([CONFIRMED] 2026-10-03, user; [OBSERVED] twice in the dark cultist #29 lair at 1/1139, Paradigm unrecognized-lines export 2026-10-03)*.
-- **The text is not in the imported game data** *([OBSERVED] 2026-10-03)*: neither the Monsters row nor any textblock carries it (the cultists' `GreetTXT` 43 holds only greet triggers).
-- `[NEEDS CONFIRMATION]` What makes a monster print its flavor line (a timer, the fight, a death)? And do Stock's dark cultists print the same one?
+- **A monster record can name a textblock of things it says, and the engine prints a line from it on the slow tick.** The field sits at offset `0x19c` of the monster record, 128 bytes past the greet textblock. The imported game data has no column for it.
+- **How a line gets printed** (`_perform_random_event`, called once per slow tick — every 30 s, see *Monster HP regen*):
+  - The tick rolls 0–100 and does nothing on 95 or more.
+  - It walks the online players. In each player's room it looks through the fifteen monster slots for a monster whose record has the textblock.
+  - For that monster it rolls 0–100 again and reads the textblock line by line. Each line is `<threshold> <text>`; the first line whose threshold is above the roll is printed to the whole room.
+  - **One line per tick at most.** The routine returns as soon as it has printed one, and gives up after looking at 20 monsters.
+- **The Blood God cultists share textblock 9108, a single line:** `100 The fanatic screams "Death to those who oppose the Blood God!"`. The wire line is `The fanatic screams "Death to those who oppose the Blood God!"` whichever of them says it *(Paradigm: seen twice in the dark cultist #29 lair at 1/1139, unrecognized-lines export 2026-10-03)*.
+  - Fifteen Stock monsters carry it: dark cultist #29 / #142, dark cleric #143 / #1101, dark priest #144, dark paladin #145, dark warrior #146 / #1104, dark warlock #147, dark mage #149 / #1102, elite guard #150 / #1100, guard captain #151 / #1099.
+  - Paradigm has the same fifteen monsters by number and name. Its own monster file isn't available, so which of them carry the textblock there is taken from Stock.
+- Stock textblock 9230 holds four more fanatic lines behind `random 9230` (textblock 9229): `I will sacrifice you to the Blood God!`, `The hellhounds shall feast on your bones!`, `Glory to the Blood God!` and `Taste my holy steel vile infidel!`, each as `The fanatic screams "…"`. No Stock monster record points at 9229; where it is used was not traced.
 
 **Client use:**
-- The Paradigm message seed carries it as a record linked to Monsters #29 (`WitnessMessage`), so `MessageCandidateWatcher` no longer stages it. Nothing acts on the line.
+- Both message seeds carry the cultists' line as one record linked to the fifteen monsters (`WitnessMessage`), so `MessageCandidateWatcher` no longer stages it. Nothing acts on the line.
 
 ### Monster movement lines
 

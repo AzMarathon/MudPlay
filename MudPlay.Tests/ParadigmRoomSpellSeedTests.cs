@@ -107,7 +107,7 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
 
     // The lines a 2026-10-03 unrecognized-lines export still carried: the eight card
     // readings a deck of cards deals (their records hold the opening of each quote),
-    // and the cry of the dark cultists.
+    // and the cry of the dark cultists (MonsterFlavorLineSeedTests pins its record).
     [Theory]
     [InlineData("\"The Knight is both protector and aggressor. Strength and vigilance shall")]
     [InlineData("\"The Wheel of Fortune, when played in this instance, indicates that luck is")]
@@ -134,19 +134,6 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
         Invoke(watcher, "CommitPending");
 
         Assert.Empty(candidates.Candidates);
-    }
-
-    [Fact]
-    public void DarkCultistRecord_IsLinkedToTheMonster_AndItsIdMatchesItsFields()
-    {
-        MessageRecord r = _records.Single(m => m.Links is { } links
-            && links.Any(k => k.Table == "Monsters" && k.Number == 29));
-
-        Assert.Equal("The fanatic screams \"Death to those who oppose the Blood God!\"", r.WitnessMessage);
-        Assert.Equal(
-            MessageRecord.ComputeId(r.Name, r.CasterMessage, r.TargetMessage,
-                r.WitnessMessage, r.AppliedMessage, r.AppliedEndsWith),
-            r.Id);
     }
 
     private static void Invoke(MessageCandidateWatcher watcher, string method, params object[] args) =>
