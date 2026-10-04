@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.24**
+> **Version 3.143.25**
 > - Chest Offload: each open is read against a fresh `i` taken just before it, so items already carried or picked up between chests no longer show as chest loot; a chest opened by typing `open <chest>` counts too
 > - Chest Offload: Sell All and Sell walk to the shop first when you aren't standing in it, then sell on arrival
+> - Character Info: a carried chest has a treasure-chest icon that opens the Chest Offload window
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
