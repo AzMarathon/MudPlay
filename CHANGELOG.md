@@ -1,12 +1,13 @@
 # Version history
 
-## 3.143.30
+## 3.143.31
 
 - Character Info: Paradigm HP Regen shows the measured ticks — a third of the amount every 10 s standing, and resting every 5 s in three small then three full gains (the tooltip still described the old 10 s cycle)
 - Paradigm meditate is timed: a mana gain every 15 s (was taken as 10), on the same grid as the 30 s tick — the meditate countdown, Mana Regen tooltip and Exp/Hr estimate follow
 - Paradigm HP-regen gear is measured: the small gains are thirds of the amount before the bonus, and the bonus's extra comes on the third one — the Exp/Hr estimate and HP Regen tooltip no longer run a point short per 30 s
 - Paradigm HP countdown follows the HP gains: after a rest it no longer reads 5 s out after each mana tick, and standing up counts from the last rest gain
 - Stock rest and meditate countdowns count from the game tick the command landed in, and a rest or meditate gain no longer restarts the 30 s HP / mana countdown
+- A heal landing just after a combat round no longer nudges the round countdown
 - bug reports addressed: paradigm-20261004-140923, paradigm-20261004-142359, stock-20261004-150847
 
 ## 3.143.25

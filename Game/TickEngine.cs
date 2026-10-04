@@ -163,9 +163,15 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
             if (authoritative) LastCombatTick = at;
             return;
         }
-        if (_lastSeenRound is { } seen && at - seen < SeenRoundHolds) authoritative = false;
-
         double period = CombatTickInterval.TotalMilliseconds;
+        if (_lastSeenRound is { } seen)
+        {
+            // A gain inside the round just seen says nothing its damage line didn't,
+            // and a heal cast between rounds lands there too: the seen round stands.
+            if ((at - seen).TotalMilliseconds < period / 2) return;
+            if (at - seen < SeenRoundHolds) authoritative = false;
+        }
+
         double since = (at - last).TotalMilliseconds;
         double rounds = Math.Round(since / period);
         if (rounds < 0) return;
