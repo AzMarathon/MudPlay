@@ -407,6 +407,29 @@ public sealed class DarkRoomCombatWatcherTests
     }
 
     [Fact]
+    public void CommandNoEffect_InDark_AnsweringAnotherCommand_DoesNotRetract()
+    {
+        // The line answers whatever command was echoed ahead of it. A cast that
+        // did nothing says nothing about the monster still swinging at us
+        // (report stock-20261004-150645).
+        using Harness h = new();
+        h.AddMonster(1, "cave bear");
+        h.EnterDarkRoom();
+        h.Feed("The cave bear swings at you.");
+        h.CurrentTarget = "cave bear";
+
+        DateTimeOffset at = DateTimeOffset.UtcNow;
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "[HP=32/MA=39]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "swan", Array.Empty<CellAttributes>(), at, IsPromptLine: false));
+        h.Feed("Your command had no effect.");
+
+        Assert.Single(h.Classifier.Current!.Value.Entities);
+        Assert.Single(h.Observations);
+    }
+
+    [Fact]
     public void CommandNoEffect_NotInDark_DoesNotRetract()
     {
         // In a lit room the same line is the dropped / mortally-wounded bounce;

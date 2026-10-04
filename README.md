@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.25**
-> - Stat Breakpoints: **Mana / tick** column under your class's mana stat (Mage INT, Priest WIL, Bard CHA, Druid INT and WIL); none for Mystics or classes without mana
-> - Stat Breakpoints: **Max HP** (Health), **Carry weight** (Strength) and **Energy / swing** (Agility, for your wielded weapon and load) columns
+> **Version 3.143.31**
+> - A cast the game answers with `Your command had no effect.` no longer drops the monster you're fighting: the fight held, no swing at a monster left in the last room, no rest under its attacks
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

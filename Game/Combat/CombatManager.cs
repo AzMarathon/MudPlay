@@ -76,6 +76,7 @@ public sealed partial class CombatManager : IDisposable
     // landed. Session Stats keeps backstabs' own hit / miss rate off it.
     public event Action<string, bool>? BackstabResolved;
 
+    private readonly MessageRouter _router;
     private readonly RoomEntityClassifier _classifier;
     private readonly MonsterMessageStore _monsters;
     private readonly Func<int, MonsterOverlay> _resolveOverlay;
@@ -835,6 +836,7 @@ public sealed partial class CombatManager : IDisposable
         ArgumentNullException.ThrowIfNull(post);
         _post         = post;
         _classifier   = classifier;
+        _router       = router;
         _monsters     = monsters;
         _resolveOverlay = resolveOverlay;
         _roomAwareResolve = roomAwareResolve;
@@ -3433,6 +3435,18 @@ public sealed partial class CombatManager : IDisposable
         if (!_isEnabled()) return;
         if (_wireSender is null) return;
         if (_currentTarget is null) return;
+
+        // The line names no command, so read the echo ahead of it: a between-round
+        // cast the character can't use (a heal slot holding another class's spell)
+        // draws the same line every round, and blaming it on the attack dropped a
+        // live target, cleared the fight and let a rest through under the monster's
+        // swings (report stock-20261004-150645).
+        if (_router.ReplyIsForCommandNotNaming(_currentTarget))
+        {
+            _log?.Combat(LogCategory,
+                $"command-no-effect answers '{_router.CommandEchoedBeforeLine}', not the attack — keeping target={_currentTarget}");
+            return;
+        }
 
         string gone = _currentTarget;
         _log?.Combat(LogCategory,
