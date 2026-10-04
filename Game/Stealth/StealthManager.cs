@@ -27,7 +27,9 @@ namespace MudPlay.Game.Stealth;
 //   * UserCantSneak ("You may not sneak right now!") → StealthState.Failed. It's
 //     the game's post-combat cooldown and clears in seconds: with auto-sneak on we
 //     hold movement (MovementCoordinator.SneakCooldownGate) and retry sn until it
-//     takes or SneakCooldownCap passes (report paradigm-20260926-233357).
+//     takes or SneakCooldownCap passes (report paradigm-20260926-233357). It's also
+//     the answer while a monster shares the room — when one has followed us in, the
+//     walk carries on unsneaked instead (see "Followed" below).
 //
 // Hide is a separate, thinner FSM because its success is NOT self-observable —
 // the server runs a hide check but never reports that it landed:
@@ -79,6 +81,37 @@ public sealed class StealthManager : IDisposable
     private bool _sneakConfirmedThisRoom;
     private int _sneakRetries;
 
+    // ----- followed -----------------------------------------------------------
+    // A monster that follows us arrives a few milliseconds AFTER the new room's
+    // display, so at the moment the arrival sn and the pre-step sn are decided the
+    // room still looks empty — every step sent sn, drew "You may not sneak right now!",
+    // and the cooldown hold stood us still under attack (backscroll 2026-10-04 14:50).
+    // A monster arriving within FollowWindow of our room change marks us followed:
+    // no sn and no stopping to cast while it lasts, since a sneak can't take with a
+    // monster in the room (GAME_MECHANICS "NPCs and sneaking"). It lifts when we leave
+    // a room nobody followed us into — they've lost us, so the next room sneaks again.
+    private static readonly TimeSpan FollowWindow = TimeSpan.FromMilliseconds(1500);
+    private DateTimeOffset _roomChangedAt = DateTimeOffset.MinValue;
+    private bool _followed;
+    private bool _followedHere;
+
+    public bool IsFollowed => _followed;
+
+    // A monster arrived in our room (RoomEntryWatcher.ArrivalObserved).
+    public void NoteMonsterArrival()
+    {
+        if (NowProvider() - _roomChangedAt > FollowWindow) return;
+        _followedHere = true;
+        if (_followed) return;
+        _followed = true;
+        _log?.Info(LogCategory,
+            "followed — a monster came in right behind us; no sn until we leave a room nobody follows us into");
+    }
+
+    // A sneak can't take here: an NPC in the room, or one following us that's about
+    // to walk in behind us.
+    private bool SneakBlockedHere() => _followed || _isSneakBlockedByRoom?.Invoke() == true;
+
     // ----- sneak-cooldown hold ---------------------------------------------
     private static readonly TimeSpan SneakCooldownRetry = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan SneakCooldownCap = TimeSpan.FromSeconds(15);
@@ -125,7 +158,7 @@ public sealed class StealthManager : IDisposable
         }
         if (IsStealthed || _stateValue == StealthState.AttemptingSneak) return true;
         if (_moveUnsneakedOnce) { _moveUnsneakedOnce = false; return true; }
-        if (_state.InCombat || _isSneakBlockedByRoom?.Invoke() == true) return true;
+        if (_state.InCombat || SneakBlockedHere()) return true;
         if (_stateValue is not (StealthState.Idle or StealthState.Failed)) return true;
         TryBeginAutoSneak("before the step");
         return !_settleHold;
@@ -179,7 +212,7 @@ public sealed class StealthManager : IDisposable
     private bool CastWantsThisRoom() =>
         !_castHoldSpentThisRoom
         && !_state.InCombat
-        && _isSneakBlockedByRoom?.Invoke() != true
+        && !SneakBlockedHere()
         && _castDue?.Invoke() == true;
 
     private void BeginCastHold()
@@ -341,6 +374,15 @@ public sealed class StealthManager : IDisposable
     // "Sneaking..." emit (if any) has already updated _sneakConfirmedThisRoom.
     public void NoteRoomChanged()
     {
+        // Nobody came in behind us in the room we just left: they've lost us.
+        if (_followed && !_followedHere)
+        {
+            _followed = false;
+            _log?.Info(LogCategory, "no longer followed — nothing came in behind us last room; sneaking again");
+        }
+        _followedHere = false;
+        _roomChangedAt = NowProvider();
+
         // We moved anyway (a manual step, a flee) — the hold was for the room we left.
         ReleaseCooldownHold("moved");
         ReleaseSettleHold("moved");
@@ -399,6 +441,14 @@ public sealed class StealthManager : IDisposable
     // pre-move hook's job.
     public void NoteCombatEndedStealthReset()
     {
+        // A fight that ran its course here means whatever followed us is dealt with.
+        // Right after a move it's only the room display reading clear, with the
+        // followers still about to walk in, so keep the flag then.
+        if (_followed && NowProvider() - _roomChangedAt > FollowWindow)
+        {
+            _followed = false;
+            _log?.Info(LogCategory, "no longer followed — the fight here is over");
+        }
         if (_stateValue == StealthState.Sneaking)
         {
             _log?.Info(LogCategory, "combat spent sneak — resetting for pre-move re-sneak");
@@ -618,7 +668,7 @@ public sealed class StealthManager : IDisposable
     {
         if (IsStealthed) { _restSneakTries = 0; return false; }
         if (_stateValue == StealthState.AttemptingSneak) return true;
-        if (_state.InCombat || _isSneakBlockedByRoom?.Invoke() == true) return false;
+        if (_state.InCombat || SneakBlockedHere()) return false;
         if (_stateValue is not (StealthState.Idle or StealthState.Failed)) return false;
         if (_restSneakTries >= 2) return false;
         _restSneakTries++;
@@ -671,6 +721,11 @@ public sealed class StealthManager : IDisposable
         // Any NPC in the room prevents sneak from taking — don't burn an
         // `sn` the server will reject. The move (if engine-driven)
         // proceeds regardless; sneak re-attempts once the room is clear.
+        if (_followed)
+        {
+            _log?.Info(LogCategory, $"auto-sneak suppressed ({reason}): being followed");
+            return false;
+        }
         if (_isSneakBlockedByRoom?.Invoke() == true)
         {
             _log?.Info(LogCategory, $"auto-sneak suppressed ({reason}): NPC present");
@@ -866,6 +921,13 @@ public sealed class StealthManager : IDisposable
         ReleaseSettleHold("cooldown");   // the cooldown hold below takes over
         Transition(StealthState.Failed);
         if (_isAutoSneakEnabled?.Invoke() != true || _coordinator is null) return;
+        // Refused because a monster is here (it followed us in): retrying can't work
+        // until we're away from it, and holding the walk only lets it keep hitting us.
+        if (SneakBlockedHere())
+        {
+            _log?.Info(LogCategory, "sneak refused with a monster here — moving on unsneaked, no hold");
+            return;
+        }
         if (_cooldownHoldSince is null)
         {
             _cooldownHoldSince = NowProvider();
@@ -900,7 +962,7 @@ public sealed class StealthManager : IDisposable
         }
         // A fight or an NPC here makes sneaking impossible anyway — combat's own gate
         // takes over.
-        if (_state.InCombat || _isSneakBlockedByRoom?.Invoke() == true)
+        if (_state.InCombat || SneakBlockedHere())
         {
             ReleaseCooldownHold("combat / NPC in the room");
             return;

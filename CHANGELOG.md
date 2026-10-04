@@ -1,5 +1,9 @@
 # Version history
 
+## 3.144.1
+
+- Auto-Sneak: when monsters follow you from room to room it stops sending `sn` and walks on unsneaked (no hold, no stopping to cast) until you leave a room nothing followed you into, then sneaks again
+
 ## 3.144.0
 
 - Chest Offload: each open is read against a fresh `i` taken just before it, so items already carried or picked up between chests no longer show as chest loot; a chest opened by typing `open <chest>` counts too

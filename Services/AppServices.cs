@@ -5027,6 +5027,12 @@ public sealed class AppServices
         // Reset it the instant combat ends — before the Combat gate releases the
         // walker — so the pre-move re-sneak re-establishes stealth for the step out.
         CombatTracker.CombatSpentStealth += () => Stealth.NoteCombatEndedStealthReset();
+        // A monster coming in right behind us means it's following: no sn until we
+        // shake it (StealthManager "followed").
+        RoomEntry.ArrivalObserved += e =>
+        {
+            if (e.Kind == Game.Combat.EntityKind.Monster) Stealth.NoteMonsterArrival();
+        };
 
         // Backstab window — CombatManager opens with `bs` on the first swing while
         // stealthed: either a sneak-approach into the monster's room, or a monster
