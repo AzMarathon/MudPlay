@@ -2,33 +2,25 @@ using System.ComponentModel;
 
 namespace MudPlay.Game;
 
-// Watches PlayerState and runs four independent regen cycles whose anchors
-// and intervals reflect what the MajorMUD server actually does:
+// Watches PlayerState and runs four regen cycles on the cadence the realm's wire
+// shows (RegenTickCadence):
 //
-//   HpNatural — 30 s. Always running once anchored on the first observed HP
-//     uptick. Per-tick amount = HPRegen / 3.
-//   HpRest    — 21 s. Starts the moment the user enters Resting, stops when
-//     they leave. Anchor is independent of the natural cycle. Per-tick
-//     amount = HPRegen.
-//   MpNatural — 30 s. Always running once anchored. Per-tick amount = MPRegen.
-//   MpMedi    — 15 s. Starts on entering Meditating, stops on leaving.
-//     Per-tick amount = MeditateRate.
+//   HpNatural — the standing HP gain. Anchored on the first one seen.
+//   MpNatural — the standing mana gain, likewise.
+//   HpRest    — the resting HP gain, while resting.
+//   MpMedi    — the meditating mana gain, while meditating.
 //
-// The natural cycle and the bonus cycle can be (and usually are)
-// desynchronised — the natural anchors at first observation; the bonus
-// anchors when the user types rest / meditate. The status bar shows them as
-// parallel countdowns.
+// The game pays its passive regen on a combat-round boundary (GAME_MECHANICS "The
+// engine clock — one fast tick drives every timer"), so the cycles share one grid
+// with the round: a round seen on the wire slides every running cycle onto it
+// (NoteRound), and a mana gain is always an HP grid point too. The HP gain mirrors
+// onto mana only where both run at the same interval (Stock); on Paradigm HP comes
+// three times as often, and which of the three carries the mana isn't known until a
+// mana gain is seen.
 //
-// The two natural cycles (HP + MA) fire on the same server pulse, however —
-// empirically verified. Any observation that anchors one mirrors the anchor
-// onto the other so a max-HP / max-MA character still has a live countdown
-// driven by whichever stream is moving.
-//
-// The intervals quoted above are the Stock cadence. On ParaMud / Paradigm the
-// server splits each cycle's amount into thirds on a faster grid, so the
-// observable cadence differs — SetRealm re-seeds every cycle from the active
-// RealmRegenProfile (wired to GameDataCache.ActiveSetChanged in AppServices).
-// Cycles default to the Stock profile until told otherwise.
+// A rest or meditate tick is counted from the command on Stock, so those cycles
+// anchor when the posture begins. On Paradigm a rest gain rides the round grid
+// whenever the character lay down, so the rest cycle anchors on the last grid point.
 public sealed class RegenTracker : IDisposable
 {
     private readonly PlayerState _state;
@@ -43,7 +35,14 @@ public sealed class RegenTracker : IDisposable
     private bool _maBaselineSet;
     private bool _disposed;
 
-    private RealmRegenProfile _profile = RealmRegenProfile.Stock;
+    private RegenTickCadence _cadence = RegenTickCadence.Stock;
+    // The last combat round seen on the wire, for anchoring a grid-riding rest.
+    private DateTimeOffset? _lastRoundAt;
+    private static readonly TimeSpan RoundStep = TickEngine.CombatTickInterval;
+    // How far a coasting anchor may sit from a seen round and still be slid onto it.
+    // The game's tick runs a shade over a second and makes up a whole second in one
+    // jump every couple of minutes, so a second and a bit covers an honest drift.
+    private static readonly TimeSpan GridTolerance = TimeSpan.FromMilliseconds(1250);
 
     public RegenCycle HpNatural { get; } = new("HP natural", RegenConstants.SeedStandingInterval);
     public RegenCycle HpRest    { get; } = new("HP rest",    RegenConstants.SeedRestingInterval);
@@ -77,17 +76,37 @@ public sealed class RegenTracker : IDisposable
     public TimeSpan? GetTimeToNextMpMediTick() => MpMedi.GetTimeToNext(_clock());
 
     // Re-seed every cycle's tick cadence for the given realm family (see
-    // RealmRegenProfile). Called once at wire-up and again on every
+    // RegenTickCadence). Called once at wire-up and again on every
     // GameDataCache.ActiveSetChanged. Idempotent — re-applying the same realm
     // just re-asserts the same intervals.
     public void SetRealm(RealmType realm)
     {
-        _profile = RealmRegenProfile.For(realm);
-        HpNatural.Reseed(_profile.StandingInterval);
-        MpNatural.Reseed(_profile.StandingInterval);
-        HpRest.Reseed(_profile.RestingInterval);
-        MpMedi.Reseed(_profile.MeditatingInterval);
+        _cadence = RegenTickCadence.For(realm);
+        HpNatural.Reseed(_cadence.HpStanding);
+        MpNatural.Reseed(_cadence.MpStanding);
+        HpRest.Reseed(_cadence.HpResting);
+        MpMedi.Reseed(_cadence.MpMeditating);
     }
+
+    // A combat round was seen on the wire at `at`. Every cycle that rides the round
+    // grid is slid onto it.
+    public void NoteRound(DateTimeOffset at)
+    {
+        _lastRoundAt = at;
+        HpNatural.AlignTo(at, RoundStep, GridTolerance);
+        MpNatural.AlignTo(at, RoundStep, GridTolerance);
+        if (_cadence.RestingOnRoundGrid) HpRest.AlignTo(at, RoundStep, GridTolerance);
+    }
+
+    // Whether an HP gain seen in this posture sits on the round grid: a standing gain
+    // does on both realms, a resting one only where rest rides the grid. Meditating
+    // is left out until a capture has timed it.
+    public bool HpGainIsOnRoundGrid(PlayerPosition position) => position switch
+    {
+        PlayerPosition.Standing => true,
+        PlayerPosition.Resting => _cadence.RestingOnRoundGrid,
+        _ => false,
+    };
 
     // Mark the moment as an artifact (heal / drink / etc.) so subsequent
     // up-deltas drop.
@@ -134,19 +153,28 @@ public sealed class RegenTracker : IDisposable
         // Credit whichever active HP cycle is closer to its boundary. If
         // both rest + natural look due, both get advanced (a 60 s mark
         // while resting fires both simultaneously).
+        // Where rest rides the round grid it takes the standing gain's place and
+        // comes twice as often, so a rest gain says nothing of which round the
+        // standing gain falls on: the standing cycle coasts through the rest and
+        // keeps the phase the mana pass gave it.
+        bool restOwnsTheGain = HpRest.IsActive && _cadence.RestingOnRoundGrid;
         bool restClaimed = ClaimIfDue(HpRest, now, delta);
-        bool natClaimed  = ClaimIfDue(HpNatural, now, delta);
+        bool natClaimed  = !restOwnsTheGain && ClaimIfDue(HpNatural, now, delta);
         if (!restClaimed && !natClaimed)
         {
-            // No active cycle was due — anchor HpNatural so it starts the
-            // 30 s cadence from this observation. First-time path.
-            HpNatural.RecordObservation(now, delta);
-            natClaimed = true;
+            // No active cycle was due — anchor on this observation. First-time path.
+            if (restOwnsTheGain) HpRest.RecordObservation(now, delta);
+            else
+            {
+                HpNatural.RecordObservation(now, delta);
+                natClaimed = true;
+            }
         }
-        // Natural HP and natural MA fire on the same server pulse —
-        // empirically verified. Sync MpNatural so its countdown stays
-        // valid even when MA sits at max and never upticks.
-        if (natClaimed) MpNatural.Start(now);
+        // Where HP and mana come on the same pass (Stock), an HP gain is the mana
+        // gain's moment too: keep the mana countdown live while mana sits at max.
+        // On Paradigm HP comes three times per mana pass, so it says nothing of
+        // which one carries the mana.
+        if (natClaimed && HpNatural.Interval == MpNatural.Interval) MpNatural.Start(now);
 
         TimeSpan sinceLast = _lastHpTickAt is { } prevTick ? now - prevTick : TimeSpan.Zero;
         _lastHpTickAt = now;
@@ -178,7 +206,7 @@ public sealed class RegenTracker : IDisposable
             MpNatural.RecordObservation(now, delta);
             natClaimed = true;
         }
-        // Mirror onto HpNatural — same pulse. Lets a max-HP character
+        // A mana gain is an HP grid point on both realms. Lets a max-HP character
         // still see a live HP countdown driven by observed MA ticks.
         if (natClaimed) HpNatural.Start(now);
 
@@ -209,7 +237,7 @@ public sealed class RegenTracker : IDisposable
         DateTimeOffset now = _clock();
         if (_state.Position == PlayerPosition.Resting && !HpRest.IsActive)
         {
-            HpRest.Start(now);
+            HpRest.Start(_cadence.RestingOnRoundGrid ? LastGridPoint(now) : now);
         }
         else if (_state.Position != PlayerPosition.Resting && HpRest.IsActive)
         {
@@ -224,6 +252,17 @@ public sealed class RegenTracker : IDisposable
         {
             MpMedi.Stop();
         }
+    }
+
+    // The latest round-grid point at or before now, from the last round seen or,
+    // failing that, the last standing gain (itself on the grid). now when neither
+    // is known.
+    private DateTimeOffset LastGridPoint(DateTimeOffset now)
+    {
+        DateTimeOffset? known = _lastRoundAt ?? HpNatural.Anchor ?? MpNatural.Anchor;
+        if (known is not { } reference || reference > now) return now;
+        long steps = (long)((now - reference).Ticks / RoundStep.Ticks);
+        return reference + TimeSpan.FromTicks(steps * RoundStep.Ticks);
     }
 
     // True just after a heal-shaped event (RecordArtifact): a gain seen now isn't

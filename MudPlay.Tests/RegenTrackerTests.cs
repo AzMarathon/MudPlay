@@ -297,14 +297,222 @@ public sealed class RegenTrackerTests
     }
 
     [Fact]
-    public void SetRealmParaMud_ReseedsRestCadenceToTenSecondGrid()
+    public void SetRealmParaMud_RestGainsComeEveryFiveSeconds()
     {
         var (state, tracker, _) = Setup();
         tracker.SetRealm(RealmType.ParaMud);
         state.Position = PlayerPosition.Resting;   // anchors HpRest at T0.
 
-        Assert.Equal(TimeSpan.FromSeconds(10), tracker.GetTimeToNextHpRestTick());
+        Assert.Equal(TimeSpan.FromSeconds(5), tracker.GetTimeToNextHpRestTick());
         tracker.Dispose();
+    }
+
+    [Fact]
+    public void SetRealmParaMud_ManaComesEveryThirtySeconds_AndAnHpGainDoesNotMoveIt()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Ma = 50;
+        state.Ma = 57;                              // the mana pass, at T0
+        Assert.Equal(TimeSpan.FromSeconds(30), tracker.GetTimeToNextMpNaturalTick());
+
+        clock.Advance(TimeSpan.FromSeconds(10));
+        state.Hp = 101;                             // an HP gain a third of the way in
+
+        Assert.Equal(TimeSpan.FromSeconds(20), tracker.GetTimeToNextMpNaturalTick());
+        Assert.Equal(TimeSpan.FromSeconds(10), tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // On Paradigm a rest gain rides the round grid whenever the character lay down:
+    // lying down 3.2 s after a round, the first gain is 1.8 s away, not 5.
+    [Fact]
+    public void ParaMud_RestCycleAnchorsOnTheRoundGrid_NotOnLyingDown()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        tracker.NoteRound(clock.Now);
+        clock.Advance(TimeSpan.FromSeconds(13.2));  // two rounds and 3.2 s later
+        state.Position = PlayerPosition.Resting;
+
+        AssertSeconds(1.8, tracker.GetTimeToNextHpRestTick());
+        tracker.Dispose();
+    }
+
+    [Fact]
+    public void Stock_RestCycleCountsFromLyingDown()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.NoteRound(clock.Now);
+        clock.Advance(TimeSpan.FromSeconds(13.2));
+        state.Position = PlayerPosition.Resting;
+
+        Assert.Equal(TimeSpan.FromSeconds(21), tracker.GetTimeToNextHpRestTick());
+        tracker.Dispose();
+    }
+
+    // A round seen on the wire slides a coasting cycle onto its grid; one that is
+    // further off than an honest drift is left alone.
+    [Fact]
+    public void RoundSeen_SlidesACoastingCycleOntoTheGrid()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Hp = 100;
+        state.Hp = 105;                             // natural anchor at T0
+        clock.Advance(TimeSpan.FromSeconds(20.4));
+
+        tracker.NoteRound(clock.Now);               // grid is 0.4 s later than we had it
+
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    [Fact]
+    public void RoundSeen_FarOffTheCycle_LeavesItAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Hp = 100;
+        state.Hp = 105;
+        clock.Advance(TimeSpan.FromSeconds(22.3));  // 2.3 s off any 5 s grid through T0
+
+        tracker.NoteRound(clock.Now);
+
+        AssertSeconds(7.7, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // The gains of a real Paradigm session (report paradigm-20261004-024314: five
+    // minutes of standing, then resting, with a fight at each end), as milliseconds
+    // from the first event: R a round seen, H / M an HP / mana change from-to, P a
+    // posture (0 standing, 1 resting). Every gain must have been called within a
+    // second and a bit by the countdown that was showing just before it.
+    private static readonly (int Ms, char Kind, int A, int B)[] ParadigmCapture =
+    {
+        (0, 'M', 56, 63),
+        (10043, 'R', 0, 0),
+        (20110, 'R', 0, 0),
+        (25143, 'R', 0, 0),
+        (30176, 'M', 36, 43),
+        (35210, 'R', 0, 0),
+        (50335, 'R', 0, 0),
+        (60405, 'M', 11, 18),
+        (70457, 'H', 71, 72),
+        (80514, 'H', 72, 73),
+        (90590, 'H', 73, 74),
+        (90590, 'M', 18, 25),
+        (100674, 'H', 74, 75),
+        (110755, 'H', 75, 76),
+        (120821, 'H', 76, 77),
+        (120821, 'M', 25, 32),
+        (130895, 'H', 77, 78),
+        (140930, 'H', 78, 79),
+        (150002, 'H', 79, 80),
+        (150002, 'M', 32, 39),
+        (160077, 'H', 80, 81),
+        (170173, 'H', 81, 82),
+        (180223, 'H', 82, 83),
+        (180223, 'M', 39, 46),
+        (190307, 'H', 83, 84),
+        (195018, 'P', 0, 1),
+        (195370, 'H', 84, 85),
+        (200383, 'H', 85, 86),
+        (205410, 'H', 86, 87),
+        (210457, 'H', 87, 91),
+        (210457, 'M', 46, 53),
+        (215525, 'H', 91, 95),
+        (220554, 'H', 95, 99),
+        (225591, 'H', 99, 100),
+        (230644, 'H', 100, 101),
+        (235679, 'H', 101, 102),
+        (240741, 'H', 102, 106),
+        (240741, 'M', 53, 60),
+        (245768, 'H', 106, 110),
+        (250789, 'H', 110, 114),
+        (255815, 'H', 114, 115),
+        (260859, 'H', 115, 116),
+        (265897, 'H', 116, 117),
+        (270906, 'H', 117, 121),
+        (270906, 'M', 60, 67),
+        (274957, 'H', 121, 125),
+        (280024, 'H', 125, 129),
+        (285021, 'H', 129, 130),
+        (290071, 'H', 130, 131),
+        (295105, 'H', 131, 132),
+        (300132, 'H', 132, 136),
+        (300132, 'M', 67, 74),
+        (305158, 'H', 136, 140),
+        (310173, 'H', 140, 144),
+        (315203, 'H', 144, 145),
+        (320231, 'H', 145, 146),
+        (325257, 'H', 146, 147),
+        (330309, 'P', 0, 0),
+        (330310, 'R', 0, 0),
+        (330315, 'H', 147, 148),
+        (330315, 'M', 74, 79),
+        (335322, 'R', 0, 0),
+        (340358, 'R', 0, 0),
+        (340362, 'H', 148, 149),
+        (344869, 'P', 0, 1),
+        (345417, 'H', 149, 150)
+    };
+
+    [Fact]
+    public void ParadigmCapture_EveryGainLandsWhenTheCountdownSaidItWould()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        DateTimeOffset start = clock.Now;
+        state.Hp = 71;
+        state.Ma = 56;
+        bool resting = false, manaSeen = false, hpSeen = false, restSeen = false;
+        double worst = 0;
+
+        foreach ((int ms, char kind, int a, int b) in ParadigmCapture)
+        {
+            clock.Now = start + TimeSpan.FromMilliseconds(ms);
+            switch (kind)
+            {
+                case 'R': tracker.NoteRound(clock.Now); break;
+                case 'P':
+                    resting = b == 1;
+                    state.Position = resting ? PlayerPosition.Resting : PlayerPosition.Standing;
+                    restSeen = false;
+                    break;
+                case 'M':
+                    if (manaSeen) worst = Math.Max(worst, Miss(tracker.GetTimeToNextMpNaturalTick(), tracker.MpNatural.Interval));
+                    if (state.Ma != a) state.Ma = a;    // a cast spent mana since the last gain
+                    state.Ma = b;
+                    manaSeen = true;
+                    break;
+                case 'H':
+                    if (resting && restSeen) worst = Math.Max(worst, Miss(tracker.GetTimeToNextHpRestTick(), tracker.HpRest.Interval));
+                    else if (!resting && hpSeen) worst = Math.Max(worst, Miss(tracker.GetTimeToNextHpNaturalTick(), tracker.HpNatural.Interval));
+                    if (state.Hp != a) state.Hp = a;
+                    state.Hp = b;
+                    hpSeen = true;
+                    if (resting) restSeen = true;
+                    break;
+            }
+        }
+
+        Assert.True(worst <= 1.2, $"a gain came {worst:0.00}s from where the countdown had it");
+        tracker.Dispose();
+    }
+
+    private static void AssertSeconds(double expected, TimeSpan? actual)
+    {
+        Assert.NotNull(actual);
+        Assert.Equal(expected, actual!.Value.TotalSeconds, 3);
+    }
+
+    // How far a gain arriving now is from the tick the countdown was pointing at:
+    // the countdown reads either "almost due" or "just passed" (a full interval).
+    private static double Miss(TimeSpan? toNext, TimeSpan interval)
+    {
+        Assert.NotNull(toNext);
+        double left = toNext!.Value.TotalSeconds;
+        return Math.Min(left, interval.TotalSeconds - left);
     }
 
     [Fact]

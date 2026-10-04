@@ -2665,7 +2665,25 @@ public sealed class AppServices
         Regen.SetRealm(GameData.ActiveRealm);
         GameData.ActiveSetChanged += _ => Regen.SetRealm(GameData.ActiveRealm);
         TickTiming = new Game.TickTimingLog(PlayerState, Regen);
-        Tick.CombatTickElapsed += () => TickTiming.NoteRound(Tick.LastCombatTickWasDamageDriven);
+        Tick.CombatTickElapsed += () =>
+        {
+            bool seen = Tick.LastCombatTickWasDamageDriven;
+            TickTiming.NoteRound(seen);
+            if (seen && Tick.LastCombatTick is { } at) Regen.NoteRound(at);
+        };
+        // The game pays passive regen on a round boundary, so a gain keeps the round
+        // grid true while no fight is printing damage lines. A meditate tick is
+        // counted from the command on Stock and untimed on Paradigm: left out.
+        Regen.MaTickObserved += sample =>
+        {
+            if (sample.Position != Game.PlayerPosition.Meditating)
+                Tick.NoteGridTick(sample.Timestamp, authoritative: true);
+        };
+        Regen.HpTickObserved += sample =>
+        {
+            if (Regen.HpGainIsOnRoundGrid(sample.Position))
+                Tick.NoteGridTick(sample.Timestamp, authoritative: false);
+        };
         RegenDiagnostics = new Game.RegenDiagnosticsRecorder(Regen, PlayerState, Log,
             () => TickTiming.SinceLastSeenRound);
         // RemoteCommands is constructed AFTER Chat / Party / Players are

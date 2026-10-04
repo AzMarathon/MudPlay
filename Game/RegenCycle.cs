@@ -67,6 +67,21 @@ public sealed partial class RegenCycle : ObservableObject
         return a + Interval - now;
     }
 
+    // Slide the anchor onto a grid of `step` through gridPoint, when it is already
+    // within tolerance of one. A regen pass falls on a combat round, so a round seen
+    // on the wire says exactly where the next tick will be; between sightings the
+    // anchor only coasts on nominal seconds.
+    public void AlignTo(DateTimeOffset gridPoint, TimeSpan step, TimeSpan tolerance)
+    {
+        if (Anchor is not { } a || step <= TimeSpan.Zero) return;
+        double stepMs = step.TotalMilliseconds;
+        double off = (a - gridPoint).TotalMilliseconds % stepMs;
+        if (off > stepMs / 2) off -= stepMs;
+        else if (off < -stepMs / 2) off += stepMs;
+        if (off != 0 && Math.Abs(off) <= tolerance.TotalMilliseconds)
+            Anchor = a - TimeSpan.FromMilliseconds(off);
+    }
+
     // Record an observed tick at at with the given amount. Anchors the cycle
     // if not yet started, advances the EWMA for the per-tick amount.
     public void RecordObservation(DateTimeOffset at, double amount)

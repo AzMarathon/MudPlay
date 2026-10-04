@@ -19,6 +19,85 @@ public sealed class TickEngineTests
         return (router, tick);
     }
 
+    // ----- regen gains keep the round grid true ----------------------------
+
+    private static (MessageRouter router, TickEngine tick, Func<DateTimeOffset> now, Action<double> advance) SetupClocked()
+    {
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        DateTimeOffset now = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
+        TickEngine tick = new(router, () => now);
+        return (router, tick, () => now, seconds => now += TimeSpan.FromSeconds(seconds));
+    }
+
+    [Fact]
+    public void ManaGain_StartsTheRoundGrid_AnHpGainDoesNot()
+    {
+        var (_, tick, now, _) = SetupClocked();
+
+        tick.NoteGridTick(now(), authoritative: false);
+        Assert.Null(tick.LastCombatTick);
+
+        tick.NoteGridTick(now(), authoritative: true);
+        Assert.Equal(now(), tick.LastCombatTick);
+        tick.Dispose();
+    }
+
+    [Fact]
+    public void HpGain_OnlyFineTunesTheGrid()
+    {
+        var (_, tick, now, advance) = SetupClocked();
+        tick.NoteGridTick(now(), authoritative: true);
+        DateTimeOffset start = now();
+
+        advance(0.4);                                   // the grid is 0.4 s later than projected
+        tick.NoteGridTick(now(), authoritative: false);
+        Assert.Equal(start + TimeSpan.FromSeconds(0.4), tick.LastCombatTick);
+
+        advance(2.0);                                   // a heal over time, off the grid
+        tick.NoteGridTick(now(), authoritative: false);
+        Assert.Equal(start + TimeSpan.FromSeconds(0.4), tick.LastCombatTick);
+        tick.Dispose();
+    }
+
+    [Fact]
+    public void ManaGain_MovesTheGridByAnyAmount_UnlessARoundWasJustSeen()
+    {
+        var (router, tick, now, advance) = SetupClocked();
+        tick.NoteGridTick(now(), authoritative: true);
+        advance(2.0);
+        tick.NoteGridTick(now(), authoritative: true);
+        Assert.Equal(now(), tick.LastCombatTick);
+
+        advance(3.0);
+        router.Dispatch(Line("Forged slashes Goblin for 17 damage!"));   // a round seen on the wire
+        DateTimeOffset seen = now();
+        advance(2.0);
+        tick.NoteGridTick(now(), authoritative: true);                   // two seconds off a seen round
+        Assert.Equal(seen, tick.LastCombatTick);
+        tick.Dispose();
+    }
+
+    // The projection running a little late for a round the gain has just marked:
+    // the timer fires that round at once and lands on the gain.
+    [Fact]
+    public void GainAheadOfTheProjection_FiresThatRoundOnTheNextPoll()
+    {
+        var (_, tick, now, advance) = SetupClocked();
+        tick.NoteGridTick(now(), authoritative: true);
+        int fires = 0;
+        tick.CombatTickElapsed += () => fires++;
+
+        advance(4.8);
+        tick.NoteGridTick(now(), authoritative: false);
+        Assert.Equal(0, fires);                          // nothing fires from the gain itself
+        tick.PollTimersForTests();
+
+        Assert.Equal(1, fires);
+        Assert.Equal(now(), tick.LastCombatTick);
+        tick.Dispose();
+    }
+
     [Fact]
     public void UserHitsDamageLine_FiresCombatTickAndStampsTimestamp()
     {

@@ -1,8 +1,9 @@
 namespace MudPlay.Game;
 
-// Per-realm regen tick cadence — the wall-clock interval at which each of
-// RegenTracker's cycles delivers an observable uptick. Selected off
-// GameDataCache.ActiveRealm and applied via RegenTracker.SetRealm.
+// Per-realm regen tick cadence as the Exp/Hr simulator plays it (SimRegen). The
+// live countdowns run on RegenTickCadence, which follows a timed capture; this one
+// still plays ParaMud rest as the 10-second cycle the user described. Their 30 s
+// totals agree.
 //
 // Stock uses the engine's own tick intervals (natural 30 s / rest 21 s /
 // meditate 15 s), one uptick per interval paying the full per-tick amount.
@@ -17,11 +18,6 @@ namespace MudPlay.Game;
 // into thirds, with rest riding the same grid at 3× the amount (the resting
 // multiplier lives in CharacterCalculator.CalcHpRegen, not here). Meditate is
 // not split into thirds on ParaMud — it ticks every 10 s (user-confirmed).
-//
-// This models only the observable interval — the per-tick amount is learned
-// live by RegenStat. Making the interval realm-correct is what keeps the
-// status-bar countdown honest on ParaMud (a 10 s natural tick, not a stock
-// 30 s one).
 public readonly record struct RealmRegenProfile(
     TimeSpan StandingInterval,
     TimeSpan RestingInterval,
