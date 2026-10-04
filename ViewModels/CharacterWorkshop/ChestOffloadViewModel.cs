@@ -57,8 +57,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     // `drop` per copy on Stock, would otherwise overflow the game's command queue.
     private readonly Action<IReadOnlyList<string>> _sendPaced;
     private readonly Action<RoomKey> _queueWalk;
-    private readonly Action<RoomKey> _goWalk;
-    private readonly AutoWalkManager? _walker;
+    private readonly ChestSellTour _tour;
     private readonly ChestOpenTracker _chests;
     private readonly LogDiagnosticState? _diagnostics;
     private readonly LogService? _log;
@@ -67,9 +66,6 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     // Coin shown while the Simulate Chest test button drives the view.
     private CurrencyHoldings _simCoin = CurrencyHoldings.Empty;
 
-    // A Sell that's walking to its shop first; it sells when the walk arrives.
-    private sealed record PendingSell(RoomKey Room, int Shop, string ShopName, Action SellNow);
-    private PendingSell? _pendingSell;
     private bool _simulating;
     private Dictionary<int, Room> _shopRoom = new();               // shop id → serving room (first found), rebuilt each render
 
@@ -78,6 +74,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     // What a Sell is doing when it isn't instant: walking to the shop, or why it stopped.
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSellStatus))] private string _sellStatus = "";
     public bool HasSellStatus => SellStatus.Length > 0;
+    [ObservableProperty] private bool _isTourRunning;
     // Coin the chest gave, one denomination per line, most-expensive first.
     public ObservableCollection<string> CoinGains { get; } = new();
     public ObservableCollection<ChestContainerRow> Containers { get; } = new();
@@ -96,7 +93,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         AppServices.Current.Currency,
         cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo,
         cmds => AppServices.Current.InventoryAction.SendPaced(cmds),
-        AppServices.Current.ChestOpens, AppServices.Current.GoWalkTo, AppServices.Current.Walker)
+        AppServices.Current.ChestOpens, AppServices.Current.ChestSellTour)
     { }
 
     public ChestOffloadViewModel(
@@ -104,8 +101,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         ItemNameStore itemNames, PlayerStats stats, GameDataCache gameData,
         RoomTracker tracker, BfsMapper bfs, MovementFilter movement, CurrencyNaming naming,
         Action<string> send, Action<RoomKey> queueWalk,
-        Action<IReadOnlyList<string>> sendPaced, ChestOpenTracker chests,
-        Action<RoomKey>? goWalk = null, AutoWalkManager? walker = null)
+        Action<IReadOnlyList<string>> sendPaced, ChestOpenTracker chests, ChestSellTour tour)
     {
         _sendPaced = sendPaced;
         _chests = chests;
@@ -121,14 +117,15 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _naming = naming;
         _send = send;
         _queueWalk = queueWalk;
-        _goWalk = goWalk ?? queueWalk;
-        _walker = walker;
+        _tour = tour;
 
         _charm = stats.Charm > 0 ? stats.Charm : 50;
 
         _chests.Changed += OnChestsChanged;
         _inventory.Changed += OnInventoryChanged;
-        if (_walker is not null) _walker.Event += OnWalkerEvent;
+        _tour.Changed += OnTourChanged;
+        _sellStatus = _tour.Status;
+        _isTourRunning = _tour.IsRunning;
         // Reconcile the list against the game's OWN confirmed sell/drop lines, so a
         // refused sale changes nothing and a partial one reduces only that item.
         _inventory.ItemSold += OnItemSold;
@@ -484,92 +481,100 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         OnPropertyChanged(nameof(HasUnsellable));
     }
 
+    // Sell All: a one-stop tour of this shop (sells here when standing in it).
     private void SellGroup(ChestOffloadShopGroup group)
     {
         _log?.Info(LogCategory, $"Sell All '{group.ShopName}' — {group.Items.Count} item(s)");
-        SellAtShop(group.Shop, group.ShopName, () => SellNow(group.Items.ToList()));
+        if (StopFor(group.Shop, group.ShopName, group.Items) is { } stop) _tour.Start(new[] { stop });
     }
 
     private void SellItem(ChestOffloadItemRow item)
     {
         if (item.SellQty <= 0) return;
         string shopName = GroupOf(item)?.ShopName ?? $"Shop #{item.CurrentShop}";
-        SellAtShop(item.CurrentShop, shopName, () => SellNow(new[] { item }));
+        if (StopFor(item.CurrentShop, shopName, new[] { item }) is { } stop) _tour.Start(new[] { stop });
     }
 
-    // Sell here when we're standing in the shop; otherwise walk there (the full "Walk
-    // here" path — conflicting engines stop, gated routes ask) and sell on arrival
-    // (OnWalkerEvent). A new Sell replaces one still walking.
-    private void SellAtShop(int shop, string shopName, Action sellNow)
+    // Sell Tour: read the inventory fresh (so the list's counts are the truth), show
+    // exactly what each shop will be sold, and on Yes walk and sell them all in route
+    // order. Quantities are capped at what the chests gave and are still carried, here
+    // for the prompt and again by the tour right before each sell.
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private async System.Threading.Tasks.Task SellTour()
     {
-        if (_tracker.State.CurrentRoom?.Shop == shop)
+        if (_tour.IsRunning) { SellStatus = "A sell tour is already running — cancel it first."; return; }
+        if (_simulating) { SellStatus = "Simulated chests can't be sold — Clear list first."; return; }
+        await ReadInventoryAsync();
+
+        var stops = new List<ChestSellTour.Stop>();
+        foreach (ChestOffloadShopGroup group in ShopGroups)
+            if (StopFor(group.Shop, group.ShopName, group.Items) is { } stop) stops.Add(stop);
+        if (stops.Count == 0) { SellStatus = "Nothing on the list to sell."; return; }
+
+        var body = new System.Text.StringBuilder();
+        body.Append("Walk to each shop below in this order and sell exactly these items:\n");
+        int n = 0;
+        foreach (ChestSellTour.Stop stop in stops)
         {
-            CancelPendingSell(null);
-            sellNow();
-            return;
+            body.Append($"\n{++n}. {stop.ShopName} ({stop.Room.Map}/{stop.Room.Room})\n   ")
+                .Append(string.Join(", ", stop.Items.Select(i => $"{i.Qty} {i.Name}")))
+                .Append('\n');
         }
+        body.Append("\nOnly items the chests gave are sold, never more than the chests gave — " +
+                    "anything you already had stays in your pack. A running loop or Auto-Lair stops for the walk.");
+        bool go = await AppServices.Current.Confirm.ConfirmAsync("Sell Tour", body.ToString(), "Start tour");
+        if (!go) return;
+        _tour.Start(stops);
+    }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void CancelTour() => _tour.Cancel();
+
+    // One shop's stop: each row's picked quantity, capped at what the chests gave and
+    // are still carried. Null when nothing is left to sell there, or the shop has no
+    // known room to walk to.
+    private ChestSellTour.Stop? StopFor(int shop, string shopName, IEnumerable<ChestOffloadItemRow> rows)
+    {
+        IReadOnlyList<(string Name, int Count)> loot = _chests.Loot(_inventory.Snapshot.CarriedItems);
+        var items = new List<(string Name, int Qty)>();
+        foreach (ChestOffloadItemRow row in rows)
+        {
+            int fromChests = loot.FirstOrDefault(l => string.Equals(l.Name, row.Name, StringComparison.OrdinalIgnoreCase)).Count;
+            int qty = Math.Min(row.SellQty, fromChests);
+            if (qty > 0) items.Add((row.Name, qty));
+        }
+        if (items.Count == 0) return null;
         if (!_shopRoom.TryGetValue(shop, out Room? room))
         {
             SellStatus = $"{shopName}: no known room for this shop — walk there and sell by hand.";
             _log?.Info(LogCategory, $"sell at '{shopName}' skipped — no room serves shop #{shop}");
-            return;
+            return null;
         }
-        _pendingSell = new PendingSell(room.Key, shop, shopName, sellNow);
-        SellStatus = $"Walking to {shopName} ({room.Key.Map}/{room.Key.Room}) to sell…";
-        _log?.Info(LogCategory, $"walking to '{shopName}' {room.Key.Map}/{room.Key.Room} to sell there");
-        _goWalk(room.Key);
+        return new ChestSellTour.Stop(room.Key, shop, shopName, items);
     }
 
-    // The walk a Sell started: sell when it arrives at the shop; stand down if it
-    // stops, fails, or another walk replaces it.
-    private void OnWalkerEvent(WalkEvent e) => Dispatcher.UIThread.Post(() =>
+    // Send `i` and wait for it to parse (or 3 s), so the tracker has pruned the list to
+    // what's really carried before quantities are worked out.
+    private async System.Threading.Tasks.Task ReadInventoryAsync()
     {
-        if (_pendingSell is not { } pending) return;
-        bool ours = e.Destination is { } d && d.Equals(pending.Room);
-        switch (e.Kind)
+        var parsed = new System.Threading.Tasks.TaskCompletionSource();
+        void OnParsed() => parsed.TrySetResult();
+        _inventory.FullInventoryParsed += OnParsed;
+        try
         {
-            case WalkEventKind.Started when !ours:
-                CancelPendingSell($"another walk started — not selling at {pending.ShopName}.");
-                break;
-            case WalkEventKind.Finished when ours:
-                _pendingSell = null;
-                if (_tracker.State.CurrentRoom?.Shop == pending.Shop)
-                {
-                    SellStatus = "";
-                    _log?.Info(LogCategory, $"arrived at '{pending.ShopName}' — selling");
-                    pending.SellNow();
-                }
-                else CancelPendingSell($"the walk ended outside {pending.ShopName} — nothing sold.");
-                break;
-            case WalkEventKind.Stopped or WalkEventKind.Failed when ours || e.Destination is null:
-                CancelPendingSell($"walk to {pending.ShopName} {(e.Kind == WalkEventKind.Failed ? "failed" : "stopped")}" +
-                    (e.Detail.Length > 0 ? $" ({e.Detail})" : "") + " — nothing sold.");
-                break;
+            _send("i");
+            await System.Threading.Tasks.Task.WhenAny(parsed.Task, System.Threading.Tasks.Task.Delay(3000));
+            // The tracker prunes on the same parse through a UI-thread post; let it run.
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
         }
+        finally { _inventory.FullInventoryParsed -= OnParsed; }
+    }
+
+    private void OnTourChanged() => Dispatcher.UIThread.Post(() =>
+    {
+        SellStatus = _tour.Status;
+        IsTourRunning = _tour.IsRunning;
     });
-
-    private void CancelPendingSell(string? why)
-    {
-        _pendingSell = null;
-        SellStatus = why ?? "";
-        if (why is not null) _log?.Info(LogCategory, why);
-    }
-
-    // Send the picked quantity of each row, paced like the drops (Stock sells one copy
-    // per command). The list is NOT touched here — it reconciles when the game's "You
-    // sold …" lands, so a refused sale leaves the row untouched.
-    private void SellNow(IReadOnlyList<ChestOffloadItemRow> items)
-    {
-        bool paradigm = _gameData.ActiveRealm == RealmType.ParaMud;
-        List<string> sells = new();
-        foreach (ChestOffloadItemRow item in items)
-        {
-            if (item.SellQty <= 0) continue;
-            _log?.Info(LogCategory, $"sell {item.SellQty} {item.Name} (of {item.Gained} held)");
-            CountedCommand.Emit(sells.Add, "sell", item.SellQty, item.Name, paradigm);
-        }
-        if (sells.Count > 0) _sendPaced(sells);
-    }
 
     private ChestOffloadShopGroup? GroupOf(ChestOffloadItemRow item)
         => ShopGroups.FirstOrDefault(g => g.Items.Contains(item));
@@ -667,7 +672,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     {
         _chests.Changed -= OnChestsChanged;
         _inventory.Changed -= OnInventoryChanged;
-        if (_walker is not null) _walker.Event -= OnWalkerEvent;
+        _tour.Changed -= OnTourChanged;
         _inventory.ItemSold -= OnItemSold;
         _inventory.ItemDropped -= OnItemDropped;
         if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;

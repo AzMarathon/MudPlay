@@ -1267,7 +1267,10 @@ public static class BugReportBuilder
         var chestLoot = svc.ChestOpens.Loot(svc.Inventory.Snapshot.CarriedItems);
         sb.Append("\n**Chest Offload list** (").Append(chestLoot.Count)
           .Append(svc.ChestOpens.IsOpening ? ", an open in progress" : "")
-          .Append(", coin ").Append(svc.ChestOpens.Coin.TotalCopperValue).Append("c)\n\n");
+          .Append(", coin ").Append(svc.ChestOpens.Coin.TotalCopperValue).Append("c")
+          .Append(svc.ChestSellTour.IsRunning ? "; sell tour running" : "")
+          .Append(svc.ChestSellTour.Status.Length > 0 ? $" — {svc.ChestSellTour.Status}" : "")
+          .Append(")\n\n");
         if (chestLoot.Count == 0)
             sb.Append("_(empty)_\n");
         else
