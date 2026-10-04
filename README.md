@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.3**
-> - Map: zooming a long way out or back in redraws the rooms as you go, so a route line no longer runs across blank space or blurred blocks until the wheel stops
+> **Version 3.143.4**
+> - Combat: bashing a door open is no longer taken for an attack you typed, so a buff cast on entering the next room no longer leaves the monsters un-attacked
+> - Combat: after an attack you really did type, an attack spell stopped by the engine's own heal or buff is re-cast on the next round instead of waiting for a monster to land a hit
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

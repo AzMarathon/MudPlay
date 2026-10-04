@@ -1,5 +1,11 @@
 # Version history
 
+## 3.143.4
+
+- Combat: bashing a door open is no longer taken for an attack you typed, so a buff cast on entering the next room no longer leaves the monsters un-attacked
+- Combat: after an attack you really did type, an attack spell stopped by the engine's own heal or buff is re-cast on the next round instead of waiting for a monster to land a hit
+- bug reports addressed: paradigm-20261003-194358
+
 ## 3.143.3
 
 - Map: zooming a long way out or back in redraws the rooms as you go, so a route line no longer runs across blank space or blurred blocks until the wheel stops

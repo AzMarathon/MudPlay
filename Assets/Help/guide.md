@@ -203,7 +203,7 @@ Each combat round the engine picks one main action — **cast an attack spell** 
 
 Two things always sit above that choice: a **backstab opener** fires first when eligible, and **debuff spells** are a separate extra action that can land the same round.
 
-**Taking a round yourself.** If you hand-type an attack mid-fight — a **combat spell** (any spell that costs round energy, as opposed to a 0-energy heal/buff) or a **physical attack** (`a`/`at`/`att`/`aa`, `bash`/`sm`/`sma`/`smash`, `bs`) — the engine treats it as a **user override** and holds its own auto-attack for that round, so it won't fight you by re-sending its action on top of yours. Control returns automatically on the next combat round.
+**Taking a round yourself.** If you hand-type an attack mid-fight — a **combat spell** (any spell that costs round energy, as opposed to a 0-energy heal/buff) or a **physical attack** (`a`/`at`/`att`/`aa`, `bash`/`sm`/`sma`/`smash`, `bs`) — the engine treats it as a **user override** and holds its own auto-attack for that round, so it won't fight you by re-sending its action on top of yours. Control returns automatically on the next combat round: if one of the engine's own heals or buffs stopped the fight during the round you took, it re-attacks then. `bash` followed by a direction (`bash n`) is a door, not an attack, and doesn't count.
 
 A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it lands the engine resumes attacking right away, same as before.
 

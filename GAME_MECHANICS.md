@@ -3549,6 +3549,10 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A successful `pick <dir>` prints `You successfully unlocked the door.`** — **past tense**, and the *same* line the use-key unlock emits (the two are distinguished only by which command was in flight, not by wording).
 - **A pick failure is `Your skill fails you this time.`**
 - **A bash opens the door itself — no `open` afterwards.** *([CONFIRMED] 2026-09-28, user.)* `open <dir>` is only needed after a key (or a pick) has unlocked the door, or for a door that's shut but not locked.
+- **`bash` reads its argument as a direction first, and only then as a monster.** *([OBSERVED] 2026-10-03, Stock 1.11p `wccmmud.dll` `_cmd_bash` / `_cmd_smash`. Paradigm: the door form is in the capture of report `paradigm-20261003-194358` (`bash n` → `You bashed the door open.`); the fall-through to the attack is `[NEEDS CONFIRMATION]` there.)*
+  - `bash <dir>` in a room that has an exit that way is the door bash, and never an attack.
+  - Any other argument, or a direction the room has no exit for, goes on to the bash attack (`_cmd_any_attack`) with the argument as the monster's name.
+  - `smash` has no door form: `_cmd_smash` goes straight to the attack.
 - **Unlocking does not open the door** — a separate `open <dir>` is required. Its success line comes in two wordings, and **the game prints both**: `You open the door.` (the capture above) and `The door is now open.` / `The %s is now open.` (the Stock 1.11p `wccmmud.dll` `_cmd_open` text). *([CONFIRMED] 2026-09-28, user. An earlier note said only `You open the door.`, and the DLL has only the second form; superseded 2026-09-28.)* The client matches both.
 - **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit), so sustained bashing whittles the character down.
 - **Picking does not drain HP.**
@@ -3578,6 +3582,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `DoorOpenManager` treats the two bash refusals as "can't bash" and falls back to pick, then the key, instead of re-bashing on the response watchdog forever (2026-09-28); the wrong-key line fails the key step at once.
 - `DoorOpenManager` bashes a *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced the old fixed `MaxBashAttempts` cap.)
 - Picking keeps its `MaxPickAttempts` retry cap.
+- `OutboundAttackObserver` does not count `bash <direction>` as a typed attack. The walker's own door bashes were arming the typed-attack hold on the combat engine, and a buff cast on entering the next room then left the fight un-resumed (report `paradigm-20261003-194358`).
 - `RoomTooltipBuilder.PickChance` shows the chance on a door's hint (map tooltip, Room Info, the room detail dialog): `Picklocks − N + 1`, clamped 0–100, and at least `Picklocks + 1` on an "any" lock (user request, 2026-09-30; the Stock rule assumed for Paradigm).
 
 ### Hidden exits — `sea <dir>` reveal wording

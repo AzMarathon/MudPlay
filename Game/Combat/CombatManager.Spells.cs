@@ -549,6 +549,8 @@ public sealed partial class CombatManager
         // engine resumes its auto attack this round. A hand-typed attack suppresses the
         // engine's re-send only for the round it landed in.
         ClearUserAttackOverrideForNewRound();
+        bool resumeHeldForUserAttack = _spellResumeHeldForUserAttack;
+        _spellResumeHeldForUserAttack = false;
 
         // New round — reset the per-round exp-line tally the AoE-wipe path reads.
         _expGainsThisRound = 0;
@@ -627,7 +629,13 @@ public sealed partial class CombatManager
 
         if (!CombatSpellsWired) return;
         if (!_isEnabled()) return;
-        if (_combatOff) return;                         // round interrupted; resume path owns re-engage
+        if (_combatOff)
+        {
+            // Round interrupted; the resume path owns the re-engage — all but the one
+            // a user-typed attack held last round, which falls due here.
+            if (resumeHeldForUserAttack) ResumeSpellHeldForUserAttack();
+            return;
+        }
 
         CombatSettings settings = _readSettings();
 
