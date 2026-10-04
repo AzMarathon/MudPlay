@@ -1,5 +1,12 @@
 # Version history
 
+## 3.143.22
+
+- Emergency heal no longer loses the round to a Major heal picked on a half-landed round: a mid-round HP read is always held until the round settles, whichever part of the client asks first
+- A heal sent off a round's hits keeps that round's cast slot, so a second heal isn't sent into `You have already cast a spell this round!`
+- No cures mid-fight: poison, holds/knockdowns, disease and blindness (yours or a party member's) wait until the fight is over, so the round's cast stays free for healing
+- bug reports addressed: paradigm-20261004-054304
+
 ## 3.143.20
 
 - Tick countdowns run on one clock: a round seen on the wire sets the regen countdowns, and a regen gain keeps the round countdown true between fights

@@ -3121,6 +3121,8 @@ The "spend a maxed-out pool on something useful" casts are configured as ordinar
 **Default:** unset
 **What it does:** The specific spell used to cure each named ailment. These feed the Curing priority category (self first, then party members). A party member is cured when their MudPlay client announces the ailment — `@held` (paralysed / held), `.@poisoned`, `.@diseased`, `.@blind` — in that order: a hold first, as for you. A member's hold clears when they send `@ok`.
 
+During a fight the only between-round casts are heals: every cure — holds, poison, disease, blindness, on you or on a party member — waits until the fight is over (the room has no monster left to fight). A cure takes the round's one between-round cast, so no heal goes out that round, and the next hit usually poisons you or knocks you down again.
+
 ### Room light — moved to the Buff Watchdog
 
 The room-light spell is configured in the **Buff Watchdog** now. Add it there and tick **Only when the room is dark** on the slot to keep the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
