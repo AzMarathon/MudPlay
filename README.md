@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.25**
-> - Stat Breakpoints: **Mana / tick** column under your class's mana stat (Mage INT, Priest WIL, Bard CHA, Druid INT and WIL); none for Mystics or classes without mana
-> - Stat Breakpoints: **Max HP** (Health), **Carry weight** (Strength) and **Energy / swing** (Agility, for your wielded weapon and load) columns
+> **Version 3.143.26**
+> - Character Info: Paradigm HP Regen shows the measured ticks — a third of the amount every 10 s standing, and resting every 5 s in three small then three full gains (the tooltip still described the old 10 s cycle)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

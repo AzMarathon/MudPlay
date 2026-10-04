@@ -126,7 +126,7 @@ public static class SimCharacterBuilder
         int level = stats.Level, health = stats.Health, intel = stats.Intellect, wil = stats.Willpower, cha = stats.Charm;
         bool paradigm = realm == RealmType.ParaMud;
         double Idle(int extra) => CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, false, realm);
-        double IdleThird(int extra) => Math.Max(1, Math.Floor(Idle(extra) / 3));
+        double IdleThird(int extra) => CharacterCalculator.ParadigmHpRegenThird((int)Idle(extra));
         double Mana(int extra) => CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
             mageryType, mageryLevel, mpPct + extra, false, realm);
         double meditating = CharacterCalculator.CalcManaRegen(level, intel, wil, cha,

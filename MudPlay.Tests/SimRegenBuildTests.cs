@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using MudPlay.Game;
+using MudPlay.Game.Calculators;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Simulation;
 using MudPlay.Services;
@@ -56,4 +57,15 @@ public sealed class SimRegenBuildTests : IDisposable
         Assert.Equal(new[] { 6.0, 6.0, 6.0, 6.0 }, Enumerable.Range(1, 4).Select(t => regen.RestTickHp(t)));
         Assert.False(regen.RestReplacesStanding);
     }
+
+    // Paradigm's standing gain and low rest gain: a third of the 30 s amount, the
+    // fraction dropped, never under 1.
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 1)]
+    [InlineData(4, 1)]
+    [InlineData(6, 2)]
+    [InlineData(13, 4)]
+    public void ParadigmHpRegenThird_DropsTheFraction_NeverUnderOne(int idle, int third) =>
+        Assert.Equal(third, CharacterCalculator.ParadigmHpRegenThird(idle));
 }

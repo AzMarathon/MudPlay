@@ -375,10 +375,21 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         int idle = CharacterCalculator.CalcHpRegen(level, _stats.Health, t.HpRegenPercent, isResting: false, realm);
         int rest = CharacterCalculator.CalcHpRegen(level, _stats.Health, t.HpRegenPercent, isResting: true, realm);
-        HpRegen = $"+{idle} / +{rest}";
-        HpRegenTip = realm == RealmType.ParaMud
-            ? $"Standing: +{idle} HP every 30 s.\nResting: ticks every 10 s in threes — +{rest / 3}, +{rest / 3}, then +{rest}."
-            : $"Standing: +{idle} HP every 30 s.\nResting: that tick keeps paying, plus +{rest} every 21 s.";
+        if (realm == RealmType.ParaMud)
+        {
+            // Paradigm pays the 30 s amount in thirds, and a rest's full gain is that
+            // whole amount, not three times it.
+            int third = CharacterCalculator.ParadigmHpRegenThird(idle);
+            HpRegen = $"+{third} / +{idle}";
+            HpRegenTip = $"Standing: +{third} HP every 10 s.\n"
+                + $"Resting: a gain every 5 s — three of +{third}, then three of +{idle}, and round again. "
+                + "It counts from when you lie down, so resting again starts back at the small gains.";
+        }
+        else
+        {
+            HpRegen = $"+{idle} / +{rest}";
+            HpRegenTip = $"Standing: +{idle} HP every 30 s.\nResting: that tick keeps paying, plus +{rest} every 21 s.";
+        }
 
         int mageryType = GetInt(classRow, "MageryType"), mageryLevel = GetInt(classRow, "MageryLVL");
         ShowManaRegen = mageryType > 0;
