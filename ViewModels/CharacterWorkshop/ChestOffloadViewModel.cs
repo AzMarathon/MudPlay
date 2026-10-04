@@ -22,7 +22,23 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // standing in it.
 public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogViewModel<bool>, IDisposable
 {
-    private const int ContainerItemType = 8;
+    public const int ContainerItemType = 8;
+
+    // The one open Chest Offload window. Two would both read the inventory and diff
+    // the same chest opens, so every way in raises this one instead.
+    private static ChestOffloadViewModel? _openWindow;
+
+    // Open the window, or bring it forward when it's already open — the Bosses tab
+    // button and the Character Info panel's chest icon both come through here.
+    public static async System.Threading.Tasks.Task OpenOrRaise()
+    {
+        DialogService dialogs = AppServices.Current.Dialogs;
+        if (_openWindow is { } open && dialogs.RaiseIfOpen(open)) return;
+        var vm = new ChestOffloadViewModel();
+        _openWindow = vm;
+        try { await dialogs.OpenWindowAsync<ChestOffloadViewModel, bool>(vm); }
+        finally { if (ReferenceEquals(_openWindow, vm)) _openWindow = null; }
+    }
 
     // Modeless browse/action window: it closes via the title-bar X, so this stays
     // unraised — it exists only to satisfy the DialogService contract.

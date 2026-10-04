@@ -124,6 +124,8 @@
 
     <!-- Combat-profile cycle (circular arrow) — usually hidden behind the "P#" badge. -->
     <StreamGeometry x:Key="IconCombatProfile">M18.5 8 A7 7 0 1 0 19 13 M18.5 8 H15.5 M18.5 8 V11</StreamGeometry>
+    <!-- Treasure chest: domed lid, band, latch — the Chest Offload window. -->
+    <StreamGeometry x:Key="IconTreasureChest">M4 11 A8 5 0 0 1 20 11 V20 H4 Z M4 12 H20 M11 11 H13 V15 H11 Z</StreamGeometry>
     <!-- Combat-profile menu (list + expand chevron). -->
     <StreamGeometry x:Key="IconCombatProfileMenu">M4 7 H16 M4 12 H16 M4 17 H16 M19 10 L21 12 L19 14</StreamGeometry>
 
