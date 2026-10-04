@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.21**
-> - Only auto-invite while navigation is running: a flagged player already standing with you is invited when a walk, loop or trip (deposit, sell, train, stash) starts, not only when you walk into their room
+> **Version 3.143.23**
+> - Emergency heal no longer loses the round to a Major heal picked on a half-landed round: a mid-round HP read is always held until the round settles, whichever part of the client asks first
+> - A heal sent off a round's hits keeps that round's cast slot, so a second heal isn't sent into `You have already cast a spell this round!`
+> - No cures mid-fight: poison, holds/knockdowns, disease and blindness (yours or a party member's) wait until the fight is over, so the round's cast stays free for healing
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
