@@ -210,6 +210,60 @@ public sealed class SpellbookStateTests : IDisposable
         Assert.Contains("curse", Names(book.Available));
     }
 
+    // ----- one cast code, several spells (the priest's word spells) --------
+
+    private static readonly object[] _wordSpells =
+    [
+        SpellRow(400, "balanced word", "word", magery: 1, mageryLvl: 1, reqLevel: 1),
+        SpellRow(401, "exalted word", "word", magery: 1, mageryLvl: 1, reqLevel: 1, abil0: 111), // not evil
+        SpellRow(402, "tainted word", "word", magery: 1, mageryLvl: 1, reqLevel: 1, abil0: 110), // not good
+        SpellRow(403, "plain bolt", "bolt", magery: 1, mageryLvl: 1, reqLevel: 1),
+    ];
+
+    // The alignment quest decides which word spell a priest learns, and the other two
+    // can then never be learned (user, 2026-10-03). A neutral reading allows all three,
+    // so before this the cast code resolved to the first of them, learned or not.
+    [Fact]
+    public void LearnedSpell_OwnsItsCastCode_AndRulesOutItsSiblings()
+    {
+        SpellbookState book = New(_wordSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 2); // read as Neutral
+        Assert.Equal(4, book.Available.Count);
+        Assert.Equal("balanced word", book.FindByCastCode("word")!.Value.Name);
+
+        book.SetObtainedByNames(new[] { "tainted word", "plain bolt" });
+
+        Assert.Equal(new[] { "plain bolt", "tainted word" }, Names(book.Available));
+        Assert.Equal("tainted word", book.FindByCastCode("word")!.Value.Name);
+        Assert.Equal(4, book.ClassSpells.Count);   // the Spell Book window still lists all three
+    }
+
+    [Fact]
+    public void LearnedSpell_RulesOutASiblingOurAlignmentNowAllows()
+    {
+        SpellbookState book = New(_wordSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 3); // Evil
+        book.MarkObtainedByName("tainted word");
+
+        book.Refresh(classNumber: 12, level: 1, charAlign: 1); // drifted to Good
+
+        // Tainted stays (learned); exalted is allowed by alignment but can't be learned now.
+        Assert.Equal(new[] { "plain bolt", "tainted word" }, Names(book.Available));
+    }
+
+    [Fact]
+    public void ClearingTheLearnedSet_BringsTheSiblingsBack()
+    {
+        SpellbookState book = New(_wordSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 2);
+        book.SetObtainedByNames(new[] { "exalted word" });
+        Assert.Equal(2, book.Available.Count);
+
+        book.ClearObtained();   // a reroll
+
+        Assert.Equal(4, book.Available.Count);
+    }
+
     [Fact]
     public void Refresh_CharAlignZero_NeverFiltersRegardlessOfObtainedState()
     {

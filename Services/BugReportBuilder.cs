@@ -1012,7 +1012,9 @@ public static class BugReportBuilder
     // the engine) rather than a sentinel number.
     private static string SpellResolutionLine(AppServices svc, string label, string code)
     {
-        int? number = svc.SpellShort.NumberByShort(code);
+        // The character's own spell for the code first: several spells can share one
+        // (a priest's three word spells), and the set-wide index knows only the first.
+        int? number = svc.Spellbook.FindByCastCode(code)?.Number ?? svc.SpellShort.NumberByShort(code);
         string head = $"{label}: `{code}`";
         if (number is not { } n)
             return $"{head} → (no Spells row with this short-code)";
