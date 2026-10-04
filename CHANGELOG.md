@@ -1,5 +1,9 @@
 # Version history
 
+## 3.143.3
+
+- Map: zooming a long way out or back in redraws the rooms as you go, so a route line no longer runs across blank space or blurred blocks until the wheel stops
+
 ## 3.143.2
 
 - A walk, loop or Auto-Lair paused by a move you typed now says so: a terminal notice, a hold chip naming the command, and the engine badge reads PAUSED instead of LOOPING / WALKING
