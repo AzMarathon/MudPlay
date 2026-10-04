@@ -479,15 +479,84 @@ public sealed class RegenTrackerTests
         tracker.Dispose();
     }
 
+    // Stock counts 21 whole game ticks from the command, so the first rest gain comes
+    // 21 s after the tick the command landed in: 20.8 s after a command sent 0.2 s
+    // into a tick (report stock-20261004-150847: rest seen 15:07:39.601, rounds
+    // falling at .70, first rest gain 15:07:59.693).
     [Fact]
-    public void Stock_RestCycleCountsFromLyingDown()
+    public void Stock_RestCycleCountsFromTheGameTickTheCommandLandedIn()
     {
         var (state, tracker, clock) = Setup();
         tracker.NoteRound(clock.Now);
         clock.Advance(TimeSpan.FromSeconds(13.2));
         state.Position = PlayerPosition.Resting;
 
-        Assert.Equal(TimeSpan.FromSeconds(21), tracker.GetTimeToNextHpRestTick());
+        AssertSeconds(20.8, tracker.GetTimeToNextHpRestTick());
+        tracker.Dispose();
+    }
+
+    // With no round or pass seen lately there is no tick to count from: half a tick
+    // back, the middle of where the command can have landed.
+    [Fact]
+    public void Stock_RestCycle_NoTickPhaseKnown_CountsFromHalfATickBack()
+    {
+        var (state, tracker, _) = Setup();
+        state.Position = PlayerPosition.Resting;
+
+        AssertSeconds(20.5, tracker.GetTimeToNextHpRestTick());
+        tracker.Dispose();
+    }
+
+    // The same report: the 30 s pass at 15:07:33.716, rest from 15:07:39.601, the
+    // rest gain at 15:07:59.693 and the next pass at 15:08:03.711. The rest gain is
+    // the rest cycle's and leaves the pass countdown where it was; it used to fall
+    // through to the pass and restart that countdown at 30 with 4 s to go.
+    [Fact]
+    public void Stock_RestGain_IsTheRestCyclesAndLeavesThePassCountdownAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Hp = 24;
+        state.Hp = 25;                              // the pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(5.885));
+        state.Position = PlayerPosition.Resting;
+        clock.Advance(TimeSpan.FromSeconds(20.092));
+
+        AssertSeconds(0.023, tracker.GetTimeToNextHpRestTick());
+        state.Hp = 28;                              // the rest gain, +3
+
+        AssertSeconds(21, tracker.GetTimeToNextHpRestTick());
+        AssertSeconds(4.023, tracker.GetTimeToNextHpNaturalTick());
+
+        clock.Advance(TimeSpan.FromSeconds(4.018));
+        state.Hp = 29;                              // the next pass, +1
+        AssertSeconds(30, tracker.GetTimeToNextHpNaturalTick());
+        AssertSeconds(16.982, tracker.GetTimeToNextHpRestTick());
+
+        // A rest gain that comes just after the countdown rolled over is still the
+        // rest cycle's (15:08:41.697 in the report).
+        clock.Advance(TimeSpan.FromSeconds(16.99));
+        tracker.GetTimeToNextHpRestTick();
+        state.Hp = 32;
+        AssertSeconds(21, tracker.GetTimeToNextHpRestTick());
+        AssertSeconds(13.01, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // Meditate is counted the same way, 15 ticks from the command, and its gain
+    // leaves the mana pass countdown alone.
+    [Fact]
+    public void Stock_MeditateGain_IsTheMeditateCyclesAndLeavesThePassCountdownAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Ma = 10;
+        state.Ma = 14;                              // the pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(5.9));
+        state.Position = PlayerPosition.Meditating;
+        clock.Advance(TimeSpan.FromSeconds(14.08));  // the 15th tick after the command
+        state.Ma = 18;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(10.02, tracker.GetTimeToNextMpNaturalTick());
         tracker.Dispose();
     }
 

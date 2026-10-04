@@ -19,8 +19,11 @@ namespace MudPlay.Game;
 // off the mana pass: there a mana gain places the HP cycle only while no HP gain
 // is being seen (HP at max), and standing up re-anchors it on the last rest gain.
 //
-// A rest or meditate tick is counted from the command on Stock, so those cycles
-// anchor when the posture begins. On Paradigm a rest gain rides the round grid
+// A rest or meditate tick is counted from the command on Stock, in whole one-second
+// game ticks, so those cycles anchor on the game tick the posture began in: the
+// first gain comes 20 to 21 s (rest) or 14 to 15 s (meditate) after the command.
+// A gain near such a tick is that cycle's and re-anchors it; it is never taken for
+// the 30 s pass. On Paradigm a rest gain rides the round grid
 // whenever the character lay down, so the rest cycle anchors on the last grid point;
 // and a meditate gain rides a 15 s grid the mana pass sits on, so the meditate cycle
 // anchors on the mana cycle.
@@ -39,6 +42,9 @@ public sealed class RegenTracker : IDisposable
     private bool _disposed;
 
     private RealmRegenProfile _cadence = RealmRegenProfile.Stock;
+    // Where the rest and meditate cycles were anchored when the posture began.
+    private DateTimeOffset? _restStartedAt;
+    private DateTimeOffset? _mediStartedAt;
     // The last combat round seen on the wire, for anchoring a grid-riding rest.
     private DateTimeOffset? _lastRoundAt;
     private static readonly TimeSpan RoundStep = TickEngine.CombatTickInterval;
@@ -52,6 +58,15 @@ public sealed class RegenTracker : IDisposable
     private static readonly TimeSpan GridReferenceTrusted = TimeSpan.FromSeconds(60);
     // How far off the grid a gain may be and still be regen.
     private static readonly TimeSpan OnGridWithin = TimeSpan.FromMilliseconds(750);
+    // How far a gain may fall from a tick counted from a command and still be it:
+    // the count runs in whole game ticks, so a count of plain seconds from the
+    // posture change can be most of a second out until the first gain is seen.
+    private static readonly TimeSpan CommandTickWithin = TimeSpan.FromMilliseconds(1250);
+    // Two cycles this close to their ticks at one gain are paid together in it.
+    private static readonly TimeSpan SameGainWithin = TimeSpan.FromMilliseconds(300);
+    private static readonly TimeSpan GameTick = TimeSpan.FromSeconds(1);
+    // A round or pass this recent still says where the one-second game ticks fall.
+    private static readonly TimeSpan GameTickPhaseTrusted = TimeSpan.FromSeconds(45);
     // The last gain turned away as off the grid. A second one a whole number of
     // rounds after it is the grid itself having moved (the game making up a second).
     private DateTimeOffset? _lastOffGridGain;
@@ -174,8 +189,16 @@ public sealed class RegenTracker : IDisposable
         // comes twice as often: the rest cycle owns the gain, and the standing cycle
         // is placed again on standing up (ApplyPositionChange).
         bool restOwnsTheGain = HpRest.IsActive && _cadence.RestingOnRoundGrid;
-        bool restClaimed = ClaimIfDue(HpRest, now, delta);
-        bool natClaimed  = !restOwnsTheGain && ClaimIfDue(HpNatural, now, delta);
+        bool restClaimed, natClaimed;
+        if (restOwnsTheGain || !HpRest.IsActive)
+        {
+            restClaimed = ClaimIfDue(HpRest, now, delta);
+            natClaimed = !restOwnsTheGain && ClaimIfDue(HpNatural, now, delta);
+        }
+        else
+        {
+            (restClaimed, natClaimed) = CreditCommandCountedGain(HpRest, _restStartedAt, HpNatural, now, delta);
+        }
         if (!restClaimed && !natClaimed)
         {
             // No active cycle was due — anchor on this observation. First-time path.
@@ -216,8 +239,16 @@ public sealed class RegenTracker : IDisposable
         if (IsInArtifactWindow(now)) return;
         if (_state.Position != PlayerPosition.Meditating && !OnTheRoundGrid(now)) return;
 
-        bool mediClaimed = ClaimIfDue(MpMedi, now, delta);
-        bool natClaimed  = ClaimIfDue(MpNatural, now, delta);
+        bool mediClaimed, natClaimed;
+        if (_cadence.MeditatingOnManaGrid || !MpMedi.IsActive)
+        {
+            mediClaimed = ClaimIfDue(MpMedi, now, delta);
+            natClaimed = ClaimIfDue(MpNatural, now, delta);
+        }
+        else
+        {
+            (mediClaimed, natClaimed) = CreditCommandCountedGain(MpMedi, _mediStartedAt, MpNatural, now, delta);
+        }
         if (!mediClaimed && !natClaimed)
         {
             // Where meditate rides the mana grid, a gain while meditating is a point
@@ -241,6 +272,42 @@ public sealed class RegenTracker : IDisposable
         TimeSpan sinceLast = _lastMaTickAt is { } prevTick ? now - prevTick : TimeSpan.Zero;
         _lastMaTickAt = now;
         MaTickObserved?.Invoke(new RegenSample(now, delta, sinceLast, _state.Position));
+    }
+
+    // A gain while a command-counted cycle (Stock's rest or meditate) is running,
+    // alongside the 30 s pass that keeps paying: credit the cycle whose tick the gain
+    // is nearest, both when one gain carries both. A gain near the command-counted
+    // tick is never left to fall through to the pass, which would move the pass's
+    // countdown onto it.
+    private static (bool Bonus, bool Pass) CreditCommandCountedGain(
+        RegenCycle bonus, DateTimeOffset? bonusStartedAt, RegenCycle pass, DateTimeOffset now, double delta)
+    {
+        // Until a gain or a countdown rollover has moved it, the bonus cycle's anchor
+        // is the command, where no tick falls.
+        TimeSpan? bonusOff = OffNearestTick(bonus, now, anchorIsATick: bonus.Anchor != bonusStartedAt);
+        TimeSpan? passOff = OffNearestTick(pass, now, anchorIsATick: true);
+        bool bonusNear = bonusOff is { } b && b <= CommandTickWithin;
+        bool passNear = passOff is { } p && p <= TimeSpan.FromMilliseconds(750);
+        if (bonusNear && passNear)
+        {
+            // Both in reach: the nearer one, or both when the gain sits on both.
+            if (bonusOff!.Value > passOff!.Value + SameGainWithin) bonusNear = false;
+            else if (passOff.Value > bonusOff.Value + SameGainWithin) passNear = false;
+        }
+        if (bonusNear) bonus.RecordObservation(now, delta);
+        if (passNear) pass.RecordObservation(now, delta);
+        return (bonusNear, passNear);
+    }
+
+    // How far now is from the cycle's nearest tick: the anchor itself counts as one
+    // only when it is a tick.
+    private static TimeSpan? OffNearestTick(RegenCycle cycle, DateTimeOffset now, bool anchorIsATick)
+    {
+        if (cycle.Anchor is not { } anchor) return null;
+        double interval = cycle.Interval.TotalMilliseconds;
+        double elapsed = (now - anchor).TotalMilliseconds;
+        double ticks = Math.Max(anchorIsATick ? 0 : 1, Math.Round(elapsed / interval));
+        return TimeSpan.FromMilliseconds(Math.Abs(elapsed - ticks * interval));
     }
 
     // An HP gain was seen within the last two standing intervals, so the HP cycle
@@ -270,7 +337,8 @@ public sealed class RegenTracker : IDisposable
         DateTimeOffset now = _clock();
         if (_state.Position == PlayerPosition.Resting && !HpRest.IsActive)
         {
-            HpRest.Start(_cadence.RestingOnRoundGrid ? LastGridPoint(now) : now);
+            HpRest.Start(_cadence.RestingOnRoundGrid ? LastGridPoint(now) : LastGameTick(now));
+            _restStartedAt = HpRest.Anchor;
         }
         else if (_state.Position != PlayerPosition.Resting && HpRest.IsActive)
         {
@@ -287,7 +355,8 @@ public sealed class RegenTracker : IDisposable
 
         if (_state.Position == PlayerPosition.Meditating && !MpMedi.IsActive)
         {
-            MpMedi.Start(_cadence.MeditatingOnManaGrid ? LastMeditateGridPoint(now) : now);
+            MpMedi.Start(_cadence.MeditatingOnManaGrid ? LastMeditateGridPoint(now) : LastGameTick(now));
+            _mediStartedAt = MpMedi.Anchor;
         }
         else if (_state.Position != PlayerPosition.Meditating && MpMedi.IsActive)
         {
@@ -337,6 +406,22 @@ public sealed class RegenTracker : IDisposable
         long steps = (long)((now - reference).Ticks / RoundStep.Ticks);
         return reference + TimeSpan.FromTicks(steps * RoundStep.Ticks);
     }
+
+    // The game tick a command landed in, for a cycle the game counts from the command
+    // in whole ticks: the latest one-second point at or before now, from a round or a
+    // pass seen lately (both fall on a game tick). With neither to go by, half a tick
+    // back, which is the middle of where it can be.
+    private DateTimeOffset LastGameTick(DateTimeOffset now)
+    {
+        DateTimeOffset? known = Latest(_lastRoundAt, Latest(HpNatural.Anchor, MpNatural.Anchor));
+        if (known is not { } reference || reference > now || now - reference > GameTickPhaseTrusted)
+            return now - TimeSpan.FromMilliseconds(500);
+        long ticks = (now - reference).Ticks / GameTick.Ticks;
+        return reference + TimeSpan.FromTicks(ticks * GameTick.Ticks);
+    }
+
+    private static DateTimeOffset? Latest(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is null ? b : b is null ? a : a > b ? a : b;
 
     // The latest point at or before now on the meditate grid, which the mana pass
     // sits on: whole meditate intervals from the mana cycle's anchor. now before any
