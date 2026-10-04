@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.24
+
+- Chest Offload: each open is read against a fresh `i` taken just before it, so items already carried or picked up between chests no longer show as chest loot; a chest opened by typing `open <chest>` counts too
+- Chest Offload: Sell All and Sell walk to the shop first when you aren't standing in it, then sell on arrival
+
 ## 3.143.20
 
 - Tick countdowns run on one clock: a round seen on the wire sets the regen countdowns, and a regen gain keeps the round countdown true between fights

@@ -5174,6 +5174,7 @@ There is no room to drop amethyst pendant here.
 **Client use:**
 - AutoDiscard exists to clean up after `open chest`: it drops the unwanted dumped items down to the keep band.
 - The loot readout shows items only, because chest coin amounts aren't in the data.
+- The Chest Offload window diffs a fresh `i` taken just before each `open` against one taken after it (`ChestLootLedger`), so items already carried or picked up between chests are never counted as chest loot.
 
 ### NPC keyword hand-over detection
 *Status: CONFIRMED 2026-09-11 (user, reports `paradigm-20260911-103025`, `-103315`)*

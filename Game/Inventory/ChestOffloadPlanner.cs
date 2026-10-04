@@ -33,7 +33,26 @@ public static class ChestOffloadPlanner
         return gains;
     }
 
-    private static Dictionary<string, int> CountByName(IReadOnlyList<string> tokens)
+    // The carried container a typed `open <target>` names: an exact name, or one with
+    // a word starting with the target (`open chest` → "oak chest"). Null when it names
+    // none of them — a door, or a container we don't hold.
+    public static string? MatchContainer(string target, IEnumerable<string> containerNames)
+    {
+        string t = target.Trim();
+        if (t.Length == 0) return null;
+        string? wordMatch = null;
+        foreach (string name in containerNames)
+        {
+            if (string.Equals(name, t, StringComparison.OrdinalIgnoreCase)) return name;
+            if (wordMatch is null
+                && name.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                       .Any(w => w.StartsWith(t, StringComparison.OrdinalIgnoreCase)))
+                wordMatch = name;
+        }
+        return wordMatch;
+    }
+
+    internal static Dictionary<string, int> CountByName(IReadOnlyList<string> tokens)
     {
         var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (string token in tokens)
