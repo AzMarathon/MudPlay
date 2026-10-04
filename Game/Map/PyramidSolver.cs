@@ -852,6 +852,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         MovementCoordinator.HeldGate,
         MovementCoordinator.MortallyWoundedGate,
         MovementCoordinator.FearGate,
+        MovementCoordinator.TooHeavyGate,
     };
 
     // Floors where the climb holds for everything the walker would. F1/F2 walk on

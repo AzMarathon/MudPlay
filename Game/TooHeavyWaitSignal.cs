@@ -1,24 +1,33 @@
 using Avalonia.Threading;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 
 namespace MudPlay.Game;
 
-// "You are too heavy to move" — our carried weight is over our max encumbrance,
-// usually because a debuff (frail's Encum% cut) lowered the max mid-fight. It
-// isn't a hold: freedom / cure paralysis do nothing, and the leader can't see it.
-// So we tell the leader ourselves — @wait (too heavy to move) — and read `i` for
-// the lowered max. The wait holds until the weight is back under the max, either
-// because items were dropped or because the debuff wore off; a fresh `i` every
-// RecheckInterval is what notices the max coming back up.
+// Over max encumbrance: every move is refused with "You are too heavy to move".
+// It usually comes from a debuff that cuts carrying capacity mid-fight (weakness,
+// frail's Encum%). It isn't a hold: freedom / cure paralysis do nothing, and the
+// leader can't see it.
+//
+// Two ways in. A capacity debuff landing reads `i` at once, so we know before the
+// first refused move; the refusal line itself is the fallback for anything else
+// that put us over. While over, our own walk / loop / auto-lair holds (TooHeavyGate)
+// and a follower tells the leader — @wait (too heavy to move).
+//
+// It ends when a fresh `i` shows the weight back under the max: the debuff wore off
+// (its wear-off line prompts a read) or the player shed weight. A read every
+// RecheckInterval covers a wear-off line we missed.
 public sealed class TooHeavyWaitSignal : IDisposable
 {
-    private const string LogCategory = "Party";
+    public const string AsserterName = "TooHeavyMovementGate";
+    private const string LogCategory = "Encumbrance";
     private static readonly TimeSpan RecheckInterval = TimeSpan.FromSeconds(15);
 
     private readonly InventoryManager _inventory;
     private readonly PartyRestSync _restSync;
+    private readonly MovementCoordinator _coordinator;
     private readonly LogService? _log;
     private readonly IDisposable _sub;
     private readonly WireSender _wire = new();
@@ -27,6 +36,9 @@ public sealed class TooHeavyWaitSignal : IDisposable
     // The snapshot's reading predates the debuff until a fresh `i` lands, so a
     // Changed before then (a coin pickup) must not read as "back under max".
     private bool _awaitingFreshRead;
+    // A capacity debuff landed and the `i` that tells us whether it put us over
+    // hasn't come back yet.
+    private bool _checkingAfterDebuff;
     private bool _disposed;
 
     public bool IsTooHeavy => _tooHeavy;
@@ -34,13 +46,16 @@ public sealed class TooHeavyWaitSignal : IDisposable
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
     public TooHeavyWaitSignal(
-        MessageRouter router, InventoryManager inventory, PartyRestSync restSync, LogService? log = null)
+        MessageRouter router, InventoryManager inventory, PartyRestSync restSync,
+        MovementCoordinator coordinator, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(restSync);
+        ArgumentNullException.ThrowIfNull(coordinator);
         _inventory = inventory;
         _restSync = restSync;
+        _coordinator = coordinator;
         _log = log;
         _sub = router.Subscribe(KnownPatterns.MovementFailedHeavy, _ => OnTooHeavy());
         _inventory.Changed += OnInventoryChanged;
@@ -49,24 +64,59 @@ public sealed class TooHeavyWaitSignal : IDisposable
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
-    private void OnTooHeavy()
+    // A spell that cuts our carrying capacity just landed. Whether it put us over
+    // the max only shows in `i`, so read it; OnFullInventoryParsed decides.
+    public void NoteCapacityDebuffApplied()
+    {
+        if (_tooHeavy || _checkingAfterDebuff) return;
+        _checkingAfterDebuff = true;
+        _log?.Info(LogCategory, "A debuff cut our carrying capacity — reading `i` to see if we can still move.");
+        Recheck();
+    }
+
+    // The debuff wore off: the max is back, so don't wait for the next timed read.
+    public void NoteCapacityDebuffEnded()
+    {
+        if (!_tooHeavy) return;
+        _awaitingFreshRead = true;
+        Recheck();
+    }
+
+    private void OnTooHeavy() => EnterTooHeavy("the game refused a move", reread: true);
+
+    // reread: the reading in hand predates whatever put us over, so ask for a new one.
+    private void EnterTooHeavy(string how, bool reread)
     {
         if (!_tooHeavy)
         {
             _tooHeavy = true;
-            _log?.Info(LogCategory, "Too heavy to move — asking the leader to @wait until we're under our max encumbrance.");
+            _coordinator.AssertGate(MovementCoordinator.TooHeavyGate, AsserterName, "over max encumbrance");
+            _log?.Info(LogCategory, $"Too heavy to move ({how}) — holding until we're back under our max encumbrance.");
         }
         // Resend: the leader may already be waiting on us for another reason, and
         // this one is worth naming.
         _restSync.RequestWait(WaitReason.TooHeavy, resend: true);
-        _awaitingFreshRead = true;
-        Recheck();
+        if (reread)
+        {
+            _awaitingFreshRead = true;
+            Recheck();
+        }
         StartTimer();
     }
 
     private void OnFullInventoryParsed()
     {
         _awaitingFreshRead = false;
+        if (_checkingAfterDebuff)
+        {
+            _checkingAfterDebuff = false;
+            EncumbranceReading enc = _inventory.Snapshot.Encumbrance;
+            if (!_tooHeavy && enc.MaxWeight > 0 && enc.CurrentWeight > enc.MaxWeight)
+            {
+                EnterTooHeavy($"{enc.CurrentWeight}/{enc.MaxWeight} after the debuff", reread: false);
+                return;
+            }
+        }
         OnInventoryChanged();
     }
 
@@ -77,7 +127,8 @@ public sealed class TooHeavyWaitSignal : IDisposable
         if (enc.MaxWeight <= 0 || enc.CurrentWeight > enc.MaxWeight) return;
         _tooHeavy = false;
         StopTimer();
-        _log?.Info(LogCategory, $"Back under max encumbrance ({enc.CurrentWeight}/{enc.MaxWeight}) — sending @ok.");
+        _coordinator.ClearGate(MovementCoordinator.TooHeavyGate, AsserterName, "back under max encumbrance");
+        _log?.Info(LogCategory, $"Back under max encumbrance ({enc.CurrentWeight}/{enc.MaxWeight}) — moving again.");
         _restSync.RequestOk(WaitReason.TooHeavy);
     }
 
@@ -110,5 +161,7 @@ public sealed class TooHeavyWaitSignal : IDisposable
         _inventory.Changed -= OnInventoryChanged;
         _inventory.FullInventoryParsed -= OnFullInventoryParsed;
         StopTimer();
+        if (_tooHeavy)
+            _coordinator.ClearGate(MovementCoordinator.TooHeavyGate, AsserterName, "disposed");
     }
 }

@@ -2153,6 +2153,7 @@ public sealed partial class CombatManager : IDisposable
         _lastAlternationAdvanceAt = DateTimeOffset.MinValue;
         _lastAttackTallyAt = DateTimeOffset.MinValue;
         _spellAttackOwed = false;
+        _spellResumeHeldForUserAttack = false;
         // Drop a pending pre-attack-debuff suppress: if the fight ended (room clear,
         // combat off, death) before the debuff's *Combat Off* arrived, a stale stamp
         // could bar the first legit resume in the NEXT fight (unlikely — a new cast
@@ -3741,6 +3742,9 @@ public sealed partial class CombatManager : IDisposable
     // hand-cast IN-BETWEEN spell (heal / buff / cure, energy 0) is NOT an override — it
     // keeps the resume-after-cast behaviour (NoteManualBetweenRoundCast).
     private bool _userAttackOverride;
+    // The between-round-cast resume was skipped for the override while in spell mode;
+    // the next round's tick owes the re-announce (ResumeSpellHeldForUserAttack).
+    private bool _spellResumeHeldForUserAttack;
     // One-shot echo claim: SendAttack stamps the verb it just sent so the attack
     // observer — which sees the engine's OWN swings too — drops that echo instead of
     // reading it as a manual override. Consumed synchronously as the send flows back
@@ -3896,6 +3900,79 @@ public sealed partial class CombatManager : IDisposable
         if (!_userAttackOverride) return;
         _userAttackOverride = false;
         _log?.Combat(LogCategory, "user attack override cleared — new combat round, engine resumes");
+    }
+
+    // Re-announce the attack spell after a between-round cast's *Combat Off* stopped
+    // its server-side repeat. Shared by the Off handler (the usual, same-round resume)
+    // and the round tick (a resume a user-typed attack held for a round).
+    private void ResumeSpellAfterBetweenRoundCast(RoomEntitiesObservation live, string target,
+        EngageableCandidate cand)
+    {
+        if (_lastBetweenRoundCastManual) _lastManualCastResumeAt = DateTimeOffset.Now;
+        // Clear the interrupt flag before attempting the re-announce, mirroring
+        // ResumeEngage's weapon-mode path — NOT only inside DispatchRoundAction's
+        // TryCast-succeeded branch. This attempt can lose the round's single cast
+        // slot to a survival heal firing the same instant (CastingDirector.Evaluate
+        // runs immediately on the HP change that triggered this whole interrupt, not
+        // just on the tick boundary), and DispatchRoundAction's own comment ("stay in
+        // spell mode and retry next tick") only holds if OnCombatTick's heartbeat can
+        // actually run next tick — it bails immediately while _combatOff is true. Left
+        // set here, a single lost race parks the engine in spell mode with no path back
+        // to a retry: the reported "won't re-engage after buffing/healing, sits there
+        // until manual input" stall.
+        // The interrupted attack spell held the round the between-round cast
+        // just closed. RoundDamageTracker tie-breaks ahead of us on CombatStatus,
+        // so it has already CloseCurrent'd that round (RoundCount++) — tally it
+        // toward MaxCasts NOW, before the re-decide inside DispatchRoundAction.
+        // The heartbeat can't (it bails while _combatOff), so without this the
+        // resume re-announces the just-capped spell uncapped (LBOL 2x, report
+        // paradigm-20260820-063541). Round-delta gated so a heal that interrupted
+        // BEFORE the spell's first fire (no round opened) doesn't over-count;
+        // death-window gated so the kill-left-a-survivor path (a legitimately
+        // fresh cast on the survivor) is untouched.
+        if (_announcedSpellCode is { } interruptedSpell
+            && _lastCastAction is { } interruptedAction
+            && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
+            && ReadRoundCount?.Invoke() is { } interruptedRound
+            && interruptedRound != _lastTalliedRound)
+        {
+            _spellChooser.MarkCast(
+                new CombatSpellDecision(interruptedAction, interruptedSpell), target);
+            _lastTalliedRound = interruptedRound;
+        }
+        _combatOff = false;
+        _announcedSpellCode = null;
+        // Mark this specific interrupt as resumed BEFORE dispatching — the
+        // resume's own cast drops its own *Combat Off* a moment later, and
+        // without this stamped first that Off would satisfy the exact same
+        // condition above and re-fire again (see
+        // _lastSpellResumeForBetweenRoundCastAt).
+        _lastSpellResumeForBetweenRoundCastAt = _betweenRoundCastAt;
+        _log?.Combat(LogCategory,
+            $"between-round-cast resume → re-announcing attack spell on {target}");
+        // bypassRecastInterval: this re-attack lands within 500ms of the
+        // survival buff/heal that dropped *Combat Off*; without the bypass the
+        // burst guard defers it to the next tick and the mob swings free (the
+        // "broke combat to cast armr, didn't re-attack until after they swung"
+        // report). This resume is now guarded to fire once per interrupt (see
+        // above), so the bypass can't compound into a burst.
+        DispatchRoundAction(_readSettings(), cand, CountEngageable(live), live,
+            bypassRecastInterval: true);
+    }
+
+    // The round after a user-typed attack held the between-round-cast resume: the
+    // override is over, combat is still off, and the spell is still owed. Skipped
+    // when an attack has gone out since the cast or the target has left the room.
+    private void ResumeSpellHeldForUserAttack()
+    {
+        if (_castingSpellTarget is not { } target
+            || _lastAttackSentAt > _betweenRoundCastAt
+            || _betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt
+            || _classifier.Current is not { } live
+            || !TargetPresent(live, target)
+            || TryBuildCandidate(live, target) is not { } cand)
+            return;
+        ResumeSpellAfterBetweenRoundCast(live, target, cand);
     }
 
     private void NoteBetweenRoundCast(bool manual)
@@ -4199,63 +4276,27 @@ public sealed partial class CombatManager : IDisposable
                 && _betweenRoundCastAt != _lastSpellResumeForBetweenRoundCastAt
                 && !attackAlreadyFiredThisRound
                 && !manualPaced
-                && !_userAttackOverride   // user hand-typed this round's attack — hold our own until next round
                 && _castingSpellTarget is { } spellTarget
                 && (DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow || survivorReadied)
                 && _classifier.Current is { } liveSpell
                 && TargetPresent(liveSpell, spellTarget)
                 && TryBuildCandidate(liveSpell, spellTarget) is { } spellCand)
             {
-                if (_lastBetweenRoundCastManual) _lastManualCastResumeAt = DateTimeOffset.Now;
-                // Clear the interrupt flag before attempting the re-announce, mirroring
-                // ResumeEngage's weapon-mode path — NOT only inside DispatchRoundAction's
-                // TryCast-succeeded branch. This attempt can lose the round's single cast
-                // slot to a survival heal firing the same instant (CastingDirector.Evaluate
-                // runs immediately on the HP change that triggered this whole interrupt, not
-                // just on the tick boundary), and DispatchRoundAction's own comment ("stay in
-                // spell mode and retry next tick") only holds if OnCombatTick's heartbeat can
-                // actually run next tick — it bails immediately while _combatOff is true. Left
-                // set here, a single lost race parks the engine in spell mode with no path back
-                // to a retry: the reported "won't re-engage after buffing/healing, sits there
-                // until manual input" stall.
-                // The interrupted attack spell held the round the between-round cast
-                // just closed. RoundDamageTracker tie-breaks ahead of us on CombatStatus,
-                // so it has already CloseCurrent'd that round (RoundCount++) — tally it
-                // toward MaxCasts NOW, before the re-decide inside DispatchRoundAction.
-                // The heartbeat can't (it bails while _combatOff), so without this the
-                // resume re-announces the just-capped spell uncapped (LBOL 2x, report
-                // paradigm-20260820-063541). Round-delta gated so a heal that interrupted
-                // BEFORE the spell's first fire (no round opened) doesn't over-count;
-                // death-window gated so the kill-left-a-survivor path (a legitimately
-                // fresh cast on the survivor) is untouched.
-                if (_announcedSpellCode is { } interruptedSpell
-                    && _lastCastAction is { } interruptedAction
-                    && DateTimeOffset.Now - _lastDeathAt >= DeathInterruptWindow
-                    && ReadRoundCount?.Invoke() is { } interruptedRound
-                    && interruptedRound != _lastTalliedRound)
+                if (_userAttackOverride)
                 {
-                    _spellChooser.MarkCast(
-                        new CombatSpellDecision(interruptedAction, interruptedSpell), spellTarget);
-                    _lastTalliedRound = interruptedRound;
+                    // The user hand-typed this round's attack, so ours waits — but this
+                    // Off stopped theirs too, and in spell mode nothing else brings the
+                    // fight back: the heartbeat bails while combat is off, and a monster
+                    // whose swing wording isn't parsed never wakes the mob-swing resume
+                    // (report paradigm-20261003-194358: 65 s without an attack). Owe
+                    // the re-announce to the next round's tick, when the override ends.
+                    _spellResumeHeldForUserAttack = true;
+                    _ensureCombatTickAnchor?.Invoke();
+                    _log?.Combat(LogCategory,
+                        $"between-round-cast resume held — user attack override; re-announcing on {spellTarget} next round");
                 }
-                _combatOff = false;
-                _announcedSpellCode = null;
-                // Mark this specific interrupt as resumed BEFORE dispatching — the
-                // resume's own cast drops its own *Combat Off* a moment later, and
-                // without this stamped first that Off would satisfy the exact same
-                // condition above and re-fire again (see
-                // _lastSpellResumeForBetweenRoundCastAt).
-                _lastSpellResumeForBetweenRoundCastAt = _betweenRoundCastAt;
-                _log?.Combat(LogCategory,
-                    $"between-round-cast resume → re-announcing attack spell on {spellTarget}");
-                // bypassRecastInterval: this re-attack lands within 500ms of the
-                // survival buff/heal that dropped *Combat Off*; without the bypass the
-                // burst guard defers it to the next tick and the mob swings free (the
-                // "broke combat to cast armr, didn't re-attack until after they swung"
-                // report). This resume is now guarded to fire once per interrupt (see
-                // above), so the bypass can't compound into a burst.
-                DispatchRoundAction(_readSettings(), spellCand, CountEngageable(liveSpell), liveSpell,
-                    bypassRecastInterval: true);
+                else
+                    ResumeSpellAfterBetweenRoundCast(liveSpell, spellTarget, spellCand);
             }
 
             // Guard-redirect recovery. When a guarded monster is our priority, each

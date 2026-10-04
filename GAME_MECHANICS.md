@@ -322,7 +322,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 | Room too dark to see (starves name + exits + Also-here) | `The room is very dark - you can't see anything.` |
 | Room considerably darker (same starving) | `The room is pitch black...` |
 | Guard interposes for a guarded monster (no trailing period, no prefix) | `<guard> moves to protect <protected>` |
-| Incoming mob attack — miss (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> at you` |
+| Incoming mob attack — miss (dark cyan; reveals a mob in a dark room). The wording is per attack: most swing `at you`; a touch attack `reaches for you` (`The vengeful spirit reaches for you!`, [OBSERVED] Paradigm, reports `paradigm-20261003-194358` / `paradigm-20261003-201253`) | `The <monster> <verb> at you` / `The <monster> <verb> for you` |
 | Incoming mob attack — hit (dark cyan; reveals a mob in a dark room) | `The <monster> <verb> you for N damage!` |
 | Thorns / ShockShield reflect (**white** line, follows the **red** hit that triggered it, inside a *Combat Engaged*…*Combat Off* window) | `The <item-wording> stab <attacker> for N damage!` — see *Armour, defence & to-hit → Thorns / ShockShield reflect damage* |
 | Monster leaves the room (e.g. dragged out by a fleeing player) | `<name> walks out of the room to <dir>.` **or** `<name> exits the room to <dir>.` — both confirmed; the "exits" form (no leading article) was the paradigm drag-out capture |
@@ -2102,7 +2102,9 @@ How one damage spell cast against a monster is worked out.
     for a player on Stock** (`cmp edx,0x61`; a monster target caps at 98), so the chance is that figure
     in 99. MMUD-Explorer's sim caps it at 98 (MR 196), which
     the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
+  - **Paradigm prints `You negate <monster>'s cast of <spell>!`** for a monster spell that does nothing to you *([OBSERVED] 2026-10-03, reports `paradigm-20261003-194358` / `paradigm-20261003-201253`: `You negate vengeful spirit's cast of necromantic beam!`, 94 times across the two captures)*. It is the same full resist as Stock's `You resisted…` line, under Paradigm's wording *([CONFIRMED] 2026-10-03, user)*.
 - **Client use:**
+  - The `UserMisses` pattern skips any `You … 's cast of …!` line. Before 2026-10-03 the Paradigm negate line counted as a miss of our own and as a confirmed cast of our attack spell (`CombatManager.OnAttackCastConfirmed`), spending its cast cap (report `paradigm-20261003-194358`).
   - Character Info's Magic Res tooltip (`CharacterInfoSectionViewModel.ComputeMagicResTip`) and Monster
     Intel's per-spell note on the Attacks rows (`MonsterIntelViewModel.SpellResistNote`) show the cut and
     the full-resist chance for the character's current Magic Res, via
@@ -3247,6 +3249,12 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 - **A character carrying more than their max encumbrance can't move and sees `You are too heavy to move`.** *([CONFIRMED] user; trailing punctuation not recorded — the client matches the phrase `too heavy to move` on an unquoted line.)*
 - **It is not a hold.** `freedom` / `cure paralysis` don't clear it.
+- **Over the max means no moving at all, and `i` is where it shows.** *([CONFIRMED] 2026-10-03, user.)* Current weight above the max shown by `i` is the whole condition; the refusal line only appears when a move is tried.
+- **Weakness works the same way: it is a carry-capacity debuff, not a hold.** *([CONFIRMED] 2026-10-03, user; data [OBSERVED] Paradigm 1.9.1 and Stock 1.11p.)* **weakness #424** carries **Encum% (96) −25**, Accuracy −10 and MaxDamage, `Dur` 40, and no HoldPerson / Paralyze code. `cure paralysis` and `freedom` do not remove it. It only stops a character already near the max. This is the reason for the 90% encumbrance pickup limits on coin and items (user, 2026-10-03).
+  - Its lines are the frail ones: `You feel weak and powerless` / `You feel your strength return`. Eight records share that applied line (weakness #424, weakness touch #127, frail #949 / #956 / #5445, red beam #1067 / #1191, red wave #1072), so the wire can't say which landed.
+  - **globe of darkness #440** was the same case in the Paradigm seed: flagged `MovementPrevented` with no hold code (IlluTarget −9999, Illu −9999, AC −5, Accuracy −15). Unmarked 2026-10-03 (user). The Stock seed flags it `Blinded`.
+  - The seeds flagged weakness `MovementPrevented` until 2026-10-03 (a flag carried in with the record, backed by no ability code). Because the applied line is shared, every frail read as a hold: the loop stood for the whole duration and cast `cure paralysis` into it (report `paradigm-20261003-201253`).
+- **The Stock refusal is `You are too heavy to move anywhere!`** — see *Per-hop movement speed*.
 - **It clears one of two ways:** drop items until the weight is under the (lowered) max shown by `i`, or wait for the debuff that lowered the max to wear off.
 - **A debuff can lower the max mid-fight.** *([OBSERVED] Paradigm 1.9.1 data, 2026-09-26.)* **frail #949** carries **Encum% (96) −5**, beside AC −10, Accuracy −10, AlterDR% −15, Crits −5 and MaxDamage −2, with `Dur` 15.
   - Its apply and wear-off lines are target-only: `You feel weak and powerless` / `You feel your strength return`. The caster, target-seen and witness lines are all `{null}`, so nobody else sees it land.
@@ -3254,7 +3262,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A follower in this state is left behind when the leader moves** (see *Party → A follower who can't move is left behind*).
 
 **Client use:**
-- `TooHeavyWaitSignal` (follower side): on the line it telepaths the leader `@wait (too heavy to move)` (`WaitReason.TooHeavy`) and sends `i` every 15 s. It sends `@ok` once a fresh `i` shows current ≤ max.
+- `TooHeavyWaitSignal`: a capacity debuff landing (`EncumbranceDebuffIndex`: any linked spell with a negative Encum%) sends `i` at once; a read showing current > max, or the refusal line itself, starts the wait. While it lasts our own walk / loop / auto-lair holds on `MovementCoordinator.TooHeavyGate`, a follower telepaths the leader `@wait (too heavy to move)` (`WaitReason.TooHeavy`), and `i` goes out every 15 s. The debuff's wear-off line prompts a read straight away. A fresh `i` showing current ≤ max ends it (`@ok` for a follower), whether the debuff wore off or the player shed weight. **Client policy** (user, 2026-10-03): wait the debuff out; nothing is dropped automatically.
+- `MovementRefusalDetector` reverts the pending move on either refusal wording.
 - `ComebackRequester` counts the line as a left-behind cause.
 
 ### Per-hop movement speed
@@ -3549,6 +3558,10 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A successful `pick <dir>` prints `You successfully unlocked the door.`** — **past tense**, and the *same* line the use-key unlock emits (the two are distinguished only by which command was in flight, not by wording).
 - **A pick failure is `Your skill fails you this time.`**
 - **A bash opens the door itself — no `open` afterwards.** *([CONFIRMED] 2026-09-28, user.)* `open <dir>` is only needed after a key (or a pick) has unlocked the door, or for a door that's shut but not locked.
+- **`bash` reads its argument as a direction first, and only then as a monster.** *([OBSERVED] 2026-10-03, Stock 1.11p `wccmmud.dll` `_cmd_bash` / `_cmd_smash`. Paradigm: the door form is in the capture of report `paradigm-20261003-194358` (`bash n` → `You bashed the door open.`); the fall-through to the attack is `[NEEDS CONFIRMATION]` there.)*
+  - `bash <dir>` in a room that has an exit that way is the door bash, and never an attack.
+  - Any other argument, or a direction the room has no exit for, goes on to the bash attack (`_cmd_any_attack`) with the argument as the monster's name.
+  - `smash` has no door form: `_cmd_smash` goes straight to the attack.
 - **Unlocking does not open the door** — a separate `open <dir>` is required. Its success line comes in two wordings, and **the game prints both**: `You open the door.` (the capture above) and `The door is now open.` / `The %s is now open.` (the Stock 1.11p `wccmmud.dll` `_cmd_open` text). *([CONFIRMED] 2026-09-28, user. An earlier note said only `You open the door.`, and the DLL has only the second form; superseded 2026-09-28.)* The client matches both.
 - **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit), so sustained bashing whittles the character down.
 - **Picking does not drain HP.**
@@ -3578,6 +3591,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `DoorOpenManager` treats the two bash refusals as "can't bash" and falls back to pick, then the key, instead of re-bashing on the response watchdog forever (2026-09-28); the wrong-key line fails the key step at once.
 - `DoorOpenManager` bashes a *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced the old fixed `MaxBashAttempts` cap.)
 - Picking keeps its `MaxPickAttempts` retry cap.
+- `OutboundAttackObserver` does not count `bash <direction>` as a typed attack. The walker's own door bashes were arming the typed-attack hold on the combat engine, and a buff cast on entering the next room then left the fight un-resumed (report `paradigm-20261003-194358`).
 - `RoomTooltipBuilder.PickChance` shows the chance on a door's hint (map tooltip, Room Info, the room detail dialog): `Picklocks − N + 1`, clamped 0–100, and at least `Picklocks + 1` on an "any" lock (user request, 2026-09-30; the Stock rule assumed for Paradigm).
 
 ### Hidden exits — `sea <dir>` reveal wording

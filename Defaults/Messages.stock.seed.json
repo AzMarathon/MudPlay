@@ -5715,8 +5715,8 @@
   {
     "Id": "d59c1d6a677cd6c7",
     "Name": "weakness",
-    "Flags": "MovementPrevented",
-    "RawFlagsHex": 16,
+    "Flags": "None",
+    "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "The {source} casts {spellname} on you!",
     "WitnessMessage": "The {source} casts {spellname} on {target}!",

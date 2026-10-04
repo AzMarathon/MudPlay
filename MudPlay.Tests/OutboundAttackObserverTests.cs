@@ -60,6 +60,22 @@ public sealed class OutboundAttackObserverTests
         Assert.Empty(seen);
     }
 
+    // A direction after `bash` is the door on that exit. The walker bashes doors on
+    // its own, so reading one as a typed attack held the engine's attack for the round.
+    [Fact]
+    public void BashAtADirection_IsADoorNotAnAttack()
+    {
+        (OutboundAttackObserver obs, List<string> seen, List<string?> targets) = New();
+        foreach (string door in new[] { "bash n", "bash sw", "BASH North", "bash  u ", "bash down" })
+            Send(obs, door);
+        Assert.Empty(seen);
+
+        Send(obs, "bash nasty orc");   // starts with a direction letter, but is a monster
+        Send(obs, "smash n");          // smash has no door form
+        Assert.Equal(new[] { "bash", "smash" }, seen);
+        Assert.Equal(new string?[] { "nasty orc", "n" }, targets);
+    }
+
     [Fact]
     public void EmptyOrOversized_Ignored()
     {

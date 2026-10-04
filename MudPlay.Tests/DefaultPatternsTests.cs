@@ -170,6 +170,32 @@ public sealed class DefaultPatternsTests
         Assert.True(p.TryMatch(Line("The whale shark lunges at you!"), out _));
     }
 
+    // A touch attack that misses "reaches for you" rather than swinging "at you".
+    // Unmatched, a room of spirits that only missed never woke the re-engage
+    // (reports paradigm-20261003-194358, paradigm-20261003-201253).
+    [Fact]
+    public void MobMissesRegex_MatchesAReachForYou()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.MobMisses);
+
+        Assert.True(p.TryMatch(Line("The vengeful spirit reaches for you!"), out MatchResult m));
+        Assert.Equal("vengeful spirit", m.Groups[0]);
+        Assert.True(p.TryMatch(Line("The whale shark lunges at you!"), out _));
+        Assert.False(p.TryMatch(Line("The barmaid has a letter for your brother."), out _));
+    }
+
+    // Shrugging off a monster's spell is not a swing of ours, though the line starts
+    // "You", names the monster and ends in "!".
+    [Fact]
+    public void UserMissesRegex_SkipsANegatedMonsterCast()
+    {
+        IMessagePattern p = PatternById(KnownPatterns.UserMisses);
+
+        Assert.False(p.TryMatch(Line("You negate vengeful spirit's cast of necromantic beam!"), out _));
+        Assert.True(p.TryMatch(Line("You punch acid slime!"), out _));
+        Assert.True(p.TryMatch(Line("You swing at the kobold, but miss!"), out _));
+    }
+
     [Fact]
     public void UserDodgesRegex_MatchesArticlelessBlankVerbDodge()
     {

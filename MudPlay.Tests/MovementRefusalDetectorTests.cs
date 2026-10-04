@@ -81,6 +81,9 @@ public sealed class MovementRefusalDetectorTests : IDisposable
     [InlineData("You are too dazed to move.")]
     [InlineData("You can't see well enough to move.")]
     [InlineData("You are too encumbered to move.")]
+    // Over max encumbrance: the Stock wording, and the shorter Paradigm one.
+    [InlineData("You are too heavy to move anywhere!")]
+    [InlineData("You are too heavy to move!")]
     [InlineData("The door is closed.")]
     [InlineData("The gate is closed!")]
     [InlineData("The gate is closed.")]

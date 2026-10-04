@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text;
 using MudPlay.Game;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -9,9 +10,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// A frail (Encum% cut) can push a follower over max encumbrance: "You are too
-// heavy to move". Not a hold — the follower tells the leader to @wait and @oks once
-// a fresh `i` shows them back under the lowered max (report paradigm-20260926-195517).
+// A weakness or frail (Encum% cut) can push a character over max encumbrance: "You
+// are too heavy to move". Not a hold — our own movement waits, a follower tells the
+// leader to @wait, and both end once a fresh `i` shows the weight back under the max
+// (reports paradigm-20260926-195517, paradigm-20261003-201253).
 public sealed class TooHeavyWaitSignalTests
 {
     private sealed class Harness : IDisposable
@@ -21,7 +23,10 @@ public sealed class TooHeavyWaitSignalTests
         public PartyRestSync Rest { get; }
         public InventoryManager Inv { get; } = new(log: null);
         public LineExtractor Lines { get; } = new(new TerminalEmulator(80, 24));
+        public MovementCoordinator Coordinator { get; } = new();
         public TooHeavyWaitSignal Signal { get; }
+        public bool Held => Coordinator.AssertedGates.Contains(MovementCoordinator.TooHeavyGate);
+        public int InventoryReads => Signal.LastSentForTests.Count(b => Encoding.Latin1.GetString(b) == "i\r");
         public List<string> RestWire { get; } = new();
 
         public Harness()
@@ -30,7 +35,7 @@ public sealed class TooHeavyWaitSignalTests
             Inv.AttachLineExtractor(Lines);
             Rest = new PartyRestSync(Party);
             Rest.SetWireSender(b => RestWire.Add(Encoding.Latin1.GetString(b)));
-            Signal = new TooHeavyWaitSignal(Router, Inv, Rest);
+            Signal = new TooHeavyWaitSignal(Router, Inv, Rest, Coordinator);
             Signal.SetWireSender(_ => { });
             Party.IsInParty = true;
             Party.LeaderName = "Boss";
@@ -95,6 +100,72 @@ public sealed class TooHeavyWaitSignalTests
 
         Assert.False(h.Signal.IsTooHeavy);
         Assert.Equal("/Boss @ok\r", h.RestWire[^1]);
+    }
+
+    [Fact]
+    public void TooHeavy_HoldsOurOwnMovement_UntilBackUnderMax()
+    {
+        using Harness h = new();
+
+        h.Game("You are too heavy to move!");
+        Assert.True(h.Held);
+
+        h.Inventory(cur: 1300, max: 1200);
+        Assert.True(h.Held);
+
+        h.Inventory(cur: 1100, max: 1200);        // the player dropped something
+        Assert.False(h.Held);
+    }
+
+    // The debuff landing is when we find out: `i` shows the lowered max before any
+    // move has been refused.
+    [Fact]
+    public void CapacityDebuff_ReadsInventory_AndHoldsOnlyWhenOverTheMax()
+    {
+        using Harness h = new();
+
+        h.Signal.NoteCapacityDebuffApplied();
+        h.Signal.NoteCapacityDebuffApplied();     // a second record on the same line
+        Assert.Equal(1, h.InventoryReads);
+        Assert.False(h.Held);
+
+        h.Inventory(cur: 800, max: 1200);         // still under: nothing to wait for
+        Assert.False(h.Signal.IsTooHeavy);
+        Assert.False(h.Held);
+        Assert.Empty(h.RestWire);
+
+        h.Signal.NoteCapacityDebuffApplied();
+        h.Inventory(cur: 1300, max: 1200);        // this one put us over
+        Assert.True(h.Signal.IsTooHeavy);
+        Assert.True(h.Held);
+        Assert.Equal("/Boss @wait (too heavy to move)\r", h.RestWire[^1]);
+    }
+
+    [Fact]
+    public void CapacityDebuffWearingOff_ReadsInventoryAtOnce_AndReleases()
+    {
+        using Harness h = new();
+        h.Signal.NoteCapacityDebuffApplied();
+        h.Inventory(cur: 1300, max: 1200);
+        int reads = h.InventoryReads;
+
+        h.Signal.NoteCapacityDebuffEnded();
+        Assert.Equal(reads + 1, h.InventoryReads);
+        Assert.True(h.Held);                      // not until the read comes back
+
+        h.Inventory(cur: 1300, max: 1600);
+        Assert.False(h.Held);
+        Assert.Equal("/Boss @ok\r", h.RestWire[^1]);
+    }
+
+    [Fact]
+    public void CapacityDebuffWearingOff_WhileNotOver_SendsNothing()
+    {
+        using Harness h = new();
+
+        h.Signal.NoteCapacityDebuffEnded();
+
+        Assert.Equal(0, h.InventoryReads);
     }
 
     [Fact]

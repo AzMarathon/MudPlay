@@ -933,6 +933,27 @@ public sealed class CombatManagerSpellsTests
     // 2 makes both halves of that guarantee observable: if the two projectile lines were
     // miscounted as two casts, the cap would exhaust (and switch) after the FIRST real
     // cast; if a later, separate cast were missed, the cap would never exhaust at all.
+    // Report paradigm-20261003-194358: each "You negate <monster>'s cast of …!" was
+    // tallied as a cast of our own attack spell, spending its cast cap on rounds in
+    // which we never cast.
+    [Fact]
+    public void NegatedMonsterCast_IsNotACastOfOurs()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "disr", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
+        h.AddMonster(1, "fierce wraith");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+
+        h.Feed("Also here: fierce wraith.");
+        h.Feed("You negate fierce wraith's cast of necromantic beam!");
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+
+        Assert.Equal(0, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("disr fierce wraith", h.LastSent);   // the one allowed cast is still unspent
+    }
+
     [Fact]
     public void MaxCasts2_ConfirmedCastCount_GroupsProjectiles_CountsSeparateCasts_NoRoundCloseNeeded()
     {
@@ -1309,12 +1330,38 @@ public sealed class CombatManagerSpellsTests
         h.Feed("*Combat Off*");
         Assert.Equal(afterEngage, h.Sent.Count);      // suppressed — engine sent nothing over the user
 
-        // Next round (tick) clears the override; a fresh interrupt resumes.
+        // Next round (tick) clears the override and re-announces the spell that Off
+        // stopped: in spell mode nothing else would (report paradigm-20261003-194358).
         h.Tick();
+        Assert.Equal("harm giant rat", h.LastSent);
+        Assert.Equal(afterEngage + 1, h.Sent.Count);
+
+        // A fresh interrupt resumes as usual.
         int afterTick = h.Sent.Count;
         h.Combat.NoteBetweenRoundCast();
         h.Feed("*Combat Off*");
         Assert.True(h.Sent.Count > afterTick);        // resumes — override cleared at the tick
+    }
+
+    // The held resume never fires at a corpse: a kill inside the held round ends it.
+    [Fact]
+    public void ManualPhysicalAttack_HeldResume_DroppedWhenTheTargetDies()
+    {
+        using Harness h = new();
+        h.Settings.ActionOrder = CombatActionOrder.SpellsFirst;
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "harm", MinEnemies = 0 };
+        h.AddMonster(1, "giant rat");
+
+        h.Feed("Also here: giant rat.");
+        h.Combat.NoteAttackCommandObserved("a");
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        int held = h.Sent.Count;
+
+        h.Feed("You gain 100 experience.");           // the user's swing killed it
+        h.Tick();
+
+        Assert.DoesNotContain("harm giant rat", h.AllSent.Skip(held));
     }
 
     [Fact]

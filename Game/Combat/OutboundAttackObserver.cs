@@ -1,4 +1,5 @@
 using System.Text;
+using MudPlay.Game.Map;
 
 namespace MudPlay.Game.Combat;
 
@@ -11,6 +12,13 @@ namespace MudPlay.Game.Combat;
 // "att" (attack), "aa" (alternate attack), "bash" / "sm" / "sma" / "smash", and "bs"
 // (backstab). Only the first whitespace-delimited token is the verb; the remainder is
 // the target ("a giant rat").
+//
+// "bash <direction>" is the exception: MajorMUD reads a direction after `bash` as the
+// door on that exit, not a monster, so it's no attack at all. Counting it as one made
+// every door the walker bashed open hold the engine's attack for the round, and a buff
+// cast in the next room then left the fight un-resumed (report
+// paradigm-20261003-194358). The game only takes the door reading when the room has
+// that exit; a monster targeted by a bare direction letter is rare enough to give up.
 //
 // Unlike casts, the combat engine's OWN physical attacks DO flow through this observer
 // (SendAttack rides the same wrapped SendUserInput path). So the observer can't tell a
@@ -50,7 +58,12 @@ public sealed class OutboundAttackObserver
         // The remainder is the target the user aimed at ("a giant rat" → "giant rat"),
         // needed to mark a manually-engaged neutral. null for a bare verb.
         string? target = space >= 0 ? cmd[(space + 1)..].Trim() : null;
-        if (AttackVerbs.Contains(verb))
-            _onAttackCommand(verb, string.IsNullOrEmpty(target) ? null : target);
+        if (!AttackVerbs.Contains(verb)) return;
+        if (IsDoorBash(verb, target)) return;
+        _onAttackCommand(verb, string.IsNullOrEmpty(target) ? null : target);
     }
+
+    private static bool IsDoorBash(string verb, string? target)
+        => verb.Equals("bash", StringComparison.OrdinalIgnoreCase)
+            && DirectionExtensions.TryFromToken(target, out _);
 }

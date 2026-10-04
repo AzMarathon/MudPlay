@@ -5256,7 +5256,19 @@ public sealed class AppServices
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
                 : null);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
-        TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, Log);
+        TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, MovementCoordinator, Log);
+        // A spell that cuts carrying capacity (weakness, frail) can leave us over our
+        // max; `i` is the only place that shows. Records sharing one applied line each
+        // raise the event, and the signal reads once.
+        Game.GameData.EncumbranceDebuffIndex capacityDebuffs = new(GameData);
+        Conditions.ConditionApplied += rec =>
+        {
+            if (capacityDebuffs.LowersMaxEncumbrance(SpellNumberOf(rec))) TooHeavyWait.NoteCapacityDebuffApplied();
+        };
+        Conditions.ConditionEnded += rec =>
+        {
+            if (capacityDebuffs.LowersMaxEncumbrance(SpellNumberOf(rec))) TooHeavyWait.NoteCapacityDebuffEnded();
+        };
         // The Stock mana-regen reroll skips a tick that lands mid gear-set swap.
         Inventory.Changed += NoteWornChange;
 

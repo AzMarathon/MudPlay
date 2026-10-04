@@ -50,6 +50,7 @@ public static class NavActivity
         (MovementCoordinator.ConfusionGate, "Confused", NavActivityKind.Waiting, true),
         (MovementCoordinator.HeldGate, "Held", NavActivityKind.Waiting, true),
         (MovementCoordinator.FearGate, "Feared", NavActivityKind.Waiting, true),
+        (MovementCoordinator.TooHeavyGate, "Too heavy", NavActivityKind.Waiting, true),
         // Recovery holds — resting / meditating below a rest floor.
         (MovementCoordinator.HealthRecoveryGate, "Low HP", NavActivityKind.Waiting, true),
         (MovementCoordinator.ManaRecoveryGate, "Low MANA", NavActivityKind.Waiting, true),
