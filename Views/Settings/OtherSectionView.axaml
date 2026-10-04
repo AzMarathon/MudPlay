@@ -158,7 +158,7 @@
             <CheckBox Content="Only auto-invite while navigation is running"
                       IsChecked="{Binding AutoInviteOnlyWhileNavigating, Mode=TwoWay}"
                       Margin="0,8,0,0"
-                      ToolTip.Tip="When checked: players you've flagged 'Invite to party if seen' are auto-invited only while navigation is running — a walk, loop or auto-lair (running or paused), or an auto-deposit or train trip. Standing idle, seeing them does nothing. When unchecked (default), they're invited whenever you see them. Re-invites of your own party (after a disconnect, a split or a trainer trip) aren't affected. Applies only for this character."/>
+                      ToolTip.Tip="When checked: players you've flagged 'Invite to party if seen' are auto-invited only while navigation is running — a walk, loop or auto-lair (running or paused), or an auto-deposit or train trip. Standing idle, seeing them does nothing until navigation starts; anyone still in the room is invited then. When unchecked (default), they're invited whenever you see them. Re-invites of your own party (after a disconnect, a split or a trainer trip) aren't affected. Applies only for this character."/>
 
             <!-- Go ▾ Run / Sprint starts stopped by hand before the run began:
                  whether the autos they turned off come back. Char-tier settings. -->

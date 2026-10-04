@@ -91,6 +91,53 @@ public sealed class AutoPartyManagerTests
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
     }
 
+    // Report paradigm-20261004-061346: a flagged player already standing beside us
+    // when a run starts is invited as it starts, not walked away from.
+    [Fact]
+    public void OnlyWhileNavigating_SeenWhileIdle_InvitedWhenNavigationStartsInThatRoom()
+    {
+        var (engine, router, players, _) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+        bool navigating = false;
+        engine.OnlyWhileNavigating = true;
+        engine.SetNavigationProbe(() => navigating);
+        engine.SetRoomProbe(() => new RoomKey(16, 10110));
+
+        Dispatch(router, "Also here: Raijin.");
+        engine.OnNavigationStateChanged();
+        Assert.Empty(engine.LastSentForTests);
+
+        navigating = true;
+        engine.OnNavigationStateChanged();
+        byte[] sent = Assert.Single(engine.LastSentForTests);
+        Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
+
+        engine.OnNavigationStateChanged();
+        Assert.Single(engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void OnlyWhileNavigating_SeenWhileIdle_NotInvitedFromAnotherRoomOrAfterLeaving()
+    {
+        var (engine, router, players, _) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+        SeedPlayer(players, "Fujin", inviteOnSeen: true);
+        bool navigating = false;
+        RoomKey room = new(16, 10110);
+        engine.OnlyWhileNavigating = true;
+        engine.SetNavigationProbe(() => navigating);
+        engine.SetRoomProbe(() => room);
+
+        Dispatch(router, "Also here: Raijin.");
+        room = new RoomKey(16, 10111);
+        Dispatch(router, "Also here: Fujin.");
+        Dispatch(router, "Fujin just left to the north.");
+
+        navigating = true;
+        engine.OnNavigationStateChanged();
+        Assert.Empty(engine.LastSentForTests);
+    }
+
     [Fact]
     public void AlsoHere_UnflaggedPlayer_NoInvite()
     {

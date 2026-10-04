@@ -298,6 +298,10 @@ public static class BugReportBuilder
         // A split-teleport regroup in flight: a "leader walked on alone after a
         // teleport" report needs whom it held for and whether the jump had landed.
         Kv(sb, "Split-teleport reform", svc.AutoParty.ReformSummary);
+        // "Only auto-invite while navigation is running": who a run started here invites.
+        IReadOnlyCollection<string> heldInvites = svc.AutoParty.SeenWhileIdle;
+        Kv(sb, "Auto-invite held until navigation starts",
+            heldInvites.Count > 0 ? string.Join(", ", heldInvites) : "(nobody)");
         // Leader-side recovery state — who (if anyone) we're currently walking to
         // re-collect, and the reach cap that gates it. A "leader never came back
         // for me" report needs both.

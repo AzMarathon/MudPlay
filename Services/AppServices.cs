@@ -7890,6 +7890,7 @@ public sealed class AppServices
         AutoParty.SetNavigationProbe(() =>
             MovementControl.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring
             || TrainerWalk.IsBusy || TrainFunding.IsBusy || StashTransfer.IsBusy);
+        MovementControl.StateChanged += AutoParty.OnNavigationStateChanged;
         // Sell detours: walk / loop / lair → the chosen shop → Auto-sell → carry on.
         // Blocked while anything else owns movement or holds it (combat, rest, a user
         // pause, following a leader, the other errand engines).
