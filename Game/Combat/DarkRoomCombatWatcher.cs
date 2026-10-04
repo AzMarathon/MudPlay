@@ -66,6 +66,7 @@ public sealed class DarkRoomCombatWatcher : IDisposable
     // guard" is four words past its article; six is slack.
     private const int MaxNameWords = 6;
 
+    private readonly MessageRouter _router;
     private readonly RoomTracker _roomTracker;
     private readonly RoomEntityClassifier _classifier;
     private readonly Func<string?> _currentTarget;
@@ -96,6 +97,7 @@ public sealed class DarkRoomCombatWatcher : IDisposable
         ArgumentNullException.ThrowIfNull(roomTracker);
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(currentTarget);
+        _router = router;
         _roomTracker = roomTracker;
         _classifier = classifier;
         _currentTarget = currentTarget;
@@ -105,7 +107,7 @@ public sealed class DarkRoomCombatWatcher : IDisposable
         _subs.Add(router.Subscribe(KnownPatterns.IncomingDamage, OnAttackLine));
         _subs.Add(router.Subscribe(KnownPatterns.IncomingAttack, OnSwing));
         _subs.Add(router.Subscribe(KnownPatterns.PartyAttackAnnounce, OnPartyAttack));
-        _subs.Add(router.Subscribe(KnownPatterns.CommandNoEffect, OnTargetGone));
+        _subs.Add(router.Subscribe(KnownPatterns.CommandNoEffect, OnCommandNoEffect));
         _subs.Add(router.Subscribe(KnownPatterns.TargetNotHere, OnTargetNotHere));
     }
 
@@ -216,6 +218,15 @@ public sealed class DarkRoomCombatWatcher : IDisposable
     private void OnTargetNotHere(MatchResult match)
     {
         if (match.Groups.Count > 0 && !_classifier.RefusalNamesMonster(match.Groups[0], _currentTarget())) return;
+        OnTargetGone(match);
+    }
+
+    // Only a refused attack says the target left. The same line answers any command
+    // that did nothing, so one echoed for something else (a cast) retracts nobody.
+    private void OnCommandNoEffect(MatchResult match)
+    {
+        if (_currentTarget() is { Length: > 0 } target
+            && _router.ReplyIsForCommandNotNaming(target)) return;
         OnTargetGone(match);
     }
 

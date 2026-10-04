@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.31
+
+- A cast the game answers with `Your command had no effect.` no longer drops the monster you're fighting: the fight held, no swing at a monster left in the last room, no rest under its attacks
+- bug reports addressed: stock-20261004-150645
+
 ## 3.143.25
 
 - Stat Breakpoints: **Mana / tick** column under your class's mana stat (Mage INT, Priest WIL, Bard CHA, Druid INT and WIL); none for Mystics or classes without mana

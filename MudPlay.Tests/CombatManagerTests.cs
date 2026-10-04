@@ -135,6 +135,17 @@ public sealed class CombatManagerTests
             Router.Dispatch(emitted);
         }
 
+        // A command as the server echoes it: the prompt row, then its trailing
+        // text as a second line carrying the same timestamp.
+        public void FeedEchoed(string command)
+        {
+            DateTimeOffset at = DateTimeOffset.UtcNow;
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                "[HP=43/MA=39]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                command, Array.Empty<CellAttributes>(), at, IsPromptLine: false));
+        }
+
         public string LastSent => Sent.Count == 0
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
@@ -533,6 +544,31 @@ public sealed class CombatManagerTests
 
         Assert.Null(h.Combat.CurrentTarget);   // target dropped
         Assert.Equal(1, h.CrRefreshSends);     // recovery CR fired
+    }
+
+    [Fact]
+    public void CommandNoEffect_AnsweringAnotherCommand_KeepsTarget()
+    {
+        // Report stock-20261004-150645: a heal the character couldn't cast drew
+        // "Your command had no effect." every round, and the engine read it as the
+        // attack being refused. The echo ahead of the line names the command it
+        // answers, so only a refused attack drops the target.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+
+        h.FeedEchoed("swan");
+        h.Feed("Your command had no effect.");
+
+        Assert.Equal("giant rat", h.Combat.CurrentTarget);
+        Assert.Equal(0, h.CrRefreshSends);
+
+        h.FeedEchoed("a giant rat");
+        h.Feed("Your command had no effect.");
+
+        Assert.Null(h.Combat.CurrentTarget);
+        Assert.Equal(1, h.CrRefreshSends);
     }
 
     [Fact]
