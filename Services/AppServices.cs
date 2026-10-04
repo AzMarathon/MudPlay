@@ -101,6 +101,13 @@ public sealed class AppServices
     public void SetGoWalkOpener(Action<Game.Map.RoomKey> opener) => _goWalkOpener = opener;
     public void GoWalkTo(Game.Map.RoomKey key) => _goWalkOpener?.Invoke(key);
 
+    // The same walk started on the player's behalf (a Sell Tour stop): it takes the
+    // default route without the route picker, which shows only when the player's
+    // avoid rooms are in the way. No-op until the main VM binds it.
+    private Action<Game.Map.RoomKey>? _errandWalkOpener;
+    public void SetErrandWalkOpener(Action<Game.Map.RoomKey> opener) => _errandWalkOpener = opener;
+    public void ErrandWalkTo(Game.Map.RoomKey key) => _errandWalkOpener?.Invoke(key);
+
     // Type text at the game through the SAME path the terminal / Conversation input
     // uses — macro split, alias expansion, and the outbound cast/attack/chat/movement
     // observers — so a programmatic send is indistinguishable from the user typing
@@ -6983,7 +6990,7 @@ public sealed class AppServices
 
         ChestSellTour = new Game.Inventory.ChestSellTour(
             currentShop: () => RoomTracker.State.CurrentRoom?.Shop,
-            goWalk: GoWalkTo,
+            goWalk: ErrandWalkTo,
             chestCount: name => ChestOpens.Loot(Inventory.Snapshot.CarriedItems)
                 .FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase)).Count,
             sendPaced: cmds => InventoryAction.SendPaced(cmds),

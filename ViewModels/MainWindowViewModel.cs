@@ -804,6 +804,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.SetNavigateToRoomOpener(FocusNavigationOnRoom);
         AppServices.Current.SetQueueWalkOpener(QueueWalkToRoom);
         AppServices.Current.SetGoWalkOpener(GoWalkToRoom);
+        AppServices.Current.SetErrandWalkOpener(
+            key => _ = EnsureNavigationWindow()?.QueueAndStartWalkTo(key, askOnlyOverAvoids: true));
         AppServices.Current.SetCenterNavigationIfOpenOpener(CenterNavigationOnRoomIfOpen);
         AppServices.Current.SetHighlightWhereOpener(HighlightWhereRoomIfOpen);
         AppServices.Current.SetLeaderRouteOpener(ShowLeaderRouteIfOpen);

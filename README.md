@@ -11,6 +11,7 @@
 > - Chest Offload: shop headers and the Sell Tour prompt show each shop's steps and walking time, and the prompt each shop's sale value and the whole tour's walk
 > - Chest Offload: Sell Tour skips a shop whose items were all taken off the list, sold or dropped, instead of walking there for nothing
 > - Chest Offload: opening a second chest while the first is still being read no longer drops it — a click waits its turn, a typed open is caught by the read that sees its loot
+> - Chest Offload: Sell Tour (and Sell All / Sell) walks the default route to each shop without the route picker; it asks only when your Avoid rooms are in the way
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

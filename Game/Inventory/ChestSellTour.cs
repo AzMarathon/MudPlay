@@ -6,9 +6,10 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Inventory;
 
-// Sells the Chest Offload list shop by shop: walk to each stop (the full "Walk here"
-// path), sell its items, wait for the game to confirm, then on to the next. A single
-// shop's Sell All, or one item's Sell, is just a one-stop tour.
+// Sells the Chest Offload list shop by shop: walk to each stop by the default route
+// (AppServices.ErrandWalkTo — the route picker shows only when the player's avoid rooms
+// are in the way), sell its items, wait for the game to confirm, then on to the next.
+// A single shop's Sell All, or one item's Sell, is just a one-stop tour.
 //
 // It never sells what the player already owned. Every quantity is capped, right before
 // its `sell` goes out, at how many of that item the chests gave and are still carried

@@ -34,11 +34,17 @@ public static class RouteChoicePrompt
     // startMode sets the walk out with Auto-Combat off or in Sprint Mode — applied only
     // once a walk actually commits (a cancelled picker changes nothing); the picker's
     // own Run / Sprint buttons override it.
+    // askOnlyOverAvoids: a walk the client starts on the player's behalf (a Sell Tour
+    // stop) takes the default route without asking, as a no-fork walk does; the picker
+    // shows only when the player's avoid rooms are in the way (or there's no default
+    // route to take). Such a walk stays out of the goto history and never flashes the
+    // "Calculating…" window.
     public static async Task WalkAsync(
         AppServices services,
         RoomKey destination,
         Action<IReadOnlyList<RoomKey>?>? previewSink = null,
-        RunStartMode startMode = RunStartMode.Normal)
+        RunStartMode startMode = RunStartMode.Normal,
+        bool askOnlyOverAvoids = false)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -47,7 +53,7 @@ public static class RouteChoicePrompt
         if (services.MovementControl.SuspendedErrand is not null)
         {
             services.MovementControl.StartUserRun(
-                () => _ = WalkAsync(services, destination, previewSink, startMode));
+                () => _ = WalkAsync(services, destination, previewSink, startMode, askOnlyOverAvoids));
             return;
         }
 
@@ -72,7 +78,7 @@ public static class RouteChoicePrompt
         // The automation engines (LoopRunner, AutoLair, DeathRecovery,
         // TrainerWalk, the remote handlers) call Walker.WalkTo directly and never
         // reach here, so they stay out of the history exactly as before.
-        services.GotoHistory.Record(destination);
+        if (!askOnlyOverAvoids) services.GotoHistory.Record(destination);
 
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
@@ -108,7 +114,8 @@ public static class RouteChoicePrompt
             // Only pop the "Calculating…" window if planning takes long enough to
             // notice — a fast plan (most walk-tos) wins the race and never flashes a
             // window; the picker, if any, is then built fully-populated below.
-            if (await Task.WhenAny(planTask, Task.Delay(RouteCalcRevealDelayMs)) != planTask)
+            if (!askOnlyOverAvoids
+                && await Task.WhenAny(planTask, Task.Delay(RouteCalcRevealDelayMs)) != planTask)
             {
                 calcVm = new RouteChoiceDialogViewModel(
                     DestinationLabel(services, destination), DestinationLabel(services, src));
@@ -144,6 +151,16 @@ public static class RouteChoicePrompt
         else
             services.Log.Info(LogCat, plan.LogMessage);
 
+        if (askOnlyOverAvoids && TakesDefaultRouteUnasked(plan))
+        {
+            services.Log.Info(LogCat,
+                $"route pick {src} -> {destination}: {plan.Kind} fork on a walk that asks only over avoids — taking the default route");
+            calcVm?.Close();
+            ApplyStartMode(services, startMode);
+            CommitWalk(services, destination, gated: false);
+            return;
+        }
+
         switch (plan.Kind)
         {
             case RoutePlanKind.PlainWalk:
@@ -169,6 +186,17 @@ public static class RouteChoicePrompt
                 return;
         }
     }
+
+    // The forks a walk that asks only over avoids skips: each has a default route the
+    // walker takes on its own (overland past a token or teleport, disarming a trap,
+    // around an item gate). An avoid-override always asks, and so do a sole gated route
+    // and a blocked one — there's no default route there to fall back to.
+    private static bool TakesDefaultRouteUnasked(RoutePlan plan) => plan.Kind switch
+    {
+        RoutePlanKind.Token or RoutePlanKind.Teleport or RoutePlanKind.TrapAvoid => true,
+        RoutePlanKind.ItemGate => plan.Choice?.HasFreeRoute == true,
+        _ => false,
+    };
 
     private static void ApplyStartMode(AppServices services, RunStartMode mode)
     {
