@@ -490,7 +490,11 @@ public static class RouteChoicePlanner
         Func<IReadOnlyList<Direction>?>? baseRoute = null,
         // Memoized avoids-lifted route (ignoreAvoids), shared with AvoidAlternative so
         // the ignore-avoids BFS runs once across both.
-        Func<IReadOnlyList<Direction>?>? avoidLiftedRoute = null)
+        Func<IReadOnlyList<Direction>?>? avoidLiftedRoute = null,
+        // How many steps the avoid-crossing route must save before the override is
+        // offered beside an avoid-honouring one. A walk that asks only over avoids
+        // passes 1: any avoid on the shortest route is the player's call.
+        int minSavings = MinAvoidOverrideSavings)
     {
         ArgumentNullException.ThrowIfNull(bfs);
         ArgumentNullException.ThrowIfNull(filter);
@@ -540,7 +544,7 @@ public static class RouteChoicePlanner
 
         // TWO-ROUTE: an avoid-honouring route exists — only offer the override when
         // it's meaningfully shorter, or the user's deliberate avoid stands.
-        if (free!.Count - overrideRoute.Count < MinAvoidOverrideSavings) return null;
+        if (free!.Count - overrideRoute.Count < minSavings) return null;
 
         // ...but if OBTAINING an acquirable gate item opens an avoid-respecting route
         // shorter than even the avoid-crossing override, that's the better answer —

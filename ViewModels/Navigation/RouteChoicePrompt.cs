@@ -36,8 +36,8 @@ public static class RouteChoicePrompt
     // own Run / Sprint buttons override it.
     // askOnlyOverAvoids: a walk the client starts on the player's behalf (a Sell Tour
     // stop) takes the default route without asking, as a no-fork walk does; the picker
-    // shows only when the player's avoid rooms are in the way (or there's no default
-    // route to take). Such a walk stays out of the goto history and never flashes the
+    // shows its cards whenever a room the player marked Avoid is on the shortest route
+    // (or there's no default route to take). Such a walk stays out of the goto history and never flashes the
     // "Calculating…" window.
     public static async Task WalkAsync(
         AppServices services,
@@ -151,14 +151,29 @@ public static class RouteChoicePrompt
         else
             services.Log.Info(LogCat, plan.LogMessage);
 
-        if (askOnlyOverAvoids && TakesDefaultRouteUnasked(plan))
+        if (askOnlyOverAvoids && plan.Kind != RoutePlanKind.AvoidOverride)
         {
-            services.Log.Info(LogCat,
-                $"route pick {src} -> {destination}: {plan.Kind} fork on a walk that asks only over avoids — taking the default route");
-            calcVm?.Close();
-            ApplyStartMode(services, startMode);
-            CommitWalk(services, destination, gated: false);
-            return;
+            // An avoid on the shortest route is always the player's call, even a one-step
+            // saving, and even when another fork (teleport, trap, item gate) was found
+            // first and would have hidden it: show the avoid cards.
+            if (RouteChoicePlanner.EvaluateAvoidOverride(
+                    services.Bfs, services.Movement, services.RoomGraph, src, destination, minSavings: 1)
+                is { } avoid)
+            {
+                services.Log.Info(LogCat,
+                    $"route pick {src} -> {destination}: the shortest route crosses {avoid.AvoidedRoomCount} room(s) you marked Avoid; showing picker");
+                await RunPickerAsync(services, destination, src, avoid, previewSink, calcVm, calcDialogTask, startMode);
+                return;
+            }
+            if (TakesDefaultRouteUnasked(plan))
+            {
+                services.Log.Info(LogCat,
+                    $"route pick {src} -> {destination}: {plan.Kind} fork, no avoid on the route — taking the default route");
+                calcVm?.Close();
+                ApplyStartMode(services, startMode);
+                CommitWalk(services, destination, gated: false);
+                return;
+            }
         }
 
         switch (plan.Kind)
