@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.16
+
+- Bug report: a Tick timing section — the last 400 combat rounds, HP / mana gains and posture changes to the millisecond; the Debug regen line says how long after a round each gain came
+- Auto-rest no longer sends `rest` or `meditate` to a character already doing it, which restarted the wait for the next tick
+
 ## 3.143.14
 
 - Map: toggling an overlay (lairs, shops, spells, level gates) shows at once instead of waiting for the view to be moved

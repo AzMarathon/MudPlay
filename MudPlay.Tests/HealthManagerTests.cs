@@ -448,6 +448,23 @@ public sealed class HealthManagerTests
         Assert.True(h.Health.RestInFlight);
     }
 
+    // A second `rest` restarts the game's count toward the next rest tick, so a rest
+    // already under way (typed by hand, or left running while the engine was off) is
+    // taken over, not re-sent.
+    [Fact]
+    public void AlreadyResting_TakesTheRestOver_WithoutSendingRestAgain()
+    {
+        using Harness h = new();
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Position = PlayerPosition.Resting;   // the player typed `rest` themselves
+        h.State.Hp = 50;
+
+        Assert.True(h.HealthGateHeld);
+        Assert.DoesNotContain("rest", h.SentLines);
+        Assert.True(h.Health.RestInFlight);
+    }
+
     [Fact]
     public void GateAsserted_InCombat_DoesNotRest()
     {

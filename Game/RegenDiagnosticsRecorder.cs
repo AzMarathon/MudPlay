@@ -26,10 +26,15 @@ public sealed class RegenDiagnosticsRecorder : IDisposable
     private readonly RegenTracker _tracker;
     private readonly PlayerState _state;
     private readonly LogService _log;
+    // How long ago the last combat round was seen on the wire, when known: where a
+    // tick falls against the round is the first thing a tick-cycle question asks.
+    private readonly Func<TimeSpan?>? _sinceLastRound;
     private bool _disposed;
 
-    public RegenDiagnosticsRecorder(RegenTracker tracker, PlayerState state, LogService log)
+    public RegenDiagnosticsRecorder(RegenTracker tracker, PlayerState state, LogService log,
+        Func<TimeSpan?>? sinceLastRound = null)
     {
+        _sinceLastRound = sinceLastRound;
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(log);
@@ -45,14 +50,19 @@ public sealed class RegenDiagnosticsRecorder : IDisposable
         // Guard before building the interpolated line so the disabled path
         // stays allocation-free (per LogService's Debug-channel contract).
         if (!_log.IsDebugEnabled) return;
-        _log.Debug(Source, Format("HP", sample, _state.Hp, _state.MaxHp));
+        _log.Debug(Source, Format("HP", sample, _state.Hp, _state.MaxHp) + RoundOffset());
     }
 
     private void OnMaTick(RegenSample sample)
     {
         if (!_log.IsDebugEnabled) return;
-        _log.Debug(Source, Format("MP", sample, _state.Ma, _state.MaxMa));
+        _log.Debug(Source, Format("MP", sample, _state.Ma, _state.MaxMa) + RoundOffset());
     }
+
+    private string RoundOffset() =>
+        _sinceLastRound?.Invoke() is { } since
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $" · {since.TotalSeconds:0.00}s after a round")
+            : string.Empty;
 
     private static string Format(string stream, RegenSample sample, int current, int max)
     {

@@ -226,6 +226,10 @@ public sealed class RegenTracker : IDisposable
         }
     }
 
+    // True just after a heal-shaped event (RecordArtifact): a gain seen now isn't
+    // credited to a regen cycle.
+    public bool InArtifactWindow => IsInArtifactWindow(_clock());
+
     private bool IsInArtifactWindow(DateTimeOffset now)
         => _lastArtifactAt is { } at && now - at <= RegenConstants.ArtifactGraceWindow;
 

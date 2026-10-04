@@ -141,10 +141,14 @@ how many swings or spell fires a player or monster gets inside one round.
 - **So the passes are locked to each other for as long as the game is up, and are the same for every player.** The combat round falls on every 5th tick, the spell round on every 3rd, the regen pass on every 30th. Each regen pass therefore lands on a combat round (every 6th one) and on a spell round (every 10th one); a combat round and a spell round share a tick every 15 ticks.
 - **Order inside one tick:** the queued passes first, then the per-character fast update (rest, meditate, command delays), then the per-monster one. When several passes share a tick they run medium → monster-create → energy → slow *(worked out by replaying the queue's insert rule from the start-up order; on a tick with only energy and monster-create, energy runs first)*. So on a regen tick the round's combat output comes before the regen.
 - **A fast tick is a little over a second.** The next call is asked for only after the pass has finished, and the body runs at most once per turn of the host's main loop (a flag the host's cycle hook sets and the pass clears; a call that finds it clear just re-arms and counts nothing). The 5.04 s combat round in *Combat round (5s) and the between-round cast cycle* puts a tick at about 1.008 s, which makes the regen pass about 30.2 s. A stall delays every pass alike, since they all count the same ticks.
+- **Paradigm: what one capture shows** *([OBSERVED] 2026-10-04, report `paradigm-20261004-013848`; one character, about three minutes, times to the second)*. Standing mana gains came at 01:36:27, 01:36:58, 01:37:57 and 01:38:27 (the log's own gaps: 29.2 s and 30.3 s), and the last two fell in the same second as a combat round (rounds at :47, :52, :57, :02 … :27). That fits the same one-clock shape with a 30-tick mana pass. `[NEEDS CONFIRMATION]` from a longer capture: does every Paradigm pass (HP standing, rest, meditate) count the same tick, and where does each fall against the round?
 - **The combat round** (`_background_energy`):
   - every online character has its just-moved flag cleared and its energy topped up (`_energy_update_character`), then every monster likewise;
   - then the players' attacks (`_do_autocombat`) and the monsters' attacks run, players first 60% of the time and monsters first otherwise (a 0–100 roll under 60);
   - last, every online character gets back its one cast for the round (bit `0x4` of the character's `+0x700`, which a cast clears). That is what `You have already cast a spell this round!` tests, in or out of a fight.
+
+**Client use:**
+- `TickTimingLog` keeps the last 400 combat rounds, HP / mana gains and posture changes to the millisecond, each gain with its gap, its offset from the last round seen on the wire and from the start of the rest or meditation. The bug report prints it as *Tick timing*, and the Debug `Regen:` line carries the round offset. It is there to settle the Paradigm question in this topic.
 
 ### Exp/hour ceiling and loop geometry
 *Status: CONFIRMED 2026-08-02 (user); single-target-ceiling rule CONFIRMED 2026-08-14 (user)*
@@ -1025,6 +1029,7 @@ How HP works from full health down through dropping and death, how monster healt
 
 **Client use:**
 - `RealmRegenProfile` / `RegenConstants`: Stock 30 / 21 / 15 s, Paradigm 10 / 10 / 10 s for natural / rest / meditate. `RegenTracker` learns the per-tick amounts live.
+- `HealthManager` never sends `rest` / `meditate` to a character already in that posture (lain down by hand, or left resting while the engine was switched off): it takes the rest under way as its own. A second `rest` restarts the count toward the next tick (Stock, the bullets in this topic; the user said the same of Paradigm, 2026-09-29).
 - `SimCharacterBuilder.BuildRegen` (the Exp/Hr Estimator's character simulation) plays Paradigm rest as the three-tick cycle, the two reduced ticks a third of the full one, counted from lying down (that start is the unconfirmed part).
 
 ### Poison prevents resting
