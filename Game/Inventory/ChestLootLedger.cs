@@ -29,16 +29,62 @@ public sealed class ChestLootLedger
         return gains;
     }
 
-    // The game confirmed `count` of `name` left the pack (sold or dropped).
-    public void Remove(string name, int count)
+    // Every listed item and its count, in first-seen order — what gets saved.
+    public IReadOnlyList<(string Name, int Count)> Entries
+        => _order.Select(name => (name, _loot[name])).ToList();
+
+    public bool IsEmpty => _order.Count == 0;
+
+    // Replace the list with a saved one.
+    public void Load(IEnumerable<(string Name, int Count)> entries)
     {
-        if (!_loot.TryGetValue(name, out int held)) return;
+        Clear();
+        foreach ((string name, int count) in entries)
+        {
+            if (count <= 0 || string.IsNullOrWhiteSpace(name)) continue;
+            if (!_loot.ContainsKey(name)) _order.Add(name);
+            _loot[name] = _loot.GetValueOrDefault(name) + count;
+        }
+    }
+
+    public void Clear()
+    {
+        _loot.Clear();
+        _order.Clear();
+    }
+
+    // The player took this item off the list (it stays in the pack).
+    public bool RemoveAll(string name) => _loot.ContainsKey(name) && Remove(name, int.MaxValue);
+
+    // A full inventory read is the truth: lower each count to what's carried, and drop
+    // what isn't carried at all (given away, used up, sold while nothing was watching).
+    // Returns true when anything changed.
+    public bool Prune(IReadOnlyList<string> carried)
+    {
+        Dictionary<string, int> carriedCounts = ChestOffloadPlanner.CountByName(carried);
+        bool changed = false;
+        foreach (string name in _order.ToList())
+        {
+            int have = carriedCounts.GetValueOrDefault(name);
+            if (have >= _loot[name]) continue;
+            changed = true;
+            if (have > 0) _loot[name] = have;
+            else Remove(name, int.MaxValue);
+        }
+        return changed;
+    }
+
+    // The game confirmed `count` of `name` left the pack (sold or dropped).
+    public bool Remove(string name, int count)
+    {
+        if (!_loot.TryGetValue(name, out int held)) return false;
         if (held <= count)
         {
             _loot.Remove(name);
             _order.RemoveAll(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
         }
         else _loot[name] = held - count;
+        return true;
     }
 
     // The chest loot still in the pack, each capped at what's actually carried now,

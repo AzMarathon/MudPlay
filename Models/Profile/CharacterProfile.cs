@@ -223,6 +223,10 @@ public sealed class CharacterProfile
     // See ItemChargeTracker. (Stock uses ItemUseCounts above instead.)
     public Dictionary<int, ItemChargeRecord>? ItemCharges { get; set; }
 
+    // The Chest Offload list: chest loot not yet sold, dropped or cleared, and the
+    // chests' coin. null = nothing listed. See ChestOpenTracker.
+    public ChestLootRecord? ChestLoot { get; set; }
+
     // LEGACY Roomba Mode fields — superseded by the BBS-tier RoombaSettings
     // (Data/BBS/{bbs}/roomba.json; see GhRoomLabelStore) since every character
     // on a BBS shares one gang house. Kept ONLY so GhRoomLabelStore can lift an

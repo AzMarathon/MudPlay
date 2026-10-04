@@ -882,7 +882,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             int number = ResolveItemNumber(name);
             CarriedItems.Add(new WorkshopItemRow(name, string.Empty, number, ChargesTextFor(name),
                 isContainer: number > 0
-                    && AppServices.Current.ItemNames.ItemTypeOf(number) == ChestOffloadViewModel.ContainerItemType));
+                    && AppServices.Current.ItemNames.ItemTypeOf(number) == Game.Inventory.ChestOffloadPlanner.ContainerItemType));
         }
 
         Keys.Clear();
