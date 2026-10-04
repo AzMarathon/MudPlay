@@ -7890,6 +7890,7 @@ public sealed class AppServices
         AutoParty.SetNavigationProbe(() =>
             MovementControl.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring
             || TrainerWalk.IsBusy || TrainFunding.IsBusy || StashTransfer.IsBusy);
+        MovementControl.StateChanged += AutoParty.OnNavigationStateChanged;
         // Sell detours: walk / loop / lair → the chosen shop → Auto-sell → carry on.
         // Blocked while anything else owns movement or holds it (combat, rest, a user
         // pause, following a leader, the other errand engines).
@@ -7937,6 +7938,14 @@ public sealed class AppServices
         TrainFunding.Finished += _ => MovementControl.NoteErrandStateChanged();
         SellDetour.DetouringChanged += MovementControl.NoteErrandStateChanged;
         AutoDeposit.ReroutingChanged += MovementControl.NoteErrandStateChanged;
+        // The same errands count as navigation for "Only auto-invite while navigation
+        // is running", and one can start with no walk or loop under it: its own start
+        // is what releases a held invite then. Train funding only ever begins inside
+        // a train trip.
+        StashTransfer.StateChanged += AutoParty.OnNavigationStateChanged;
+        TrainerWalk.StateChanged += AutoParty.OnNavigationStateChanged;
+        SellDetour.DetouringChanged += AutoParty.OnNavigationStateChanged;
+        AutoDeposit.ReroutingChanged += AutoParty.OnNavigationStateChanged;
         MovementControl.SuspendedErrandChanged += () =>
         {
             if (MovementControl.SuspendedErrand is { } held)

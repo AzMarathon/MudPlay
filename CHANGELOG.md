@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.21
+
+- Only auto-invite while navigation is running: a flagged player already standing with you is invited when a walk, loop or trip (deposit, sell, train, stash) starts, not only when you walk into their room
+- bug reports addressed: paradigm-20261004-061346
+
 ## 3.143.20
 
 - Tick countdowns run on one clock: a round seen on the wire sets the regen countdowns, and a regen gain keeps the round countdown true between fights

@@ -39,6 +39,7 @@ public sealed class AutoPartyManager : IDisposable
     private readonly IDisposable _followerRemovedSub;
     private readonly IDisposable _youInvitedSub;
     private readonly IDisposable _teleportArrivalSub;
+    private readonly IDisposable _departureSub;
     private bool _disposed;
 
     // Per-recipient TTL on auto-invites. Subsequent room renders within this
@@ -171,6 +172,34 @@ public sealed class AutoPartyManager : IDisposable
     // What "navigation is running" means for OnlyWhileNavigating — wired in AppServices.
     public void SetNavigationProbe(Func<bool> isNavigating) => _isNavigating = isNavigating;
 
+    // Flagged players OnlyWhileNavigating held back, with the room they were seen in.
+    // A run started in that room invites them before its first move: nothing lists
+    // them again until we leave, so otherwise someone standing beside us is walked
+    // away from (report paradigm-20261004-061346).
+    private readonly Dictionary<string, Map.RoomKey?> _seenWhileIdle =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    // For the bug report.
+    public IReadOnlyCollection<string> SeenWhileIdle => _seenWhileIdle.Keys;
+
+    private bool HeldForNavigation => OnlyWhileNavigating && _isNavigating?.Invoke() != true;
+
+    // The movement engines' state may have changed. They raise this before a run's
+    // first move goes out, so an invite sent here is still answered in this room,
+    // and a loop sees the invite hold before it steps.
+    public void OnNavigationStateChanged()
+    {
+        // Names are only held while idle, so any still held once navigation runs
+        // were seen before it started.
+        if (_seenWhileIdle.Count == 0 || _isNavigating?.Invoke() != true) return;
+
+        Map.RoomKey? here = _currentRoom?.Invoke();
+        KeyValuePair<string, Map.RoomKey?>[] held = _seenWhileIdle.ToArray();
+        _seenWhileIdle.Clear();
+        foreach ((string given, Map.RoomKey? seenIn) in held)
+            if (Nullable.Equals(seenIn, here)) TryAutoInvite(given);
+    }
+
     // The room we're in (RoomTracker's current room), so a split-teleport reform can
     // tell the leader has crossed. Some teleports wait before moving anyone (Darkwood's
     // `go vortex` carries `adddelay 5`), and until the leader lands the members are
@@ -269,6 +298,8 @@ public sealed class AutoPartyManager : IDisposable
         // waiting on after a party-splitting teleport, timed to their actual
         // arrival rather than the instant the leader crossed.
         _teleportArrivalSub = _router.Subscribe(KnownPatterns.PlayerTeleportsIn, OnTeleportArrival);
+        // Someone held back for navigation who walks off is no longer beside us.
+        _departureSub = _router.Subscribe(KnownPatterns.RoomEntryDeparture, OnDeparture);
 
         // TTL housekeeping — drop the cooldown entry for any member that
         // leaves the roster (so a player who separates from us and then
@@ -466,6 +497,7 @@ public sealed class AutoPartyManager : IDisposable
         _followerRemovedSub.Dispose();
         _youInvitedSub.Dispose();
         _teleportArrivalSub.Dispose();
+        _departureSub.Dispose();
         _party.Members.CollectionChanged -= OnPartyMembersChanged;
         _party.PropertyChanged           -= OnPartyPropertyChanged;
         foreach (PartyMember m in _watchedMembers) m.PropertyChanged -= OnMemberPropertyChanged;
@@ -589,7 +621,14 @@ public sealed class AutoPartyManager : IDisposable
         if (!FindCustomization(given, out PlayerCustomization c)) return;
         if (!c.InviteToPartyIfSeen) return;
         // Settings → Other "Only auto-invite while navigation is running".
-        if (OnlyWhileNavigating && _isNavigating?.Invoke() != true) return;
+        if (HeldForNavigation)
+        {
+            if (!_seenWhileIdle.ContainsKey(given))
+                _log?.Log(LogSeverity.Debug, "AutoParty",
+                    $"{given} seen while idle — invite held until navigation starts here.");
+            _seenWhileIdle[given] = _currentRoom?.Invoke();
+            return;
+        }
 
         // Uninvite suppression — if we just kicked this player, don't
         // re-add them. Lazy expiry on read so the map self-prunes.
@@ -1117,11 +1156,21 @@ public sealed class AutoPartyManager : IDisposable
     public void OnPlayerArrival(Combat.RoomEntryArrivalEvent arrival)
     {
         if (arrival.Kind != Combat.EntityKind.Player) return;
-        if (!string.Equals(arrival.Direction, "nowhere", StringComparison.OrdinalIgnoreCase))
-            return;
         string given = ExtractGiven(arrival.Name);
         if (string.IsNullOrEmpty(given)) return;
+        // Arriving while we stand idle, from any direction: no "Also here" follows,
+        // so this is the only sighting a run started here has to go on.
+        if (HeldForNavigation && FindCustomization(given, out PlayerCustomization c) && c.InviteToPartyIfSeen)
+            _seenWhileIdle[given] = _currentRoom?.Invoke();
+        if (!string.Equals(arrival.Direction, "nowhere", StringComparison.OrdinalIgnoreCase))
+            return;
         TrySendDeferredReformInvite(given);
+    }
+
+    private void OnDeparture(MatchResult match)
+    {
+        if (match.Groups.Count == 0) return;
+        _seenWhileIdle.Remove(ExtractGiven(match.Groups[0]));
     }
 
     // Drop the invite-wait for given (they joined, were uninvited, or the party

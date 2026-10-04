@@ -3858,7 +3858,7 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 ### Only auto-invite while navigation is running
 
 **Default:** Off
-**What it does:** Players you've flagged **Invite to party if seen** (Game Data → Players) are auto-invited only while navigation is running: a walk, loop or Auto-Lair (running or paused), or an auto-deposit or train trip. Standing idle, seeing them does nothing. Off, they're invited whenever you see them.
+**What it does:** Players you've flagged **Invite to party if seen** (Game Data → Players) are auto-invited only while navigation is running: a walk, loop or Auto-Lair (running or paused), or an auto-deposit or train trip. Standing idle, seeing them does nothing until you start moving: anyone still in the room with you is invited as the walk, loop or trip starts, before its first step. Off, they're invited whenever you see them.
 **Important notes:** Re-inviting your own party (after a disconnect, a split or a trainer trip) isn't affected. Saved for this character.
 
 ### Stopping a Run turns Auto-Combat back on
