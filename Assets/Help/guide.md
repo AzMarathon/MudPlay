@@ -1000,7 +1000,7 @@ Press **F2** to open the **Spell Book** — a read-only reference to your class'
 
 The list also respects your **alignment** — a Good-only, Evil-only, or Neutral-only spell you haven't learned yet stays hidden until your alignment actually matches it, everywhere the class list feeds (the book itself and the Settings → Spells pickers alike). An Evil-only spell needs you to be Outlaw or worse, so a Seedy character doesn't see one; on Stock, Seedy counts as Neutral for spells as it does for gear. A spell you've **already** learned never disappears, even if your alignment later drifts away from it — an alignment-quest reward stays yours.
 
-Alignment isn't part of `stat`'s output, so it comes from your own row in the realm's player list, which every `who` that shows you updates; until a `who` has shown you on that realm, every alignment-gated spell still shows (nothing gets hidden on a guess).
+Alignment isn't part of `stat`'s output, so it comes from your own row in the realm's player list, which every `who` that shows you updates; until a `who` has shown you on that realm, every alignment-gated spell still shows (nothing gets hidden on a guess). That reading can lag behind the game between `who`s, so the game's own word wins: any spell your `sp` list shows, or that the game says you just learned, is marked learned and offered (in the Buff Watchdog too) even when your last-seen alignment would have hidden it.
 
 **All / Heals / Buffs / Attacks / Party+AoE** tabs across the top narrow the grid by what a spell actually does:
 

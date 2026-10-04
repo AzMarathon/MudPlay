@@ -256,16 +256,7 @@ public sealed class SpellbookState
         // alignment. Union back in any already-obtained spell the filter excluded,
         // reading the unfiltered (charAlign 0) list as the source of what to
         // restore, then re-sort to keep Query's ReqLevel-then-Name order.
-        if (CharAlign != 0 && _obtainedNames.Count > 0)
-        {
-            HashSet<int> present = new(aligned.Select(s => s.Number));
-            foreach (KnownSpell s in _catalog.Query(ClassNumber, level: 0, charAlign: 0))
-            {
-                if (present.Contains(s.Number) || !_obtainedNames.Contains(s.Name)) continue;
-                aligned.Add(s);
-            }
-            aligned.Sort(KnownSpellCatalog.CompareByReqLevelThenName);
-        }
+        AddAlignmentExcluded(aligned, _obtainedNames);
         _available = aligned;
         // Class-scoped cast-item list is a full Items scan — resolve it once here,
         // on the same class-change / set-swap trigger, so per-pass GetCastItems reads
@@ -276,6 +267,34 @@ public sealed class SpellbookState
         _castItems = _spellBookCastItems.Where(static item => !item.Carried || item.IsDraw).ToList();
         ResolveObtainedFromNames();
         RebuildAvailablePicks();
+    }
+
+    // Adds to `list` the class spells our alignment reading filtered out whose names
+    // are in `names`, keeping Query's order. True when it added any.
+    private bool AddAlignmentExcluded(List<KnownSpell> list, ICollection<string> names)
+    {
+        if (CharAlign == 0 || names.Count == 0) return false;
+        HashSet<int> present = new(list.Select(s => s.Number));
+        bool added = false;
+        foreach (KnownSpell s in _catalog.Query(ClassNumber, level: 0, charAlign: 0))
+        {
+            if (present.Contains(s.Number) || !names.Contains(s.Name)) continue;
+            list.Add(s);
+            added = true;
+        }
+        if (added) list.Sort(KnownSpellCatalog.CompareByReqLevelThenName);
+        return added;
+    }
+
+    // The game says we hold these spells, so our alignment reading can't say
+    // otherwise. That reading only moves on a `who` or `pro` and can sit a title
+    // behind; a spell it hid from Available could never be marked learned, and so
+    // never reached the Buff Watchdog's pickers (report paradigm-20261003-215442).
+    private void AdmitNamedByTheGame(IEnumerable<string> names)
+    {
+        HashSet<string> wanted = new(names.Select(n => n.Trim()), StringComparer.OrdinalIgnoreCase);
+        List<KnownSpell> list = new(_available);
+        if (AddAlignmentExcluded(list, wanted)) _available = list;
     }
 
     // Re-derive the obtained number cache from the authoritative obtained names
@@ -315,9 +334,11 @@ public sealed class SpellbookState
     public void SetObtainedByNames(IEnumerable<string> names)
     {
         ArgumentNullException.ThrowIfNull(names);
+        List<string> listed = names.ToList();
+        AdmitNamedByTheGame(listed);
         HashSet<string> nextNames = new(StringComparer.OrdinalIgnoreCase);
         HashSet<int> nextNums = new();
-        foreach (string name in names)
+        foreach (string name in listed)
             if (FindAvailableByName(name) is { } s)
             {
                 nextNames.Add(s.Name);
@@ -358,6 +379,8 @@ public sealed class SpellbookState
     // Changed only when the spell was newly added.
     public KnownSpell? MarkObtainedByName(string name)
     {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        AdmitNamedByTheGame(new[] { name });
         if (FindAvailableByName(name) is not { } match) return null;
         _obtainedNames.Add(match.Name);
         if (_obtained.Add(match.Number))

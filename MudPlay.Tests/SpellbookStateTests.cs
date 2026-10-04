@@ -169,6 +169,37 @@ public sealed class SpellbookStateTests : IDisposable
         Assert.True(book.IsObtained(book.Available.Single(s => s.Name == "curse").Number));
     }
 
+    // Report paradigm-20261003-215442: our alignment reading only moves on a `who`
+    // or `pro`, so it can say Neutral while the character is evil and has just learned
+    // an evil-only spell. The game's own spell list outranks the reading.
+    [Fact]
+    public void SpellList_NamingASpellOurAlignmentReadingExcludes_MarksItLearned()
+    {
+        SpellbookState book = New(_alignedSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 2); // read as Neutral
+        Assert.DoesNotContain("curse", Names(book.Available));
+
+        book.SetObtainedByNames(new[] { "plain bolt", "curse" });
+
+        KnownSpell curse = book.Available.Single(s => s.Name == "curse");
+        Assert.True(book.IsObtained(curse.Number));
+        Assert.Equal(2, book.ObtainedCount);
+        Assert.DoesNotContain("smite", Names(book.Available)); // unlearned, still excluded
+    }
+
+    [Fact]
+    public void LearnLine_NamingASpellOurAlignmentReadingExcludes_MarksItLearned()
+    {
+        SpellbookState book = New(_alignedSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 1); // read as Good
+
+        KnownSpell? learned = book.MarkObtainedByName("curse");
+
+        Assert.NotNull(learned);
+        Assert.True(book.IsObtained(learned!.Value.Number));
+        Assert.Contains("curse", Names(book.Available));
+    }
+
     [Fact]
     public void Refresh_CharAlignZero_NeverFiltersRegardlessOfObtainedState()
     {

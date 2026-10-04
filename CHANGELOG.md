@@ -1,5 +1,11 @@
 # Version history
 
+## 3.143.9
+
+- A spell your `sp` list shows is marked learned even when the client's last-seen alignment would hide it, so it can be picked in the Buff Watchdog
+- Bug report: the Spell Book's class, alignment gate and counts, and learned buffs that have no Buff Watchdog slot
+- bug reports addressed: paradigm-20261003-215442
+
 ## 3.143.8
 
 - Combat: bashing a door open is no longer taken for an attack you typed, so a buff cast on entering the next room no longer leaves the monsters un-attacked
