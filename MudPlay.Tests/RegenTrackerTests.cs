@@ -340,15 +340,358 @@ public sealed class RegenTrackerTests
         tracker.Dispose();
     }
 
+    // On Paradigm the standing gain comes two rounds after the last HP gain, a rest
+    // gain included (live log 2026-10-04: last rest gain 02:53:41.5, standing gains
+    // from 02:53:51.6, while the mana pass sat at :25.9 / :56.0). Three rest gains
+    // move it a round off where it was before the rest.
     [Fact]
-    public void Stock_RestCycleCountsFromLyingDown()
+    public void ParaMud_StandingUp_PlacesTheStandingGainTenSecondsAfterTheLastRestGain()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Hp = 101;                             // a standing gain, at T0
+        clock.Advance(TimeSpan.FromSeconds(2));
+        state.Position = PlayerPosition.Resting;
+        clock.Advance(TimeSpan.FromSeconds(3));
+        state.Hp = 102;                             // rest gains at T0+5, +10, +15
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 103;
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 104;
+        clock.Advance(TimeSpan.FromSeconds(2));
+        state.Position = PlayerPosition.Standing;   // T0+17
+
+        AssertSeconds(8, tracker.GetTimeToNextHpNaturalTick());   // T0+25, not T0+20
+        tracker.Dispose();
+    }
+
+    // The same log: a mana pass 5 s after a standing HP gain. It is not an HP gain's
+    // moment, and the HP countdown the gains have placed stays where it is.
+    [Fact]
+    public void ParaMud_ManaPassOffTheHpCycle_LeavesTheHpCountdownAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Ma = 50;
+        state.Hp = 101;                             // T0
+        clock.Advance(TimeSpan.FromSeconds(10));
+        state.Hp = 102;                             // T0+10
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Ma = 54;                              // the mana pass, at T0+15
+
+        AssertSeconds(5, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // At max HP no HP gain is seen, so the mana pass is the only sign of the grid and
+    // still starts the HP countdown.
+    [Fact]
+    public void ParaMud_NoHpGainsSeen_ManaPassStartsTheHpCountdown()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Hp = 100;
+        state.Ma = 50;
+        clock.Advance(TimeSpan.FromSeconds(40));
+        state.Ma = 54;
+
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // ----- telling regen from heals and heal-over-time buffs ----------------
+
+    // The level 51 Priest of the 2026-10-04 live log: a standing third of 3, a whole
+    // amount of 9, max HP 520.
+    private static (PlayerState state, RegenTracker tracker, FakeClock clock, List<string> leftOut) PriestSetup()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        HpRegenExpectation expected = HpRegenExpectation.For(RealmType.ParaMud, 51, 67, 0)!;
+        tracker.SetHpExpectation(() => expected);
+        List<string> leftOut = new();
+        tracker.HpGainLeftOut += (gain, why) => leftOut.Add($"+{gain} {why}");
+        state.MaxHp = 520;
+        state.Hp = 300;
+        return (state, tracker, clock, leftOut);
+    }
+
+    // A between-round heal lands half a second after the round, inside the round
+    // grid's reach: +134 at 14:50:57.350 in the log. Its size gives it away.
+    [Fact]
+    public void Heal_BiggerThanRegenPays_IsLeftOut()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // regen, at T0
+        clock.Advance(TimeSpan.FromSeconds(5.4));
+        state.Hp = 437;                             // the heal
+
+        AssertSeconds(4.6, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Single(leftOut);
+        Assert.StartsWith("+134 more than regen pays", leftOut[0]);
+        tracker.Dispose();
+    }
+
+    // The Priest's buffs tick +1 and +2 every spell round; one in five lands on a
+    // combat round. While +3 keeps arriving, those aren't regen.
+    [Fact]
+    public void GainOfAnotherSize_IsLeftOut_WhileRegenSizedGainsKeepComing()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // T0
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 305;                             // a buff's +2 on the other round
+
+        AssertSeconds(5, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Single(leftOut);
+        tracker.Dispose();
+    }
+
+    // No regen-sized gain for 40 s while other sizes arrive: the expected amounts
+    // are off (a stat not read, a buff's percent), and the gains count again.
+    [Fact]
+    public void GainOfAnotherSize_CountsAgain_OnceRegenSizedGainsStop()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;
+        clock.Advance(TimeSpan.FromSeconds(40));
+        state.Hp = 305;
+
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Empty(leftOut);
+        tracker.Dispose();
+    }
+
+    // The last gain before max HP is cut short: 519 -> 520 is regen whatever its size.
+    [Fact]
+    public void GainThatFillsHpToMax_IsRegenWhateverItsSize()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        state.Hp = 519;                             // damage healed elsewhere; baseline moves
+        leftOut.Clear();
+        clock.Advance(TimeSpan.FromSeconds(9));
+        state.Hp = 520;
+
+        Assert.Empty(leftOut);
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // The rolled buff's +3 is the size of the Priest's regen third. It falls between
+    // two ticks of a cycle that has taken two gains in a row, and doesn't move it.
+    [Fact]
+    public void RegenSizedGain_BetweenTheTicksOfATrackedCycle_DoesNotMoveIt()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // T0
+        clock.Advance(TimeSpan.FromSeconds(10));
+        state.Hp = 306;                             // T0+10: two in a row
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 309;                             // the buff, on the other round
+
+        AssertSeconds(5, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Single(leftOut);
+        Assert.Contains("between two ticks", leftOut[0]);
+
+        clock.Advance(TimeSpan.FromSeconds(5.07));  // the next regen gain, a moment after the countdown rolled over
+        tracker.GetTimeToNextHpNaturalTick();
+        state.Hp = 312;
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // A lone first gain that was really the buff's tick: the gain 5 s later shows it
+    // was misplaced, and the cycle moves at once.
+    [Fact]
+    public void LoneMisplacedGain_IsCorrectedByTheNextOne()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // the buff's +3, taken as the first tick
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 306;                             // the real regen gain
+
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Empty(leftOut);
+        tracker.Dispose();
+    }
+
+    // Without the amounts (no `stat` read yet) every gain is judged on timing alone.
+    [Fact]
+    public void NoExpectation_NothingIsLeftOutForItsSize()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        int ticks = 0;
+        tracker.HpTickObserved += _ => ticks++;
+        state.Hp = 300;
+        state.Hp = 303;
+        clock.Advance(TimeSpan.FromSeconds(10));
+        state.Hp = 437;
+
+        Assert.Equal(2, ticks);
+        tracker.Dispose();
+    }
+
+    // On Paradigm a meditate gain comes every 15 s on a grid the 30 s mana pass sits
+    // on (143 timed stretches: every gap between gains was 14-15 s, so the pass never
+    // landed apart from a meditate gain). Meditating 22 s after a pass, the next gain
+    // is 8 s away, at the pass.
+    [Fact]
+    public void ParaMud_MeditateCycleAnchorsOnTheManaGrid_NotOnTheCommand()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Ma = 50;
+        state.Ma = 167;                             // the mana pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(22));
+        state.Position = PlayerPosition.Meditating;
+
+        AssertSeconds(8, tracker.GetTimeToNextMpMediTick());
+
+        clock.Advance(TimeSpan.FromSeconds(8));
+        state.Ma = 313;                             // pass + meditate gain together
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(30, tracker.GetTimeToNextMpNaturalTick());
+
+        clock.Advance(TimeSpan.FromSeconds(15));
+        state.Ma = 342;                             // the meditate gain between passes
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(15, tracker.GetTimeToNextMpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // No mana gain seen before meditating: the cycle counts from the command until
+    // the first gain shows where the grid is. That gain is a meditate grid point but
+    // not known to be the pass, and it is the only mana anchor there is.
+    [Fact]
+    public void ParaMud_FirstMeditateGain_SetsTheMeditateGrid()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Ma = 50;
+        state.Position = PlayerPosition.Meditating;
+        clock.Advance(TimeSpan.FromSeconds(6));
+        state.Ma = 79;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        Assert.True(tracker.MpNatural.IsActive);
+        tracker.Dispose();
+    }
+
+    // A meditate gain the countdown didn't expect moves the meditate grid and leaves
+    // a running mana countdown where the last pass put it.
+    [Fact]
+    public void ParaMud_OffCountdownMeditateGain_LeavesTheManaCycleAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Ma = 50;
+        state.Ma = 167;                             // the mana pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(2));
+        state.Position = PlayerPosition.Meditating;
+        clock.Advance(TimeSpan.FromSeconds(8));     // 10 s after the pass
+        state.Ma = 196;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(20, tracker.GetTimeToNextMpNaturalTick());
+        tracker.Dispose();
+    }
+
+    [Fact]
+    public void Stock_MeditateCycleCountsFromTheCommand()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Ma = 50;
+        state.Ma = 57;                              // the 30 s pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(22));
+        state.Position = PlayerPosition.Meditating;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        tracker.Dispose();
+    }
+
+    // Stock counts 21 whole game ticks from the command, so the first rest gain comes
+    // 21 s after the tick the command landed in: 20.8 s after a command sent 0.2 s
+    // into a tick (report stock-20261004-150847: rest seen 15:07:39.601, rounds
+    // falling at .70, first rest gain 15:07:59.693).
+    [Fact]
+    public void Stock_RestCycleCountsFromTheGameTickTheCommandLandedIn()
     {
         var (state, tracker, clock) = Setup();
         tracker.NoteRound(clock.Now);
         clock.Advance(TimeSpan.FromSeconds(13.2));
         state.Position = PlayerPosition.Resting;
 
-        Assert.Equal(TimeSpan.FromSeconds(21), tracker.GetTimeToNextHpRestTick());
+        AssertSeconds(20.8, tracker.GetTimeToNextHpRestTick());
+        tracker.Dispose();
+    }
+
+    // With no round or pass seen lately there is no tick to count from: half a tick
+    // back, the middle of where the command can have landed.
+    [Fact]
+    public void Stock_RestCycle_NoTickPhaseKnown_CountsFromHalfATickBack()
+    {
+        var (state, tracker, _) = Setup();
+        state.Position = PlayerPosition.Resting;
+
+        AssertSeconds(20.5, tracker.GetTimeToNextHpRestTick());
+        tracker.Dispose();
+    }
+
+    // The same report: the 30 s pass at 15:07:33.716, rest from 15:07:39.601, the
+    // rest gain at 15:07:59.693 and the next pass at 15:08:03.711. The rest gain is
+    // the rest cycle's and leaves the pass countdown where it was; it used to fall
+    // through to the pass and restart that countdown at 30 with 4 s to go.
+    [Fact]
+    public void Stock_RestGain_IsTheRestCyclesAndLeavesThePassCountdownAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Hp = 24;
+        state.Hp = 25;                              // the pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(5.885));
+        state.Position = PlayerPosition.Resting;
+        clock.Advance(TimeSpan.FromSeconds(20.092));
+
+        AssertSeconds(0.023, tracker.GetTimeToNextHpRestTick());
+        state.Hp = 28;                              // the rest gain, +3
+
+        AssertSeconds(21, tracker.GetTimeToNextHpRestTick());
+        AssertSeconds(4.023, tracker.GetTimeToNextHpNaturalTick());
+
+        clock.Advance(TimeSpan.FromSeconds(4.018));
+        state.Hp = 29;                              // the next pass, +1
+        AssertSeconds(30, tracker.GetTimeToNextHpNaturalTick());
+        AssertSeconds(16.982, tracker.GetTimeToNextHpRestTick());
+
+        // A rest gain that comes just after the countdown rolled over is still the
+        // rest cycle's (15:08:41.697 in the report).
+        clock.Advance(TimeSpan.FromSeconds(16.99));
+        tracker.GetTimeToNextHpRestTick();
+        state.Hp = 32;
+        AssertSeconds(21, tracker.GetTimeToNextHpRestTick());
+        AssertSeconds(13.01, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // Meditate is counted the same way, 15 ticks from the command, and its gain
+    // leaves the mana pass countdown alone.
+    [Fact]
+    public void Stock_MeditateGain_IsTheMeditateCyclesAndLeavesThePassCountdownAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Ma = 10;
+        state.Ma = 14;                              // the pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(5.9));
+        state.Position = PlayerPosition.Meditating;
+        clock.Advance(TimeSpan.FromSeconds(14.08));  // the 15th tick after the command
+        state.Ma = 18;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(10.02, tracker.GetTimeToNextMpNaturalTick());
         tracker.Dispose();
     }
 

@@ -43,6 +43,13 @@ public sealed class RegenDiagnosticsRecorder : IDisposable
         _log = log;
         _tracker.HpTickObserved += OnHpTick;
         _tracker.MaTickObserved += OnMaTick;
+        _tracker.HpGainLeftOut += OnHpGainLeftOut;
+    }
+
+    private void OnHpGainLeftOut(int gain, string why)
+    {
+        if (!_log.IsDebugEnabled) return;
+        _log.Debug(Source, $"HP +{gain} left out of the regen cycles — {why}");
     }
 
     private void OnHpTick(RegenSample sample)
@@ -85,6 +92,7 @@ public sealed class RegenDiagnosticsRecorder : IDisposable
         if (_disposed) return;
         _disposed = true;
         _tracker.HpTickObserved -= OnHpTick;
+        _tracker.HpGainLeftOut -= OnHpGainLeftOut;
         _tracker.MaTickObserved -= OnMaTick;
     }
 }

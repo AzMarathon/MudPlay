@@ -803,6 +803,10 @@ public sealed class AppServices
     // out a realm's tick cycle from a bug report.
     public Game.TickTimingLog TickTiming { get; }
 
+    // The HP amounts passive regen can pay the live character, which the regen cycles
+    // use to leave out heals and other HP sources by their size.
+    public Game.HpRegenExpectationSource HpRegenExpected { get; private set; } = null!;
+
     // Live mirror of the loaded character profile's Display settings.
     // The Settings → Display section writes through to this so changes
     // (font size in particular) apply without restarting the app.
@@ -5299,6 +5303,11 @@ public sealed class AppServices
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
                 : null);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
+        HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData,
+            () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
+                Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), Profile.Current?.QuestLog));
+        Regen.SetHpExpectation(() => HpRegenExpected.Current);
+        Profile.ProfileLoaded += _ => HpRegenExpected.Invalidate();
         TooHeavyWait = new Game.TooHeavyWaitSignal(Router, Inventory, PartyRest, MovementCoordinator, Log);
         // A spell that cuts carrying capacity (weakness, frail) can leave us over our
         // max; `i` is the only place that shows. Records sharing one applied line each

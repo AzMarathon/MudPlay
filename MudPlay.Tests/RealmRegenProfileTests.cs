@@ -19,13 +19,15 @@ public sealed class RealmRegenProfileTests
     public void ParaMud_UsesTheMeasuredCadence()
     {
         // Timed captures (report paradigm-20261004-024314): standing HP every 10 s,
-        // mana every 30 s, a rest gain every 5 s on the round grid. Meditate is the
-        // user's 10 s figure, not yet timed.
+        // mana every 30 s, a rest gain every 5 s on the round grid. Meditate, timed
+        // over 143 stretches of a level 49-51 Priest: every 15 s, on the mana grid.
         Assert.Equal(TimeSpan.FromSeconds(10), RealmRegenProfile.ParaMud.StandingInterval);
         Assert.Equal(TimeSpan.FromSeconds(30), RealmRegenProfile.ParaMud.ManaInterval);
         Assert.Equal(TimeSpan.FromSeconds(5), RealmRegenProfile.ParaMud.RestingInterval);
-        Assert.Equal(TimeSpan.FromSeconds(10), RealmRegenProfile.ParaMud.MeditatingInterval);
+        Assert.Equal(TimeSpan.FromSeconds(15), RealmRegenProfile.ParaMud.MeditatingInterval);
         Assert.True(RealmRegenProfile.ParaMud.RestingOnRoundGrid);
+        Assert.True(RealmRegenProfile.ParaMud.MeditatingOnManaGrid);
+        Assert.False(RealmRegenProfile.Stock.MeditatingOnManaGrid);
     }
 
     [Theory]

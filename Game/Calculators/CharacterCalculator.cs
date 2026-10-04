@@ -113,6 +113,13 @@ public static class CharacterCalculator
         return regen;
     }
 
+    // Paradigm pays the idle HP amount in thirds: one standing gain every 10 s, and
+    // the low gains of a rest. The third is of the amount before any regen percent,
+    // with the fraction dropped, and is kept to at least 1 as the amount itself is.
+    // What the percent adds to the whole amount comes on the last gain of each three
+    // (GAME_MECHANICS "Rest and meditate tick timing").
+    public static int ParadigmHpRegenThird(int baseAmount) => Math.Max(1, baseAmount / 3);
+
     // ----- Mana / Kai ------------------------------------------------------
 
     // Max mana: (mageryLevel * level * 2) + 6 + plusMaxMana. Returns 0 for
@@ -507,6 +514,22 @@ public static class CharacterCalculator
         if (ClassCapabilities.ClassHasJumpKick(classRow)) attacks.Add(MudAttackType.Jumpkick);
 
         return attacks;
+    }
+
+    // Worn gear plus the race's and class's own abilities and the completed quests'
+    // bonuses: the totals the game's whole-character figures (regen among them) run on.
+    public static EquipmentStatSummary CharacterTotals(
+        PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
+        IReadOnlyList<Quests.QuestBonus>? questBonuses)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        ArgumentNullException.ThrowIfNull(worn);
+        ArgumentNullException.ThrowIfNull(gameData);
+        EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
+        if (gameData.FindRowByName("Races", stats.Race) is JsonElement race) ApplyAbilityBonuses(combined, race, stats.Race);
+        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement cls) ApplyAbilityBonuses(combined, cls, stats.Class);
+        if (questBonuses is not null) ApplyQuestBonuses(combined, questBonuses, "Quests");
+        return combined.Totals;
     }
 
     // The caster's spell-damage bonus % (AlterSpDmg, ability 165): worn gear plus

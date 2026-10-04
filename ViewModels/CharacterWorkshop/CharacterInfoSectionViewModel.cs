@@ -375,10 +375,27 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         int idle = CharacterCalculator.CalcHpRegen(level, _stats.Health, t.HpRegenPercent, isResting: false, realm);
         int rest = CharacterCalculator.CalcHpRegen(level, _stats.Health, t.HpRegenPercent, isResting: true, realm);
-        HpRegen = $"+{idle} / +{rest}";
-        HpRegenTip = realm == RealmType.ParaMud
-            ? $"Standing: +{idle} HP every 30 s.\nResting: ticks every 10 s in threes — +{rest / 3}, +{rest / 3}, then +{rest}."
-            : $"Standing: +{idle} HP every 30 s.\nResting: that tick keeps paying, plus +{rest} every 21 s.";
+        if (realm == RealmType.ParaMud)
+        {
+            // Paradigm pays the 30 s amount in thirds, and a rest's full gain is that
+            // whole amount, not three times it. The thirds are of the amount before
+            // the HP-regen bonus; what the bonus adds comes on the last of each three.
+            int unscaled = CharacterCalculator.CalcHpRegen(level, _stats.Health, 0, isResting: false, realm);
+            int third = CharacterCalculator.ParadigmHpRegenThird(unscaled);
+            int extra = idle - unscaled;
+            string lows = extra != 0 ? $"+{third}, +{third}, +{third + extra}" : $"three of +{third}";
+            HpRegen = $"+{third} / +{idle}";
+            HpRegenTip = (extra != 0
+                    ? $"Standing: {lows} over 30 s, one every 10 s (the last with the mana tick).\n"
+                    : $"Standing: +{third} HP every 10 s.\n")
+                + $"Resting: a gain every 5 s — {lows}, then three of +{idle}, and round again. "
+                + "It counts from when you lie down, so resting again starts back at the small gains.";
+        }
+        else
+        {
+            HpRegen = $"+{idle} / +{rest}";
+            HpRegenTip = $"Standing: +{idle} HP every 30 s.\nResting: that tick keeps paying, plus +{rest} every 21 s.";
+        }
 
         int mageryType = GetInt(classRow, "MageryType"), mageryLevel = GetInt(classRow, "MageryLVL");
         ShowManaRegen = mageryType > 0;
@@ -391,9 +408,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             int meditate = CharacterCalculator.CalcManaRegen(level, _stats.Intellect, _stats.Willpower, _stats.Charm,
                 mageryType, mageryLevel, t.MpRegenPercent, isMeditating: true, realm);
             ManaRegen = $"+{passive} / +{meditate}";
-            ManaRegenTip = passiveLine + (realm == RealmType.ParaMud
-                ? $"\nMeditating: +{meditate} every 10 s."
-                : $"\nMeditating: +{meditate} every 15 s, on top of the 30 s tick.");
+            ManaRegenTip = passiveLine + $"\nMeditating: +{meditate} every 15 s, on top of the 30 s tick.";
         }
         else
         {
@@ -952,7 +967,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             DialogService.RaiseExisting(window);
             return;
         }
-        _breakpointsWindow = new StatBreakpointsWindow { DataContext = new StatBreakpointsViewModel(_stats, _gameData, stat) };
+        _breakpointsWindow = new StatBreakpointsWindow { DataContext = new StatBreakpointsViewModel(_stats, _gameData, _inventory, stat) };
         _breakpointsWindow.Closed += (_, _) => _breakpointsWindow = null;
         _breakpointsWindow.Show();
     }
