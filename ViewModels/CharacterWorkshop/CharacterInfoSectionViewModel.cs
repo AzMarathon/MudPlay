@@ -402,9 +402,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             int meditate = CharacterCalculator.CalcManaRegen(level, _stats.Intellect, _stats.Willpower, _stats.Charm,
                 mageryType, mageryLevel, t.MpRegenPercent, isMeditating: true, realm);
             ManaRegen = $"+{passive} / +{meditate}";
-            ManaRegenTip = passiveLine + (realm == RealmType.ParaMud
-                ? $"\nMeditating: +{meditate} every 10 s."
-                : $"\nMeditating: +{meditate} every 15 s, on top of the 30 s tick.");
+            ManaRegenTip = passiveLine + $"\nMeditating: +{meditate} every 15 s, on top of the 30 s tick.";
         }
         else
         {

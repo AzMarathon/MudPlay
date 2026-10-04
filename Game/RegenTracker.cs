@@ -20,7 +20,9 @@ namespace MudPlay.Game;
 //
 // A rest or meditate tick is counted from the command on Stock, so those cycles
 // anchor when the posture begins. On Paradigm a rest gain rides the round grid
-// whenever the character lay down, so the rest cycle anchors on the last grid point.
+// whenever the character lay down, so the rest cycle anchors on the last grid point;
+// and a meditate gain rides a 15 s grid the mana pass sits on, so the meditate cycle
+// anchors on the mana cycle.
 public sealed class RegenTracker : IDisposable
 {
     private readonly PlayerState _state;
@@ -108,11 +110,12 @@ public sealed class RegenTracker : IDisposable
         HpNatural.AlignTo(at, RoundStep, GridTolerance);
         MpNatural.AlignTo(at, RoundStep, GridTolerance);
         if (_cadence.RestingOnRoundGrid) HpRest.AlignTo(at, RoundStep, GridTolerance);
+        if (_cadence.MeditatingOnManaGrid) MpMedi.AlignTo(at, RoundStep, GridTolerance);
     }
 
     // Whether an HP gain seen in this posture sits on the round grid: a standing gain
     // does on both realms, a resting one only where rest rides the grid. Meditating
-    // is left out until a capture has timed it.
+    // is left out: no capture has shown its HP gains cleanly.
     public bool HpGainIsOnRoundGrid(PlayerPosition position) => position switch
     {
         PlayerPosition.Standing => true,
@@ -217,8 +220,17 @@ public sealed class RegenTracker : IDisposable
         bool natClaimed  = ClaimIfDue(MpNatural, now, delta);
         if (!mediClaimed && !natClaimed)
         {
-            MpNatural.RecordObservation(now, delta);
-            natClaimed = true;
+            // Where meditate rides the mana grid, a gain while meditating is a point
+            // on the meditate grid whatever the countdown said, and only every other
+            // one is the mana pass: it re-anchors the meditate cycle and leaves a
+            // running mana cycle alone.
+            bool onMediGrid = _cadence.MeditatingOnManaGrid && MpMedi.IsActive;
+            if (onMediGrid) MpMedi.RecordObservation(now, delta);
+            if (!onMediGrid || !MpNatural.IsActive)
+            {
+                MpNatural.RecordObservation(now, delta);
+                natClaimed = true;
+            }
         }
         // A mana gain is an HP grid point on both realms. Lets a max-HP character
         // still see a live HP countdown driven by observed MA ticks.
@@ -260,7 +272,7 @@ public sealed class RegenTracker : IDisposable
 
         if (_state.Position == PlayerPosition.Meditating && !MpMedi.IsActive)
         {
-            MpMedi.Start(now);
+            MpMedi.Start(_cadence.MeditatingOnManaGrid ? LastMeditateGridPoint(now) : now);
         }
         else if (_state.Position != PlayerPosition.Meditating && MpMedi.IsActive)
         {
@@ -309,6 +321,16 @@ public sealed class RegenTracker : IDisposable
         if (known is not { } reference || reference > now) return now;
         long steps = (long)((now - reference).Ticks / RoundStep.Ticks);
         return reference + TimeSpan.FromTicks(steps * RoundStep.Ticks);
+    }
+
+    // The latest point at or before now on the meditate grid, which the mana pass
+    // sits on: whole meditate intervals from the mana cycle's anchor. now before any
+    // mana gain has been seen.
+    private DateTimeOffset LastMeditateGridPoint(DateTimeOffset now)
+    {
+        if (MpNatural.Anchor is not { } pass || pass > now) return now;
+        long steps = (now - pass).Ticks / MpMedi.Interval.Ticks;
+        return pass + TimeSpan.FromTicks(steps * MpMedi.Interval.Ticks);
     }
 
     // True just after a heal-shaped event (RecordArtifact): a gain seen now isn't

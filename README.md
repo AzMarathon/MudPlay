@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.26**
+> **Version 3.143.27**
 > - Character Info: Paradigm HP Regen shows the measured ticks — a third of the amount every 10 s standing, and resting every 5 s in three small then three full gains (the tooltip still described the old 10 s cycle)
+> - Paradigm meditate is timed: a mana gain every 15 s (was taken as 10), on the same grid as the 30 s tick — the meditate countdown, Mana Regen tooltip and Exp/Hr estimate follow
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

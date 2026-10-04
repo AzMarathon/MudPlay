@@ -340,6 +340,84 @@ public sealed class RegenTrackerTests
         tracker.Dispose();
     }
 
+    // On Paradigm a meditate gain comes every 15 s on a grid the 30 s mana pass sits
+    // on (143 timed stretches: every gap between gains was 14-15 s, so the pass never
+    // landed apart from a meditate gain). Meditating 22 s after a pass, the next gain
+    // is 8 s away, at the pass.
+    [Fact]
+    public void ParaMud_MeditateCycleAnchorsOnTheManaGrid_NotOnTheCommand()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Ma = 50;
+        state.Ma = 167;                             // the mana pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(22));
+        state.Position = PlayerPosition.Meditating;
+
+        AssertSeconds(8, tracker.GetTimeToNextMpMediTick());
+
+        clock.Advance(TimeSpan.FromSeconds(8));
+        state.Ma = 313;                             // pass + meditate gain together
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(30, tracker.GetTimeToNextMpNaturalTick());
+
+        clock.Advance(TimeSpan.FromSeconds(15));
+        state.Ma = 342;                             // the meditate gain between passes
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(15, tracker.GetTimeToNextMpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // No mana gain seen before meditating: the cycle counts from the command until
+    // the first gain shows where the grid is. That gain is a meditate grid point but
+    // not known to be the pass, and it is the only mana anchor there is.
+    [Fact]
+    public void ParaMud_FirstMeditateGain_SetsTheMeditateGrid()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Ma = 50;
+        state.Position = PlayerPosition.Meditating;
+        clock.Advance(TimeSpan.FromSeconds(6));
+        state.Ma = 79;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        Assert.True(tracker.MpNatural.IsActive);
+        tracker.Dispose();
+    }
+
+    // A meditate gain the countdown didn't expect moves the meditate grid and leaves
+    // a running mana countdown where the last pass put it.
+    [Fact]
+    public void ParaMud_OffCountdownMeditateGain_LeavesTheManaCycleAlone()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        state.Ma = 50;
+        state.Ma = 167;                             // the mana pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(2));
+        state.Position = PlayerPosition.Meditating;
+        clock.Advance(TimeSpan.FromSeconds(8));     // 10 s after the pass
+        state.Ma = 196;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        AssertSeconds(20, tracker.GetTimeToNextMpNaturalTick());
+        tracker.Dispose();
+    }
+
+    [Fact]
+    public void Stock_MeditateCycleCountsFromTheCommand()
+    {
+        var (state, tracker, clock) = Setup();
+        state.Ma = 50;
+        state.Ma = 57;                              // the 30 s pass, at T0
+        clock.Advance(TimeSpan.FromSeconds(22));
+        state.Position = PlayerPosition.Meditating;
+
+        AssertSeconds(15, tracker.GetTimeToNextMpMediTick());
+        tracker.Dispose();
+    }
+
     [Fact]
     public void Stock_RestCycleCountsFromLyingDown()
     {
