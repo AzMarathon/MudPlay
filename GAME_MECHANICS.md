@@ -2102,7 +2102,7 @@ How one damage spell cast against a monster is worked out.
     for a player on Stock** (`cmp edx,0x61`; a monster target caps at 98), so the chance is that figure
     in 99. MMUD-Explorer's sim caps it at 98 (MR 196), which
     the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
-  - **Paradigm prints `You negate <monster>'s cast of <spell>!`** for a monster spell that does nothing to you *([OBSERVED] 2026-10-03, reports `paradigm-20261003-194358` / `paradigm-20261003-201253`: `You negate vengeful spirit's cast of necromantic beam!`, 94 times across the two captures)*. `[NEEDS CONFIRMATION]`: is this the same full-resist roll as Stock's `You resisted…` line, or a separate anti-magic negate?
+  - **Paradigm prints `You negate <monster>'s cast of <spell>!`** for a monster spell that does nothing to you *([OBSERVED] 2026-10-03, reports `paradigm-20261003-194358` / `paradigm-20261003-201253`: `You negate vengeful spirit's cast of necromantic beam!`, 94 times across the two captures)*. It is the same full resist as Stock's `You resisted…` line, under Paradigm's wording *([CONFIRMED] 2026-10-03, user)*.
 - **Client use:**
   - The `UserMisses` pattern skips any `You … 's cast of …!` line. Before 2026-10-03 the Paradigm negate line counted as a miss of our own and as a confirmed cast of our attack spell (`CombatManager.OnAttackCastConfirmed`), spending its cast cap (report `paradigm-20261003-194358`).
   - Character Info's Magic Res tooltip (`CharacterInfoSectionViewModel.ComputeMagicResTip`) and Monster
