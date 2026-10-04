@@ -1,10 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.23**
-> - Emergency heal no longer loses the round to a Major heal picked on a half-landed round: a mid-round HP read is always held until the round settles, whichever part of the client asks first
-> - A heal sent off a round's hits keeps that round's cast slot, so a second heal isn't sent into `You have already cast a spell this round!`
-> - New **Cure after combat** box beside each cure spell (Settings → Spells): ticked, that cure waits until the fight is over, on you or a party member, so the round's cast stays free for healing
+> **Version 3.144.0**
+> - Chest Offload: each open is read against a fresh `i` taken just before it, so items already carried or picked up between chests no longer show as chest loot; a chest opened by typing `open <chest>` counts too
+> - Chest Offload: Sell All and Sell walk to the shop first when you aren't standing in it, then sell on arrival
+> - Character Info: a carried chest has a treasure-chest icon that opens the Chest Offload window
+> - Chest Offload: the list keeps after the window closes (saved with the character) until each item is sold, dropped or taken off with ✕; Clear list empties it
+> - Chest Offload: each chest's contents and coin are said to the room when it's opened
+> - Chest Offload: Sell Tour walks to every shop and sells the list after you confirm exactly what goes; every sale is capped at what the chests gave, so items you already had are never sold
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
