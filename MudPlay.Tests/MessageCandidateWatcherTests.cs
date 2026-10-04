@@ -475,6 +475,23 @@ public sealed class MessageCandidateWatcherTests
     }
 
     [Fact]
+    public void LiteralAppliedMessage_IsMatchedAsSubstring()
+    {
+        // A gypsy card's record holds only the opening of its reading, which is what
+        // ConditionTracker latches the card on. The wire line runs on past it (and
+        // opens with a quote), so an exact comparison staged every draw for review.
+        Harness h = new();
+        h.Messages.Messages.Add(MakeTemplateRecord(
+            "card-knight",
+            applied: "The Knight is both protector and aggressor",
+            endsWith: "The gaze of luck is no longer upon you"));
+
+        h.Feed("\"The Knight is both protector and aggressor. Strength and vigilance shall");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
     public void PlaceholderOnlyTemplate_DoesNotSuppressUnrelatedLines()
     {
         // A template with no literal text compiles to a pattern matching virtually

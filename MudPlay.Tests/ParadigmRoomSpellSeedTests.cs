@@ -105,6 +105,50 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
         Assert.Empty(candidates.Candidates);
     }
 
+    // The lines a 2026-10-03 unrecognized-lines export still carried: the eight card
+    // readings a deck of cards deals (their records hold the opening of each quote),
+    // and the cry of the dark cultists.
+    [Theory]
+    [InlineData("\"The Knight is both protector and aggressor. Strength and vigilance shall")]
+    [InlineData("\"The Wheel of Fortune, when played in this instance, indicates that luck is")]
+    [InlineData("\"The Wizard symbolizes mystical power and prodigious intelligence. You may")]
+    [InlineData("\"When the Priest is played, wisdom and insight are paramount. Faith and")]
+    [InlineData("\"The Grail! A most fortuitous card, the Grail symbolizes life itself. You")]
+    [InlineData("\"The Sun is a boon to all those who search for things concealed. Keen")]
+    [InlineData("\"The Angel indicates that you are being watched over. Protection is yours,")]
+    [InlineData("\"The Chariot symbolizes mastery over movement. Speed and endurance are its")]
+    [InlineData("The fanatic screams \"Death to those who oppose the Blood God!\"")]
+    public void AttributedLine_IsRecognized_NotStaged(string line)
+    {
+        MessageStore messages = new();
+        messages.Messages.ReplaceAll(_records);
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        MessageCandidateStore candidates = new();
+        using MessageCandidateWatcher watcher = new(router, messages, candidates);
+        watcher.NotifyInGame();
+
+        var emitted = new LineExtractor.EmittedLine(
+            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false);
+        Invoke(watcher, "OnLine", emitted);
+        Invoke(watcher, "CommitPending");
+
+        Assert.Empty(candidates.Candidates);
+    }
+
+    [Fact]
+    public void DarkCultistRecord_IsLinkedToTheMonster_AndItsIdMatchesItsFields()
+    {
+        MessageRecord r = _records.Single(m => m.Links is { } links
+            && links.Any(k => k.Table == "Monsters" && k.Number == 29));
+
+        Assert.Equal("The fanatic screams \"Death to those who oppose the Blood God!\"", r.WitnessMessage);
+        Assert.Equal(
+            MessageRecord.ComputeId(r.Name, r.CasterMessage, r.TargetMessage,
+                r.WitnessMessage, r.AppliedMessage, r.AppliedEndsWith),
+            r.Id);
+    }
+
     private static void Invoke(MessageCandidateWatcher watcher, string method, params object[] args) =>
         typeof(MessageCandidateWatcher)
             .GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!

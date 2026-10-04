@@ -26341,5 +26341,24 @@
     ],
     "ConfuseFumbleLine": "",
     "CastResponse": ""
+  },
+  {
+    "Id": "07b3084883951b02",
+    "Name": "dark cultist",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "The fanatic screams \"Death to those who oppose the Blood God!\"",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Monsters",
+        "Number": 29
+      }
+    ],
+    "ConfuseFumbleLine": "",
+    "CastResponse": ""
   }
 ]

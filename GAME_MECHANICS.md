@@ -3145,6 +3145,16 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 - A spell effect on the monster moves it in a picked random direction when its value beats `genrdn(0,100)` (`_perform_routine_spell_monster_upkeep` @ `0x44a37b`).
 - A trapdoor action pushes every monster in the room through the exit as a forced move (@ `0x46c86a`).
 
+### Monster flavor lines
+*Status: CONFIRMED 2026-10-03 (user) · Realm: Paradigm (not recorded for Stock)*
+
+- **A monster can print a flavor line of its own that is no attack, spell or movement.** The dark cultists' is `The fanatic screams "Death to those who oppose the Blood God!"` *([CONFIRMED] 2026-10-03, user; [OBSERVED] twice in the dark cultist #29 lair at 1/1139, Paradigm unrecognized-lines export 2026-10-03)*.
+- **The text is not in the imported game data** *([OBSERVED] 2026-10-03)*: neither the Monsters row nor any textblock carries it (the cultists' `GreetTXT` 43 holds only greet triggers).
+- `[NEEDS CONFIRMATION]` What makes a monster print its flavor line (a timer, the fight, a death)? And do Stock's dark cultists print the same one?
+
+**Client use:**
+- The Paradigm message seed carries it as a record linked to Monsters #29 (`WitnessMessage`), so `MessageCandidateWatcher` no longer stages it. Nothing acts on the line.
+
 ### Monster movement lines
 
 *Status: CONFIRMED 2026-09-09 (user) for yellow-indexed arrival names; CONFIRMED 2026-09-24 (user + contributor capture, PR #690) for generic movement lines*
@@ -5077,6 +5087,7 @@ There is no room to drop amethyst pendant here.
   - death `A deathly curse be upon you! The shadow of death hovers at your door`; fool `Fools often wander the land in ignorant bliss`; swamp `The Swamp swallows life and slows travel`; demon `as a Demon hovers about you`; void `Unending darkness is the hallmark of the Void`.
 - **Client use:**
   - The message seeds key each card record on its own quote, and the shared `The gaze of luck is upon you` line sits on the deck's own record (`card deck draw` / `card-draw`). With all thirteen records on the shared line, one draw latched every card and the void's Confused flag held navigation (report `paradigm-20261002-120516`).
+  - `MessageCandidateWatcher` treats a line as recognized when a record's applied (or wear-off) wording appears anywhere in it, the same test `ConditionTracker` uses. The card records hold only the opening of each quote, and the wire line begins with a `"` and runs on past it, so until 2026-10-03 every draw was staged as an unrecognized line while the card itself was being recognised.
   - The Spell Book lists the Paradigm deck as a cast-on-use item marked *carried, not worn*.
   - `SpellEffectFormatter` leaves ability 15 out of a spell's effect text: it is a marker, not an effect.
   - `TerminalEmulator.CompleteRowBeforeLeaving` completes a written row when the cursor is moved off it, so the row naming the card reaches `ConditionTracker`. Before that only LF-ended rows were emitted, no card was ever recognised, and the Buff Watchdog drew again over a wanted card (report `paradigm-20261002-140334`). `MessageCandidateWatcher` drops the picture's rows.
