@@ -4,7 +4,7 @@
 
 - Emergency heal no longer loses the round to a Major heal picked on a half-landed round: a mid-round HP read is always held until the round settles, whichever part of the client asks first
 - A heal sent off a round's hits keeps that round's cast slot, so a second heal isn't sent into `You have already cast a spell this round!`
-- No cures mid-fight: poison, holds/knockdowns, disease and blindness (yours or a party member's) wait until the fight is over, so the round's cast stays free for healing
+- New **Cure after combat** box beside each cure spell (Settings → Spells): ticked, that cure waits until the fight is over, on you or a party member, so the round's cast stays free for healing
 - bug reports addressed: paradigm-20261004-054304
 
 ## 3.143.21

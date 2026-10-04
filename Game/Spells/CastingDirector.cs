@@ -31,8 +31,8 @@ namespace MudPlay.Game.Spells;
 //   - Curing — remove an active ailment. The actual ailment state comes from
 //     ConditionTracker (game-data Messages tab owns the patterns). Per-ailment cure
 //     spells are CureHoldsSpell etc. Internal order inside the Curing slot:
-//     movement-prevented → poison → disease → blindness. Every cure waits until the
-//     fight is over (CureWaitsForFightEnd).
+//     movement-prevented → poison → disease → blindness. A cure ticked "Cure after
+//     combat" waits until the fight is over (CureWaitsForFightEnd).
 //   - Buffing — recast player buffs (Bless1–10 slots).
 //   - Debuffing — an in-between action sourced from the combat engine. The DECISION
 //     (config + once-per-room / once-per-target gating) is owned by CombatManager /
@@ -2129,11 +2129,9 @@ public sealed class CastingDirector : IDisposable
     // the target string.
     private CastCandidate? PickCure(SpellsSettings spells)
     {
-        CastCandidate? cure = PickSelfCure(spells) is { } selfSpell
-            ? new CastCandidate(selfSpell, Target: null)
-            : PickPartyCure(spells);
-        if (cure is { } due && CureWaitsForFightEnd(due)) return null;
-        return cure;
+        if (PickSelfCure(spells) is { } selfSpell)
+            return new CastCandidate(selfSpell, Target: null);
+        return PickPartyCure(spells);
     }
 
     // Walk the cure-priority list and return the first configured spell whose
@@ -2145,19 +2143,19 @@ public sealed class CastingDirector : IDisposable
         if (_conditions is null) return null;
 
         if (_conditions.IsMovementPrevented
-         && !string.IsNullOrWhiteSpace(spells.CureHoldsSpell))
+         && SelfCureDue(spells.CureHoldsSpell, spells.CureHoldsAfterCombat))
             return spells.CureHoldsSpell;
 
         if (_conditions.IsPoisoned
-         && !string.IsNullOrWhiteSpace(spells.CurePoisonSpell))
+         && SelfCureDue(spells.CurePoisonSpell, spells.CurePoisonAfterCombat))
             return spells.CurePoisonSpell;
 
         if (_conditions.IsDiseased
-         && !string.IsNullOrWhiteSpace(spells.CureDiseaseSpell))
+         && SelfCureDue(spells.CureDiseaseSpell, spells.CureDiseaseAfterCombat))
             return spells.CureDiseaseSpell;
 
         if (_conditions.IsBlinded
-         && !string.IsNullOrWhiteSpace(spells.CureBlindnessSpell))
+         && SelfCureDue(spells.CureBlindnessSpell, spells.CureBlindnessAfterCombat))
             return spells.CureBlindnessSpell;
 
         // No CureConfusion picker on SpellsSettings yet (legacy: rare
@@ -2167,19 +2165,21 @@ public sealed class CastingDirector : IDisposable
         return null;
     }
 
-    // Every cure — ours or a party member's — waits until the fight is over; in a
-    // fight the between-round cast is for healing. A cure takes the round's one
-    // between-round cast, so no heal can go out that round, and the next hit usually
-    // puts the poison or knockdown straight back (user, 2026-10-04; report
-    // paradigm-20261004-054304). InCombat stays true until the room is clear, through
-    // the *Combat Off* between kills. A hold that also stops attacks (paralysis, stun)
-    // blocks every cast anyway (AttacksPrevented). Logged once per fight per cure.
-    private bool CureWaitsForFightEnd(CastCandidate cure)
+    private bool SelfCureDue(string? spell, bool afterCombat) =>
+        !string.IsNullOrWhiteSpace(spell) && !CureWaitsForFightEnd(spell, target: null, afterCombat);
+
+    // A cure ticked "Cure after combat" sits the fight out, on us or on a party
+    // member, and the picker moves on to the next ailment. A cure takes the round's
+    // one between-round cast, and the next hit often puts the poison or knockdown
+    // straight back (report paradigm-20261004-054304), so a user can keep that cast
+    // for healing. InCombat stays true until the room is clear, through the
+    // *Combat Off* between kills. Logged once per fight per cure.
+    private bool CureWaitsForFightEnd(string spell, string? target, bool afterCombat)
     {
-        if (!_state.InCombat) return false;
-        string key = cure.Target is { } target ? $"{cure.Spell} {target}" : cure.Spell;
+        if (!afterCombat || !_state.InCombat) return false;
+        string key = target is null ? spell : $"{spell} {target}";
         if (_curesHeldThisFight.Add(key))
-            _log?.Combat(LogCategory, $"Curing {key} held until the fight is over");
+            _log?.Combat(LogCategory, $"Curing {key} held until the fight is over (Cure after combat)");
         return true;
     }
 
@@ -2200,33 +2200,38 @@ public sealed class CastingDirector : IDisposable
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
-            CastCandidate? cure = PartyCureFor(m, m.Held, spells.CureHoldsSpell)
-                ?? PartyCureFor(m, m.Poisoned, spells.CurePoisonSpell)
-                ?? PartyCureFor(m, m.Diseased, spells.CureDiseaseSpell)
-                ?? PartyCureFor(m, m.Blinded, spells.CureBlindnessSpell);
+            CastCandidate? cure =
+                PartyCureFor(m, m.Held, spells.CureHoldsSpell, spells.CureHoldsAfterCombat)
+                ?? PartyCureFor(m, m.Poisoned, spells.CurePoisonSpell, spells.CurePoisonAfterCombat)
+                ?? PartyCureFor(m, m.Diseased, spells.CureDiseaseSpell, spells.CureDiseaseAfterCombat)
+                ?? PartyCureFor(m, m.Blinded, spells.CureBlindnessSpell, spells.CureBlindnessAfterCombat);
             if (cure is not null) return cure;
         }
         return null;
     }
 
     // The cure for one of a member's ailments, or null when they don't have it, no
-    // spell is configured, or the spell is in its back-off for them (so the picker
-    // moves on to their next ailment, then the next member). A chip that has stayed
-    // clear since the last cast means the cure took: the back-off record is dropped.
-    private CastCandidate? PartyCureFor(PartyMember m, bool afflicted, string? spell)
+    // spell is configured, the spell is in its back-off for them, or it is waiting for
+    // the fight to end (so the picker moves on to their next ailment, then the next
+    // member). A chip that has stayed clear since the last cast means the cure took:
+    // the back-off record is dropped.
+    private CastCandidate? PartyCureFor(PartyMember m, bool afflicted, string? spell, bool afterCombat)
     {
         if (string.IsNullOrWhiteSpace(spell) || MemberTarget(m) is not { } target) return null;
         string key = PartyCureKey(spell, target);
-        if (!_partyCures.TryGetValue(key, out (DateTime At, int Casts) last))
-            return afflicted ? new CastCandidate(spell, target) : null;
-
-        TimeSpan since = _now() - last.At;
-        if (!afflicted)
+        if (_partyCures.TryGetValue(key, out (DateTime At, int Casts) last))
         {
-            if (since >= PartyCureSettledAfter) _partyCures.Remove(key);
-            return null;
+            TimeSpan since = _now() - last.At;
+            if (!afflicted)
+            {
+                if (since >= PartyCureSettledAfter) _partyCures.Remove(key);
+                return null;
+            }
+            if (since < PartyCureWindow(last.Casts)) return null;
         }
-        return since < PartyCureWindow(last.Casts) ? null : new CastCandidate(spell, target);
+        else if (!afflicted) return null;
+
+        return CureWaitsForFightEnd(spell, target, afterCombat) ? null : new CastCandidate(spell, target);
     }
 
     private static string PartyCureKey(string spell, string target) => $"{spell} {target}";

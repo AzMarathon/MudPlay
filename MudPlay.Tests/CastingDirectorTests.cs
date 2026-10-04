@@ -1033,12 +1033,27 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Cure_Poisoned_MidFight_WaitsForTheFightToEnd()
+    public void Cure_Poisoned_MidFight_CastsWhenNoHealIsDue()
+    {
+        // The default: a round that needs no heal spends its cast on the cure.
+        using CureHarness h = new();
+        h.Spells.CurePoisonSpell = "cure";
+        h.RecordCondition("Poison", MessageFlags.Poisoned, "poisoned!");
+        h.State.InCombat = true;
+
+        h.FeedLine("You have been poisoned!");
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "cure" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Cure_Poisoned_AfterCombatTicked_WaitsForTheFightToEnd()
     {
         // Report paradigm-20261004-054304 (05:35:36): cure poison went out with the
         // locust still alive, spending the round's cast; its next bite re-poisons.
         using CureHarness h = new();
         h.Spells.CurePoisonSpell = "cure";
+        h.Spells.CurePoisonAfterCombat = true;
         h.RecordCondition("Poison", MessageFlags.Poisoned, "poisoned!");
         h.State.InCombat = true;
 
@@ -1051,12 +1066,13 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Cure_KnockedDown_MidFight_WaitsForTheFightToEnd()
+    public void Cure_KnockedDown_AfterCombatTicked_WaitsForTheFightToEnd()
     {
         // Same report (05:38:46): curp cast mid-fight after the grimhound's trample
         // knocked us down.
         using CureHarness h = new();
         h.Spells.CureHoldsSpell = "curp";
+        h.Spells.CureHoldsAfterCombat = true;
         h.RecordCondition("knockdown", MessageFlags.MovementPrevented,
             "You are knocked off your feet, and land with a heavy thump!");
         h.State.InCombat = true;
@@ -1070,10 +1086,11 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Cure_Diseased_MidFight_WaitsForTheFightToEnd()
+    public void Cure_Diseased_AfterCombatTicked_WaitsForTheFightToEnd()
     {
         using CureHarness h = new();
         h.Spells.CureDiseaseSpell = "cdes";
+        h.Spells.CureDiseaseAfterCombat = true;
         h.RecordCondition("Disease", MessageFlags.Diseased, "diseased!");
         h.State.InCombat = true;
 
@@ -1091,6 +1108,7 @@ public sealed class CastingDirectorTests
         // A held cure ranked above the heal must not hold the heal behind it.
         using CureHarness h = new();
         h.Spells.CurePoisonSpell = "cure";
+        h.Spells.CurePoisonAfterCombat = true;
         h.Spells.MinorHealSpell = "grhe";
         h.Spells.PriorityCuring = 1;
         h.Health.MinorHealCombatTrigger = 70;
@@ -3566,11 +3584,11 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void PartyCure_MidFight_WaitsForTheFightToEnd()
+    public void PartyCure_AfterCombatTicked_WaitsForTheFightToEnd()
     {
-        // In a fight the between-round cast is for healing only (user, 2026-10-04).
         using PartyHarness h = new();
         h.Spells.CurePoisonSpell = "neutralize";
+        h.Spells.CurePoisonAfterCombat = true;
         h.State.InCombat = true;
         PartyMember tank = h.AddMember("Tank", hpPercent: 100);
         tank.Poisoned = true;
@@ -3580,6 +3598,23 @@ public sealed class CastingDirectorTests
 
         h.State.InCombat = false;
         Assert.Equal(new[] { "neutralize Tank" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyCure_AfterCombatTickedForOneCure_StillCastsTheOthersMidFight()
+    {
+        // Each cure has its own box: a held poison cure doesn't hold the hold cure.
+        using PartyHarness h = new();
+        h.Spells.CurePoisonSpell = "neutralize";
+        h.Spells.CurePoisonAfterCombat = true;
+        h.Spells.CureHoldsSpell = "curp";
+        h.State.InCombat = true;
+        PartyMember tank = h.AddMember("Tank", hpPercent: 100);
+        tank.Poisoned = true;
+        tank.Held = true;
+
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "curp Tank" }, h.CastsSent);
     }
 
     // Report paradigm-20261003-131851: a cure-poison too weak for the poison left the

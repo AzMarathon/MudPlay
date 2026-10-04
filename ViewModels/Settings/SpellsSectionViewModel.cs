@@ -142,6 +142,11 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     [NotifyPropertyChangedFor(nameof(CureBlindnessSpellUnlearned))]
     private string? _cureBlindnessSpell;
 
+    [ObservableProperty] private bool _cureHoldsAfterCombat;
+    [ObservableProperty] private bool _curePoisonAfterCombat;
+    [ObservableProperty] private bool _cureDiseaseAfterCombat;
+    [ObservableProperty] private bool _cureBlindnessAfterCombat;
+
     // Red-outline flags — the slot names a spell the character hasn't learned.
     // All pick from SpellSuggestions (spell-only). Re-raised on the name
     // change (attributes above) and on a spellbook change (OnSpellbookChanged).
@@ -360,6 +365,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         CurePoisonSpell    = NullIfBlank(CurePoisonSpell),
         CureDiseaseSpell   = NullIfBlank(CureDiseaseSpell),
         CureBlindnessSpell = NullIfBlank(CureBlindnessSpell),
+        CureHoldsAfterCombat     = CureHoldsAfterCombat,
+        CurePoisonAfterCombat    = CurePoisonAfterCombat,
+        CureDiseaseAfterCombat   = CureDiseaseAfterCombat,
+        CureBlindnessAfterCombat = CureBlindnessAfterCombat,
 
         SelfBlessWhileResting = SelfBlessWhileResting,
         SelfBlessDuringCombat = SelfBlessDuringCombat,
@@ -421,6 +430,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         CurePoisonSpell    = dto.CurePoisonSpell;
         CureDiseaseSpell   = dto.CureDiseaseSpell;
         CureBlindnessSpell = dto.CureBlindnessSpell;
+        CureHoldsAfterCombat     = dto.CureHoldsAfterCombat;
+        CurePoisonAfterCombat    = dto.CurePoisonAfterCombat;
+        CureDiseaseAfterCombat   = dto.CureDiseaseAfterCombat;
+        CureBlindnessAfterCombat = dto.CureBlindnessAfterCombat;
 
         SelfBlessWhileResting = dto.SelfBlessWhileResting;
         SelfBlessDuringCombat = dto.SelfBlessDuringCombat;
@@ -468,6 +481,10 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     partial void OnCurePoisonSpellChanged(string? value)     => MarkDirty();
     partial void OnCureDiseaseSpellChanged(string? value)    => MarkDirty();
     partial void OnCureBlindnessSpellChanged(string? value)  => MarkDirty();
+    partial void OnCureHoldsAfterCombatChanged(bool value)     => MarkDirty();
+    partial void OnCurePoisonAfterCombatChanged(bool value)    => MarkDirty();
+    partial void OnCureDiseaseAfterCombatChanged(bool value)   => MarkDirty();
+    partial void OnCureBlindnessAfterCombatChanged(bool value) => MarkDirty();
 
     partial void OnSelfBlessWhileRestingChanged(bool value)  => MarkDirty();
     partial void OnSelfBlessDuringCombatChanged(bool value)  => MarkDirty();
