@@ -70,7 +70,7 @@
                                 <DataTemplate x:DataType="vm:ChestContainerRow">
                                     <Button Content="{Binding Display}" Command="{Binding OpenCommand}"
                                             Margin="0,0,6,6"
-                                            ToolTip.Tip="Send &quot;open&quot; for this container"/>
+                                            ToolTip.Tip="Read your inventory, send &quot;open&quot; for this container, then read it again — only what this open added is listed"/>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -115,6 +115,9 @@
                     <TextBlock Text="Open a container above to see what's sellable."
                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                IsVisible="{Binding !HasLoot}"/>
+                    <TextBlock Text="{Binding SellStatus}" TextWrapping="Wrap"
+                               Foreground="{StaticResource AccentAmberBrush}"
+                               IsVisible="{Binding HasSellStatus}"/>
 
                     <ItemsControl ItemsSource="{Binding ShopGroups}">
                         <ItemsControl.ItemTemplate>
@@ -138,7 +141,7 @@
                                                        Foreground="{StaticResource AccentAmberBrush}"/>
                                             <Button Grid.Column="2" Content="Sell All" Command="{Binding SellCommand}"
                                                     Margin="0,0,6,0"
-                                                    ToolTip.Tip="Send the sell commands for every item's quantity below (do this while standing in the shop)"/>
+                                                    ToolTip.Tip="Sell every item's quantity below at this shop — walks there first when you aren't standing in it"/>
                                             <Button Grid.Column="3" Content="Drop All" Command="{Binding DropAllCommand}"
                                                     ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan"/>
                                         </Grid>
@@ -200,7 +203,7 @@
                                                                    Margin="10,0,8,0" MinWidth="90"/>
                                                         <Button Grid.Column="5" Content="Sell" Command="{Binding SellCommand}"
                                                                 Margin="0,0,6,0"
-                                                                ToolTip.Tip="Sell the quantity picked above (do this while standing in the shop). The row updates when the game confirms the sale — a refused sale changes nothing."/>
+                                                                ToolTip.Tip="Sell the quantity picked above at this item's shop — walks there first when you aren't standing in it. The row updates when the game confirms the sale — a refused sale changes nothing."/>
                                                         <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
                                                                 ToolTip.Tip="Drop this item's whole held stack. The row updates when the game confirms the drop."/>
                                                     </Grid>

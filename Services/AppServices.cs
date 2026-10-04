@@ -495,6 +495,10 @@ public sealed class AppServices
     // restock at the BBS cleanup time. Persisted on the character profile.
     public Game.Inventory.ItemUseCountTracker ItemUseCounts { get; private set; } = null!;
 
+    // Typed `open <target>` watcher — lets the Chest Offload window track a chest
+    // opened from the terminal.
+    public Game.Inventory.OutboundOpenObserver OutboundOpen { get; } = new();
+
     // Realm-aware charge lookup over the two trackers above, shared by Character Info
     // and the @uses remote query so their readouts never diverge.
     public Game.Inventory.CarriedChargeReadout CarriedCharges { get; private set; } = null!;

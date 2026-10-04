@@ -3547,6 +3547,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Stock use-counting — counts an outbound `use <item>` for a limited-use item
         // (stock has no charge line; no-op on Paradigm, which reads the look reply).
         AppServices.Current.ItemUseCounts.ObserveOutbound(data);
+        // Chest Offload — a typed `open <chest>` is tracked like the window's own Open.
+        AppServices.Current.OutboundOpen.ObserveOutbound(data);
         AppServices.Current.Telepaths.Send(data);
     }
 
