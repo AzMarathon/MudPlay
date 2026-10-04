@@ -10,6 +10,9 @@ namespace MudPlay.Game.Inventory;
 // be unit-tested; the view-model supplies the item→shop and pricing lookups.
 public static class ChestOffloadPlanner
 {
+    // Items.ItemType of a container — a chest, box or other thing you `open`.
+    public const int ContainerItemType = 8;
+
     // Per-item count gains between two carried-item lists (the display tokens from
     // an InventorySnapshot, e.g. "3 piece of amber"). Counts are count-prefix aware
     // (CountedCommand.SplitLeadingCount), grouped by the bare singular name. Only
@@ -50,6 +53,35 @@ public static class ChestOffloadPlanner
                 wordMatch = name;
         }
         return wordMatch;
+    }
+
+    // What a chest gave, as room-say lines: "oak chest dropped: 2 moonstone, ruby,
+    // 12 gold". Parts never split; a list too long for one line carries on in
+    // "<chest> (more): …" lines, each within maxChars. Empty when it gave nothing.
+    public static IReadOnlyList<string> AnnounceLines(
+        string chest, IReadOnlyList<(string Name, int Count)> items, IReadOnlyList<string> coins, int maxChars)
+    {
+        var parts = items.Select(i => i.Count > 1 ? $"{i.Count} {i.Name}" : i.Name).Concat(coins).ToList();
+        var lines = new List<string>();
+        if (parts.Count == 0) return lines;
+
+        string head = $"{chest} dropped: ";
+        var line = new System.Text.StringBuilder(head);
+        bool empty = true;
+        foreach (string part in parts)
+        {
+            if (!empty && line.Length + 2 + part.Length > maxChars)
+            {
+                lines.Add(line.ToString());
+                line.Clear().Append($"{chest} (more): ");
+                empty = true;
+            }
+            if (!empty) line.Append(", ");
+            line.Append(part);
+            empty = false;
+        }
+        lines.Add(line.ToString());
+        return lines;
     }
 
     internal static Dictionary<string, int> CountByName(IReadOnlyList<string> tokens)

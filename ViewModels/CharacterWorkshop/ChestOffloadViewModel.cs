@@ -15,15 +15,13 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// Chest Offload window: open the containers you're holding (here or by typing
-// `open <chest>`), diff a fresh inventory read before and after each open to show the
-// coin the chest gave and every new item — grouped into the fewest shops with a charm
-// picker and per-item sell quantities. Sell walks to the shop first when you aren't
-// standing in it.
+// Chest Offload window: a view over ChestOpenTracker's list of chest loot (which
+// lives on past the window and is saved on the profile) — open the containers you're
+// holding, see the coin and items the chests gave grouped into the fewest shops with a
+// charm picker and per-item sell quantities, and sell (walking to the shop first when
+// you aren't standing in it), drop, or take items off the list.
 public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogViewModel<bool>, IDisposable
 {
-    public const int ContainerItemType = 8;
-
     // The one open Chest Offload window. Two would both read the inventory and diff
     // the same chest opens, so every way in raises this one instead.
     private static ChestOffloadViewModel? _openWindow;
@@ -61,28 +59,13 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private readonly Action<RoomKey> _queueWalk;
     private readonly Action<RoomKey> _goWalk;
     private readonly AutoWalkManager? _walker;
-    private readonly OutboundOpenObserver? _typedOpen;
-    private readonly DispatcherTimer _reparse;
-    // How long to wait for an open's before / after `i` before going on with the
-    // cached inventory instead.
-    private readonly DispatcherTimer _readTimeout;
+    private readonly ChestOpenTracker _chests;
     private readonly LogDiagnosticState? _diagnostics;
     private readonly LogService? _log;
     private const string LogCategory = "ChestOffload";
 
-    // Items and coin are attributed per open: each open is diffed against a fresh
-    // inventory read taken just before it, so what was already carried, picked up
-    // between opens, or paid for a sale never counts as chest loot.
-    private readonly ChestLootLedger _ledger = new();
-    private CurrencyHoldings _chestCoin = CurrencyHoldings.Empty;   // accumulated across opens
-
-    // An open in flight: read the inventory, open, read it again.
-    private enum OpenStep { Idle, ReadingBefore, AwaitingAfter }
-    private OpenStep _openStep = OpenStep.Idle;
-    private string _openTarget = "";
-    private IReadOnlyList<string> _preOpenCarried = Array.Empty<string>();
-    private CurrencyHoldings? _preOpenCurrency;                     // coin held just before the in-flight open
-    private bool _settlePending;                                    // set once the forced 'i' is sent, awaiting the re-parse
+    // Coin shown while the Simulate Chest test button drives the view.
+    private CurrencyHoldings _simCoin = CurrencyHoldings.Empty;
 
     // A Sell that's walking to its shop first; it sells when the walk arrives.
     private sealed record PendingSell(RoomKey Room, int Shop, string ShopName, Action SellNow);
@@ -113,7 +96,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         AppServices.Current.Currency,
         cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo,
         cmds => AppServices.Current.InventoryAction.SendPaced(cmds),
-        AppServices.Current.GoWalkTo, AppServices.Current.Walker, AppServices.Current.OutboundOpen)
+        AppServices.Current.ChestOpens, AppServices.Current.GoWalkTo, AppServices.Current.Walker)
     { }
 
     public ChestOffloadViewModel(
@@ -121,11 +104,11 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         ItemNameStore itemNames, PlayerStats stats, GameDataCache gameData,
         RoomTracker tracker, BfsMapper bfs, MovementFilter movement, CurrencyNaming naming,
         Action<string> send, Action<RoomKey> queueWalk,
-        Action<IReadOnlyList<string>>? sendPaced = null,
-        Action<RoomKey>? goWalk = null, AutoWalkManager? walker = null,
-        OutboundOpenObserver? typedOpen = null)
+        Action<IReadOnlyList<string>> sendPaced, ChestOpenTracker chests,
+        Action<RoomKey>? goWalk = null, AutoWalkManager? walker = null)
     {
-        _sendPaced = sendPaced ?? (cmds => { foreach (string cmd in cmds) send(cmd); });
+        _sendPaced = sendPaced;
+        _chests = chests;
         _inventory = inventory;
         _shops = shops;
         _rooms = rooms;
@@ -140,29 +123,12 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _queueWalk = queueWalk;
         _goWalk = goWalk ?? queueWalk;
         _walker = walker;
-        _typedOpen = typedOpen;
 
         _charm = stats.Charm > 0 ? stats.Charm : 50;
 
-        RebuildContainers(_inventory.Snapshot);
-
-        // Force an inventory re-read a beat after the loot spills, then diff. The
-        // 'i' is what makes the chest's coin visible (chest give-lines carry no
-        // coin), so the re-parse it triggers is the "after" snapshot for the open.
-        _readTimeout = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _readTimeout.Tick += (_, _) => OnReadTimeout();
-        _reparse = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
-        _reparse.Tick += (_, _) =>
-        {
-            _reparse.Stop();
-            _settlePending = true;
-            _send("i");
-            _readTimeout.Stop();
-            _readTimeout.Start();
-        };
-        _inventory.FullInventoryParsed += OnFullInventoryParsed;
+        _chests.Changed += OnChestsChanged;
+        _inventory.Changed += OnInventoryChanged;
         if (_walker is not null) _walker.Event += OnWalkerEvent;
-        if (_typedOpen is not null) _typedOpen.OpenSent += OnTypedOpen;
         // Reconcile the list against the game's OWN confirmed sell/drop lines, so a
         // refused sale changes nothing and a partial one reduces only that item.
         _inventory.ItemSold += OnItemSold;
@@ -174,8 +140,10 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         if (_diagnostics is not null) _diagnostics.Changed += OnDiagnosticsChanged;
         _log = AppServices.CurrentOrNull?.Log;
 
+        RebuildLoot();
         _log?.Info(LogCategory,
-            $"window opened — charm {_charm}, {Containers.Count} container(s) held");
+            $"window opened — charm {_charm}, {Containers.Count} container(s) held, " +
+            $"{ShopGroups.Sum(g => g.Items.Count) + Unsellable.Count} item(s) on the list");
     }
 
     // Reveal the test-only "Simulate Chest" button — gated by the Log pane toggle,
@@ -191,94 +159,29 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         foreach (string token in snap.CarriedItems)
         {
             (int count, string name) = CountedCommand.SplitLeadingCount(token);
-            if (_itemNames.FindByName(name) is int n && _itemNames.ItemTypeOf(n) == ContainerItemType)
+            if (_itemNames.FindByName(name) is int n && _itemNames.ItemTypeOf(n) == ChestOffloadPlanner.ContainerItemType)
                 Containers.Add(new ChestContainerRow(name, count, () => OpenContainer(name)));
         }
         OnPropertyChanged(nameof(HasContainers));
     }
 
-    // The Open button: read the inventory first, so the "before" is what's really
-    // carried this moment rather than a cached copy, then open (OnFullInventoryParsed).
     private void OpenContainer(string name)
     {
-        if (_openStep != OpenStep.Idle)
-        {
-            _log?.Info(LogCategory, $"open {name} ignored — {_openTarget} is still being opened");
-            return;
-        }
-        _simulating = false;   // a real open returns to the live-inventory diff
-        _openTarget = name;
-        _openStep = OpenStep.ReadingBefore;
-        _settlePending = false;
-        _log?.Info(LogCategory, $"open {name} — reading inventory first for the before snapshot");
-        _send("i");
-        _readTimeout.Stop();
-        _readTimeout.Start();
+        _simulating = false;   // a real open returns to the tracker's list
+        _chests.Open(name);
     }
 
-    // `open <chest>` typed in the terminal. It's already on the wire, so there's no
-    // reading the inventory first: the cached one is the before (kept current by the
-    // gets and drops it tracks, and refreshed by the last open's after-read).
-    private void OnTypedOpen(string target) => Dispatcher.UIThread.Post(() =>
+    // The tracker's list changed as a whole (an open settled, a row was taken off, the
+    // list was cleared). Sells and drops don't come through here — they reconcile row
+    // by row (OnItemSold / OnItemDropped) so the user's sell quantities and ⇄ shop
+    // moves survive. Simulated chests keep their own view.
+    private void OnChestsChanged()
     {
-        if (_openStep != OpenStep.Idle) return;
-        InventorySnapshot snap = _inventory.Snapshot;
-        if (ChestOffloadPlanner.MatchContainer(target, Containers.Where(c => !c.Simulated).Select(c => c.Name))
-            is not { } name)
-            return;
-        _simulating = false;
-        _openTarget = name;
-        _log?.Info(LogCategory, $"typed open {name} — using the cached inventory as the before snapshot");
-        StartAfterRead(snap);
-    });
-
-    // An `i` that never parsed (cut off by combat output, say) mustn't leave the open
-    // stuck: go on with the cached inventory, which the give lines keep current.
-    private void OnReadTimeout()
-    {
-        _readTimeout.Stop();
-        if (_openStep == OpenStep.ReadingBefore)
-        {
-            _log?.Info(LogCategory, $"no inventory read in {_readTimeout.Interval.TotalSeconds:0}s — opening {_openTarget} on the cached inventory");
-            SendOpen(_inventory.Snapshot);
-        }
-        else if (_openStep == OpenStep.AwaitingAfter && _settlePending)
-        {
-            _log?.Info(LogCategory, $"no inventory read in {_readTimeout.Interval.TotalSeconds:0}s after opening {_openTarget} — diffing the cached inventory");
-            RebuildLoot();
-        }
+        if (!_simulating) RebuildLoot();
     }
 
-    private void SendOpen(InventorySnapshot before)
-    {
-        _readTimeout.Stop();
-        _send($"open {_openTarget}");
-        StartAfterRead(before);
-    }
-
-    // Hold the before snapshot and re-read the inventory once the loot has spilled.
-    private void StartAfterRead(InventorySnapshot before)
-    {
-        _preOpenCarried = before.CarriedItems;
-        _preOpenCurrency = before.Currency;
-        _settlePending = false;                            // don't attribute until the forced 'i' lands
-        _openStep = OpenStep.AwaitingAfter;
-        _log?.Info(LogCategory, $"opened {_openTarget} — re-reading inventory in {_reparse.Interval.TotalMilliseconds:F0}ms for the loot + coin diff");
-        _reparse.Stop();
-        _reparse.Start();
-    }
-
-    // A full `i` landed: either the before-read of a button open (now send the open) or
-    // the after-read of an open (now diff it). Only that after-read rebuilds the list —
-    // sells and drops reconcile row by row (OnItemSold / OnItemDropped) so the user's
-    // sell quantities and ⇄ shop moves survive. Simulated chests never rebuild from
-    // live inventory.
-    private void OnFullInventoryParsed() => Dispatcher.UIThread.Post(() =>
-    {
-        if (_simulating) return;
-        if (_openStep == OpenStep.ReadingBefore) { SendOpen(_inventory.Snapshot); return; }
-        if (_openStep == OpenStep.AwaitingAfter && _settlePending) RebuildLoot();
-    });
+    // The containers held can change any time (a chest picked up or opened).
+    private void OnInventoryChanged() => Dispatcher.UIThread.Post(() => RebuildContainers(_inventory.Snapshot));
 
     // The game confirmed a sale of `count` of `name` (the player's own "You sold …").
     // Reduce that row and drop it at zero, leaving every other row's edits intact.
@@ -305,7 +208,6 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             $"{(sold ? "sold" : "dropped")} {count} {name} confirmed — held {before}→{row.Gained}" +
             (empty ? " (row cleared)" : $", sell qty now {row.SellQty}"));
 
-        _ledger.Remove(name, count);
         if (empty)
         {
             group.Items.Remove(row);
@@ -332,42 +234,9 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     {
         InventorySnapshot snap = _inventory.Snapshot;
         RebuildContainers(snap);
-
-        // The before→after delta of THIS open is its coin and its items.
-        if (_preOpenCurrency is { } pre)
-        {
-            CurrencyHoldings gain = CoinGain(pre, snap.Currency);
-            _chestCoin = AddCoins(_chestCoin, gain);
-            _log?.Info(LogCategory, $"open settled — coin this open +{gain.TotalCopperValue}c (accumulated {_chestCoin.TotalCopperValue}c)");
-        }
-        IReadOnlyList<(string Name, int Count)> opened = _ledger.AddOpen(_preOpenCarried, snap.CarriedItems);
-        _preOpenCurrency = null;
-        _settlePending = false;
-        _openStep = OpenStep.Idle;
-        _readTimeout.Stop();
-        RebuildCoinGains(_chestCoin);
-
-        IReadOnlyList<(string Name, int Count)> loot = _ledger.Current(snap.CarriedItems);
-        _log?.Info(LogCategory,
-            $"{_openTarget} gave {opened.Count} item type(s): " +
-            (opened.Count == 0 ? "nothing" : string.Join(", ", opened.Select(g => $"{g.Count} {g.Name}"))) +
-            $" — {loot.Count} item type(s) to offload");
-        RenderLoot(loot);
+        RebuildCoinGains(_chests.Coin);
+        RenderLoot(_chests.Loot(snap.CarriedItems));
     }
-
-    // Positive per-denomination coin an open added (before → after). Clamped at
-    // zero per denomination — an open only adds coin, never removes it.
-    private static CurrencyHoldings CoinGain(CurrencyHoldings before, CurrencyHoldings now) => new(
-        Math.Max(0, now.Copper - before.Copper),
-        Math.Max(0, now.Silver - before.Silver),
-        Math.Max(0, now.Gold - before.Gold),
-        Math.Max(0, now.Platinum - before.Platinum),
-        Math.Max(0, now.Runic - before.Runic),
-        Math.Max(0, now.TotalCopperValue - before.TotalCopperValue));
-
-    private static CurrencyHoldings AddCoins(CurrencyHoldings a, CurrencyHoldings b) => new(
-        a.Copper + b.Copper, a.Silver + b.Silver, a.Gold + b.Gold,
-        a.Platinum + b.Platinum, a.Runic + b.Runic, a.TotalCopperValue + b.TotalCopperValue);
 
     // Turn a set of (item name, count) gains into the priced, shop-grouped view.
     // Shared by the real inventory diff and the "Simulate Chest" test button.
@@ -385,7 +254,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         foreach ((string name, int count) in gains)
         {
             if (_itemNames.FindByName(name) is not int number) continue;
-            if (_itemNames.ItemTypeOf(number) == ContainerItemType) continue;   // don't sell chests
+            if (_itemNames.ItemTypeOf(number) == ChestOffloadPlanner.ContainerItemType) continue;   // don't sell chests
             loot.Add(new LootItem(name, count, BaseCopperOf(number), _shops.ShopsSelling(number)));
         }
 
@@ -404,14 +273,15 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
                 group.Items.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper,
                     li.Shops, shopNum,
                     it => { GroupOf(it)?.Retotal(); UpdateGrandTotal(); },
-                    DropItem, BuildShopChoices, MoveItemToShop, SellItem));
+                    DropItem, BuildShopChoices, MoveItemToShop, SellItem, RemoveItem));
             group.Reprice(Charm, _gameData.ActiveRealm);
             ShopGroups.Add(group);
         }
 
         Unsellable.Clear();
         foreach (LootItem li in noShop)
-            Unsellable.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper, li.Shops, 0, null));
+            Unsellable.Add(new ChestOffloadItemRow(li.Name, li.Count, li.BaseCopper, li.Shops, 0, null,
+                onRemove: RemoveItem));
 
         UpdateGrandTotal();
         OnPropertyChanged(nameof(HasLoot));
@@ -508,12 +378,9 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void SimulateChest()
     {
-        _simulating = true;   // hold the simulated view against real inventory refreshes
-        _preOpenCurrency = null; _settlePending = false;   // drop any in-flight real open
-        _openStep = OpenStep.Idle;
-        _readTimeout.Stop();
-        _chestCoin = CurrencyHoldings.Empty;               // fresh test run
-        RebuildCoinGains(_chestCoin);
+        _simulating = true;   // hold the simulated view against the tracker's list
+        _simCoin = CurrencyHoldings.Empty;                 // fresh test run
+        RebuildCoinGains(_simCoin);
         _chestTables ??= ChestContentsReader.ReadAll(_gameData);
         for (int i = Containers.Count - 1; i >= 0; i--)
             if (Containers[i].Simulated) Containers.RemoveAt(i);
@@ -537,8 +404,12 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _send($"open {name}");
 
         // No real currency change to diff in simulation, so add a believable spill.
-        _chestCoin = AddCoins(_chestCoin, RandomCoinGain());
-        RebuildCoinGains(_chestCoin);
+        CurrencyHoldings spill = RandomCoinGain();
+        _simCoin = new CurrencyHoldings(
+            _simCoin.Copper + spill.Copper, _simCoin.Silver + spill.Silver, _simCoin.Gold + spill.Gold,
+            _simCoin.Platinum + spill.Platinum, _simCoin.Runic + spill.Runic,
+            _simCoin.TotalCopperValue + spill.TotalCopperValue);
+        RebuildCoinGains(_simCoin);
 
         if (_chestTables is null || !_chestTables.TryGetValue(number, out ChestContents? contents)
             || contents.Drops.Count == 0)
@@ -576,6 +447,42 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void Close() => CloseRequested?.Invoke(false);
+
+    // Take one item off the list (it stays in the pack). The tracker's Changed
+    // rebuilds the view.
+    private void RemoveItem(ChestOffloadItemRow item)
+    {
+        if (_simulating) { RemoveRow(item); return; }
+        _chests.RemoveItem(item.Name);
+    }
+
+    // Empty the whole list and the coin tally.
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void ClearList()
+    {
+        if (_simulating)
+        {
+            _simulating = false;
+            _simCoin = CurrencyHoldings.Empty;
+        }
+        _chests.Clear();
+        RebuildLoot();
+    }
+
+    // A simulated row has nothing in the tracker behind it — just drop it from view.
+    private void RemoveRow(ChestOffloadItemRow item)
+    {
+        if (GroupOf(item) is { } group)
+        {
+            group.Items.Remove(item);
+            if (group.Items.Count == 0) ShopGroups.Remove(group);
+            else group.Retotal();
+        }
+        else Unsellable.Remove(item);
+        UpdateGrandTotal();
+        OnPropertyChanged(nameof(HasLoot));
+        OnPropertyChanged(nameof(HasUnsellable));
+    }
 
     private void SellGroup(ChestOffloadShopGroup group)
     {
@@ -758,14 +665,12 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     public void Dispose()
     {
-        _inventory.FullInventoryParsed -= OnFullInventoryParsed;
+        _chests.Changed -= OnChestsChanged;
+        _inventory.Changed -= OnInventoryChanged;
         if (_walker is not null) _walker.Event -= OnWalkerEvent;
-        if (_typedOpen is not null) _typedOpen.OpenSent -= OnTypedOpen;
-        _readTimeout.Stop();
         _inventory.ItemSold -= OnItemSold;
         _inventory.ItemDropped -= OnItemDropped;
         if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
-        _reparse.Stop();
         _log?.Info(LogCategory, "window closed");
     }
 
