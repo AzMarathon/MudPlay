@@ -126,6 +126,80 @@ public sealed class ChestOpenTrackerTests : IDisposable
     }
 
     [Fact]
+    public void TwoChestsBackToBack_AddUp_WithoutDoubleCounting()
+    {
+        // The first chest gives 2 moonstone; the second 1 moonstone and a ruby. The
+        // second open's before already holds the first chest's loot, so the list ends
+        // at 3 moonstone and a ruby — not 5.
+        Inventory("oak chest, iron chest", gold: 10);
+        _tracker.Open("oak chest");
+        Inventory("oak chest, iron chest", gold: 10);
+        RunScheduled();
+        Inventory("iron chest, 2 moonstone", gold: 10);
+
+        _tracker.Open("iron chest");
+        Inventory("iron chest, 2 moonstone", gold: 10);
+        RunScheduled();
+        Inventory("3 moonstone, ruby", gold: 12);
+
+        Assert.Equal(new[] { ("moonstone", 3), ("ruby", 1) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
+        Assert.Contains(".oak chest dropped: 2 moonstone", _sent);
+        Assert.Contains(".iron chest dropped: moonstone, ruby, 2 gold", _sent);
+    }
+
+    [Fact]
+    public void SecondOpenClick_WhileTheFirstIsInFlight_WaitsItsTurn()
+    {
+        Inventory("oak chest, iron chest", gold: 10);
+        _tracker.Open("oak chest");
+        _tracker.Open("iron chest");                      // clicked straight away — queued
+        Inventory("oak chest, iron chest", gold: 10);    // oak's before-read
+        Assert.Equal(new[] { "i", "open oak chest" }, _sent);
+
+        RunScheduled();
+        Inventory("iron chest, 2 moonstone", gold: 10);  // oak's after-read → iron starts
+        Assert.Equal("i", _sent.Last());
+        Inventory("iron chest, 2 moonstone", gold: 10);  // iron's before-read
+        RunScheduled();
+        Inventory("3 moonstone, ruby", gold: 10);
+
+        Assert.Contains("open iron chest", _sent);
+        Assert.Equal(new[] { ("moonstone", 3), ("ruby", 1) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
+    }
+
+    [Fact]
+    public void ChestTypedOpenWhileTheButtonsReadIsOut_IsCountedOnce()
+    {
+        // The iron chest's loot lands before the oak chest's before-read parses. The
+        // before is taken from the moment it was typed, so its loot still counts.
+        Inventory("oak chest, iron chest", gold: 10);
+        _tracker.Open("oak chest");
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes("open iron chest\r\n"));
+        Inventory("oak chest, ruby", gold: 10);          // before-read already shows the ruby
+        RunScheduled();
+        Inventory("ruby, 2 moonstone", gold: 10);
+
+        Assert.Equal(new[] { ("ruby", 1), ("moonstone", 2) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
+        Assert.Contains(_sent, l => l.StartsWith(".oak chest + iron chest dropped: "));
+    }
+
+    [Fact]
+    public void ChestTypedOpenAfterTheAfterReadWentOut_GetsAFollowUpRead()
+    {
+        Inventory("oak chest, iron chest", gold: 10);
+        _tracker.Open("oak chest");
+        Inventory("oak chest, iron chest", gold: 10);
+        RunScheduled();                                  // oak's after `i` is out
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes("open iron chest\r\n"));
+        Inventory("iron chest, 2 moonstone", gold: 10);  // oak's after-read, before iron's spill
+        RunScheduled();                                  // the follow-up after `i`
+        Inventory("2 moonstone, ruby", gold: 10);
+
+        Assert.Equal(new[] { ("moonstone", 2), ("ruby", 1) }, _tracker.Loot(_inv.Snapshot.CarriedItems));
+        Assert.Contains(".iron chest dropped: ruby", _sent);
+    }
+
+    [Fact]
     public void TypedOpen_IsTrackedToo()
     {
         Inventory("oak chest, 2 rusty dagger", gold: 10);

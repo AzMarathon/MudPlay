@@ -10,6 +10,7 @@
 - Chest Offload: Sell Tour walks to every shop and sells the list after you confirm exactly what goes; every sale is capped at what the chests gave, so items you already had are never sold
 - Chest Offload: shop headers and the Sell Tour prompt show each shop's steps and walking time, and the prompt each shop's sale value and the whole tour's walk
 - Chest Offload: Sell Tour skips a shop whose items were all taken off the list, sold or dropped, instead of walking there for nothing
+- Chest Offload: opening a second chest while the first is still being read no longer drops it — a click waits its turn, a typed open is caught by the read that sees its loot
 
 ## 3.143.23
 

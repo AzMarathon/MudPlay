@@ -10,7 +10,10 @@ namespace MudPlay.Game.Inventory;
 // or by typing `open <chest>` — whether or not the window is up. An open reads the
 // inventory (`i`), opens, and reads it again; only what that one open added joins
 // the list (ChestLootLedger), and its contents and coin are said to the room so
-// everyone there knows what dropped. The list is saved on the character profile and
+// everyone there knows what dropped. Chests opened back to back add up without
+// double counting: each open's before is the read after the last one. A second Open
+// click while one is in flight waits its turn; a second chest typed open mid-flight
+// joins whichever diff will see its loot. The list is saved on the character profile and
 // stays until the items are sold, dropped, or the player removes them, so closing
 // the window (or the client) never loses it. UI thread only: line and inventory
 // events arrive through `post`.
@@ -40,7 +43,19 @@ public sealed class ChestOpenTracker : IDisposable
 
     private enum Step { Idle, ReadingBefore, AwaitingAfter }
     private Step _step = Step.Idle;
-    private string _target = "";
+    // The container the Open button is opening (what `open` is sent for).
+    private string _buttonTarget = "";
+    // Every container whose loot the current before/after diff covers — the button's
+    // one plus any typed open that landed inside the same diff.
+    private readonly List<string> _opened = new();
+    // Open clicks that came while another open was in flight: run in turn after it.
+    private readonly Queue<string> _queued = new();
+    // A typed open that landed while the button's before-read was still out: the
+    // cached inventory at that moment, which can't contain either chest's loot yet.
+    private InventorySnapshot? _beforeOverride;
+    // Typed opens that landed after the after-read went out: their loot may show in
+    // that read or only after it, so a follow-up diff starts from it.
+    private readonly List<string> _followUp = new();
     private IReadOnlyList<string> _beforeCarried = Array.Empty<string>();
     private CurrencyHoldings _beforeCoin = CurrencyHoldings.Empty;
     private bool _afterReadSent;
@@ -88,10 +103,14 @@ public sealed class ChestOpenTracker : IDisposable
     {
         if (_step != Step.Idle)
         {
-            _log?.Info(LogCategory, $"open {name} ignored — {_target} is still being opened");
+            _queued.Enqueue(name);
+            _log?.Info(LogCategory, $"open {name} queued — {Label(_opened)} is still being opened");
             return;
         }
-        _target = name;
+        _buttonTarget = name;
+        _opened.Clear();
+        _opened.Add(name);
+        _beforeOverride = null;
         _step = Step.ReadingBefore;
         _log?.Info(LogCategory, $"open {name} — reading inventory first for the before snapshot");
         _send("i");
@@ -116,38 +135,62 @@ public sealed class ChestOpenTracker : IDisposable
     }
 
     // `open <chest>` typed in the terminal. It's already on the wire, so the cached
-    // inventory is the before (kept current by the gets and drops it tracks).
+    // inventory is the before (kept current by the gets and drops it tracks). One that
+    // lands while another open is in flight joins whichever diff will see its loot.
     private void OnTypedOpen(string target) => _post(() =>
     {
-        if (_step != Step.Idle) return;
         InventorySnapshot snap = _inventory.Snapshot;
         IEnumerable<string> containers = snap.CarriedItems
             .Select(t => CountedCommand.SplitLeadingCount(t).Name)
             .Where(_isContainer);
         if (ChestOffloadPlanner.MatchContainer(target, containers) is not { } name) return;
-        _target = name;
-        _log?.Info(LogCategory, $"typed open {name} — using the cached inventory as the before snapshot");
-        StartAfterRead(snap);
+        switch (_step)
+        {
+            case Step.Idle:
+                _opened.Clear();
+                _opened.Add(name);
+                _log?.Info(LogCategory, $"typed open {name} — using the cached inventory as the before snapshot");
+                StartAfterRead(snap);
+                break;
+            case Step.ReadingBefore:
+                // Its loot may beat the button's before-read, so the before has to be
+                // what was carried before either chest opened.
+                _beforeOverride ??= snap;
+                _opened.Add(name);
+                _log?.Info(LogCategory, $"typed open {name} while {_buttonTarget}'s inventory read was out — one diff covers both");
+                break;
+            case Step.AwaitingAfter when !_afterReadSent:
+                _opened.Add(name);
+                _log?.Info(LogCategory, $"typed open {name} before the after-read — counted with {Label(_opened)}");
+                break;
+            default:
+                _followUp.Add(name);
+                _log?.Info(LogCategory, $"typed open {name} after the after-read went out — a follow-up read will catch its loot");
+                break;
+        }
     });
+
+    private static string Label(IReadOnlyList<string> names) => string.Join(" + ", names);
 
     private void OnReadTimeout(int gen)
     {
         if (gen != _generation) return;
         if (_step == Step.ReadingBefore)
         {
-            _log?.Info(LogCategory, $"no inventory read in {ReadTimeoutMs / 1000}s — opening {_target} on the cached inventory");
-            SendOpen(_inventory.Snapshot);
+            _log?.Info(LogCategory, $"no inventory read in {ReadTimeoutMs / 1000}s — opening {_buttonTarget} on the cached inventory");
+            SendOpen(_beforeOverride ?? _inventory.Snapshot);
         }
         else if (_step == Step.AwaitingAfter && _afterReadSent)
         {
-            _log?.Info(LogCategory, $"no inventory read in {ReadTimeoutMs / 1000}s after opening {_target} — diffing the cached inventory");
+            _log?.Info(LogCategory, $"no inventory read in {ReadTimeoutMs / 1000}s after opening {Label(_opened)} — diffing the cached inventory");
             Settle(_inventory.Snapshot);
         }
     }
 
     private void SendOpen(InventorySnapshot before)
     {
-        _send($"open {_target}");
+        _beforeOverride = null;
+        _send($"open {_buttonTarget}");
         StartAfterRead(before);
     }
 
@@ -173,7 +216,7 @@ public sealed class ChestOpenTracker : IDisposable
     private void OnFullInventoryParsed() => _post(() =>
     {
         InventorySnapshot snap = _inventory.Snapshot;
-        if (_step == Step.ReadingBefore) { SendOpen(snap); return; }
+        if (_step == Step.ReadingBefore) { SendOpen(_beforeOverride ?? snap); return; }
         if (_step == Step.AwaitingAfter)
         {
             if (_afterReadSent) Settle(snap);
@@ -195,15 +238,26 @@ public sealed class ChestOpenTracker : IDisposable
         IReadOnlyList<(string Name, int Count)> items = _ledger.AddOpen(_beforeCarried, after.CarriedItems);
         _coin = AddCoins(_coin, coin);
         _ledger.Prune(after.CarriedItems);
+        string label = Label(_opened);
         _log?.Info(LogCategory,
-            $"{_target} gave " +
+            $"{label} gave " +
             (items.Count == 0 ? "no items" : string.Join(", ", items.Select(g => $"{g.Count} {g.Name}"))) +
             $" and {coin.TotalCopperValue}c");
-        Announce(items, coin);
+        Announce(label, items, coin);
         SaveAndNotify();
+
+        // A chest typed open after the after-read went out: diff again from this read.
+        if (_followUp.Count > 0)
+        {
+            _opened.Clear();
+            _opened.AddRange(_followUp);
+            _followUp.Clear();
+            StartAfterRead(after);
+        }
+        else if (_queued.Count > 0) Open(_queued.Dequeue());
     }
 
-    private void Announce(IReadOnlyList<(string Name, int Count)> items, CurrencyHoldings coin)
+    private void Announce(string label, IReadOnlyList<(string Name, int Count)> items, CurrencyHoldings coin)
     {
         var coins = new List<string>();
         if (coin.Runic > 0) coins.Add($"{coin.Runic:N0} {_runicName()}");
@@ -211,7 +265,7 @@ public sealed class ChestOpenTracker : IDisposable
         if (coin.Gold > 0) coins.Add($"{coin.Gold:N0} gold");
         if (coin.Silver > 0) coins.Add($"{coin.Silver:N0} silver");
         if (coin.Copper > 0) coins.Add($"{coin.Copper:N0} copper");
-        foreach (string line in ChestOffloadPlanner.AnnounceLines(_target, items, coins, AnnounceMaxChars))
+        foreach (string line in ChestOffloadPlanner.AnnounceLines(label, items, coins, AnnounceMaxChars))
             _send("." + line);
     }
 
@@ -229,6 +283,9 @@ public sealed class ChestOpenTracker : IDisposable
     {
         ++_generation;
         _step = Step.Idle;
+        _queued.Clear();
+        _followUp.Clear();
+        _beforeOverride = null;
         LoadFromProfile();
         Changed?.Invoke();
     });
