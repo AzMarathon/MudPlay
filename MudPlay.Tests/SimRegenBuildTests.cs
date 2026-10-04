@@ -64,9 +64,10 @@ public sealed class SimRegenBuildTests : IDisposable
         Assert.Equal(new[] { 2.0, 2.0, 3.0, 7.0, 7.0, 7.0, 2.0, 2.0, 3.0, 7.0 },
             Enumerable.Range(1, 10).Select(t => regen.RestTickHp(t, 25)));
 
-        // Without the ring: 2 a gain and 6 as the full gain, nothing extra.
+        // The same character with the ring off (report paradigm-20261004-142359):
+        // +2 +2 +2 +6 +6 +6.
         Assert.Equal(0, regen.StandingPassExtra(0));
-        Assert.Equal(new[] { 2.0, 2.0, 2.0, 6.0 }, Enumerable.Range(1, 4).Select(t => regen.RestTickHp(t)));
+        Assert.Equal(new[] { 2.0, 2.0, 2.0, 6.0, 6.0, 6.0, 2.0 }, Enumerable.Range(1, 7).Select(t => regen.RestTickHp(t)));
     }
 
     [Fact]
