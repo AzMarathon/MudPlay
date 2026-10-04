@@ -1710,6 +1710,12 @@ public sealed class MapControl : Control
         _staticZoom = _zoom;
         if (_staticLayer is not { } layer) return;
         layer.RenderTransform = null;
+        // A cached visual is only drawn again when its cache or transform has changed
+        // since the last draw; an invalidate alone leaves the old picture up. A pan or
+        // zoom always moved the transform first, so those redrew — an overlay toggle
+        // did not, and showed only after the view was next moved (report
+        // paradigm-20261004-013848). A fresh cache makes every redraw land.
+        layer.CacheMode = new BitmapCache();
         layer.InvalidateVisual();
     }
 
