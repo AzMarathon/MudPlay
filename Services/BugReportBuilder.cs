@@ -839,6 +839,34 @@ public static class BugReportBuilder
         StringBuilder sb = new();
         Kv(sb, "Current mana", $"{svc.PlayerState.Ma}/{svc.PlayerState.MaxMa}");
 
+        // What the Spell Book believes the character can cast and has learned. The
+        // Buff Watchdog's pickers are built from exactly this, so a "my spell isn't
+        // offered" report needs the gate it was built under and what fell outside it.
+        Game.Spells.SpellbookState book = svc.Spellbook;
+        string alignGate = book.CharAlign switch
+        {
+            0 => "unknown (nothing filtered)",
+            1 => "Good",
+            2 => "Neutral",
+            3 => "Evil",
+            4 => "evil, short of Outlaw (no evil-only spells)",
+            _ => book.CharAlign.ToString(),
+        };
+        Kv(sb, "Spell book", $"class #{book.ClassNumber}, level {book.Level}, alignment gate {alignGate}; "
+            + $"{book.ClassSpells.Count} spell(s) in the class list, {book.Available.Count} usable under that gate, "
+            + $"{book.ObtainedCount} learned");
+        HashSet<string> slottedCodes = new(
+            (svc.Profile.Current?.PartyBuffs?.Slots ?? new List<Models.Profile.BuffSlot>())
+                .Where(slot => !string.IsNullOrWhiteSpace(slot.Spell)).Select(slot => slot.Spell!.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+        List<string> unslotted = book.Available
+            .Where(spell => Game.Spells.BuffClassifier.IsAnyBuff(spell) && book.IsObtained(spell.Number)
+                && !slottedCodes.Contains(spell.Short.Trim()))
+            .Select(spell => $"{spell.Short.Trim()} ({spell.Name}, level {spell.ReqLevel})")
+            .ToList();
+        Kv(sb, "Learned buffs with no Buff Watchdog slot",
+            unslotted.Count == 0 ? "(none)" : string.Join(", ", unslotted));
+
         // Buff-duration timers CastingDirector believes are still running, straight
         // from its own tracking (not re-derived) — a timer surviving past a real
         // death is the direct symptom of report paradigm-20260824-012300 (the
@@ -984,7 +1012,9 @@ public static class BugReportBuilder
     // the engine) rather than a sentinel number.
     private static string SpellResolutionLine(AppServices svc, string label, string code)
     {
-        int? number = svc.SpellShort.NumberByShort(code);
+        // The character's own spell for the code first: several spells can share one
+        // (a priest's three word spells), and the set-wide index knows only the first.
+        int? number = svc.Spellbook.FindByCastCode(code)?.Number ?? svc.SpellShort.NumberByShort(code);
         string head = $"{label}: `{code}`";
         if (number is not { } n)
             return $"{head} → (no Spells row with this short-code)";

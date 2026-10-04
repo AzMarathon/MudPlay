@@ -59,7 +59,7 @@
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                 BorderThickness="0,0,0,1"
                 Padding="10,6">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" VerticalAlignment="Center">
                 <TextBlock Grid.Column="0"
                            Text="{Binding HeaderText}"
                            HorizontalAlignment="Left"
@@ -91,7 +91,18 @@
                           FontSize="11"
                           Margin="0,0,10,0"
                           VerticalAlignment="Center"/>
-                <TextBox Grid.Column="3" Classes="clearable" MinWidth="180"
+                <!-- Alignment filter: a spell shows when any ticked alignment can use it. -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" Margin="0,0,10,0"
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="Show spells a character of each ticked alignment can use. A spell with no alignment requirement shows under all three.">
+                    <CheckBox IsChecked="{Binding ShowGood}" Content="Good"
+                              Foreground="{StaticResource ChromeFgSecBrush}" FontSize="11"/>
+                    <CheckBox IsChecked="{Binding ShowNeutral}" Content="Neutral"
+                              Foreground="{StaticResource ChromeFgSecBrush}" FontSize="11"/>
+                    <CheckBox IsChecked="{Binding ShowEvil}" Content="Evil"
+                              Foreground="{StaticResource ChromeFgSecBrush}" FontSize="11"/>
+                </StackPanel>
+                <TextBox Grid.Column="4" Classes="clearable" MinWidth="180"
                          PlaceholderText="Search code / name…"
                          Text="{Binding SearchText, Mode=TwoWay}"/>
             </Grid>

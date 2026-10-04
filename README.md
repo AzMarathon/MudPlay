@@ -1,14 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.8**
-> - Combat: bashing a door open is no longer taken for an attack you typed, so a buff cast on entering the next room no longer leaves the monsters un-attacked
-> - Combat: after an attack you really did type, an attack spell stopped by the engine's own heal or buff is re-cast on the next round instead of waiting for a monster to land a hit
-> - Weakness is no longer treated as a hold: no standing still or casting cure paralysis through every weakness or frail
-> - A monster that misses by reaching for you now counts as a swing, so the client attacks back instead of waiting for a hit to land
-> - Too heavy to move: a weakness or frail reads `i` straight away, and a character over its max waits (hold chip **Too heavy**) until it wears off or you shed weight; leaders and solo characters included
-> - Globe of darkness (Paradigm) is no longer treated as a hold either
-> - Paradigm: shrugging off a monster's spell (`You negate …'s cast of …!`) no longer counts as a miss of yours or as a cast of your attack spell toward its cast limit
+> **Version 3.143.11**
+> - A spell your `spells` list shows is marked learned even when the client's last-seen alignment would hide it, so it can be picked in the Buff Watchdog
+> - Spell Book: lists every spell the class can learn, with Good / Neutral / Evil boxes to filter by alignment
+> - Priest `word` spells: the one you've learned is the one the client casts and reports, and the other two are no longer listed as spells still to learn
+> - Bug report: the Spell Book's class, alignment gate and counts, and learned buffs that have no Buff Watchdog slot
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

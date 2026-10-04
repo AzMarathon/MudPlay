@@ -64,6 +64,47 @@ public sealed class SpellBookViewModelTests : IDisposable
         return book;
     }
 
+    // ----- alignment boxes -------------------------------------------------
+
+    private static readonly object[] _alignedSpells =
+    [
+        AffectSpellRow(300, "smite", "smit", magery: 1, mageryLvl: 1, reqLevel: 1, abilCode: 97, abilVal: 0),   // good only
+        AffectSpellRow(301, "blight", "blit", magery: 1, mageryLvl: 1, reqLevel: 1, abilCode: 98, abilVal: 0),  // evil only
+        AffectSpellRow(302, "ward", "ward", magery: 1, mageryLvl: 1, reqLevel: 1, abilCode: 111, abilVal: 0),   // not evil
+        SpellRow(303, "plain bolt", "bolt", magery: 1, mageryLvl: 1, reqLevel: 1),                              // ungated
+    ];
+
+    // The book lists the whole class whatever alignment the client last read: that
+    // reading can lag, and hiding rows on it made a learned spell look missing
+    // (report paradigm-20261003-215442).
+    [Fact]
+    public void Rows_ListEveryClassSpell_WhateverOurAlignmentReading()
+    {
+        SpellbookState book = NewBook(classNumber: 12, level: 5, spells: _alignedSpells);
+        book.Refresh(classNumber: 12, level: 5, charAlign: 1); // read as Good
+        using SpellBookViewModel vm = new(book);
+
+        Assert.Equal(new[] { "blight", "plain bolt", "smite", "ward" }, vm.Rows.Select(r => r.Name));
+        Assert.StartsWith("0 of 4 learned", vm.StatusText);
+    }
+
+    [Fact]
+    public void AlignmentBoxes_ShowSpellsAnyTickedAlignmentCanUse()
+    {
+        SpellbookState book = NewBook(classNumber: 12, level: 5, spells: _alignedSpells);
+        using SpellBookViewModel vm = new(book) { ShowGood = false, ShowNeutral = false };
+
+        // Evil only: its own spell and the ungated one; not the good-only or not-evil ones.
+        Assert.Equal(new[] { "blight", "plain bolt" }, vm.Rows.Select(r => r.Name));
+
+        vm.ShowNeutral = true;   // neutral can use the not-evil spell too
+        Assert.Equal(new[] { "blight", "plain bolt", "ward" }, vm.Rows.Select(r => r.Name));
+
+        vm.ShowEvil = false;
+        vm.ShowNeutral = false;  // nothing ticked: nothing to show
+        Assert.Empty(vm.Rows);
+    }
+
     [Fact]
     public void Rows_MirrorAvailableList_SortedByLevel()
     {

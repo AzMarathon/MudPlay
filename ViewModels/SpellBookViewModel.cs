@@ -1,12 +1,13 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Game.Calculators;
 using MudPlay.Game.Spells;
 
 namespace MudPlay.ViewModels;
 
 // Modeless Spell Book window VM. Renders the active class's full learnable
-// list (SpellbookState.Available) with an obtained checkmark and
+// list (SpellbookState.ClassSpells) with an obtained checkmark and
 // level-scaled effect / mana figures, rebuilding whenever the book's class,
 // level, or obtained set changes.
 //
@@ -99,12 +100,20 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     // (0).
     [ObservableProperty] private bool _showAllSpells;
 
+    // Alignment boxes: a spell shows when a character of any ticked alignment could
+    // use it. All three start ticked, so the whole class list shows — the client's
+    // own alignment reading can lag, and hiding rows on it made learned spells look
+    // missing (report paradigm-20261003-215442). An ungated spell fits all three.
+    [ObservableProperty] private bool _showGood = true;
+    [ObservableProperty] private bool _showNeutral = true;
+    [ObservableProperty] private bool _showEvil = true;
+
     // Window title-strip header: class + level.
     public string HeaderText
     {
         get
         {
-            if (_book.Available.Count == 0)
+            if (_book.ClassSpells.Count == 0)
                 return "Spell Book — no spells for this class";
             string? className = _classNameProvider?.Invoke();
             string classPart = string.IsNullOrWhiteSpace(className) ? "Spell Book" : className.Trim();
@@ -122,7 +131,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     {
         get
         {
-            if (_book.Available.Count == 0) return string.Empty;
+            if (_book.ClassSpells.Count == 0) return string.Empty;
             bool paradigm = _isParadigmProvider?.Invoke() ?? false;
             string text = "Success % = your Spellcasting + the spell's difficulty  "
                 + (paradigm ? "(capped at 100%)" : "(capped at 98%, 100% for Kai)");
@@ -139,7 +148,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     {
         get
         {
-            int total = _book.Available.Count;
+            int total = _book.ClassSpells.Count;
             if (total == 0) return "This class has no spell book.";
             string shown = Rows.Count == total ? string.Empty : $"  ·  showing {Rows.Count}";
             return $"{_book.ObtainedCount} of {total} learned{shown}";
@@ -149,6 +158,14 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
     partial void OnSearchTextChanged(string value) => Rebuild();
     partial void OnShowObtainedOnlyChanged(bool value) => Rebuild();
     partial void OnShowAllSpellsChanged(bool value) => Rebuild();
+    partial void OnShowGoodChanged(bool value) => Rebuild();
+    partial void OnShowNeutralChanged(bool value) => Rebuild();
+    partial void OnShowEvilChanged(bool value) => Rebuild();
+
+    private bool FitsATickedAlignment(in KnownSpell spell)
+        => (ShowGood && BuffClassifier.IsAlignmentEligible(spell.Formula, AlignmentBucket.Good))
+        || (ShowNeutral && BuffClassifier.IsAlignmentEligible(spell.Formula, AlignmentBucket.Neutral))
+        || (ShowEvil && BuffClassifier.IsAlignmentEligible(spell.Formula, AlignmentBucket.Evil));
     partial void OnSelectedCategoryChanged(SpellBookCategory value) => Rebuild();
 
     private void OnBookChanged()
@@ -166,7 +183,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
         // Number → formula map so chained end-cast (Abil 151) spells in the
         // same class list resolve to a real follow-up rather than dropping.
         Dictionary<int, SpellFormulaInput> byNumber = new();
-        foreach (KnownSpell s in _book.Available) byNumber[s.Number] = s.Formula;
+        foreach (KnownSpell s in _book.ClassSpells) byNumber[s.Number] = s.Formula;
         SpellFormulaInput? ResolveChain(int number)
             => byNumber.TryGetValue(number, out SpellFormulaInput f) ? f : null;
 
@@ -194,7 +211,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
 
         string filter = SearchText.Trim();
         Rows.Clear();
-        foreach (KnownSpell spell in _book.Available)
+        foreach (KnownSpell spell in _book.ClassSpells)
         {
             bool obtained = _book.IsObtained(spell.Number);
             if (ShowObtainedOnly && !obtained) continue;
@@ -203,6 +220,7 @@ public sealed partial class SpellBookViewModel : ObservableObject, IDisposable
             // Level gate (default): hide above-level spells unless Show-all is on.
             // Skipped when the level is unknown (0) so a fresh book isn't empty.
             if (!ShowAllSpells && _book.Level > 0 && effectiveLevel > _book.Level) continue;
+            if (!FitsATickedAlignment(spell)) continue;
             if (filter.Length > 0 && !Matches(spell, filter)) continue;
             if (!SpellBookCategoryClassifier.Matches(SelectedCategory, spell, _book.Level, ResolveChain)) continue;
             Rows.Add(new SpellBookRowViewModel(

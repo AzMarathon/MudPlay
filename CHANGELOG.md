@@ -1,5 +1,13 @@
 # Version history
 
+## 3.143.11
+
+- A spell your `spells` list shows is marked learned even when the client's last-seen alignment would hide it, so it can be picked in the Buff Watchdog
+- Spell Book: lists every spell the class can learn, with Good / Neutral / Evil boxes to filter by alignment
+- Priest `word` spells: the one you've learned is the one the client casts and reports, and the other two are no longer listed as spells still to learn
+- Bug report: the Spell Book's class, alignment gate and counts, and learned buffs that have no Buff Watchdog slot
+- bug reports addressed: paradigm-20261003-215442
+
 ## 3.143.8
 
 - Combat: bashing a door open is no longer taken for an attack you typed, so a buff cast on entering the next room no longer leaves the monsters un-attacked

@@ -31,6 +31,10 @@ public sealed class SpellbookState
     // from _obtainedNames whenever the class list rebuilds. Backs IsObtained.
     private readonly HashSet<int> _obtained = new();
     private List<KnownSpell> _available = new();
+    private IReadOnlyList<KnownSpell> _classSpells = Array.Empty<KnownSpell>();
+    // The class list as our alignment reading filters it, before learned spells are
+    // folded in. ComposeAvailable builds Available from it.
+    private IReadOnlyList<KnownSpell> _alignedSpells = Array.Empty<KnownSpell>();
     private SpellPick[] _availablePicks = Array.Empty<SpellPick>();
     // Cast-on-use items for the active class. GetClassCastItems is a full Items-table
     // scan, and the casting decision pass hits GetCastItems several times per pass
@@ -56,8 +60,17 @@ public sealed class SpellbookState
     // Character alignment used by the eligibility filter (0 = unknown / unrestricted).
     public int CharAlign { get; private set; }
 
-    // Every spell the current class can learn, sorted by ReqLevel then Name. Empty for non-magery classes.
+    // The spells the character can use: the class list less the alignment-gated
+    // spells our alignment reading rules out, plus anything already learned. Sorted
+    // by ReqLevel then Name. Empty for non-magery classes. The casting engines and
+    // pickers read this one — two priest spells share the cast code `word`, and only
+    // the alignment tells which the character means.
     public IReadOnlyList<KnownSpell> Available => _available;
+
+    // Every spell the class can learn, whatever our alignment. The Spell Book window
+    // lists these (its own boxes filter by alignment), and the game's `sp` list and
+    // learn line resolve against them.
+    public IReadOnlyList<KnownSpell> ClassSpells => _classSpells;
 
     // The Available spells as distinct (by cast-code) SpellPick entries, ordered
     // by name — the suggestion source for the Settings spell-picker typeahead
@@ -100,10 +113,15 @@ public sealed class SpellbookState
     {
         if (string.IsNullOrWhiteSpace(castCode)) return null;
         string target = castCode.Trim();
+        KnownSpell? first = null;
         foreach (KnownSpell s in _available)
-            if (string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
-                return s;
-        return null;
+        {
+            if (!string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase)) continue;
+            // The game casts the one in our spellbook, so a learned match wins.
+            if (_obtained.Contains(s.Number)) return s;
+            first ??= s;
+        }
+        return first;
     }
 
     // The cast-on-use items the active class can use (wands / scrolls / potions
@@ -247,26 +265,10 @@ public sealed class SpellbookState
 
     private void RebuildAvailable()
     {
-        List<KnownSpell> aligned = new(_catalog.Query(ClassNumber, level: 0, CharAlign));
-        // An alignment-gated spell the character has ALREADY obtained must never
-        // disappear just because their alignment has since drifted — MajorMUD
-        // doesn't retroactively un-teach a spell (an alignment-quest reward stays
-        // yours even if you later shift away from that alignment); only whether a
-        // NEW, not-yet-obtained spell can still be learned is gated by the CURRENT
-        // alignment. Union back in any already-obtained spell the filter excluded,
-        // reading the unfiltered (charAlign 0) list as the source of what to
-        // restore, then re-sort to keep Query's ReqLevel-then-Name order.
-        if (CharAlign != 0 && _obtainedNames.Count > 0)
-        {
-            HashSet<int> present = new(aligned.Select(s => s.Number));
-            foreach (KnownSpell s in _catalog.Query(ClassNumber, level: 0, charAlign: 0))
-            {
-                if (present.Contains(s.Number) || !_obtainedNames.Contains(s.Name)) continue;
-                aligned.Add(s);
-            }
-            aligned.Sort(KnownSpellCatalog.CompareByReqLevelThenName);
-        }
-        _available = aligned;
+        _alignedSpells = _catalog.Query(ClassNumber, level: 0, CharAlign);
+        _classSpells = CharAlign == 0
+            ? _alignedSpells
+            : _catalog.Query(ClassNumber, level: 0, charAlign: 0);
         // Class-scoped cast-item list is a full Items scan — resolve it once here,
         // on the same class-change / set-swap trigger, so per-pass GetCastItems reads
         // are free. GetClassCastItems keys only on class, so this is its full input.
@@ -274,8 +276,56 @@ public sealed class SpellbookState
         // The cast engines take readied gear, and a carried item only when it is a
         // draw item (a deck of cards) — that one has a use the Buff Watchdog drives.
         _castItems = _spellBookCastItems.Where(static item => !item.Carried || item.IsDraw).ToList();
+        ComposeAvailable();
+    }
+
+    // Available = what our alignment reading allows, plus every learned spell, less
+    // the spells a learned one rules out. Rebuilt whenever the class list or the
+    // learned names change.
+    //
+    // Learned spells come back in whatever the alignment reading says. The game
+    // never un-teaches a spell when alignment drifts (an alignment-quest reward
+    // stays yours), and the reading itself only moves on a `who` or `pro`: a spell
+    // it hid could otherwise never be marked learned, so it never reached the Buff
+    // Watchdog's pickers (report paradigm-20261003-215442).
+    //
+    // A learned spell owns its cast code. A priest's balanced / exalted / tainted
+    // word all cast as `word`; the alignment quest decides which one is learned and
+    // the other two can then never be (GAME_MECHANICS "The `spells` / `sp` command
+    // output"). Same-named twins are left alone: the learned set is keyed by name
+    // and can't tell them apart.
+    private void ComposeAvailable()
+    {
+        List<KnownSpell> list = new(_alignedSpells);
+        if (_obtainedNames.Count > 0 && !ReferenceEquals(_classSpells, _alignedSpells))
+        {
+            HashSet<int> present = new(list.Select(s => s.Number));
+            foreach (KnownSpell s in _classSpells)
+                if (!present.Contains(s.Number) && _obtainedNames.Contains(s.Name)) list.Add(s);
+            list.Sort(KnownSpellCatalog.CompareByReqLevelThenName);
+        }
+        _available = list;
         ResolveObtainedFromNames();
+
+        Dictionary<string, string> learnedByCode = new(StringComparer.OrdinalIgnoreCase);
+        foreach (KnownSpell s in list)
+            if (_obtained.Contains(s.Number) && !string.IsNullOrWhiteSpace(s.Short))
+                learnedByCode.TryAdd(s.Short.Trim(), s.Name);
+        list.RemoveAll(s => !_obtained.Contains(s.Number)
+            && learnedByCode.TryGetValue(s.Short.Trim(), out string? learnedName)
+            && !string.Equals(learnedName, s.Name, StringComparison.OrdinalIgnoreCase));
+
         RebuildAvailablePicks();
+    }
+
+    private KnownSpell? FindClassSpellByName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        string target = name.Trim();
+        foreach (KnownSpell s in _classSpells)
+            if (string.Equals(s.Name.Trim(), target, StringComparison.OrdinalIgnoreCase))
+                return s;
+        return null;
     }
 
     // Re-derive the obtained number cache from the authoritative obtained names
@@ -316,20 +366,13 @@ public sealed class SpellbookState
     {
         ArgumentNullException.ThrowIfNull(names);
         HashSet<string> nextNames = new(StringComparer.OrdinalIgnoreCase);
-        HashSet<int> nextNums = new();
         foreach (string name in names)
-            if (FindAvailableByName(name) is { } s)
-            {
-                nextNames.Add(s.Name);
-                nextNums.Add(s.Number);
-            }
+            if (FindClassSpellByName(name) is { } s) nextNames.Add(s.Name);
 
         if (nextNames.SetEquals(_obtainedNames)) return;
         _obtainedNames.Clear();
         _obtainedNames.UnionWith(nextNames);
-        _obtained.Clear();
-        _obtained.UnionWith(nextNums);
-        RebuildAvailablePicks();
+        ComposeAvailable();
         Changed?.Invoke();
     }
 
@@ -347,8 +390,7 @@ public sealed class SpellbookState
         if (nextNames.SetEquals(_obtainedNames)) return;
         _obtainedNames.Clear();
         _obtainedNames.UnionWith(nextNames);
-        ResolveObtainedFromNames();
-        RebuildAvailablePicks();
+        ComposeAvailable();
         Changed?.Invoke();
     }
 
@@ -358,14 +400,13 @@ public sealed class SpellbookState
     // Changed only when the spell was newly added.
     public KnownSpell? MarkObtainedByName(string name)
     {
-        if (FindAvailableByName(name) is not { } match) return null;
-        _obtainedNames.Add(match.Name);
-        if (_obtained.Add(match.Number))
+        if (FindClassSpellByName(name) is not { } match) return null;
+        if (_obtainedNames.Add(match.Name))
         {
-            RebuildAvailablePicks();
+            ComposeAvailable();
             Changed?.Invoke();
         }
-        return match;
+        return FindAvailableByName(match.Name) ?? match;
     }
 
     // Drop every obtained spell (reroll / "you have no spells"). Clears the
@@ -375,8 +416,7 @@ public sealed class SpellbookState
     {
         if (_obtained.Count == 0 && _obtainedNames.Count == 0) return;
         _obtainedNames.Clear();
-        _obtained.Clear();
-        RebuildAvailablePicks();
+        ComposeAvailable();
         Changed?.Invoke();
     }
 
