@@ -735,6 +735,11 @@ public sealed class CastingDirectorTests
         /// the round and holds the non-heal categories (cure / buff / debuff).</summary>
         public bool CombatTickDamageDriven { get; set; }
 
+        /// <summary>Runs on an HP change BEFORE the director's own handler — the app's
+        /// party self row is subscribed to PlayerState first and re-enters Evaluate
+        /// through its HpPercent change.</summary>
+        public Action? BeforeDirectorSeesHp { get; set; }
+
         /// <summary>Settled passes the director queued (delay, callback). Only
         /// captured after <see cref="EnableBurstSettle"/> — the burst-settle hold is
         /// off without a scheduler, so the rest of the suite keeps its reactive
@@ -800,6 +805,10 @@ public sealed class CastingDirectorTests
             Cast.SetWireSender(_ => { });
             Cast.CastSent += CastsSent.Add;
             Conditions = new ConditionTracker(Messages, Log);
+            State.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(PlayerState.Hp)) BeforeDirectorSeesHp?.Invoke();
+            };
             Director = new CastingDirector(State, Cast, Conditions,
                 readSpells: () => Spells,
                 readHealth: () => Health,
@@ -1021,6 +1030,94 @@ public sealed class CastingDirectorTests
 
         Assert.Equal(2, h.CastsSent.Count);
         Assert.All(h.CastsSent, c => Assert.Equal("grhe", c));
+    }
+
+    [Fact]
+    public void Cure_Poisoned_MidFight_CastsWhenNoHealIsDue()
+    {
+        // The default: a round that needs no heal spends its cast on the cure.
+        using CureHarness h = new();
+        h.Spells.CurePoisonSpell = "cure";
+        h.RecordCondition("Poison", MessageFlags.Poisoned, "poisoned!");
+        h.State.InCombat = true;
+
+        h.FeedLine("You have been poisoned!");
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "cure" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Cure_Poisoned_AfterCombatTicked_WaitsForTheFightToEnd()
+    {
+        // Report paradigm-20261004-054304 (05:35:36): cure poison went out with the
+        // locust still alive, spending the round's cast; its next bite re-poisons.
+        using CureHarness h = new();
+        h.Spells.CurePoisonSpell = "cure";
+        h.Spells.CurePoisonAfterCombat = true;
+        h.RecordCondition("Poison", MessageFlags.Poisoned, "poisoned!");
+        h.State.InCombat = true;
+
+        h.FeedLine("You have been poisoned!");
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.State.InCombat = false;                 // room clear — the fight is over
+        Assert.Equal(new[] { "cure" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Cure_KnockedDown_AfterCombatTicked_WaitsForTheFightToEnd()
+    {
+        // Same report (05:38:46): curp cast mid-fight after the grimhound's trample
+        // knocked us down.
+        using CureHarness h = new();
+        h.Spells.CureHoldsSpell = "curp";
+        h.Spells.CureHoldsAfterCombat = true;
+        h.RecordCondition("knockdown", MessageFlags.MovementPrevented,
+            "You are knocked off your feet, and land with a heavy thump!");
+        h.State.InCombat = true;
+
+        h.FeedLine("You are knocked off your feet, and land with a heavy thump!");
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.State.InCombat = false;
+        Assert.Equal(new[] { "curp" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Cure_Diseased_AfterCombatTicked_WaitsForTheFightToEnd()
+    {
+        using CureHarness h = new();
+        h.Spells.CureDiseaseSpell = "cdes";
+        h.Spells.CureDiseaseAfterCombat = true;
+        h.RecordCondition("Disease", MessageFlags.Diseased, "diseased!");
+        h.State.InCombat = true;
+
+        h.FeedLine("You have been diseased!");
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.State.InCombat = false;
+        Assert.Equal(new[] { "cdes" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Cure_HeldMidFight_LetsTheHealBelowItFire()
+    {
+        // A held cure ranked above the heal must not hold the heal behind it.
+        using CureHarness h = new();
+        h.Spells.CurePoisonSpell = "cure";
+        h.Spells.CurePoisonAfterCombat = true;
+        h.Spells.MinorHealSpell = "grhe";
+        h.Spells.PriorityCuring = 1;
+        h.Health.MinorHealCombatTrigger = 70;
+        h.RecordCondition("Poison", MessageFlags.Poisoned, "poisoned!");
+        h.State.InCombat = true;
+        h.FeedLine("You have been poisoned!");
+
+        h.State.Hp = 120;                         // 60%: the heal is due
+        Assert.Equal(new[] { "grhe" }, h.CastsSent);
     }
 
     [Fact]
@@ -1398,6 +1495,70 @@ public sealed class CastingDirectorTests
         h.RunSettledPass();
         Assert.Single(h.CastsSent);
         Assert.Equal("grhe", h.CastsSent[0]);      // the heal, not the buff
+    }
+
+    // Report paradigm-20261004-054304 settings: 520 max HP, minor < 70%, major < 65%,
+    // emergency < 50% (260), grhe / gdhe / mgra, Emergency on priority slot 1.
+    private static CureHarness ReportPriestHarness()
+    {
+        CureHarness h = PriestHarness();
+        h.Health.MinorHealCombatTrigger = 70;
+        h.Health.MajorHealCombatTrigger = 65;
+        h.State.MaxMa = 755;
+        h.State.MaxHp = 520;
+        h.State.Hp = 413;
+        h.SettledPasses.Clear();
+        return h;
+    }
+
+    [Fact]
+    public void MajorHeal_NotPickedOnPartialHp_WhenAnotherHpSubscriberEvaluatesFirst()
+    {
+        // Incident replay (05:42:51): the party self row saw HP=273 first and its
+        // HpPercent change ran a pass before the director had stamped the drop, so gdhe
+        // went out on the partial read. The burst ended at 160 (31%) and the mgra sent
+        // after it drew "You have already cast a spell this round!".
+        using CureHarness h = ReportPriestHarness();
+        h.BeforeDirectorSeesHp = () => h.Director.Evaluate();
+
+        h.State.Hp = 273;                         // mummy's hit: 52%, a partial read
+        Assert.Empty(h.CastsSent);
+
+        h.State.Hp = 160;                         // tentacle's hit: 31% < 50%
+        Assert.Equal(new[] { "mgra" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void DamageTick_ReadAfterTheBurstsPrompts_KeepsTheSlotSpent()
+    {
+        // Same incident: the round's damage-line tick is processed after the burst's
+        // prompts, so it lands just after the heal those prompts fired. Freeing the
+        // slot there let a second heal into the refused "already cast" round.
+        using CureHarness h = ReportPriestHarness();
+
+        h.State.Hp = 160;                         // emergency due, fires at once
+        Assert.Equal(new[] { "mgra" }, h.CastsSent);
+
+        h.Cast.OnCombatTick();                    // this burst's own tick
+        h.Director.NotifyRoundComplete();
+        h.Director.OnCombatTick();
+        h.RunSettledPass();                       // gdhe is due at 31%, but the slot is spent
+        Assert.Equal(new[] { "mgra" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void DamageTick_NextRound_FreesTheSlot()
+    {
+        using CureHarness h = ReportPriestHarness();
+
+        h.State.Hp = 160;
+        Assert.Equal(new[] { "mgra" }, h.CastsSent);
+
+        h.Now += TimeSpan.FromSeconds(4.6);       // the next round's first damage line
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.State.Hp = 300;                         // 58% after the heal: a Major heal
+        Assert.Equal(new[] { "mgra", "gdhe" }, h.CastsSent);
     }
 
     [Fact]
@@ -3420,6 +3581,40 @@ public sealed class CastingDirectorTests
 
         Assert.Single(h.CastsSent);
         Assert.Equal("neutralize Tank", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyCure_AfterCombatTicked_WaitsForTheFightToEnd()
+    {
+        using PartyHarness h = new();
+        h.Spells.CurePoisonSpell = "neutralize";
+        h.Spells.CurePoisonAfterCombat = true;
+        h.State.InCombat = true;
+        PartyMember tank = h.AddMember("Tank", hpPercent: 100);
+        tank.Poisoned = true;
+
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.State.InCombat = false;
+        Assert.Equal(new[] { "neutralize Tank" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyCure_AfterCombatTickedForOneCure_StillCastsTheOthersMidFight()
+    {
+        // Each cure has its own box: a held poison cure doesn't hold the hold cure.
+        using PartyHarness h = new();
+        h.Spells.CurePoisonSpell = "neutralize";
+        h.Spells.CurePoisonAfterCombat = true;
+        h.Spells.CureHoldsSpell = "curp";
+        h.State.InCombat = true;
+        PartyMember tank = h.AddMember("Tank", hpPercent: 100);
+        tank.Poisoned = true;
+        tank.Held = true;
+
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "curp Tank" }, h.CastsSent);
     }
 
     // Report paradigm-20261003-131851: a cure-poison too weak for the poison left the

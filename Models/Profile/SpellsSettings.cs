@@ -115,6 +115,14 @@ public sealed class SpellsSettings
     // Cure-blindness spell.
     public string? CureBlindnessSpell { get; set; }
 
+    // "Cure after combat", one per cure: that cure waits until the fight is over
+    // instead of taking a round's between-round cast. Off = cure as soon as no
+    // higher-ranked cast is due.
+    public bool CureHoldsAfterCombat { get; set; }
+    public bool CurePoisonAfterCombat { get; set; }
+    public bool CureDiseaseAfterCombat { get; set; }
+    public bool CureBlindnessAfterCombat { get; set; }
+
     // ----- Utility --------------------------------------------------
 
     // Cast when entering a dark room (pairs with the future Settings.Other

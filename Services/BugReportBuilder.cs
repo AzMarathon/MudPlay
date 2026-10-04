@@ -959,6 +959,9 @@ public static class BugReportBuilder
             sb.Append('\n');
         }
 
+        static string CureLabel(string ailment, bool afterCombat) =>
+            afterCombat ? ailment + " (after combat)" : ailment;
+
         Group("Combat", new (string, string?)[]
         {
             ("normal-attack", combat.NormalAttackSpell.SpellName),
@@ -980,10 +983,10 @@ public static class BugReportBuilder
         });
         Group("Cures", new (string, string?)[]
         {
-            ("holds", spells.CureHoldsSpell),
-            ("poison", spells.CurePoisonSpell),
-            ("disease", spells.CureDiseaseSpell),
-            ("blindness", spells.CureBlindnessSpell),
+            (CureLabel("holds", spells.CureHoldsAfterCombat), spells.CureHoldsSpell),
+            (CureLabel("poison", spells.CurePoisonAfterCombat), spells.CurePoisonSpell),
+            (CureLabel("disease", spells.CureDiseaseAfterCombat), spells.CureDiseaseSpell),
+            (CureLabel("blindness", spells.CureBlindnessAfterCombat), spells.CureBlindnessSpell),
         });
         Group("Party heal", new (string, string?)[]
         {

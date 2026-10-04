@@ -3121,6 +3121,13 @@ The "spend a maxed-out pool on something useful" casts are configured as ordinar
 **Default:** unset
 **What it does:** The specific spell used to cure each named ailment. These feed the Curing priority category (self first, then party members). A party member is cured when their MudPlay client announces the ailment — `@held` (paralysed / held), `.@poisoned`, `.@diseased`, `.@blind` — in that order: a hold first, as for you. A member's hold clears when they send `@ok`.
 
+During a fight a cure is cast between rounds like any other spell in the priority list: when the round's hits have landed and nothing ranked above Curing (a heal, by default) is due, the cure goes out.
+
+### Cure after combat (one box beside each cure)
+
+**Default:** off
+**What it does:** Ticked, that cure waits until the fight is over (the room has no monster left to fight) before it is cast, on you or on a party member. A cure takes the round's one between-round cast, so no heal can go out that round, and the next hit often poisons you or knocks you down again; tick the box for a cure you would rather not spend a round on. Each cure has its own box, so you can hold the poison cure and still cure a hold mid-fight. A held cure never blocks the spells ranked below it. Saved with the character, like the cure spells.
+
 ### Room light — moved to the Buff Watchdog
 
 The room-light spell is configured in the **Buff Watchdog** now. Add it there and tick **Only when the room is dark** on the slot to keep the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); leave it unticked to maintain the light like an ordinary buff. See the **Buff Watchdog** section.
@@ -4359,6 +4366,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Spell type priority (9 categories) | Emergency heal(1)…Debuffing(9) | 1–9 permutation | `PriorityEmergencyHeal` … `PriorityDebuffing` | Models/Profile/SpellsSettings.cs |
 | Minor / Major / Emergency heal, HP Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `EmergencyHealSpell`, `HpRegenSpell` | Models/Profile/SpellsSettings.cs |
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
+| Cure after combat (per cure) | off | checkbox | `CureHoldsAfterCombat` etc. | Models/Profile/SpellsSettings.cs |
 | Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
 | Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
 | Ignore poison, blindness, confusion, diseased (each suppresses both @wait + say) | false (all) | bool | `IgnorePoison` etc. | Models/Profile/SpellsSettings.cs |

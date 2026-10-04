@@ -177,7 +177,7 @@
 
                 <!-- ============ Other spells ============ -->
                 <TextBlock Classes="SectionHeader" Text="Other spells"/>
-                <Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Cure Holds"/>
                     <AutoCompleteBox Grid.Row="0" Grid.Column="1"
                                      Text="{Binding CureHoldsSpell, Mode=TwoWay}"
@@ -189,6 +189,10 @@
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="Cure-paralyze / cure-hold spell — canonically `freedom` in stock MajorMUD."/>
+                    <CheckBox Grid.Row="0" Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                              Content="Cure after combat"
+                              IsChecked="{Binding CureHoldsAfterCombat, Mode=TwoWay}"
+                              ToolTip.Tip="Ticked: this cure waits until the fight is over (no monster left to fight), on you or a party member, so the round's one between-round cast stays free for healing. Unticked: it is cast between rounds as soon as nothing ranked above Curing is due."/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Cure poison"/>
                     <AutoCompleteBox Grid.Row="1" Grid.Column="1"
@@ -201,6 +205,10 @@
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="Cure-poison spell."/>
+                    <CheckBox Grid.Row="1" Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                              Content="Cure after combat"
+                              IsChecked="{Binding CurePoisonAfterCombat, Mode=TwoWay}"
+                              ToolTip.Tip="Ticked: this cure waits until the fight is over (no monster left to fight), on you or a party member, so the round's one between-round cast stays free for healing. Unticked: it is cast between rounds as soon as nothing ranked above Curing is due."/>
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Cure disease"/>
                     <AutoCompleteBox Grid.Row="2" Grid.Column="1"
@@ -213,6 +221,10 @@
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="Cure-disease spell."/>
+                    <CheckBox Grid.Row="2" Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                              Content="Cure after combat"
+                              IsChecked="{Binding CureDiseaseAfterCombat, Mode=TwoWay}"
+                              ToolTip.Tip="Ticked: this cure waits until the fight is over (no monster left to fight), on you or a party member, so the round's one between-round cast stays free for healing. Unticked: it is cast between rounds as soon as nothing ranked above Curing is due."/>
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Cure blindness"/>
                     <AutoCompleteBox Grid.Row="3" Grid.Column="1"
@@ -225,6 +237,10 @@
                                      PlaceholderText="Type code or name…"
                                      Width="260" HorizontalAlignment="Left"
                                      ToolTip.Tip="Cure-blindness spell."/>
+                    <CheckBox Grid.Row="3" Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Center"
+                              Content="Cure after combat"
+                              IsChecked="{Binding CureBlindnessAfterCombat, Mode=TwoWay}"
+                              ToolTip.Tip="Ticked: this cure waits until the fight is over (no monster left to fight), on you or a party member, so the round's one between-round cast stays free for healing. Unticked: it is cast between rounds as soon as nothing ranked above Curing is due."/>
                 </Grid>
 
                 <!-- Self-bless spell picks + the "when HP/MA full" utility casts

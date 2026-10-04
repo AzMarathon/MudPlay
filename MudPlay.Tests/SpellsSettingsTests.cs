@@ -115,6 +115,8 @@ public sealed class SpellsSettingsTests
             CurePoisonSpell    = "antidote",
             CureDiseaseSpell   = "purify",
             CureBlindnessSpell = "vision",
+            CurePoisonAfterCombat = true,
+            CureBlindnessAfterCombat = true,
 
             RoomLightSpell     = "light",
 
@@ -167,6 +169,10 @@ public sealed class SpellsSettingsTests
         Assert.Equal(dto.CurePoisonSpell,    round.CurePoisonSpell);
         Assert.Equal(dto.CureDiseaseSpell,   round.CureDiseaseSpell);
         Assert.Equal(dto.CureBlindnessSpell, round.CureBlindnessSpell);
+        Assert.False(round.CureHoldsAfterCombat);
+        Assert.True(round.CurePoisonAfterCombat);
+        Assert.False(round.CureDiseaseAfterCombat);
+        Assert.True(round.CureBlindnessAfterCombat);
 
         Assert.Equal(dto.RoomLightSpell,     round.RoomLightSpell);
 
