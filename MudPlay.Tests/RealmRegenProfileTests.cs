@@ -11,17 +11,21 @@ public sealed class RealmRegenProfileTests
         Assert.Equal(TimeSpan.FromSeconds(30), RealmRegenProfile.Stock.StandingInterval);
         Assert.Equal(TimeSpan.FromSeconds(21), RealmRegenProfile.Stock.RestingInterval);
         Assert.Equal(TimeSpan.FromSeconds(15), RealmRegenProfile.Stock.MeditatingInterval);
+        Assert.Equal(TimeSpan.FromSeconds(30), RealmRegenProfile.Stock.ManaInterval);
+        Assert.False(RealmRegenProfile.Stock.RestingOnRoundGrid);   // counted from the command
     }
 
     [Fact]
-    public void ParaMud_UsesTheMeasuredTenSecondGrid()
+    public void ParaMud_UsesTheMeasuredCadence()
     {
-        // Derived from live Paradigm captures: natural +rate/3 every 10 s, rest
-        // riding the same grid. Meditate isn't split — it ticks every 10 s, where
-        // Stock's ticks every 15 s.
+        // Timed captures (report paradigm-20261004-024314): standing HP every 10 s,
+        // mana every 30 s, a rest gain every 5 s on the round grid. Meditate is the
+        // user's 10 s figure, not yet timed.
         Assert.Equal(TimeSpan.FromSeconds(10), RealmRegenProfile.ParaMud.StandingInterval);
-        Assert.Equal(TimeSpan.FromSeconds(10), RealmRegenProfile.ParaMud.RestingInterval);
+        Assert.Equal(TimeSpan.FromSeconds(30), RealmRegenProfile.ParaMud.ManaInterval);
+        Assert.Equal(TimeSpan.FromSeconds(5), RealmRegenProfile.ParaMud.RestingInterval);
         Assert.Equal(TimeSpan.FromSeconds(10), RealmRegenProfile.ParaMud.MeditatingInterval);
+        Assert.True(RealmRegenProfile.ParaMud.RestingOnRoundGrid);
     }
 
     [Theory]

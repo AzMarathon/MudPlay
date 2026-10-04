@@ -30,25 +30,29 @@ public sealed record SimBuff(
     bool BeforeRestingForMana, int? RerollBelow, int RerollCount, bool RerollInfinite);
 
 // Per-tick regen, as functions of the regen percent active buffs add (ManaRgn /
-// HPRegen), on the realm cadence they arrive on (RealmRegenProfile). Rest ticks
-// count from the moment the character lies down: every RestFullEvery-th tick pays
-// HpResting and the ones between pay HpResting × RestReducedShare. On Stock every
-// rest tick is full and adds to the standing tick; on Paradigm rest replaces the
-// standing tick and runs in cycles of three 10 s ticks, the third full
-// (GAME_MECHANICS "Rest and meditate tick timing"). MaMeditating always adds on top
-// of the standing mana tick.
+// HPRegen), on the realm cadence they arrive on (RealmRegenProfile).
+//
+// Stock: the standing tick pays HP and mana together; resting adds a full HpResting
+// tick on its own count from lying down, and every rest tick is the same.
+//
+// Paradigm: rest takes the standing HP gain's place and rides the round grid, and
+// the amount runs in threes counted from lying down — RestRun gains of HpRestingLow,
+// then RestRun of HpResting, and round again (GAME_MECHANICS "Rest and meditate
+// tick timing").
+//
+// MaMeditating always adds on top of the standing mana tick.
 public sealed record SimRegen(
     Func<int, double> HpStanding, Func<int, double> HpResting,
     Func<int, double> MaStanding, double MaMeditating,
-    RealmRegenProfile Cadence, bool RestReplacesStanding, int RestFullEvery = 1, double RestReducedShare = 1)
+    RealmRegenProfile Cadence, bool RestReplacesStanding,
+    Func<int, double>? HpRestingLow = null, int RestRun = 1)
 {
     // HP paid by the tick-th rest tick since lying down (1-based), with extra HP-regen
     // percent from active buffs.
-    public double RestTickHp(long tick, int extra = 0)
-    {
-        double full = HpResting(extra);
-        return tick % Math.Max(1, RestFullEvery) == 0 ? full : full * RestReducedShare;
-    }
+    public double RestTickHp(long tick, int extra = 0) =>
+        HpRestingLow is { } low && (tick - 1) / Math.Max(1, RestRun) % 2 == 0
+            ? low(extra)
+            : HpResting(extra);
 }
 
 // Everything the loop simulator plays by: the character's pools, offense, defense

@@ -96,11 +96,16 @@ public static class SimCharacterBuilder
 
     // Per-tick regen from the stat formulas (CharacterCalculator.CalcHpRegen /
     // CalcManaRegen) with gear, race, class and quest regen percents folded in.
-    // Paradigm splits each natural cycle into thirds on a 10 s grid; resting there
-    // replaces it with 10 s ticks in cycles of three, the third paying the full rest
-    // amount and the two before it a third of that. Stock adds a separate full rest
-    // tick (GAME_MECHANICS "Rest and meditate tick timing").
-    private static SimRegen BuildRegen(
+    //
+    // Stock pays the idle HP amount and the mana amount every 30 s and adds a
+    // separate rest tick of three times the idle amount.
+    //
+    // Paradigm, as measured (GAME_MECHANICS "Rest and meditate tick timing"): mana
+    // whole every 30 s; standing HP a third of the idle amount, fraction dropped,
+    // every 10 s; resting a gain every 5 s, three of that third and then three of the
+    // whole idle amount. A third is kept to at least 1, as the idle amount itself is:
+    // no capture has shown a character whose idle amount is under 3.
+    internal static SimRegen BuildRegen(
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
         IReadOnlyList<QuestBonus>? questBonuses, RealmType realm)
     {
@@ -119,18 +124,23 @@ public static class SimCharacterBuilder
 
         int hpPct = t.HpRegenPercent, mpPct = t.MpRegenPercent;
         int level = stats.Level, health = stats.Health, intel = stats.Intellect, wil = stats.Willpower, cha = stats.Charm;
-        // Paradigm pays each natural cycle in thirds on its 10 s grid.
         bool paradigm = realm == RealmType.ParaMud;
-        double share = paradigm ? 1.0 / 3 : 1.0;
-        return new SimRegen(
-            HpStanding: extra => share * CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, false, realm),
-            HpResting: extra => CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, true, realm),
-            MaStanding: extra => share * CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
-                mageryType, mageryLevel, mpPct + extra, false, realm),
-            MaMeditating: CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
-                mageryType, mageryLevel, mpPct, true, realm),
-            RealmRegenProfile.For(realm), RestReplacesStanding: paradigm,
-            RestFullEvery: paradigm ? 3 : 1, RestReducedShare: paradigm ? 1.0 / 3 : 1);
+        double Idle(int extra) => CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, false, realm);
+        double IdleThird(int extra) => Math.Max(1, Math.Floor(Idle(extra) / 3));
+        double Mana(int extra) => CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
+            mageryType, mageryLevel, mpPct + extra, false, realm);
+        double meditating = CharacterCalculator.CalcManaRegen(level, intel, wil, cha,
+            mageryType, mageryLevel, mpPct, true, realm);
+        return paradigm
+            ? new SimRegen(
+                HpStanding: IdleThird, HpResting: Idle, MaStanding: Mana, MaMeditating: meditating,
+                RealmRegenProfile.ParaMud, RestReplacesStanding: true,
+                HpRestingLow: IdleThird, RestRun: 3)
+            : new SimRegen(
+                HpStanding: Idle,
+                HpResting: extra => CharacterCalculator.CalcHpRegen(level, health, hpPct + extra, true, realm),
+                MaStanding: Mana, MaMeditating: meditating,
+                RealmRegenProfile.Stock, RestReplacesStanding: false);
     }
 
     private static IReadOnlyDictionary<string, SimSpell> BuildSpells(

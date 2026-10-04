@@ -3,7 +3,7 @@ using System.ComponentModel;
 namespace MudPlay.Game;
 
 // Watches PlayerState and runs four regen cycles on the cadence the realm's wire
-// shows (RegenTickCadence):
+// shows (RealmRegenProfile):
 //
 //   HpNatural — the standing HP gain. Anchored on the first one seen.
 //   MpNatural — the standing mana gain, likewise.
@@ -35,7 +35,7 @@ public sealed class RegenTracker : IDisposable
     private bool _maBaselineSet;
     private bool _disposed;
 
-    private RegenTickCadence _cadence = RegenTickCadence.Stock;
+    private RealmRegenProfile _cadence = RealmRegenProfile.Stock;
     // The last combat round seen on the wire, for anchoring a grid-riding rest.
     private DateTimeOffset? _lastRoundAt;
     private static readonly TimeSpan RoundStep = TickEngine.CombatTickInterval;
@@ -86,16 +86,16 @@ public sealed class RegenTracker : IDisposable
     public TimeSpan? GetTimeToNextMpMediTick() => MpMedi.GetTimeToNext(_clock());
 
     // Re-seed every cycle's tick cadence for the given realm family (see
-    // RegenTickCadence). Called once at wire-up and again on every
+    // RealmRegenProfile). Called once at wire-up and again on every
     // GameDataCache.ActiveSetChanged. Idempotent — re-applying the same realm
     // just re-asserts the same intervals.
     public void SetRealm(RealmType realm)
     {
-        _cadence = RegenTickCadence.For(realm);
-        HpNatural.Reseed(_cadence.HpStanding);
-        MpNatural.Reseed(_cadence.MpStanding);
-        HpRest.Reseed(_cadence.HpResting);
-        MpMedi.Reseed(_cadence.MpMeditating);
+        _cadence = RealmRegenProfile.For(realm);
+        HpNatural.Reseed(_cadence.StandingInterval);
+        MpNatural.Reseed(_cadence.ManaInterval);
+        HpRest.Reseed(_cadence.RestingInterval);
+        MpMedi.Reseed(_cadence.MeditatingInterval);
     }
 
     // A combat round was seen on the wire at `at`. Every cycle that rides the round

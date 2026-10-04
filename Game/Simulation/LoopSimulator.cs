@@ -143,7 +143,7 @@ public static class LoopSimulator
         private readonly Dictionary<string, int> _casts = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, (double Until, int ManaRegen, int HpRegen)> _buffs =
             new(StringComparer.OrdinalIgnoreCase);
-        private readonly int _standingSteps, _restingSteps, _meditatingSteps;
+        private readonly int _standingSteps, _manaSteps, _restingSteps, _meditatingSteps;
         private readonly int _spawnPassPhase;
         private readonly bool _perSlotClock;
         // The realm's room monster cap, and whether a death cast lands whole or not at
@@ -184,6 +184,7 @@ public static class LoopSimulator
             _hp = ch.MaxHp;
             _ma = ch.MaxMana;
             _standingSteps = StepsOf(ch.Regen.Cadence.StandingInterval);
+            _manaSteps = StepsOf(ch.Regen.Cadence.ManaInterval);
             _restingSteps = StepsOf(ch.Regen.Cadence.RestingInterval);
             _meditatingSteps = StepsOf(ch.Regen.Cadence.MeditatingInterval);
             // The spawn pass runs on the server's own clock, unrelated to the round.
@@ -902,12 +903,17 @@ public static class LoopSimulator
 
             long since = _step - _postureSince;
             bool resting = _posture == Posture.Resting;
-            if (_step > 0 && _step % _standingSteps == 0)
+            if (_step > 0 && _step % _standingSteps == 0 && (!resting || !r.RestReplacesStanding))
+                _hp += r.HpStanding(hpBonus);
+            if (_step > 0 && _step % _manaSteps == 0) _ma += r.MaStanding(manaBonus);
+            if (resting && r.Cadence.RestingOnRoundGrid)
             {
-                if (!resting || !r.RestReplacesStanding) _hp += r.HpStanding(hpBonus);
-                _ma += r.MaStanding(manaBonus);
+                // The gains fall on the game's own grid; only their count runs from
+                // lying down.
+                if (since > 0 && _step % _restingSteps == 0)
+                    _hp += r.RestTickHp(_step / _restingSteps - _postureSince / _restingSteps, hpBonus);
             }
-            if (resting && since > 0 && since % _restingSteps == 0)
+            else if (resting && since > 0 && since % _restingSteps == 0)
                 _hp += r.RestTickHp(since / _restingSteps, hpBonus);
             if (_posture == Posture.Meditating && since > 0 && since % _meditatingSteps == 0)
                 _ma += r.MaMeditating;

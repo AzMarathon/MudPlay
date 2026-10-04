@@ -1247,7 +1247,7 @@ For the curious, here are the actual equations behind the numbers above, with ev
 
 **Max HP** = `HEA/2 + Level×MinHits + (HEA−50)×Level/16 + per-level rolls + RaceHPPerLevel×Level` (+ gear `+MaxHP`). The per-level rolls are random, which is why the projection shows HP as a range.
 
-**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**. On Stock the natural tick comes every 30 s, and resting adds a separate ×3 tick every 21 s on top of it. Meditating pays mana every 15 s on Stock and every 10 s on Paradigm.
+**HP regen** (per tick) = `(Level+20)×HEA / divisor`, floored at 1, then **×3 while resting**, then **×(gearHPregen% + 100)/100**. `divisor` = **750 on Stock, 500 on Paradigm**. On Stock the natural tick comes every 30 s, and resting adds a separate ×3 tick every 21 s on top of it. On Paradigm the natural amount arrives in thirds, one every 10 s (fractions dropped), and resting pays every 5 s instead: three gains of that third, then three of the whole amount, counted from lying down — so standing up and resting again starts back at the small gains. Mana comes every 30 s on both. Meditating pays mana every 15 s on Stock and every 10 s on Paradigm.
 
 **Max mana** = `MageryLevel×Level×2 + 6` (+ gear `+MaxMana`); 0 for non-casters. Mystics instead use **Kai = Level − 1**. Note this has *no stat term* — no attribute raises max mana.
 
