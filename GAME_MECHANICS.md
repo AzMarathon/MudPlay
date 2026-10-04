@@ -123,6 +123,29 @@ how many swings or spell fires a player or monster gets inside one round.
   **0.6–0.7s per room**; **Paradigm** is bounded by its movement-speed formula (see *Movement &
   navigation → Per-hop movement speed*), 1.0s at best, plus lag.
 
+### The engine clock — one fast tick drives every timer
+*Status: [OBSERVED] 2026-10-04, Stock `wccmmud.dll` 1.11p (`_init__wccmmud`, `_background_fast`, `_my_rtkick`, `_perform_kicks`, `_background_energy`, `_background_medium`, `_background_slow`) · Realm: Stock (Paradigm's intervals differ; its clock structure is not recorded)*
+
+- **There is one real timer: the fast tick, once a second.** `_background_fast` is the only routine on the host's own timer (`rtkick`, 1 s). Each run adds 1 to a tick counter (`0x47fb70`), runs whatever is due in the DLL's own queue, then updates every character and every monster, then asks the host to call it again in 1 s.
+- **Every other periodic pass is counted in fast ticks.** `_my_rtkick(n, routine)` queues a routine for `counter + n`; each pass re-queues itself the same way when it has run. All of them were queued together at start-up, at counter 0:
+
+  | Pass | Every | What it does |
+  |---|---|---|
+  | `_background_medium` | 3 ticks | the spell round: affect durations, damage over time, monster roaming |
+  | `_background_energy` | 5 ticks | the combat round (see the bullets on it in this topic) |
+  | `_background_monster_create` | 5 ticks | lair refills |
+  | `_background_slow` | 30 ticks | passive HP and mana regen, poison, bleeding, monster regen, a monster's flavor line |
+  | `_background_other`, `_background_save_buffers` | 60 ticks | housekeeping |
+  | `_background_inactivity` | 3600 ticks | idle users |
+
+- **So the passes are locked to each other for as long as the game is up, and are the same for every player.** The combat round falls on every 5th tick, the spell round on every 3rd, the regen pass on every 30th. Each regen pass therefore lands on a combat round (every 6th one) and on a spell round (every 10th one); a combat round and a spell round share a tick every 15 ticks.
+- **Order inside one tick:** the queued passes first, then the per-character fast update (rest, meditate, command delays), then the per-monster one. When several passes share a tick they run medium → monster-create → energy → slow *(worked out by replaying the queue's insert rule from the start-up order; on a tick with only energy and monster-create, energy runs first)*. So on a regen tick the round's combat output comes before the regen.
+- **A fast tick is a little over a second.** The next call is asked for only after the pass has finished, and the body runs at most once per turn of the host's main loop (a flag the host's cycle hook sets and the pass clears; a call that finds it clear just re-arms and counts nothing). The 5.04 s combat round in *Combat round (5s) and the between-round cast cycle* puts a tick at about 1.008 s, which makes the regen pass about 30.2 s. A stall delays every pass alike, since they all count the same ticks.
+- **The combat round** (`_background_energy`):
+  - every online character has its just-moved flag cleared and its energy topped up (`_energy_update_character`), then every monster likewise;
+  - then the players' attacks (`_do_autocombat`) and the monsters' attacks run, players first 60% of the time and monsters first otherwise (a 0–100 roll under 60);
+  - last, every online character gets back its one cast for the round (bit `0x4` of the character's `+0x700`, which a cast clears). That is what `You have already cast a spell this round!` tests, in or out of a fight.
+
 ### Exp/hour ceiling and loop geometry
 *Status: CONFIRMED 2026-08-02 (user); single-target-ceiling rule CONFIRMED 2026-08-14 (user)*
 
@@ -980,16 +1003,24 @@ How HP works from full health down through dropping and death, how monster healt
 ### Rest and meditate tick timing
 *Status: per-bullet tags · Realm: differs*
 
-- **Stock engine timers** *([OBSERVED] `wccmmud.dll` 1.11p timer setup)*. The engine runs four background timers:
-  - a 1 s tick (rest and meditate counters);
-  - a 3 s tick (spell-round durations);
-  - a 5 s tick (combat energy);
-  - a 30 s tick (passive regen and bleeding out).
+- **Stock engine timers** *([OBSERVED] `wccmmud.dll` 1.11p timer setup)*. The engine runs four background passes, all counted off one 1-second tick — see *Timing & rounds → The engine clock — one fast tick drives every timer*:
+  - the 1 s tick itself (rest and meditate counters);
+  - every 3 ticks (spell-round durations);
+  - every 5 ticks (combat energy);
+  - every 30 ticks (passive regen and bleeding out).
+- **Stock's passive tick pays whatever the character is doing** *([OBSERVED] 2026-10-04, `_slow_update_character`)*. The 30-tick pass tests no fighting, resting or meditating flag: HP below max gains the HP amount, mana below max gains the mana amount. Poison comes off first; a character at 0 HP or less bleeds (or, once aided, gains 1) instead of regenerating HP.
+  - **The game sends a fresh prompt when that pass changed anything**, and stays silent when it didn't. That unprompted statline is the passive tick on the wire.
+- **Stock's rest and meditate ticks count from the command, in fast ticks** *([OBSERVED] 2026-10-04, `_handle_commands`, `_fast_update_character`)*:
+  - `rest` sets the resting flag and zeroes a per-character counter (`+0x7b2`), then prints `You are now resting.`. Each fast tick adds 1 while the flag is up; when the counter passes 20 it is zeroed and the rest amount is paid. So the first rest tick is the 21st fast tick after the command, and they repeat every 21.
+  - `meditate` does the same with its own counter (`+0x7eb`) and `You are now meditating.`; the counter pays when it passes 14, so every 15 ticks.
+  - **Typing `rest` (or `meditate`) again while already resting zeroes the counter**, which pushes the next tick a full 21 (15) ticks out.
+  - **Each rest or meditate tick sends a fresh prompt**, paid or not: a rest tick at full HP still redraws it.
+  - Meditation ends itself when mana reaches max: `You awake from deep meditation feeling stronger!`, then the prompt.
 - **Passive regen: every 30 s, both realms' base** — see *Character stats & progression → Health (HEA) — max HP and HP regen* and *Mana regeneration & the ManaRgn breakpoints*.
 - **Resting on Stock: an extra HP tick every 21 s** *([OBSERVED] DLL; [CONFIRMED] 2026-09-27, user)*. It pays `3 × max(1, (level+20)·HEA/750)`, then the HP-regen percent bonus, **in addition to** the 30 s tick.
 - **Resting on Paradigm: a 10 s tick in cycles of three, the third tick full** *([CONFIRMED] 2026-09-30, user)*. While resting, HP ticks every 10 s instead of every 30 s. The first two ticks of each cycle pay a reduced amount and the third pays the full amount.
   - **Each of the two reduced ticks pays one third of the full rest tick** *([CONFIRMED] 2026-09-30, user)*. MMUD-Explorer's source (checked 2026-09-30) has no Paradigm rest cycle: `CalcRestingRate` only switches the divisor (500 on GreaterMUD, 750 on Stock) and triples the amount when resting, and its exp/hr model uses one rest tick every 20 s on both realms (`SEC_PER_REST_TICK`). An earlier live capture (2026-09-27) showed natural and rest both paying on a 10 s grid, rest at 3× the natural amount (a druid: +3 standing, +9 resting). (Tagged [NEEDS CONFIRMATION] until the user answered, 2026-09-30.)
-  - `[NEEDS CONFIRMATION]` **Where a cycle starts.** Question: does the three-tick cycle count from the moment you lie down, or run on a fixed server grid?
+  - `[NEEDS CONFIRMATION]` **Where a cycle starts.** Question: does the three-tick cycle count from the moment you lie down, or run on a fixed server grid? (Stock's counts from the `rest` command — the Stock bullets in this topic.)
 - **Meditating: every 15 s on Stock, every 10 s on Paradigm** *([CONFIRMED] 2026-09-27, user; Stock also [OBSERVED] DLL)*. On Stock the meditate tick pays the base mana formula **without** the `ManaRgn%` modifier, and the 30 s passive tick keeps running alongside it.
 
 **Client use:**
