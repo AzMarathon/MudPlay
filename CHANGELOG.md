@@ -1,5 +1,10 @@
 # Version history
 
+## 3.143.24
+
+- Chest Offload: each open is read against a fresh `i` taken just before it, so items already carried or picked up between chests no longer show as chest loot; a chest opened by typing `open <chest>` counts too
+- Chest Offload: Sell All and Sell walk to the shop first when you aren't standing in it, then sell on arrival
+
 ## 3.143.22
 
 - Emergency heal no longer loses the round to a Major heal picked on a half-landed round: a mid-round HP read is always held until the round settles, whichever part of the client asks first
