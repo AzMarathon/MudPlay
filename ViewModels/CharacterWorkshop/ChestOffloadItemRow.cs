@@ -45,13 +45,16 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
 
     public IRelayCommand DropCommand { get; }
     public IRelayCommand SellCommand { get; }
+    // Take the item off the list; it stays in the pack.
+    public IRelayCommand RemoveCommand { get; }
 
     public ChestOffloadItemRow(string name, int gained, double baseCopper,
         IReadOnlyCollection<int> candidateShops, int currentShop,
         Action<ChestOffloadItemRow>? onQtyChanged, Action<ChestOffloadItemRow>? onDrop = null,
         Func<ChestOffloadItemRow, IReadOnlyList<ShopChoiceRow>>? buildChoices = null,
         Action<ChestOffloadItemRow, int>? moveToShop = null,
-        Action<ChestOffloadItemRow>? onSell = null)
+        Action<ChestOffloadItemRow>? onSell = null,
+        Action<ChestOffloadItemRow>? onRemove = null)
     {
         Name = name;
         _gained = gained;
@@ -64,6 +67,7 @@ public sealed partial class ChestOffloadItemRow : ObservableObject
         _sellQty = gained;   // default: sell all of what the chest gave
         DropCommand = new RelayCommand(() => onDrop?.Invoke(this));
         SellCommand = new RelayCommand(() => onSell?.Invoke(this));
+        RemoveCommand = new RelayCommand(() => onRemove?.Invoke(this));
     }
 
     public void Reprice(int charm, RealmType realm)

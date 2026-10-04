@@ -1567,6 +1567,24 @@ public sealed class RouteChoicePlannerTests
     }
 
     [Fact]
+    public void AvoidOverride_OnAOneStepSaving_WhenTheWalkAsksOverEveryAvoid()
+    {
+        WithGraph(AvoidTwoRouteSmallJson, (bfs, graph, filter) =>
+        {
+            filter.MarkAvoided(new RoomKey(1, 5));
+
+            // A Sell Tour walk asks whenever an avoided room is on the shortest route,
+            // so the same one-room saving now shows the cards.
+            RouteChoice? choice = RouteChoicePlanner.EvaluateAvoidOverride(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9), minSavings: 1);
+
+            Assert.NotNull(choice);
+            Assert.Equal(3, choice!.FreeStepCount);
+            Assert.Equal(2, choice.GatedStepCount);
+        });
+    }
+
+    [Fact]
     public void NoAvoidOverride_WhenRouteTouchesNoAvoidedRoom()
     {
         WithGraph(AvoidTwoRouteJson, (bfs, graph, filter) =>

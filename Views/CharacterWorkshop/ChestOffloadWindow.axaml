@@ -70,7 +70,7 @@
                                 <DataTemplate x:DataType="vm:ChestContainerRow">
                                     <Button Content="{Binding Display}" Command="{Binding OpenCommand}"
                                             Margin="0,0,6,6"
-                                            ToolTip.Tip="Send &quot;open&quot; for this container"/>
+                                            ToolTip.Tip="Read your inventory, send &quot;open&quot; for this container, then read it again — only what this open added is listed"/>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -82,6 +82,17 @@
                         <TextBlock Text="Charm" VerticalAlignment="Center"/>
                         <NumericUpDown Width="120" Minimum="0" Maximum="255" Increment="1" FormatString="0"
                                        Value="{Binding Charm, Mode=TwoWay}"/>
+                        <Button Content="Sell Tour" Command="{Binding SellTourCommand}" Margin="12,0,0,0"
+                                IsVisible="{Binding !IsTourRunning}"
+                                ToolTip.Tip="Walk to every shop below in turn and sell each one's items. Shows exactly what will be sold first; only what the chests gave is ever sold, never more — anything you already had stays."/>
+                        <Button Content="Cancel tour" Command="{Binding CancelTourCommand}" Margin="12,0,0,0"
+                                IsVisible="{Binding IsTourRunning}"
+                                ToolTip.Tip="Stop the sell tour. A walk already under way keeps going; nothing more is sold."/>
+                        <CheckBox Content="Say loot to the room" IsChecked="{Binding SayLootToRoom, Mode=TwoWay}"
+                                  Margin="12,0,0,0" VerticalAlignment="Center"
+                                  ToolTip.Tip="Ticked: after each chest is opened (from this window or by typing), its items and coin are said to the room, so everyone there knows what came out. Off unless you tick it; saved with the character."/>
+                        <Button Content="Clear list" Command="{Binding ClearListCommand}" Margin="6,0,0,0"
+                                ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped or taken off with ✕, even if you close this window."/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
@@ -115,6 +126,9 @@
                     <TextBlock Text="Open a container above to see what's sellable."
                                Foreground="{StaticResource ChromeFgMutedBrush}"
                                IsVisible="{Binding !HasLoot}"/>
+                    <TextBlock Text="{Binding SellStatus}" TextWrapping="Wrap"
+                               Foreground="{StaticResource AccentAmberBrush}"
+                               IsVisible="{Binding HasSellStatus}"/>
 
                     <ItemsControl ItemsSource="{Binding ShopGroups}">
                         <ItemsControl.ItemTemplate>
@@ -138,14 +152,14 @@
                                                        Foreground="{StaticResource AccentAmberBrush}"/>
                                             <Button Grid.Column="2" Content="Sell All" Command="{Binding SellCommand}"
                                                     Margin="0,0,6,0"
-                                                    ToolTip.Tip="Send the sell commands for every item's quantity below (do this while standing in the shop)"/>
+                                                    ToolTip.Tip="Sell every item's quantity below at this shop — walks there first when you aren't standing in it. Never sells more than the chests gave."/>
                                             <Button Grid.Column="3" Content="Drop All" Command="{Binding DropAllCommand}"
                                                     ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan"/>
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="vm:ChestOffloadItemRow">
-                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
+                                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
                                                         <Panel Grid.Column="0" VerticalAlignment="Center">
                                                             <Button x:Name="ShopBtn" Command="{Binding OpenShopMenuCommand}"
                                                                     IsEnabled="{Binding CanChangeShop}"
@@ -200,9 +214,12 @@
                                                                    Margin="10,0,8,0" MinWidth="90"/>
                                                         <Button Grid.Column="5" Content="Sell" Command="{Binding SellCommand}"
                                                                 Margin="0,0,6,0"
-                                                                ToolTip.Tip="Sell the quantity picked above (do this while standing in the shop). The row updates when the game confirms the sale — a refused sale changes nothing."/>
+                                                                ToolTip.Tip="Sell the quantity picked above at this item's shop — walks there first when you aren't standing in it. The row updates when the game confirms the sale — a refused sale changes nothing."/>
                                                         <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
+                                                                Margin="0,0,6,0"
                                                                 ToolTip.Tip="Drop this item's whole held stack. The row updates when the game confirms the drop."/>
+                                                        <Button Grid.Column="7" Content="✕" Command="{Binding RemoveCommand}"
+                                                                ToolTip.Tip="Take this item off the list — it stays in your pack"/>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
@@ -219,7 +236,12 @@
                             <ItemsControl ItemsSource="{Binding Unsellable}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:ChestOffloadItemRow">
-                                        <TextBlock Text="{Binding Name}" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                            <Button Content="✕" Command="{Binding RemoveCommand}"
+                                                    ToolTip.Tip="Take this item off the list — it stays in your pack"/>
+                                        </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

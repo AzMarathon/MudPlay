@@ -1,14 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.38**
-> - Character Info: Paradigm HP Regen shows the measured ticks — a third of the amount every 10 s standing, and resting every 5 s in three small then three full gains (the tooltip still described the old 10 s cycle)
-> - Paradigm meditate is timed: a mana gain every 15 s (was taken as 10), on the same grid as the 30 s tick — the meditate countdown, Mana Regen tooltip and Exp/Hr estimate follow
-> - Paradigm HP-regen gear is measured: the small gains are thirds of the amount before the bonus, and the bonus's extra comes on the third one — the Exp/Hr estimate and HP Regen tooltip no longer run a point short per 30 s
-> - Paradigm HP countdown follows the HP gains: after a rest it no longer reads 5 s out after each mana tick, and standing up counts from the last rest gain
-> - Stock rest and meditate countdowns count from the game tick the command landed in, and a rest or meditate gain no longer restarts the 30 s HP / mana countdown
-> - A heal landing just after a combat round no longer nudges the round countdown
-> - HP regen countdown tells regen from heals and heal-over-time buffs by the amount regen can pay your character, so a healer's countdown stops jumping onto them
+> **Version 3.144.0**
+> - Chest Offload: each open is read against a fresh `i` taken just before it, so items already carried or picked up between chests no longer show as chest loot; a chest opened by typing `open <chest>` counts too
+> - Chest Offload: Sell All and Sell walk to the shop first when you aren't standing in it, then sell on arrival
+> - Character Info: a carried chest has a treasure-chest icon that opens the Chest Offload window
+> - Chest Offload: the list keeps after the window closes (saved with the character) until each item is sold, dropped or taken off with ✕; Clear list empties it
+> - Chest Offload: a **Say loot to the room** box (off by default) says each opened chest's contents and coin to the room
+> - Chest Offload: Sell Tour walks to every shop and sells the list after you confirm exactly what goes; every sale is capped at what the chests gave, so items you already had are never sold
+> - Chest Offload: shop headers and the Sell Tour prompt show each shop's steps and walking time, and the prompt each shop's sale value and the whole tour's walk
+> - Chest Offload: Sell Tour skips a shop whose items were all taken off the list, sold or dropped, instead of walking there for nothing
+> - Chest Offload: opening a second chest while the first is still being read no longer drops it — a click waits its turn, a typed open is caught by the read that sees its loot
+> - Chest Offload: Sell Tour (and Sell All / Sell) walks the default route to each shop without asking about shortcuts, and shows the route cards whenever an Avoid room is on the shortest route
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

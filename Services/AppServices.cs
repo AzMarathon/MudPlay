@@ -101,6 +101,14 @@ public sealed class AppServices
     public void SetGoWalkOpener(Action<Game.Map.RoomKey> opener) => _goWalkOpener = opener;
     public void GoWalkTo(Game.Map.RoomKey key) => _goWalkOpener?.Invoke(key);
 
+    // The same walk started on the player's behalf (a Sell Tour stop): it takes the
+    // default route without the route picker, which shows only when the player's
+    // avoid rooms are in the way. The task ends once the walk is under way or was
+    // called off, and says which. Not under way until the main VM binds it.
+    private Func<Game.Map.RoomKey, Task<bool>>? _errandWalkOpener;
+    public void SetErrandWalkOpener(Func<Game.Map.RoomKey, Task<bool>> opener) => _errandWalkOpener = opener;
+    public Task<bool> ErrandWalkTo(Game.Map.RoomKey key) => _errandWalkOpener?.Invoke(key) ?? Task.FromResult(false);
+
     // Type text at the game through the SAME path the terminal / Conversation input
     // uses — macro split, alias expansion, and the outbound cast/attack/chat/movement
     // observers — so a programmatic send is indistinguishable from the user typing
@@ -494,6 +502,18 @@ public sealed class AppServices
     // no charge line) so Character Info can show remaining = max − used; rechargeables
     // restock at the BBS cleanup time. Persisted on the character profile.
     public Game.Inventory.ItemUseCountTracker ItemUseCounts { get; private set; } = null!;
+
+    // Typed `open <target>` watcher — lets the Chest Offload window track a chest
+    // opened from the terminal.
+    public Game.Inventory.OutboundOpenObserver OutboundOpen { get; } = new();
+
+    // Every chest opened (window button or typed): the loot list the Chest Offload
+    // window shows, saved on the profile, and the room announcement of what dropped.
+    public Game.Inventory.ChestOpenTracker ChestOpens { get; private set; } = null!;
+
+    // Walks and sells the Chest Offload list shop by shop, never selling more of an
+    // item than the chests gave.
+    public Game.Inventory.ChestSellTour ChestSellTour { get; private set; } = null!;
 
     // Realm-aware charge lookup over the two trackers above, shared by Character Info
     // and the @uses remote query so their readouts never diverge.
@@ -5594,6 +5614,21 @@ public sealed class AppServices
             },
             log: Log);
 
+        ChestOpens = new Game.Inventory.ChestOpenTracker(
+            Inventory, Profile, OutboundOpen,
+            isContainer: name => ItemNames.FindByName(name) is int n
+                && ItemNames.ItemTypeOf(n) == Game.Inventory.ChestOffloadPlanner.ContainerItemType,
+            send: cmd => SendGameCommand(cmd),
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            runicName: () => Currency.RunicName,
+            log: Log);
+
         // One realm-aware charge lookup shared by Character Info and @uses.
         CarriedCharges = new Game.Inventory.CarriedChargeReadout(
             GameData, ItemCharges, ItemUseCounts, ItemNumberByName, HeldItemNames);
@@ -6962,6 +6997,24 @@ public sealed class AppServices
             log: Log);
         AutoLightProvisioner.SetProvisioner(AutoLightShopRouter.OnBuyRequested);
         Walker.Event += AutoLightShopRouter.OnWalkEvent;
+
+        ChestSellTour = new Game.Inventory.ChestSellTour(
+            currentShop: () => RoomTracker.State.CurrentRoom?.Shop,
+            goWalk: ErrandWalkTo,
+            chestCount: name => ChestOpens.Loot(Inventory.Snapshot.CarriedItems)
+                .FirstOrDefault(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase)).Count,
+            sendPaced: cmds => InventoryAction.SendPaced(cmds),
+            isParadigm: () => GameData.ActiveRealm == Game.RealmType.ParaMud,
+            inventory: Inventory,
+            schedule: (ms, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
+            log: Log);
+        Walker.Event += ChestSellTour.OnWalkerEvent;
         Inventory.Changed += AutoLightShopRouter.OnInventoryChanged;
         // Reorder poll: an `i` dump is the only moment the readied light's charge
         // refreshes, so the provisioner catches a dwindling supply here and hands

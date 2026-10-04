@@ -893,7 +893,12 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
 
         CarriedItems.Clear();
         foreach (string name in snap.CarriedItems)
-            CarriedItems.Add(new WorkshopItemRow(name, string.Empty, ResolveItemNumber(name), ChargesTextFor(name)));
+        {
+            int number = ResolveItemNumber(name);
+            CarriedItems.Add(new WorkshopItemRow(name, string.Empty, number, ChargesTextFor(name),
+                isContainer: number > 0
+                    && AppServices.Current.ItemNames.ItemTypeOf(number) == Game.Inventory.ChestOffloadPlanner.ContainerItemType));
+        }
 
         Keys.Clear();
         if (snap.Keys is { } keys)

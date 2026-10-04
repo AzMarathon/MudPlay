@@ -1589,10 +1589,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // immediately starts the walk via the full "Walk here" path (stop conflicting
     // engines, route picker for a gated/hazard/trap crossing, GOTO history). If the
     // route picker is cancelled the destination stays queued for a manual Run.
-    public Task QueueAndStartWalkTo(RoomKey key)
+    public Task QueueAndStartWalkTo(RoomKey key, bool askOnlyOverAvoids = false)
     {
         QueueDestination(key);
-        return WalkToRoom(key);
+        return WalkToRoom(key, askOnlyOverAvoids);
     }
 
     // ----- Loops + Auto-Lair setups (combined) ----------------------
@@ -2768,7 +2768,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Shared walk-to used by the room right-click "Walk here" AND the menu's
     // Favorites / Recent-destinations sub-lists — stop conflicting engines, drop
     // out of loop-build, record the destination, then hand to the route picker.
-    private async Task WalkToRoom(Game.Map.RoomKey k)
+    private async Task WalkToRoom(Game.Map.RoomKey k, bool askOnlyOverAvoids = false)
     {
         // If a loop or Auto-Lair is currently driving movement, stop
         // it before handing control to the walker — the user's explicit
@@ -2807,7 +2807,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // the dialog decides.
         // (RouteChoicePrompt.WalkAsync records the destination in the goto
         // history — every user-initiated walk path goes through it.)
-        await RouteChoicePrompt.WalkAsync(_services, k, path => PreviewPath = path);
+        await RouteChoicePrompt.WalkAsync(_services, k, path => PreviewPath = path,
+            askOnlyOverAvoids: askOnlyOverAvoids);
     }
 
     [RelayCommand]
