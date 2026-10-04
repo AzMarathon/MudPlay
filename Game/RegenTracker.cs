@@ -42,6 +42,15 @@ public sealed class RegenTracker : IDisposable
     private bool _disposed;
 
     private RealmRegenProfile _cadence = RealmRegenProfile.Stock;
+    // What passive regen can pay this character per gain, when known.
+    private Func<HpRegenExpectation?>? _hpExpectation;
+    // The last HP gain that was a regen amount. While those keep coming, a gain of
+    // another size is another source; when they stop, the expected amounts are off.
+    private DateTimeOffset? _lastRegenSizedHpAt;
+    // When the standing HP cycle last took a gain as its tick, and how many it has
+    // taken in a row, each on the tick the one before pointed at.
+    private DateTimeOffset? _lastHpNaturalTickAt;
+    private int _hpNaturalTicksInARow;
     // Where the rest and meditate cycles were anchored when the posture began.
     private DateTimeOffset? _restStartedAt;
     private DateTimeOffset? _mediStartedAt;
@@ -80,6 +89,9 @@ public sealed class RegenTracker : IDisposable
     // Fired after an observed HP uptick that passes the artifact filter.
     public event Action<RegenSample>? HpTickObserved;
 
+    // Fired for an HP gain left out for its size, with the reason.
+    public event Action<int, string>? HpGainLeftOut;
+
     // Fired after an observed MA uptick that passes the artifact filter.
     public event Action<RegenSample>? MaTickObserved;
 
@@ -114,6 +126,27 @@ public sealed class RegenTracker : IDisposable
         MpNatural.Reseed(_cadence.ManaInterval);
         HpRest.Reseed(_cadence.RestingInterval);
         MpMedi.Reseed(_cadence.MeditatingInterval);
+    }
+
+    // Give the tracker the HP amounts regen can pay (HpRegenExpectationSource). With
+    // none, every gain is judged on timing alone.
+    public void SetHpExpectation(Func<HpRegenExpectation?> source) => _hpExpectation = source;
+
+    // Why an HP gain of this size isn't regen, or null when it can be: more than
+    // regen ever pays (a heal), or an amount regen doesn't pay while the amounts it
+    // does pay are still arriving (a heal over time, a drain). A gain that fills HP
+    // to its max can be any size up to the largest. When no regen-sized gain has
+    // come for three standing intervals the expected amounts are taken to be off (a
+    // stat not read yet, a buff's percent) and other sizes count again.
+    public string? WhyHpGainIsNotRegen(int gain, int hpAfter, DateTimeOffset now)
+    {
+        if (_hpExpectation?.Invoke() is not { } expected) return null;
+        if (gain > expected.Largest) return $"more than regen pays (at most +{expected.Largest})";
+        bool filledToMax = _state.MaxHp > 0 && hpAfter >= _state.MaxHp;
+        if (filledToMax || expected.Matches(gain)) return null;
+        bool regenStillArriving = _lastRegenSizedHpAt is { } last
+            && now - last <= HpNatural.Interval + HpNatural.Interval + HpNatural.Interval + TimeSpan.FromSeconds(5);
+        return regenStillArriving ? $"not an amount regen pays ({expected})" : null;
     }
 
     // A combat round was seen on the wire at `at`. Every cycle that rides the round
@@ -180,6 +213,12 @@ public sealed class RegenTracker : IDisposable
 
         if (delta <= 0) return;                  // damage / no change.
         if (IsInArtifactWindow(now)) return;     // heal-shaped event recently.
+        if (WhyHpGainIsNotRegen(delta, current, now) is { } notRegen)
+        {
+            HpGainLeftOut?.Invoke(delta, notRegen);
+            return;
+        }
+        if (_hpExpectation?.Invoke() is { } sizes && sizes.Matches(delta)) _lastRegenSizedHpAt = now;
         if (HpGainIsOnRoundGrid(_state.Position) && !OnTheRoundGrid(now)) return;
 
         // Credit whichever active HP cycle is closer to its boundary. If
@@ -193,22 +232,37 @@ public sealed class RegenTracker : IDisposable
         if (restOwnsTheGain || !HpRest.IsActive)
         {
             restClaimed = ClaimIfDue(HpRest, now, delta);
-            natClaimed = !restOwnsTheGain && ClaimIfDue(HpNatural, now, delta);
+            natClaimed = !restOwnsTheGain && ClaimIfOnATick(HpNatural, now, delta);
         }
         else
         {
             (restClaimed, natClaimed) = CreditCommandCountedGain(HpRest, _restStartedAt, HpNatural, now, delta);
         }
+        if (natClaimed) _hpNaturalTicksInARow = HpNaturalAnchorIsFresh(now) ? _hpNaturalTicksInARow + 1 : 1;
         if (!restClaimed && !natClaimed)
         {
-            // No active cycle was due — anchor on this observation. First-time path.
+            // No active cycle was due. A cycle that has taken two gains in a row on
+            // its own ticks isn't moved by a gain that comes between them: a buff that
+            // heals every spell round (GAME_MECHANICS "Heal-over-time buffs pay on the
+            // spell round") lands on a combat round every 15 s and can be the size of
+            // a regen gain. If the cycle is out of step after all, it stops taking
+            // gains, goes stale within two intervals and anchors afresh.
+            if (!restOwnsTheGain && _hpNaturalTicksInARow >= 2 && HpNaturalAnchorIsFresh(now))
+            {
+                HpGainLeftOut?.Invoke(delta, "between two ticks of the HP cycle");
+                return;
+            }
+            // Otherwise anchor on this observation: the first gain, one that shows a
+            // lone earlier gain was misplaced, or the first after a silence.
             if (restOwnsTheGain) HpRest.RecordObservation(now, delta);
             else
             {
                 HpNatural.RecordObservation(now, delta);
                 natClaimed = true;
+                _hpNaturalTicksInARow = 1;
             }
         }
+        if (natClaimed) _lastHpNaturalTickAt = now;
         // Where HP and mana come on the same pass (Stock), an HP gain is the mana
         // gain's moment too: keep the mana countdown live while mana sits at max.
         // On Paradigm HP comes three times per mana pass, so it says nothing of
@@ -310,10 +364,27 @@ public sealed class RegenTracker : IDisposable
         return TimeSpan.FromMilliseconds(Math.Abs(elapsed - ticks * interval));
     }
 
+    // The standing HP cycle took a gain as its tick within the last two intervals
+    // (and a little), so its anchor is a tick seen and not a projection grown stale.
+    private bool HpNaturalAnchorIsFresh(DateTimeOffset now) =>
+        HpNatural.IsActive && _lastHpNaturalTickAt is { } last
+        && now - last <= HpNatural.Interval + HpNatural.Interval + TimeSpan.FromSeconds(2);
+
     // An HP gain was seen within the last two standing intervals, so the HP cycle
     // is being placed by its own gains.
     private bool HpGainsAreRecent(DateTimeOffset now) =>
         _lastHpTickAt is { } last && now - last <= HpNatural.Interval + HpNatural.Interval;
+
+    // The gain falls on one of the cycle's ticks, a little early or late: record it
+    // there. Judged from both sides, since the countdown rolls the anchor forward as
+    // each tick passes and a gain a moment late would otherwise read as a whole
+    // interval early. The reach covers the game's catch-up second.
+    private static bool ClaimIfOnATick(RegenCycle cycle, DateTimeOffset now, double delta)
+    {
+        if (OffNearestTick(cycle, now, anchorIsATick: true) is not { } off || off > CommandTickWithin) return false;
+        cycle.RecordObservation(now, delta);
+        return true;
+    }
 
     // If cycle is active and the now-instant is at or past its next-tick
     // boundary (with a small grace), record the observation and return true.
@@ -348,7 +419,12 @@ public sealed class RegenTracker : IDisposable
             if (_cadence.RestingOnRoundGrid)
             {
                 HpRest.GetTimeToNext(now);
-                if (HpRest.Anchor is { } lastRestGain) HpNatural.Start(lastRestGain);
+                if (HpRest.Anchor is { } lastRestGain)
+                {
+                    HpNatural.Start(lastRestGain);
+                    _lastHpNaturalTickAt = lastRestGain;
+                    _hpNaturalTicksInARow = 2;
+                }
             }
             HpRest.Stop();
         }

@@ -401,6 +401,141 @@ public sealed class RegenTrackerTests
         tracker.Dispose();
     }
 
+    // ----- telling regen from heals and heal-over-time buffs ----------------
+
+    // The level 51 Priest of the 2026-10-04 live log: a standing third of 3, a whole
+    // amount of 9, max HP 520.
+    private static (PlayerState state, RegenTracker tracker, FakeClock clock, List<string> leftOut) PriestSetup()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        HpRegenExpectation expected = HpRegenExpectation.For(RealmType.ParaMud, 51, 67, 0)!;
+        tracker.SetHpExpectation(() => expected);
+        List<string> leftOut = new();
+        tracker.HpGainLeftOut += (gain, why) => leftOut.Add($"+{gain} {why}");
+        state.MaxHp = 520;
+        state.Hp = 300;
+        return (state, tracker, clock, leftOut);
+    }
+
+    // A between-round heal lands half a second after the round, inside the round
+    // grid's reach: +134 at 14:50:57.350 in the log. Its size gives it away.
+    [Fact]
+    public void Heal_BiggerThanRegenPays_IsLeftOut()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // regen, at T0
+        clock.Advance(TimeSpan.FromSeconds(5.4));
+        state.Hp = 437;                             // the heal
+
+        AssertSeconds(4.6, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Single(leftOut);
+        Assert.StartsWith("+134 more than regen pays", leftOut[0]);
+        tracker.Dispose();
+    }
+
+    // The Priest's buffs tick +1 and +2 every spell round; one in five lands on a
+    // combat round. While +3 keeps arriving, those aren't regen.
+    [Fact]
+    public void GainOfAnotherSize_IsLeftOut_WhileRegenSizedGainsKeepComing()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // T0
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 305;                             // a buff's +2 on the other round
+
+        AssertSeconds(5, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Single(leftOut);
+        tracker.Dispose();
+    }
+
+    // No regen-sized gain for 40 s while other sizes arrive: the expected amounts
+    // are off (a stat not read, a buff's percent), and the gains count again.
+    [Fact]
+    public void GainOfAnotherSize_CountsAgain_OnceRegenSizedGainsStop()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;
+        clock.Advance(TimeSpan.FromSeconds(40));
+        state.Hp = 305;
+
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Empty(leftOut);
+        tracker.Dispose();
+    }
+
+    // The last gain before max HP is cut short: 519 -> 520 is regen whatever its size.
+    [Fact]
+    public void GainThatFillsHpToMax_IsRegenWhateverItsSize()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;
+        clock.Advance(TimeSpan.FromSeconds(1));
+        state.Hp = 519;                             // damage healed elsewhere; baseline moves
+        leftOut.Clear();
+        clock.Advance(TimeSpan.FromSeconds(9));
+        state.Hp = 520;
+
+        Assert.Empty(leftOut);
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // The rolled buff's +3 is the size of the Priest's regen third. It falls between
+    // two ticks of a cycle that has taken two gains in a row, and doesn't move it.
+    [Fact]
+    public void RegenSizedGain_BetweenTheTicksOfATrackedCycle_DoesNotMoveIt()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // T0
+        clock.Advance(TimeSpan.FromSeconds(10));
+        state.Hp = 306;                             // T0+10: two in a row
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 309;                             // the buff, on the other round
+
+        AssertSeconds(5, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Single(leftOut);
+        Assert.Contains("between two ticks", leftOut[0]);
+
+        clock.Advance(TimeSpan.FromSeconds(5.07));  // the next regen gain, a moment after the countdown rolled over
+        tracker.GetTimeToNextHpNaturalTick();
+        state.Hp = 312;
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        tracker.Dispose();
+    }
+
+    // A lone first gain that was really the buff's tick: the gain 5 s later shows it
+    // was misplaced, and the cycle moves at once.
+    [Fact]
+    public void LoneMisplacedGain_IsCorrectedByTheNextOne()
+    {
+        var (state, tracker, clock, leftOut) = PriestSetup();
+        state.Hp = 303;                             // the buff's +3, taken as the first tick
+        clock.Advance(TimeSpan.FromSeconds(5));
+        state.Hp = 306;                             // the real regen gain
+
+        AssertSeconds(10, tracker.GetTimeToNextHpNaturalTick());
+        Assert.Empty(leftOut);
+        tracker.Dispose();
+    }
+
+    // Without the amounts (no `stat` read yet) every gain is judged on timing alone.
+    [Fact]
+    public void NoExpectation_NothingIsLeftOutForItsSize()
+    {
+        var (state, tracker, clock) = Setup();
+        tracker.SetRealm(RealmType.ParaMud);
+        int ticks = 0;
+        tracker.HpTickObserved += _ => ticks++;
+        state.Hp = 300;
+        state.Hp = 303;
+        clock.Advance(TimeSpan.FromSeconds(10));
+        state.Hp = 437;
+
+        Assert.Equal(2, ticks);
+        tracker.Dispose();
+    }
+
     // On Paradigm a meditate gain comes every 15 s on a grid the 30 s mana pass sits
     // on (143 timed stretches: every gap between gains was 14-15 s, so the pass never
     // landed apart from a meditate gain). Meditating 22 s after a pass, the next gain

@@ -111,18 +111,13 @@ public static class SimCharacterBuilder
         PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
         IReadOnlyList<QuestBonus>? questBonuses, RealmType realm)
     {
-        EquipmentStatBreakdown gear = CharacterCalculator.AggregateEquipmentStats(worn, gameData);
         int mageryType = 0, mageryLevel = 0;
-        if (gameData.FindRowByName("Races", stats.Race) is JsonElement race)
-            CharacterCalculator.ApplyAbilityBonuses(gear, race, stats.Race);
         if (gameData.FindRowByName("Classes", stats.Class) is JsonElement cls)
         {
-            CharacterCalculator.ApplyAbilityBonuses(gear, cls, stats.Class);
             mageryType = ReadInt(cls, "MageryType");
             mageryLevel = ReadInt(cls, "MageryLVL");
         }
-        if (questBonuses is not null) CharacterCalculator.ApplyQuestBonuses(gear, questBonuses, "Quests");
-        EquipmentStatSummary t = gear.Totals;
+        EquipmentStatSummary t = CharacterCalculator.CharacterTotals(stats, worn, gameData, questBonuses);
 
         int hpPct = t.HpRegenPercent, mpPct = t.MpRegenPercent;
         int level = stats.Level, health = stats.Health, intel = stats.Intellect, wil = stats.Willpower, cha = stats.Charm;

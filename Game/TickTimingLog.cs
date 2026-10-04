@@ -97,6 +97,8 @@ public sealed class TickTimingLog : IDisposable
         if (_position != PlayerPosition.Standing && _postureSince is { } since)
             detail.Append("  ").Append(Describe(_position)).Append('+').Append(Seconds(now - since));
         if (_regen.InArtifactWindow) detail.Append("  (heal window)");
+        else if (kind == "hp" && _regen.WhyHpGainIsNotRegen(delta, current, now) is { } notRegen)
+            detail.Append("  (").Append(notRegen).Append(')');
         Add(now, kind, detail.ToString());
     }
 

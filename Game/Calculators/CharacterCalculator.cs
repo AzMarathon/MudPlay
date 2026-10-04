@@ -516,6 +516,22 @@ public static class CharacterCalculator
         return attacks;
     }
 
+    // Worn gear plus the race's and class's own abilities and the completed quests'
+    // bonuses: the totals the game's whole-character figures (regen among them) run on.
+    public static EquipmentStatSummary CharacterTotals(
+        PlayerStats stats, IReadOnlyList<EquippedItem> worn, GameDataCache gameData,
+        IReadOnlyList<Quests.QuestBonus>? questBonuses)
+    {
+        ArgumentNullException.ThrowIfNull(stats);
+        ArgumentNullException.ThrowIfNull(worn);
+        ArgumentNullException.ThrowIfNull(gameData);
+        EquipmentStatBreakdown combined = AggregateEquipmentStats(worn, gameData);
+        if (gameData.FindRowByName("Races", stats.Race) is JsonElement race) ApplyAbilityBonuses(combined, race, stats.Race);
+        if (gameData.FindRowByName("Classes", stats.Class) is JsonElement cls) ApplyAbilityBonuses(combined, cls, stats.Class);
+        if (questBonuses is not null) ApplyQuestBonuses(combined, questBonuses, "Quests");
+        return combined.Totals;
+    }
+
     // The caster's spell-damage bonus % (AlterSpDmg, ability 165): worn gear plus
     // race and class abilities, the same sources the melee profile folds in, and on
     // Paradigm the Spellcasting share (SpellcastingSpellDamageBonus).
