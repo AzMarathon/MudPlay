@@ -58,6 +58,8 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
     private readonly Action<IReadOnlyList<string>> _sendPaced;
     private readonly Action<RoomKey> _queueWalk;
     private readonly ChestSellTour _tour;
+    // Walking time for a number of steps (Auto-Lair's live travel model).
+    private readonly Func<int, TimeSpan> _hopEta;
     private readonly ChestOpenTracker _chests;
     private readonly LogDiagnosticState? _diagnostics;
     private readonly LogService? _log;
@@ -93,7 +95,8 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         AppServices.Current.Currency,
         cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo,
         cmds => AppServices.Current.InventoryAction.SendPaced(cmds),
-        AppServices.Current.ChestOpens, AppServices.Current.ChestSellTour)
+        AppServices.Current.ChestOpens, AppServices.Current.ChestSellTour,
+        hops => AppServices.Current.AutoLair.TravelCostModel.EstimateTravel(hops))
     { }
 
     public ChestOffloadViewModel(
@@ -101,7 +104,8 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         ItemNameStore itemNames, PlayerStats stats, GameDataCache gameData,
         RoomTracker tracker, BfsMapper bfs, MovementFilter movement, CurrencyNaming naming,
         Action<string> send, Action<RoomKey> queueWalk,
-        Action<IReadOnlyList<string>> sendPaced, ChestOpenTracker chests, ChestSellTour tour)
+        Action<IReadOnlyList<string>> sendPaced, ChestOpenTracker chests, ChestSellTour tour,
+        Func<int, TimeSpan> hopEta)
     {
         _sendPaced = sendPaced;
         _chests = chests;
@@ -118,6 +122,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _send = send;
         _queueWalk = queueWalk;
         _tour = tour;
+        _hopEta = hopEta;
 
         _charm = stats.Charm > 0 ? stats.Charm : 50;
 
@@ -353,11 +358,20 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         return StepsText(room, here, dist);
     }
 
-    private static string StepsText(Room? room, RoomKey? here, int? dist)
+    private string StepsText(Room? room, RoomKey? here, int? dist)
     {
         if (room is null || here is null) return "";
-        if (dist is null) return "unreachable";
-        return dist switch { 0 => "you're here", 1 => "1 step", _ => $"{dist} steps" };
+        if (dist is not { } steps) return "unreachable";
+        return steps == 0 ? "you're here" : StepsAndEta(steps);
+    }
+
+    // "12 steps · ~45s": the steps plus their walking time under the same per-step
+    // travel model the Navigation status ETA uses. Fights on the way aren't counted.
+    private string StepsAndEta(int steps)
+    {
+        string count = steps == 1 ? "1 step" : $"{steps} steps";
+        TimeSpan eta = _hopEta(steps);
+        return eta > TimeSpan.Zero ? $"{count} · ~{RouteEtaEstimator.FormatCompact(eta)}" : count;
     }
 
     partial void OnCharmChanged(int value)
@@ -511,15 +525,29 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
             if (StopFor(group.Shop, group.ShopName, group.Items) is { } stop) stops.Add(stop);
         if (stops.Count == 0) { SellStatus = "Nothing on the list to sell."; return; }
 
+        // Each leg's steps and walking time from the stop before it (the first from
+        // where you stand), so a long walk for one cheap item is plain before you go.
         var body = new System.Text.StringBuilder();
         body.Append("Walk to each shop below in this order and sell exactly these items:\n");
-        int n = 0;
+        int n = 0, totalSteps = 0;
+        bool anyUnknown = false;
+        RoomKey? from = _tracker.State.CurrentRoom?.Key;
         foreach (ChestSellTour.Stop stop in stops)
         {
-            body.Append($"\n{++n}. {stop.ShopName} ({stop.Room.Map}/{stop.Room.Room})\n   ")
+            int? leg = from is { } f ? _bfs.DistanceBetween(f, stop.Room, _movement) : null;
+            string legText = leg switch
+            {
+                null => "steps unknown",
+                0 => "you're here",
+                _ => StepsAndEta(leg.Value),
+            };
+            if (leg is { } l) totalSteps += l; else anyUnknown = true;
+            body.Append($"\n{++n}. {stop.ShopName} ({stop.Room.Map}/{stop.Room.Room}) — {legText}, sells for {ValueOf(stop)}\n   ")
                 .Append(string.Join(", ", stop.Items.Select(i => $"{i.Qty} {i.Name}")))
                 .Append('\n');
+            from = stop.Room;
         }
+        body.Append($"\nWhole tour: {(anyUnknown ? "at least " : "")}{StepsAndEta(totalSteps)} of walking (fights on the way not counted).\n");
         body.Append("\nOnly items the chests gave are sold, never more than the chests gave — " +
                     "anything you already had stays in your pack. A running loop or Auto-Lair stops for the walk.");
         bool go = await AppServices.Current.Confirm.ConfirmAsync("Sell Tour", body.ToString(), "Start tour");
@@ -529,6 +557,17 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void CancelTour() => _tour.Cancel();
+
+    // What a stop's items fetch at the current charm: each row's line price, scaled to
+    // the (possibly capped) quantity the stop sells.
+    private string ValueOf(ChestSellTour.Stop stop)
+    {
+        double copper = 0;
+        foreach ((string name, int qty) in stop.Items)
+            if (FindRow(name) is (_, ChestOffloadItemRow row) && row.SellQty > 0)
+                copper += (double)row.LineCopper * qty / row.SellQty;
+        return copper > 0 ? ShopPriceCalculator.FormatCopper((long)Math.Round(copper)) : "—";
+    }
 
     // One shop's stop: each row's picked quantity, capped at what the chests gave and
     // are still carried. Null when nothing is left to sell there, or the shop has no

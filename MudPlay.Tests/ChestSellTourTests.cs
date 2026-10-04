@@ -128,6 +128,34 @@ public sealed class ChestSellTourTests : IDisposable
     }
 
     [Fact]
+    public void AShopWhoseItemsWereRemoved_IsSkipped_NotWalkedTo()
+    {
+        // The tunic was taken off the list (✕) after the tour was planned: its shop is
+        // never walked to, and the tour goes straight to the next one.
+        _fromChests["moonstone"] = 2;
+        _tour.Start(new[]
+        {
+            new ChestSellTour.Stop(Weapons, 2, "Armoury", new[] { ("tunic", 1) }),
+            new ChestSellTour.Stop(Jeweler, 1, "Jeweler", new[] { ("moonstone", 2) }),
+        });
+
+        Assert.Equal(new[] { Jeweler }, _walks);
+    }
+
+    [Fact]
+    public void AnItemRemovedMidTour_IsNotSold()
+    {
+        _fromChests["moonstone"] = 2;
+        _fromChests["ruby"] = 1;
+        _tour.Start(new[] { new ChestSellTour.Stop(Jeweler, 1, "Jeweler", new[] { ("moonstone", 2), ("ruby", 1) }) });
+
+        _fromChests.Remove("ruby");                   // ✕ on the ruby while walking
+        Arrive(Jeweler, 1);
+
+        Assert.Equal(new[] { "sell 2 moonstone" }, _sent);
+    }
+
+    [Fact]
     public void ArrivingSomewhereElse_SellsNothing()
     {
         _fromChests["moonstone"] = 2;

@@ -14,7 +14,7 @@ namespace MudPlay.Game.Inventory;
 // its `sell` goes out, at how many of that item the chests gave and are still carried
 // (`chestCount`, from ChestOpenTracker's list) — so with 3 moonstones of your own and 2
 // from a chest, at most 2 are sold, whatever the plan said. An item not on the list
-// sells 0.
+// sells 0, and a shop left with nothing to sell is skipped rather than walked to.
 //
 // App-lifetime so closing the window doesn't strand a tour mid-walk. UI thread only:
 // walker and inventory events arrive through `post`.
@@ -88,6 +88,13 @@ public sealed class ChestSellTour : IDisposable
     private void GoToStop()
     {
         ++_generation;
+        // A stop whose items have all been taken off the list, sold or dropped since
+        // the tour was planned isn't walked to — no trip for nothing.
+        while (_index < _stops.Count && !HasAnythingToSell(_stops[_index]))
+        {
+            _log?.Info(LogCategory, $"skipping '{_stops[_index].ShopName}' — nothing on its list is still from the chests");
+            _index++;
+        }
         if (_index >= _stops.Count)
         {
             Finish(_stops.Count > 1 ? "Sell tour done." : "");
@@ -127,6 +134,8 @@ public sealed class ChestSellTour : IDisposable
                 break;
         }
     });
+
+    private bool HasAnythingToSell(Stop stop) => stop.Items.Any(i => Math.Min(i.Qty, _chestCount(i.Name)) > 0);
 
     private void SellHere()
     {
