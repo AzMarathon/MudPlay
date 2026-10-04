@@ -31,6 +31,7 @@ public sealed class SpellbookState
     // from _obtainedNames whenever the class list rebuilds. Backs IsObtained.
     private readonly HashSet<int> _obtained = new();
     private List<KnownSpell> _available = new();
+    private IReadOnlyList<KnownSpell> _classSpells = Array.Empty<KnownSpell>();
     private SpellPick[] _availablePicks = Array.Empty<SpellPick>();
     // Cast-on-use items for the active class. GetClassCastItems is a full Items-table
     // scan, and the casting decision pass hits GetCastItems several times per pass
@@ -56,8 +57,17 @@ public sealed class SpellbookState
     // Character alignment used by the eligibility filter (0 = unknown / unrestricted).
     public int CharAlign { get; private set; }
 
-    // Every spell the current class can learn, sorted by ReqLevel then Name. Empty for non-magery classes.
+    // The spells the character can use: the class list less the alignment-gated
+    // spells our alignment reading rules out, plus anything already learned. Sorted
+    // by ReqLevel then Name. Empty for non-magery classes. The casting engines and
+    // pickers read this one — two priest spells share the cast code `word`, and only
+    // the alignment tells which the character means.
     public IReadOnlyList<KnownSpell> Available => _available;
+
+    // Every spell the class can learn, whatever our alignment. The Spell Book window
+    // lists these (its own boxes filter by alignment), and the game's `sp` list and
+    // learn line resolve against them.
+    public IReadOnlyList<KnownSpell> ClassSpells => _classSpells;
 
     // The Available spells as distinct (by cast-code) SpellPick entries, ordered
     // by name — the suggestion source for the Settings spell-picker typeahead
@@ -248,6 +258,9 @@ public sealed class SpellbookState
     private void RebuildAvailable()
     {
         List<KnownSpell> aligned = new(_catalog.Query(ClassNumber, level: 0, CharAlign));
+        _classSpells = CharAlign == 0
+            ? aligned.ToArray()
+            : _catalog.Query(ClassNumber, level: 0, charAlign: 0);
         // An alignment-gated spell the character has ALREADY obtained must never
         // disappear just because their alignment has since drifted — MajorMUD
         // doesn't retroactively un-teach a spell (an alignment-quest reward stays
@@ -276,7 +289,7 @@ public sealed class SpellbookState
         if (CharAlign == 0 || names.Count == 0) return false;
         HashSet<int> present = new(list.Select(s => s.Number));
         bool added = false;
-        foreach (KnownSpell s in _catalog.Query(ClassNumber, level: 0, charAlign: 0))
+        foreach (KnownSpell s in _classSpells)
         {
             if (present.Contains(s.Number) || !names.Contains(s.Name)) continue;
             list.Add(s);

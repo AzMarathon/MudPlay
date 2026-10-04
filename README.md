@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.143.9**
-> - A spell your `sp` list shows is marked learned even when the client's last-seen alignment would hide it, so it can be picked in the Buff Watchdog
+> **Version 3.143.10**
+> - A spell your `spells` list shows is marked learned even when the client's last-seen alignment would hide it, so it can be picked in the Buff Watchdog
+> - Spell Book: lists every spell the class can learn, with Good / Neutral / Evil boxes to filter by alignment
 > - Bug report: the Spell Book's class, alignment gate and counts, and learned buffs that have no Buff Watchdog slot
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

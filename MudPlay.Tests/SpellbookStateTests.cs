@@ -188,6 +188,16 @@ public sealed class SpellbookStateTests : IDisposable
     }
 
     [Fact]
+    public void ClassSpells_HoldsTheWholeClassList_WhileAvailableStaysAlignmentGated()
+    {
+        SpellbookState book = New(_alignedSpells).book;
+        book.Refresh(classNumber: 12, level: 1, charAlign: 1); // read as Good
+
+        Assert.Equal(new[] { "curse", "plain bolt", "smite" }, Names(book.ClassSpells));
+        Assert.DoesNotContain("curse", Names(book.Available));
+    }
+
+    [Fact]
     public void LearnLine_NamingASpellOurAlignmentReadingExcludes_MarksItLearned()
     {
         SpellbookState book = New(_alignedSpells).book;

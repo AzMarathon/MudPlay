@@ -853,7 +853,8 @@ public static class BugReportBuilder
             _ => book.CharAlign.ToString(),
         };
         Kv(sb, "Spell book", $"class #{book.ClassNumber}, level {book.Level}, alignment gate {alignGate}; "
-            + $"{book.Available.Count} spell(s) in the class list, {book.ObtainedCount} learned");
+            + $"{book.ClassSpells.Count} spell(s) in the class list, {book.Available.Count} usable under that gate, "
+            + $"{book.ObtainedCount} learned");
         HashSet<string> slottedCodes = new(
             (svc.Profile.Current?.PartyBuffs?.Slots ?? new List<Models.Profile.BuffSlot>())
                 .Where(slot => !string.IsNullOrWhiteSpace(slot.Spell)).Select(slot => slot.Spell!.Trim()),

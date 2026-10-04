@@ -365,10 +365,16 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **The header's inter-column padding varies by class and realm, so match it whitespace-normalised,** not against a fixed single-space string. Kai classes render "Level Kai  Short …" with an extra space, and a realm's mana header can be padded differently again.
 - **Each row is `Level Mana Short <Spell Name…>`.** The obtained set keys on the full Name, not the Short cast-code.
 - **`You have no spells.` is the authoritative empty list.**
+- **The list holds every spell the character has learned, whatever its alignment is now** *([CONFIRMED] 2026-10-03, user, both realms; Stock [OBSERVED] `wccmmud.dll` 1.11p: `_display_users_spells` never calls the can-use check)*. An evil character who learned an evil-only spell and then turned good still sees it under `spells` (`pow` for a mystic). Learning is never undone by an alignment change, but the spell **can't be cast** while the alignment no longer fits.
+  - **The can-use check (`_user_can_use_spell`) runs when a spell is learned and again on every cast.** It tests the class's magery type and level, the character's level, and the alignment table in *Items, inventory & equipment → Item wear restrictions (ability-code flags)*.
+  - **Learning** (a scroll, or a trainer's teach action) refused by it prints `You don't know what to do with this!` — see *Spells, buffs & conditions → Learning a spell from a teaching item*.
+  - **Casting** a learned spell the character can no longer use prints `You may not cast this spell.` (`_cmd_cast`). A spell above the character's level prints `This spell is too powerful for you - ` first.
 - **A parse that opens on the header but reads zero rows is a format miss, not an empty book.** It must not clear the obtained set.
 
 **Client use:**
 - SpellListParser. Driven by the report "sp didn't update spellbook".
+- `SpellbookState.SetObtainedByNames` marks every listed spell learned, resolving names against the whole class list (`ClassSpells`) and not only the spells our alignment reading allows. That reading moves only on a `who` or `pro`; while it lagged, a listed evil-only spell was dropped and never reached the Buff Watchdog's Add buff list (report `paradigm-20261003-215442`).
+- **Client policy** (user, 2026-10-03): the Spell Book window lists every spell the class can learn, with Good / Neutral / Evil boxes to filter by alignment. The casting engines and the Settings pickers still read the alignment-gated list (`Available`): three priest spells share the cast code `word` (balanced / exalted / tainted word), and only the alignment or the learned set tells which one the character means.
 
 ### The `health` command output
 *Status: CONFIRMED 2026-09-03 (user captures) · Realm: both*
