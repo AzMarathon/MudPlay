@@ -23,7 +23,11 @@ public sealed record AddBuffResult(
     int? RerollThreshold,
     bool RerollInfinite = false,
     // Draw items: the outcomes (spell numbers) the user unticked.
-    IReadOnlyList<int>? RejectedOutcomes = null);
+    IReadOnlyList<int>? RejectedOutcomes = null,
+    // The buff's own mana floor and whether it casts on us in a rest or a fight.
+    int BlessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa,
+    bool BlessWhileResting = false,
+    bool BlessDuringCombat = false);
 
 // One entry in the Add-buff dropdown: the cast Code the game accepts, a Display
 // showing the buff's name + the level it's learned at ("bless (Lvl 2)"), and
@@ -124,6 +128,33 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
 
     // Per-slot conditions.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BlessIfAboveConverted))]
+    private int _blessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa;
+    [ObservableProperty] private bool _blessWhileResting;
+    [ObservableProperty] private bool _blessDuringCombat;
+
+    // The mana floor is a percent of max mana, or a raw amount when Settings → Health
+    // reads its mana thresholds as absolute values.
+    private readonly bool _manaFloorIsAbsolute;
+    public string BlessIfAboveLabel => _manaFloorIsAbsolute ? "Cast if mana ≥" : "Cast if mana ≥ %";
+    public int BlessIfAboveMaximum => _manaFloorIsAbsolute ? 100_000 : 100;
+
+    // The floor in the other unit, against the character's max mana right now (the
+    // pool the casting engine measures it against): "125/250" for a percent, "50%"
+    // for an amount. Empty until max mana is known.
+    private readonly int _maxMana;
+    public string BlessIfAboveConverted
+    {
+        get
+        {
+            if (_maxMana <= 0) return string.Empty;
+            return _manaFloorIsAbsolute
+                ? $"{(int)Math.Round(BlessIfAboveMa * 100.0 / _maxMana)}% of {_maxMana}"
+                : $"{(int)Math.Round(_maxMana * BlessIfAboveMa / 100.0)}/{_maxMana}";
+        }
+    }
+
     [ObservableProperty] private bool _onlyWhenHpFull;
     [ObservableProperty] private bool _onlyWhenMaFull;
     [ObservableProperty] private bool _onlyWhenDark;
@@ -181,8 +212,11 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         bool isStockRealm = false, Func<string?, string?>? tickSteps = null,
         AddBuffResult? initial = null, Func<string?, (int Min, int Max)?>? rollRange = null,
         Func<string?, IReadOnlyList<CastOutcome>>? outcomesOf = null,
-        Func<string?, bool>? isNoRedrawDraw = null)
+        Func<string?, bool>? isNoRedrawDraw = null,
+        bool manaFloorIsAbsolute = false, int maxMana = 0)
     {
+        _manaFloorIsAbsolute = manaFloorIsAbsolute;
+        _maxMana = maxMana;
         _outcomesOf = outcomesOf;
         _isNoRedrawDraw = isNoRedrawDraw;
         foreach (int rejected in initial?.RejectedOutcomes ?? Array.Empty<int>()) _initiallyRejected.Add(rejected);
@@ -200,6 +234,9 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             _selectedPick = pickOptions.FirstOrDefault(
                 o => string.Equals(o.Code, i.Spell, StringComparison.OrdinalIgnoreCase));
             _recastMarginSec = i.RecastMarginSec;
+            _blessIfAboveMa = i.BlessIfAboveMa;
+            _blessWhileResting = i.BlessWhileResting;
+            _blessDuringCombat = i.BlessDuringCombat;
             _onlyWhenHpFull = i.OnlyWhenHpFull;
             _onlyWhenMaFull = i.OnlyWhenMaFull;
             _onlyWhenDark = i.OnlyWhenDark;
@@ -227,7 +264,10 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             IsRollSpell ? Math.Clamp(RerollCount, 0, 20) : 0,
             IsRollSpell ? RerollThreshold : null,
             IsRollSpell && RerollInfinite,
-            Outcomes.Where(static o => !o.IsChecked).Select(static o => o.SpellNumber).ToList()));
+            Outcomes.Where(static o => !o.IsChecked).Select(static o => o.SpellNumber).ToList(),
+            Math.Clamp(BlessIfAboveMa, 0, BlessIfAboveMaximum),
+            BlessWhileResting,
+            BlessDuringCombat));
     }
 
     [RelayCommand]

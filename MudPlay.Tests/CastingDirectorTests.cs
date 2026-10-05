@@ -865,8 +865,15 @@ public sealed class CastingDirectorTests
             if (!string.IsNullOrWhiteSpace(Spells.MaRegenSpell))
                 merged.Slots.Add(new BuffSlot { Spell = Spells.MaRegenSpell, CastOnSelf = true });
             merged.Slots.AddRange(PartyBuffs.Slots);
+            StampSharedBlessGates(merged, Health, Spells, SlotsCarryTheirOwnGates);
             return merged;
         }
+
+        /// <summary>Set when a test gives each buff slot its own mana floor and rest /
+        /// combat switches. Otherwise the harness mirrors the schema-5 migration: the
+        /// once-shared Health.BlessIfAboveMa and Spells.SelfBless* values the older
+        /// tests set are copied onto every slot before the director reads them.</summary>
+        public bool SlotsCarryTheirOwnGates { get; set; }
 
         public void RecordCondition(string name, MessageFlags flags,
                                     string applied, string endsWith = "")
@@ -1360,6 +1367,28 @@ public sealed class CastingDirectorTests
         Assert.Equal("bless", h.CastsSent[0]);
     }
 
+    // ProfileMigrations' v4 → v5 and v5 → v6 steps, for the harnesses: the
+    // once-shared bless gates go onto every slot, and the party pair is folded into
+    // the slots that cast on the party.
+    private static void StampSharedBlessGates(BuffSettings buffs, HealthSettings health, SpellsSettings spells,
+        bool skip, PartySettings? party = null)
+    {
+        if (skip) return;
+        foreach (BuffSlot slot in buffs.Slots)
+        {
+            slot.BlessIfAboveMa = health.BlessIfAboveMa;
+            slot.BlessWhileResting = spells.SelfBlessWhileResting;
+            slot.BlessDuringCombat = spells.SelfBlessDuringCombat;
+            if (party is null) continue;
+            bool aimedAtMembers = slot.AllMembers || slot.Targets.Count > 0;
+            bool wholeParty = !slot.CastOnSelf && !aimedAtMembers && slot.WholePartyOn;
+            if (!aimedAtMembers && !wholeParty) continue;
+            bool alsoOnSelf = wholeParty ? slot.CastSolo : slot.CastOnSelf;
+            slot.BlessWhileResting = party.BlessWhileResting || (alsoOnSelf && slot.BlessWhileResting);
+            slot.BlessDuringCombat = party.BlessDuringCombat || (alsoOnSelf && slot.BlessDuringCombat);
+        }
+    }
+
     // Report paradigm-20260928-131549 settings: 433 max HP, minor < 85%, major < 75%,
     // emergency < 50% (216), grhe / gdhe / mgra, Emergency on priority slot 1.
     private static CureHarness PriestHarness()
@@ -1621,6 +1650,147 @@ public sealed class CastingDirectorTests
 
         Assert.Single(h.CastsSent);
         Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    // ----- Each buff carries its own mana floor and rest / combat switches -----
+
+    [Fact]
+    public void Buff_ManaFloorIsPerBuff_LowFloorCastsWhileHighFloorWaits()
+    {
+        // Two buffs both down at 60% mana: the one waiting for 80% is passed over,
+        // the one happy at 40% casts — even though it sits lower in the list.
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bigb", CastOnSelf = true, BlessIfAboveMa = 80 });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "smal", CastOnSelf = true, BlessIfAboveMa = 40 });
+        h.State.MaxMa = 100;
+        h.State.Ma = 60;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "smal" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_ManaFloorIsPerBuff_HighFloorCastsOnceManaReachesIt()
+    {
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bigb", CastOnSelf = true, BlessIfAboveMa = 80 });
+        h.State.MaxMa = 100;
+        h.State.Ma = 79;
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.State.Ma = 80;
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bigb" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_ManaFloorIsPerBuff_AbsoluteModeReadsTheSlotValueAsMana()
+    {
+        // With Health thresholds set to absolute values the slot's number is mana
+        // points, not a percent: 150 of a 400 pool is under a 200 floor.
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.Health.MaThresholdMode = ThresholdMode.Absolute;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bigb", CastOnSelf = true, BlessIfAboveMa = 200 });
+        h.State.MaxMa = 400;
+        h.State.Ma = 150;
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.State.Ma = 200;
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bigb" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_CombatSwitchIsPerBuff_OnlyTheTickedBuffCastsInAFight()
+    {
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "calm", CastOnSelf = true, BlessIfAboveMa = 0 });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "figh", CastOnSelf = true, BlessIfAboveMa = 0, BlessDuringCombat = true });
+        h.State.InCombat = true;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "figh" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_RestSwitchIsPerBuff_OnlyTheTickedBuffCastsInARecoveryRest()
+    {
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "wait", CastOnSelf = true, BlessIfAboveMa = 0 });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "rest", CastOnSelf = true, BlessIfAboveMa = 0, BlessWhileResting = true });
+        h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = true;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "rest" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void Buff_NewSlotDefaults_WaitForHalfManaAndHoldInCombat()
+    {
+        // A buff added fresh waits for half mana, and holds in a fight and in a
+        // recovery rest.
+        BuffSlot fresh = new();
+        Assert.Equal(50, fresh.BlessIfAboveMa);
+        Assert.False(fresh.BlessWhileResting);
+        Assert.False(fresh.BlessDuringCombat);
+
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", CastOnSelf = true });
+        h.State.MaxMa = 100;
+        h.State.Ma = 49;
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.State.Ma = 50;
+        h.Director.Evaluate();
+        Assert.Equal(new[] { "bles" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void ManaRegenReroll_WaitsOutAFightItsBuffMayNotCastIn_ThenFires()
+    {
+        // A reroll staged mid-fight for a buff without "cast during combat" is held,
+        // not dropped: it goes out once the fight ends.
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "mreg", BlessIfAboveMa = 0 });
+        h.State.InCombat = true;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+
+        h.Director.RequestManaRegenReroll("mreg");
+        Assert.Empty(h.CastsSent);
+
+        h.State.InCombat = false;
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "mreg" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void ManaRegenReroll_UnderItsBuffsManaFloor_IsDropped()
+    {
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "mreg", BlessIfAboveMa = 90 });
+        h.State.MaxMa = 100;
+        h.State.Ma = 50;
+
+        h.Director.RequestManaRegenReroll("mreg");
+        h.State.Ma = 100;
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
     }
 
     [Fact]
@@ -3791,6 +3961,11 @@ public sealed class CastingDirectorTests
         /// <summary>The party-buff plan the director reads (CharacterProfile.PartyBuffs).</summary>
         public BuffSettings PartyBuffs { get; } = new();
 
+        /// <summary>Set when a test gives each buff slot its own conditions. Otherwise
+        /// the harness mirrors the profile migration: the once-shared self and party
+        /// bless gates the older tests set are folded onto the slots.</summary>
+        public bool SlotsCarryTheirOwnGates { get; set; }
+
         /// <summary>Given names currently in the room — the presence gate. AddMember
         /// puts a member here by default; drop a name to model an absent member.</summary>
         public HashSet<string> InRoom { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -3837,7 +4012,11 @@ public sealed class CastingDirectorTests
                 _ => null,
                 removesShortsFor: code =>
                     Removes.TryGetValue(code, out string[]? v) ? v : System.Array.Empty<string>());
-            Director.SetPartyBuffSource(() => PartyBuffs);
+            Director.SetPartyBuffSource(() =>
+            {
+                StampSharedBlessGates(PartyBuffs, Health, Spells, SlotsCarryTheirOwnGates, PartySettings);
+                return PartyBuffs;
+            });
             Director.SetRoomPresenceCheck(g => InRoom.Contains(g));
             Director.SetPartyWideBuffCheck(s => WholeParty.Contains(s));
             // Healthy + full mana so survival categories never pre-empt buffs.
@@ -4538,6 +4717,92 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_CombatSwitchIsPerBuff_OnlyTheTickedBuffGoesOutOnAMember()
+    {
+        // Two buffs aimed at the same member mid-fight: the one with "cast during
+        // combat" goes out, the other waits for the fight to end.
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.InCombat = true;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "prot", BlessIfAboveMa = 0, Targets = { "raijin" } });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 0, Targets = { "raijin" }, BlessDuringCombat = true });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["prot"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bles Raijin" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_RestSwitchIsPerBuff_OnlyTheTickedBuffGoesOutOnAMember()
+    {
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = true;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "prot", BlessIfAboveMa = 0, Targets = { "raijin" } });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 0, Targets = { "raijin" }, BlessWhileResting = true });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["prot"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bles Raijin" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_TheOldPartySwitches_NoLongerDecideAnything()
+    {
+        // Settings → Party's pair is unread: with both on there, a buff without its
+        // own "cast during combat" still waits out the fight.
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartySettings.BlessDuringCombat = true;
+        h.PartySettings.BlessWhileResting = true;
+        h.State.InCombat = true;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 0, Targets = { "raijin" } });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_ManaFloorIsPerBuff_OnAMemberToo()
+    {
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.Ma = 50;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "prot", BlessIfAboveMa = 80, Targets = { "raijin" } });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 40, Targets = { "raijin" } });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["prot"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bles Raijin" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_WholeParty_InAParty_FollowsTheBuffsOwnCombatSwitch()
+    {
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.InCombat = true;
+        h.AddWholePartySlot("chan");
+        h.PartyBuffs.Slots[^1].BlessIfAboveMa = 0;
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.PartyBuffs.Slots[^1].BlessDuringCombat = true;
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "chan" }, h.CastsSent);
+    }
+
+    [Fact]
     public void PartyBless_DuringCombatOn_Casts()
     {
         // "During combat" is an opt-in override (off by default) — turn it on and
@@ -4563,6 +4828,8 @@ public sealed class CastingDirectorTests
         // The reroller stages a reroll on the director; it casts through the
         // between-round pass (as a Buffing candidate), not on the raw wire.
         using Harness h = new();
+        BuffSettings buffs = new() { Slots = { new BuffSlot { Spell = "mreg" } } };
+        h.Director.SetPartyBuffSource(() => buffs);
         h.SetPrompt(hp: 100, maxHp: 100, ma: 100, maxMa: 100);   // full, out of combat, nothing due
         Assert.Empty(h.CastsSent);
 
@@ -4578,7 +4845,9 @@ public sealed class CastingDirectorTests
         // reroll must then yield (not double-cast the same round) — the exact race
         // the old raw-wire reroll could lose.
         using Harness h = new();
-        h.Spells.SelfBlessDuringCombat = true;   // allow a buff (the reroll) in combat
+        // The reroll's buff may cast in combat, so only the spent slot holds it.
+        BuffSettings buffs = new() { Slots = { new BuffSlot { Spell = "mreg", BlessDuringCombat = true } } };
+        h.Director.SetPartyBuffSource(() => buffs);
         h.Spells.MinorHealSpell = "heal";
         h.Health.MinorHealCombatTrigger = 70;
         h.SetPrompt(hp: 50, maxHp: 100, ma: 100, maxMa: 100, inCombat: true);   // 50% < 70% → heal fires, spends slot

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MudPlay.ViewModels;
 using Xunit;
 
@@ -16,6 +17,75 @@ public sealed class AddBuffDialogViewModelTests
             isStockRealm: stock, tickSteps: _ => steps,
             initial: new AddBuffResult("flux", 15, false, false, false, false, 3, null),
             rollRange: _ => roll);
+
+    [Fact]
+    public void ANewBuff_StartsAtHalfMana_AndHoldsInRestAndCombat()
+    {
+        AddBuffDialogViewModel d = new(Picks, _ => false, _ => false);
+
+        Assert.Equal(50, d.BlessIfAboveMa);
+        Assert.False(d.BlessWhileResting);
+        Assert.False(d.BlessDuringCombat);
+        Assert.Equal("Cast if mana ≥ %", d.BlessIfAboveLabel);
+        Assert.Equal(100, d.BlessIfAboveMaximum);
+    }
+
+    [Fact]
+    public void EditingABuff_ShowsItsConditions_AndOkHandsThemBack()
+    {
+        AddBuffDialogViewModel d = new(Picks, _ => false, _ => false,
+            initial: new AddBuffResult("flux", 15, false, false, false, false, 0, null,
+                BlessIfAboveMa: 35, BlessWhileResting: true, BlessDuringCombat: false));
+        Assert.Equal(35, d.BlessIfAboveMa);
+        Assert.True(d.BlessWhileResting);
+
+        d.BlessIfAboveMa = 150;          // past a percent's ceiling
+        d.BlessDuringCombat = true;
+        AddBuffResult? result = null;
+        d.CloseRequested += r => result = r;
+        d.OkCommand.Execute(null);
+
+        Assert.NotNull(result);
+        Assert.Equal(100, result.BlessIfAboveMa);
+        Assert.True(result.BlessWhileResting);
+        Assert.True(result.BlessDuringCombat);
+    }
+
+    [Fact]
+    public void TheManaFloor_IsShownAgainstTheCharactersMaxMana()
+    {
+        AddBuffDialogViewModel percent = new(Picks, _ => false, _ => false, maxMana: 250);
+        Assert.Equal("125/250", percent.BlessIfAboveConverted);
+
+        List<string?> raised = new();
+        percent.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        percent.BlessIfAboveMa = 10;
+        Assert.Equal("25/250", percent.BlessIfAboveConverted);
+        Assert.Contains(nameof(AddBuffDialogViewModel.BlessIfAboveConverted), raised);
+
+        AddBuffDialogViewModel amount = new(Picks, _ => false, _ => false,
+            initial: new AddBuffResult("flux", 15, false, false, false, false, 0, null, BlessIfAboveMa: 100),
+            manaFloorIsAbsolute: true, maxMana: 250);
+        Assert.Equal("40% of 250", amount.BlessIfAboveConverted);
+
+        AddBuffDialogViewModel unknown = new(Picks, _ => false, _ => false);
+        Assert.Equal(string.Empty, unknown.BlessIfAboveConverted);
+    }
+
+    [Fact]
+    public void AbsoluteManaThresholds_TakeTheFloorAsAnAmount()
+    {
+        AddBuffDialogViewModel d = new(Picks, _ => false, _ => false,
+            initial: new AddBuffResult("flux", 15, false, false, false, false, 0, null, BlessIfAboveMa: 250),
+            manaFloorIsAbsolute: true);
+
+        Assert.Equal("Cast if mana ≥", d.BlessIfAboveLabel);
+        AddBuffResult? result = null;
+        d.CloseRequested += r => result = r;
+        d.OkCommand.Execute(null);
+
+        Assert.Equal(250, result!.BlessIfAboveMa);
+    }
 
     [Fact]
     public void Stock_UsesTheRollBox_AndShowsTheTickSteps()

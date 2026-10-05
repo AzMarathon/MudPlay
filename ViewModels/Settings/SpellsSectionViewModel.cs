@@ -11,11 +11,10 @@ namespace MudPlay.ViewModels.Settings;
 // "Spells" tab — self-cast picks per role. Top section orders the between-round
 // casting categories (Minor / Major party heal, Minor / Major self heal,
 // Curing, Buffing, Debuffing). Middle sections name the heal / regen / cure
-// spells plus the mana-regen reroll config; the bottom sections hold the
-// self-bless timing gates and the ailment-handling toggles. Persists as the
-// "Spells" entry in CharacterProfile.Settings. The self-bless spell picks
-// themselves live in the unified Buff Watchdog list (CharacterProfile.PartyBuffs),
-// not here.
+// spells plus the mana-regen reroll config; the bottom section holds the
+// ailment-handling toggles. Persists as the "Spells" entry in
+// CharacterProfile.Settings. The self-bless spell picks and their timing live in
+// the unified Buff Watchdog list (CharacterProfile.PartyBuffs), not here.
 //
 // This tab wires DTO storage only — CastingDirector (the between-round cast
 // engine) subscribes to ProfileService.ProfileLoaded to re-read the DTO.
@@ -39,7 +38,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // The spell-priority order + the self-heal / HP-regen picks are PER COMBAT
     // PROFILE (they swap with the chip on the Combat tab); the rest of this tab
-    // (cures, bless timing, ailment gates) stays per-character. Dirtiness + commit
+    // (cures, ailment gates) stays per-character. Dirtiness + commit
     // are owned by the shared staging session so a Spells edit saves as one unit
     // with the Combat / Health tabs.
     public override bool IsDirty => _session.IsDirty;
@@ -77,7 +76,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Healing", "Regeneration", "Minor heal", "Major heal", "Emergency heal",
         "HP Regen",
         "Other spells", "Cure Holds", "Cure poison", "Cure disease", "Cure blindness",
-        "Self bless while resting", "Self bless during combat", "Bless timing",
         "Ailment handling", "Coordination",
         "Ignore poison", "Ignore blindness", "Ignore confusion", "Ignore disease",
     };
@@ -159,11 +157,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     public bool CureDiseaseSpellUnlearned   => IsSpellUnlearned(SpellSuggestions, CureDiseaseSpell);
     public bool CureBlindnessSpellUnlearned => IsSpellUnlearned(SpellSuggestions, CureBlindnessSpell);
 
-    // Self-bless timing gates (default on/off preserve the historical
-    // out-of-combat-only behaviour). Govern the self-buff path in CastingDirector.
-    [ObservableProperty] private bool _selfBlessWhileResting = true;
-    [ObservableProperty] private bool _selfBlessDuringCombat;
-
     // ----- Ailment handling / coordination --------------------------
     // Each "Ignore X" gate is the single per-ailment toggle: it suppresses BOTH the
     // @wait sent to the party leader AND the say-channel announce. Default off
@@ -184,7 +177,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     public CombatProfileChipBar ChipBar { get; }
     public CombatProfileGroupToggle SpellPriorityInProfile { get; }
     public CombatProfileGroupToggle HealingRegenInProfile { get; }
-    public CombatProfileGroupToggle BlessTimingInProfile { get; }
 
     public SpellsSectionViewModel(CombatProfileStagingSession session)
         : this(AppServices.Current.Profile, session) { }
@@ -213,7 +205,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         ChipBar = new CombatProfileChipBar(_session);
         SpellPriorityInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.SpellPriority, MarkDirty);
         HealingRegenInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.HealingRegen, MarkDirty);
-        BlessTimingInProfile = new CombatProfileGroupToggle(_session, Models.Profile.CombatProfileGroup.BlessTiming, MarkDirty);
 
         OnDispose(() =>
         {
@@ -229,7 +220,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             ChipBar.Dispose();
             SpellPriorityInProfile.Dispose();
             HealingRegenInProfile.Dispose();
-            BlessTimingInProfile.Dispose();
         });
         _suppressDirty = true;
         LoadFromProfile();                       // full: per-character from Settings["Spells"]
@@ -243,8 +233,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
 
     // ----- Shared-session participation -----------------------------
 
-    // Fold the per-profile boxes (priority ranks, self-heal / HP-regen picks, self-bless
-    // timing) into
+    // Fold the per-profile boxes (priority ranks, self-heal / HP-regen picks) into
     // the active working profile — mutates in place, leaving the profile's other
     // sections (its Health / Combat / weapons) untouched.
     private void CaptureSpellBoxesToActive()
@@ -263,8 +252,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         s.MajorHealSpell = NullIfBlank(MajorHealSpell);
         s.EmergencyHealSpell = NullIfBlank(EmergencyHealSpell);
         s.HpRegenSpell   = NullIfBlank(HpRegenSpell);
-        s.SelfBlessWhileResting = SelfBlessWhileResting;
-        s.SelfBlessDuringCombat = SelfBlessDuringCombat;
     }
 
     // Chip switch: load only the per-profile boxes from the active profile, leaving
@@ -306,8 +293,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         MajorHealSpell = s.MajorHealSpell;
         EmergencyHealSpell = s.EmergencyHealSpell;
         HpRegenSpell   = s.HpRegenSpell;
-        SelfBlessWhileResting = s.SelfBlessWhileResting;
-        SelfBlessDuringCombat = s.SelfBlessDuringCombat;
     }
 
     private void OnSessionChipsChanged()
@@ -341,7 +326,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     }
 
     // The FULL Settings["Spells"] DTO from the current boxes — the per-character
-    // fields (cures / bless timing / ailments) plus the per-profile priority + heal
+    // fields (cures / ailments) plus the per-profile priority + heal
     // subset (which the boxes show for the active profile). The session's commit
     // writes this; the per-profile subset also lands on the profile blob.
     private SpellsSettings BuildDto() => new()
@@ -370,8 +355,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         CureDiseaseAfterCombat   = CureDiseaseAfterCombat,
         CureBlindnessAfterCombat = CureBlindnessAfterCombat,
 
-        SelfBlessWhileResting = SelfBlessWhileResting,
-        SelfBlessDuringCombat = SelfBlessDuringCombat,
 
         IgnorePoison    = IgnorePoison,
         IgnoreBlindness = IgnoreBlindness,
@@ -435,8 +418,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         CureDiseaseAfterCombat   = dto.CureDiseaseAfterCombat;
         CureBlindnessAfterCombat = dto.CureBlindnessAfterCombat;
 
-        SelfBlessWhileResting = dto.SelfBlessWhileResting;
-        SelfBlessDuringCombat = dto.SelfBlessDuringCombat;
 
         IgnorePoison    = dto.IgnorePoison;
         IgnoreBlindness = dto.IgnoreBlindness;
@@ -486,8 +467,6 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
     partial void OnCureDiseaseAfterCombatChanged(bool value)   => MarkDirty();
     partial void OnCureBlindnessAfterCombatChanged(bool value) => MarkDirty();
 
-    partial void OnSelfBlessWhileRestingChanged(bool value)  => MarkDirty();
-    partial void OnSelfBlessDuringCombatChanged(bool value)  => MarkDirty();
 
     partial void OnIgnorePoisonChanged(bool value)           => MarkDirty();
     partial void OnIgnoreBlindnessChanged(bool value)        => MarkDirty();

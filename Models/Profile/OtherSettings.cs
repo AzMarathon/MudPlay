@@ -153,8 +153,4 @@ public sealed class OtherSettings
     // graduated to CombatSettings — they sit on the Combat tab next to the
     // room thresholds + RunDistance they coordinate with. HealthManager's
     // flee path reads them from there.
-
-    // Note: the party-bless gates (BlessWhileResting / BlessDuringCombat)
-    // graduated to PartySettings — they sit on the Party tab next to the
-    // bless slots they gate. CastingDirector reads them from there.
 }

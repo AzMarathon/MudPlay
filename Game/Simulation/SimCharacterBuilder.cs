@@ -83,7 +83,8 @@ public static class SimCharacterBuilder
             if (!selfCast) continue;
             int? rerollBelow = slot.RerollThresholdIsRoll || realm == RealmType.ParaMud ? slot.RerollThreshold : null;
             list.Add(new SimBuff(slot.Spell, slot.RecastMarginSec, slot.OnlyWhenHpFull, slot.OnlyWhenMaFull,
-                slot.CastBeforeRestingForMana, rerollBelow, slot.RerollCount, slot.RerollInfinite));
+                slot.CastBeforeRestingForMana, rerollBelow, slot.RerollCount, slot.RerollInfinite,
+                slot.BlessIfAboveMa, slot.BlessWhileResting, slot.BlessDuringCombat));
         }
         return list;
     }

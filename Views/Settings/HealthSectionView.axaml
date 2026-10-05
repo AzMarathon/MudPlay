@@ -193,7 +193,7 @@
                                          ToolTip.Tip="Thresholds below are read as absolute MA / KAI."/>
                         </StackPanel>
 
-                        <Grid ColumnDefinitions="180,130,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+                        <Grid ColumnDefinitions="180,130,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Rest max"/>
                             <NumericUpDown Grid.Row="0" Grid.Column="1"
                                            Value="{Binding RestMaxMa, Mode=TwoWay}"
@@ -239,15 +239,9 @@
                                        VerticalAlignment="Center" Margin="8,0,0,0"
                                        Text="{Binding RunIfBelowMaConverted}"/>
 
-                            <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="Bless if above"/>
-                            <NumericUpDown Grid.Row="5" Grid.Column="1"
-                                           Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
-                                           Minimum="0" Maximum="{Binding MaThresholdMax}" Increment="1" FormatString="0" Width="120" HorizontalAlignment="Left"
-                                           ToolTip.Tip="Re-cast party / self buffs when MA recovers past this point."/>
-                            <TextBlock Grid.Row="5" Grid.Column="2" Classes="FieldLabel"
-                                       VerticalAlignment="Center" Margin="8,0,0,0"
-                                       Text="{Binding BlessIfAboveMaConverted}"/>
                         </Grid>
+                        <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Text="&quot;Bless if above&quot; is set on each buff now: Buff Watchdog → edit a buff → Cast if mana ≥."/>
                     </StackPanel>
                 </Panel>
 

@@ -55,7 +55,78 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v4 → v5: "bless if above", "bless self while resting" and "bless self
+        // during combat" stopped being one setting for every buff and became three
+        // conditions on each buff slot. Copy what the character had onto every slot
+        // it already has, so nothing casts differently after the update.
+        if (profile.SchemaVersion < 5)
+        {
+            CopyBlessGatesOntoBuffSlots(profile);
+            profile.SchemaVersion = 5;
+            changed = true;
+        }
+
+        // v5 → v6: "bless party while resting / during combat" went the same way.
+        // A buff's own two switches now cover its casts on the party as well as on
+        // the character, so the party pair is folded into the slots that cast there.
+        if (profile.SchemaVersion < 6)
+        {
+            FoldPartyBlessGatesIntoBuffSlots(profile);
+            profile.SchemaVersion = 6;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    // Fold the stored Party rest / combat switches into the buff slots, which carry
+    // the self pair from the step before. A slot cast only on party members takes the
+    // party values. A slot cast both ways (on the character and on members, or a
+    // whole-party spell also cast solo) keeps a switch on when either side had it on,
+    // so no cast it used to make is lost. A slot cast only on the character is left.
+    //
+    // A whole-party spell can't be told from the slot alone (that needs the spell
+    // record), so it is read off the targeting: nothing aimed, the Party toggle on.
+    private static void FoldPartyBlessGatesIntoBuffSlots(CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs) return;
+        PartySettings party = ReadStored<PartySettings>(profile, "Party");
+        foreach (BuffSlot slot in buffs.Slots)
+        {
+            bool aimedAtMembers = slot.AllMembers || slot.Targets.Count > 0;
+            bool wholeParty = !slot.CastOnSelf && !aimedAtMembers && slot.WholePartyOn;
+            if (!aimedAtMembers && !wholeParty) continue;
+            bool alsoOnSelf = wholeParty ? slot.CastSolo : slot.CastOnSelf;
+            slot.BlessWhileResting = party.BlessWhileResting || (alsoOnSelf && slot.BlessWhileResting);
+            slot.BlessDuringCombat = party.BlessDuringCombat || (alsoOnSelf && slot.BlessDuringCombat);
+        }
+    }
+
+    // Stamp the Health "bless if above" and Spells rest / combat switches onto every
+    // existing buff slot. They come from the character's own stored sections, the
+    // same place the casting engine read them from (and the active combat profile
+    // mirrors those sections, so its values are the ones copied). The stored values
+    // stay where they are, unread.
+    private static void CopyBlessGatesOntoBuffSlots(CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs) return;
+        HealthSettings health = ReadStored<HealthSettings>(profile, "Health");
+        SpellsSettings spells = ReadStored<SpellsSettings>(profile, "Spells");
+        foreach (BuffSlot slot in buffs.Slots)
+        {
+            slot.BlessIfAboveMa = health.BlessIfAboveMa;
+            slot.BlessWhileResting = spells.SelfBlessWhileResting;
+            slot.BlessDuringCombat = spells.SelfBlessDuringCombat;
+        }
+    }
+
+    // A stored settings section, or its defaults when the profile has none or it
+    // doesn't parse.
+    private static T ReadStored<T>(CharacterProfile profile, string key) where T : new()
+    {
+        if (profile.Settings is not { } settings || !settings.TryGetValue(key, out JsonElement json)) return new T();
+        try { return JsonSerializer.Deserialize<T>(json.GetRawText()) ?? new T(); }
+        catch (JsonException) { return new T(); }   // an unreadable section migrates as defaults
     }
 
     // Move MaRegenSpell (with ManaRegenRerollThreshold / Cap) + RoomLightSpell out of

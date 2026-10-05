@@ -774,7 +774,7 @@ Party buffs are no longer set up here in the Party window. **All** automated buf
 Two things about party buffs stay worth knowing here:
 
 - **Who's targeted** — a single-target buff fires for any member who's **currently in your party** (a MajorMUD party is always in one room, so being in `par` means being in the room; a member who leaves or is uninvited drops out and is no longer targeted). The one exception is a member who's **hiding**: the cast comes back *"You do not see … here!"*, so the client backs off that member — the Buff Watchdog marks them **"hidden — can't target"** — and retries the next time you **move** or they **reappear**. Targets are remembered by name, so your setup survives parties dissolving and reforming.
-- **When it casts** — the two **bless while resting / during combat** gates that decide *when* the party-buff engine may cast still live on **Settings → Party**.
+- **When it casts** — each buff carries its own conditions, set in its edit dialog in the Buff Watchdog: **Cast if mana ≥**, **Cast while resting** and **Cast during combat**. They apply to every cast of that buff, on you or on the party.
 
 ## Leaders and followers
 
@@ -988,7 +988,7 @@ A cure that doesn't take isn't cast over and over. On yourself, the same cure go
 
 Auto-blessing — self *and* party — is controlled by the **Auto-Bless** toggle and nothing else (it's independent of Auto-Combat and Auto-Rest/Heal). By default the engine buffs while you're **moving or standing idle** (including an idle rest) and holds off **during combat** and **during a triggered recovery rest** (when HP or MA fell below your rest-if-below setting).
 
-Two opt-in checkboxes override those holds — one to also bless during a recovery rest, one to also bless while actively fighting (the self pair on **Settings → Spells**, the party pair on **Settings → Party**). You can also tell it to ignore, or not announce, specific ailments.
+Each buff has two opt-in tick boxes that override those holds — **Cast while resting** to also cast it during a recovery rest, **Cast during combat** to also cast it mid-fight — and its own mana floor, **Cast if mana ≥**. They are set in the buff's edit dialog in the **Buff Watchdog** and apply to every cast of that buff, on you or on the party. You can also tell it to ignore, or not announce, specific ailments.
 
 ## Mana regen
 
@@ -2002,7 +2002,12 @@ Click **＋ Add buff** to open the Add-buff dialog:
 
 - **Pick a buff** — a **dropdown**, not a text box: it lists every buff spell you've actually **learned** (attacks and heals filtered out), each shown as its **name and the level you learned it at** (e.g. *bless (Lvl 2)*), plus any **cast-on-use buff item** you can actually use — one you own (carried or worn) and meet the level for (an unlimited-use item like a *shimmering greatsword* that casts a buff when used; these show as a `#item` entry). A buff that's **already slotted** stays in the list but is **greyed out / unselectable**, so you can see it's taken rather than wonder where it went. The list is ordered by learn-level, low to high. What targeting a slot offers depends on the spell: a self-only spell can only be cast on you, a single-target spell can be aimed at you and/or party members, and a whole-party spell (chant and the like) blankets everyone with one cast.
 - **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off). It can also be **negative**, which recasts that many seconds *after* the buff wears off — e.g. `-30` on a 60s buff recasts it every 90s, letting it lapse on purpose to **spread out mana use**. The Watchdog bar shows the post-expiry wait as a **red** extension (see *The buff bars* below).
-- **Set conditions** — optional per-slot gates, some of which only appear for the spell that uses them:
+- **Set conditions** — per-slot gates. The first three are on every buff; the rest only appear for the spell that uses them:
+  - **Cast if mana ≥** — this buff is only cast once your mana is at or above this value (default **50%** for a new buff), so mana recovers past a floor before it goes on upkeep. Each buff has its own: a cheap bless can go out at 30% while an expensive one waits for 80%. `0` never holds it back. It is a percent of max mana, or a raw mana / kai amount when Settings → Health reads its mana thresholds as amounts (the label drops the `%`). Beside the box is what it comes to against your max mana right now, e.g. *125/250*. A free item-cast buff ignores it.
+  - **Cast while resting** — off (the default), this buff waits out a **triggered recovery rest** (HP or MA fell below your rest-if-below setting and you're resting back up); ticked, it is cast during one too. An idle rest never holds a buff.
+  - **Cast during combat** — off (the default), this buff waits until the fight is over; ticked, it is also cast mid-fight (the cast spends that round's between-round slot). Tick it on the buffs worth a round and leave the rest for after the fight.
+
+    All three apply to **every cast of that buff**, solo or in a party: the Self cast, a cast on a party member, a whole-party spell, and a mana-regen reroll. They replaced the shared *Bless if above* (Settings → Health), *Bless self while resting / during combat* (Settings → Spells) and *Bless party while resting / during combat* (Settings → Party); each buff you already had took the values you had there.
   - **Only when HP is full** / **Only when MA is full** — hold the cast until you've rested up to your **rest-max** target (not literal 100%); a "topped-off, ready for the next fight" buff. A triggered recovery rest suspends it until you're back at max.
   - **Only when the room is dark** — shown for a **light** spell. Ticked, it keeps the reactive cast-on-entering-a-dark-room behaviour (via the auto-light system); unticked, the light is maintained like any ordinary buff.
   - **Cast before resting for mana** — shown for a **mana-regen roll** spell (nature tap / mana flux / prfl). Ticked, the buff is only kept up **while you're resting for mana**: it's (re)cast when your mana drops below its rest threshold and recast on expiry through the whole rest — including if a fight interrupts the rest — and stops once your mana tops back up. Unticked, it's kept up all the time like a normal buff. (It also carries the reroll knobs, below.)
@@ -2122,7 +2127,7 @@ A **drag bar** sits between the config table and the timer bars — grab it to r
 
 Switching characters starts the watchdog empty.
 
-The window is a live view — it refreshes about once a second while open. The two timing gates that decide *when* the buff engine may cast — self-bless "while resting / during combat" and party-bless "while resting / during combat" — still live in Settings (**Settings → Spells** for self, **Settings → Party** for party).
+The window is a live view — it refreshes about once a second while open. *When* a buff may cast — its mana floor, and whether it casts in a recovery rest or a fight — is set on the buff itself, in its edit dialog, and holds for casts on you and on the party alike.
 
 ## Wire Inspector (F5)
 
@@ -2949,8 +2954,8 @@ Either way a flee only ever sends plain compass moves, so it **stops short at an
 **What a profile remembers (a full loadout):**
 - on the **Combat tab**: the **action order** (spells-first / physical-first / custom cycle), the **weapons & attack commands** (primary / alternate + off-hands and the normal / alternate verbs), the **backstab options** (including stealth running), the **room thresholds** (min / max monsters, run distance, **kill all engaged**, and **when running away** — go backwards, break before running), and the **spell combat** slots with their per-slot gates, the mana-threshold mode and the drain settings;
 - the **entire Health tab** — rest / heal / flee / hangup thresholds, meditate / shadowrest, the emergency escape, and the pre-/post-rest commands;
-- on the **Spells tab**: the **between-round spell-type priority order**, the **healing / regeneration picks** (Minor heal, Major heal, Emergency heal, HP Regen), and **bless timing** (bless self while resting / during combat);
-- on the **Party tab**: **party healing** (the Minor / Major single-target and party (AOE) heals, their thresholds, and how many members switch to the AOE heal) and **party bless** (bless party while resting / during combat).
+- on the **Spells tab**: the **between-round spell-type priority order** and the **healing / regeneration picks** (Minor heal, Major heal, Emergency heal, HP Regen);
+- on the **Party tab**: **party healing** (the Minor / Major single-target and party (AOE) heals, their thresholds, and how many members switch to the AOE heal).
 
 The rest stays per-character and never swaps: targeting and display on the Combat tab, the cures and ailment gates on the Spells tab, the Buff Watchdog self-bless slots, and the Party tab's **Rank** and options.
 
@@ -3141,13 +3146,7 @@ The room-light spell is configured in the **Buff Watchdog** now. Add it there an
 
 ### Self-bless — moved to the Buff Watchdog
 
-The self-buff slots (which spells, `#item`-cast buffs, per-slot recast timers) live in the **Buff Watchdog** now, folded into the one unified buff list alongside your party buffs — tick the **Self** box on a slot to cast it on yourself. See the **Buff Watchdog** section for how to add and target buffs. The two **timing gates** below — *when* the self-buff engine may cast — stay here on this tab.
-
-### Bless self while resting / Bless self during combat
-
-**Default:** both Off
-**What it does:** Two opt-in overrides for your own buffs. With both off (the default), the engine buffs while you're **moving or standing idle** — including an idle rest — and holds off **during combat** and **during a triggered recovery rest** (HP or MA fell below your rest-if-below setting and you're resting back up). "Bless while resting" lets it also buff during that recovery rest; "Bless during combat" lets it also buff mid-fight (casting spends that round). Note "while resting" means a *triggered recovery rest* only — idle resting always buffs.
-**When you might change it:** Turn on "during combat" for a fast hunting loop that rarely stays out of combat long enough to bless between fights; turn on "while resting" if you'd rather top off your buffs during recovery downtime than wait until you're back on your feet.
+The self-buff slots (which spells, `#item`-cast buffs, per-slot recast timers) live in the **Buff Watchdog** now, folded into the one unified buff list alongside your party buffs — tick the **Self** box on a slot to cast it on yourself. See the **Buff Watchdog** section for how to add and target buffs. *When* each buff may cast — its mana floor, and whether it casts in a recovery rest or a fight — is set on the buff too, in its edit dialog (**Cast if mana ≥**, **Cast while resting**, **Cast during combat**). Those replaced this tab's *Bless self while resting / during combat* boxes; each buff you already had took the values you had here.
 
 ### Ignore poison / blindness / confusion / diseased
 
@@ -3228,10 +3227,9 @@ Only Default-set items you actually **have** (worn or carried) count — an item
 **What it does:** A mana floor that gates self-heal casts — below this, MudPlay skips the heal so mana can regenerate. `0` disables the gate entirely (always heal regardless of mana).
 **Important notes:** This floor gates Minor and Major heal only. **Emergency heal ignores it** — a last-resort save spends whatever mana is left rather than conserving it (it still won't attempt a spell it can't afford the mana for). So even with a high floor set here, your Emergency heal still fires in its band.
 
-### Bless if above
+### Bless if above (moved)
 
-**Default:** 70%
-**What it does:** Re-casts your buffs only once mana has climbed back above this value — letting mana recover past a floor before you spend it on upkeep rather than survival.
+The mana floor for re-casting buffs is set on each buff now: **Buff Watchdog → edit a buff → Cast if mana ≥**. Each buff you already had took the value that was set here.
 
 ### Use 'meditate' ability
 
@@ -3290,11 +3288,11 @@ Settings → Party.
 
 ### Party bless
 
-**Where it's configured:** the party-buff **slots** (which spells, which members, recast timers) live in the **Buff Watchdog** — see the **Buff Watchdog** section under *Tools & Diagnostics*. This tab keeps only the two timing gates below.
+**Where it's configured:** the party-buff **slots** (which spells, which members, recast timers) live in the **Buff Watchdog** — see the **Buff Watchdog** section under *Tools & Diagnostics*. *When* each buff may cast is set there too, on the buff itself (**Cast if mana ≥**, **Cast while resting**, **Cast during combat**).
 
 **Targeting, and when they fire:**
 
-- A **whole-party** spell (chant and the like) is sent once with no target and blankets the party, including you. Its **Party** checkbox is the master enable: unticking it stops the spell everywhere, clears Solo, and leaves both boxes visibly off. While that master is enabled, the **Solo** option allows it while you're alone (a whole-party cast still lands on a lone character); untick only Solo to make it party-only. In a party it obeys the party bless-timing gates below; **while solo it follows your self-bless timing gates** (Settings → Spells — the same combat / rest holds), since it's effectively a self-cast then.
+- A **whole-party** spell (chant and the like) is sent once with no target and blankets the party, including you. Its **Party** checkbox is the master enable: unticking it stops the spell everywhere, clears Solo, and leaves both boxes visibly off. While that master is enabled, the **Solo** option allows it while you're alone (a whole-party cast still lands on a lone character); untick only Solo to make it party-only. Solo or in a party, it follows the buff's own **Cast while resting / Cast during combat** boxes (Buff Watchdog → edit the buff).
 - A **single-target** spell is cast on each selected member individually with its own recast timer, is **not** cast on your own character (self comes from the self-bless slots), and only fires for a member who's both in your party and in the room — so it genuinely needs a party.
 
 Your self-bless slots always fire, party or not.
@@ -3305,10 +3303,9 @@ Your self-bless slots always fire, party or not.
 
 Any OTHER pair of configured buffs that remove each other this way — two self-cast buffs, two whole-party buffs, a whole-party buff removing a member's buff, and so on — aren't auto-resolved like this one case is; they instead get the **⚠** warning described in the **Buff Watchdog** section, so you know about the conflict without the client silently changing what it casts.
 
-### Bless party while resting / Bless party during combat
+### Bless party while resting / during combat (moved)
 
-**Default:** both Off
-**What it does:** The party-bless mirror of the self-bless overrides. Party buffing runs under the same Auto-Bless toggle and the same rule: with both off (the default) it buffs the party while moving or standing idle (including an idle rest) and holds during combat and during a triggered recovery rest. "While resting" adds a triggered recovery rest; "during combat" adds mid-fight. As with self-bless, "while resting" means a *triggered recovery rest* — idle resting always buffs.
+These two boxes are gone from this tab. Each buff has its own **Cast while resting** and **Cast during combat** now (Buff Watchdog → edit a buff), and they cover casts on the party as well as on you. Each buff you already had that was cast on the party took the values you had here.
 
 ### Help leader open doors
 
@@ -4375,7 +4372,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Cure after combat (per cure) | off | checkbox | `CureHoldsAfterCombat` etc. | Models/Profile/SpellsSettings.cs |
 | Unified buff list (self + party bless, room light, mana-regen + reroll, when-HP/MA-full) | empty | spell / `#item` + targets + recast + conditions | `PartyBuffs` (`BuffSettings`) | Models/Profile/BuffSettings.cs (Buff Watchdog) |
-| Bless self while resting / during combat | false / false | bool | `SelfBlessWhileResting` / `SelfBlessDuringCombat` | Models/Profile/SpellsSettings.cs |
+| Per buff: Cast if mana ≥ / Cast while resting / Cast during combat | `50` (%) / false / false | 0–100 (%) or a mana amount / bool / bool | `BlessIfAboveMa` / `BlessWhileResting` / `BlessDuringCombat` on each `BuffSlot` | Models/Profile/BuffSettings.cs (Buff Watchdog → edit a buff) |
 | Ignore poison, blindness, confusion, diseased (each suppresses both @wait + say) | false (all) | bool | `IgnorePoison` etc. | Models/Profile/SpellsSettings.cs |
 | HP/MA threshold mode | `Percentage` (both) | Percentage / Absolute | `HpThresholdMode` / `MaThresholdMode` | Models/Profile/HealthSettings.cs |
 | Rest max / Rest if below (HP, MA) | 95/60/95/30 (%) | 0–100,000 | `RestMaxHp`, `RestIfBelowHp`, `RestMaxMa`, `RestIfBelowMa` | Models/Profile/HealthSettings.cs |
@@ -4383,7 +4380,6 @@ This section is a compact, technical lookup table for every setting documented a
 | Hang up if below | `5` (%) | death-floor minimum–100,000 | `HangIfBelowHp` | Models/Profile/HealthSettings.cs |
 | Sys goto wimpy instead of hanging (+ location) | false / unset | bool / Sys Goto keyword | `SysGotoWimpyInsteadOfHanging` / `SysGotoWimpyLocation` | Models/Profile/HealthSettings.cs |
 | Heal (rest) / Minor / Major / Emergency heal (combat) | 80/70/40/20 (%) | 0–100,000 | `HealRestTrigger`, `MinorHealCombatTrigger`, `MajorHealCombatTrigger`, `EmergencyHealTrigger` | Models/Profile/HealthSettings.cs |
-| Bless if above | `70` (%) | 0–100,000 | `BlessIfAboveMa` | Models/Profile/HealthSettings.cs |
 | Heal if above (rest / combat) | 50 / 0 (%) | 0–100,000 (0=off) | `HealIfAboveMaResting` / `HealIfAboveMaCombat` | Models/Profile/HealthSettings.cs |
 | Use meditate / Meditate before resting / Utilize shadowrest | false (all) | bool | `UseMeditateAbility`, `MeditateBeforeResting`, `UtilizeShadowRest` | Models/Profile/HealthSettings.cs |
 | Pre/Post-rest command | empty | free text, `^M`/`;` chained | `PreRestCommand` / `PostRestCommand` | Models/Profile/HealthSettings.cs |
@@ -4396,7 +4392,6 @@ This section is a compact, technical lookup table for every setting documented a
 | Minor/Major party heal (single/AOE) | blank (all 4) | spell code | `MinorPartyHealSpell` etc. | Models/Profile/PartySettings.cs |
 | Minor/Major heal threshold %, AOE min members | 70/40/2 | 0–100 / 2–6 | `MinorHealMemberThresholdPercent` etc. / `AoeMinMembers` | Models/Profile/PartySettings.cs |
 | Party bless slots (part of the unified buff list — see Spells/Health above) | empty | configured in the Buff Watchdog | `PartyBuffs` | Models/Profile/BuffSettings.cs (Buff Watchdog) |
-| Bless while resting / during combat | false / false | bool | `BlessWhileResting` / `BlessDuringCombat` | Models/Profile/PartySettings.cs |
 | Help leader open doors / Ignore @wait when leading / Reset stats on loop start | false/false/true | bool | `HelpLeaderOpenDoors`, `IgnoreWaitWhenLeading`, `ResetStatisticsOnLoopStart` | Models/Profile/PartySettings.cs |
 | Use @panic while leading / Ignore @panics | false / false | bool | `UsePanicWhileLeading`, `IgnorePanics` | Models/Profile/PartySettings.cs |
 | Re-invite lost members / send @join nags / send @health nags / probe on join | true (all) | bool | `AutoInviteReconnecting`, `SendJoinToInvited`, `SendHealthToMembers`, `ProbeStatsOnPartyJoin` | Models/Profile/PartySettings.cs |

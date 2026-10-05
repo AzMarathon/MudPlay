@@ -8731,6 +8731,12 @@ public sealed class AppServices
         Health.FleeStarted += () => Sounds.Fire(Game.Sounds.SoundCues.Flee);
     }
 
+    // Settings → Health reads its mana thresholds as raw amounts rather than percents;
+    // a buff slot's own mana floor is in the same unit.
+    public bool ManaThresholdsAreAbsolute =>
+        ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health").MaThresholdMode
+            == Models.Profile.ThresholdMode.Absolute;
+
     private static T ReadSection<T>(Models.Profile.CharacterProfile? profile, string key)
         where T : new()
     {
@@ -10333,6 +10339,9 @@ public sealed class AppServices
             if (s.OnlyWhenMaFull) cond.Add("ma-full");
             if (s.OnlyWhenDark) cond.Add("only-dark");
             if (s.CastBeforeRestingForMana) cond.Add("pre-rest");
+            cond.Add($"ma>={s.BlessIfAboveMa}");
+            if (s.BlessWhileResting) cond.Add("while-resting");
+            if (s.BlessDuringCombat) cond.Add("in-combat");
             if (s.RerollCount > 0) cond.Add($"reroll<{s.RerollThreshold?.ToString() ?? "-"} x{s.RerollCount}");
 
             string target = who.Count > 0 ? string.Join("/", who) : "no target";
@@ -10382,21 +10391,22 @@ public sealed class AppServices
            && Game.Spells.ManaRegenReroller.IsRollSpell(s.Formula);
 
     // Reroll affordability gate: would paying for one more recast of the
-    // configured mana-regen spell drop mana below the buff floor
-    // (Models.Profile.HealthSettings.BlessIfAboveMa percent of
-    // max)? An unknown cost is treated as free. Returns false when the
-    // pool is unknown or the recast would breach the floor.
+    // configured mana-regen spell drop mana below that buff's own floor
+    // (Models.Profile.BuffSlot.BlessIfAboveMa, a percent of max or a raw amount per
+    // the Health tab's mana threshold mode)? An unknown cost is
+    // treated as free. Returns false when the pool is unknown or the recast would
+    // breach the floor.
     private bool CanAffordManaRegenReroll()
     {
         int maxMa = PlayerState.MaxMa;
         if (maxMa <= 0) return false;
 
-        if (ManaRegenRerollSlot()?.Spell?.Trim() is not { Length: > 0 } shortCode) return false;
+        if (ManaRegenRerollSlot() is not { } slot || slot.Spell?.Trim() is not { Length: > 0 } shortCode) return false;
 
         int cost = Spellbook.ManaCostOf(shortCode) ?? 0;
-        Models.Profile.HealthSettings health =
-            ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health");
-        int floor = (int)Math.Round(maxMa * (health.BlessIfAboveMa / 100.0));
+        int floor = Game.Health.PoolThreshold.Resolve(
+            ReadSection<Models.Profile.HealthSettings>(Profile.Current, "Health").MaThresholdMode,
+            slot.BlessIfAboveMa, maxMa);
         return PlayerState.Ma - cost >= floor;
     }
 

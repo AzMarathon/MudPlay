@@ -114,7 +114,14 @@ public sealed partial class BuffSlotRowViewModel : ObservableObject
     // pick; on a configured row it only reads as confusing (it's not the recast).
     // Full "name - 15s" form for the row's hover tooltip (the row itself shows the
     // abbreviated name + the pinned recast).
-    public string HeaderText => _resolveName(_dto.Spell) + RecastText;
+    public string HeaderText => _resolveName(_dto.Spell) + RecastText + CastConditionsText;
+
+    // The slot's own mana floor and rest / combat switches, for the tooltip only:
+    // the narrow row has no room for them.
+    private string CastConditionsText =>
+        $" · mana ≥ {_dto.BlessIfAboveMa}"
+        + (_dto.BlessWhileResting ? " · while resting" : "")
+        + (_dto.BlessDuringCombat ? " · in combat" : "");
 
     // The buff name for the narrow row, shortened to the form players use in game
     // ("protection from evil" → "prot evil") so the recast pinned beside it stays

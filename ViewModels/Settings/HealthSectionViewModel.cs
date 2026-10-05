@@ -53,7 +53,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         "Rest max", "Rest if below", "Heal rest", "Heal combat", "Heal during rest",
         "Minor heal combat", "Major heal combat", "Emergency heal",
         "Heal if above", "Heal if above resting", "Heal if above combat", "Mana floor",
-        "Run if below", "Hang up if below", "Bless if above",
+        "Run if below", "Hang up if below",
         "Sys goto wimpy", "Wimpy", "Wimpy goto", "Wimpy location",
         "Use meditate ability", "Meditate before resting",
         "Pre-rest", "Post-rest", "Pre-meditate", "Post-meditate",
@@ -84,7 +84,6 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _healIfAboveMaResting = 50;
     [ObservableProperty] private int _healIfAboveMaCombat;
     [ObservableProperty] private int _runIfBelowMa     = 10;
-    [ObservableProperty] private int _blessIfAboveMa   = 70;
 
     // ----- Resting Options ------------------------------------------
 
@@ -263,7 +262,6 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         HealIfAboveMaResting   = Clamp(HealIfAboveMaResting),
         HealIfAboveMaCombat    = Clamp(HealIfAboveMaCombat),
         RunIfBelowMa           = Clamp(RunIfBelowMa),
-        BlessIfAboveMa         = Clamp(BlessIfAboveMa),
 
         UseMeditateAbility     = UseMeditateAbility,
         MeditateBeforeResting  = MeditateBeforeResting,
@@ -424,7 +422,6 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
             OnPropertyChanged(nameof(HealIfAboveMaRestingConverted));
             OnPropertyChanged(nameof(HealIfAboveMaCombatConverted));
             OnPropertyChanged(nameof(RunIfBelowMaConverted));
-            OnPropertyChanged(nameof(BlessIfAboveMaConverted));
         }
     }
 
@@ -463,7 +460,6 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     public string HealIfAboveMaRestingConverted   => FormatConversion(HealIfAboveMaResting,   PreviewMa, MaModePercentage);
     public string HealIfAboveMaCombatConverted    => FormatConversion(HealIfAboveMaCombat,    PreviewMa, MaModePercentage);
     public string RunIfBelowMaConverted           => FormatConversion(RunIfBelowMa,           PreviewMa, MaModePercentage);
-    public string BlessIfAboveMaConverted         => FormatConversion(BlessIfAboveMa,         PreviewMa, MaModePercentage);
 
     // Commit through the shared session (folds both tabs + persists Settings
     // ["Combat"] + Settings["Health"] + the profile blob + weapons as one unit).
@@ -520,7 +516,6 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         HealIfAboveMaResting = dto.HealIfAboveMaResting;
         HealIfAboveMaCombat  = dto.HealIfAboveMaCombat;
         RunIfBelowMa     = dto.RunIfBelowMa;
-        BlessIfAboveMa   = dto.BlessIfAboveMa;
 
         UseMeditateAbility    = dto.UseMeditateAbility;
         MeditateBeforeResting = dto.MeditateBeforeResting;
@@ -623,14 +618,12 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         if (HealIfAboveMaResting > 100) HealIfAboveMaResting = 100;
         if (HealIfAboveMaCombat > 100) HealIfAboveMaCombat = 100;
         if (RunIfBelowMa > 100) RunIfBelowMa = 100;
-        if (BlessIfAboveMa > 100) BlessIfAboveMa = 100;
     }
     partial void OnRestMaxMaChanged(int value)                { OnPropertyChanged(nameof(RestMaxMaConverted));            MarkDirty(); }
     partial void OnRestIfBelowMaChanged(int value)            { OnPropertyChanged(nameof(RestIfBelowMaConverted));        MarkDirty(); }
     partial void OnHealIfAboveMaRestingChanged(int value)     { OnPropertyChanged(nameof(HealIfAboveMaRestingConverted)); MarkDirty(); }
     partial void OnHealIfAboveMaCombatChanged(int value)      { OnPropertyChanged(nameof(HealIfAboveMaCombatConverted));  MarkDirty(); }
     partial void OnRunIfBelowMaChanged(int value)             { OnPropertyChanged(nameof(RunIfBelowMaConverted));         MarkDirty(); }
-    partial void OnBlessIfAboveMaChanged(int value)           { OnPropertyChanged(nameof(BlessIfAboveMaConverted));       MarkDirty(); }
 
     private void RefreshAllHpConverted()
     {
@@ -651,7 +644,6 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(HealIfAboveMaRestingConverted));
         OnPropertyChanged(nameof(HealIfAboveMaCombatConverted));
         OnPropertyChanged(nameof(RunIfBelowMaConverted));
-        OnPropertyChanged(nameof(BlessIfAboveMaConverted));
     }
 
     // Resting Options

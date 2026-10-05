@@ -233,11 +233,23 @@ public sealed class BuffSlotRowViewModelTests
     [Fact]
     public void HeaderText_IsNameAndRecast_NoLevelTag()
     {
-        // The configured-row header is just name + recast — no "(Lvl N)" tag (that
-        // lives in the Add-buff dropdown, where it helps you pick; on a slotted row
-        // it only read as confusing).
+        // The configured-row header is name + recast + the buff's own cast
+        // conditions — no "(Lvl N)" tag (that lives in the Add-buff dropdown, where
+        // it helps you pick; on a slotted row it only read as confusing).
         var row = Row(new BuffSlot { Spell = "bless", RecastMarginSec = 15 });
-        Assert.Equal("bless - 15s", row.HeaderText);
+        Assert.Equal("bless - 15s · mana ≥ 50", row.HeaderText);
+    }
+
+    [Fact]
+    public void HeaderText_NamesTheBuffsOwnRestAndCombatSwitches()
+    {
+        var row = Row(new BuffSlot
+        {
+            Spell = "bless", RecastMarginSec = 15,
+            BlessIfAboveMa = 30, BlessWhileResting = true, BlessDuringCombat = true,
+        });
+        Assert.Equal("bless - 15s · mana ≥ 30 · while resting · in combat", row.HeaderText);
+        Assert.Equal(" - 15s", row.RecastText);   // the narrow row itself stays short
     }
 
     [Theory]

@@ -1,8 +1,10 @@
 namespace MudPlay.Models.Profile;
 
 // The Party-tab subset a combat profile carries: party healing (the minor / major
-// single-target and AOE heals, their member thresholds, the AOE member count) and
-// the party-bless gates. Rank and the rest of Settings["Party"] stay per-character.
+// single-target and AOE heals, their member thresholds, the AOE member count). Rank
+// and the rest of Settings["Party"] stay per-character. The two bless switches are
+// legacy: each buff slot carries its own now, and these are only stored and copied
+// so an older profile round-trips.
 public sealed class CombatProfileParty
 {
     public string? MinorPartyHealSpell { get; set; }
