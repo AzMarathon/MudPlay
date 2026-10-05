@@ -180,6 +180,10 @@ public static class BugReportBuilder
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held for {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
+        Kv(sb, "PvP attacks on us", svc.PvpAttacks.Recent.Count == 0
+            ? "(none this session)"
+            : string.Join("; ", svc.PvpAttacks.Recent.Select(a =>
+                $"{a.At.ToLocalTime():HH:mm:ss} {a.Player} ({a.Kind}; {a.Relationship}{(a.MarkedEnemy ? ", marked by this" : "")})")));
         // Retry/reconnect config for the active BBS. A "won't stop redialing" or
         // "never reconnected" report hinges on whether InfiniteRetries is on (which
         // overrides the count+pause to unlimited @ 3s) and which triggers are armed.

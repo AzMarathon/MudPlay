@@ -162,6 +162,10 @@ public static class KnownPatterns
     // CombatManager treats it as a room commit for attack-last (room after them).
     public const string PartyRoomPoised      = "combat.party-room-poised";
 
+    // "<player> moves to attack you!" — what the victim of another player's attack
+    // sees, for a weapon and an attack spell alike (onlookers get the two-name form).
+    public const string PlayerAttacksYou     = "pvp.player-attacks-you";
+
     // "<guard> moves to protect <protected>." — MajorMUD guard/redirect mechanic.
     // A "guarded" monster (e.g. a brigand chief guarded by brigands) can't be
     // attacked directly while a guard is in the room: the server redirects our

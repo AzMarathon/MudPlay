@@ -410,6 +410,12 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.PartyRoomPoised,
             @"^(?:\[[^\]]*\]:|:)*(?<player>\w+) is poised to assault the room!");
 
+        // Another player attacking us. Ends in "!" where the announce for a monster
+        // target ends in ".", so PartyAttackAnnounce never takes it for a target
+        // named "you".
+        yield return new RegexPattern(KnownPatterns.PlayerAttacksYou,
+            @"^(?:\[[^\]]*\]:|:)*(?<player>\w+) moves to attack you!");
+
         // Guard/redirect announce — "<guard> moves to protect <protected>." A
         // guarded monster can't be attacked while a guard is present; the server
         // redirects the swing to the guard and emits this. Both names are monsters

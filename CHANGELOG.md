@@ -7,6 +7,7 @@
 - A player's class is also taken from the top list
 - On a PvP realm, room attacks and room debuffs are held while a player outside your party is in the room, and one already running is broken off
 - On a PvP realm, a walk or loop carries on past a room where another player is room-attacking
+- A Neutral player who attacks you is marked Enemy, saved on their record
 
 ## 3.144.20
 

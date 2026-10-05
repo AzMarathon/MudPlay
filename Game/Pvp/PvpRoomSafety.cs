@@ -51,6 +51,11 @@ public sealed class PvpRoomSafety : IDisposable
     private readonly Dictionary<string, DateTimeOffset> _roomAttackSeenAt =
         new(StringComparer.OrdinalIgnoreCase);
 
+    // When each player's arrival line was seen. One from before our last move was
+    // an arrival into the room we have since left.
+    private readonly Dictionary<string, DateTimeOffset> _arrivedAt =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private readonly Dictionary<string, int?> _fromLevelByClass =
         new(StringComparer.OrdinalIgnoreCase);
 
@@ -136,6 +141,21 @@ public sealed class PvpRoomSafety : IDisposable
         }
         return reason;
     }
+
+    // A player's arrival line, from RoomEntryWatcher.
+    public void NoteArrival(RoomEntryArrivalEvent arrival)
+    {
+        if (arrival.Kind != EntityKind.Player) return;
+        string given = PlayerObservation.SplitName(arrival.Name).Given;
+        if (given.Length > 0) _arrivedAt[given] = arrival.At;
+    }
+
+    // Whether we watched them come into the room we were already standing in. Only
+    // an arrival line counts: marking someone an Enemy over a room attack needs
+    // better evidence than their not having been listed when we walked in.
+    public bool ArrivedAfterUs(string given) =>
+        _arrivedAt.TryGetValue(given, out DateTimeOffset at)
+        && (_lastMoveSentAt() is not { } moveAt || at >= moveAt);
 
     // For the bug report.
     public string Describe()

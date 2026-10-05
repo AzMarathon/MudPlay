@@ -55,6 +55,7 @@ public sealed class PvpRoomSafetyTests
                 lastMoveSentAt: () => LastMoveSentAt);
             Safety.RoomAttackSeen += () => RoomAttacksSeen++;
             Watcher = new RoomEntryWatcher(Router, Classifier);
+            Watcher.ArrivalObserved += Safety.NoteArrival;
 
             Monsters.Messages.Add(new MonsterMessageRecord(
                 Id: "M1", Name: "giant rat", Links: new[] { new GameDataLink("Monsters", 1) }));
@@ -331,6 +332,25 @@ public sealed class PvpRoomSafetyTests
         h.Feed("Bob moves to attack everyone in the room.");
 
         Assert.Null(h.Safety.LeaveRoomReason());
+    }
+
+    // ----- who we watched walk in ----------------------------------------
+
+    [Fact]
+    public void ArrivedAfterUs_OnlyForAPlayerSeenWalkingIn_SinceOurLastMove()
+    {
+        using Harness h = new();
+        h.Move();
+        h.Feed("Also here: Ann, giant rat.");
+        h.Feed("Bob walks into the room from the south.");
+        h.Feed("A giant rat walks into the room from the north.");
+
+        Assert.True(h.Safety.ArrivedAfterUs("Bob"));
+        Assert.False(h.Safety.ArrivedAfterUs("Ann"));    // here before us
+        Assert.False(h.Safety.ArrivedAfterUs("Cal"));    // never seen
+
+        h.Move();
+        Assert.False(h.Safety.ArrivedAfterUs("Bob"));
     }
 
     [Fact]

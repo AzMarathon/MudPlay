@@ -1623,6 +1623,8 @@ public sealed class AppServices
     // RoomClassifier's observation so CombatStateTracker
     // re-evaluates the Combat gate immediately on spawn.
     public Game.Combat.RoomEntryWatcher RoomEntry { get; private set; } = null!;
+    // Other players attacking us, and the Neutral-to-Enemy marking that follows.
+    public Game.Pvp.PvpAttackWatcher PvpAttacks { get; private set; } = null!;
 
     // Observes mid-room departure lines
     // ("<name> walks out of the room to <dir>.")
@@ -4075,6 +4077,19 @@ public sealed class AppServices
         // RoomEntryArrival pattern + appends to the classifier so the
         // Combat gate / CombatManager react to spawns immediately.
         RoomEntry = new Game.Combat.RoomEntryWatcher(Router, RoomClassifier, Log);
+        RoomEntry.ArrivalObserved += PvpRoom.NoteArrival;
+        PvpAttacks = new Game.Pvp.PvpAttackWatcher(
+            Router, RoomClassifier, PvpRoom, Players, PartyState,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            flipFriends: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp")
+                .FlipFriendToEnemyIfAttacked,
+            ownGivenName: () => Party.LocalCharacterName ?? Profile.Current?.Name,
+            log: Log);
+        PvpAttacks.Attacked += attack =>
+        {
+            if (attack.MarkedEnemy)
+                WriteTerminalNotice($"[PvP: {attack.Player} attacked you and is now marked Enemy]");
+        };
         // A reform member who crossed a party-splitting teleport that lands them
         // with a plain "walks into the room from nowhere" (a "go hole"-style CMD
         // teleport, no "blinding flash" line) still needs their withheld re-invite
