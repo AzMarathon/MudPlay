@@ -21,6 +21,7 @@ public enum CombatProfileGroup
     // Spells tab
     SpellPriority,
     HealingRegen,
+    // LEGACY: bless timing moved onto each buff slot; kept so stored group sets still load.
     BlessTiming,
     // Party tab
     PartyHealing,

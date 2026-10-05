@@ -747,37 +747,36 @@ public static class LoopSimulator
         }
 
         // Buff upkeep, CastingDirector's solo path: a staged mana-regen reroll leads,
-        // then the Buffs list in priority order. Mana-drawing buffs wait for the
-        // BlessIfAboveMa floor; self-buffs wait out combat and triggered rests unless
-        // SelfBlessDuringCombat / SelfBlessWhileResting allow them.
+        // then the Buffs list in priority order. Each buff waits for its own mana
+        // floor, and waits out combat and triggered rests unless its own switches
+        // allow them.
         private bool Buff(bool inCombat)
         {
             if (_ch.Buffs is not { Count: > 0 } buffs) return false;
             ResumeReroll(inCombat);
             HealthSettings h = _ch.Health;
-            if (_ch.MaxMana <= 0 || _ma < PoolThreshold.Resolve(h.MaThresholdMode, h.BlessIfAboveMa, _ch.MaxMana))
-            {
-                _pendingReroll = null;     // CastingDirector drops a reroll it can't pay for now
-                return false;
-            }
             bool resting = _posture != Posture.Standing;
-            bool selfAllowed = !(inCombat && !_ch.SpellSlots.SelfBlessDuringCombat)
-                && !(resting && !_ch.SpellSlots.SelfBlessWhileResting);
+            bool ManaClears(SimBuff b) =>
+                _ch.MaxMana > 0 && _ma >= PoolThreshold.Resolve(h.MaThresholdMode, b.BlessIfAboveMa, _ch.MaxMana);
+            bool SelfAllowed(SimBuff b) => !(inCombat && !b.DuringCombat) && !(resting && !b.WhileResting);
 
-            if (_pendingReroll is { } reroll && selfAllowed
-                && buffs.FirstOrDefault(b => string.Equals(b.Spell, reroll, StringComparison.OrdinalIgnoreCase)) is { } rb)
+            if (_pendingReroll is { } reroll
+                && buffs.FirstOrDefault(b => string.Equals(b.Spell, reroll, StringComparison.OrdinalIgnoreCase)) is { } rb
+                && SelfAllowed(rb))
             {
                 _pendingReroll = null;     // CastBuff re-stages it when the cycle needs another go
-                if (CastBuff(rb, inCombat)) return true;
-                _pendingReroll = reroll;
+                // CastingDirector drops a reroll it can't pay for now.
+                if (ManaClears(rb) && CastBuff(rb, inCombat)) return true;
+                if (ManaClears(rb)) _pendingReroll = reroll;
             }
             int hpFull = PoolThreshold.Resolve(h.HpThresholdMode, h.RestMaxHp, _ch.MaxHp);
             int maFull = PoolThreshold.Resolve(h.MaThresholdMode, h.RestMaxMa, _ch.MaxMana);
             foreach (SimBuff b in buffs)
             {
+                if (!ManaClears(b)) continue;
                 if (b.OnlyWhenHpFull && _hp < hpFull) continue;
                 if (b.OnlyWhenMaFull && _ma < maFull) continue;
-                if (!(b.BeforeRestingForMana ? _maGate : selfAllowed)) continue;
+                if (!(b.BeforeRestingForMana ? _maGate : SelfAllowed(b))) continue;
                 if (BuffUp(b.Spell, b.RecastMarginSec)) continue;
                 if (CastBuff(b, inCombat)) return true;
             }
@@ -836,11 +835,13 @@ public static class LoopSimulator
         }
 
         // AppServices.CanAffordManaRegenReroll: the recast must leave mana at or above
-        // the BlessIfAboveMa percentage of max.
+        // that buff's own BlessIfAboveMa floor.
         private bool CanAffordReroll(string code)
         {
             if (_ch.MaxMana <= 0 || !_ch.Spells.TryGetValue(code, out SimSpell? spell)) return false;
-            int floor = (int)Math.Round(_ch.MaxMana * (_ch.Health.BlessIfAboveMa / 100.0));
+            int value = _ch.Buffs?.FirstOrDefault(b => string.Equals(b.Spell, code, StringComparison.OrdinalIgnoreCase))
+                ?.BlessIfAboveMa ?? HealthSettings.DefaultBlessIfAboveMa;
+            int floor = PoolThreshold.Resolve(_ch.Health.MaThresholdMode, value, _ch.MaxMana);
             return _ma - spell.ManaPerCast >= floor;
         }
 

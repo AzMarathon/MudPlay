@@ -92,9 +92,13 @@ public sealed class HealthSettings
     // the MA flee entirely (never run on mana). Default 10 (%).
     public int RunIfBelowMa { get; set; } = 10;
 
-    // Re-cast party / self buffs once MA recovers past this value.
-    // CastingDirector trigger. Default 70 (%).
-    public int BlessIfAboveMa { get; set; } = 70;
+    // What a new buff slot starts at for its own "cast if mana is above".
+    public const int DefaultBlessIfAboveMa = 70;
+
+    // LEGACY: the one mana floor every buff shared. Each buff slot carries its own
+    // now (BuffSlot.BlessIfAboveMa); profile schema 5 copied this value onto the
+    // slots that existed then. Kept so an older profile still loads and migrates.
+    public int BlessIfAboveMa { get; set; } = DefaultBlessIfAboveMa;
 
     // Mana-floor for heal spells while resting / idle (out of combat):
     // CastingDirector only casts a heal when the caster pool sits at or above

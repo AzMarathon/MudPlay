@@ -82,6 +82,81 @@ public sealed class ProfileMigrationsTests
     }
 
     [Fact]
+    public void V4Profile_CopiesTheSharedBlessConditionsOntoEveryBuff()
+    {
+        // "Bless if above" (Health) and the self rest / combat switches (Spells) were
+        // one setting for every buff; each existing buff takes what the character had.
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 4,
+            PartyBuffs = new BuffSettings
+            {
+                Slots =
+                {
+                    new BuffSlot { Spell = "bles", CastOnSelf = true },
+                    new BuffSlot { Spell = "chan", WholePartyOn = true },
+                },
+            },
+            Settings = new Dictionary<string, JsonElement>
+            {
+                ["Health"] = JsonSerializer.SerializeToElement(new HealthSettings { BlessIfAboveMa = 45 }),
+                ["Spells"] = JsonSerializer.SerializeToElement(new SpellsSettings { SelfBlessDuringCombat = true }),
+            },
+        };
+
+        Assert.True(ProfileMigrations.Apply(profile));
+
+        Assert.Equal(CharacterProfile.CurrentSchemaVersion, profile.SchemaVersion);
+        Assert.All(profile.PartyBuffs!.Slots, slot =>
+        {
+            Assert.Equal(45, slot.BlessIfAboveMa);
+            Assert.True(slot.BlessDuringCombat);
+            Assert.False(slot.BlessWhileResting);
+        });
+    }
+
+    [Fact]
+    public void V4Profile_WithNoStoredSections_GivesBuffsTheOldDefaults()
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 4,
+            PartyBuffs = new BuffSettings { Slots = { new BuffSlot { Spell = "bles", CastOnSelf = true } } },
+        };
+
+        ProfileMigrations.Apply(profile);
+
+        BuffSlot slot = Assert.Single(profile.PartyBuffs!.Slots);
+        Assert.Equal(HealthSettings.DefaultBlessIfAboveMa, slot.BlessIfAboveMa);
+        Assert.False(slot.BlessWhileResting);
+        Assert.False(slot.BlessDuringCombat);
+    }
+
+    [Fact]
+    public void CurrentProfile_KeepsEachBuffsOwnConditions()
+    {
+        // Once migrated, a buff's own values are never written over by the old
+        // shared ones still sitting in the stored sections.
+        CharacterProfile profile = new()
+        {
+            PartyBuffs = new BuffSettings
+            {
+                Slots = { new BuffSlot { Spell = "bles", BlessIfAboveMa = 20, BlessWhileResting = true } },
+            },
+            Settings = new Dictionary<string, JsonElement>
+            {
+                ["Health"] = JsonSerializer.SerializeToElement(new HealthSettings { BlessIfAboveMa = 90 }),
+            },
+        };
+
+        Assert.False(ProfileMigrations.Apply(profile));
+
+        BuffSlot slot = Assert.Single(profile.PartyBuffs!.Slots);
+        Assert.Equal(20, slot.BlessIfAboveMa);
+        Assert.True(slot.BlessWhileResting);
+    }
+
+    [Fact]
     public void CurrentProfile_IsNoOp()
     {
         CharacterProfile profile = new(); // authored at CurrentSchemaVersion.

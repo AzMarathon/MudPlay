@@ -206,14 +206,38 @@ public sealed class LoopSimulatorTests
         {
             ["prfl"] = Spell("prfl", mana: 1, duration: 60, manaRegenMin: 0, manaRegenMax: 100),
         };
-        var buffs = new[] { new SimBuff("prfl", 0, false, false, false, RerollBelow: 50, RerollCount: 0, RerollInfinite: true) };
-        var health = new HealthSettings { BlessIfAboveMa = 0, RestIfBelowMa = 0, UseMeditateAbility = false };
+        var buffs = new[] { new SimBuff("prfl", 0, false, false, false, RerollBelow: 50, RerollCount: 0, RerollInfinite: true, BlessIfAboveMa: 0) };
+        var health = new HealthSettings { RestIfBelowMa = 0, UseMeditateAbility = false };
         LoopSimRun run = LoopSimulator.Run(
             Character(spells: spells, buffs: buffs, maxMana: 1000, health: health),
             new[] { Empty(1), Empty(2) }, World(), secondsPerStep: 1, hours: 1, seed: 1);
 
         int casts = run.Casts.GetValueOrDefault("prfl");
         Assert.True(casts > 60, $"cast {casts} times");
+    }
+
+    [Fact]
+    public void EachBuffWaitsForItsOwnManaFloor()
+    {
+        // Two buffs on a full pool: the one whose floor the pool can never reach is
+        // never cast, the other is kept up.
+        var spells = new Dictionary<string, SimSpell>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["bles"] = Spell("bles", mana: 1, duration: 60),
+            ["high"] = Spell("high", mana: 1, duration: 60),
+        };
+        var buffs = new[]
+        {
+            new SimBuff("high", 0, false, false, false, null, 0, false, BlessIfAboveMa: 101),
+            new SimBuff("bles", 0, false, false, false, null, 0, false, BlessIfAboveMa: 0),
+        };
+        var health = new HealthSettings { RestIfBelowMa = 0, UseMeditateAbility = false };
+        LoopSimRun run = LoopSimulator.Run(
+            Character(spells: spells, buffs: buffs, maxMana: 1000, health: health),
+            new[] { Empty(1), Empty(2) }, World(), secondsPerStep: 1, hours: 0.5, seed: 1);
+
+        Assert.True(run.Casts.GetValueOrDefault("bles") > 0);
+        Assert.Equal(0, run.Casts.GetValueOrDefault("high"));
     }
 
     [Fact]
@@ -631,8 +655,8 @@ public sealed class LoopSimulatorTests
         {
             ["prfl"] = Spell("prfl", mana: 1, duration: 36000, manaRegenMin: 0, manaRegenMax: 100) with { CastChance = 50 },
         };
-        var buffs = new[] { new SimBuff("prfl", 0, false, false, false, RerollBelow: 101, RerollCount: 0, RerollInfinite: true) };
-        var health = new HealthSettings { BlessIfAboveMa = 0, RestIfBelowMa = 0, UseMeditateAbility = false };
+        var buffs = new[] { new SimBuff("prfl", 0, false, false, false, RerollBelow: 101, RerollCount: 0, RerollInfinite: true, BlessIfAboveMa: 0) };
+        var health = new HealthSettings { RestIfBelowMa = 0, UseMeditateAbility = false };
         LoopSimRun run = LoopSimulator.Run(
             Character(spells: spells, buffs: buffs, maxMana: 1000, health: health),
             new[] { Empty(1), Empty(2) }, World(), secondsPerStep: 1, hours: 0.5, seed: 1);

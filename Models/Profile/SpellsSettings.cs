@@ -177,15 +177,11 @@ public sealed class SpellsSettings
     // idly resting and holds only during combat and during a triggered recovery
     // rest — flip either on to also buff in that situation.
 
-    // Opt-in override: when true, allow self-buff recasts during a TRIGGERED
-    // recovery rest (HP/MA fell below rest-if-below). OFF by default — the normal
-    // cadence buffs while moving / idle / idly resting and defers only to an
-    // active recovery. Consumed by the self-buff path in Game.Spells.CastingDirector.
+    // LEGACY: the two switches every self-buff shared. Each buff slot carries its
+    // own now (BuffSlot.BlessWhileResting / BlessDuringCombat); profile schema 5
+    // copied these onto the slots that existed then. Kept so an older profile still
+    // loads and migrates.
     public bool SelfBlessWhileResting { get; set; }
-
-    // Opt-in override: when true, allow self-buff recasts during combat — casting
-    // spends that round, so it's OFF by default. Consumed by the self-buff path in
-    // Game.Spells.CastingDirector.
     public bool SelfBlessDuringCombat { get; set; }
 
     // ----- Ailment handling / coordination ------------------------------

@@ -55,7 +55,45 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v4 → v5: "bless if above", "bless self while resting" and "bless self
+        // during combat" stopped being one setting for every buff and became three
+        // conditions on each buff slot. Copy what the character had onto every slot
+        // it already has, so nothing casts differently after the update.
+        if (profile.SchemaVersion < 5)
+        {
+            CopyBlessGatesOntoBuffSlots(profile);
+            profile.SchemaVersion = 5;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    // Stamp the Health "bless if above" and Spells rest / combat switches onto every
+    // existing buff slot. They come from the character's own stored sections, the
+    // same place the casting engine read them from (and the active combat profile
+    // mirrors those sections, so its values are the ones copied). The stored values
+    // stay where they are, unread.
+    private static void CopyBlessGatesOntoBuffSlots(CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs) return;
+        HealthSettings health = ReadStored<HealthSettings>(profile, "Health");
+        SpellsSettings spells = ReadStored<SpellsSettings>(profile, "Spells");
+        foreach (BuffSlot slot in buffs.Slots)
+        {
+            slot.BlessIfAboveMa = health.BlessIfAboveMa;
+            slot.BlessWhileResting = spells.SelfBlessWhileResting;
+            slot.BlessDuringCombat = spells.SelfBlessDuringCombat;
+        }
+    }
+
+    // A stored settings section, or its defaults when the profile has none or it
+    // doesn't parse.
+    private static T ReadStored<T>(CharacterProfile profile, string key) where T : new()
+    {
+        if (profile.Settings is not { } settings || !settings.TryGetValue(key, out JsonElement json)) return new T();
+        try { return JsonSerializer.Deserialize<T>(json.GetRawText()) ?? new T(); }
+        catch (JsonException) { return new T(); }   // an unreadable section migrates as defaults
     }
 
     // Move MaRegenSpell (with ManaRegenRerollThreshold / Cap) + RoomLightSpell out of

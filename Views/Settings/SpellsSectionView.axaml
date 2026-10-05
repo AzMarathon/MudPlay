@@ -253,31 +253,8 @@
                            MaxWidth="440" HorizontalAlignment="Left"
                            Margin="0,16,0,0"/>
 
-                <!-- Self-bless timing: when the self-buff path may recast. Both
-                     scoped to OUR OWN buffs (the party-bless equivalents live on
-                     the Party tab). Defaults reproduce the old behaviour — cast
-                     out of combat, including while resting — so a profile that
-                     leaves these alone is unchanged. -->
-                <Panel Classes="ProfileFrame">
-                    <Border Classes="ProfileGroup" IsVisible="{Binding BlessTimingInProfile.IsIncluded}"
-                            Background="{Binding ActiveProfileAccentSoftBrush}"
-                            BorderBrush="{Binding ActiveProfileAccentBrush}"/>
-                    <StackPanel Classes="ProfileBody">
-                        <DockPanel>
-                            <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                                      IsChecked="{Binding BlessTimingInProfile.IsIncluded, Mode=TwoWay}"
-                                      ToolTip.Tip="{Binding BlessTimingInProfile.Tooltip}"/>
-                            <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
-                                       Foreground="{Binding ActiveProfileAccentBrush}"
-                                       IsVisible="{Binding BlessTimingInProfile.IsIncluded}"/>
-                            <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Bless timing"/>
-                        </DockPanel>
-                        <CheckBox Content="Bless self while resting" IsChecked="{Binding SelfBlessWhileResting, Mode=TwoWay}"
-                                  ToolTip.Tip="When checked (default): keep self-buffs up while resting. Uncheck to hold self-bless casts during rest."/>
-                        <CheckBox Content="Bless self during combat" IsChecked="{Binding SelfBlessDuringCombat, Mode=TwoWay}"
-                                  ToolTip.Tip="When checked: recast self-buffs mid-fight — casting spends that combat round. Off by default; useful when a fast hunting loop rarely leaves combat long enough to bless between fights."/>
-                    </StackPanel>
-                </Panel>
+                <TextBlock Classes="HelpText" Margin="0,2,0,4" TextWrapping="Wrap"
+                           Text="Bless timing is set on each buff now: Buff Watchdog → edit a buff → Cast while resting / Cast during combat."/>
 
                 <!-- ============ Ailment handling / coordination ============ -->
                 <!-- One "Ignore X" toggle per ailment. It's the single "I don't

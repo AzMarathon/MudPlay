@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.5**
-> - Auto-Sneak sneaks again after killing a monster that followed you in, even when the kill lands within a second or two of arriving
+> **Version 3.144.7**
+> - "Bless if above" is set on each buff now (Buff Watchdog → edit a buff → Cast if mana ≥) instead of once on Settings → Health
+> - "Bless self while resting" and "during combat" are tick boxes on each buff now, instead of one pair on Settings → Spells and in combat profiles
+> - Buffs you already had keep the values you had set; a new buff starts at 70%, off and off
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -721,6 +721,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         dto.RerollThresholdIsRoll = true;   // the dialog edits the rolled value on both realms
         dto.RerollInfinite = r.RerollInfinite;
         dto.RejectedOutcomes = r.RejectedOutcomes?.ToList() ?? new List<int>();
+        dto.BlessIfAboveMa = r.BlessIfAboveMa;
+        dto.BlessWhileResting = r.BlessWhileResting;
+        dto.BlessDuringCombat = r.BlessDuringCombat;
     }
 
     // The buffs a draw item (a deck of cards) can deal, for the dialog's tick boxes.
@@ -751,7 +754,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         AddBuffDialogViewModel dlg = new(BuildPickOptions(SlottedSpells()), IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickSteps,
             rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf,
-            isNoRedrawDraw: IsNoRedrawDraw);
+            isNoRedrawDraw: IsNoRedrawDraw, manaFloorIsAbsolute: AppServices.Current.ManaThresholdsAreAbsolute);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
@@ -869,12 +872,12 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         AddBuffResult initial = new(
             d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
             d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold, d.RerollInfinite,
-            d.RejectedOutcomes.ToList());
+            d.RejectedOutcomes.ToList(), d.BlessIfAboveMa, d.BlessWhileResting, d.BlessDuringCombat);
         AddBuffDialogViewModel dlg = new(
             options, IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickSteps, initial,
             rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf,
-            isNoRedrawDraw: IsNoRedrawDraw);
+            isNoRedrawDraw: IsNoRedrawDraw, manaFloorIsAbsolute: AppServices.Current.ManaThresholdsAreAbsolute);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;

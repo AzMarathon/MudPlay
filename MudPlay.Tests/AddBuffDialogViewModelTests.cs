@@ -18,6 +18,54 @@ public sealed class AddBuffDialogViewModelTests
             rollRange: _ => roll);
 
     [Fact]
+    public void ANewBuff_StartsWithTheOldSharedDefaults()
+    {
+        AddBuffDialogViewModel d = new(Picks, _ => false, _ => false);
+
+        Assert.Equal(70, d.BlessIfAboveMa);
+        Assert.False(d.BlessWhileResting);
+        Assert.False(d.BlessDuringCombat);
+        Assert.Equal("Cast if mana ≥ %", d.BlessIfAboveLabel);
+        Assert.Equal(100, d.BlessIfAboveMaximum);
+    }
+
+    [Fact]
+    public void EditingABuff_ShowsItsConditions_AndOkHandsThemBack()
+    {
+        AddBuffDialogViewModel d = new(Picks, _ => false, _ => false,
+            initial: new AddBuffResult("flux", 15, false, false, false, false, 0, null,
+                BlessIfAboveMa: 35, BlessWhileResting: true, BlessDuringCombat: false));
+        Assert.Equal(35, d.BlessIfAboveMa);
+        Assert.True(d.BlessWhileResting);
+
+        d.BlessIfAboveMa = 150;          // past a percent's ceiling
+        d.BlessDuringCombat = true;
+        AddBuffResult? result = null;
+        d.CloseRequested += r => result = r;
+        d.OkCommand.Execute(null);
+
+        Assert.NotNull(result);
+        Assert.Equal(100, result.BlessIfAboveMa);
+        Assert.True(result.BlessWhileResting);
+        Assert.True(result.BlessDuringCombat);
+    }
+
+    [Fact]
+    public void AbsoluteManaThresholds_TakeTheFloorAsAnAmount()
+    {
+        AddBuffDialogViewModel d = new(Picks, _ => false, _ => false,
+            initial: new AddBuffResult("flux", 15, false, false, false, false, 0, null, BlessIfAboveMa: 250),
+            manaFloorIsAbsolute: true);
+
+        Assert.Equal("Cast if mana ≥", d.BlessIfAboveLabel);
+        AddBuffResult? result = null;
+        d.CloseRequested += r => result = r;
+        d.OkCommand.Execute(null);
+
+        Assert.Equal(250, result!.BlessIfAboveMa);
+    }
+
+    [Fact]
     public void Stock_UsesTheRollBox_AndShowsTheTickSteps()
     {
         AddBuffDialogViewModel d = Dialog(stock: true, steps: "6 MP/tick at worst · 7 from 12", roll: (-64, 216));

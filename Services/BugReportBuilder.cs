@@ -1076,6 +1076,9 @@ public static class BugReportBuilder
         if (s.OnlyWhenMaFull) scope += " +ma-full";
         if (s.OnlyWhenDark) scope += " +only-dark";
         if (s.CastBeforeRestingForMana) scope += " +pre-rest";
+        scope += $" +ma>={s.BlessIfAboveMa}";
+        if (s.BlessWhileResting) scope += " +while-resting";
+        if (s.BlessDuringCombat) scope += " +in-combat";
         if (s.RerollInfinite || s.RerollCount > 0)
             scope += $" +reroll<{s.RerollThreshold?.ToString() ?? "-"}x{(s.RerollInfinite ? "∞" : s.RerollCount.ToString())}";
         return scope;

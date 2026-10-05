@@ -106,7 +106,7 @@ public static class CombatSpellProfileReport
         char hp = h.HpThresholdMode == ThresholdMode.Percentage ? '%' : 'v';
         char ma = h.MaThresholdMode == ThresholdMode.Percentage ? '%' : 'v';
         return $"health[HP{hp} rest<{h.RestIfBelowHp}→{h.RestMaxHp} run<{h.RunIfBelowHp} hang<{h.HangIfBelowHp}" +
-               $" · MA{ma} rest<{h.RestIfBelowMa}→{h.RestMaxMa} bless>{h.BlessIfAboveMa}]";
+               $" · MA{ma} rest<{h.RestIfBelowMa}→{h.RestMaxMa}]";
     }
 
     private static string SlotDetail(string label, CombatSpellSlot slot, bool roomWide)

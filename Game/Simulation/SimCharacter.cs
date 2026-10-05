@@ -25,9 +25,14 @@ public sealed record SimSpell(
 // One self-maintained buff from the Buffs list, in cast-priority order: recast when
 // it's down or within RecastMarginSec of wearing off. A roll spell recasts at once
 // while its roll lands below RerollBelow, up to RerollCount times (or without limit).
+// BlessIfAboveMa, WhileResting and DuringCombat are the slot's own conditions
+// (BuffSlot): the mana it waits for, and whether it casts in a triggered rest or a
+// fight.
 public sealed record SimBuff(
     string Spell, int RecastMarginSec, bool OnlyWhenHpFull, bool OnlyWhenMaFull,
-    bool BeforeRestingForMana, int? RerollBelow, int RerollCount, bool RerollInfinite);
+    bool BeforeRestingForMana, int? RerollBelow, int RerollCount, bool RerollInfinite,
+    int BlessIfAboveMa = Models.Profile.HealthSettings.DefaultBlessIfAboveMa,
+    bool WhileResting = false, bool DuringCombat = false);
 
 // Per-tick regen, as functions of the regen percent active buffs add (ManaRgn /
 // HPRegen), on the realm cadence they arrive on (RealmRegenProfile).

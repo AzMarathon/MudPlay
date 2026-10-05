@@ -294,7 +294,8 @@ public sealed class CombatProfileSpells
     public string? EmergencyHealSpell { get; set; }
     public string? HpRegenSpell { get; set; }
 
-    // Bless timing (self).
+    // LEGACY bless timing (self): each buff slot carries its own now (BuffSlot). Still
+    // stored and copied so an older profile round-trips; nothing reads it.
     public bool SelfBlessWhileResting { get; set; }
     public bool SelfBlessDuringCombat { get; set; }
 

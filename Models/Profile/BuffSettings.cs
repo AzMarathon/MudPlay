@@ -84,6 +84,22 @@ public sealed class BuffSlot
 
     // ----- Conditions (per-slot gates) -------------------------------
 
+    // Cast this buff only while mana is at or above this much: a percent of max
+    // mana, or a raw mana / kai amount when Settings → Health reads its mana
+    // thresholds as absolute values (HealthSettings.MaThresholdMode). It keeps mana
+    // back for heals. A free item-cast buff ignores it. Was one value for every
+    // buff (HealthSettings.BlessIfAboveMa) until profile schema 5.
+    public int BlessIfAboveMa { get; set; } = HealthSettings.DefaultBlessIfAboveMa;
+
+    // Cast on ourselves while a triggered recovery rest is under way. Off = wait
+    // until the rest is done. Was one switch for every buff
+    // (SpellsSettings.SelfBlessWhileResting) until profile schema 5.
+    public bool BlessWhileResting { get; set; }
+
+    // Cast on ourselves during a fight. Off = wait until the room is clear. Was one
+    // switch for every buff (SpellsSettings.SelfBlessDuringCombat) until schema 5.
+    public bool BlessDuringCombat { get; set; }
+
     // Cast only once we've rested our HP up to the rest-max target — a "topped-off,
     // ready for the next fight" buff. Recasts while up there; a triggered rest-if-below
     // suspends it until we've rested back to max. Replaces the old dedicated

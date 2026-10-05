@@ -8,7 +8,7 @@
         x:Class="MudPlay.Views.AddBuffDialog"
         x:DataType="vm:AddBuffDialogViewModel"
         Title="{Binding DialogTitle}"
-        Width="380" Height="380"
+        Width="380" Height="460"
         MinWidth="340" MinHeight="300"
         WindowStartupLocation="CenterOwner">
 
@@ -56,6 +56,20 @@
             <StackPanel Spacing="4">
                 <TextBlock Text="Conditions" FontSize="10" Margin="0,2,0,0"
                            Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                <Grid ColumnDefinitions="110,*" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Text="{Binding BlessIfAboveLabel}" VerticalAlignment="Center"
+                               FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                    <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
+                                   Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
+                                   Minimum="0" Maximum="{Binding BlessIfAboveMaximum}" Increment="1" FormatString="0"
+                                   ToolTip.Tip="Cast this buff only while your mana is at or above this much, so mana is kept back for heals. 0 = cast at any mana. A percent of max mana, or a raw mana / kai amount when Settings → Health reads its mana thresholds as absolute values. A free item-cast buff ignores it."/>
+                </Grid>
+                <CheckBox Content="Cast while resting"
+                          IsChecked="{Binding BlessWhileResting, Mode=TwoWay}"
+                          ToolTip.Tip="Cast this buff on yourself during a rest the client started to recover HP or mana. Unticked: it waits until the rest is done. Casts on party members follow Settings → Party."/>
+                <CheckBox Content="Cast during combat"
+                          IsChecked="{Binding BlessDuringCombat, Mode=TwoWay}"
+                          ToolTip.Tip="Cast this buff on yourself in the middle of a fight — the cast spends that round. Unticked: it waits until the room is clear. Casts on party members follow Settings → Party."/>
                 <CheckBox Content="Only when HP is full (rested up)"
                           IsChecked="{Binding OnlyWhenHpFull, Mode=TwoWay}"
                           ToolTip.Tip="Cast only once HP is rested up to the rest-max target — a 'topped off, ready for the next fight' buff."/>
