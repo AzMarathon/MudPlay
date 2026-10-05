@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.20**
-> - Player Workshop, CP Allocation: a Buy spells button runs the trainer's shop trip on its own, whether Auto-obtain spells from shops is on or off
-> - A scroll that shares its name with another item (scroll of resist lightning) is read after it's bought instead of being left in the pack
-> - The spell trip reads a shop's list at once instead of waiting it out, and skips scrolls marked (You can't use) or (Too powerful)
+> **Version 3.145.0**
+> - Players can be marked Friend, Neutral or Enemy per realm, with an optional PvP response of their own (Game Data → Players)
+> - Realm settings gain "PvP is enabled on this realm"
+> - A player's class is also taken from the top list
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -1607,6 +1607,15 @@ The rightmost **Use** column shows which tier owns each row — **Def** for the 
 
 The **Items** and **Players** tables carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — an item's **Collect / Discard / Open / Buy / Sell / Sell-detour / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete** followed by each **remote-control permission** you've granted them (a full grant collapses to *All @-permissions*). It reads blank when you've set none; a crowded cell trims with an ellipsis — hover it for the full list, or drag the column wider. Click its header to sort by it, which groups the rows you've configured together. (The Players tab's separate **@'s** column keeps the quick None / Some / All summary of those permissions.) The **Monsters** table surfaces the same kind of per-record settings, but as their own columns — see its column list below.
 
+The **Players** table also has a **Relationship** column, and a player's edit dialog (double-click the row) has the two settings behind it:
+
+- **Relationship** — how you stand with that player on this realm: **Neutral** (the default for everyone: not attacked on sight, fought back if they attack you), **Friend** (never attacked) or **Enemy** (the PvP response applies on sight). It is saved with the realm's player list, so every character you play on that realm shares it, and a Friend or Enemy is never removed by the stale-player cleanup.
+- **PvP response** — what to do about that player when they are an Enemy. *Use the PvP settings* follows the general response; any other choice (hang up, flee then hang up, flee, attack, chase and attack, do nothing) replaces it for that one player.
+
+The column is blank for a Neutral player, so the ones you've marked stand out. Nothing acts on these yet — they are recorded for the PvP features that follow. If you saved a column layout for the Players table before this release, use **Columns ▾ → Reset to defaults** to see the new column.
+
+A player's **class** is filled in from wherever the game states it: the party list, the **top** list (run `top` and every listed player you already have a record for gets their class), and `look`. Failing those it is worked out from their title on `who` when only one class uses that title.
+
 The **Monsters** table lists only the monsters that can actually be met in the game. The ones the game data marks *out of play* — sysop-only NPCs, unused or test monsters (about 70 in the Paradigm set, such as the extra copies of *dark cleric* or *guardsman* that no room ever spawns) — are not here; they are in the **Unobtainable** table instead, so a name that appears twice in Monsters is two real spawns.
 
 The **Unobtainable** table collects everything the game data marks out of play, **Items** and **Monsters** alike, read-only. It also holds any **monster that can never spawn** even though the data marks it in play: one that isn't placed, isn't in a lair, isn't summoned by anything, and is only listed under rooms that have a different NPC. The game data can't show which rooms really skip their listed spawns, so this is a careful guess; in the known data sets it catches only *Cygani*, listed under Aiken's Magic Shoppe, where the Stock game files confirm the shop only ever spawns Aiken. Map room tooltips and room panels leave out anything on this list, so they only show monsters you can actually meet. Its **Kind** column says which table a row came from (the two number ranges overlap, so read the ID together with the Kind), and **Reason** says why it's here; the item columns (type, slot, damage, price…) fill in for items and **HP / Exp / Avg Damage / Alignment** for monsters. The Item Finder skips the same items.
@@ -2695,6 +2704,12 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 **Default:** `-25`
 **What it does:** The negative HP value at which this realm actually kills a character (0 HP alone just "drops" you — bleeding out but revivable). Used by the emergency-hangup safety logic to know how far into negative HP it's safe to let things go.
 **Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from observed deaths and updates this automatically.
+
+### PvP is enabled on this realm
+
+**Default:** Off
+**What it does:** Tells MudPlay that players can attack one another on this realm. Nothing the game prints says so, so it is yours to set, once per realm (a board with a PVE and a PVP realm has it off on one and on on the other).
+**Important notes:** It is the switch the player-versus-player features look at: the care taken not to catch other players in a room attack, and the PvP settings, only apply on a realm where it is ticked. On its own it changes nothing yet — those features arrive in later releases.
 
 ### Boss cleanup time / Boss cleanup zone
 
@@ -4348,6 +4363,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Game entry / exit command | `"E"` / `"=x"` | string | `GameEntryCommand` / `GameExitCommand` | Models/Settings/BbsProfile.cs |
 | Player dies at (HP) | `-25` | -999–0 | `PlayerDiesAtHp` | Models/Settings/RealmProfile.cs |
 | Auto-refine death floor | `true` | bool | `AutoRefineDeathFloor` | Models/Settings/BbsProfile.cs |
+| PvP is enabled on this realm | `false` | bool | `PvpEnabled` | Models/Settings/RealmProfile.cs |
 | Boss cleanup time / zone | `"21:00"` / local zone | `HH:mm` / IANA/Windows tz id | `CleanupTimeOfDay` / `CleanupTimeZoneId` | Models/Settings/RealmProfile.cs |
 | Board disconnect line | `null` | pattern string | `DisconnectPattern` | Models/Settings/BbsProfile.cs |
 | Name of runic currency | `"runic"` | string | `RunicCurrencyName` | Models/Settings/BbsProfile.cs |

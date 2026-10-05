@@ -1,5 +1,11 @@
 # Version history
 
+## 3.145.0
+
+- Players can be marked Friend, Neutral or Enemy per realm, with an optional PvP response of their own (Game Data → Players)
+- Realm settings gain "PvP is enabled on this realm"
+- A player's class is also taken from the top list
+
 ## 3.144.20
 
 - Player Workshop, CP Allocation: a Buy spells button runs the trainer's shop trip on its own, whether Auto-obtain spells from shops is on or off

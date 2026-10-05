@@ -172,6 +172,11 @@ public static class BugReportBuilder
             ? $"{bbsRealm.Realm.Name} (game data {bbsRealm.Realm.ActiveGameDataSet ?? "global default"}; "
               + $"{bbsRealm.Bbs.Realms.Count} realm(s) on the BBS)"
             : "(none)");
+        // PvP: whether the realm is marked for it, and how many players carry a
+        // relationship other than the Neutral everyone starts with.
+        Kv(sb, "Realm PvP", (svc.ResolveActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
+            + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
+            + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
         // Retry/reconnect config for the active BBS. A "won't stop redialing" or
         // "never reconnected" report hinges on whether InfiniteRetries is on (which
         // overrides the count+pause to unlimited @ 3s) and which triggers are armed.

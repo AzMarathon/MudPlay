@@ -328,6 +328,13 @@
                                       Content="Auto-refine the floor from slow deaths"
                                       ToolTip.Tip="Learn the realm's true death floor from deaths where you bled out gradually (which land right at the floor). A single big overkill hit blows past the floor and is ignored. Turn off to keep the value you set above."/>
 
+                            <!-- Nothing in the game's output says whether players can attack
+                                 one another on a realm, so the user tells us. -->
+                            <CheckBox IsChecked="{Binding PvpEnabled, Mode=TwoWay}"
+                                      Margin="0,6,0,0"
+                                      Content="PvP is enabled on this realm"
+                                      ToolTip.Tip="Tick this when players can attack one another on this realm. The PvP settings, and the care taken not to hit other players with room attacks, only apply on a realm where it is ticked."/>
+
                             <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the
                                  Bosses tab read DEAD once marked and flip back to ALIVE at
                                  this daily wall-clock time (in the chosen zone). -->

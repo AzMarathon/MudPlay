@@ -26,7 +26,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
 
     public override IReadOnlyList<string> Columns { get; } = new[]
     {
-        "Given Name", "Family Name", "Gang", "@'s", TogglesColumn, "Last Seen",
+        "Given Name", "Family Name", "Gang", "Relationship", "@'s", TogglesColumn, "Last Seen",
     };
 
     public override string SearchKeyColumn => "Given Name";
@@ -37,7 +37,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
 
     public override IEnumerable<string> SearchableLabels => new[]
     {
-        Title, "player", "name", "remote", "@", "permissions",
+        Title, "player", "name", "remote", "@", "permissions", "relationship", "friend", "enemy", "pvp",
     };
 
     public IRelayCommand<GameDataRow?> OpenEditAsyncCommand { get; }
@@ -143,6 +143,11 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
                 // Last-seen gang from the `who` parse (preserved across sightings that
                 // don't re-report it); blank when never seen in a gang.
                 ["Gang"]        = p.Gang ?? string.Empty,
+                // Blank for the Neutral everyone starts as, so a Friend or an Enemy
+                // stands out; an Enemy with its own response shows it.
+                ["Relationship"] = p.Relationship == PlayerRelationship.Neutral ? string.Empty
+                    : p.PvpResponse is { } own ? $"{PvpLabels.Of(p.Relationship)} ({PvpLabels.Of(own)})"
+                    : PvpLabels.Of(p.Relationship),
                 ["@'s"]         = RemoteControlsLabel(p.RemoteControls),
                 // The settings we've configured for this player: the party-behaviour
                 // toggles, then each granted remote-control permission (the @'s column
@@ -280,6 +285,7 @@ public sealed class PlayersSectionViewModel : GameDataTableSectionViewModel, IEd
         // AccountName lives on the BBS-tier observation, not the customization
         // slice, so it takes its own write path.
         _db.SetAccountName(record.GivenName, result.Updated.AccountName);
+        _db.SetRelationship(record.GivenName, result.Updated.Relationship, result.Updated.PvpResponse);
         Reload();
     }
 

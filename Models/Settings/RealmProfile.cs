@@ -46,6 +46,11 @@ public sealed class RealmProfile
     // HP reading is an accurate measurement. Off pins the user's manual value.
     public bool AutoRefineDeathFloor { get; set; } = true;
 
+    // Players can attack one another on this realm. Nothing in the game's output
+    // says so, so the user tells us; the PvP settings and the room-attack care
+    // around other players only apply where this is on.
+    public bool PvpEnabled { get; set; }
+
     // The realm's nightly cleanup wall-clock time. Some bosses ("Respawns @
     // Cleanup" in the boss table) reset only at this daily cleanup — a marked one
     // reads DEAD until the next cleanup, then ALIVE. Format "HH:mm" in

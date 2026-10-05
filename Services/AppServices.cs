@@ -7217,6 +7217,15 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
         LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, PromptScanner, Log);
+        // The top list states each listed player's class outright; put it on the
+        // records of the players we know. Off the capture, not the store's load: a
+        // realm switch loads the list before the players, and the old realm's
+        // records must not take the new realm's classes.
+        Leaderboards.Captured += snapshot =>
+        {
+            foreach (Game.Leaderboard.LeaderboardEntry entry in snapshot.Entries)
+                Players.RecordStatedClass(entry.Name, entry.Class);
+        };
         // BFS consults the blacklist to skip placement of hidden
         // rooms (edge still recorded → dangling stub). Cache flushes
         // on every blacklist change so the next layout build picks
@@ -12405,8 +12414,10 @@ public sealed class AppServices
     //
     // Class sources in precedence order, strongest first: the party roster (`par`
     // states a member's class outright), our own stat screen, then the player
-    // database — an explicitly observed class from `look`, else the class implied by
-    // their title when exactly one class uses it (a shared title tells us nothing).
+    // database — a class the game stated or showed (the party roster, the top list,
+    // `look`) — then the latest top list itself for a player with no record, else
+    // the class implied by their title when exactly one class uses it (a shared
+    // title tells us nothing).
     private bool? PlayerCanCast(string givenName) =>
         SpellCatalog.ClassCanCast(ResolveKnownPlayerClass(givenName));
 
@@ -12422,10 +12433,14 @@ public sealed class AppServices
             && PlayerStats.Class is { Length: > 0 } own)
             return own;
 
-        if (Players.Find(givenName) is not { } record) return null;
-        if (record.Class is { Length: > 0 } observed) return observed;
+        Models.GameData.PlayerRecord? record = Players.Find(givenName);
+        if (record?.Class is { Length: > 0 } observed) return observed;
+        if (Leaderboards.Snapshots.Count > 0)
+            foreach (Game.Leaderboard.LeaderboardEntry entry in Leaderboards.Snapshots[0].Entries)
+                if (FirstTokenEquals(entry.Name, givenName) && entry.Class.Length > 0)
+                    return entry.Class;
         // A title only identifies a class when it isn't shared across classes.
-        return Game.GameData.ClassTitleTable.LookupClasses(record.Title) is { Count: 1 } implied
+        return Game.GameData.ClassTitleTable.LookupClasses(record?.Title) is { Count: 1 } implied
             ? implied[0]
             : null;
     }

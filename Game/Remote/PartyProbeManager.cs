@@ -154,7 +154,7 @@ public sealed class PartyProbeManager : IDisposable
     private void ReconcileClass(PartyMember m)
     {
         if (m.IsSelf || string.IsNullOrEmpty(m.Name) || string.IsNullOrEmpty(m.Class)) return;
-        if (_players.RecordPartyClass(m.Name, m.Class) is not { } oldClass) return;
+        if (_players.RecordStatedClass(m.Name, m.Class) is not { } oldClass) return;
         _log?.Info("PartyProbe",
             $"{GivenName(m.Name)} is now a {m.Class} (record was a {oldClass}) — dropped the old character's title and level.");
         if (!m.IsInvited) TryProbeOnJoin(m);
