@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.144.21**
-> - A copied profile no longer carries the original character's stats, max HP and mana, carry weight or position; its first entry reads `stat` and `i` for the new character
+> - A copied profile no longer carries the original character's stats, max HP and mana, carry weight, position, gear-set items, learned spells, death history or stash amounts; its first entry reads `stat` and `i` for the new character
 > - Health tab's converted figures update as soon as a `stat` re-records the Default-gear max, instead of on the next reopen
 > - Default-gear max read at another level is dropped when none of the Default set's items are owned, so the live max is used
 >

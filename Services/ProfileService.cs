@@ -661,8 +661,10 @@ public sealed class ProfileService
     //
     // A copy is usually the settings carried to a different character (another
     // realm, level, race, gear), so what the source read off the game doesn't come
-    // along: the copy starts with no stats, Default-gear maxima, carry weight or
-    // position, and is marked StateUnverified so its first entry reads them.
+    // along: the copy starts with no stats, Default-gear maxima, carry weight,
+    // position or gear-set contents, and is marked StateUnverified so its first
+    // entry reads them. Its learned spells, death history and stash amounts are
+    // the source's own record and stay behind too.
     public void CopyProfile(string bbsName, string fromName, string toName)
     {
         if (string.IsNullOrWhiteSpace(bbsName) || string.IsNullOrWhiteSpace(fromName) || string.IsNullOrWhiteSpace(toName))
@@ -694,6 +696,11 @@ public sealed class ProfileService
             copy.LastKnownRoom = null;
             copy.RecentSteps = null;
             copy.PendingReconnectLeader = null;
+            // The sets name the source's gear; the set options are settings and stay.
+            copy.Equipment?.Sets.Clear();
+            copy.LearnedSpells = null;
+            copy.DeathHistory = null;
+            copy.StashedCopper = null;
             copy.StateUnverified = true;
             JsonStore.Save(path, copy);
         }

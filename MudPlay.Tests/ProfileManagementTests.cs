@@ -117,6 +117,11 @@ public sealed class ProfileManagementTests : IDisposable
         source.LastKnownStats = new LastKnownStats { Level = 60, MaxHits = 480 };
         source.DefaultPoolBaseline = new DefaultPoolBaseline { MaxHp = 480, MaxMa = 300, Level = 60 };
         source.LearnedSpells = new List<string> { "minor healing" };
+        source.DeathHistory = new List<DeathRecord> { new() };
+        source.StashedCopper = new Dictionary<string, long> { ["1/100"] = 5000 };
+        source.GotoHistory = new List<string> { "silvermere bank" };
+        source.Equipment = new EquipmentSettings { SwapToDefaultBeforeLairs = true };
+        source.Equipment.Sets.Add(new EquipmentSet { Name = "Default" });
         JsonStore.Save(sourcePath, source);
 
         svc.CopyProfile(_bbsA, "Priest60", "Priest40");
@@ -125,10 +130,18 @@ public sealed class ProfileManagementTests : IDisposable
         Assert.Null(copy.LastKnownStats);
         Assert.Null(copy.DefaultPoolBaseline);
         Assert.True(copy.StateUnverified);
-        Assert.Equal(new[] { "minor healing" }, copy.LearnedSpells);
+        Assert.Empty(copy.Equipment!.Sets);
+        Assert.True(copy.Equipment.SwapToDefaultBeforeLairs);
+        Assert.Null(copy.LearnedSpells);
+        Assert.Null(copy.DeathHistory);
+        Assert.Null(copy.StashedCopper);
+        Assert.Single(copy.GotoHistory!);
         CharacterProfile kept = JsonStore.Load<CharacterProfile>(sourcePath)!;
         Assert.Equal(480, kept.DefaultPoolBaseline!.MaxHp);
         Assert.False(kept.StateUnverified);
+        Assert.Single(kept.Equipment!.Sets);
+        Assert.Single(kept.DeathHistory!);
+        Assert.Equal(5000, kept.StashedCopper!["1/100"]);
     }
 
     [Fact]
