@@ -241,6 +241,77 @@ public sealed class DeathRecoveryManagerTests
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 
+    // Report paradigm-20261004-201808: Auto-All off, the corpse recovered by hand
+    // with two monsters in the room, and the client fired eleven wear commands.
+    [Fact]
+    public void AutoEquip_WithAutoAllOff_HoldsTheGear_UntilItIsBackOn()
+    {
+        using GraphHarness h = new();
+        bool autoOn = false;
+        h.Recovery.SetAutoEnabledProbe(() => autoOn);
+        Die(h, new[]
+        {
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("platinum mace", "Weapon Hand"),
+        }, new[] { "torch" });
+        h.Recovery.AutoEquip = true;
+        h.EnterGates();
+        h.Sent.Clear();
+
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");   // by hand
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(2, h.Recovery.HeldReequipCount);
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+
+        autoOn = true;
+        h.Recovery.OnAutoAllRestored();
+
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+        Assert.Equal(0, h.Recovery.HeldReequipCount);
+    }
+
+    [Fact]
+    public void AutoEquip_HeldForAutoAll_LeavesOutWhatWasWornByHandMeanwhile()
+    {
+        using GraphHarness h = new();
+        bool autoOn = false;
+        h.Recovery.SetAutoEnabledProbe(() => autoOn);
+        Die(h, new[]
+        {
+            new EquippedItem("plate mail", "Torso"),
+            new EquippedItem("platinum mace", "Weapon Hand"),
+        }, Array.Empty<string>());
+        h.Recovery.AutoEquip = true;
+        h.EnterGates();
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        h.Sent.Clear();
+
+        // The user put the armour back on themselves while Auto-All was off.
+        h.Snapshot = SnapWith(new[] { new EquippedItem("plate mail", "Torso") }, new[] { "platinum mace" });
+        autoOn = true;
+        h.Recovery.OnAutoAllRestored();
+
+        Assert.Equal(new[] { "eq platinum mace" }, h.Sent.ToArray());
+    }
+
+    [Fact]
+    public void AutoEquip_HeldForAutoAll_IsDroppedByANewDeath()
+    {
+        using GraphHarness h = new();
+        bool autoOn = false;
+        h.Recovery.SetAutoEnabledProbe(() => autoOn);
+        Die(h, new[] { new EquippedItem("plate mail", "Torso") }, Array.Empty<string>());
+        h.Recovery.AutoEquip = true;
+        h.EnterGates();
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        Assert.Equal(1, h.Recovery.HeldReequipCount);
+
+        h.Tracker.NoteDeath(1, "You now have 1 lives remaining.");
+
+        Assert.Equal(0, h.Recovery.HeldReequipCount);
+    }
+
     // ----- gear handed back by a party member -------------------------
 
     [Fact]

@@ -2429,6 +2429,66 @@ public sealed class HealthManagerTests
         Assert.False(h.Health.KeepRunning());
     }
 
+    // Report paradigm-20261004-201232: the trail back was refused ("There is no exit
+    // in that direction!"), and still under the run trigger the next leg planned the
+    // same step — 23 times into the same wall until the character died. A way out the
+    // game refuses is not sent again: the run takes another, the plan's own way
+    // included, and with every way refused stands and fights.
+    [Fact]
+    public void Flee_AWayOutTheGameRefuses_IsNeverSentAgain()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 10));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        Assert.Equal(new[] { Game.Map.Direction.W }, h.Engine!.SentBacktrackMoves);
+
+        h.Health.NoteMoveBlocked();
+        Assert.Equal(new[] { Game.Map.Direction.W, Game.Map.Direction.N }, h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteMoveBlocked();
+        Assert.Equal(new[] { Game.Map.Direction.W, Game.Map.Direction.N, Game.Map.Direction.E },
+            h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteMoveBlocked();
+        Assert.Equal(3, h.Engine.SentBacktrackMoves.Count);
+        Assert.False(h.Health.KeepRunning());
+    }
+
+    // The same report's shape: the refused step was the trail back itself.
+    [Fact]
+    public void Flee_TheTrailBackRefused_RunsAnotherWayInsteadOfRepeatingIt()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        Assert.Equal(new[] { Game.Map.Direction.E }, h.Engine!.SentBacktrackMoves);   // the trail back
+
+        h.Health.NoteMoveBlocked();
+
+        Assert.Equal(new[] { Game.Map.Direction.E, Game.Map.Direction.W }, h.Engine.SentBacktrackMoves);
+    }
+
+    // A run that ended leaves nothing shut: the next run may try that way again (a
+    // door closed then can be open now).
+    [Fact]
+    public void Flee_RefusedWaysOut_AreForgottenWhenTheRunEnds()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        h.Health.NoteMoveBlocked();                                   // E refused, W sent
+
+        // Ending the run re-reads the room: still hurt with the monster here, a new
+        // run starts, and its trail back is E again.
+        h.Health.CancelFlee();
+
+        Assert.Equal(new[] { Game.Map.Direction.E, Game.Map.Direction.W, Game.Map.Direction.E },
+            h.Engine!.SentBacktrackMoves);
+    }
+
     private static FleeHarness HitAndRunFlee()
     {
         FleeHarness h = new();
@@ -3001,6 +3061,43 @@ public sealed class HealthManagerTests
         h.State.Position = PlayerPosition.Standing;
         Assert.True(h.HealthGateHeld);
         Assert.Equal(3, h.SentLines.Count(l => l == "rest"));
+    }
+
+    [Fact]
+    public void Rest_Interrupted_WithTheReRestPutOffForASneak_StillRestsOnToTheTarget()
+    {
+        // Report paradigm-20261004-202253: a ShadowRest character resting from 63
+        // toward 121 of 151 HP was stood up at 96 by a buff ticked "cast while
+        // resting". The re-rest waits for the sneak that goes first, and on the next
+        // pass nothing remembered the recovery: the gate cleared against the 77
+        // trigger and the rest was dropped at 64%.
+        using Harness h = new();
+        bool sneakFirst = false;
+        h.Health.SetShadowRest(() => true, () => true, () => true, () => { });
+        h.Health.SetSneakBeforeRestProbe(() => sneakFirst);
+        h.Settings.UtilizeShadowRest = true;
+        h.State.MaxMa = 0;
+        h.SetPrompt(hp: 200, maxHp: 400);   // below the 60% trigger (240); target 380
+        Assert.Equal(1, h.SentLines.Count(l => l == "rest"));
+        h.State.Position = PlayerPosition.Resting;
+
+        // A cast stands us up at 260 (over the trigger, far under the target), and
+        // the rest has to wait for the sneak.
+        sneakFirst = true;
+        h.State.Hp = 260;
+        h.State.Position = PlayerPosition.Standing;
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(1, h.SentLines.Count(l => l == "rest"));
+
+        // Another pass while still waiting: the recovery is not forgotten.
+        h.State.Hp = 261;
+        Assert.True(h.HealthGateHeld);
+
+        // The sneak lands; the rest goes out again.
+        sneakFirst = false;
+        h.Health.Evaluate();
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(2, h.SentLines.Count(l => l == "rest"));
     }
 
     [Fact]

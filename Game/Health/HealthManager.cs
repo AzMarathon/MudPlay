@@ -167,6 +167,15 @@ public sealed class HealthManager : IDisposable
     private bool _hpGateConfirmed;
     private bool _maGateConfirmed;
     private bool _restInFlight;          // sent rest, awaiting recovery
+
+    // A rest under way was broken off outside a fight and hasn't been re-sent yet.
+    // The re-send usually goes out on the same pass, but it can be put off (a
+    // ShadowRest sneaks first), and on the next pass nothing else says we were
+    // mid-recovery: the gate then cleared against the rest trigger instead of the
+    // rest target, and the character stood there at 64% with the rest dropped
+    // (report paradigm-20261004-202253). Held until the rest goes out again, a
+    // fight starts, we move, or the gates clear.
+    private bool _restResumeOwed;
     private bool _restConfirmedByPrompt; // observed (Resting) since the last rest emit
     private bool _wasPoisoned;           // poison state last Evaluate — for the poison-cleared re-rest edge
 
@@ -273,6 +282,11 @@ public sealed class HealthManager : IDisposable
     private DateTimeOffset _maxHpChangedAt;
     private DateTimeOffset _maxMaChangedAt;
     private bool _fledThisCombat;        // reacted to run-trigger (flee OR @heal), awaiting combat end
+
+    // The flee move last sent, and the ways out the game refused during this run by
+    // the room they were tried from. Dropped when the run ends.
+    private Map.Direction? _lastFleeMove;
+    private readonly HashSet<(Map.RoomKey Room, Map.Direction Dir)> _refusedFleeMoves = new();
     private bool _wasInCombat;           // previous Evaluate's InCombat — falling-edge detection for the rest-send reconfirm
     private bool _hangFired;             // emergency-hangup latch; re-arms when danger passes
     private Map.IRecoverableEngine? _fleeEngine;     // engine we paused mid-flee
@@ -870,6 +884,7 @@ public sealed class HealthManager : IDisposable
                 _requestPartyOk?.Invoke();
             }
             _restInFlight = false;
+            _restResumeOwed = false;
             _restConfirmedByPrompt = false;
             _wasPoisoned = false;
             _fledThisCombat = false;
@@ -965,6 +980,9 @@ public sealed class HealthManager : IDisposable
         {
             _restInFlight = false;
             _restConfirmedByPrompt = false;
+            // Stood up outside a fight (our own cast, a swap): the rest is owed again,
+            // whenever the command can next go out.
+            _restResumeOwed = !_state.InCombat;
             _log?.Combat(LogCategory,
                 $"rest interrupted — position now {_state.Position} " +
                 $"(hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa} " +
@@ -976,6 +994,7 @@ public sealed class HealthManager : IDisposable
         // the party wait for a full topoff; solo / leader recover to
         // rest-max. Defaults to leader/solo when no role selector is wired.
         bool follower = _isPartyFollower?.Invoke() ?? false;
+        if (_state.InCombat) _restResumeOwed = false;
 
         // A loop can flag the room it's standing in as "do not rest here" (too
         // dangerous to sit still). While in such a room we never raise the rest
@@ -1045,7 +1064,8 @@ public sealed class HealthManager : IDisposable
         // boost = liveMax − defaultBasis), so it can never strand. Zero in Default gear
         // and when the Default basis is unknown (fail-safe → no change from before).
         int hpBoost = PoolBoostOverDefault(_state.MaxHp, _defaultSetMaxHp);
-        int hpClearFloor = (_restInFlight || wasActivelyResting) ? hpRestTarget + hpBoost : hpRestTrigger;
+        bool midRecovery = _restInFlight || wasActivelyResting || _restResumeOwed;
+        int hpClearFloor = midRecovery ? hpRestTarget + hpBoost : hpRestTrigger;
 
         // Strictly below — "rest if below N" rests only when the pool is
         // under N, never AT N. (Equal-or-less traps a level-2 mystic: 1 max
@@ -1071,7 +1091,7 @@ public sealed class HealthManager : IDisposable
                 restOff ? "auto-rest is off"
                     : skipRest
                     ? "do-not-rest room — advancing instead of resting"
-                    : _restInFlight || wasActivelyResting
+                    : midRecovery
                         ? $"HP {_state.Hp}/{_state.MaxHp} >= clear-floor={hpClearFloor} (rest-target={hpRestTarget}{(hpBoost > 0 ? $" + pre-rest boost {hpBoost}" : "")})"
                         : $"HP {_state.Hp}/{_state.MaxHp} recovered above rest-trigger={hpRestTrigger} before rest started");
         }
@@ -1087,7 +1107,7 @@ public sealed class HealthManager : IDisposable
         // See hpClearFloor above — same pre-send-vs-resting distinction for MA, and
         // the same Pre-rest Mana-set pool-boost compensation.
         int maBoost = PoolBoostOverDefault(_state.MaxMa, _defaultSetMaxMa);
-        int maClearFloor = (_restInFlight || wasActivelyResting) ? maRestTarget + maBoost : maRestTrigger;
+        int maClearFloor = midRecovery ? maRestTarget + maBoost : maRestTrigger;
 
         // Strictly below (see HP gate above) — the mystic-at-level-2 case.
         if (!skipRest && !maMaxUnsettled && !_maGateAsserted && _state.Ma < maRestTrigger && _state.MaxMa > 0)
@@ -1112,10 +1132,11 @@ public sealed class HealthManager : IDisposable
                     ? "do-not-rest room — advancing instead of resting"
                     : ManaAtGameFull() && _state.Ma < maClearFloor
                         ? $"MA {_state.Ma}/{_state.MaxMa} — the game says mana is full"
-                    : _restInFlight || wasActivelyResting
+                    : midRecovery
                         ? $"MA {_state.Ma}/{_state.MaxMa} >= clear-floor={maClearFloor} (rest-target={maRestTarget}{(maBoost > 0 ? $" + pre-rest boost {maBoost}" : "")})"
                         : $"MA {_state.Ma}/{_state.MaxMa} recovered above rest-trigger={maRestTrigger} before rest started");
         }
+        if (!_hpGateAsserted && !_maGateAsserted) _restResumeOwed = false;
 
         // A do-not-rest room can't raise (and clears) the recovery gate even when
         // the pool is below a rest trigger. A plain Standing hop OUT of that room
@@ -1300,6 +1321,7 @@ public sealed class HealthManager : IDisposable
                     $"(HP {_state.Hp}/{_state.MaxHp} > {hpRunTrigger}, MA {_state.Ma}/{_state.MaxMa} > {maRunTrigger})");
                 _fleeEngine.ResumeAfterFlee(room);
                 _fleeEngine = null;
+                _refusedFleeMoves.Clear();
             }
         }
 
@@ -1566,6 +1588,7 @@ public sealed class HealthManager : IDisposable
             if (alreadyThere)
             {
                 _restInFlight = true;
+                _restResumeOwed = false;
                 _restConfirmedByPrompt = true;
                 _log?.Combat(LogCategory,
                     $"already {(command == "rest" ? "resting" : "meditating")}{restReason} — not sending {command} again " +
@@ -1585,6 +1608,7 @@ public sealed class HealthManager : IDisposable
                     $"{command}{restReason} " +
                     $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
                 _restInFlight = true;
+                _restResumeOwed = false;
             }
         }
         else if (!shouldRest && _restInFlight)
@@ -2028,6 +2052,7 @@ public sealed class HealthManager : IDisposable
         // run-trigger (handled in Evaluate's recovery branch).
         engine.PauseForFlee($"flee — {reason}");
 
+        if (_fleeEngine is null) _refusedFleeMoves.Clear();   // a new run starts with every way out open
         _fleeEngine = engine;
         _fleeFromGates = fromGates;
         FleeStarted?.Invoke();
@@ -2046,6 +2071,7 @@ public sealed class HealthManager : IDisposable
         _log?.Combat(LogCategory,
             $"flee start engine={engine.Name} mode={combat.RunDirection} " +
             $"route=[{string.Join(",", steps)}] first={first} ({reason})");
+        _lastFleeMove = first;
         engine.SendBacktrackMove(first);
         return true;
     }
@@ -2125,8 +2151,30 @@ public sealed class HealthManager : IDisposable
                 break;
         }
 
-        // A flee goes out as bare direction commands, so the route has to be
-        // cardinals all the way. Both sources can yield a CMD-teleport hop —
+        // The game already refused this way out of this room during this run: take
+        // another, the plan's own way included, rather than send it again. With every
+        // way out refused there is nowhere to run, and an empty route lets combat
+        // fight back.
+        // The same goes for a route that came up empty once a refused way was
+        // left out of the picking.
+        if (_lastKnownRoom is { } standing
+            && (steps.Count > 0
+                ? _refusedFleeMoves.Contains((standing, steps[0]))
+                : _refusedFleeMoves.Any(r => r.Room.Equals(standing))))
+        {
+            steps.Clear();
+            if (AnotherWayOut(engine, standing) is { } other)
+            {
+                _log?.Combat(LogCategory, $"flee: a way out of {standing} was refused — running {other} instead");
+                steps.Add(other);
+            }
+            else
+                _log?.Combat(LogCategory, $"flee: every way out of {standing} was refused — standing to fight");
+        }
+
+        // A flee goes out one direction at a time (the engine sends a text exit's own
+        // command for its slot), so the route has to be cardinals all the way. Both
+        // sources can yield a CMD-teleport hop —
         // BFS routes through them, and so does the engine's own plan — and a
         // teleport is crossed by that exit's command, which we don't have here.
         // Truncate at the first one: retreat as far as the cardinals go and stop.
@@ -2157,13 +2205,25 @@ public sealed class HealthManager : IDisposable
         Map.Direction? ahead = engine.PlannedDirectionFrom(at);
         Map.Direction? opposite = Reverse(ahead);
         return exits
-            .Where(e => e.Key.IsCardinal() && e.Key != ahead && !(avoid is { } a && e.Value.Equals(a)))
+            .Where(e => e.Key.IsCardinal() && e.Key != ahead && !(avoid is { } a && e.Value.Equals(a))
+                && !_refusedFleeMoves.Contains((at, e.Key)))
             .Select(e => (Dir: e.Key, Risk: RoomRisk?.Invoke(e.Value) ?? (false, 0)))
             .OrderBy(e => e.Risk.Boss)
             .ThenBy(e => e.Risk.LairMax)
             .ThenBy(e => e.Dir != opposite)
             .Select(e => (Map.Direction?)e.Dir)
             .FirstOrDefault();
+    }
+
+    // A way out of this room the game hasn't refused during this run: away from the
+    // plan first (AwayFromThePlan's pick), then the plan's own way.
+    private Map.Direction? AnotherWayOut(Map.IRecoverableEngine engine, Map.RoomKey at)
+    {
+        if (AwayFromThePlan(engine, at, avoid: null) is { } away) return away;
+        return engine.PlannedDirectionFrom(at) is { } ahead && ahead.IsCardinal()
+            && !_refusedFleeMoves.Contains((at, ahead))
+            && RoomExits?.Invoke(at) is { } exits && exits.ContainsKey(ahead)
+                ? ahead : null;
     }
 
     // While a low-HP / MA run is on and a hostile is here: run again rather than turn
@@ -2355,6 +2415,7 @@ public sealed class HealthManager : IDisposable
         if (_fleeEngine is null && _deferredFleeReason is null && _fleeQueue.Count == 0) return;
         _log?.Combat(LogCategory, "flee cancelled (reset) — nothing will be resumed");
         _fleeEngine = null;
+        _refusedFleeMoves.Clear();
         _fleeQueue.Clear();
         _fleeLanded = false;
         _fleeFromRoom = null;
@@ -2368,10 +2429,22 @@ public sealed class HealthManager : IDisposable
     // A flee move was refused — the route ran into a wall. Stop the retreat where we
     // stand rather than wait forever for a landing that can't come (report
     // paradigm-20260927-011659: stuck "already running" beside an acid slime).
+    //
+    // The way just tried is remembered as shut for the rest of this run. Still under
+    // the run trigger with the monster still here, the next leg is planned at once,
+    // and without that it planned the very same step: 23 times into the same wall,
+    // one every three seconds, until the character died (report
+    // paradigm-20261004-201232).
     public void NoteMoveBlocked()
     {
         if (_fleeEngine is null || _fleeLanded) return;
-        _log?.Combat(LogCategory, "flee move refused — stopping the retreat here");
+        if (_fleeFromRoom is { } room && _lastFleeMove is { } tried)
+        {
+            _refusedFleeMoves.Add((room, tried));
+            _log?.Combat(LogCategory, $"flee move {tried} refused at {room} — stopping the retreat here; that way out won't be tried again this run");
+        }
+        else
+            _log?.Combat(LogCategory, "flee move refused — stopping the retreat here");
         _fleeQueue.Clear();
         _fleeLanded = true;
         _fledThisCombat = false;
@@ -2427,6 +2500,7 @@ public sealed class HealthManager : IDisposable
         {
             _fleeFromRoom = _lastKnownRoom;
             Map.Direction next = _fleeQueue.Dequeue();
+            _lastFleeMove = next;
             _fleeEngine.SendBacktrackMove(next);
             _log?.Combat(LogCategory,
                 $"flee step engine={_fleeEngine.Name} dir={next} " +
@@ -2451,6 +2525,7 @@ public sealed class HealthManager : IDisposable
             _restConfirmedByPrompt = false;
             _log?.Combat(LogCategory, "rest-in-flight cleared on room change");
         }
+        _restResumeOwed = false;
 
         // Moved while still below a rest floor as a follower: our own movement is held
         // by the recovery gate, so this is the leader walking on — it isn't (or no

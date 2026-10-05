@@ -31,6 +31,29 @@ internal enum SpecialExitSend
 // cases that complete in a single send.
 internal static class SpecialExitDispatch
 {
+    // A retreat's single step out of the room, told to the tracker and returned as
+    // the bytes to send with a label for the log. A direction arrives with no exit
+    // beside it, and a bare direction doesn't cross a text exit: the way back along
+    // a trail can be one ("go path" in the northwest slot), and the game answers
+    // the plain "nw" with "There is no exit in that direction!" (report
+    // paradigm-20261004-201232, a flee that bonked that wall until it died). So
+    // while the tracker knows the room, a text exit there goes out as its own
+    // command. A tracker that has lost its place sends the direction as given.
+    public static (byte[] Bytes, string Label) EncodeBacktrack(RoomTracker tracker, Direction direction)
+    {
+        if (tracker.State.Confidence == RoomConfidence.Confirmed
+            && tracker.State.CurrentRoom is { } room
+            && room.Exits.TryGetValue(direction, out RoomExit exit)
+            && exit.Hint == RoomExitHint.Text && exit.TextCommands is { Count: > 0 } cmds)
+        {
+            tracker.NoteMoveSent(cmds[0], cardinal: direction);
+            return (Encoding.Latin1.GetBytes(cmds[0] + "\r"),
+                $"tier3 backtrack {direction} by its text exit '{cmds[0]}' → {exit.Target}");
+        }
+        tracker.NoteMoveSent(direction);
+        return (AutoWalkManager.EncodeMove(direction), $"tier3 backtrack {direction}");
+    }
+
     // Cross exit in direction when it is a synchronous special exit. Returns
     // NotHandled for ordinary passages and for the async door/hidden hints so
     // the caller can fall through to its own handling.

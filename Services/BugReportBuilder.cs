@@ -263,6 +263,8 @@ public static class BugReportBuilder
         // rounds — shows a "recovered but not fully re-equipped" report mid-burst.
         if (svc.DeathRecovery.PendingReequipCount > 0)
             Kv(sb, "Re-equip pieces pending", svc.DeathRecovery.PendingReequipCount.ToString());
+        if (svc.DeathRecovery.HeldReequipCount > 0)
+            Kv(sb, "Re-equip pieces held for Auto-All", svc.DeathRecovery.HeldReequipCount.ToString());
         var lastDeath = svc.DeathRecovery.Records.Count > 0 ? svc.DeathRecovery.Records[^1] : null;
         Kv(sb, "Latest deathpile", lastDeath is null
             ? "(none)"

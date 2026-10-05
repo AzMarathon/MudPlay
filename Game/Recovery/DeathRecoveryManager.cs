@@ -68,6 +68,15 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // (tests / no hostile), ReequipAllWorn sends everything at once as before.
     private readonly Queue<DeathItem> _pendingEquip = new();
 
+    // The master switch (the Auto-All kill switch): with automation silenced, a
+    // corpse the user recovers by hand must not set off a burst of wear / eq
+    // commands — they are playing the character themselves, often with something
+    // hostile in the room (report paradigm-20261004-201808). The pieces wait here
+    // and go on when Auto-All is switched back on. Unbound = always enabled.
+    private Func<bool>? _isAutoEnabled;
+    private readonly List<DeathItem> _heldEquip = new();
+    private DateTimeOffset _heldEquipSince;
+
     // Deathpile gear handed back by another player — a party member who recovered
     // our corpse and gave the items over (a follower never walks back to its own
     // pile; the leader does). Each received item is struck off the open pile as it
@@ -254,6 +263,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _armourClass = armourClass;
     }
 
+    public void SetAutoEnabledProbe(Func<bool> isAutoEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(isAutoEnabled);
+        _isAutoEnabled = isAutoEnabled;
+    }
+
     // Bind the realm probe that chooses the recovery mechanic: Paradigm packs the
     // pile into a `corpse of <name>` (one `recover corpse`), Stock scatters it
     // loose on the floor (per-item `get`). Wired by AppServices from the active
@@ -305,6 +320,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // Worn pieces still queued for the combat-paced re-equip (0 when idle) — a
     // bug report taken mid-recovery shows how far the in-combat burst has drained.
     public int PendingReequipCount => _pendingEquip.Count;
+
+    // Worn pieces recovered while Auto-All was off, waiting for it to come back on.
+    public int HeldReequipCount => _heldEquip.Count;
 
     // Auto-grab a deathpile's lost items (ignoring per-item auto-get policy) when
     // re-entering the death room. Persisted per-character. The grab itself is
@@ -1069,8 +1087,53 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         List<DeathItem> ordered = OrderForReequip(recovered, _armourClass);
 
+        if (_isAutoEnabled?.Invoke() == false)
+        {
+            if (_heldEquip.Count == 0) _heldEquipSince = DateTimeOffset.UtcNow;
+            foreach (DeathItem item in ordered)
+                if (!_heldEquip.Exists(h => NamesMatch(h.Name, item.Name))) _heldEquip.Add(item);
+            _log?.Info(LogCategory,
+                $"auto-equip: Auto-All is off — holding {_heldEquip.Count} piece(s) until it is back on");
+            return;
+        }
+
         (int Map, int Room)? paceIn = pacingRoom is { } pr ? (pr.Map, pr.Room)
             : record.Room is { } dr ? (dr.Map, dr.Room) : null;
+        EquipOrPace(ordered, paceIn);
+    }
+
+    // Auto-All came back on: put on what was held while it was off. Anything the user
+    // has since worn by hand is left out — judged only by an inventory read newer
+    // than the hold, since an older one still lists the gear as it was worn at death.
+    // The rest goes on the same way a fresh recovery would, paced when something
+    // hostile is here.
+    public void OnAutoAllRestored()
+    {
+        if (_heldEquip.Count == 0) return;
+        List<DeathItem> held = new(_heldEquip);
+        _heldEquip.Clear();
+        if (!AutoEquip)
+        {
+            _log?.Info(LogCategory, $"auto-equip: Auto-All back on, but Auto-equip is off — {held.Count} held piece(s) dropped");
+            return;
+        }
+        if (_inventorySnapshot?.Invoke() is { } inv && inv.LastUpdated >= _heldEquipSince)
+            held.RemoveAll(i => inv.EquippedItems.Any(w => NamesMatch(w.Name, i.Name)));
+        if (held.Count == 0)
+        {
+            _log?.Info(LogCategory, "auto-equip: Auto-All back on — the held pieces are already worn");
+            return;
+        }
+        _log?.Info(LogCategory, $"auto-equip: Auto-All back on — putting on {held.Count} held piece(s)");
+        RoomKey? here = _roomTracker.State.CurrentRoom?.Key;
+        EquipOrPace(held, here is { } k ? (k.Map, k.Room) : null);
+    }
+
+    private static bool NamesMatch(string a, string b) =>
+        string.Equals(ItemNameStore.Normalize(a), ItemNameStore.Normalize(b), StringComparison.OrdinalIgnoreCase);
+
+    private void EquipOrPace(List<DeathItem> ordered, (int Map, int Room)? paceIn)
+    {
         if (_hostilesPresent?.Invoke() == true && paceIn is { } room)
         {
             _pendingEquip.Clear();
@@ -1347,6 +1410,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // Snapshot its backscroll before the graveyard display floods scrollback.
     private void OnDeathObserved()
     {
+        _heldEquip.Clear();   // whatever was waiting to go back on is on the new pile now
         if (_profile.Current?.DeathHistory is not { Count: > 0 } list) return;
         DeathRecord last = list[^1];
         if (last.DeathLogFile is not null) return;   // already captured
