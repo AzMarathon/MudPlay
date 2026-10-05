@@ -1714,6 +1714,8 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
     - A full party (six, see *Party → Party size bounds*) can't take them, so the room attack stays held for as long as they are in the room.
     - A Neutral player who attacks us becomes an Enemy, and the PvP settings' action (hang up, flee or fight) applies from then on. The change is saved on their record.
     - A Neutral player who enters our room and starts a room attack counts as attacking us: Enemy, and respond.
+    - The other way round is not an attack: when we walk into a room where a Neutral player is already room-attacking and get hit, they are not marked Enemy. Other clients don't tell Friend, Neutral and Enemy apart or stop a room attack for a newcomer. (On Paradigm an already-running room attack shows as `<player> is poised to assault the room!` on entry — see *Attack announce lines and round commits*.)
+    - What our client does in their place — a Friend or Neutral walks into our room attack — is send `break`.
     - That flip must not come from a room attack after a party split: a Neutral we were partied with, whose party a teleport broke up, can catch us (or be caught by us) in a room attack that was never aimed at them.
     - A Friend isn't flipped or attacked back, unless a PvP-tab checkbox ("Flip a Friend to Enemy if they attack you", off by default) says to treat a Friend who attacks us like a Neutral who does.
     - Inviting such a player to the party is left to the per-player invite settings that already exist; nothing new invites them.
