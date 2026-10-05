@@ -1715,7 +1715,7 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
     - A Neutral player who attacks us becomes an Enemy, and the PvP settings' action (hang up, flee or fight) applies from then on. The change is saved on their record.
     - A Neutral player who enters our room and starts a room attack counts as attacking us: Enemy, and respond.
     - That flip must not come from a room attack after a party split: a Neutral we were partied with, whose party a teleport broke up, can catch us (or be caught by us) in a room attack that was never aimed at them.
-    - A Friend never flips, and is never attacked back.
+    - A Friend isn't flipped or attacked back, unless a PvP-tab checkbox ("Flip a Friend to Enemy if they attack you", off by default) says to treat a Friend who attacks us like a Neutral who does.
     - Inviting such a player to the party is left to the per-player invite settings that already exist; nothing new invites them.
 - **A spell can chain to a second one whose line follows the first** *([CONFIRMED] 2026-09-29, user; report `paradigm-20260929-063213`)*: necromantic bolt (#1008) chains to `nebo secondary` (#1246, ability 151): `You fire a necromantic bolt at small dark sprite for 350 damage!` → `small dark sprite's life is drained for 95 damage!`. The drain both damages the target and heals the caster.
 - **Some Paradigm spells' seeded caster line was wrong or on another record** *(report `paradigm-20260929-063213`; user 2026-09-29)*:
