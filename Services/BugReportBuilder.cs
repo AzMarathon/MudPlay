@@ -177,6 +177,9 @@ public static class BugReportBuilder
         Kv(sb, "Realm PvP", (svc.ResolveActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
             + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
             + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
+        Kv(sb, "PvP room", svc.PvpRoom.Describe()
+            + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held for {heldBy}" : "")
+            + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
         // Retry/reconnect config for the active BBS. A "won't stop redialing" or
         // "never reconnected" report hinges on whether InfiniteRetries is on (which
         // overrides the count+pause to unlimited @ 3s) and which triggers are armed.

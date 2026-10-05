@@ -46,6 +46,7 @@ public sealed partial class CombatManager
     // provably ineffective (turn-undead vs a non-undead mob) BEFORE the reactive probe.
     private SpellTargetTypeIndex? _spellTargetType;
     private Func<bool>? _autoNukeGate;
+    private Func<string?>? _roomAttackHold;
 
     // Resolves a Spell.Number to its Short cast-code (the per-monster override
     // slots store a Number, but casts go out as the Short). Optional: until wired
@@ -289,6 +290,51 @@ public sealed partial class CombatManager
     {
         ArgumentNullException.ThrowIfNull(gate);
         _autoNukeGate = gate;
+    }
+
+    // Wire the room-attack hold: the name of a player in the room our room spells
+    // would hit and mustn't (outside our party, on a realm with PvP on), or null.
+    // While it names someone the chooser is offered no room attack, no room debuff
+    // and no room-scoped spell in a single-target rung, and a room attack already
+    // repeating is broken off. Until called, nothing is held.
+    public void SetRoomAttackHold(Func<string?> heldBy)
+    {
+        ArgumentNullException.ThrowIfNull(heldBy);
+        _roomAttackHold = heldBy;
+    }
+
+    // A room attack repeats on its own every round, so keeping it from the chooser
+    // isn't enough once it is running: only `break` stops it. Stamped as a
+    // between-round cast so the *Combat Off* that follows re-dispatches the round,
+    // which now picks a single target.
+    private void BreakRoomAttackForBystander()
+    {
+        if (_roomChannelSpell is not { } spell) return;
+        if (_roomAttackHold?.Invoke() is not { } who) return;
+        _log?.Info(LogCategory,
+            $"room attack '{spell}' broken off: {who} is here and not in our party. "
+            + "Single target until they are");
+        _roomChannelSpell = null;
+        NoteBetweenRoundCast(manual: false);
+        Send("break");
+    }
+
+    // The single-target rungs whose spell is aimed at the room, added to the level
+    // blocks while a room attack is held: a room spell slotted as the normal or
+    // alternate attack hits a bystander just the same.
+    private IReadOnlySet<CombatSpellAction>? WithRoomScopedHeld(
+        IReadOnlySet<CombatSpellAction>? blocked, string? singleCode, string? normalCode, string? altCode)
+    {
+        HashSet<CombatSpellAction>? held = null;
+        void Check(string? code, CombatSpellAction action)
+        {
+            if (IsRoomScoped(code))
+                (held ??= blocked is null ? new() : new(blocked)).Add(action);
+        }
+        Check(singleCode, CombatSpellAction.SingleDebuff);
+        Check(normalCode, CombatSpellAction.NormalAttackSpell);
+        Check(altCode, CombatSpellAction.AlternateAttackSpell);
+        return held ?? blocked;
     }
 
     // Wire the Spell.Number → Short cast-code resolver used to substitute a
@@ -1484,6 +1530,10 @@ public sealed partial class CombatManager
         string? normalEff = attackOverride    ?? NullIfBlank(settings.NormalAttackSpell.SpellName);
         string? altEff    = altAttackOverride ?? NullIfBlank(settings.AlternateAttackSpell.SpellName);
 
+        bool roomAttackHeld = _roomAttackHold?.Invoke() is not null;
+        IReadOnlySet<CombatSpellAction>? levelBlocked = LevelBlockedFor(monsterNumber, singleEff, normalEff, altEff);
+        if (roomAttackHeld) levelBlocked = WithRoomScopedHeld(levelBlocked, singleEff, normalEff, altEff);
+
         return new CombatSpellContext(
             EnemyCount:          enemyCount,
             TargetRawName:       target,
@@ -1497,8 +1547,8 @@ public sealed partial class CombatManager
             // Physical, so combat keeps swinging (and can still backstab) instead of
             // re-casting a spell the server no-ops (report paradigm-20260813-064159).
             SpellsAvailable:     ma > 0,
-            LevelBlockedActions: LevelBlockedFor(monsterNumber, singleEff, normalEff, altEff),
-            AllowNukes:          _autoNukeGate?.Invoke() ?? true,
+            LevelBlockedActions: levelBlocked,
+            AllowNukes:          !roomAttackHeld && (_autoNukeGate?.Invoke() ?? true),
             ResistBlockedActions: ResistBlockedFor(monsterNumber, normalEff, altEff),
             TargetTypeBlockedActions: TargetTypeBlockedFor(monsterNumber, normalEff, altEff),
             TargetDontBackstab:  IsDontBackstab(monsterNumber),

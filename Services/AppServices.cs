@@ -1657,6 +1657,9 @@ public sealed class AppServices
     // line; this watcher reads the name off that line (gated on
     // RoomTracker.IsInDarkRoom) and injects it into RoomClassifier so
     // CombatManager engages it as if it had been listed.
+    // Room attacks on a realm with PvP on: who ours would hit, and whether someone
+    // else is rooming in a room that was theirs first.
+    public Game.Pvp.PvpRoomSafety PvpRoom { get; private set; } = null!;
     public Game.Combat.DarkRoomCombatWatcher DarkRoomCombat { get; private set; } = null!;
     public Game.Combat.MonsterSummonWatcher MonsterSummons { get; private set; } = null!;
 
@@ -3896,6 +3899,35 @@ public sealed class AppServices
         // Also-Here line so toggling takes effect immediately.
         RoomClassifier = new Game.Combat.RoomEntityClassifier(
             Router, MonsterMessages, Players, RoomTracker, Log, GameData, FlavorPrefixes);
+        // Built before the combat tracker and engine so it reads each room roster
+        // ahead of them: they ask it about the room inside their own handlers.
+        PvpRoom = new Game.Pvp.PvpRoomSafety(
+            Router, RoomClassifier,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            inParty: PartyState.HasMember,
+            // Attacking on sight is the one case where hitting them is the point.
+            // Any other Enemy is left to their PvP response, not to a stray room spell.
+            attackOnSight: given => Players.Find(given) is
+            {
+                Relationship: Models.GameData.PlayerRelationship.Enemy,
+                PvpResponse: Models.GameData.PvpAction.Attack or Models.GameData.PvpAction.ChaseAttack,
+            },
+            classOf: ResolveKnownPlayerClass,
+            levelOf: given => Players.Find(given)?.Level,
+            roomAttackFromLevel: cls => SpellCatalog.RoomAttackFromLevel(cls),
+            realm: () => GameData.ActiveRealm,
+            lastMoveSentAt: () => RoomTracker.LastMoveSentAt,
+            log: Log);
+        GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
+        // Another player's room attack shows as a line, not a room observation, so
+        // nothing re-asks the combat gate on its own. Posted: the line is still being
+        // dispatched, and the re-check can send a break.
+        PvpRoom.RoomAttackSeen += () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (Recovery.AttachedEngine is null) return;
+            CombatTracker.OnAutoAttackChanged();
+            RoomClassifier.ReemitCurrent();
+        });
         CombatTracker = new Game.Combat.CombatStateTracker(
             Router, MovementCoordinator, RoomClassifier, MonsterMessages,
             PlayerState,
@@ -4915,6 +4947,7 @@ public sealed class AppServices
         // multi-target attack spell or either debuff (single-target attack
         // spells are not nukes and stay available).
         Combat.SetAutoNukeGate(() => ReadAutoModeFlag(d => d.AutoNuke));
+        Combat.SetRoomAttackHold(PvpRoom.RoomAttackHeldBy);
         // Debuffs are in-between actions, not combat actions — the combat
         // engine owns the decision but CastDirector casts them through the
         // shared in-between window (at PriorityDebuffing, so survival heals
@@ -9025,8 +9058,14 @@ public sealed class AppServices
             if (suppressed && evalKey is { } rk)
                 Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
         }
-        return suppressed;
+        return suppressed || PvpLeaveRoomReason() is not null;
     }
+
+    // Why a running walk or loop carries on out of the room we're in rather than
+    // fight beside another player's room attack, or null. Moving by hand there is
+    // no next room to carry on to, so the fight is left to the user.
+    public string? PvpLeaveRoomReason() =>
+        Recovery.AttachedEngine is null ? null : PvpRoom.LeaveRoomReason();
     private bool _lastCombatSuppressed;
     private Game.Map.RoomKey? _lastCombatSuppressedRoom;
 

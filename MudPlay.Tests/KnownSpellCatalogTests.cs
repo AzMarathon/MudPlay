@@ -140,6 +140,32 @@ public sealed class KnownSpellCatalogTests : IDisposable
     public void Query_Druid_MageryMismatch_Empty()
         => Assert.Empty(NewCatalog().Query(classNumber: 13, level: 0));
 
+    // A room attack is an area attack (Targets 9 / 11 / 12) that costs energy; an
+    // area cast with no energy cost is a between-round spell, not a repeating attack.
+    [Fact]
+    public void RoomAttackFromLevel_IsTheLowestEnergyCostingAreaAttack()
+    {
+        object[] spells =
+        [
+            SpellRow(200, "bolt", "bolt", magery: 1, mageryLvl: 1, reqLevel: 1,
+                learnable: 1, classes: "(*)", minBase: 1, abil0: 1, targets: 8, energy: 500),
+            SpellRow(201, "storm", "stor", magery: 1, mageryLvl: 1, reqLevel: 17,
+                learnable: 1, classes: "(*)", minBase: 1, abil0: 1, targets: 12, energy: 1000),
+            SpellRow(202, "sparks", "spar", magery: 1, mageryLvl: 1, reqLevel: 11,
+                learnable: 1, classes: "(*)", minBase: 1, abil0: 1, targets: 9, energy: 1000),
+            SpellRow(203, "weaken all", "weak", magery: 3, mageryLvl: 1, reqLevel: 4,
+                learnable: 1, classes: "(*)", minBase: 1, abil0: 1, targets: 11, energy: 0),
+        ];
+        KnownSpellCatalog catalog = NewCatalog(spells);
+
+        Assert.Equal(11, catalog.RoomAttackFromLevel("Mage"));
+        Assert.Equal(11, catalog.RoomAttackFromLevel(" warlock "));
+        Assert.Equal(0, catalog.RoomAttackFromLevel("Druid"));     // only a between-round area cast
+        Assert.Equal(0, catalog.RoomAttackFromLevel("Warrior"));
+        Assert.Null(catalog.RoomAttackFromLevel("Gladiator"));     // not a class here: unknown
+        Assert.Null(catalog.RoomAttackFromLevel(null));
+    }
+
     [Fact]
     public void Query_Warrior_NoMagery_Empty()
         => Assert.Empty(NewCatalog().Query(classNumber: 1, level: 0));
@@ -260,7 +286,7 @@ public sealed class KnownSpellCatalogTests : IDisposable
     private static Dictionary<string, object> SpellRow(
         int number, string name, string shortCode, int magery, int mageryLvl, int reqLevel,
         int learnable, string classes, int minBase = 0, int maxBase = 0, int abil0 = 0,
-        string learnedFrom = "\0", int targets = 0)
+        string learnedFrom = "\0", int targets = 0, int energy = 0)
     {
         Dictionary<string, object> row = new()
         {
@@ -284,7 +310,7 @@ public sealed class KnownSpellCatalogTests : IDisposable
             ["DurInc"] = 0,
             ["DurIncLVLs"] = 0,
             ["Cap"] = 0,
-            ["EnergyCost"] = 0,
+            ["EnergyCost"] = energy,
             ["ManaCost"] = 0,
         };
         for (int x = 0; x < 10; x++)

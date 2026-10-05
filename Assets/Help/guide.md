@@ -1612,7 +1612,7 @@ The **Players** table also has a **Relationship** column, and a player's edit di
 - **Relationship** — how you stand with that player on this realm: **Neutral** (the default for everyone: not attacked on sight, fought back if they attack you), **Friend** (never attacked) or **Enemy** (the PvP response applies on sight). It is saved with the realm's player list, so every character you play on that realm shares it, and a Friend or Enemy is never removed by the stale-player cleanup.
 - **PvP response** — what to do about that player when they are an Enemy. *Use the PvP settings* follows the general response; any other choice (hang up, flee then hang up, flee, attack, chase and attack, do nothing) replaces it for that one player.
 
-The column is blank for a Neutral player, so the ones you've marked stand out. Nothing acts on these yet — they are recorded for the PvP features that follow. If you saved a column layout for the Players table before this release, use **Columns ▾ → Reset to defaults** to see the new column.
+The column is blank for a Neutral player, so the ones you've marked stand out. So far they decide one thing: whose presence holds your room attacks on a PvP realm (see *Room attacks and other players (PvP realms)* under Combat). The responses themselves arrive with the PvP settings. If you saved a column layout for the Players table before this release, use **Columns ▾ → Reset to defaults** to see the new column.
 
 A player's **class** is filled in from wherever the game states it: the party list, the **top** list (run `top` and every listed player you already have a record for gets their class), and `look`. Failing those it is worked out from their title on `who` when only one class uses that title.
 
@@ -2709,7 +2709,7 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 
 **Default:** Off
 **What it does:** Tells MudPlay that players can attack one another on this realm. Nothing the game prints says so, so it is yours to set, once per realm (a board with a PVE and a PVP realm has it off on one and on on the other).
-**Important notes:** It is the switch the player-versus-player features look at: the care taken not to catch other players in a room attack, and the PvP settings, only apply on a realm where it is ticked. On its own it changes nothing yet — those features arrive in later releases.
+**Important notes:** It is the switch the player-versus-player features look at: the care taken not to catch other players in a room attack, and the PvP settings, only apply on a realm where it is ticked. The room-attack care is in place (see *Room attacks and other players (PvP realms)* under Combat); the PvP settings follow.
 
 ### Boss cleanup time / Boss cleanup zone
 
@@ -3057,6 +3057,20 @@ The guard needs to know what you've learned: type `spells` (or `stat`) in the ga
 
 Debuffing is a separate "extra" action that can land the same round as your main attack. Once you commit to a single-target spell against a specific monster and it later becomes unaffordable, MudPlay sticks with the weapon for the rest of that fight rather than flip-flopping back once mana regenerates.
 **Important notes:** Once a spell is announced, it auto-repeats server-side every round exactly like a weapon swing — MudPlay does **not** re-send the cast command every round, only when the situation actually changes (target dies, cap hit, mana too low, target proves immune).
+
+### Room attacks and other players (PvP realms)
+
+**Applies when:** *PvP is enabled on this realm* is ticked (Settings → BBS, on the realm). On any other realm none of this happens.
+**What it does:** A room attack or room debuff hits every player in the room who isn't in your party. So on a PvP realm MudPlay looks at who is standing there before it uses one:
+
+- **A player outside your party is in the room** — the two Multi-attack slots and the AOE debuff are held, and the round goes to your single-target spells or your weapon. A room spell you put in the Normal or Alternate attack slot (or in a monster's override) is held the same way. The hold lasts for as long as that player is in the room and not in your party; the moment they join, or leave, your room spells are back. Inviting them is left to the invite settings you already have. (With a full party of six they can't join, so the hold stays.)
+- **A player walks in while your room attack is already running** — a room attack repeats by itself every round, so MudPlay sends `break` to stop it and carries on single-target.
+- **You walk into a room where another player is room-attacking** — a walk or a loop carries on to its next room instead of fighting there. On Paradigm the game says so (`<player> is poised to assault the room!`). Stock says nothing, so there it is a guess: the player's class has room attacks (mages and druids mostly; gypsies, warlocks, bards and rangers too) and the room holds three or more monsters. A player whose class isn't known yet is treated as one who can. The same goes for a player who was in the room before you and starts a room attack while you are there. Moving by hand, MudPlay leaves the choice to you.
+
+**Who counts:** party members never hold anything. A player you marked **Enemy** with their own PvP response set to **Attack** or **Chase and attack** doesn't hold your room spells either. Everyone else does, Friend, Neutral or Enemy.
+
+**Knowing a player's class:** it comes from your party list, the realm's player list (`who`, a `look`), or the top list. Type the top-list command once on a realm and every listed player's class is remembered.
+**Important notes:** A debuff is a single cast: once it has gone out the damage is done, so it can only be held beforehand. The program log says when room attacks are held, released or broken off, and why a room was walked through (category `PvP`).
 
 ### Drain (life-steal) spell
 

@@ -5,6 +5,8 @@
 - Players can be marked Friend, Neutral or Enemy per realm, with an optional PvP response of their own (Game Data → Players)
 - Realm settings gain "PvP is enabled on this realm"
 - A player's class is also taken from the top list
+- On a PvP realm, room attacks and room debuffs are held while a player outside your party is in the room, and one already running is broken off
+- On a PvP realm, a walk or loop carries on past a room where another player is room-attacking
 
 ## 3.144.20
 
