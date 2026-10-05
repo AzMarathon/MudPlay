@@ -89,7 +89,11 @@ public sealed class BuffSlot
     // thresholds as absolute values (HealthSettings.MaThresholdMode). It keeps mana
     // back for heals. A free item-cast buff ignores it. Was one value for every
     // buff (HealthSettings.BlessIfAboveMa) until profile schema 5.
-    public int BlessIfAboveMa { get; set; } = HealthSettings.DefaultBlessIfAboveMa;
+    public int BlessIfAboveMa { get; set; } = DefaultBlessIfAboveMa;
+
+    // What a new buff starts at for its mana floor. A buff that existed before the
+    // floor became per-buff took the character's old shared value instead.
+    public const int DefaultBlessIfAboveMa = 50;
 
     // Cast this buff while a triggered recovery rest is under way — on ourselves or
     // on the party alike. Off = wait until the rest is done. Was one switch for

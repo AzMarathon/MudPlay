@@ -840,7 +840,7 @@ public static class LoopSimulator
         {
             if (_ch.MaxMana <= 0 || !_ch.Spells.TryGetValue(code, out SimSpell? spell)) return false;
             int value = _ch.Buffs?.FirstOrDefault(b => string.Equals(b.Spell, code, StringComparison.OrdinalIgnoreCase))
-                ?.BlessIfAboveMa ?? HealthSettings.DefaultBlessIfAboveMa;
+                ?.BlessIfAboveMa ?? BuffSlot.DefaultBlessIfAboveMa;
             int floor = PoolThreshold.Resolve(_ch.Health.MaThresholdMode, value, _ch.MaxMana);
             return _ma - spell.ManaPerCast >= floor;
         }

@@ -128,7 +128,7 @@ public sealed class ProfileMigrationsTests
         ProfileMigrations.Apply(profile);
 
         BuffSlot slot = Assert.Single(profile.PartyBuffs!.Slots);
-        Assert.Equal(HealthSettings.DefaultBlessIfAboveMa, slot.BlessIfAboveMa);
+        Assert.Equal(70, slot.BlessIfAboveMa);   // what the shared setting defaulted to, not a new buff's 50
         Assert.False(slot.BlessWhileResting);
         Assert.False(slot.BlessDuringCombat);
     }

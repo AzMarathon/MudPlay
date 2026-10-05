@@ -18,11 +18,11 @@ public sealed class AddBuffDialogViewModelTests
             rollRange: _ => roll);
 
     [Fact]
-    public void ANewBuff_StartsWithTheOldSharedDefaults()
+    public void ANewBuff_StartsAtHalfMana_AndHoldsInRestAndCombat()
     {
         AddBuffDialogViewModel d = new(Picks, _ => false, _ => false);
 
-        Assert.Equal(70, d.BlessIfAboveMa);
+        Assert.Equal(50, d.BlessIfAboveMa);
         Assert.False(d.BlessWhileResting);
         Assert.False(d.BlessDuringCombat);
         Assert.Equal("Cast if mana ≥ %", d.BlessIfAboveLabel);

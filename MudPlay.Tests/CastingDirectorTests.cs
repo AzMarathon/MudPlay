@@ -1737,23 +1737,23 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
-    public void Buff_NewSlotDefaults_WaitForSeventyPercentAndHoldInCombat()
+    public void Buff_NewSlotDefaults_WaitForHalfManaAndHoldInCombat()
     {
-        // A buff added fresh starts where the shared settings used to: 70% mana,
-        // not in a fight, not in a recovery rest.
+        // A buff added fresh waits for half mana, and holds in a fight and in a
+        // recovery rest.
         BuffSlot fresh = new();
-        Assert.Equal(HealthSettings.DefaultBlessIfAboveMa, fresh.BlessIfAboveMa);
+        Assert.Equal(50, fresh.BlessIfAboveMa);
         Assert.False(fresh.BlessWhileResting);
         Assert.False(fresh.BlessDuringCombat);
 
         using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
         h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", CastOnSelf = true });
         h.State.MaxMa = 100;
-        h.State.Ma = 69;
+        h.State.Ma = 49;
         h.Director.Evaluate();
         Assert.Empty(h.CastsSent);
 
-        h.State.Ma = 70;
+        h.State.Ma = 50;
         h.Director.Evaluate();
         Assert.Equal(new[] { "bles" }, h.CastsSent);
     }

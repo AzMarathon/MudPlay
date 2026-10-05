@@ -31,7 +31,7 @@ public sealed record SimSpell(
 public sealed record SimBuff(
     string Spell, int RecastMarginSec, bool OnlyWhenHpFull, bool OnlyWhenMaFull,
     bool BeforeRestingForMana, int? RerollBelow, int RerollCount, bool RerollInfinite,
-    int BlessIfAboveMa = Models.Profile.HealthSettings.DefaultBlessIfAboveMa,
+    int BlessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa,
     bool WhileResting = false, bool DuringCombat = false);
 
 // Per-tick regen, as functions of the regen percent active buffs add (ManaRgn /

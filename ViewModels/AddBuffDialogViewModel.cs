@@ -25,7 +25,7 @@ public sealed record AddBuffResult(
     // Draw items: the outcomes (spell numbers) the user unticked.
     IReadOnlyList<int>? RejectedOutcomes = null,
     // The buff's own mana floor and whether it casts on us in a rest or a fight.
-    int BlessIfAboveMa = HealthSettings.DefaultBlessIfAboveMa,
+    int BlessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa,
     bool BlessWhileResting = false,
     bool BlessDuringCombat = false);
 
@@ -128,7 +128,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
 
     // Per-slot conditions.
-    [ObservableProperty] private int _blessIfAboveMa = HealthSettings.DefaultBlessIfAboveMa;
+    [ObservableProperty] private int _blessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa;
     [ObservableProperty] private bool _blessWhileResting;
     [ObservableProperty] private bool _blessDuringCombat;
 

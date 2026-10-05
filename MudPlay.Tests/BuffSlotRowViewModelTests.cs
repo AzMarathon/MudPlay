@@ -237,7 +237,7 @@ public sealed class BuffSlotRowViewModelTests
         // conditions — no "(Lvl N)" tag (that lives in the Add-buff dropdown, where
         // it helps you pick; on a slotted row it only read as confusing).
         var row = Row(new BuffSlot { Spell = "bless", RecastMarginSec = 15 });
-        Assert.Equal("bless - 15s · mana ≥ 70", row.HeaderText);
+        Assert.Equal("bless - 15s · mana ≥ 50", row.HeaderText);
     }
 
     [Fact]
