@@ -1713,6 +1713,7 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
     - A Friend or Neutral player who walks in while the room attack is repeating means break and swap to the single-target attack until that player is in the party.
     - A full party (six, see *Party → Party size bounds*) can't take them, so the room attack stays held for as long as they are in the room.
     - A Neutral player who attacks us becomes an Enemy, and the PvP settings' action (hang up, flee or fight) applies from then on. The change is saved on their record.
+    - A Neutral player who enters our room and starts a room attack counts as attacking us: Enemy, and respond.
     - That flip must not come from a room attack after a party split: a Neutral we were partied with, whose party a teleport broke up, can catch us (or be caught by us) in a room attack that was never aimed at them.
     - A Friend never flips, and is never attacked back.
     - Inviting such a player to the party is left to the per-player invite settings that already exist; nothing new invites them.
