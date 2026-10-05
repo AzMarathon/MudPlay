@@ -53,6 +53,12 @@
             <Setter Property="BorderBrush" Value="#7A4E00"/>
             <Setter Property="Foreground" Value="#0E0E0E"/>
         </Style>
+        <!-- Loop lines: the running loop's green -->
+        <Style Selector="Button.ToggleChip.LoopFill">
+            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="Foreground" Value="#0E0E0E"/>
+        </Style>
         <!-- Legend: neutral amber (no map equivalent) -->
         <Style Selector="Button.ToggleChip.LegendFill">
             <Setter Property="Background" Value="{StaticResource AccentAmberBrush}"/>
@@ -596,7 +602,7 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4"
                             IsVisible="{Binding MapExpanded}">
                     <Button Classes="ToggleChip" Content="Overlays ▾"
-                            ToolTip.Tip="Map overlays — lairs, shops, spells, legend.">
+                            ToolTip.Tip="Map overlays — lairs, shops, spells, loop lines, legend.">
                         <Button.Flyout>
                             <Flyout Placement="BottomEdgeAlignedLeft">
                                 <StackPanel Orientation="Vertical" Spacing="4" Margin="2" MinWidth="120">
@@ -624,6 +630,11 @@
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                             ToolTip.Tip="Show the floors you reach by up and down exits, dimmed, around the floor you're on, wherever they don't cover it. Click to cycle all floors → only the floors above → only the floors below → off. A climbing path shows end to end, and those rooms can be hovered, clicked and walked to like any other. How many floors up and down, and when a crowded floor is left out, are in Settings → General. All floors by default; applies to every character."
                                             Classes.LevelGateFill="{Binding ShowOtherLevels}"/>
+                                    <Button Classes="ToggleChip" Content="{Binding LoopLinesButtonLabel}"
+                                            Command="{Binding ToggleLoopLinesCommand}"
+                                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                            ToolTip.Tip="How a running loop is drawn: click to cycle its line with a numbered circle on each step → the line alone, one unbroken route through the whole loop → off. A loop you're building, and a saved loop you preview, always draw. Your choice is saved per character."
+                                            Classes.LoopFill="{Binding ShowLoopLines}"/>
                                     <Button Classes="ToggleChip" Content="Legend"
                                             Command="{Binding ToggleLegendCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
@@ -776,11 +787,11 @@
                                  WalkPath="{Binding WalkPath}"
                                  PreviewPath="{Binding PreviewPath}"
                                  LeaderRoutePath="{Binding LeaderRouteLine}"
-                                 LoopPath="{Binding LoopPath}"
+                                 LoopPath="{Binding MapLoopPath}"
                                  LoopBuilderPath="{Binding LoopBuilderPath}"
                                  LoopBuilderWaypoints="{Binding LoopBuilderWaypoints}"
-                                 LoopRunningWaypoints="{Binding LoopRunningWaypoints}"
-                                 LoopApproachPreviewPath="{Binding LoopApproachPreviewPath}"
+                                 LoopRunningWaypoints="{Binding MapLoopRunningWaypoints}"
+                                 LoopApproachPreviewPath="{Binding MapLoopApproachPreviewPath}"
                                  AvoidedRooms="{Binding AvoidedRooms}"
                                  LevelGatedRooms="{Binding LevelGatedRooms}"
                                  OtherLevels="{Binding OtherLevelsLayout}"

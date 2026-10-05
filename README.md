@@ -1,10 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.8**
-> - "Bless if above" is set on each buff now (Buff Watchdog → edit a buff → Cast if mana ≥) instead of once on Settings → Health
-> - "Bless while resting" and "during combat" are tick boxes on each buff now, covering casts on you and on the party, instead of the pairs on Settings → Spells, Settings → Party and in combat profiles
-> - Buffs you already had keep the values you had set; a new buff starts at 50%, off and off
+> **Version 3.144.9**
+> - New map overlay, Loop lines: show a running loop with numbered steps, as a plain line with no step circles, or not at all
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

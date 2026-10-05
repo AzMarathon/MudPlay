@@ -194,6 +194,7 @@ public static class BugReportBuilder
         // check ran, what it found, and whether one was even scheduled.
         Kv(sb, "Automatic update check", svc.Settings.Current.AutoCheckForUpdates ? "on" : "off");
         Kv(sb, "Map other floors", $"{svc.Settings.Current.MapOtherFloors}, {svc.Settings.Current.MapOtherFloorsLevels} floor(s), overlap limit {svc.Settings.Current.MapOtherFloorsMaxOverlapPercent}%");
+        Kv(sb, "Map loop lines", svc.Profile.Current?.NavLoopLinesMode.ToString() ?? "(no profile)");
         Kv(sb, "Last update check", DescribeUpdate(svc));
         Kv(sb, "Next update check", svc.Update.NextAutoCheck is { } due
             ? due.ToString("yyyy-MM-dd HH:mm") : "(not scheduled)");
