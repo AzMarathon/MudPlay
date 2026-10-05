@@ -105,6 +105,10 @@ public sealed class ShopSpellErrand
         _reserve = reserve;
     }
 
+    // A scroll for a spell this level can learn is already in the pack: a trip has
+    // something to do even with nothing left to buy.
+    public bool HasCarriedScrolls(int level) => _carriedScrolls(level).Count > 0;
+
     // Start the trip for a character now at `level`. False when there is nothing to
     // go for — no shop to visit and no scroll in the pack — and nothing was sent.
     public bool Begin(int level, RoomKey returnTo)
@@ -228,14 +232,33 @@ public sealed class ShopSpellErrand
         ArgumentNullException.ThrowIfNull(stock);
         if (_phase != Phase.Listing || _stop is not { } stop) return;
 
-        List<string> outOfStock = new();
+        // The shop's own verdict comes first (GAME_MECHANICS "`list` — live shop stock readout"):
+        // "(You can't use)" is a scroll this character can never learn, "(Too
+        // powerful)" one it isn't yet the level for. Either would be coin spent on a
+        // scroll the read then refuses.
+        List<string> outOfStock = new(), cantUse = new(), tooPowerful = new();
         foreach (ShopSpellPurchase scroll in stop.Purchases)
         {
-            if (InStock(stock, scroll.ItemName)) _queue.Enqueue((scroll, true));
+            ShopListParser.StockRow? row = RowFor(stock, scroll.ItemName);
+            if (row is { CantUse: true })
+            {
+                _gaveUp.Add(scroll.SpellNumber);
+                cantUse.Add(scroll.ItemName);
+            }
+            else if (row is { TooPowerful: true })
+            {
+                _gaveUp.Add(scroll.SpellNumber);
+                tooPowerful.Add(scroll.ItemName);
+            }
+            else if (row is { Quantity: > 0 }) _queue.Enqueue((scroll, true));
             else outOfStock.Add(scroll.ItemName);
         }
         if (outOfStock.Count > 0)
             _log?.Info(LogCategory, $"Out of stock at {Describe(stop)}: {string.Join(", ", outOfStock)}.");
+        if (cantUse.Count > 0)
+            _log?.Info(LogCategory, $"{Describe(stop)} marks these \"You can't use\" — not buying: {string.Join(", ", cantUse)}.");
+        if (tooPowerful.Count > 0)
+            _log?.Info(LogCategory, $"{Describe(stop)} marks these \"Too powerful\" for this level — not buying: {string.Join(", ", tooPowerful)}.");
         Pump();
     }
 
@@ -248,6 +271,14 @@ public sealed class ShopSpellErrand
         {
             (ShopSpellPurchase scroll, bool buy) = _queue.Peek();
             if (_isObtained(scroll.SpellNumber) || _gaveUp.Contains(scroll.SpellNumber))
+            {
+                _queue.Dequeue();
+                continue;
+            }
+
+            // Queued as already carried, and it no longer is (read under another
+            // spell's entry of the same scroll): nothing to read.
+            if (!buy && _carriedCount(scroll.ItemNumber) <= 0)
             {
                 _queue.Dequeue();
                 continue;
@@ -353,11 +384,18 @@ public sealed class ShopSpellErrand
         });
     }
 
-    private static bool InStock(IReadOnlyList<ShopListParser.StockRow> stock, string itemName)
+    // The shop's row for a scroll; one that is in stock is preferred over a sold-out
+    // row of the same name.
+    private static ShopListParser.StockRow? RowFor(IReadOnlyList<ShopListParser.StockRow> stock, string itemName)
     {
+        ShopListParser.StockRow? found = null;
         foreach (ShopListParser.StockRow row in stock)
-            if (row.Quantity > 0 && NameMatches(row.Name, itemName)) return true;
-        return false;
+        {
+            if (!NameMatches(row.Name, itemName)) continue;
+            if (row.Quantity > 0) return row;
+            found ??= row;
+        }
+        return found;
     }
 
     // The list's item column is a fixed width, so a long name can arrive cut short.

@@ -85,8 +85,13 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     [NotifyPropertyChangedFor(nameof(StatusText), nameof(HasStatusText))]
     private string? _actionMessage;
 
+    // True while a Buy spells run is in flight: the busy notice names it.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusText))]
+    private bool _buyingSpells;
+
     public string? StatusText =>
-        AutoTrainBusy ? "Training…"
+        AutoTrainBusy ? (BuyingSpells ? "Buying spells…" : "Training…")
         : !string.IsNullOrEmpty(ActionMessage) ? ActionMessage
         : CanTrainNow ? "● Can train now"
         : null;
@@ -129,6 +134,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _profile.ProfileLoaded += OnProfileLoaded;
         _profile.ProfileSaving += OnProfileSavingReseed;
         _trainerWalk.StateChanged += OnAutoTrainStateChanged;
+        _trainerWalk.SpellRunFinished += OnSpellRunFinished;
         _trainerWalk.PlanApplied += OnPlanApplied;
         _autoTrain.StateChanged += OnAutoTrainStateChanged;
         _autoTrain.ApplyTargetsCompleted += OnApplyLevelCompleted;
@@ -249,6 +255,15 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     private bool CanRunTrain() => CanTrainNow && !AutoTrainBusy;
 
+    // The shop leg of a train trip on its own: buy and read the scrolls for spells
+    // this level can learn, whatever Auto-obtain spells from shops is set to.
+    [RelayCommand(CanExecute = nameof(CanBuySpells))]
+    private void BuySpellsNow() => ActionMessage = _trainerWalk.BuySpellsNow();
+
+    private bool CanBuySpells() => _trainerWalk.CanBuySpellsNow && !AutoTrainBusy;
+
+    private void OnSpellRunFinished(string summary) => ActionMessage = summary;
+
     private void OnAutoTrainStateChanged() => SyncAutoTrain();
 
     // Mirror the coordinator's live state into the bound properties + commands.
@@ -258,7 +273,9 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     {
         CanTrainNow = _trainerWalk.CanTrainNow;
         AutoTrainBusy = _trainerWalk.IsBusy || _autoTrain.IsBusy;
+        BuyingSpells = _trainerWalk.IsBuyingSpells;
         TrainNowCommand.NotifyCanExecuteChanged();
+        BuySpellsNowCommand.NotifyCanExecuteChanged();
         ApplyLevelCommand.NotifyCanExecuteChanged();
     }
 
@@ -574,6 +591,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _profile.ProfileLoaded -= OnProfileLoaded;
         _profile.ProfileSaving -= OnProfileSavingReseed;
         _trainerWalk.StateChanged -= OnAutoTrainStateChanged;
+        _trainerWalk.SpellRunFinished -= OnSpellRunFinished;
         _trainerWalk.PlanApplied -= OnPlanApplied;
         _autoTrain.StateChanged -= OnAutoTrainStateChanged;
         _autoTrain.ApplyTargetsCompleted -= OnApplyLevelCompleted;

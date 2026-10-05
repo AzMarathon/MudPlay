@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.18**
-> - Stash Transfer chip tooltip: what is left in the stash by value and by coin, how many more trips it takes, a rough time to finish, and what has been banked
-> - Transaction history: a stash transfer updates the stash's row, Last to what was taken and Total to what is left there
-> - A stash transfer that finds the stash empty while you still carry coin banks it and ends at the bank
+> **Version 3.144.20**
+> - Player Workshop, CP Allocation: a Buy spells button runs the trainer's shop trip on its own, whether Auto-obtain spells from shops is on or off
+> - A scroll that shares its name with another item (scroll of resist lightning) is read after it's bought instead of being left in the pack
+> - The spell trip reads a shop's list at once instead of waiting it out, and skips scrolls marked (You can't use) or (Too powerful)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

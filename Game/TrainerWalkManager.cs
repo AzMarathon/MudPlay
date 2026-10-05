@@ -97,6 +97,7 @@ public sealed class TrainerWalkManager : IDisposable
     private bool _walkRun;            // the run walked to its trainer (Train Now / armed), not @train in place
     private RoomKey _runFrom;         // where a walk run started — the shop leg plans its way back here
     private bool _spellTripTried;     // the shop leg has had its one go this run
+    private bool _spellsOnly;         // a shop leg started by hand: no training, no train report
     private bool _fundingWithSpells;  // the funding errand in flight is collecting scroll money too
 
     // Party-train run shaping. _ceilingCap tightens DoNotTrainAbove for this run only
@@ -236,6 +237,83 @@ public sealed class TrainerWalkManager : IDisposable
 
     // True when Train Now would do something: a CP plan is applicable, or we can level.
     public bool CanTrainNow => _autoTrain.CanTrainNow || CanLevelNow();
+
+    // The shop leg can be started by hand: it is wired and nothing is in flight.
+    public bool CanBuySpellsNow => _spellErrand is not null && !IsBusy && _wire.IsBound;
+
+    // A shop leg started by hand is under way (fetching the coin, or at the shops).
+    public bool IsBuyingSpells => _spellsOnly && _phase != Phase.Idle;
+
+    // Raised when a shop leg started by hand is over, with what it learned.
+    public event Action<string>? SpellRunFinished;
+
+    // Manual trigger (CP Allocation tab "Buy spells"): the shop leg of a train trip
+    // on its own — walk to the shops selling scrolls for spells the character can
+    // learn at its level, buy and read them — whatever Auto-obtain spells from shops
+    // is set to. That box decides whether a train trip goes on to the shops by
+    // itself; the per-spell checklist under it still decides which spells are wanted.
+    // The scrolls are paid for the way a train trip pays: from the purse, with the
+    // funding errand fetching the rest first. A running loop or Auto-Lair is stopped
+    // for the trip and resumed after, as Train Now does.
+    //
+    // Null when the run is under way; otherwise why it didn't start.
+    public string? BuySpellsNow()
+    {
+        if (IsBusy) return "A train or spell run is already under way.";
+        if (_spellErrand is null || !_wire.IsBound) return "Not connected.";
+        if (_tracker.State.CurrentRoom is not { } cur) return "Current room unknown — walk a step to locate.";
+
+        int level = _stats.Level;
+        Game.Train.ShopSpellPlan? wanted = PlanShopSpells?.Invoke(cur.Key, cur.Key, level);
+        if (wanted is not { Stops.Count: > 0 } && !_spellErrand.HasCarriedScrolls(level))
+        {
+            string why = wanted is { Unreachable.Count: > 0 }
+                ? $"No spell scrolls to buy — can't reach a shop for {string.Join(", ", wanted.Unreachable)}."
+                : $"No spell scrolls to buy at level {level}.";
+            _log?.Info("AutoTrain", why);
+            return why;
+        }
+
+        ResetRunState(loop: false, applyCp: false, reply: null);
+        _spellsOnly = true;
+        _startLevel = level;
+        _runFrom = cur.Key;
+        _resume = SnapshotEngine();
+        StopEngine();
+        _log?.Info("AutoTrain", $"Buy spells: checking the spell shops for level {level}.");
+
+        if (_funding is not null && wanted is { CostCopper: > 0, Stops.Count: > 0 })
+        {
+            switch (_funding.Begin(wanted.CostCopper, wanted.Stops[0].Room,
+                        TripTolls(Array.Empty<Game.Train.TrainSegment>(), cur.Key, wanted)))
+            {
+                case Game.Train.TrainFundingStart.Collecting:
+                    _phase = Phase.Funding;
+                    StateChanged?.Invoke();
+                    return null;
+                case Game.Train.TrainFundingStart.Short:
+                    _log?.Info("AutoTrain", "Buy spells: can't cover every scroll — buying what the purse stretches to.");
+                    break;
+            }
+        }
+        BeginSpellsOnlyErrand();
+        return null;
+    }
+
+    // The coin is settled (or as settled as it gets): go to the shops. A purse that
+    // stretches to nothing ends the run here.
+    private void BeginSpellsOnlyErrand()
+    {
+        if (_spellErrand is null || !_spellErrand.Begin(_stats.Level, _runFrom))
+        {
+            const string none = "Nothing affordable to buy.";
+            Finish($"Buy spells: {none}");
+            SpellRunFinished?.Invoke(none);
+            return;
+        }
+        _phase = Phase.Spells;
+        StateChanged?.Invoke();
+    }
 
     // Manual trigger (CP Allocation tab "Train Now"). Assesses the banked-exp /
     // buffer situation before acting:
@@ -680,6 +758,14 @@ public sealed class TrainerWalkManager : IDisposable
         _lastFundingShortfall = result.ShortfallCopper;
         if (_phase != Phase.Funding) return;
 
+        if (_spellsOnly)
+        {
+            if (!result.Funded)
+                _log?.Info("AutoTrain", $"Buy spells: couldn't gather the coin for every scroll ({result.Detail}) — buying what the purse stretches to.");
+            BeginSpellsOnlyErrand();
+            return;
+        }
+
         if (!result.Funded && _fundingWithSpells && _target is { } unfunded
             && _tracker.State.CurrentRoom is { } at)
         {
@@ -840,6 +926,7 @@ public sealed class TrainerWalkManager : IDisposable
         _stopReason = StopReason.None;
         _walkRun = false;
         _spellTripTried = false;
+        _spellsOnly = false;
         _fundingWithSpells = false;
     }
 
@@ -1222,6 +1309,16 @@ public sealed class TrainerWalkManager : IDisposable
         // Someone took the walker over mid-trip: leave the engine stopped under
         // them, as a stopped trainer walk does.
         if (result.Aborted) _resume = default;
+        if (_spellsOnly)
+        {
+            // The errand has logged the trip and the spells by name; a train report
+            // would say "no levels". The tab's notice only has room for a count.
+            int bought = result.Learned.Count;
+            string summary = $"Spell buying is complete, bought {(bought == 0 ? "no" : bought.ToString())} spell{(bought == 1 ? "" : "s")}.";
+            Finish(null);
+            SpellRunFinished?.Invoke(summary);
+            return;
+        }
         FinishWithReport();
     }
 
@@ -1267,6 +1364,7 @@ public sealed class TrainerWalkManager : IDisposable
         _stopReason = StopReason.None;
         _walkRun = false;
         _spellTripTried = false;
+        _spellsOnly = false;
         _fundingWithSpells = false;
 
         // Inside a party trip the engine stays down: the trip goes on (more stops,

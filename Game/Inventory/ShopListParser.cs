@@ -16,12 +16,23 @@ namespace MudPlay.Game.Inventory;
 //
 // Item names carry spaces ("rope and grapple"), so the columns can't be split on
 // whitespace — the parser locates the Quantity / Price column offsets from the
-// header row and slices each data row at those fixed positions (the monospace
-// grid guarantees alignment). The trailing "(You can't use)" usability hint is
-// left in the Price text and ignored by callers — it does not gate auto-buy.
+// header row and slices each data row there. Only the name column is a fixed
+// width: the quantity is the first number after it, and the price follows wherever
+// the quantity ends — a spell shop's wide prices start left of the "Price" header
+// ("10         600 gold crowns"), and slicing at the header's offset cut into them
+// and lost the row (report paradigm-20261005-091552).
+//
+// A row can end in a usability tag (GAME_MECHANICS "`list` — live shop stock readout"):
+// "(You can't use)" — never usable by this character — or "(Too powerful)" — not
+// at this level. The tag stays in the Price text and is also read out as CantUse /
+// TooPowerful. Neither gates auto-buy; the spell errand skips a scroll with either.
 public static class ShopListParser
 {
-    public readonly record struct StockRow(string Name, int Quantity, string Price);
+    public const string CantUseTag = "(You can't use)";
+    public const string TooPowerfulTag = "(Too powerful)";
+
+    public readonly record struct StockRow(string Name, int Quantity, string Price,
+        bool CantUse = false, bool TooPowerful = false);
 
     public static IReadOnlyList<StockRow> Parse(IReadOnlyList<string> bodyLines)
     {
@@ -67,12 +78,18 @@ public static class ShopListParser
         string name = line[..qtyCol].Trim();
         if (name.Length == 0) return false;
 
-        int qtyEnd = System.Math.Min(priceCol, line.Length);
-        string qtyStr = line[qtyCol..qtyEnd].Trim();
-        if (!int.TryParse(qtyStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int qty)) return false;
+        string rest = line[qtyCol..].TrimStart();
+        int digits = 0;
+        while (digits < rest.Length && char.IsAsciiDigit(rest[digits])) digits++;
+        if (digits == 0
+            || !int.TryParse(rest[..digits], NumberStyles.Integer, CultureInfo.InvariantCulture, out int qty)
+            || (digits < rest.Length && !char.IsWhiteSpace(rest[digits])))
+            return false;
 
-        string price = priceCol < line.Length ? line[priceCol..].Trim() : string.Empty;
-        row = new StockRow(name, qty, price);
+        string price = rest[digits..].Trim();
+        row = new StockRow(name, qty, price,
+            CantUse: price.EndsWith(CantUseTag, System.StringComparison.OrdinalIgnoreCase),
+            TooPowerful: price.EndsWith(TooPowerfulTag, System.StringComparison.OrdinalIgnoreCase));
         return true;
     }
 }

@@ -23,6 +23,9 @@
             <Button Content="Train now" Margin="0,0,6,6" Command="{Binding TrainNowCommand}"
                     IsVisible="{Binding HasCharacter}"
                     ToolTip.Tip="Walk to the nearest allowed, level-appropriate trainer and train, applying the plan."/>
+            <Button Content="Buy spells" Margin="0,0,6,6" Command="{Binding BuySpellsNowCommand}"
+                    IsVisible="{Binding HasCharacter}"
+                    ToolTip.Tip="Walk to the shops selling scrolls for spells you can learn at your level, buy them and read them — the shop trip Auto-Trainer makes after training, run on its own. It works whatever 'Auto-obtain spells from shops' is set to; spells unticked in that checklist are still skipped. Coin is fetched first when your purse is short, the way a train trip does it."/>
             <Button Content="Apply this level" Margin="0,0,12,6" Command="{Binding ApplyLevelCommand}"
                     IsVisible="{Binding HasCharacter}"
                     ToolTip.Tip="Select a plan row, then click to apply its stats at the trainer you're standing on via the train-stats screen — it only trains when that row's CP fully lines up with your available CP (otherwise it tells you why). On a `stat`-confirmed success the row is cleared."/>

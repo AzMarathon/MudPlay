@@ -81,6 +81,8 @@ public sealed class ShopSpellErrandTests
         public void List(params (string Name, int Quantity)[] rows) =>
             Errand.OnShopListed(rows.Select(r => new ShopListParser.StockRow(r.Name, r.Quantity, "1 gold crown")).ToArray());
 
+        public void ListRows(params ShopListParser.StockRow[] rows) => Errand.OnShopListed(rows);
+
         public void Bought(ShopSpellPurchase scroll)
         {
             Pack[scroll.ItemNumber] = 1;
@@ -93,6 +95,63 @@ public sealed class ShopSpellErrandTests
             Obtained.Add(scroll.SpellNumber);
             Errand.OnSpellbookChanged();
         }
+    }
+
+    // The Buy spells button asks before it stops a running loop: a scroll already in
+    // the pack is a trip worth making even with no shop to visit.
+    [Fact]
+    public void HasCarriedScrolls_IsTrueOnlyForAnUnlearnedScrollInThePack()
+    {
+        Harness h = new();
+        Assert.False(h.Errand.HasCarriedScrolls(9));
+
+        h.Pack[Bliz.ItemNumber] = 1;
+        Assert.True(h.Errand.HasCarriedScrolls(9));
+
+        h.Obtained.Add(Bliz.SpellNumber);
+        Assert.False(h.Errand.HasCarriedScrolls(9));
+    }
+
+    // The shop's own tags (user, 2026-10-05): "(You can't use)" is never learnable,
+    // "(Too powerful)" not at this level. Neither is bought.
+    [Fact]
+    public void AScrollTheShopTagsCantUseOrTooPowerful_IsNotBought()
+    {
+        Harness h = new();
+        h.Shops[ShopA] = new() { Smite, Flash, Bliz };
+        h.Errand.Begin(9, Loop);
+        h.FireTimers();
+        h.Arrive(ShopA);
+
+        h.ListRows(
+            new("scroll of smite", 3, "8 gold crowns (You can't use)", CantUse: true),
+            new("scroll of flash", 1, "40 gold crowns"),
+            new("scroll of blizzard", 2, "340 gold crowns (Too powerful)", TooPowerful: true));
+
+        Assert.Equal("buy scroll of flash", h.Sent[^1]);
+        h.Bought(Flash);
+        h.Learned(Flash);
+
+        Assert.DoesNotContain("buy scroll of smite", h.Sent);
+        Assert.DoesNotContain("buy scroll of blizzard", h.Sent);
+        Assert.NotNull(h.Result);
+        Assert.Equal(new[] { "flash" }, h.Result!.Value.Learned);
+    }
+
+    // Queued as already in the pack, gone by the time its turn comes: no read is
+    // sent for a scroll that isn't there.
+    [Fact]
+    public void ACarriedScrollThatIsGoneByItsTurn_IsNotRead()
+    {
+        Harness h = new();
+        h.Pack[Bliz.ItemNumber] = 1;
+        Assert.True(h.Errand.Begin(9, Loop));
+
+        h.Pack.Remove(Bliz.ItemNumber);          // read under another entry meanwhile
+        h.FireTimers();                          // the spell list window: carried scrolls queue
+
+        Assert.DoesNotContain("read scroll of blizzard", h.Sent);
+        Assert.NotNull(h.Result);
     }
 
     [Fact]
