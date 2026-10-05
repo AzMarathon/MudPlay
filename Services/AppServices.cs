@@ -7482,6 +7482,13 @@ public sealed class AppServices
             if (engaged) MovementControl.SuspendForAutoAll();
             else MovementControl.ReleaseFromAutoAll();
         };
+        // Auto-equip on recovery follows the same switch: a corpse recovered by hand
+        // with Auto-All off keeps its worn gear in the pack until it is back on.
+        DeathRecovery.SetAutoEnabledProbe(() => !AutoModeController.KillSwitchEngaged);
+        AutoModeController.KillSwitchToggled += engaged =>
+        {
+            if (!engaged) DeathRecovery.OnAutoAllRestored();
+        };
 
         // Death engine-quiescence. On our death RoomTracker fires
         // PlayerDeathObserved (both death phrasings). PlayerDeathHalt does a clean

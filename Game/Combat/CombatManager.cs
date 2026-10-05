@@ -1910,6 +1910,13 @@ public sealed partial class CombatManager : IDisposable
         }
 
         bool backstabPending = BackstabPending(settings, obs);
+        // A sneaking character opening with a plain attack reads as a missed backstab
+        // unless the log names the monster that spotted it (report
+        // paradigm-20261004-201936).
+        if (!backstabPending && settings.DoBackstab && !_backstabOpenerConsumed && _currentTarget is null
+            && _isStealthed?.Invoke() == true && SeeHiddenOccupant(obs) is { } seer)
+            _log?.Combat(LogCategory,
+                $"no backstab in this room — {seer} sees hidden, so the sneak is spotted; opening with a normal attack");
         EngageableCandidate? choice = null;
         EngageableCandidate? actionableFallback = null;
         foreach (EngageableCandidate cand in ordered)
@@ -2095,17 +2102,20 @@ public sealed partial class CombatManager : IDisposable
     // True when any monster currently in the room carries SeeHidden — which
     // defeats a stealthed character's backstab (sneak or hide) for the whole room.
     // No-op (false) until the backstab hooks are wired.
-    private bool RoomHasSeeHidden(RoomEntitiesObservation obs)
+    private bool RoomHasSeeHidden(RoomEntitiesObservation obs) => SeeHiddenOccupant(obs) is not null;
+
+    // The first monster in the room that carries SeeHidden, by the name the room shows.
+    private string? SeeHiddenOccupant(RoomEntitiesObservation obs)
     {
-        if (_hasSeeHidden is null) return false;
+        if (_hasSeeHidden is null) return null;
         for (int i = 0; i < obs.Entities.Count; i++)
         {
             RoomEntity e = obs.Entities[i];
             if (e.Kind != EntityKind.Monster) continue;
             if (e.MonsterNumber is not int n) continue;
-            if (_hasSeeHidden(n)) return true;
+            if (_hasSeeHidden(n)) return e.RawName;
         }
-        return false;
+        return null;
     }
 
     // ----- Weapon-swap mechanics --------------------------------------

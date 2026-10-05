@@ -1,5 +1,14 @@
 # Version history
 
+## 3.144.13
+
+- A flee crosses a text exit (a trail you leave with `go path`) with its own command instead of walking into a wall
+- A flee move the game refuses is never sent again that run: it takes another way out of the room, or stands and fights
+- Auto-equip on recovery waits while Auto-All is off and puts the gear on when it is switched back on
+- A rest broken by a buff set to cast while resting carries on to the rest max, also when a ShadowRest character sneaks first
+- The log names the see-hidden monster when a sneaking character opens with a plain attack
+- bug reports addressed: paradigm-20261004-201232, paradigm-20261004-201808, paradigm-20261004-201936, paradigm-20261004-202253
+
 ## 3.144.9
 
 - New map overlay, Loop lines: show a running loop with numbered steps, as a plain line with no step circles, or not at all

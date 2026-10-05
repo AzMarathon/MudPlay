@@ -338,9 +338,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // ever cross a cardinal — callers must keep Direction.Teleport out. It's
         // deliberately not guarded here: EncodeMove throwing is how the one caller
         // that got this wrong was found at all (Crash-20260908-181131).
-        _tracker.NoteMoveSent(direction);
-        byte[] bytes = EncodeMove(direction);
-        EmitMoveBytes(bytes, $"tier3 backtrack {direction}");
+        (byte[] bytes, string what) = SpecialExitDispatch.EncodeBacktrack(_tracker, direction);
+        EmitMoveBytes(bytes, what);
     }
 
     // See LoopRunner.PauseForFlee — the same hold against a gate clearing mid-flee.

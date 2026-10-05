@@ -1438,6 +1438,35 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("borrow skiff\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
+    // Report paradigm-20261004-201232: a flee's way back was a text exit in the
+    // northwest slot, and the bare "nw" it sent got "There is no exit in that
+    // direction!" every time.
+    [Fact]
+    public void SendBacktrackMove_AcrossATextExit_SendsItsCommand_NotTheDirection()
+    {
+        Harness h = NewHarness(TextExitGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Walker.SendBacktrackMove(Direction.S);
+
+        Assert.Single(h.Sent);
+        Assert.Equal("borrow skiff\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+    }
+
+    [Fact]
+    public void SendBacktrackMove_WithThePlaceLost_SendsTheBareDirection()
+    {
+        // A recovery backtrack runs while the tracker doesn't know the room, so the
+        // room it last believed in can't supply an exit command.
+        Harness h = NewHarness(TextExitGraphJson);
+
+        h.Walker.SendBacktrackMove(Direction.S);
+
+        Assert.Single(h.Sent);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
     [Fact]
     public void Walker_TextExit_StepDisplaysCommand_NotDirection()
     {

@@ -430,10 +430,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // FSM stays in sync with the observation it'll receive.
         // Cardinals only, same as the walker's — callers must keep
         // Direction.Teleport out rather than have this swallow it.
-        _tracker.NoteMoveSent(direction);
-        byte[] bytes = AutoWalkManager.EncodeMove(direction);
+        (byte[] bytes, string what) = SpecialExitDispatch.EncodeBacktrack(_tracker, direction);
         _preMoveHook?.Invoke();
-        Write(bytes, $"tier3 backtrack {direction}");
+        Write(bytes, what);
     }
 
     public void PauseForRecovery(string reason)
