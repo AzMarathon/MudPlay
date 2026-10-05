@@ -43,6 +43,8 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // string to the records that carry it (multiple records can share text —
     // realm variants).
     private List<(string Pattern, MessageRecord Record)> _appliedIndex = new();
+    // Applied text → the longer applied texts that hold it (BuildLongerApplied).
+    private Dictionary<string, string[]> _longerApplied = new(StringComparer.Ordinal);
 
     // Built from MessageStore on every CollectionChanged. Maps an ends-with
     // string to records — only records whose EndsWith is non-empty get indexed.
@@ -275,6 +277,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _appliedIndex = applied;
         _endsIndex = ends;
         _appliedAliases = aliases;
+        _longerApplied = BuildLongerApplied(aliases.Keys);
         _confuseFumbleIndex = fumbles;
         _log?.Debug(LogCategory,
             $"index built — applied={applied.Count} endsWith={ends.Count} totalRecords={_messages.Messages.Count}");
@@ -307,12 +310,27 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         // state when they re-evaluate.
         List<MessageRecord> endedThisLine = new();
         List<MessageRecord> appliedThisLine = new();
+        // A clear can release records without raising a ConditionEnded; the aggregate
+        // flags still have to follow the active set.
+        bool activeTouched = false;
 
         foreach ((string pattern, MessageRecord r) in _endsIndex)
         {
             if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
-            if (!_active.Remove(r.Id)) continue;
-            endedThisLine.Add(r);   // PRIMARY: its OWN wear-off line fired
+
+            // The wear-off line arriving is the event, whether or not this record is
+            // the one latched: an applied line and the wear-off the game prints can
+            // sit on different records that share a flag, and the tracker has no
+            // timed expiry, so a flag nothing clears stands until ClearAll. The
+            // flag-wide clear below runs either way.
+            bool wasOwnLatch = _active.Remove(r.Id);
+            if (wasOwnLatch) activeTouched = true;
+
+            // ConditionEnded stays gated on the record having been latched: the
+            // self-buff recast timers consume it, and a record never latched would
+            // tear down the timer of a buff that is still up.
+            if (wasOwnLatch)
+                endedThisLine.Add(r);   // PRIMARY: its OWN wear-off line fired
 
             // Collateral clears below drop co-latched siblings from _active so the
             // recomputed flags (and the nav pause they drive) stay honest — but they
@@ -334,7 +352,8 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 && _appliedAliases.TryGetValue(r.AppliedMessage, out List<MessageRecord>? group))
             {
                 foreach (MessageRecord alias in group)
-                    if (alias.Id != r.Id) _active.Remove(alias.Id);
+                    if (alias.Id != r.Id && _active.Remove(alias.Id))
+                        activeTouched = true;
             }
 
             // Every flag is a single toggle state, not a per-source stack: any
@@ -356,7 +375,9 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (r.Flags != MessageFlags.None)
             {
                 foreach (MessageRecord other in _messages.Messages)
-                    if ((other.Flags & r.Flags) != MessageFlags.None) _active.Remove(other.Id);
+                    if ((other.Flags & r.Flags) != MessageFlags.None
+                        && _active.Remove(other.Id))
+                        activeTouched = true;
             }
         }
 
@@ -369,9 +390,11 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         // timers anchor on the typed cast code instead.
         MessageRecord? actionFailed = null;
         if (!StatusEffectReadout().IsMatch(text) && _inStatScreen?.Invoke() != true)
+        {
             foreach ((string pattern, MessageRecord r) in _appliedIndex)
             {
                 if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
+                if (IsPartOfALongerMessage(text, pattern)) continue;
                 // Capture a LastActionFailed match BEFORE the active-set dedup below —
                 // a failure line can recur while its record stays "applied" only once,
                 // so ActionFailed must ride the raw line, not the deduped apply. First
@@ -381,6 +404,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
                 if (!_active.Add(r.Id)) continue;
                 appliedThisLine.Add(r);
             }
+        }
 
         // A confusion fumble (ConfuseFumbleLine) is itself an eaten command — the
         // same outcome LastActionFailed exists to signal — so it fires ActionFailed
@@ -393,7 +417,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
             if (norm.Length > 0) actionFailed = MatchConfuseFumble(norm);
         }
 
-        if (endedThisLine.Count > 0 || appliedThisLine.Count > 0)
+        if (endedThisLine.Count > 0 || appliedThisLine.Count > 0 || activeTouched)
             RecomputeFlags();
 
         // Log the batch collapsed, then fan out the per-record events unchanged —
@@ -409,6 +433,75 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
 
         if (actionFailed is { } af)
             ActionFailed?.Invoke(af);
+    }
+
+    // The applied text matched, but only as part of a longer applied text the line
+    // also holds: the line is that longer message, and this record's condition was
+    // never applied. "You are stunned by electrical shock!" (a hold) holds "You are
+    // stunned" (the applied text of the confusion stuns), which latched Confused with
+    // no wear-off of its own ever to come; "You are engulfed in flames!" (damage only)
+    // holds "You are engulfed" (a hold) the same way. A longer text that only adds
+    // punctuation ("You are blind" / "You are blind!") is the same message and was
+    // never indexed as longer; a shorter text that also stands on its own elsewhere
+    // in the line still counts.
+    //
+    // Only applied texts are compared. A record's own cast line often holds its
+    // applied text with more words after it ("You are poisoned for 12 damage!",
+    // "You are mesmerized by the movements!"), and the condition is rightly read off
+    // that line too.
+    private bool IsPartOfALongerMessage(string text, string pattern)
+    {
+        if (!_longerApplied.TryGetValue(pattern, out string[]? longer)) return false;
+        foreach (string message in longer)
+        {
+            if (!text.Contains(message, StringComparison.Ordinal)) continue;
+            if (StandsOutside(text, pattern, message)) continue;
+            _log?.Debug(LogCategory, $"applied text '{pattern}' matched only inside '{message}' — not latched");
+            return true;
+        }
+        return false;
+    }
+
+    // For each applied text, the other applied texts that hold it and add words to it.
+    private static Dictionary<string, string[]> BuildLongerApplied(IReadOnlyCollection<string> appliedTexts)
+    {
+        Dictionary<string, string[]> result = new(StringComparer.Ordinal);
+        foreach (string applied in appliedTexts)
+        {
+            List<string>? longer = null;
+            foreach (string other in appliedTexts)
+            {
+                if (other.Length <= applied.Length) continue;
+                int at = other.IndexOf(applied, StringComparison.Ordinal);
+                if (at < 0 || !AddsWords(other, at, applied.Length)) continue;
+                (longer ??= new List<string>()).Add(other);
+            }
+            if (longer is not null) result[applied] = longer.ToArray();
+        }
+        return result;
+    }
+
+    // The longer text has a letter or digit outside the span the shorter one covers.
+    private static bool AddsWords(string longer, int at, int length)
+    {
+        for (int i = 0; i < longer.Length; i++)
+            if ((i < at || i >= at + length) && char.IsLetterOrDigit(longer[i])) return true;
+        return false;
+    }
+
+    // The shorter text occurs in the line somewhere not covered by the longer one.
+    private static bool StandsOutside(string text, string shorter, string longer)
+    {
+        for (int i = text.IndexOf(shorter, StringComparison.Ordinal); i >= 0;
+             i = text.IndexOf(shorter, i + 1, StringComparison.Ordinal))
+        {
+            bool covered = false;
+            for (int j = text.IndexOf(longer, StringComparison.Ordinal); j >= 0 && !covered;
+                 j = text.IndexOf(longer, j + 1, StringComparison.Ordinal))
+                covered = i >= j && i + shorter.Length <= j + longer.Length;
+            if (!covered) return true;
+        }
+        return false;
     }
 
     // Matches a trailing remaining-time parenthetical — "(411s)", "(6m 51s)", "(1h)" —

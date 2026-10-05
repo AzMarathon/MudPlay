@@ -1,5 +1,10 @@
 # Version history
 
+## 3.144.4
+
+- A condition line that holds another spell's line no longer sets that spell's condition too: the shard creature's `You are stunned by electrical shock!` stopped you without also leaving you marked confused for the rest of the session, and `You are engulfed in flames!` no longer reads as a hold
+- A wear-off line clears its condition even when the line belongs to a different message record than the one that set it
+
 ## 3.144.3
 
 - `Your spell has no effect in this room!` is recognized: a debuff cast at an emptied room is no longer counted as landed, and a room attack that ran out of monsters is cast again for the next ones
