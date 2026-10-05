@@ -128,7 +128,9 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     [ObservableProperty] private int _recastMarginSec = SpellsSettings.DefaultBlessRecastMarginSec;
 
     // Per-slot conditions.
-    [ObservableProperty] private int _blessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BlessIfAboveConverted))]
+    private int _blessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa;
     [ObservableProperty] private bool _blessWhileResting;
     [ObservableProperty] private bool _blessDuringCombat;
 
@@ -137,6 +139,21 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     private readonly bool _manaFloorIsAbsolute;
     public string BlessIfAboveLabel => _manaFloorIsAbsolute ? "Cast if mana ≥" : "Cast if mana ≥ %";
     public int BlessIfAboveMaximum => _manaFloorIsAbsolute ? 100_000 : 100;
+
+    // The floor in the other unit, against the character's max mana right now (the
+    // pool the casting engine measures it against): "125/250" for a percent, "50%"
+    // for an amount. Empty until max mana is known.
+    private readonly int _maxMana;
+    public string BlessIfAboveConverted
+    {
+        get
+        {
+            if (_maxMana <= 0) return string.Empty;
+            return _manaFloorIsAbsolute
+                ? $"{(int)Math.Round(BlessIfAboveMa * 100.0 / _maxMana)}% of {_maxMana}"
+                : $"{(int)Math.Round(_maxMana * BlessIfAboveMa / 100.0)}/{_maxMana}";
+        }
+    }
 
     [ObservableProperty] private bool _onlyWhenHpFull;
     [ObservableProperty] private bool _onlyWhenMaFull;
@@ -196,9 +213,10 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
         AddBuffResult? initial = null, Func<string?, (int Min, int Max)?>? rollRange = null,
         Func<string?, IReadOnlyList<CastOutcome>>? outcomesOf = null,
         Func<string?, bool>? isNoRedrawDraw = null,
-        bool manaFloorIsAbsolute = false)
+        bool manaFloorIsAbsolute = false, int maxMana = 0)
     {
         _manaFloorIsAbsolute = manaFloorIsAbsolute;
+        _maxMana = maxMana;
         _outcomesOf = outcomesOf;
         _isNoRedrawDraw = isNoRedrawDraw;
         foreach (int rejected in initial?.RejectedOutcomes ?? Array.Empty<int>()) _initiallyRejected.Add(rejected);

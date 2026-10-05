@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MudPlay.ViewModels;
 using Xunit;
 
@@ -48,6 +49,27 @@ public sealed class AddBuffDialogViewModelTests
         Assert.Equal(100, result.BlessIfAboveMa);
         Assert.True(result.BlessWhileResting);
         Assert.True(result.BlessDuringCombat);
+    }
+
+    [Fact]
+    public void TheManaFloor_IsShownAgainstTheCharactersMaxMana()
+    {
+        AddBuffDialogViewModel percent = new(Picks, _ => false, _ => false, maxMana: 250);
+        Assert.Equal("125/250", percent.BlessIfAboveConverted);
+
+        List<string?> raised = new();
+        percent.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        percent.BlessIfAboveMa = 10;
+        Assert.Equal("25/250", percent.BlessIfAboveConverted);
+        Assert.Contains(nameof(AddBuffDialogViewModel.BlessIfAboveConverted), raised);
+
+        AddBuffDialogViewModel amount = new(Picks, _ => false, _ => false,
+            initial: new AddBuffResult("flux", 15, false, false, false, false, 0, null, BlessIfAboveMa: 100),
+            manaFloorIsAbsolute: true, maxMana: 250);
+        Assert.Equal("40% of 250", amount.BlessIfAboveConverted);
+
+        AddBuffDialogViewModel unknown = new(Picks, _ => false, _ => false);
+        Assert.Equal(string.Empty, unknown.BlessIfAboveConverted);
     }
 
     [Fact]

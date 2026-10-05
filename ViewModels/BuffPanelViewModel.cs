@@ -754,7 +754,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         AddBuffDialogViewModel dlg = new(BuildPickOptions(SlottedSpells()), IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickSteps,
             rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf,
-            isNoRedrawDraw: IsNoRedrawDraw, manaFloorIsAbsolute: AppServices.Current.ManaThresholdsAreAbsolute);
+            isNoRedrawDraw: IsNoRedrawDraw, manaFloorIsAbsolute: AppServices.Current.ManaThresholdsAreAbsolute,
+            maxMana: AppServices.Current.PlayerState.MaxMa);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;
@@ -877,7 +878,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
             options, IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickSteps, initial,
             rollRange: AppServices.Current.ManaRegenRollRange, outcomesOf: OutcomesOf,
-            isNoRedrawDraw: IsNoRedrawDraw, manaFloorIsAbsolute: AppServices.Current.ManaThresholdsAreAbsolute);
+            isNoRedrawDraw: IsNoRedrawDraw, manaFloorIsAbsolute: AppServices.Current.ManaThresholdsAreAbsolute,
+            maxMana: AppServices.Current.PlayerState.MaxMa);
         AddBuffResult? result = await AppServices.Current.Dialogs
             .OpenWindowAsync<AddBuffDialogViewModel, AddBuffResult>(dlg);
         if (result is not { } r) return;

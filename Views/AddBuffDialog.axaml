@@ -54,15 +54,16 @@
         <!-- Per-slot conditions. The dark / reroll rows adapt to the picked spell. -->
         <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
             <StackPanel Spacing="4">
-                <TextBlock Text="Conditions" FontSize="10" Margin="0,2,0,0"
-                           Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                <Grid ColumnDefinitions="110,*" ColumnSpacing="8">
+                <Grid ColumnDefinitions="110,Auto,*" ColumnSpacing="8">
                     <TextBlock Grid.Column="0" Text="{Binding BlessIfAboveLabel}" VerticalAlignment="Center"
                                FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"/>
                     <NumericUpDown Grid.Column="1" HorizontalAlignment="Left" Width="120"
                                    Value="{Binding BlessIfAboveMa, Mode=TwoWay}"
                                    Minimum="0" Maximum="{Binding BlessIfAboveMaximum}" Increment="1" FormatString="0"
                                    ToolTip.Tip="Cast this buff only while your mana is at or above this much, so mana is kept back for heals. 0 = cast at any mana. A percent of max mana, or a raw mana / kai amount when Settings → Health reads its mana thresholds as absolute values. A free item-cast buff ignores it."/>
+                    <TextBlock Grid.Column="2" Text="{Binding BlessIfAboveConverted}" VerticalAlignment="Center"
+                               FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"
+                               ToolTip.Tip="What that comes to against your max mana right now."/>
                 </Grid>
                 <CheckBox Content="Cast while resting"
                           IsChecked="{Binding BlessWhileResting, Mode=TwoWay}"
