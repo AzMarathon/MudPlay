@@ -7738,7 +7738,14 @@ public sealed class AppServices
                 return (long)cash.KeepOnHandWealth
                        * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
             },
-            coinLoad: () => Cash.CoinLoad());
+            coinLoad: () => Cash.CoinLoad(),
+            // The Navigation chip's tooltip: the pile by coin, what is left of it,
+            // and a rough time from the walk between the two rooms.
+            surveyedCoins: () => Cash.SurveyedCoinsUnderLimit,
+            purse: () => Inventory.Snapshot.Currency,
+            walkTime: (from, to) => Bfs.DistanceBetween(from, to, Movement) is { } hops
+                ? AutoLair.TravelCostModel.EstimateTravel(hops) : null,
+            believedCopper: room => StashBalances.Believed(room));
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
         // A member's {reply} to @get-stash / @deposit-all says that member is done.
         Chat.EntryClassified += e =>

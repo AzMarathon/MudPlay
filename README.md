@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.15**
-> - A stash transfer, bank run or trainer trip no longer walks into a hazard room (the Silver River) without its counter; only a route you pick may
-> - Map other floors: where two shadowed floors share a cell the higher one is drawn, going up as well as down
+> **Version 3.144.16**
+> - Stash Transfer chip tooltip: what is left in the stash by value and by coin, how many more trips it takes, a rough time to finish, and what has been banked
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

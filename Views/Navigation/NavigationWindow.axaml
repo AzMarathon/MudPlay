@@ -475,7 +475,8 @@
                             <DataTemplate x:DataType="vm:NavHoldChip">
                                 <Border Classes="HoldChip"
                                         Classes.Trip="{Binding IsTrip}"
-                                        Classes.Cleared="{Binding IsCleared}">
+                                        Classes.Cleared="{Binding IsCleared}"
+                                        ToolTip.Tip="{Binding Tip}">
                                     <TextBlock Text="{Binding Label}"/>
                                 </Border>
                             </DataTemplate>
