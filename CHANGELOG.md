@@ -1,5 +1,10 @@
 # Version history
 
+## 3.144.5
+
+- Auto-Sneak sneaks again after killing a monster that followed you in, even when the kill lands within a second or two of arriving
+- bug reports addressed: paradigm-20261004-180252
+
 ## 3.144.4
 
 - A condition line that holds another spell's line no longer sets that spell's condition too: the shard creature's `You are stunned by electrical shock!` stopped you without also leaving you marked confused for the rest of the session, and `You are engulfed in flames!` no longer reads as a hold

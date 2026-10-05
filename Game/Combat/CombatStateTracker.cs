@@ -195,7 +195,9 @@ public sealed class CombatStateTracker : IDisposable
     // kill. StealthManager subscribes and resets to Idle; raised BEFORE the Combat
     // gate releases so the walker's pre-move re-sneak sees a clean state and can
     // re-establish stealth for the step out (report stock-20260730-163044).
-    public event Action? CombatSpentStealth;
+    // The argument is true when a death emptied the room, false when it only reads
+    // clear (a departure, the display of a room we just walked into).
+    public event Action<bool>? CombatSpentStealth;
 
     // Fires when combat is FORCE-cleared (the idle-stall watchdog, or manual Reset
     // States) rather than via a normal room-clear. The normal end-of-fight flushes
@@ -660,7 +662,7 @@ public sealed class CombatStateTracker : IDisposable
                 // state — otherwise a stealth runner leaves a cleared see-hidden room
                 // unsneaked. Guarded on InCombat (true only after we engaged), so a pure
                 // walk-past of an un-actionable room never resets a sneak we still hold.
-                CombatSpentStealth?.Invoke();
+                CombatSpentStealth?.Invoke(obs.Source == RoomObservationSource.Death);
             }
             return;
         }
@@ -737,7 +739,7 @@ public sealed class CombatStateTracker : IDisposable
             if (_state.InCombat)
             {
                 _state.InCombat = false;                                  // (2)
-                CombatSpentStealth?.Invoke();
+                CombatSpentStealth?.Invoke(obs.Source == RoomObservationSource.Death);
             }
             if (wasAsserted)                                              // (3)
                 _coordinator.ClearGate(MovementCoordinator.CombatGate, AsserterName, clearReason);

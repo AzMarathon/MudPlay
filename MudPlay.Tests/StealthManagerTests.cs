@@ -586,6 +586,23 @@ public sealed class StealthManagerTests
         Assert.False(h.Stealth.IsFollowed);
     }
 
+    // Report paradigm-20261004-180252: a backstab killed the follower half a second
+    // after we walked in, the flag stayed, and the step out went unsneaked.
+    [Fact]
+    public void Followed_AKillRightAfterArriving_LiftsIt()
+    {
+        var (h, _, _, advance) = Chase();
+        using AutoHarness _h = h;
+        h.Stealth.NoteRoomChanged();
+        advance(5);
+        h.Stealth.NoteMonsterArrival();
+
+        advance(500);
+        h.Stealth.NoteCombatEndedStealthReset(roomClearedByKill: true);
+
+        Assert.False(h.Stealth.IsFollowed);
+    }
+
     // Report paradigm-20260926-233357: "You may not sneak right now!" is a post-combat
     // cooldown. Hold the route and retry sn instead of walking on unsneaked.
     [Fact]
