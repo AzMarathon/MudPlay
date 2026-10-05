@@ -119,4 +119,35 @@ public sealed class ShopListParserTests
 
         Assert.Empty(ShopListParser.Parse(body));
     }
+
+    // Report paradigm-20261005-091552: a spell shop's list as it prints. The wide
+    // prices start left of the "Price" header, and slicing at the header's offset
+    // cut into them and dropped every scroll of 100 gold or more.
+    [Fact]
+    public void ASpellShopsWidePrices_AndItsTags_AreRead()
+    {
+        List<string> body = new()
+        {
+            "Item                          Quantity    Price",
+            "------------------------------------------------------",
+            "scroll of solid fog           10         600 gold crowns (You can't use)",
+            "scroll of sleep               10        1250 gold crowns (You can't use)",
+            "scroll of resist lightning    10         200 gold crowns",
+            "scroll of slow                9           90 gold crowns",
+            "scroll of eldritch bolt       9          600 gold crowns (Too powerful)",
+            "scroll of blur                30           Free",
+        };
+
+        IReadOnlyList<ShopListParser.StockRow> rows = ShopListParser.Parse(body);
+
+        Assert.Equal(6, rows.Count);
+        Assert.Equal(("scroll of solid fog", 10, true, false),
+            (rows[0].Name, rows[0].Quantity, rows[0].CantUse, rows[0].TooPowerful));
+        Assert.Equal("1250 gold crowns (You can't use)", rows[1].Price);
+        Assert.Equal(new ShopListParser.StockRow("scroll of resist lightning", 10, "200 gold crowns"), rows[2]);
+        Assert.Equal(new ShopListParser.StockRow("scroll of slow", 9, "90 gold crowns"), rows[3]);
+        Assert.Equal(("scroll of eldritch bolt", 9, false, true),
+            (rows[4].Name, rows[4].Quantity, rows[4].CantUse, rows[4].TooPowerful));
+        Assert.Equal(new ShopListParser.StockRow("scroll of blur", 30, "Free"), rows[5]);
+    }
 }

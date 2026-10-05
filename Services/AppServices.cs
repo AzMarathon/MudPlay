@@ -1503,7 +1503,7 @@ public sealed class AppServices
                 continue;
             foreach (Game.Train.ShopSpellSource source in offer.Sources)
             {
-                if (CountItemCarried(source.ItemNumber) <= 0) continue;
+                if (CountCarriedByName(source.ItemNumber) <= 0) continue;
                 carried.Add(new(offer.SpellNumber, offer.SpellName, offer.ReqLevel,
                     source.ItemNumber, source.ItemName, 0));
                 break;
@@ -6324,6 +6324,11 @@ public sealed class AppServices
             log: Log,
             isParadigm: onParadigm);
 
+        // A shop's stock readout ends at the prompt after it, a line of its own that
+        // the line stream only emits once something else is printed. Posted, so the
+        // rows that arrived in the same read are in before the readout is closed.
+        PromptScanner.PromptObserved += _ => Avalonia.Threading.Dispatcher.UIThread.Post(AutoBuy.NotePromptSeen);
+
         AutoSell = new Game.Inventory.AutoSellManager(Router,
             carriedItems: () => Inventory.Snapshot.CarriedItems,
             resolve: ResolveAutoSellItem,
@@ -7784,7 +7789,7 @@ public sealed class AppServices
             plan: (from, returnTo, level, visited, gaveUp) =>
                 PlanShopSpells(from, returnTo, level, SpendableCopper(), visited, gaveUp),
             carriedScrolls: CarriedSpellScrolls,
-            carriedCount: CountItemCarried,
+            carriedCount: CountCarriedByName,
             isObtained: spell => Spellbook.IsObtained(spell),
             walkTo: key => Walker.WalkTo(key, planThroughAcquirableGates: true),
             send: cmd => SendGameCommand(cmd),
@@ -10781,6 +10786,26 @@ public sealed class AppServices
     // to its Number and counting yields the live copy count the leader's
     // party-provisioning redistribution needs. Backs
     // Game.Map.PartyPathItemGate's self-count seam.
+    // How many of an item are in the pack, told by its name rather than its record
+    // number. Two item records can share a name — "scroll of resist lightning" is
+    // both #149 and #1993 — and the pack shows only the name, which resolves back to
+    // one of the numbers. Counted by number, the other record reads as never
+    // carried: the spell errand bought that scroll, never saw it arrive, and moved
+    // on without reading it (report paradigm-20261005-091552). The game takes the
+    // name in `read` either way.
+    private int CountCarriedByName(int itemId)
+    {
+        if (ItemNames.GetName(itemId) is not { Length: > 0 } wanted) return 0;
+        string key = ItemNameStore.Normalize(wanted);
+        int count = 0;
+        foreach (string entry in Inventory.Snapshot.CarriedItems)
+        {
+            (int qty, string name) = Game.Inventory.CountedCommand.SplitLeadingCount(entry);
+            if (string.Equals(ItemNameStore.Normalize(name), key, StringComparison.OrdinalIgnoreCase)) count += qty;
+        }
+        return count;
+    }
+
     private int CountItemCarried(int itemId)
     {
         int count = 0;

@@ -93,6 +93,32 @@ public sealed class AutoBuyManagerTests
         public void Dispose() => Buy.Dispose();
     }
 
+    // Report paradigm-20261005-091552: the readout ends at the prompt, which sits on
+    // an unfinished line and so never arrives as a line by itself. An errand
+    // waiting on the stock timed out at every shop.
+    [Fact]
+    public void APromptAfterTheRows_ClosesTheReadout_WithoutATerminatingLine()
+    {
+        using Harness h = new();
+        List<IReadOnlyList<ShopListParser.StockRow>> listed = new();
+        h.Buy.StockListed += listed.Add;
+
+        h.Emit("The following items are for sale here:");
+        h.Buy.NotePromptSeen();                   // a prompt before any row closes nothing
+        h.Emit("Item".PadRight(QtyCol) + "Quantity".PadRight(PriceCol - QtyCol) + "Price");
+        h.Emit(new string('-', 47));
+        h.Emit("torch".PadRight(QtyCol) + "250".PadRight(PriceCol - QtyCol) + "Free");
+        Assert.Empty(listed);
+
+        h.Buy.NotePromptSeen();
+
+        Assert.Equal("torch", Assert.Single(Assert.Single(listed)).Name);
+
+        // The prompt's line arriving later is not a second readout.
+        h.Emit("[HP=100/MA=10]:buy torch", prompt: true);
+        Assert.Single(listed);
+    }
+
     [Fact]
     public void FlaggedItem_BuysUpToCap_OnePerResult()
     {

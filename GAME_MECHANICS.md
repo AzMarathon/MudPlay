@@ -5566,12 +5566,33 @@ glass jug               5               2 gold crowns
 - **Item** = the name to feed `buy <item>`. **Quantity** = current stock count. **Price** = formatted
   currency (or `Free`).
 - **A trailing `(You can't use)` suffix marks an item the character can't use** — shown when the
-  character's class / stats bar the item from being *used*. This suffix is **informational only**.
+  character's class / stats bar the item from being *used*. On a spell scroll it means the character
+  **can never learn that spell** *([CONFIRMED] 2026-10-05, user)*.
+- **A trailing `(Too powerful)` suffix marks an item the character isn't the right level for yet**
+  *([CONFIRMED] 2026-10-05, user)*: on a spell scroll, a spell above the character's level. Captured
+  on a spell shop's list (report `paradigm-20261005-091552`): `scroll of eldritch bolt       9          600 gold crowns (Too powerful)`.
+- **Only the item column is a fixed width** *([OBSERVED] 2026-10-05, report `paradigm-20261005-091552`)*.
+  The quantity starts under `Quantity`, but a wide price starts left of the `Price` header:
+  `scroll of sleep               10        1250 gold crowns (You can't use)` under
+  `Item                          Quantity    Price`.
+- **No shop carries two items with the same name** *([CONFIRMED] 2026-10-05, user)*. Two item records
+  can share a name all the same: `scroll of resist lightning` is both item 149 and item 1993 in the
+  Paradigm 1.9.1 data, sold in different shops *([OBSERVED] game data; user 2026-10-05)*.
+- **The readout ends at the prompt, with no line of its own after the last row** *([OBSERVED]
+  2026-10-05, report `paradigm-20261005-091552`)*.
 
 **Client use:**
 - The `(You can't use)` suffix does **not** gate auto-buy. If the user flagged the item AutoBuy, buy it
   regardless; the player may want it for a mule, a party member, resale, or a quest. User intent (the
   AutoBuy flag) always wins over the usability hint.
+- `ShopListParser` reads the quantity as the first number after the item column and the price after it,
+  and sets `StockRow.CantUse` / `TooPowerful` from the suffix. `ShopSpellErrand.OnShopListed` buys
+  neither kind of scroll.
+- `AutoBuyManager.NotePromptSeen` closes the readout when the prompt reaches the wire, so an errand
+  that sent the `list` gets the stock at once rather than after its window.
+- The spell errand counts a scroll in the pack by its name (`AppServices.CountCarriedByName`): counted
+  by record number, the same-named other record read as never bought, and the scroll was bought and
+  not read (report `paradigm-20261005-091552`).
 
 ### Buy / sell result lines
 *Status: CONFIRMED 2026-07-10; ParaMUD free-item line CONFIRMED 2026-08-02 (capture `paradigm-20260802-164843`)*

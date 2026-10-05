@@ -142,6 +142,18 @@ public sealed class AutoBuyManager : IDisposable
         if (_body.Count >= MaxBodyLines) FinishCapture();
     }
 
+    // A prompt reached the wire. The readout's last row is followed by the prompt
+    // on a line of its own that isn't ended, so it is only emitted as a line once
+    // something else is printed — which, for an errand that sent the `list` and is
+    // waiting on the stock, is never: every spell-shop stop waited out its window
+    // and bought blind (report paradigm-20261005-091552). The owner calls this one
+    // dispatch hop after the prompt was seen, when the rows that arrived in the same
+    // read have been emitted.
+    public void NotePromptSeen()
+    {
+        if (_capturing && _body.Count > 0) FinishCapture();
+    }
+
     private void FinishCapture()
     {
         _capturing = false;
