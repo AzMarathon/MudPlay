@@ -2805,21 +2805,39 @@ public partial class MainWindowViewModel : ObservableObject
         TimeSpan delay = reconnectAt - now;
         if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
 
+        string when = ArmTimedReconnect(delay);
+        AppServices.Current.Log.Info("Cleanup",
+            $"Reconnect scheduled at {when} — warning observed at " +
+            $"{warning.ObservedAt.LocalDateTime:HH:mm:ss} with {warning.MinutesRemaining}m remaining " +
+            $"+ {bbs.CleanupPeriodMinutes}m cleanup period.");
+    }
+
+    // The PvP response hung up with "Re-connect after PvP" on: dial back in once
+    // the wait is over. Shares the cleanup reconnect's timer, countdown and cancel
+    // (pressing Connect), since only one timed dial-back can be pending.
+    private void SchedulePvpReconnect(TimeSpan delay)
+    {
+        // A hang-up normally leaves the next login at the menu for the user to
+        // enter by hand. This dial-back is the user's standing instruction to go
+        // back in, so it enters the realm like any other login.
+        string when = ArmTimedReconnect(delay, beforeDial: AppServices.Current.HangupSignal.AllowNextEntry);
+        AppServices.Current.Log.Info("PvP", $"Reconnect scheduled at {when}, {delay.TotalMinutes:0} min after the PvP hang-up.");
+    }
+
+    // Arm the one-shot timed dial-back and announce it. Returns the dial time.
+    private string ArmTimedReconnect(TimeSpan delay, Action? beforeDial = null)
+    {
         CancelCleanupReconnect(reason: null);
         _cleanupReconnectCts = new CancellationTokenSource();
         NotifyReconnectPendingChanged();
         CancellationToken token = _cleanupReconnectCts.Token;
 
-        string when = reconnectAt.LocalDateTime.ToString("HH:mm:ss");
+        string when = (DateTimeOffset.Now + delay).LocalDateTime.ToString("HH:mm:ss");
         int minutes = (int)delay.TotalMinutes;
         int seconds = delay.Seconds;
         WriteTerminalStatus(
             $"[AUTO-RECONNECT ARMED — DIALING AT {when} (IN {minutes}m{seconds:D2}s). PRESS CONNECT TO CANCEL.]",
             TerminalStatusKind.Notice);
-        AppServices.Current.Log.Info("Cleanup",
-            $"Reconnect scheduled at {when} — warning observed at " +
-            $"{warning.ObservedAt.LocalDateTime:HH:mm:ss} with {warning.MinutesRemaining}m remaining " +
-            $"+ {bbs.CleanupPeriodMinutes}m cleanup period.");
 
         StartReconnectCountdown(delay);
 
@@ -2834,9 +2852,11 @@ public partial class MainWindowViewModel : ObservableObject
                 NotifyReconnectPendingChanged();
                 StopReconnectCountdown();
                 AppServices.Current.Cleanup.Reset();
+                beforeDial?.Invoke();
                 _ = ConnectWithRetriesAsync();
             });
         }, TaskScheduler.Default);
+        return when;
     }
 
     private void CancelCleanupReconnect(string? reason)
@@ -3352,9 +3372,16 @@ public partial class MainWindowViewModel : ObservableObject
                 // the sender explicitly asked to relog, so we bypass the
                 // cleanup/reactive scheduling (which gates on per-BBS
                 // toggles) entirely.
+                // Read whatever the disconnect was, so a delay armed for a hang-up
+                // that never dropped the line can't attach itself to a later one.
+                TimeSpan? pvpReconnect = AppServices.Current.PvpResponse.TakeReconnectDelay();
                 if (_lastDisconnectCause == DisconnectCause.RelogInitiated)
                 {
                     ScheduleRelogReconnect();
+                }
+                else if (_lastDisconnectCause == DisconnectCause.HangupInitiated && pvpReconnect is { } pvpDelay)
+                {
+                    SchedulePvpReconnect(pvpDelay);
                 }
                 else
                 {

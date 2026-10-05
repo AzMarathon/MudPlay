@@ -1,0 +1,334 @@
+using MudPlay.Game;
+using MudPlay.Game.Combat;
+using MudPlay.Game.Pvp;
+using MudPlay.Models.GameData;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
+using MudPlay.Services.Patterns;
+using MudPlay.Terminal;
+using Xunit;
+
+namespace MudPlay.Tests;
+
+// PvpResponder: which response an Enemy in the room or an attack draws, and how
+// each one is carried out.
+public sealed class PvpResponderTests
+{
+    private sealed class Harness : IDisposable
+    {
+        public MessageRouter Router { get; } = new();
+        public PlayerDatabase Players { get; } = new();
+        public PartyState Party { get; } = new();
+        public RoomEntityClassifier Classifier { get; }
+        public PvpRoomSafety Room { get; }
+        public PvpAttackWatcher Attacks { get; }
+        public PvpResponder Responder { get; }
+
+        public bool PvpEnabled { get; set; } = true;
+        public PvpSettings Settings { get; set; } = new();
+        public DateTimeOffset Clock { get; set; } = new(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+
+        public bool HangUpWorks { get; set; } = true;
+        public bool FleeRoomsWorks { get; set; } = true;
+        public bool FleeToWorks { get; set; } = true;
+        public List<string> HangUps { get; } = new();
+        public List<(int Rooms, TimeSpan StayAway)> RoomFlees { get; } = new();
+        public List<(RoomRef Room, TimeSpan? ComeBackAfter)> RoomWalks { get; } = new();
+        public List<string> Gang { get; } = new();
+        public List<string> Reports { get; } = new();
+        public List<(TimeSpan Delay, Action Action)> Scheduled { get; } = new();
+
+        public Harness()
+        {
+            DefaultPatterns.Seed(Router);
+            Classifier = new RoomEntityClassifier(Router, new MonsterMessageStore(), Players, new LogService());
+            Room = new PvpRoomSafety(
+                Router, Classifier,
+                pvpEnabled: () => PvpEnabled, inParty: Party.HasMember, attackOnSight: _ => false,
+                classOf: _ => null, levelOf: _ => null, roomAttackFromLevel: _ => null,
+                realm: () => RealmType.ParaMud, lastMoveSentAt: () => null);
+            Attacks = new PvpAttackWatcher(
+                Router, Classifier, Room, Players, Party,
+                pvpEnabled: () => PvpEnabled, flipFriends: () => Settings.FlipFriendToEnemyIfAttacked,
+                ownGivenName: () => "Hero", now: () => Clock);
+            Responder = new PvpResponder(
+                Classifier, Attacks, Players,
+                pvpEnabled: () => PvpEnabled,
+                inParty: Party.HasMember,
+                readSettings: () => Settings,
+                hangUp: why => { HangUps.Add(why); return HangUpWorks; },
+                fleeRooms: (_, rooms, stayAway) => { RoomFlees.Add((rooms, stayAway)); return FleeRoomsWorks; },
+                fleeTo: (room, comeBack, _) => { RoomWalks.Add((room, comeBack)); return FleeToWorks; },
+                sendGang: Gang.Add,
+                roomName: () => "Town Square",
+                schedule: (delay, action) => Scheduled.Add((delay, action)),
+                now: () => Clock);
+            Responder.Responded += Reports.Add;
+
+            Players.RecordObservation("Bob", "Mage", null, null, null, null, null, DateTime.UtcNow);
+            Players.RecordObservation("Ann", "Warrior", null, null, null, null, null, DateTime.UtcNow);
+        }
+
+        public void MarkEnemy(string given, PvpAction? own = null) =>
+            Players.SetRelationship(given, PlayerRelationship.Enemy, own);
+
+        public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
+            line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        public void Dispose()
+        {
+            Responder.Dispose();
+            Attacks.Dispose();
+            Room.Dispose();
+            Classifier.Dispose();
+        }
+    }
+
+    // ----- what draws a response ----------------------------------------
+
+    [Fact]
+    public void EnemyInTheRoom_DrawsTheGeneralAction()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Equal("Bob is here", Assert.Single(h.HangUps));
+        Assert.Contains("hanging up", Assert.Single(h.Reports));
+    }
+
+    [Fact]
+    public void FriendsNeutralsAndPartyMembers_DrawNothing()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
+        h.Players.SetRelationship("Bob", PlayerRelationship.Friend, null);
+        h.MarkEnemy("Ann");
+        h.Party.Members.Add(new PartyMember { Name = "Ann" });
+
+        h.Feed("Also here: Bob, Ann.");
+
+        Assert.Empty(h.HangUps);
+    }
+
+    [Fact]
+    public void NeutralWhoAttacks_IsMarkedEnemy_AndAnswered()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
+
+        h.Feed("Bob moves to attack you!");
+
+        Assert.Equal("Bob attacked us", Assert.Single(h.HangUps));
+    }
+
+    [Fact]
+    public void FriendWhoAttacks_IsNotAnswered()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
+        h.Players.SetRelationship("Bob", PlayerRelationship.Friend, null);
+
+        h.Feed("Bob moves to attack you!");
+
+        Assert.Empty(h.HangUps);
+    }
+
+    [Fact]
+    public void PvpOffForTheRealm_NothingHappens()
+    {
+        using Harness h = new() { PvpEnabled = false, Settings = new PvpSettings { Action = PvpAction.HangUp } };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Empty(h.HangUps);
+    }
+
+    [Fact]
+    public void ThePlayersOwnResponse_ReplacesTheGeneralOne()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
+        h.MarkEnemy("Bob", PvpAction.DoNothing);
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Empty(h.HangUps);
+        Assert.Empty(h.Reports);
+    }
+
+    [Fact]
+    public void OneResponsePerEncounter_AnAttackAnswersSoonerThanASighting()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.Flee } };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+        h.Feed("Also here: Bob.");
+        Assert.Single(h.RoomFlees);
+
+        h.Clock += TimeSpan.FromSeconds(12);
+        h.Feed("Also here: Bob.");                  // still the same encounter
+        Assert.Single(h.RoomFlees);
+        h.Feed("Bob moves to attack you!");         // an attack is answered again
+        Assert.Equal(2, h.RoomFlees.Count);
+
+        h.Clock += TimeSpan.FromSeconds(31);
+        h.Feed("Also here: Bob.");
+        Assert.Equal(3, h.RoomFlees.Count);
+    }
+
+    // ----- the responses --------------------------------------------------
+
+    [Fact]
+    public void HangUp_ArmsTheReconnect_OnlyWhenAskedFor_AndOnlyOnce()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.HangUp, ReconnectAfterPvp = true, ReconnectAfterPvpMinutes = 20 },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Equal(TimeSpan.FromMinutes(20), h.Responder.TakeReconnectDelay());
+        Assert.Null(h.Responder.TakeReconnectDelay());
+    }
+
+    [Fact]
+    public void HangUpThatDoesNotGoOut_LeavesNoReconnectArmed()
+    {
+        using Harness h = new()
+        {
+            HangUpWorks = false,
+            Settings = new PvpSettings { Action = PvpAction.HangUp, ReconnectAfterPvp = true },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Null(h.Responder.TakeReconnectDelay());
+    }
+
+    [Fact]
+    public void Flee_RunsBackTheSetNumberOfRooms_AndStaysAwayTheSetTime()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.Flee, RoomsToFlee = 7, ComeBackAfterSeconds = 90 },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Equal((7, TimeSpan.FromSeconds(90)), Assert.Single(h.RoomFlees));
+        Assert.Empty(h.RoomWalks);
+        Assert.Empty(h.HangUps);
+    }
+
+    [Fact]
+    public void Flee_GoesToTheFleeRoomWhenOneIsSet_AndFallsBackWhenItCantBeReached()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.Flee, FleeTo = new RoomRef(1, 200), ComeBackAfterSeconds = 45 },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+        (RoomRef room, TimeSpan? comeBack) = Assert.Single(h.RoomWalks);
+        Assert.Equal((1, 200, TimeSpan.FromSeconds(45)), (room.Map, room.Room, comeBack));
+        Assert.Empty(h.RoomFlees);
+
+        h.FleeToWorks = false;
+        h.Clock += TimeSpan.FromMinutes(1);
+        h.Feed("Also here: Bob.");
+        Assert.Single(h.RoomFlees);
+    }
+
+    [Fact]
+    public void Flee_WithNowhereToGo_SaysSo_AndDoesNotHangUp()
+    {
+        using Harness h = new() { FleeRoomsWorks = false, Settings = new PvpSettings { Action = PvpAction.Flee } };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Contains("nowhere to flee", Assert.Single(h.Reports));
+        Assert.Empty(h.HangUps);
+    }
+
+    [Fact]
+    public void FleeThenHangUp_FleesNow_HangsUpAfterTheDelay_AndIgnoresEverythingMeanwhile()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.FleeThenHangUp, FleeHangupDelaySeconds = 30 },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        (int _, TimeSpan stayAway) = Assert.Single(h.RoomFlees);
+        Assert.True(stayAway > TimeSpan.FromSeconds(30));      // the run can't walk us back first
+        Assert.Empty(h.HangUps);
+        (TimeSpan delay, Action hangUp) = Assert.Single(h.Scheduled);
+        Assert.Equal(TimeSpan.FromSeconds(30), delay);
+
+        h.Clock += TimeSpan.FromSeconds(15);
+        h.Feed("Bob moves to attack you!");
+        Assert.Single(h.RoomFlees);
+
+        hangUp();
+        Assert.Single(h.HangUps);
+    }
+
+    [Fact]
+    public void FleeThenHangUp_WithNowhereToFlee_HangsUpAtOnce()
+    {
+        using Harness h = new()
+        {
+            FleeRoomsWorks = false,
+            Settings = new PvpSettings { Action = PvpAction.FleeThenHangUp },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Single(h.HangUps);
+        Assert.Empty(h.Scheduled);
+    }
+
+    // ----- telling the gang -----------------------------------------------
+
+    [Fact]
+    public void NotifyGang_SaysWhoAndWhere_OnceAMinute()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.Flee, NotifyGang = true } };
+        h.MarkEnemy("Bob");
+        h.MarkEnemy("Ann");
+
+        h.Feed("Bob moves to attack you!");
+        Assert.Equal("PvP: Bob attacked me at Town Square", Assert.Single(h.Gang));
+
+        h.Clock += TimeSpan.FromSeconds(20);
+        h.Feed("Also here: Ann.");
+        Assert.Single(h.Gang);
+
+        h.Clock += TimeSpan.FromSeconds(61);
+        h.Feed("Also here: Ann.");
+        Assert.Equal("PvP: Ann is here at Town Square", h.Gang[^1]);
+    }
+
+    [Fact]
+    public void NotifyGangOff_OrDoNothing_SaysNothing()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
+        h.MarkEnemy("Bob");
+        h.Feed("Also here: Bob.");
+        Assert.Empty(h.Gang);
+
+        using Harness quiet = new() { Settings = new PvpSettings { Action = PvpAction.DoNothing, NotifyGang = true } };
+        quiet.MarkEnemy("Bob");
+        quiet.Feed("Also here: Bob.");
+        Assert.Empty(quiet.Gang);
+    }
+}

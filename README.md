@@ -8,6 +8,7 @@
 > - On a PvP realm, room attacks and room debuffs are held while a player outside your party is in the room, and one already running is broken off
 > - On a PvP realm, a walk or loop carries on past a room where another player is room-attacking
 > - A Neutral player who attacks you is marked Enemy, saved on their record
+> - New Settings → PvP tab: hang up, flee then hang up, or flee and come back when an Enemy is in the room or attacks; flee-to room, gang notice, timed reconnect
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

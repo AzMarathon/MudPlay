@@ -1625,6 +1625,9 @@ public sealed class AppServices
     public Game.Combat.RoomEntryWatcher RoomEntry { get; private set; } = null!;
     // Other players attacking us, and the Neutral-to-Enemy marking that follows.
     public Game.Pvp.PvpAttackWatcher PvpAttacks { get; private set; } = null!;
+    // The PvP response to an Enemy (hang up, flee), and its flee to a chosen room.
+    public Game.Pvp.PvpResponder PvpResponse { get; private set; } = null!;
+    public Game.Pvp.PvpFleeWalk PvpFlee { get; private set; } = null!;
 
     // Observes mid-room departure lines
     // ("<name> walks out of the room to <dir>.")
@@ -7442,6 +7445,23 @@ public sealed class AppServices
         // Default set, same as LoopRunner's ReachedFirstWaypoint above.
         AutoLair.ActiveChanged += active => { if (active) AutoEquip.OnLoopStarted(); };
 
+        PvpFlee = new Game.Pvp.PvpFleeWalk(Walker, LoopRunner, AutoLair, pacedReplyScheduler, Log);
+        PvpResponse = new Game.Pvp.PvpResponder(
+            RoomClassifier, PvpAttacks, Players,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            inParty: PartyState.HasMember,
+            readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
+            hangUp: Health.HangUpForPvp,
+            fleeRooms: Health.FleeFromPlayer,
+            fleeTo: (room, comeBackAfter, why) =>
+                PvpFlee.Start(new Game.Map.RoomKey(room.Map, room.Room), comeBackAfter, why),
+            // `bg` is the gang channel's speak verb (GAME_MECHANICS "Gang channel speak verb").
+            sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
+            roomName: () => RoomTracker.State.CurrentRoom?.Name,
+            schedule: pacedReplyScheduler,
+            log: Log);
+        PvpResponse.Responded += what => WriteTerminalNotice($"[PvP: {what}]");
+
         // Always-alive control surface over the three movement engines.
         // Backs the toolbar Start / Pause / Stop buttons (which outlive
         // the window-scoped NavigationViewModel) and stays in sync with
@@ -9073,7 +9093,8 @@ public sealed class AppServices
             if (suppressed && evalKey is { } rk)
                 Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
         }
-        return suppressed || PvpLeaveRoomReason() is not null;
+        // A flee to the PvP flee room walks through whatever is on the way.
+        return suppressed || PvpFlee is { IsActive: true } || PvpLeaveRoomReason() is not null;
     }
 
     // Why a running walk or loop carries on out of the room we're in rather than
