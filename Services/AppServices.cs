@@ -5026,7 +5026,7 @@ public sealed class AppServices
         // can key on, so a room cleared by winning leaves IsSneaking stale-true.
         // Reset it the instant combat ends — before the Combat gate releases the
         // walker — so the pre-move re-sneak re-establishes stealth for the step out.
-        CombatTracker.CombatSpentStealth += () => Stealth.NoteCombatEndedStealthReset();
+        CombatTracker.CombatSpentStealth += Stealth.NoteCombatEndedStealthReset;
         // A monster coming in right behind us means it's following: no sn until we
         // shake it (StealthManager "followed").
         RoomEntry.ArrivalObserved += e =>

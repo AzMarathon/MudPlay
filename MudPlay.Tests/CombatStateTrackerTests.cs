@@ -834,7 +834,7 @@ public sealed class CombatStateTrackerTests
         h.AddMonster(1, "crystal golem", killable: true);
 
         int stealthSpent = 0;
-        h.Tracker.CombatSpentStealth += () => stealthSpent++;
+        h.Tracker.CombatSpentStealth += _ => stealthSpent++;
 
         h.Feed("Also here: crystal golem.");   // force-clear engages, gate held
         h.Feed("*Combat Engaged*");             // InCombat true (we engaged)
@@ -853,7 +853,7 @@ public sealed class CombatStateTrackerTests
         using Harness h = new() { AutoAttackEnabled = false };
 
         int stealthSpent = 0;
-        h.Tracker.CombatSpentStealth += () => stealthSpent++;
+        h.Tracker.CombatSpentStealth += _ => stealthSpent++;
 
         h.Feed("Also here: Bob.");   // hostile-free, never engaged
 

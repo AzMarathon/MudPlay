@@ -439,12 +439,15 @@ public sealed class StealthManager : IDisposable
     // re-establishes sneak for the move instead of no-opping on the stale state
     // (report stock-20260730-163044). No `sn` is sent here — the re-attempt is the
     // pre-move hook's job.
-    public void NoteCombatEndedStealthReset()
+    public void NoteCombatEndedStealthReset(bool roomClearedByKill = false)
     {
         // A fight that ran its course here means whatever followed us is dealt with.
         // Right after a move it's only the room display reading clear, with the
-        // followers still about to walk in, so keep the flag then.
-        if (_followed && NowProvider() - _roomChangedAt > FollowWindow)
+        // followers still about to walk in, so keep the flag then — unless a kill
+        // emptied the room: a backstab can drop the follower inside the window, and
+        // keeping the flag sent the next step out unsneaked (report
+        // paradigm-20261004-180252).
+        if (_followed && (roomClearedByKill || NowProvider() - _roomChangedAt > FollowWindow))
         {
             _followed = false;
             _log?.Info(LogCategory, "no longer followed — the fight here is over");
