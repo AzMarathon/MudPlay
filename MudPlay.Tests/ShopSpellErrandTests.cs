@@ -95,6 +95,21 @@ public sealed class ShopSpellErrandTests
         }
     }
 
+    // The Buy spells button asks before it stops a running loop: a scroll already in
+    // the pack is a trip worth making even with no shop to visit.
+    [Fact]
+    public void HasCarriedScrolls_IsTrueOnlyForAnUnlearnedScrollInThePack()
+    {
+        Harness h = new();
+        Assert.False(h.Errand.HasCarriedScrolls(9));
+
+        h.Pack[Bliz.ItemNumber] = 1;
+        Assert.True(h.Errand.HasCarriedScrolls(9));
+
+        h.Obtained.Add(Bliz.SpellNumber);
+        Assert.False(h.Errand.HasCarriedScrolls(9));
+    }
+
     [Fact]
     public void NothingToBuyAndNothingCarriedStartsNoTrip()
     {

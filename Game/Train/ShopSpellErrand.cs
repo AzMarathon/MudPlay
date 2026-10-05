@@ -105,6 +105,10 @@ public sealed class ShopSpellErrand
         _reserve = reserve;
     }
 
+    // A scroll for a spell this level can learn is already in the pack: a trip has
+    // something to do even with nothing left to buy.
+    public bool HasCarriedScrolls(int level) => _carriedScrolls(level).Count > 0;
+
     // Start the trip for a character now at `level`. False when there is nothing to
     // go for — no shop to visit and no scroll in the pack — and nothing was sent.
     public bool Begin(int level, RoomKey returnTo)

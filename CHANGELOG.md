@@ -1,5 +1,9 @@
 # Version history
 
+## 3.144.19
+
+- Player Workshop, CP Allocation: a Buy spells button runs the trainer's shop trip on its own, whether Auto-obtain spells from shops is on or off
+
 ## 3.144.18
 
 - Stash Transfer chip tooltip: what is left in the stash by value and by coin, how many more trips it takes, a rough time to finish, and what has been banked
