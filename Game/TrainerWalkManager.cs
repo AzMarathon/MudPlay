@@ -1311,10 +1311,10 @@ public sealed class TrainerWalkManager : IDisposable
         if (result.Aborted) _resume = default;
         if (_spellsOnly)
         {
-            // The errand has logged the trip; a train report would say "no levels".
-            string summary = result.Learned.Count > 0
-                ? $"Learned {string.Join(", ", result.Learned)}."
-                : "No new spells learned.";
+            // The errand has logged the trip and the spells by name; a train report
+            // would say "no levels". The tab's notice only has room for a count.
+            int bought = result.Learned.Count;
+            string summary = $"Spell buying is complete, bought {(bought == 0 ? "no" : bought.ToString())} spell{(bought == 1 ? "" : "s")}.";
             Finish(null);
             SpellRunFinished?.Invoke(summary);
             return;
