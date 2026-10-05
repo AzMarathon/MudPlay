@@ -1,5 +1,11 @@
 # Version history
 
+## 3.144.15
+
+- A stash transfer, bank run or trainer trip no longer walks into a hazard room (the Silver River) without its counter; only a route you pick may
+- Map other floors: where two shadowed floors share a cell the higher one is drawn, going up as well as down
+- bug reports addressed: paradigm-20261004-204354, paradigm-20261004-204610
+
 ## 3.144.13
 
 - A flee crosses a text exit (a trail you leave with `go path`) with its own command instead of walking into a wall

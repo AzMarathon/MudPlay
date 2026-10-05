@@ -1414,6 +1414,65 @@ public sealed class MovementFilterTests
         Assert.False(filter.IsExitBlocked(PlainExitTo(new RoomKey(1, 2))));
     }
 
+    // Report paradigm-20261004-204354: a stash transfer planned through gates took
+    // the Silver River, whose counter is a choice between boats that the walk start
+    // provisions for nobody, and walked in unprotected. A through-gates plan nobody
+    // picked keeps such a room closed.
+    [Fact]
+    public void SuspendButUncounteredHazards_KeepsAnUnarrangedHazardClosed()
+    {
+        WithHazards(index =>
+        {
+            (_, MovementFilter filter) = NewPair();
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 2) ? 700 : 0;
+            SetInventory(filter);   // no negator held, none arranged
+            RoomExit exit = PlainExitTo(new RoomKey(1, 2));
+
+            using (filter.SuspendAcquirableGatesButUncounteredHazards())
+                Assert.True(filter.IsExitBlocked(exit));
+            using (filter.SuspendAcquirableGates())
+                Assert.False(filter.IsExitBlocked(exit));    // a picked route still opens it
+            Assert.True(filter.IsExitBlocked(exit));          // and gating comes back
+        });
+    }
+
+    [Fact]
+    public void SuspendButUncounteredHazards_OpensAHazardTheWalkWillCounter()
+    {
+        WithHazards(index =>
+        {
+            (_, MovementFilter filter) = NewPair();
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 2) ? 700 : 0;
+            SetInventory(filter);
+            RoomExit exit = PlainExitTo(new RoomKey(1, 2));
+
+            // The walk will obtain the counter on the way.
+            filter.HazardProvisionProbe = _ => new[] { 42 };
+            using (filter.SuspendAcquirableGatesButUncounteredHazards())
+                Assert.False(filter.IsExitBlocked(exit));
+
+            // Or it is simply carried.
+            filter.HazardProvisionProbe = null;
+            SetInventory(filter, 42);
+            using (filter.SuspendAcquirableGatesButUncounteredHazards())
+                Assert.False(filter.IsExitBlocked(exit));
+        });
+    }
+
+    [Fact]
+    public void SuspendButUncounteredHazards_StillSuspendsItemGates()
+    {
+        (_, MovementFilter filter) = NewPair();
+        SetInventory(filter);   // lacking the raft
+        RoomExit raft = ItemExit(5);
+
+        Assert.True(filter.IsExitBlocked(raft));
+        using (filter.SuspendAcquirableGatesButUncounteredHazards())
+            Assert.False(filter.IsExitBlocked(raft));
+    }
+
     [Fact]
     public void SuspendAcquirableGates_SuspendsHazardGate()
     {

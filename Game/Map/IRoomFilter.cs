@@ -92,6 +92,13 @@ public interface IRoomFilter
     // only Services.MovementFilter suspends anything real.
     IDisposable SuspendAcquirableGates() => NoGateSuspension.Instance;
 
+    // The same suspension, except that a hazard room stays closed unless its counter
+    // is carried or the walk has arranged to obtain it. For a route nobody looked at
+    // and chose: the item gates on it are provisioned on the way, but a hazard whose
+    // counter is a choice between items (any raft crosses the river) is provisioned
+    // by nothing, and the walk would simply go in (report paradigm-20261004-204354).
+    IDisposable SuspendAcquirableGatesButUncounteredHazards() => SuspendAcquirableGates();
+
     // The default-implementation's inert scope — disposing it does nothing.
     private sealed class NoGateSuspension : IDisposable
     {

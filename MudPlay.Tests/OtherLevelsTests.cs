@@ -82,9 +82,12 @@ public sealed class OtherLevelsTests : IDisposable
         // 1/10 lands under 1/2 and 1/11 under 1/1: both cells belong to the ground.
         Assert.False(other.Positions.ContainsKey(K(10)));
         Assert.False(other.Positions.ContainsKey(K(11)));
-        Assert.Equal((stairs.X + 1, stairs.Y), other.Positions[K(12)]);
+        // 1/12 sits one east of the stairs, and 1/20 on the floor above it lands on
+        // that same cell: the higher floor is the one drawn.
+        Assert.False(other.Positions.ContainsKey(K(12)));
+        Assert.Equal((stairs.X + 1, stairs.Y), other.Positions[K(20)]);
         Assert.True(other.Positions.ContainsKey(K(13)));
-        Assert.Equal(K(12), other.CoordToRoom[(stairs.X + 1, stairs.Y)]);
+        Assert.Equal(K(20), other.CoordToRoom[(stairs.X + 1, stairs.Y)]);
     }
 
     [Fact]
@@ -96,9 +99,73 @@ public sealed class OtherLevelsTests : IDisposable
 
         Assert.NotNull(other);
         (int X, int Y) stairs = ground.Positions[K(2)];
-        // 1/20 lands under 1/12 (already drawn); 1/21 is one further east.
-        Assert.False(other.Positions.ContainsKey(K(20)));
+        // 1/20 lands over 1/12 and covers it; 1/21 is one further east.
+        Assert.Equal((stairs.X + 1, stairs.Y), other.Positions[K(20)]);
         Assert.Equal((stairs.X + 2, stairs.Y), other.Positions[K(21)]);
+    }
+
+    // Report paradigm-20261004-204610: among the shadowed floors the higher one is
+    // drawn where two share a cell, going up and going down alike.
+    //   Ground: 1/1 (up to 1/10, down to 1/30)
+    //   +1: 1/10 ─E─ 1/11 (up to 1/20), 1/10 ─N─ 1/12      +2: 1/20 ─N─ 1/22 ─W─ 1/23
+    //   -1: 1/30 ─E─ 1/31 (down to 1/40), 1/30 ─N─ 1/32    -2: 1/40 ─N─ 1/42 ─W─ 1/43
+    [Fact]
+    public void The_higher_shadowed_floor_wins_a_shared_cell_above_and_below()
+    {
+        string json = "[" + string.Join(",",
+            Room(1, u: "1/10", d: "1/30"),
+            Room(10, e: "1/11", north: "1/12", d: "1/1"),
+            Room(11, w: "1/10", u: "1/20"),
+            Room(12, s: "1/10"),
+            Room(20, north: "1/22", d: "1/11"),
+            Room(22, s: "1/20", w: "1/23"),
+            Room(23, e: "1/22"),
+            Room(30, e: "1/31", north: "1/32", u: "1/1"),
+            Room(31, w: "1/30", d: "1/40"),
+            Room(32, s: "1/30"),
+            Room(40, north: "1/42", u: "1/31"),
+            Room(42, s: "1/40", w: "1/43"),
+            Room(43, e: "1/42")) + "]";
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(json);
+        RoomLayout ground = bfs.BuildLayout(K(1));
+        RoomLayout? other = OtherLevels.Build(ground, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0);
+
+        Assert.NotNull(other);
+        (int X, int Y) here = ground.Positions[K(1)];
+        (int X, int Y) north = (here.X, here.Y - 1);
+        (int X, int Y) east = (here.X + 1, here.Y);
+
+        // East of here: 1/11 (+1) and 1/20 (+2) above, 1/31 (-1) and 1/40 (-2) below.
+        // The highest of them all is drawn.
+        Assert.Equal(K(20), other.CoordToRoom[east]);
+        // North of here: 1/12 (+1) and 1/23 (+2) above, 1/32 (-1) and 1/43 (-2) below.
+        Assert.Equal(K(23), other.CoordToRoom[north]);
+        Assert.False(other.Positions.ContainsKey(K(12)));
+        Assert.False(other.Positions.ContainsKey(K(32)));
+        Assert.False(other.Positions.ContainsKey(K(43)));
+    }
+
+    [Fact]
+    public void Going_down_the_nearer_floor_covers_the_deeper_one()
+    {
+        string json = "[" + string.Join(",",
+            Room(1, d: "1/30"),
+            Room(30, e: "1/31", north: "1/32", u: "1/1"),
+            Room(31, w: "1/30", d: "1/40"),
+            Room(32, s: "1/30"),
+            Room(40, north: "1/42", u: "1/31"),
+            Room(42, s: "1/40", w: "1/43"),
+            Room(43, e: "1/42")) + "]";
+        (BfsMapper bfs, RoomGraphManager graph) = NewMapper(json);
+        RoomLayout ground = bfs.BuildLayout(K(1));
+        RoomLayout? other = OtherLevels.Build(ground, graph.GetRoom, k => bfs.BuildLayout(k), 10, 1.0);
+
+        Assert.NotNull(other);
+        (int X, int Y) here = ground.Positions[K(1)];
+        Assert.Equal(K(31), other.CoordToRoom[(here.X + 1, here.Y)]);       // -1 over 1/40 (-2)
+        Assert.Equal(K(32), other.CoordToRoom[(here.X, here.Y - 1)]);       // -1 over 1/43 (-2)
+        Assert.False(other.Positions.ContainsKey(K(40)));
+        Assert.False(other.Positions.ContainsKey(K(43)));
     }
 
     [Fact]

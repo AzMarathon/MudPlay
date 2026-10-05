@@ -1,12 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.13**
-> - A flee crosses a text exit (a trail you leave with `go path`) with its own command instead of walking into a wall
-> - A flee move the game refuses is never sent again that run: it takes another way out of the room, or stands and fights
-> - Auto-equip on recovery waits while Auto-All is off and puts the gear on when it is switched back on
-> - A rest broken by a buff set to cast while resting carries on to the rest max, also when a ShadowRest character sneaks first
-> - The log names the see-hidden monster when a sneaking character opens with a plain attack
+> **Version 3.144.15**
+> - A stash transfer, bank run or trainer trip no longer walks into a hazard room (the Silver River) without its counter; only a route you pick may
+> - Map other floors: where two shadowed floors share a cell the higher one is drawn, going up as well as down
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

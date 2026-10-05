@@ -3989,6 +3989,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - Encoded in `RoomHazardIndex` — see the harm gate in `BuildHazard`.
+- **Client policy** (report `paradigm-20261004-204354`): only a route the user picked may cross a hazard room without its counter. A through-gates walk nobody picked (a stash transfer, a bank run, a trainer trip, a sell detour) plans with `MovementFilter.SuspendAcquirableGatesButUncounteredHazards`: the room stays closed unless the counter is carried or the walk will obtain it (`HazardProvisionProbe`, the walk-start announce list). The route picker's commits pass `pickedRoute` to `AutoWalkManager.WalkTo`. Before this, a stash transfer planned as if every gate item were carried, took the Silver River — whose counter is any one of three boats, which the walk-start announce provisions for nobody — and walked in unprotected.
 
 ### Protective-item gates — exit-gated vs room-spell-gated
 *Status: CONFIRMED (encoding fully decoded off the stock v1.11p data set)*
