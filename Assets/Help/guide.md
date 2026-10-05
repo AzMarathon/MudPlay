@@ -536,7 +536,7 @@ The panel lists clickable links to everything attached to the room:
 - **An `@goto` your party leader accepts** is drawn the same way. Their reply (`{walking to Grassy Cart Path, Dead End (1/2447)}`) names only where they're going, so MudPlay plans your usual route from the room you're in — you're following them, so you set out together. Only your party leader's reply counts.
 - **While you follow**, a walk-to shortens behind you and the CURRENT NAV rows tick off; it clears when you arrive, when a newer `@path` or `@goto` reply lands, after 10 minutes without progress, or with **Clear** in the CURRENT NAV header. Start a walk or loop of your own and it takes those surfaces back.
 
-The **Overlays ▾** button layers lairs, shops, spell rooms, and **level gates** onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk).
+The **Overlays ▾** button layers lairs, shops, spell rooms, **level gates** and a running loop's **loop lines** onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk).
 
 The **Legend** keys every room-cell marker the map draws: the amber-ringed **current room**, the blue-ringed **walk-to destination**, room fills (lair, shop/bank, spell, auto-lair, up/down/up+down exit rooms), and the overlay glyphs — **deathpile** skull, **boss** crown (with a red halt ring when it's a *stop-before* boss), **trainer** chevrons, **gang-house** robot, **avoid** (red X), **stash** (gold X), the amber **level-gate** wedge, and the fading green **@where** result.
 
@@ -553,6 +553,14 @@ Traps are **directional**, so a connecting line is only red on the trapped side:
 **Level gates** (on by default) marks every room that **holds a level gate** with a small **amber wedge in the top-left corner** — a room you can walk into and stand in, whose way onward is shut unless you're inside the gate's level window. It covers gated exits, **level-gated room teleports** (a vortex that won't take you until level 20), and **level-restricted boat sailings** (a captain who won't board you until level 50). That's deliberately a different mark from the **red exit stubs**, which mean a trap: a level gate is a locked door, not a hazard.
 
 It describes the **map**, not your character — it marks where the gates *are*, not which ones happen to refuse you today. So it reads the same at level 5, at level 99, and while you're browsing game data with nothing connected, which is when "where are the gates?" is most often the question. Hover a marked room to see the gate's actual level window in the tooltip. Your choice is saved per character.
+
+**Loop lines** sets how a running loop is drawn. Click it to cycle:
+
+- **Loop lines** (the default) — the loop's line with a numbered circle on each step, matching the CURRENT NAV rows.
+- **Loop lines: no steps** — the line alone: one unbroken route through the whole loop, with no circles over it.
+- **Loop lines: off** — the running loop isn't drawn. The red loop preview shown while you walk to a loop's start goes with it; the walk-to line itself stays.
+
+A loop you're **building** always shows its line and numbered steps, and a saved loop you **Preview** from the Loops list is drawn whatever this is set to. The choice is saved per character.
 
 **Other floors** (all floors by default) draws the floors you reach by **up and down exits**, dimmed, around the floor the map shows. Each one sits where the game puts it, straight above or below the stairs that lead to it, so a mountain path that climbs a floor at a time or a dungeon that drops level by level reads as **one path**: you can see where it goes and walk straight to the end instead of stepping the map floor by floor. Shadowed rooms work like any other: hover for the tooltip, click to select, **Walk here** to go.
 

@@ -72,4 +72,21 @@ public sealed class ProfileServiceTests
         CharacterProfile back = JsonSerializer.Deserialize<CharacterProfile>(json, JsonStore.Options)!;
         Assert.Equal(LairDisplayMode.HeatCount, back.NavLairMode);
     }
+
+    [Fact]
+    public void NavLoopLinesMode_DefaultsToSteps_AndRoundTripsByName()
+    {
+        // An older profile has no value stored and must come back drawing the loop
+        // the way it always was: line plus numbered steps.
+        Assert.Equal(LoopLinesMode.Steps, new CharacterProfile().NavLoopLinesMode);
+        Assert.Equal(LoopLinesMode.Steps,
+            JsonSerializer.Deserialize<CharacterProfile>("{}", JsonStore.Options)!.NavLoopLinesMode);
+
+        var profile = new CharacterProfile { NavLoopLinesMode = LoopLinesMode.NoSteps };
+        string json = JsonSerializer.Serialize(profile, JsonStore.Options);
+        Assert.Contains("\"NoSteps\"", json);
+
+        CharacterProfile back = JsonSerializer.Deserialize<CharacterProfile>(json, JsonStore.Options)!;
+        Assert.Equal(LoopLinesMode.NoSteps, back.NavLoopLinesMode);
+    }
 }

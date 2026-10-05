@@ -143,6 +143,11 @@ public sealed class CharacterProfile
     // name, defaults to Mono (the original flat-purple "has a room spell" cue).
     public SpellDisplayMode NavSpellMode { get; set; } = SpellDisplayMode.Mono;
 
+    // How the Navigation map draws a running loop (the "Loop lines" chip cycle:
+    // line + numbered steps → line only → off). Persisted per-character like
+    // NavLairMode. Serialized by name, defaults to Steps.
+    public LoopLinesMode NavLoopLinesMode { get; set; } = LoopLinesMode.Steps;
+
     // The Navigation map's level-gate overlay (rooms holding a level gate,
     // marked with an amber corner wedge). Persisted per-character like the two
     // above. Defaults ON — it costs one scan per game-data set swap, and a gate

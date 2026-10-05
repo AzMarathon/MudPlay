@@ -58,6 +58,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         {
             _lairMode = lairProfile.NavLairMode;
             _spellMode = lairProfile.NavSpellMode;
+            _loopLinesMode = lairProfile.NavLoopLinesMode;
             _showLevelGates = lairProfile.NavShowLevelGates;
         }
 
@@ -729,6 +730,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void RefreshLoopOverlays()
     {
         Game.Map.LoopRunner runner = _services.LoopRunner;
+        _loopPathIsPreview = false;
         LoopSequenceNumbers = null;     // per UX rule: no number overlay during execution
         LoopRunningWaypoints = null;    // set below only while the circle is actually running
 
@@ -851,6 +853,35 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.Profile.Current is not { } profile) return;
         if (profile.NavSpellMode == value) return;
         profile.NavSpellMode = value;
+        _services.Profile.Save();
+    }
+
+    // Loop lines chip is a three-stage toggle: Steps (the running loop's line with a
+    // numbered circle on each step) -> NoSteps (the line alone) -> Off -> Steps.
+    // ShowLoopLines (the chip's active-fill flag) is lit for anything but Off.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowLoopLines))]
+    [NotifyPropertyChangedFor(nameof(LoopLinesButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(MapLoopPath))]
+    [NotifyPropertyChangedFor(nameof(MapLoopRunningWaypoints))]
+    [NotifyPropertyChangedFor(nameof(MapLoopApproachPreviewPath))]
+    private LoopLinesMode _loopLinesMode = LoopLinesMode.Steps;
+
+    public bool ShowLoopLines => LoopLinesMode != LoopLinesMode.Off;
+
+    public string LoopLinesButtonLabel => LoopLinesMode switch
+    {
+        LoopLinesMode.NoSteps => "Loop lines: no steps",
+        LoopLinesMode.Off     => "Loop lines: off",
+        _                     => "Loop lines",
+    };
+
+    // Persisted per-character, like the lair and spell modes.
+    partial void OnLoopLinesModeChanged(LoopLinesMode value)
+    {
+        if (_services.Profile.Current is not { } profile) return;
+        if (profile.NavLoopLinesMode == value) return;
+        profile.NavLoopLinesMode = value;
         _services.Profile.Save();
     }
 
@@ -1008,6 +1039,12 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         SpellDisplayMode.ByName => SpellDisplayMode.Off,
         _                       => SpellDisplayMode.Mono,
     };
+    [RelayCommand] private void ToggleLoopLines() => LoopLinesMode = LoopLinesMode switch
+    {
+        LoopLinesMode.Steps   => LoopLinesMode.NoSteps,
+        LoopLinesMode.NoSteps => LoopLinesMode.Off,
+        _                     => LoopLinesMode.Steps,
+    };
     [RelayCommand] private void ToggleLevelGates() => ShowLevelGates = !ShowLevelGates;
     [RelayCommand] private void ToggleOtherLevels() => OtherLevelsMode = OtherLevelsMode switch
     {
@@ -1150,7 +1187,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [ObservableProperty] private NavLineStyles? _navLineStyles;
 
     [ObservableProperty] private IReadOnlyList<RoomKey>? _walkPath;
-    [ObservableProperty] private IReadOnlyList<RoomKey>? _loopPath;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MapLoopPath))]
+    private IReadOnlyList<RoomKey>? _loopPath;
 
     // Dashed cyan preview polyline drawn under the active loop / walk while
     // the user is in the LoopBuilder strip. Pulled from
@@ -1165,12 +1204,28 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // Ordered RoomKey list for the map's numbered green running-loop markers — the
     // running counterpart of LoopBuilderWaypoints, in the same order as RunningLoopRows
     // so the map bubbles line up with the CURRENT NAV rows while a loop runs.
-    [ObservableProperty] private IReadOnlyList<RoomKey>? _loopRunningWaypoints;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MapLoopRunningWaypoints))]
+    private IReadOnlyList<RoomKey>? _loopRunningWaypoints;
 
     // Red preview polyline drawn during the walker-approach phase of a loop
     // run. Lets the user see the upcoming cycle alongside the blue walk-to
     // line that's actively driving them to the start waypoint.
-    [ObservableProperty] private IReadOnlyList<RoomKey>? _loopApproachPreviewPath;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MapLoopApproachPreviewPath))]
+    private IReadOnlyList<RoomKey>? _loopApproachPreviewPath;
+
+    // What the map is handed of the three above, per the Loop lines chip. The
+    // properties themselves stay whole: the CURRENT NAV rows and the route details
+    // read them whatever the map shows. A saved loop previewed by hand is drawn even
+    // with the chip off — asking for it is the point.
+    private bool _loopPathIsPreview;
+    public IReadOnlyList<RoomKey>? MapLoopPath =>
+        LoopLinesMode == LoopLinesMode.Off && !_loopPathIsPreview ? null : LoopPath;
+    public IReadOnlyList<RoomKey>? MapLoopRunningWaypoints =>
+        LoopLinesMode == LoopLinesMode.Steps ? LoopRunningWaypoints : null;
+    public IReadOnlyList<RoomKey>? MapLoopApproachPreviewPath =>
+        LoopLinesMode == LoopLinesMode.Off ? null : LoopApproachPreviewPath;
     [ObservableProperty] private IReadOnlySet<RoomKey>? _avoidedRooms;
 
     // Rooms the user has flagged as stash drops. Bound to the MapControl's
@@ -2291,9 +2346,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void PreviewLoop(LoopRowViewModel? row)
     {
-        if (row is null) { LoopPath = null; return; }
-        if (row.Source.Waypoints.Count < 2)
+        if (row is null || row.Source.Waypoints.Count < 2)
         {
+            _loopPathIsPreview = false;
             LoopPath = null;
             return;
         }
@@ -2302,6 +2357,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // actually drive at start time.
         IReadOnlyList<RoomKey> keys = LoopExpander.ResolveCycleRoomKeys(
             row.Source.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement);
+        _loopPathIsPreview = keys.Count >= 2;
         LoopPath = keys.Count >= 2 ? keys : null;
     }
 

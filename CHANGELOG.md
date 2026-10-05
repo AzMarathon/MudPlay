@@ -1,5 +1,9 @@
 # Version history
 
+## 3.144.9
+
+- New map overlay, Loop lines: show a running loop with numbered steps, as a plain line with no step circles, or not at all
+
 ## 3.144.8
 
 - "Bless if above" is set on each buff now (Buff Watchdog → edit a buff → Cast if mana ≥) instead of once on Settings → Health
