@@ -2,7 +2,8 @@
 
 <!-- current-version:start -->
 > **Version 3.144.4**
-> - A condition the game has ended is no longer left showing as still on you: a wear-off line now clears its flag even when the line belongs to a different message record than the one that set it, which is how a stun, hold or blind could sit there for the rest of the session
+> - A condition line that holds another spell's line no longer sets that spell's condition too: the shard creature's `You are stunned by electrical shock!` stopped you without also leaving you marked confused for the rest of the session, and `You are engulfed in flames!` no longer reads as a hold
+> - A wear-off line clears its condition even when the line belongs to a different message record than the one that set it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

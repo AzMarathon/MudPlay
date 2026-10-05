@@ -90,6 +90,65 @@ public sealed class ConditionTrackerTests
     // aliases (paradigm-20260904-214452) — one step further out: there the
     // wear-off's own record WAS active and siblings were stranded; here the
     // wear-off's record was not active at all.
+    // The shard creature's zap, with the two seed records as they stand (spell 479
+    // "zaps", a hold; and "stun", one of eight confusion records whose applied text
+    // is "You are stunned"). The zap's line holds the shorter text, so it used to set
+    // Confused as well as the hold — the wrong condition — and "The shock wears off!"
+    // cleared only the hold: Confused stood for the rest of the session.
+    [Fact]
+    public void AppliedText_InsideALongerAppliedText_DoesNotLatch()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("zaps", MessageFlags.MovementPrevented,
+            applied: "You are stunned by electrical shock", endsWith: "The shock wears off"));
+        h.Messages.Messages.Add(MakeRecord("stun", MessageFlags.Confused,
+            applied: "You are stunned", endsWith: "You are no longer stunned"));
+
+        h.Feed("You are stunned by electrical shock!");
+        Assert.True(h.Tracker.IsMovementPrevented);
+        Assert.False(h.Tracker.IsConfused);
+
+        h.Feed("The shock wears off!");
+        Assert.False(h.Tracker.IsMovementPrevented);
+        Assert.False(h.Tracker.IsConfused);
+
+        h.Feed("You are stunned!");                 // the stun's own line still latches it
+        Assert.True(h.Tracker.IsConfused);
+    }
+
+    // A spell's own cast line can hold its applied text with more words after it —
+    // the poison tick "You are poisoned for 12 damage!" — and the condition is read
+    // off that line too. Only another record's longer APPLIED text shadows.
+    [Fact]
+    public void AppliedText_InsideALongerLineThatIsNotAnAppliedText_StillLatches()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("poison", MessageFlags.Poisoned,
+            applied: "You are poisoned", endsWith: "You feel better"));
+
+        h.Feed("You are poisoned for 12 damage!");
+        Assert.True(h.Tracker.IsPoisoned);
+    }
+
+    // A record with the bare text and one with its punctuation are the same message:
+    // "You are blind!" latches both.
+    [Fact]
+    public void AppliedText_ThatOnlyAddsPunctuation_ShadowsNothing()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("blind", MessageFlags.Blinded,
+            applied: "You are blind", endsWith: "You can see again"));
+        h.Messages.Messages.Add(MakeRecord("sand blind", MessageFlags.MovementPrevented,
+            applied: "You are blind!", endsWith: "The sand clears"));
+
+        h.Feed("You are blind!");
+        Assert.True(h.Tracker.IsBlinded);
+        Assert.True(h.Tracker.IsMovementPrevented);
+    }
+
+    // An applied line and the wear-off the game prints can sit on different records
+    // that share a flag. The wear-off's own record was never latched, and its line
+    // still has to release the flag: nothing else in the tracker ever would.
     [Fact]
     public void WearOff_WhoseOwnRecordNeverLatched_StillClearsTheFlag()
     {
