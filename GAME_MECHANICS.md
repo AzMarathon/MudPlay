@@ -1460,7 +1460,8 @@ How one weapon hit (normal, bash or smash) is built, by realm.
 *Status: mixed — per-fact tags inline*
 
 - **Backstab command: `bs <target>`** *([OBSERVED])*.
-- **A monster in the room with the see-hidden ability reveals the sneaker to the whole room** *([OBSERVED])*, so the opening move falls back to a normal attack rather than `bs`.
+- **A monster in the room with the see-hidden ability reveals the sneaker to the whole room** *([CONFIRMED] 2026-10-04, user; report `paradigm-20261004-201936`)*, so the opening move falls back to a normal attack rather than `bs`. No other monster in that room can be backstabbed either: with a gorgon (see-hidden) and a harpy in the room, the harpy can't be backstabbed.
+  - **Client use:** `CombatManager.BackstabPending` is false while `RoomHasSeeHidden`, and the engage pass logs which monster ruled the backstab out (`SeeHiddenOccupant`).
 - **Backstab only lands on the opening round** *([CONFIRMED])* — the very first action taken in a freshly-approached room while sneaking or hidden. Once ANY combat action has fired here (a `bs`, a spell, or a normal swing), the surprise is spent and a later `bs` can no longer connect. So after the opener the client must fall back to the configured normal attack priority; re-issuing `bs` on a re-engage (a cast interrupt's re-attack, a target re-pick) wastes the round.
 - **Success line** *([CONFIRMED])*: a landed backstab is a **single** swing containing the word **`surprise`** — e.g. `You surprise punch large wild dog for 36 damage!`. A surprise line making it through **proves the sneak did not fail** — the opener connected.
 - **A missed backstab prints an ordinary miss line** *([CONFIRMED] 2026-09-29, user)*: there's no `surprise` in it. Since the stab fires once, it's the single miss line answering the `bs` in a room we snuck into.
