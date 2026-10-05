@@ -139,6 +139,23 @@ public partial class NavigationWindow : Window
         if (DataContext is NavigationViewModel vm) vm.OnFloorChangeRequested(newOrigin);
     }
 
+    // A hold chip's tooltip: none for a chip with nothing to say, and otherwise in
+    // the map tooltip's font (Settings → General → Navigation tooltip font), read
+    // live per open the way OnMapRoomHovered reads it.
+    private void OnHoldChipToolTipOpening(object? sender, Avalonia.Interactivity.CancelRoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: ViewModels.Navigation.NavHoldChip chip } host) return;
+        if (string.IsNullOrEmpty(chip.Tip))
+        {
+            e.Cancel = true;
+            return;
+        }
+        if (ToolTip.GetTip(host) is not ToolTip tip) return;
+        Services.DisplayConfig display = MudPlay.Services.AppServices.Current.Display;
+        tip.FontFamily = new Avalonia.Media.FontFamily(display.NavTooltipFontFamily);
+        tip.FontSize = display.NavTooltipFontSize;
+    }
+
     private void OnMapRoomHovered(Game.Map.RoomKey? key, Point cursor)
     {
         Border? popup = this.FindControl<Border>("HoverTooltip");

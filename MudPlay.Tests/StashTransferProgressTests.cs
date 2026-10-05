@@ -28,6 +28,8 @@ public sealed class StashTransferProgressTests
         public DateTimeOffset Now = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
         public List<RoomKey> Walked = new();
         public int ProgressRaised;
+        // Each report to the transaction history: what left the pile, what stayed.
+        public List<(Dictionary<CoinDenomination, long> Took, Dictionary<CoinDenomination, long> Left)> Seen = new();
         private readonly List<Action> _timers = new();
 
         public readonly StashTransferRunner Runner;
@@ -74,7 +76,9 @@ public sealed class StashTransferProgressTests
                 purse: () => new CurrencyHoldings(0, Silver, 0, Platinum, 0, PurseCopper),
                 walkTime: (_, _) => TimeSpan.FromSeconds(60),
                 believedCopper: _ => 123_400,
-                now: () => Now);
+                now: () => Now,
+                noteStashSeen: (took, left) => Seen.Add((
+                    new Dictionary<CoinDenomination, long>(took), new Dictionary<CoinDenomination, long>(left))));
             Runner.ProgressChanged += () => ProgressRaised++;
         }
 
@@ -180,6 +184,40 @@ public sealed class StashTransferProgressTests
         Assert.Equal(0, p.LeftCopper);
         Assert.Equal(0, p.TripsToGo);
         Assert.Contains("Nothing left in the stash — this is the last trip", p.Describe());
+    }
+
+    [Fact]
+    public void EachLoad_ReportsWhatWasTakenAndWhatIsLeft_ByCoin()
+    {
+        Harness h = new() { Pile = { [CoinDenomination.Platinum] = 2, [CoinDenomination.Silver] = 3500 } };
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+
+        h.StashStop();                                   // 2 platinum + 2,998 silver of 3,000 coins
+        (Dictionary<CoinDenomination, long> took, Dictionary<CoinDenomination, long> left) = h.Seen[^1];
+        Assert.Equal(2, took[CoinDenomination.Platinum]);
+        Assert.Equal(2998, took[CoinDenomination.Silver]);
+        Assert.Equal(502, left[CoinDenomination.Silver]);
+        Assert.False(left.ContainsKey(CoinDenomination.Platinum));
+
+        h.BankStop();
+        h.StashStop();                                   // the last 502 silver
+        (took, left) = h.Seen[^1];
+        Assert.Equal(502, took[CoinDenomination.Silver]);
+        Assert.Empty(left);
+    }
+
+    [Fact]
+    public void ASearchThatFindsTheStashEmpty_ReportsNothingTakenAndNothingLeft()
+    {
+        Harness h = new();
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+
+        h.Arrive();
+        h.FireTimers();
+
+        (Dictionary<CoinDenomination, long> took, Dictionary<CoinDenomination, long> left) = Assert.Single(h.Seen);
+        Assert.Empty(took);
+        Assert.Empty(left);
     }
 
     [Fact]

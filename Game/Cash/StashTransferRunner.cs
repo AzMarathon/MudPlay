@@ -89,6 +89,11 @@ public sealed class StashTransferRunner
     private readonly Func<RoomKey, long>? _believedCopper;
     private readonly Func<DateTimeOffset> _now;
 
+    // Told, while we stand in the stash room, what a search showed gone from the
+    // pile and what it showed left, by coin — the stash's row in the transaction
+    // history is kept to it. Only called when the coin was read by type.
+    private readonly Action<IReadOnlyDictionary<CoinDenomination, long>, IReadOnlyDictionary<CoinDenomination, long>>? _noteStashSeen;
+
     // The pile by coin as the last search showed it, and the purse just before the
     // take, so what is left can be told by coin too.
     private IReadOnlyDictionary<CoinDenomination, long> _shownCoins = NoCoins;
@@ -209,6 +214,15 @@ public sealed class StashTransferRunner
         _tripsToGo = LeftCopper <= 0 ? 0
             : removed > 0 ? (int)Math.Ceiling(left / (double)removed)
             : null;
+        // Known by coin: the pile was read by type, and what is left was too (an
+        // emptied pile leaves nothing to read).
+        if (_shownCoins.Count > 0 && (leftCoins.Count > 0 || LeftCopper <= 0))
+        {
+            Dictionary<CoinDenomination, long> took = new();
+            foreach ((CoinDenomination coin, long shownOf) in _shownCoins)
+                if (shownOf - leftCoins.GetValueOrDefault(coin) is > 0 and var gone) took[coin] = gone;
+            _noteStashSeen?.Invoke(took, leftCoins);
+        }
         ProgressChanged?.Invoke();
     }
 
@@ -246,7 +260,8 @@ public sealed class StashTransferRunner
         Func<CurrencyHoldings>? purse = null,
         Func<RoomKey, RoomKey, TimeSpan?>? walkTime = null,
         Func<RoomKey, long>? believedCopper = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Action<IReadOnlyDictionary<CoinDenomination, long>, IReadOnlyDictionary<CoinDenomination, long>>? noteStashSeen = null)
     {
         _currentRoom = currentRoom ?? throw new ArgumentNullException(nameof(currentRoom));
         _onHandCopper = onHandCopper ?? throw new ArgumentNullException(nameof(onHandCopper));
@@ -268,6 +283,7 @@ public sealed class StashTransferRunner
         _walkTime = walkTime;
         _believedCopper = believedCopper;
         _now = now ?? (() => DateTimeOffset.UtcNow);
+        _noteStashSeen = noteStashSeen;
     }
 
     // Starts the transfer. Null when it is under way; otherwise why it isn't.
@@ -409,7 +425,21 @@ public sealed class StashTransferRunner
         if (_shown <= 0)
         {
             _reconcileStash(Stash, 0);
+            _noteStashSeen?.Invoke(NoCoins, NoCoins);
             LeftCopper = 0;
+            _leftCoins = NoCoins;
+            // Nothing here, but coin in the purse: the last load of a transfer that
+            // was cut off, or what was picked up on the way. Bank it and end there
+            // rather than stop at the stash holding it (report
+            // paradigm-20261004-224242).
+            if (_onHandCopper() - KeepOnHand() > 0)
+            {
+                _log?.Info(LogCategory, "the stash is empty — banking what is carried and ending at the bank");
+                Trips++;
+                _tripsToGo = 0;
+                GoToBank();
+                return;
+            }
             End(Trips == 0 ? "the stash is empty, nothing to transfer" : "the stash is empty", StashTransferOutcome.Done);
             return;
         }
