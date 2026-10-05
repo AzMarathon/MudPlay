@@ -190,6 +190,20 @@ public sealed class CashManager : IDisposable
         }
     }
 
+    // The same surveys by coin, for a reader that wants to say what the pile is
+    // made of (the stash transfer's progress).
+    public IReadOnlyDictionary<CoinDenomination, long> SurveyedCoinsUnderLimit
+    {
+        get
+        {
+            Dictionary<CoinDenomination, long> coins = new();
+            foreach ((string currency, int count) in _surveyedUnderLimit)
+                if (SlotForCurrency(currency) is >= 0 and var slot && count > 0)
+                    coins[(CoinDenomination)slot] = coins.GetValueOrDefault((CoinDenomination)slot) + count;
+            return coins;
+        }
+    }
+
     public void SetCollectLimit(long? copper)
     {
         _collectLimitCopper = copper is { } c ? Math.Max(0, c) : null;

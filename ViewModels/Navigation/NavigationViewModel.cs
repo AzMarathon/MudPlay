@@ -96,6 +96,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.SellDetour.DetouringChanged += OnTripChanged;
         _services.TrainerWalk.StateChanged += OnTripChanged;
         _services.StashTransfer.StateChanged += OnStashTransferChanged;
+        _services.StashTransfer.ProgressChanged += OnStashTransferProgress;
         _services.PartyComeback.RecoveringChanged += OnTripChanged;
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
@@ -271,6 +272,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.SellDetour.DetouringChanged -= OnTripChanged;
         _services.TrainerWalk.StateChanged -= OnTripChanged;
         _services.StashTransfer.StateChanged -= OnStashTransferChanged;
+        _services.StashTransfer.ProgressChanged -= OnStashTransferProgress;
         _services.PartyComeback.RecoveringChanged -= OnTripChanged;
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
@@ -2620,6 +2622,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void StopStashTransfer() => _services.StopStashTransfer();
 
+    // The Stash Transfer chip's hover text: what is left in the stash, the trips
+    // still to make and a rough time (StashTransferProgress).
+    private const string StashTransferChip = "Stash Transfer";
+    private Dictionary<string, Func<string?>>? _chipTips;
+    private IReadOnlyDictionary<string, Func<string?>> ChipTips => _chipTips ??=
+        new Dictionary<string, Func<string?>>
+        {
+            [StashTransferChip] = () => _services.StashTransfer.Progress?.Describe(_services.Currency.RunicName),
+        };
+
+    private void OnStashTransferProgress() => Dispatcher.UIThread.Post(HoldChips.RefreshTips);
+
     // The runner reports from walker events and timers; the chips and menu state
     // are read on the UI thread.
     private void OnStashTransferChanged() => Dispatcher.UIThread.Post(() =>
@@ -3772,7 +3786,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             trips.Add((_services.AutoDeposit.IsReturning ? Back(_services.AutoDeposit.ResumePlan.Kind) : "Bank Trip", NavChipTone.Trip));
         if (_services.SellDetour.IsDetouring)
             trips.Add((_services.SellDetour.IsReturning ? Back(_services.SellDetour.ResumePlan.Kind) : "Auto-Selling", NavChipTone.Trip));
-        if (_services.StashTransfer.IsBusy) trips.Add(("Stash Transfer", NavChipTone.Trip));
+        if (_services.StashTransfer.IsBusy) trips.Add((StashTransferChip, NavChipTone.Trip));
         if (_services.TrainerWalk.IsBusy) trips.Add(("Auto-Training", NavChipTone.Trip));
         else if (_services.LoopRunner.ReturningFromDetour) trips.Add(("Back to Loop", NavChipTone.Trip));
         if (_services.PartyComeback.RecoveringMember is not null) trips.Add(("@Comeback", NavChipTone.Trip));
@@ -3802,7 +3816,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (AnyEngineLiveExecuting())
             chips.AddRange(NavActivity.ActiveHolds(
                 _services.MovementCoordinator.AssertedGates, _services.Conditions.IsMovementPrevented, HoldNames()));
-        HoldChips.Update(chips);
+        HoldChips.Update(chips, ChipTips);
         // A queued-but-idle route reads its hold reason off the live gates even when
         // the chip itself is empty — so refresh the line on every gate/held change,
         // ahead of the chip's unchanged early-out below.

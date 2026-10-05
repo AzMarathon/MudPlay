@@ -171,6 +171,44 @@ public sealed class StashTransferRunnerTests
         Assert.Equal("sea", h.Sent[^1]);
     }
 
+    // Report paradigm-20261004-224242: started again with the last load still in the
+    // purse (and room for more, so it went to the stash first), found the stash
+    // empty, and stopped there holding the coin.
+    [Fact]
+    public void EmptyStash_WithCoinCarried_BanksItAndEndsAtTheBank()
+    {
+        Harness h = new() { StashHolds = 0, Purse = 17_330 };
+
+        Assert.Null(h.Runner.Start(StashRoom, BankRoom, "First Bank"));
+        h.Arrive();
+        h.FireTimers();                                  // the search shows nothing
+
+        Assert.True(h.Runner.IsBusy);
+        Assert.Equal(BankRoom, h.Walked[^1]);
+
+        h.Arrive();
+        Assert.Equal("dep 17330", h.Sent[^1]);
+        h.FireTimers();
+
+        Assert.False(h.Runner.IsBusy);
+        Assert.Equal(BankRoom, h.Room);
+        Assert.Equal(17_330, h.BankHolds);
+        Assert.StartsWith("[Stash Transfer Done:", h.Notices[^1]);
+    }
+
+    [Fact]
+    public void EmptyStash_WithOnlyTheKeepOnHandAmountCarried_StillEndsAtTheStash()
+    {
+        Harness h = new() { StashHolds = 0, Purse = 500, Keep = 500 };
+
+        h.Runner.Start(StashRoom, BankRoom, "First Bank");
+        h.Arrive();
+        h.FireTimers();
+
+        Assert.False(h.Runner.IsBusy);
+        Assert.Equal(StashRoom, h.Room);
+    }
+
     [Fact]
     public void EmptyStash_EndsThereWithNothingMoved()
     {

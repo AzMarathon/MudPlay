@@ -473,9 +473,24 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:NavHoldChip">
+                                <!-- A chip's tooltip wears the map's room-tooltip look (the
+                                     HoverTooltip border below). Its font, and whether it opens
+                                     at all, are settled in OnHoldChipToolTipOpening. -->
                                 <Border Classes="HoldChip"
                                         Classes.Trip="{Binding IsTrip}"
-                                        Classes.Cleared="{Binding IsCleared}">
+                                        Classes.Cleared="{Binding IsCleared}"
+                                        ToolTip.ToolTipOpening="OnHoldChipToolTipOpening">
+                                    <ToolTip.Tip>
+                                        <ToolTip Background="#FFFFC0"
+                                                 BorderBrush="#888" BorderThickness="1"
+                                                 CornerRadius="6" Padding="8,6"
+                                                 MaxWidth="540"
+                                                 Foreground="#000000"
+                                                 FontFamily="{StaticResource FontTerminal}"
+                                                 FontSize="13">
+                                            <TextBlock Text="{Binding Tip}" TextWrapping="Wrap"/>
+                                        </ToolTip>
+                                    </ToolTip.Tip>
                                     <TextBlock Text="{Binding Label}"/>
                                 </Border>
                             </DataTemplate>

@@ -18,6 +18,11 @@ namespace MudPlay.Game.Cash;
 // and the running total (see FormatCoinRow), takes the latest time and moves to the
 // newest end on each stash. Item hides stay one row each.
 //
+// A stash transfer draws on that same row (NoteStashWithdrawal): Last becomes what
+// was taken ("Last: took …"), and Total becomes what the search showed still there
+// afterwards, so Total is the stash as it was last seen rather than the sum of
+// everything ever hidden. The average stays the average hide, kept on its own.
+//
 // Selling and buying are one row per shop visit: the items and what they came to
 // ("Sold orc-head ×5, club for 12 gold, 5 silver"), from InventoryManager.ItemSold /
 // ItemBought. A sell run answers one line per item type; lines at the same shop
@@ -65,6 +70,8 @@ public sealed class TransactionHistoryTracker
     public const string LineBreak = " | ";
 
     private const string LastPrefix = "Last: ";
+    private const string TookPrefix = "took ";
+    private const string NothingLeft = "nothing";
     private const string VisitsInfix = " - Total Stashes: ";
     private const string AveragePrefix = "Avg: ";
     private const string TotalPrefix = "Total: ";
@@ -78,6 +85,11 @@ public sealed class TransactionHistoryTracker
         public int Visits;
         public readonly Dictionary<string, long> Last = new(StringComparer.OrdinalIgnoreCase);
         public readonly Dictionary<string, long> Total = new(StringComparer.OrdinalIgnoreCase);
+        // Last was a withdrawal (a stash transfer's load) rather than a hide.
+        public bool LastTaken;
+        // The copper value of every hide, for the average: Total stops being that
+        // sum once a withdrawal has set it to what the stash holds.
+        public long HiddenCopper;
         public TransactionEntry Entry;
     }
 
@@ -174,9 +186,10 @@ public sealed class TransactionHistoryTracker
 
         TransactionEntry old = tally.Entry;
         if (replacing) _entries.Remove(old);
-        if (!replacing || now - tally.LastAt > VisitWindow)
+        if (!replacing || tally.LastTaken || now - tally.LastAt > VisitWindow)
         {
             tally.Last.Clear();
+            tally.LastTaken = false;
             tally.Visits++;
         }
         foreach ((string currency, long amount) in currencies)
@@ -184,6 +197,7 @@ public sealed class TransactionHistoryTracker
             if (amount <= 0) continue;
             tally.Last[currency] = tally.Last.GetValueOrDefault(currency) + amount;
             tally.Total[currency] = tally.Total.GetValueOrDefault(currency) + amount;
+            tally.HiddenCopper += amount * Denominations[Math.Max(0, Rank(currency))].Copper;
         }
         tally.LastAt = now;
         tally.Entry = new TransactionEntry(now, TransactionKind.Stash, FormatCoinRow(tally), location,
@@ -193,6 +207,40 @@ public sealed class TransactionHistoryTracker
 
         if (replacing) EntryReplaced?.Invoke(old, tally.Entry);
         else EntryAdded?.Invoke(tally.Entry);
+        Changed?.Invoke();
+    }
+
+    // A stash transfer searched this room's stash and took a load: the row's Last
+    // becomes what was taken and its Total what the search showed left. With nothing
+    // taken (the search found the stash empty) only the Total is corrected. A room
+    // with no coin row gets none: there is no hide on record to draw against.
+    public void NoteStashWithdrawal(
+        IReadOnlyList<(string Currency, long Amount)> took,
+        IReadOnlyList<(string Currency, long Amount)> left,
+        string? location)
+    {
+        ArgumentNullException.ThrowIfNull(took);
+        ArgumentNullException.ThrowIfNull(left);
+        if (!_stashByLocation.TryGetValue(location ?? string.Empty, out StashTally? tally)) return;
+
+        DateTimeOffset now = _clock();
+        TransactionEntry old = tally.Entry;
+        _entries.Remove(old);
+        if (took.Any(t => t.Amount > 0))
+        {
+            tally.Last.Clear();
+            tally.LastTaken = true;
+            foreach ((string currency, long amount) in took)
+                if (amount > 0) tally.Last[currency] = tally.Last.GetValueOrDefault(currency) + amount;
+        }
+        tally.Total.Clear();
+        foreach ((string currency, long amount) in left)
+            if (amount > 0) tally.Total[currency] = tally.Total.GetValueOrDefault(currency) + amount;
+        tally.LastAt = now;
+        tally.Entry = new TransactionEntry(now, TransactionKind.Stash, FormatCoinRow(tally), location, Keep: old.Keep);
+        _entries.Add(tally.Entry);
+
+        EntryReplaced?.Invoke(old, tally.Entry);
         Changed?.Invoke();
     }
 
@@ -251,6 +299,8 @@ public sealed class TransactionHistoryTracker
             }
             foreach ((string c, long n) in row.Last) tally.Last[c] = tally.Last.GetValueOrDefault(c) + n;
             foreach ((string c, long n) in row.Total) tally.Total[c] = tally.Total.GetValueOrDefault(c) + n;
+            tally.LastTaken = row.Taken;
+            tally.HiddenCopper += row.HiddenCopper;
             tally.LastAt = e.Time;
             tally.Entry = new TransactionEntry(e.Time, TransactionKind.Stash, FormatCoinRow(tally), e.Location,
                 Keep: e.Keep || (known && tally.Entry.Keep));
@@ -313,13 +363,16 @@ public sealed class TransactionHistoryTracker
     //   Total: 34 gold, 5,210 silver (≈ 5.6 platinum)
     // Last and Total stay in the coins that were hidden; Avg is worked out by value
     // and shown in the highest coins, and Total adds what it all comes to. Stored on one line with LineBreak between them.
+    // After a stash transfer's load: "Last: took 2 platinum, 2,998 silver", and Total
+    // is what was left ("nothing" once it is empty).
     private static string FormatCoinRow(StashTally tally)
     {
-        long average = CopperValue(tally.Total) / Math.Max(1, tally.Visits);
+        long average = tally.HiddenCopper / Math.Max(1, tally.Visits);
+        string total = tally.Total.Count > 0 ? FormatCoins(tally.Total) + FormatWorth(tally.Total) : NothingLeft;
         return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{LastPrefix}{FormatCoins(tally.Last)}{VisitsInfix}{tally.Visits:N0}"
+            $"{LastPrefix}{(tally.LastTaken ? TookPrefix : "")}{FormatCoins(tally.Last)}{VisitsInfix}{tally.Visits:N0}"
             + $"{LineBreak}{AveragePrefix}{FormatValue(average)}"
-            + $"{LineBreak}{TotalPrefix}{FormatCoins(tally.Total)}{FormatWorth(tally.Total)}");
+            + $"{LineBreak}{TotalPrefix}{total}");
     }
 
     // " (≈ 8.7 platinum)" — the total's value in the highest coin it reaches, to one
@@ -372,8 +425,11 @@ public sealed class TransactionHistoryTracker
 
     // One coin row read back. Visits is null for a log's older one-echo "Hid 115
     // silver", whose amount is both its last and its total.
+    // Taken marks a Last that was a withdrawal; HiddenCopper is the value of the
+    // hides behind the average.
     private readonly record struct CoinRow(
-        Dictionary<string, long> Last, Dictionary<string, long> Total, int? Visits);
+        Dictionary<string, long> Last, Dictionary<string, long> Total, int? Visits,
+        bool Taken = false, long HiddenCopper = 0);
 
     // False for an item row or anything that isn't purely "<count> <coin>" parts.
     private static bool TryParseCoinRow(string detail, out CoinRow row)
@@ -384,17 +440,24 @@ public sealed class TransactionHistoryTracker
 
         if (detail.StartsWith(LastPrefix, StringComparison.Ordinal))
         {
-            // "Last: <coins> - Total Stashes: N | Avg: … | Total: <coins>". The
-            // average isn't read; it is recomputed from the total.
+            // "Last: [took ]<coins> - Total Stashes: N | Avg: <value> | Total: <coins>".
+            // The average is read back as the value of the hides (average × stashes):
+            // after a withdrawal the total no longer says what was hidden.
             string[] lines = detail.Split(LineBreak);
             int infix = lines[0].IndexOf(VisitsInfix, StringComparison.Ordinal);
             if (lines.Length != 3 || infix < 0
+                || !lines[1].StartsWith(AveragePrefix, StringComparison.Ordinal)
                 || !lines[2].StartsWith(TotalPrefix, StringComparison.Ordinal)
-                || !TryParseCount(lines[0][(infix + VisitsInfix.Length)..], out int visits)
-                || !TryParseCoins(lines[0][LastPrefix.Length..infix], last)
-                || !TryParseCoins(WithoutWorth(lines[2][TotalPrefix.Length..]), total))
+                || !TryParseCount(lines[0][(infix + VisitsInfix.Length)..], out int visits))
                 return false;
-            row = new CoinRow(last, total, visits);
+            string lastText = lines[0][LastPrefix.Length..infix];
+            bool taken = lastText.StartsWith(TookPrefix, StringComparison.Ordinal);
+            if (!TryParseCoins(taken ? lastText[TookPrefix.Length..] : lastText, last)) return false;
+            string totalText = WithoutWorth(lines[2][TotalPrefix.Length..]);
+            if (totalText != NothingLeft && !TryParseCoins(totalText, total)) return false;
+            Dictionary<string, long> average = new(StringComparer.OrdinalIgnoreCase);
+            TryParseCoins(lines[1][AveragePrefix.Length..], average);     // "0 copper" reads as none
+            row = new CoinRow(last, total, visits, taken, CopperValue(average) * visits);
             return true;
         }
 
@@ -404,7 +467,7 @@ public sealed class TransactionHistoryTracker
         if (!TryParseCoins(parts[0], last)) return false;
         if (parts.Length == 1)
         {
-            row = new CoinRow(last, last, null);
+            row = new CoinRow(last, last, null, HiddenCopper: CopperValue(last));
             return true;
         }
         if (parts.Length != 3 || !parts[2].StartsWith("total ", StringComparison.Ordinal)) return false;
@@ -414,7 +477,7 @@ public sealed class TransactionHistoryTracker
         int end = count.IndexOf(' ');
         if (end > 0) count = count[..end];
         if (!TryParseCount(count, out int oldVisits) || !TryParseCoins(parts[2][6..], total)) return false;
-        row = new CoinRow(last, total, oldVisits);
+        row = new CoinRow(last, total, oldVisits, HiddenCopper: CopperValue(total));
         return true;
     }
 

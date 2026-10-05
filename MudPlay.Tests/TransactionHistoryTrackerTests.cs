@@ -147,6 +147,95 @@ public sealed class TransactionHistoryTrackerTests
             Assert.Single(t.Snapshot()).Detail);
     }
 
+    // A stash transfer's load: Last is what was taken, Total what the search showed
+    // left; the average stays the average hide.
+    [Fact]
+    public void StashWithdrawal_SetsLastToWhatWasTaken_AndTotalToWhatIsLeft()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        const string room = "Stump (3/7)";
+        t.NoteStash(new[] { ("silver", 4000L) }, Array.Empty<string>(), room);
+        c.Now += TimeSpan.FromMinutes(5);
+        t.NoteStash(new[] { ("silver", 2000L) }, Array.Empty<string>(), room);
+        c.Now += TimeSpan.FromMinutes(5);
+        List<(TransactionEntry Old, TransactionEntry New)> replaced = new();
+        t.EntryReplaced += (o, n) => replaced.Add((o, n));
+
+        t.NoteStashWithdrawal(new[] { ("silver", 2500L) }, new[] { ("silver", 3500L) }, room);
+
+        TransactionEntry e = Assert.Single(t.Snapshot());
+        Assert.Equal("Last: took 2,500 silver - Total Stashes: 2 | Avg: 3 platinum | Total: 3,500 silver (≈ 3.5 platinum)", e.Detail);
+        Assert.Equal(c.Now, e.Time);
+        Assert.Equal(e, Assert.Single(replaced).New);
+    }
+
+    [Fact]
+    public void StashWithdrawal_ThatEmptiesTheStash_ReadsNothing_AndAHideAfterStartsAfresh()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        const string room = "Stump (3/7)";
+        t.NoteStash(new[] { ("silver", 4000L) }, Array.Empty<string>(), room);
+        c.Now += TimeSpan.FromMinutes(5);
+
+        t.NoteStashWithdrawal(new[] { ("silver", 4000L) }, Array.Empty<(string, long)>(), room);
+        Assert.Equal("Last: took 4,000 silver - Total Stashes: 1 | Avg: 4 platinum | Total: nothing",
+            Assert.Single(t.Snapshot()).Detail);
+
+        // Hidden again within moments: a new visit, not more of the withdrawal.
+        c.Now += TimeSpan.FromSeconds(2);
+        t.NoteStash(new[] { ("gold", 10L) }, Array.Empty<string>(), room);
+        Assert.Equal("Last: 10 gold - Total Stashes: 2 | Avg: 2 platinum, 5 gold | Total: 10 gold",
+            Assert.Single(t.Snapshot()).Detail);
+    }
+
+    [Fact]
+    public void StashWithdrawal_WithNothingTaken_OnlyCorrectsTheTotal()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        const string room = "Stump (3/7)";
+        t.NoteStash(new[] { ("silver", 4000L) }, Array.Empty<string>(), room);
+        c.Now += TimeSpan.FromMinutes(5);
+
+        // The search found it empty: someone else drew on it.
+        t.NoteStashWithdrawal(Array.Empty<(string, long)>(), Array.Empty<(string, long)>(), room);
+
+        Assert.Equal("Last: 4,000 silver - Total Stashes: 1 | Avg: 4 platinum | Total: nothing",
+            Assert.Single(t.Snapshot()).Detail);
+    }
+
+    [Fact]
+    public void StashWithdrawal_FromARoomWithNoRow_AddsNone()
+    {
+        (TransactionHistoryTracker t, _) = Make();
+
+        t.NoteStashWithdrawal(new[] { ("silver", 100L) }, new[] { ("silver", 50L) }, "Stump (3/7)");
+
+        Assert.Empty(t.Snapshot());
+    }
+
+    [Fact]
+    public void StashWithdrawal_Row_ComesBackFromTheSavedLogAsItWas()
+    {
+        (TransactionHistoryTracker t, Clock c) = Make();
+        const string room = "Stump (3/7)";
+        t.NoteStash(new[] { ("silver", 4000L) }, Array.Empty<string>(), room);
+        c.Now += TimeSpan.FromMinutes(5);
+        t.NoteStash(new[] { ("silver", 2000L) }, Array.Empty<string>(), room);
+        c.Now += TimeSpan.FromMinutes(5);
+        t.NoteStashWithdrawal(new[] { ("silver", 2500L) }, new[] { ("silver", 3500L) }, room);
+        TransactionEntry saved = Assert.Single(t.Snapshot());
+
+        (TransactionHistoryTracker back, Clock c2) = Make();
+        back.Hydrate(new[] { saved });
+        Assert.Equal(saved.Detail, Assert.Single(back.Snapshot()).Detail);
+
+        // And it is still the room's one row: the next hide extends it.
+        c2.Now = saved.Time + TimeSpan.FromHours(1);
+        back.NoteStash(new[] { ("silver", 500L) }, Array.Empty<string>(), room);
+        Assert.Equal("Last: 500 silver - Total Stashes: 3 | Avg: 2 platinum, 16 gold, 6 silver, 6 copper | Total: 4,000 silver (≈ 4 platinum)",
+            Assert.Single(back.Snapshot()).Detail);
+    }
+
     [Fact]
     public void CoinStash_EachRoomKeepsItsOwnRow_AndTheLatestMovesToTheEnd()
     {

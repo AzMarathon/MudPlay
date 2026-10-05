@@ -7738,7 +7738,17 @@ public sealed class AppServices
                 return (long)cash.KeepOnHandWealth
                        * Game.Inventory.CurrencyHoldings.CopperUnit(cash.KeepOnHandDenomination);
             },
-            coinLoad: () => Cash.CoinLoad());
+            coinLoad: () => Cash.CoinLoad(),
+            // The Navigation chip's tooltip: the pile by coin, what is left of it,
+            // and a rough time from the walk between the two rooms.
+            surveyedCoins: () => Cash.SurveyedCoinsUnderLimit,
+            purse: () => Inventory.Snapshot.Currency,
+            walkTime: (from, to) => Bfs.DistanceBetween(from, to, Movement) is { } hops
+                ? AutoLair.TravelCostModel.EstimateTravel(hops) : null,
+            believedCopper: room => StashBalances.Believed(room),
+            // Reported from the stash room, so the row is the one its hides built.
+            noteStashSeen: (took, left) => TransactionHistory.NoteStashWithdrawal(
+                CoinWords(took), CoinWords(left), CurrentRoomLabel()));
         Walker.Event += e => StashTransfer.OnWalkEvent(e.Kind);
         // A member's {reply} to @get-stash / @deposit-all says that member is done.
         Chat.EntryClassified += e =>
@@ -10746,6 +10756,19 @@ public sealed class AppServices
     // "Name (map/room)" for the room the tracker currently sits in, or null when
     // position is unknown. Stamped onto transaction-ledger rows so a deposit
     // records which bank was used and a stash records which room hid the loot.
+    // Coin counts in the words the game's own echoes use for them (the board's name
+    // for its top coin), dearest first — what the transaction history keys coin by.
+    private List<(string Currency, long Amount)> CoinWords(
+        IReadOnlyDictionary<Models.Profile.CoinDenomination, long> coins)
+    {
+        List<(string, long)> words = new();
+        foreach (Models.Profile.CoinDenomination coin in Enum.GetValues<Models.Profile.CoinDenomination>().Reverse())
+            if (coins.TryGetValue(coin, out long count) && count > 0)
+                words.Add((coin == Models.Profile.CoinDenomination.Runic && !string.IsNullOrWhiteSpace(Currency.RunicName)
+                    ? Currency.RunicName : coin.ToString().ToLowerInvariant(), count));
+        return words;
+    }
+
     private string? CurrentRoomLabel()
     {
         if (RoomTracker?.State.CurrentRoom is not { } room) return null;
