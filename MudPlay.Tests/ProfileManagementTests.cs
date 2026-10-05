@@ -105,6 +105,32 @@ public sealed class ProfileManagementTests : IDisposable
         Assert.Throws<IOException>(() => svc.CopyProfile(_bbsA, "Main", "Alt"));   // clash
     }
 
+    // The copy is for a different character: what the source read off the game stays
+    // behind, the settings come along.
+    [Fact]
+    public void CopyProfile_DropsReadState_MarksCopyUnverified()
+    {
+        var svc = new ProfileService();
+        svc.CreateProfile(_bbsA, "Priest60");
+        string sourcePath = AppPaths.CharacterProfileFile(_bbsA, "Priest60");
+        CharacterProfile source = JsonStore.Load<CharacterProfile>(sourcePath)!;
+        source.LastKnownStats = new LastKnownStats { Level = 60, MaxHits = 480 };
+        source.DefaultPoolBaseline = new DefaultPoolBaseline { MaxHp = 480, MaxMa = 300, Level = 60 };
+        source.LearnedSpells = new List<string> { "minor healing" };
+        JsonStore.Save(sourcePath, source);
+
+        svc.CopyProfile(_bbsA, "Priest60", "Priest40");
+
+        CharacterProfile copy = JsonStore.Load<CharacterProfile>(AppPaths.CharacterProfileFile(_bbsA, "Priest40"))!;
+        Assert.Null(copy.LastKnownStats);
+        Assert.Null(copy.DefaultPoolBaseline);
+        Assert.True(copy.StateUnverified);
+        Assert.Equal(new[] { "minor healing" }, copy.LearnedSpells);
+        CharacterProfile kept = JsonStore.Load<CharacterProfile>(sourcePath)!;
+        Assert.Equal(480, kept.DefaultPoolBaseline!.MaxHp);
+        Assert.False(kept.StateUnverified);
+    }
+
     [Fact]
     public void LoadDefaultProfile_OnBbs_PinsTheDraft_WithoutNamingIt()
     {

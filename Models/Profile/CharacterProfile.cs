@@ -177,6 +177,11 @@ public sealed class CharacterProfile
     // the rest engine's basis. null until the first such screen.
     public DefaultPoolBaseline? DefaultPoolBaseline { get; set; }
 
+    // Set on a copied profile: its settings came from another character, so what the
+    // game reports about this one (stats, the Default-gear maxima, inventory) hasn't
+    // been read yet. Cleared by Game.ProfileStateVerifier once it has.
+    public bool StateUnverified { get; set; }
+
     // Snapshot of the most recent carry-weight reading. Written by
     // Game.Inventory.InventoryManager on ProfileSaving and rehydrated on
     // ProfileService.ProfileLoaded so the travel-cost models / hop-timing
