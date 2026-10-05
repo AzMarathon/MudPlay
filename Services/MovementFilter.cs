@@ -170,6 +170,15 @@ public sealed class MovementFilter : IRoomFilter
     // Set/cleared through SuspendAcquirableGatesExcept's disposable scope.
     private IReadOnlyCollection<int>? _keepClosedGateItems;
 
+    // While gates are suspended, hazard rooms stay closed unless countered: by what
+    // is carried, or by what the walk will obtain for that room (HazardProvisionProbe).
+    // Set/cleared through SuspendAcquirableGatesButUncounteredHazards' scope.
+    private bool _keepUncounteredHazards;
+
+    // The counter items a walk will obtain on its own for entering a hazard room.
+    // Wired by AppServices to the same list the walk-start announce posts needs for.
+    public Func<RoomKey, IReadOnlyList<int>>? HazardProvisionProbe { get; set; }
+
     // Read-only snapshot of the currently-avoided room keys.
     public IReadOnlyCollection<RoomKey> Avoided => _avoided;
 
@@ -332,14 +341,20 @@ public sealed class MovementFilter : IRoomFilter
     // the gated-route planning pass and skipped while inventory is unknown.
     private bool IsHazardEntryBlocked(in RoomExit exit)
     {
-        if (_acquirableGateSuspended) return false;
+        if (_acquirableGateSuspended && !_keepUncounteredHazards) return false;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
         if (Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
 
         int spell = spellOf(exit.Target);
         if (spell <= 0) return false;
         RoomHazardIndex.RoomHazard? hazard = Hazards.HazardForSpell(spell);
-        return hazard is not null && !hazard.IsSatisfiedBy(carries);
+        if (hazard is null) return false;
+        if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries);
+
+        // Planning through gates with uncountered hazards kept: the room opens only
+        // when what is carried plus what the walk will obtain covers it.
+        IReadOnlyList<int> arranged = HazardProvisionProbe?.Invoke(exit.Target) ?? Array.Empty<int>();
+        return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id));
     }
 
     private bool InventoryKnown => InventoryReadyProbe?.Invoke() == true;
@@ -352,6 +367,9 @@ public sealed class MovementFilter : IRoomFilter
     // interface can suspend without knowing the concrete filter.
     public IDisposable SuspendAcquirableGates() => new GateSuspensionScope(this, keepClosed: null);
 
+    public IDisposable SuspendAcquirableGatesButUncounteredHazards() =>
+        new GateSuspensionScope(this, keepClosed: null, keepUncounteredHazards: true);
+
     // Suspends the acquirable gates EXCEPT ones that gate on an item in `keepClosed`,
     // which stay live (blocked unless carried). A BFS in this scope answers "can the
     // crosser still reach the destination WITHOUT relying on those items?" — reachable
@@ -363,16 +381,19 @@ public sealed class MovementFilter : IRoomFilter
     public readonly struct GateSuspensionScope : IDisposable
     {
         private readonly MovementFilter _filter;
-        internal GateSuspensionScope(MovementFilter filter, IReadOnlyCollection<int>? keepClosed)
+        internal GateSuspensionScope(MovementFilter filter, IReadOnlyCollection<int>? keepClosed,
+            bool keepUncounteredHazards = false)
         {
             _filter = filter;
             _filter._acquirableGateSuspended = true;
             _filter._keepClosedGateItems = keepClosed;
+            _filter._keepUncounteredHazards = keepUncounteredHazards;
         }
         public void Dispose()
         {
             _filter._acquirableGateSuspended = false;
             _filter._keepClosedGateItems = null;
+            _filter._keepUncounteredHazards = false;
         }
     }
 

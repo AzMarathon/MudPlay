@@ -6836,6 +6836,9 @@ public sealed class AppServices
         // announces only when the user forced one via the route picker's "obtain
         // then cross" choice (otherwise the group stays a manual counter choice).
         Walker.SetHazardItemResolver(HazardAnnounceItems);
+        // The same list tells route planning which hazard rooms an unpicked
+        // through-gates walk will have a counter for by the time it gets there.
+        Movement.HazardProvisionProbe = HazardAnnounceItems;
 
         // Admit a locked door's key into that same announce, but ONLY when a room
         // command can summon a guaranteed dropper for it — the one key-acquisition

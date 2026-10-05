@@ -807,7 +807,10 @@ public static class RouteChoicePrompt
             avoidTeleports: avoidTeleports,
             avoidTraps: avoidTraps,
             ignoreAvoids: ignoreAvoids,
-            preferTeleportFree: preferTeleportFree);
+            preferTeleportFree: preferTeleportFree,
+            // Every walk committed here is one the user started and, where the route
+            // forked, chose: a gated pick may cross a hazard as picked.
+            pickedRoute: gated);
     }
 
     // The items that protect as well as itemId on this route: the intersection of

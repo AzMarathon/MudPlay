@@ -1986,6 +1986,91 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Walking, walker.State);
     }
 
+    // 1/1 → E → 1/2 → E → 1/3, where 1/2 casts a damaging spell on entry that item
+    // 42 negates. The character carries nothing.
+    private const string HazardLineGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Bank", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "River", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/3", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Far Bank", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private (AutoWalkManager Walker, List<WalkEvent> Events, MovementFilter Filter) NewHazardLineWalker()
+    {
+        string set = Path.Combine(_root, "alpha");
+        Directory.CreateDirectory(set);
+        File.WriteAllText(Path.Combine(set, "Rooms.json"), HazardLineGraphJson);
+        File.WriteAllText(Path.Combine(set, "Spells.json"), """[ { "Number": 700, "Abil-0": 1, "AbilVal-0": 25 } ]""");
+        File.WriteAllText(Path.Combine(set, "Items.json"), """[ { "Number": 42, "NegateSpell-0": 700 } ]""");
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged("alpha");
+        RoomHazardIndex hazards = new(cache);
+        hazards.OnActiveSetChanged("alpha");
+        BfsMapper bfs = new(graph);
+        RoomTracker tracker = new(graph);
+        MovementFilter filter = new(new ProfileService())
+        {
+            InventoryReadyProbe = () => true,
+            ItemCarriedProbe = _ => false,
+            Hazards = hazards,
+            RoomEntrySpellProbe = key => graph.GetRoom(key)?.Spell ?? 0,
+        };
+        AutoWalkManager walker = new(graph, bfs, tracker, new MovementCoordinator(), filter);
+        walker.SetWireSender(_ => { });
+        var events = new List<WalkEvent>();
+        walker.Event += events.Add;
+        tracker.SetLocated(new RoomKey(1, 1));
+        return (walker, events, filter);
+    }
+
+    // Report paradigm-20261004-204354: a stash transfer plans through gates, and
+    // that plan took a hazard room nothing was going to counter.
+    [Fact]
+    public void ThroughGatesWalk_NobodyPicked_WontCrossAnUncounteredHazard()
+    {
+        (AutoWalkManager walker, List<WalkEvent> events, _) = NewHazardLineWalker();
+
+        Assert.False(walker.WalkTo(new RoomKey(1, 3), planThroughAcquirableGates: true));
+
+        Assert.Contains(events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Empty(walker.LastSentForTests);
+    }
+
+    [Fact]
+    public void ThroughGatesWalk_ThatWillObtainTheCounter_PlansThroughTheHazard()
+    {
+        (AutoWalkManager walker, List<WalkEvent> events, MovementFilter filter) = NewHazardLineWalker();
+        filter.HazardProvisionProbe = _ => new[] { 42 };
+
+        Assert.True(walker.WalkTo(new RoomKey(1, 3), planThroughAcquirableGates: true));
+
+        Assert.DoesNotContain(events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    [Fact]
+    public void ThroughGatesWalk_TheUserPicked_CrossesTheHazard()
+    {
+        (AutoWalkManager walker, List<WalkEvent> events, _) = NewHazardLineWalker();
+
+        Assert.True(walker.WalkTo(new RoomKey(1, 3),
+            planThroughAcquirableGates: true, armItemAcquisition: false, pickedRoute: true));
+
+        Assert.DoesNotContain(events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(WalkState.Walking, walker.State);
+    }
+
     [Fact]
     public void BlockedRoute_ItemGate_FallsBackToGeneric_WhenNoResolver()
     {

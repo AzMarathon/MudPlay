@@ -24,10 +24,13 @@ namespace MudPlay.Game.Map;
 // per down), and only floors within maxLevels of the current one are drawn — a
 // floor placed by way of a deep shaft is no further away for it.
 //
-// Where floors share a cell it reads as a view from above: every floor above the
-// current one claims cells before any floor below it, nearest first on each side.
-// A cave or volcano below never covers the trail climbing over it, however early
-// it's found (user, 2026-10-02). The current floor is never covered.
+// Where floors share a cell it reads as a view from above: the higher floor is
+// drawn and the deeper one is covered, on both sides of the current floor. Going
+// up, the floor two up covers the floor one up; going down, the floor one down
+// covers the floor two down; and anything above covers anything below, so a cave
+// or volcano never covers the trail climbing over it (user, 2026-10-02 and
+// 2026-10-04; report paradigm-20261004-204610 — nearest-first on the way up drew
+// the lower floor over the higher). The current floor is never covered.
 //
 // A floor that would land mostly on cells already drawn is a different place
 // stacked over this one (a volcano under the hills, barracks under a trail), and
@@ -39,6 +42,9 @@ namespace MudPlay.Game.Map;
 // above can be reached by a path that dips first. The other side is dropped
 // before it claims any cell. A floor level with the current one (up, then back
 // down somewhere else) is on neither side and is drawn either way.
+//
+// Which floors are drawn at all is still settled nearest first, so the floor one
+// step away is never the one left out for overlapping floors further off.
 public static class OtherLevels
 {
     public const int MaxRooms = 6000;
@@ -180,6 +186,10 @@ public static class OtherLevels
         Dictionary<(int X, int Y), IReadOnlySet<Direction>> edges = new();
         Dictionary<(int X, int Y), IReadOnlySet<Direction>> traps = new();
         Dictionary<(int X, int Y), IReadOnlySet<Direction>> spells = new();
+        // Pass 1, nearest first: which floors are drawn. Each is weighed against the
+        // current floor and the floors already chosen.
+        List<Floor> drawn = new();
+        HashSet<(int X, int Y)> crowded = new(current.CoordToRoom.Keys);
         foreach (Floor floor in found.OrderBy(f => f.Rank))
         {
             cancel.ThrowIfCancellationRequested();
@@ -190,10 +200,17 @@ public static class OtherLevels
             {
                 if (k == floor.Landing) continue;
                 weighed++;
-                if (taken.ContainsKey(floor.Cell(k))) covered++;
+                if (crowded.Contains(floor.Cell(k))) covered++;
             }
             if (covered > MinCoveredToHide - 1 && covered > weighed * maxOverlap) continue;
+            drawn.Add(floor);
+            foreach (RoomKey k in floor.Rooms) crowded.Add(floor.Cell(k));
+        }
 
+        // Pass 2, highest first: who gets a shared cell.
+        foreach (Floor floor in drawn.OrderByDescending(f => f.Elevation).ThenBy(f => f.Order))
+        {
+            cancel.ThrowIfCancellationRequested();
             RoomLayout layout = floor.Layout;
             foreach (RoomKey k in floor.Rooms)
             {
