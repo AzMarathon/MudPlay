@@ -1815,7 +1815,7 @@ public sealed class CastingDirector : IDisposable
                 SpellCategory.MinorSelfHeal   => healEnabled ? Wrap(PickMinorSelfHeal(spells, health)) : null,
                 SpellCategory.MajorSelfHeal   => healEnabled ? Wrap(PickMajorSelfHeal(spells, health)) : null,
                 SpellCategory.Curing          => healEnabled ? PickCure(spells) : null,
-                SpellCategory.Buffing         => blessEnabled ? PickBuff(health, partySettings) : null,
+                SpellCategory.Buffing         => blessEnabled ? PickBuff(health) : null,
                 SpellCategory.Debuffing       => healEnabled ? PickDebuff() : null,
                 _                              => null,
             };
@@ -2425,7 +2425,7 @@ public sealed class CastingDirector : IDisposable
     // MA-floor gate: a buff is considered only while MA is at or above its own
     // BlessIfAboveMa (BuffSlot). Mirrors MegaMUD's "don't burn buff mana when we'll
     // need it for heals soon" behaviour, per buff.
-    private CastCandidate? PickBuff(HealthSettings health, PartySettings? party)
+    private CastCandidate? PickBuff(HealthSettings health)
     {
         // Buff-strip-room gate: the room casts a buff-removal spell on entry, so
         // any buff we put up is torn straight back off. Skip the whole category
@@ -2450,7 +2450,7 @@ public sealed class CastingDirector : IDisposable
         // when-full, whole-party, per-member). Mana-regen maintenance is just a
         // CastOnSelf slot in that list, so PickUnifiedBuff handles it in place.
         if (PickManaRegenReroll(health) is { } rr) return rr;
-        return PickUnifiedBuff(health, party);
+        return PickUnifiedBuff(health);
     }
 
     // Whether mana is at or above this buff's own floor (BuffSlot.BlessIfAboveMa,
@@ -2489,19 +2489,19 @@ public sealed class CastingDirector : IDisposable
         Models.Profile.BuffSlot? slot = _readPartyBuffs?.Invoke()?.Slots.Find(
             s => string.Equals(s.Spell?.Trim(), reroll, StringComparison.OrdinalIgnoreCase));
         if (slot is null) { _pendingManaRegenReroll = null; return null; }
-        if (!SelfBuffTimingAllowed(slot)) return null;
+        if (!BuffTimingAllowed(slot)) return null;
         if (IsBuffAffordable(slot, health))
             return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
         _pendingManaRegenReroll = null;
         return null;
     }
 
-    // A buff's own timing gate for a cast on ourselves (a self-cast, a solo
-    // whole-party cast, a mana-regen reroll): allowed unless we're in combat without
-    // its BlessDuringCombat, or in a TRIGGERED recovery rest without its
-    // BlessWhileResting. Idle / standing / idly-resting is always allowed. Both
+    // A buff's own timing gate, for every cast of it — on ourselves, on a party
+    // member, across the party, or as a mana-regen reroll: allowed unless we're in
+    // combat without its BlessDuringCombat, or in a TRIGGERED recovery rest without
+    // its BlessWhileResting. Idle / standing / idly-resting is always allowed. Both
     // default OFF.
-    private bool SelfBuffTimingAllowed(Models.Profile.BuffSlot slot)
+    private bool BuffTimingAllowed(Models.Profile.BuffSlot slot)
     {
         if (_state.InCombat && !slot.BlessDuringCombat) return false;
         if ((_isTriggeredRest?.Invoke() ?? false) && !slot.BlessWhileResting) return false;
@@ -2511,21 +2511,18 @@ public sealed class CastingDirector : IDisposable
     // Walk the ONE unified buff list (CharacterProfile.PartyBuffs) in priority order
     // and pick the first due buff to cast. A slot can target ourselves (CastOnSelf),
     // the whole party in one cast (Targets 10 / 13, WholePartyOn — lands on us too),
-    // and/or selected members (Targets 2). Self targets obey the slot's own rest /
-    // combat conditions; party / member targets obey the party-bless gates
-    // (PartySettings) and require actually being in a party. Per-slot conditions
-    // (the mana floor, OnlyWhenHpFull / OnlyWhenMaFull) must be met for the slot to
-    // fire.
+    // and/or selected members (Targets 2). Every target obeys the slot's own
+    // conditions (the mana floor, the rest / combat switches, OnlyWhenHpFull /
+    // OnlyWhenMaFull); party / member targets also require actually being in a
+    // party.
     //
     // A member is eligible only when in the party (MajorMUD parties are co-located, so
     // a roster name is in the room) — the one exception being a member who's HIDING:
     // the cast returns "You do not see <name> here!" and we back off (_hiddenTargets)
     // until we move or they reappear in "Also here:".
-    private CastCandidate? PickUnifiedBuff(HealthSettings health, PartySettings? party)
+    private CastCandidate? PickUnifiedBuff(HealthSettings health)
     {
         if (_readPartyBuffs?.Invoke() is not { } buffs) return null;
-
-        bool triggeredRest = _isTriggeredRest?.Invoke() ?? false;
 
         // "When HP / MA full" fires at the REST-MAX target (the level we rest up to,
         // HealthSettings.RestMaxHp / RestMaxMa read per the threshold mode), not literal
@@ -2534,12 +2531,8 @@ public sealed class CastingDirector : IDisposable
         int restMaxHp = PoolThreshold.Resolve(health.HpThresholdMode, health.RestMaxHp, _state.MaxHp);
         int restMaxMa = PoolThreshold.Resolve(health.MaThresholdMode, health.RestMaxMa, _state.MaxMa);
 
-        // Party / member targets are only cast while actually in a party, gated by
-        // the Settings → Party toggles (default OFF → hold in combat / triggered rest).
+        // Party / member targets are only cast while actually in a party.
         bool inParty = _party?.IsInParty == true;
-        bool partyAllowed = inParty
-            && !(_state.InCombat && !(party?.BlessDuringCombat ?? false))
-            && !(triggeredRest && !(party?.BlessWhileResting ?? false));
 
         // In a party, a buff a configured party-wide buff removes (e.g. chant removes
         // bless) is left to that party buff — skip self-casting the superseded spell.
@@ -2603,9 +2596,11 @@ public sealed class CastingDirector : IDisposable
             // mid-rest doesn't drop it, so the buff stays up through that combat until mana
             // recovers. Unchecked, the slot is maintained always-up via the normal self
             // gate. (Left unwired — tests — the lock reads false, so the slot never fires.)
+            bool timingAllowed = BuffTimingAllowed(slot);
+            bool partyAllowed = inParty && timingAllowed;
             bool selfEligible = slot.CastBeforeRestingForMana
                 ? (_isManaRestActive?.Invoke() ?? false)
-                : SelfBuffTimingAllowed(slot);
+                : timingAllowed;
 
             // One untargeted, self-landing cast covers a whole-party buff AND a plain
             // self-cast — they're the same command (no target, keyed "" since it confirms

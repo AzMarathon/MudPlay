@@ -68,8 +68,8 @@ public sealed class BuffSlot
 
     // Whole-party slots: while WholePartyOn is enabled, also cast it while solo. A
     // whole-party cast still lands on a lone character (a party of one — see
-    // GAME_MECHANICS.md), so when set the slot fires solo under the self-bless timing
-    // gates. This is subordinate to WholePartyOn: it can never re-enable an off slot.
+    // GAME_MECHANICS.md), so when set the slot fires solo under the same
+    // conditions as in a party. This is subordinate to WholePartyOn: it can never re-enable an off slot.
     public bool CastSolo { get; set; } = true;
 
     // Single-target slots (Targets 2): bless every in-party member, auto-adapting
@@ -91,13 +91,15 @@ public sealed class BuffSlot
     // buff (HealthSettings.BlessIfAboveMa) until profile schema 5.
     public int BlessIfAboveMa { get; set; } = HealthSettings.DefaultBlessIfAboveMa;
 
-    // Cast on ourselves while a triggered recovery rest is under way. Off = wait
-    // until the rest is done. Was one switch for every buff
-    // (SpellsSettings.SelfBlessWhileResting) until profile schema 5.
+    // Cast this buff while a triggered recovery rest is under way — on ourselves or
+    // on the party alike. Off = wait until the rest is done. Was one switch for
+    // every self cast (SpellsSettings.SelfBlessWhileResting) and another for every
+    // party cast (PartySettings.BlessWhileResting) until profile schemas 5 and 6.
     public bool BlessWhileResting { get; set; }
 
-    // Cast on ourselves during a fight. Off = wait until the room is clear. Was one
-    // switch for every buff (SpellsSettings.SelfBlessDuringCombat) until schema 5.
+    // Cast this buff during a fight, solo or in a party. Off = wait until the room
+    // is clear. Was SpellsSettings.SelfBlessDuringCombat for self casts and
+    // PartySettings.BlessDuringCombat for party casts until schemas 5 and 6.
     public bool BlessDuringCombat { get; set; }
 
     // Cast only once we've rested our HP up to the rest-max target — a "topped-off,

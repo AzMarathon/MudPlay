@@ -271,7 +271,8 @@ public sealed class CombatSpellProfile
 }
 
 // The Spells-tab subset a combat profile carries: the between-round category
-// priority order, the self-heal / HP-regen picks and the self-bless timing.
+// priority order and the self-heal / HP-regen picks (plus the legacy self-bless
+// timing, unread now that each buff slot carries its own).
 // Everything else on the Spells tab (cures, ailment gates) and the Buff Watchdog
 // self-bless slots stay per-character — WriteInto touches only these fields, so a
 // switch never disturbs them.

@@ -66,10 +66,10 @@
                 </Grid>
                 <CheckBox Content="Cast while resting"
                           IsChecked="{Binding BlessWhileResting, Mode=TwoWay}"
-                          ToolTip.Tip="Cast this buff on yourself during a rest the client started to recover HP or mana. Unticked: it waits until the rest is done. Casts on party members follow Settings → Party."/>
+                          ToolTip.Tip="Cast this buff during a rest the client started to recover HP or mana, on yourself or on the party. Unticked: it waits until the rest is done."/>
                 <CheckBox Content="Cast during combat"
                           IsChecked="{Binding BlessDuringCombat, Mode=TwoWay}"
-                          ToolTip.Tip="Cast this buff on yourself in the middle of a fight — the cast spends that round. Unticked: it waits until the room is clear. Casts on party members follow Settings → Party."/>
+                          ToolTip.Tip="Cast this buff in the middle of a fight, solo or in a party — the cast spends that round. Unticked: it waits until the room is clear."/>
                 <CheckBox Content="Only when HP is full (rested up)"
                           IsChecked="{Binding OnlyWhenHpFull, Mode=TwoWay}"
                           ToolTip.Tip="Cast only once HP is rested up to the rest-max target — a 'topped off, ready for the next fight' buff."/>

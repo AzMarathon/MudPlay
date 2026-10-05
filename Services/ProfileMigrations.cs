@@ -66,7 +66,40 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v5 → v6: "bless party while resting / during combat" went the same way.
+        // A buff's own two switches now cover its casts on the party as well as on
+        // the character, so the party pair is folded into the slots that cast there.
+        if (profile.SchemaVersion < 6)
+        {
+            FoldPartyBlessGatesIntoBuffSlots(profile);
+            profile.SchemaVersion = 6;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    // Fold the stored Party rest / combat switches into the buff slots, which carry
+    // the self pair from the step before. A slot cast only on party members takes the
+    // party values. A slot cast both ways (on the character and on members, or a
+    // whole-party spell also cast solo) keeps a switch on when either side had it on,
+    // so no cast it used to make is lost. A slot cast only on the character is left.
+    //
+    // A whole-party spell can't be told from the slot alone (that needs the spell
+    // record), so it is read off the targeting: nothing aimed, the Party toggle on.
+    private static void FoldPartyBlessGatesIntoBuffSlots(CharacterProfile profile)
+    {
+        if (profile.PartyBuffs is not { Slots.Count: > 0 } buffs) return;
+        PartySettings party = ReadStored<PartySettings>(profile, "Party");
+        foreach (BuffSlot slot in buffs.Slots)
+        {
+            bool aimedAtMembers = slot.AllMembers || slot.Targets.Count > 0;
+            bool wholeParty = !slot.CastOnSelf && !aimedAtMembers && slot.WholePartyOn;
+            if (!aimedAtMembers && !wholeParty) continue;
+            bool alsoOnSelf = wholeParty ? slot.CastSolo : slot.CastOnSelf;
+            slot.BlessWhileResting = party.BlessWhileResting || (alsoOnSelf && slot.BlessWhileResting);
+            slot.BlessDuringCombat = party.BlessDuringCombat || (alsoOnSelf && slot.BlessDuringCombat);
+        }
     }
 
     // Stamp the Health "bless if above" and Spells rest / combat switches onto every

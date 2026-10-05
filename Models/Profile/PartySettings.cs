@@ -173,28 +173,13 @@ public sealed class PartySettings
     // (HpPercent == 0) don't trip it. Consumed by Game.PartyVitalsWatcher.
     public int WaitIfMemberBelowPercent { get; set; }
 
-    // ----- Party bless gating ---------------------------------------
-    // Two coarse gates the party-bless path honors before it casts a
-    // beneficial spell on a party member. Party buffing follows the same mantra
-    // as self-blessing: it lives solely under the Auto-Bless toggle, and these
-    // two gates are opt-in overrides, OFF by default — the normal cadence buffs
-    // the party while moving / idle / idly resting and holds only during combat
-    // and during a triggered recovery rest.
-
-    // Opt-in override: when true, allow party-bless casts during a triggered
-    // recovery rest. OFF by default. Consumed by the party-bless path in
-    // Game.Spells.CastingDirector.
+    // LEGACY: the two switches every party-buff cast shared. Each buff slot's own
+    // BlessWhileResting / BlessDuringCombat cover its party casts now; profile
+    // schema 6 folded these into the slots that existed then. Kept so an older
+    // profile still loads and migrates; the party buffs themselves are the plan on
+    // CharacterProfile.PartyBuffs (Models/Profile/BuffSettings.cs).
     public bool BlessWhileResting { get; set; }
-
-    // Opt-in override: when true, allow party-bless casts during combat. OFF by
-    // default. Consumed by the party-bless path in Game.Spells.CastingDirector.
     public bool BlessDuringCombat { get; set; }
-
-    // Party bless SLOTS moved out of here: they're now a dynamic, per-target
-    // buff plan on CharacterProfile.PartyBuffs (see Models/Profile/BuffSettings.cs),
-    // configured live in the Buff Watchdog window. The two gates above
-    // (BlessWhileResting / BlessDuringCombat) stay here — the Settings tab keeps
-    // them and Game.Spells.CastingDirector reads them from here.
 
     // Party-cure pickers ship in a follow-up commit — they need
     // per-member condition tracking, deferred until the spellbook

@@ -181,41 +181,8 @@
                 </StackPanel>
             </Panel>
 
-            <!-- ============ Party bless ============ -->
-            <!-- The party-buff SLOTS (which spells, which members, recast timers)
-                 moved to the Party window's buff panel — configure them live there.
-                 Only the two coarse gates below stay here. -->
-            <Panel Classes="ProfileFrame">
-                <Border Classes="ProfileGroup" IsVisible="{Binding PartyBlessInProfile.IsIncluded, FallbackValue=False}"
-                        Background="{Binding ActiveProfileAccentSoftBrush}"
-                        BorderBrush="{Binding ActiveProfileAccentBrush}"/>
-                <StackPanel Classes="ProfileBody">
-                    <DockPanel>
-                        <CheckBox DockPanel.Dock="Right" Classes="ProfileInclude"
-                                  IsVisible="{Binding PartyBlessInProfile, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                  IsChecked="{Binding PartyBlessInProfile.IsIncluded, Mode=TwoWay}"
-                                  ToolTip.Tip="{Binding PartyBlessInProfile.Tooltip}"/>
-                        <TextBlock DockPanel.Dock="Right" Classes="ProfileGroupHeader" Text="{Binding ActiveProfileLabel}"
-                                   Foreground="{Binding ActiveProfileAccentBrush}"
-                                   IsVisible="{Binding PartyBlessInProfile.IsIncluded, FallbackValue=False}"/>
-                        <TextBlock Classes="SectionHeader" Margin="0,2,0,4" Text="Party bless"/>
-                    </DockPanel>
-                    <TextBlock Classes="FieldLabel"
-                               Text="Party buff slots are configured in the Buff Watchdog window (View → Buff Watchdog). These two gates decide when the buff engine may cast."
-                               Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,0,0,6"
-                               TextWrapping="Wrap"/>
-                    <!-- Bless gating: coarse on/off conditions the party-bless path
-                         honors before casting. Both default ON. -->
-                    <StackPanel Spacing="2" Margin="0,2,0,0">
-                        <CheckBox Content="Bless party while resting"
-                                  IsChecked="{Binding BlessWhileResting, Mode=TwoWay}"
-                                  ToolTip.Tip="When checked (default): the party-bless engine may cast beneficial spells on party members while you're resting."/>
-                        <CheckBox Content="Bless party during combat"
-                                  IsChecked="{Binding BlessDuringCombat, Mode=TwoWay}"
-                                  ToolTip.Tip="When checked (default): the party-bless engine may cast beneficial spells on party members during combat rounds."/>
-                    </StackPanel>
-                </StackPanel>
-            </Panel>
+            <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,2,0,4" TextWrapping="Wrap"
+                       Text="Party buffs, and when each may cast, are set in the Buff Watchdog (View → Buff Watchdog): edit a buff for Cast if mana ≥, Cast while resting and Cast during combat."/>
 
             <!-- ============ Options ============ -->
             <TextBlock Classes="SectionHeader" Text="Options"/>

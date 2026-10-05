@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using Avalonia.Input;
 using MudPlay.Models.Profile;
@@ -130,6 +131,66 @@ public sealed class ProfileMigrationsTests
         Assert.Equal(HealthSettings.DefaultBlessIfAboveMa, slot.BlessIfAboveMa);
         Assert.False(slot.BlessWhileResting);
         Assert.False(slot.BlessDuringCombat);
+    }
+
+    [Fact]
+    public void V5Profile_FoldsThePartyBlessSwitchesIntoTheBuffsCastOnTheParty()
+    {
+        // The party pair was one setting for every party cast. A buff cast only on
+        // members takes it; a buff cast both ways keeps a switch on when either side
+        // had it on; a buff cast only on the character is left alone.
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 5,
+            PartyBuffs = new BuffSettings
+            {
+                Slots =
+                {
+                    new BuffSlot { Spell = "self", CastOnSelf = true, BlessWhileResting = true },
+                    new BuffSlot { Spell = "memb", Targets = { "raijin" }, BlessWhileResting = true },
+                    new BuffSlot { Spell = "both", CastOnSelf = true, AllMembers = true, BlessWhileResting = true },
+                    new BuffSlot { Spell = "chan", CastSolo = true, BlessWhileResting = true },
+                    new BuffSlot { Spell = "pray", CastSolo = false, BlessWhileResting = true },
+                },
+            },
+            Settings = new Dictionary<string, JsonElement>
+            {
+                ["Party"] = JsonSerializer.SerializeToElement(new PartySettings { BlessDuringCombat = true }),
+            },
+        };
+
+        Assert.True(ProfileMigrations.Apply(profile));
+
+        Dictionary<string, BuffSlot> by = profile.PartyBuffs!.Slots.ToDictionary(s => s.Spell!);
+        // (while resting, during combat): self was (on, off), party was (off, on).
+        Assert.Equal((true, false), (by["self"].BlessWhileResting, by["self"].BlessDuringCombat));
+        Assert.Equal((false, true), (by["memb"].BlessWhileResting, by["memb"].BlessDuringCombat));
+        Assert.Equal((true, true), (by["both"].BlessWhileResting, by["both"].BlessDuringCombat));
+        Assert.Equal((true, true), (by["chan"].BlessWhileResting, by["chan"].BlessDuringCombat));
+        Assert.Equal((false, true), (by["pray"].BlessWhileResting, by["pray"].BlessDuringCombat));
+    }
+
+    [Fact]
+    public void V4Profile_RunsBothBlessSteps_SelfThenParty()
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 4,
+            PartyBuffs = new BuffSettings { Slots = { new BuffSlot { Spell = "memb", AllMembers = true } } },
+            Settings = new Dictionary<string, JsonElement>
+            {
+                ["Health"] = JsonSerializer.SerializeToElement(new HealthSettings { BlessIfAboveMa = 55 }),
+                ["Spells"] = JsonSerializer.SerializeToElement(new SpellsSettings { SelfBlessDuringCombat = true }),
+                ["Party"] = JsonSerializer.SerializeToElement(new PartySettings { BlessWhileResting = true }),
+            },
+        };
+
+        ProfileMigrations.Apply(profile);
+
+        BuffSlot slot = Assert.Single(profile.PartyBuffs!.Slots);
+        Assert.Equal(55, slot.BlessIfAboveMa);
+        Assert.True(slot.BlessWhileResting);      // the party value
+        Assert.False(slot.BlessDuringCombat);     // the self value doesn't reach a members-only buff
     }
 
     [Fact]

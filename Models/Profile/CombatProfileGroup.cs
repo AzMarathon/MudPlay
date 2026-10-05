@@ -25,5 +25,6 @@ public enum CombatProfileGroup
     BlessTiming,
     // Party tab
     PartyHealing,
+    // LEGACY: party bless timing moved onto each buff slot too; kept as BlessTiming is.
     PartyBless,
 }

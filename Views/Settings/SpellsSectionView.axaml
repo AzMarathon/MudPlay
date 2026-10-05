@@ -253,7 +253,7 @@
                            MaxWidth="440" HorizontalAlignment="Left"
                            Margin="0,16,0,0"/>
 
-                <TextBlock Classes="HelpText" Margin="0,2,0,4" TextWrapping="Wrap"
+                <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,2,0,4" TextWrapping="Wrap"
                            Text="Bless timing is set on each buff now: Buff Watchdog → edit a buff → Cast while resting / Cast during combat."/>
 
                 <!-- ============ Ailment handling / coordination ============ -->

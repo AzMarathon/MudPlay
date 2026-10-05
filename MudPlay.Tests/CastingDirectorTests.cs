@@ -1367,9 +1367,11 @@ public sealed class CastingDirectorTests
         Assert.Equal("bless", h.CastsSent[0]);
     }
 
-    // ProfileMigrations' v4 → v5 step, for the harnesses: the once-shared bless gates
-    // go onto every slot.
-    private static void StampSharedBlessGates(BuffSettings buffs, HealthSettings health, SpellsSettings spells, bool skip)
+    // ProfileMigrations' v4 → v5 and v5 → v6 steps, for the harnesses: the
+    // once-shared bless gates go onto every slot, and the party pair is folded into
+    // the slots that cast on the party.
+    private static void StampSharedBlessGates(BuffSettings buffs, HealthSettings health, SpellsSettings spells,
+        bool skip, PartySettings? party = null)
     {
         if (skip) return;
         foreach (BuffSlot slot in buffs.Slots)
@@ -1377,6 +1379,13 @@ public sealed class CastingDirectorTests
             slot.BlessIfAboveMa = health.BlessIfAboveMa;
             slot.BlessWhileResting = spells.SelfBlessWhileResting;
             slot.BlessDuringCombat = spells.SelfBlessDuringCombat;
+            if (party is null) continue;
+            bool aimedAtMembers = slot.AllMembers || slot.Targets.Count > 0;
+            bool wholeParty = !slot.CastOnSelf && !aimedAtMembers && slot.WholePartyOn;
+            if (!aimedAtMembers && !wholeParty) continue;
+            bool alsoOnSelf = wholeParty ? slot.CastSolo : slot.CastOnSelf;
+            slot.BlessWhileResting = party.BlessWhileResting || (alsoOnSelf && slot.BlessWhileResting);
+            slot.BlessDuringCombat = party.BlessDuringCombat || (alsoOnSelf && slot.BlessDuringCombat);
         }
     }
 
@@ -3952,6 +3961,11 @@ public sealed class CastingDirectorTests
         /// <summary>The party-buff plan the director reads (CharacterProfile.PartyBuffs).</summary>
         public BuffSettings PartyBuffs { get; } = new();
 
+        /// <summary>Set when a test gives each buff slot its own conditions. Otherwise
+        /// the harness mirrors the profile migration: the once-shared self and party
+        /// bless gates the older tests set are folded onto the slots.</summary>
+        public bool SlotsCarryTheirOwnGates { get; set; }
+
         /// <summary>Given names currently in the room — the presence gate. AddMember
         /// puts a member here by default; drop a name to model an absent member.</summary>
         public HashSet<string> InRoom { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -4000,7 +4014,7 @@ public sealed class CastingDirectorTests
                     Removes.TryGetValue(code, out string[]? v) ? v : System.Array.Empty<string>());
             Director.SetPartyBuffSource(() =>
             {
-                StampSharedBlessGates(PartyBuffs, Health, Spells, skip: false);
+                StampSharedBlessGates(PartyBuffs, Health, Spells, SlotsCarryTheirOwnGates, PartySettings);
                 return PartyBuffs;
             });
             Director.SetRoomPresenceCheck(g => InRoom.Contains(g));
@@ -4700,6 +4714,92 @@ public sealed class CastingDirectorTests
         h.Director.Evaluate();
         Assert.Single(h.CastsSent);
         Assert.Equal("bles Raijin", h.CastsSent[0]);
+    }
+
+    [Fact]
+    public void PartyBless_CombatSwitchIsPerBuff_OnlyTheTickedBuffGoesOutOnAMember()
+    {
+        // Two buffs aimed at the same member mid-fight: the one with "cast during
+        // combat" goes out, the other waits for the fight to end.
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.InCombat = true;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "prot", BlessIfAboveMa = 0, Targets = { "raijin" } });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 0, Targets = { "raijin" }, BlessDuringCombat = true });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["prot"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bles Raijin" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_RestSwitchIsPerBuff_OnlyTheTickedBuffGoesOutOnAMember()
+    {
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.Position = PlayerPosition.Resting;
+        h.TriggeredRest = true;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "prot", BlessIfAboveMa = 0, Targets = { "raijin" } });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 0, Targets = { "raijin" }, BlessWhileResting = true });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["prot"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bles Raijin" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_TheOldPartySwitches_NoLongerDecideAnything()
+    {
+        // Settings → Party's pair is unread: with both on there, a buff without its
+        // own "cast during combat" still waits out the fight.
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartySettings.BlessDuringCombat = true;
+        h.PartySettings.BlessWhileResting = true;
+        h.State.InCombat = true;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 0, Targets = { "raijin" } });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_ManaFloorIsPerBuff_OnAMemberToo()
+    {
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.Ma = 50;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "prot", BlessIfAboveMa = 80, Targets = { "raijin" } });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "bles", BlessIfAboveMa = 40, Targets = { "raijin" } });
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["prot"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "bles Raijin" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PartyBless_WholeParty_InAParty_FollowsTheBuffsOwnCombatSwitch()
+    {
+        using PartyBlessHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.State.InCombat = true;
+        h.AddWholePartySlot("chan");
+        h.PartyBuffs.Slots[^1].BlessIfAboveMa = 0;
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        h.PartyBuffs.Slots[^1].BlessDuringCombat = true;
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "chan" }, h.CastsSent);
     }
 
     [Fact]

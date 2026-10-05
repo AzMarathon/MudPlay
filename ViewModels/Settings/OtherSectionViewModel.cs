@@ -161,10 +161,6 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // isn't a per-character preference; it's "I'm debugging right now", and
     // a session toggle in the LogPane is the right home.
 
-    // Note: the party-bless gates (Bless while resting / Bless during
-    // combat) graduated to the Party tab — they sit next to the bless
-    // slots they gate. CastingDirector reads them from PartySettings now.
-
     // Note: the run-away (flee) knobs (Go-backwards-if-running /
     // Break-combat-before-running) graduated to the Combat tab — they sit
     // next to the room thresholds + RunDistance they coordinate with.

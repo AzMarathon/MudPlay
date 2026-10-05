@@ -240,7 +240,7 @@
                                        Text="{Binding RunIfBelowMaConverted}"/>
 
                         </Grid>
-                        <TextBlock Classes="HelpText" Margin="0,4,0,0" TextWrapping="Wrap"
+                        <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
                                    Text="&quot;Bless if above&quot; is set on each buff now: Buff Watchdog → edit a buff → Cast if mana ≥."/>
                     </StackPanel>
                 </Panel>

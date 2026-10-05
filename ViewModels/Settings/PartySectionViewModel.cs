@@ -11,9 +11,9 @@ namespace MudPlay.ViewModels.Settings;
 // "Party" tab — bespoke layout. Knobs that map onto live services (par poll
 // cadence, auto-invite reconnecting member, reset statistics on loop start); the
 // party-heal pickers + thresholds + AOE-member count feed CastingDirector's
-// party-cast path. Party BUFF slots moved to the Party window (see
-// CharacterProfile.PartyBuffs); only the two bless GATES stay here. Persists per
-// character as the "Party" entry in CharacterProfile.Settings.
+// party-cast path. Party buffs, and when each may cast, live in the Buff Watchdog
+// (CharacterProfile.PartyBuffs), not here. Persists per character as the "Party"
+// entry in CharacterProfile.Settings.
 public sealed partial class PartySectionViewModel : SettingsSectionViewModel
 {
     private const string TabKey = "Party";
@@ -45,7 +45,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         "Party", "Rank", "Front", "Mid", "Back",
         "Party heal", "Minor heal", "Major heal", "Single-target", "Party AOE",
         "Use AOE", "Request healing",
-        "Bless", "Bless while resting", "Bless during combat",
         "Help leader open doors",
         "Auto-invite", "Auto-Exp-Reset", "par frequency",
         "Wait for members", "Max monsters",
@@ -143,20 +142,11 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     // Read by PanicResponder. Default off (we bail by default, MegaMUD parity).
     [ObservableProperty] private bool _ignorePanics;
 
-    // ----- Party bless gating (consumed by CastingDirector) ----------
-    // Two coarse gates the party-bless path honors before casting a
-    // beneficial spell on a member. Both default ON. The buff SLOTS these gate
-    // now live in the Party window (CharacterProfile.PartyBuffs); only the gates
-    // remain on this tab.
-    [ObservableProperty] private bool _blessWhileResting = true;
-    [ObservableProperty] private bool _blessDuringCombat = true;
-
-    // "Include in combat profile" for the party healing and party bless groups —
+    // "Include in combat profile" for the party healing group —
     // staged in the Settings window's combat-profile session with the other tabs'.
     // Null when the tab is built without a session.
     private readonly CombatProfileStagingSession? _session;
     public CombatProfileGroupToggle? PartyHealingInProfile { get; }
-    public CombatProfileGroupToggle? PartyBlessInProfile { get; }
     public CombatProfileChipBar? ChipBar { get; }
 
     // The border / label for the groups above follow the staged active profile, the
@@ -183,7 +173,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         if (session is not null)
         {
             PartyHealingInProfile = new CombatProfileGroupToggle(session, CombatProfileGroup.PartyHealing, MarkDirty);
-            PartyBlessInProfile = new CombatProfileGroupToggle(session, CombatProfileGroup.PartyBless, MarkDirty);
             ChipBar = new CombatProfileChipBar(session);
             session.Committing += OnSessionCommitting;
             session.Committed += OnSessionCommitted;
@@ -197,7 +186,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
             _profile.ProfileClosed -= OnProfileClosedExternally;
             _spellbook.Changed -= OnSpellbookChanged;
             PartyHealingInProfile?.Dispose();
-            PartyBlessInProfile?.Dispose();
             ChipBar?.Dispose();
             if (_session is not null)
             {
@@ -218,7 +206,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     public override void Apply()
     {
         // With the window's combat-profile session, save through it: it writes this
-        // tab first (OnSessionCommitting), folds the party healing / bless boxes into
+        // tab first (OnSessionCommitting), folds the party healing boxes into
         // the active profile, and reloads the tab afterwards.
         if (_session is not null)
         {
@@ -238,7 +226,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         if (IsDirty) Write();
     }
 
-    // The commit made the active profile's party healing / bless live; reload so the
+    // The commit made the active profile's party healing live; reload so the
     // tab reads back exactly what was saved.
     private void OnSessionCommitted()
     {
@@ -248,7 +236,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         ClearDirty();
     }
 
-    // Chip switch: fold this tab's party healing / bless boxes into the outgoing
+    // Chip switch: fold this tab's party healing boxes into the outgoing
     // profile (CaptureRequested), then load the incoming one's (LoadRequested).
     private void CapturePartyBoxesToActive() => _session?.Active.Party.CaptureFrom(BuildDto());
 
@@ -264,8 +252,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         MinorHealMemberThresholdPercent = p.MinorHealMemberThresholdPercent;
         MajorHealMemberThresholdPercent = p.MajorHealMemberThresholdPercent;
         AoeMinMembers          = p.AoeMinMembers;
-        BlessWhileResting      = p.BlessWhileResting;
-        BlessDuringCombat      = p.BlessDuringCombat;
         _suppressDirty = false;
     }
 
@@ -308,8 +294,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         HelpLeaderOpenDoors    = HelpLeaderOpenDoors,
         UsePanicWhileLeading   = UsePanicWhileLeading,
         IgnorePanics           = IgnorePanics,
-        BlessWhileResting      = BlessWhileResting,
-        BlessDuringCombat      = BlessDuringCombat,
     };
 
     private void Write()
@@ -380,8 +364,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         HelpLeaderOpenDoors    = dto.HelpLeaderOpenDoors;
         UsePanicWhileLeading   = dto.UsePanicWhileLeading;
         IgnorePanics           = dto.IgnorePanics;
-        BlessWhileResting      = dto.BlessWhileResting;
-        BlessDuringCombat      = dto.BlessDuringCombat;
 
         // Mirror loaded settings into the live services so they reflect
         // the profile from first connection, not just after the user
@@ -472,8 +454,6 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     partial void OnHelpLeaderOpenDoorsChanged(bool value)       => MarkDirty();
     partial void OnUsePanicWhileLeadingChanged(bool value)      => MarkDirty();
     partial void OnIgnorePanicsChanged(bool value)              => MarkDirty();
-    partial void OnBlessWhileRestingChanged(bool value)         => MarkDirty();
-    partial void OnBlessDuringCombatChanged(bool value)         => MarkDirty();
 
     private void MarkDirty()
     {
