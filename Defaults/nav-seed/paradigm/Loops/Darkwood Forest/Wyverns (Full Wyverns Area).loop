@@ -14,7 +14,7 @@
     },
     {
       "Room": "1/413",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -84,7 +84,12 @@
     },
     {
       "Room": "1/3321",
-      "Command": "go path",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3333",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -99,7 +104,12 @@
     },
     {
       "Room": "1/3324",
-      "Command": "go path",
+      "Command": null,
+      "DelayMs": 0
+    },
+    {
+      "Room": "1/3323",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -144,7 +154,7 @@
     },
     {
       "Room": "1/471",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     }
   ],

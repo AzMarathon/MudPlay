@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.24**
+> **Version 3.144.25**
 > - A loop waypoint command that is the same text exit the route takes next is sent once, instead of crossing and walking straight back
 > - A loop's own waypoint command no longer pauses the loop as a move you typed
+> - Packaged loops no longer carry commands the navigation already performs (`go path`, `go fissure`, `move rubble`, `push brick`, `push stone`)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
