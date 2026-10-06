@@ -122,6 +122,13 @@ public sealed class CashSettings
     // Skip a ground-item pickup that would carry the character past 90% of max
     // (see SkipCollectPast90Percent).
     public bool SkipGetItemPast90Percent { get; set; }
+
+    // An Auto-collect item that is also flagged Auto-sell, and that the item
+    // ceiling above would leave on the ground, is picked up anyway by dropping
+    // held coin first: cheapest denomination first, and none dearer than
+    // DropCoinForSellItemsUpTo (CashManager.TryDropCoinForWeight). Default off.
+    public bool DropCoinForSellItems { get; set; }
+    public CoinDenomination DropCoinForSellItemsUpTo { get; set; } = CoinDenomination.Silver;
 }
 
 // Per-currency pickup decision.

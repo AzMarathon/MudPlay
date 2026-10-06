@@ -160,26 +160,34 @@
                           ToolTip.Tip="Turns Auto-Combat off while auto-deposit takes a loop or Auto-Lair to the bank (or an off-route stash room), once the trip has left the loop's rooms, and back on when it's back or done. A rest on the way still clears the room first."/>
 
                 <!-- ============ Collection Rules ============ -->
-                <TextBlock Classes="SectionHeader" Text="Collection Rules"/>
+                <TextBlock Classes="SectionHeader" Text="Collection Rules: Coins and Items"/>
 
-                <CheckBox Content="Don't collect if it makes you Light"
-                          IsChecked="{Binding SkipCollectIfMakesLight, Mode=TwoWay}"
-                          ToolTip.Tip="Skip pickups that would push the character into the Light bracket."/>
-                <CheckBox Content="Don't collect if it makes you Medium"
-                          IsChecked="{Binding SkipCollectIfMakesMedium, Mode=TwoWay}"
-                          IsEnabled="{Binding SkipMediumEnabled}"
-                          ToolTip.Tip="Skip pickups that would push past Light → Medium. Auto-checked + locked while the stricter Light gate is on."/>
-                <CheckBox Content="Don't collect if it makes you Heavy"
-                          IsChecked="{Binding SkipCollectIfMakesHeavy, Mode=TwoWay}"
-                          IsEnabled="{Binding SkipHeavyEnabled}"
-                          ToolTip.Tip="Skip pickups that would push past Medium → Heavy. Auto-checked + locked while a stricter gate (Light or Medium) is on."/>
-                <CheckBox Content="Don't collect past 90% encumbrance"
-                          IsChecked="{Binding SkipCollectPast90Percent, Mode=TwoWay}"
-                          IsEnabled="{Binding SkipPast90Enabled}"
-                          ToolTip.Tip="Load up (Heavy included) but stop at 90% of your max, so a debuff that cuts how much you can carry (frail) doesn't leave you too heavy to move. Auto-checked + locked while a bracket gate is on."/>
                 <CheckBox Content="Collect after combat finished (Cash and Items)"
                           IsChecked="{Binding CollectAfterCombatFinished, Mode=TwoWay}"
                           ToolTip.Tip="Defer pickups until the room's combat is over before sending get commands. Shared by Cash auto-collect and the Items auto-get engine."/>
+
+                <!-- ============ Coin Collection Rules ============ -->
+                <TextBlock Classes="SectionHeader" Text="Coin Collection Rules"/>
+
+                <TextBlock Classes="FieldLabel"
+                           Text="How much weight picking up coin may bring you to. Ground items have their own limits below."
+                           TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+                <CheckBox Content="Don't collect coin if it makes you Light"
+                          IsChecked="{Binding SkipCollectIfMakesLight, Mode=TwoWay}"
+                          ToolTip.Tip="Skip coin pickups that would push the character into the Light bracket."/>
+                <CheckBox Content="Don't collect coin if it makes you Medium"
+                          IsChecked="{Binding SkipCollectIfMakesMedium, Mode=TwoWay}"
+                          IsEnabled="{Binding SkipMediumEnabled}"
+                          ToolTip.Tip="Skip coin pickups that would push past Light → Medium. Auto-checked + locked while the stricter Light gate is on."/>
+                <CheckBox Content="Don't collect coin if it makes you Heavy"
+                          IsChecked="{Binding SkipCollectIfMakesHeavy, Mode=TwoWay}"
+                          IsEnabled="{Binding SkipHeavyEnabled}"
+                          ToolTip.Tip="Skip coin pickups that would push past Medium → Heavy. Auto-checked + locked while a stricter gate (Light or Medium) is on."/>
+                <CheckBox Content="Don't collect coin past 90% encumbrance"
+                          IsChecked="{Binding SkipCollectPast90Percent, Mode=TwoWay}"
+                          IsEnabled="{Binding SkipPast90Enabled}"
+                          ToolTip.Tip="Load up on coin (Heavy included) but stop at 90% of your max, so a debuff that cuts how much you can carry (frail) doesn't leave you too heavy to move. Auto-checked + locked while a bracket gate is on."/>
                 <CheckBox Content="Drop smaller currency to make room for larger Collect-flagged coin"
                           IsChecked="{Binding DropSmallerForLarger, Mode=TwoWay}"
                           ToolTip.Tip="Cascade — drops just enough lower-value Collect-flagged held coin. Never sacrifices Ignore-flagged."/>
@@ -206,6 +214,17 @@
                           IsChecked="{Binding SkipGetItemPast90Percent, Mode=TwoWay}"
                           IsEnabled="{Binding GetItemPast90Enabled}"
                           ToolTip.Tip="Load up (Heavy included) but stop at 90% of your max, so a debuff that cuts how much you can carry (frail) doesn't leave you too heavy to move. Auto-checked + locked while a bracket gate is on."/>
+
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <CheckBox Content="Drop coin to make room for Auto-sell items, up to"
+                              IsChecked="{Binding DropCoinForSellItems, Mode=TwoWay}"
+                              VerticalAlignment="Center"
+                              ToolTip.Tip="When an item flagged Auto-collect and Auto-sell is too heavy to pick up under the limits above, drop enough coin to fit it, then take it. Coins go cheapest first, and none dearer than the coin picked here: Silver drops copper, then silver, and never touches gold, platinum or runic. Three coins weigh one unit, so a 40-weight item costs 120 coins. If the coin it may drop can't free enough room, nothing is dropped and the item stays."/>
+                    <ComboBox ItemsSource="{Binding DenominationChoices}"
+                              SelectedItem="{Binding DropCoinForSellItemsUpTo, Mode=TwoWay}"
+                              IsEnabled="{Binding DropCoinForSellItems}"
+                              Width="120" VerticalAlignment="Center"/>
+                </StackPanel>
 
             </StackPanel>
         </Grid>

@@ -1095,6 +1095,50 @@ public sealed class CashManager : IDisposable
         _inFlightCoinDeltaSetAt[slot] = now;
     }
 
+    // Make room for an item pickup (Cash "Drop coin to make room for Auto-sell
+    // items"): drop held coin worth `weight` units, cheapest denomination first and
+    // none dearer than the setting's coin. All or nothing: when the coin it may drop
+    // can't free that much, nothing goes down and the caller leaves the item. True
+    // once the drops are on the wire, ahead of the caller's `get`.
+    public bool TryDropCoinForWeight(long weight, string itemName)
+    {
+        CashSettings settings = _readSettings();
+        if (!settings.DropCoinForSellItems || weight <= 0) return false;
+
+        SweepStaleInFlight();
+        CurrencyHoldings c = _getSnapshot().Currency;
+        long[] held = { c.Copper, c.Silver, c.Gold, c.Platinum, c.Runic };
+        int dearest = (int)settings.DropCoinForSellItemsUpTo;
+        long available = 0;
+        for (int k = 0; k <= dearest; k++)
+        {
+            held[k] = Math.Max(0, held[k] + _inFlightCoinDelta[k]);
+            available += held[k];
+        }
+
+        // Three coins to the weight unit.
+        long need = weight * 3;
+        if (available < need)
+        {
+            _log?.Info(LogCategory,
+                $"no room made for item={itemName}: {need} coins must go, {available} held up to {settings.DropCoinForSellItemsUpTo}");
+            return false;
+        }
+
+        DateTime now = DateTime.UtcNow;
+        for (int k = 0; k <= dearest && need > 0; k++)
+        {
+            long drop = Math.Min(need, held[k]);
+            if (drop <= 0) continue;
+            _log?.Info(LogCategory, $"drop {drop} {SlotCurrencyNames[k]} to make room for item={itemName}");
+            Send($"drop {drop} {_naming.WireNoun(SlotCurrencyNames[k])}");
+            _inFlightCoinDelta[k] -= drop;
+            _inFlightCoinDeltaSetAt[k] = now;
+            need -= drop;
+        }
+        return true;
+    }
+
     // Slot index (0=copper..4=runic) for a single-word currency, or -1 for an
     // unrecognised denomination.
     private int SlotForCurrency(string currency)

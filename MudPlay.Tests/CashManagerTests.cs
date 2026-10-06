@@ -1525,6 +1525,45 @@ public sealed class CashManagerTests
         Assert.Equal(new[] { "drop 93 copper farthing", "get 300 gold crown" }, h.AllSent);
     }
 
+    // "Drop coin to make room for Auto-sell items": three coins to the weight unit,
+    // cheapest first, none dearer than the chosen coin.
+    [Fact]
+    public void DropCoinForWeight_DropsCheapestFirst_UpToTheChosenCoin()
+    {
+        using Harness h = new();
+        h.Settings.DropCoinForSellItems = true;
+        h.Settings.DropCoinForSellItemsUpTo = CoinDenomination.Silver;
+        h.Snapshot = Snap(30, 500, 9, 0, 0, currentWeight: 600, maxWeight: 1000);
+
+        Assert.True(h.Cash.TryDropCoinForWeight(40, "dagger"));
+
+        Assert.Equal(new[] { "drop 30 copper farthing", "drop 90 silver noble" }, h.AllSent);
+    }
+
+    [Fact]
+    public void DropCoinForWeight_NotEnoughUpToTheChosenCoin_DropsNothing()
+    {
+        using Harness h = new();
+        h.Settings.DropCoinForSellItems = true;
+        h.Settings.DropCoinForSellItemsUpTo = CoinDenomination.Silver;
+        h.Snapshot = Snap(30, 60, 5000, 0, 0, currentWeight: 1700, maxWeight: 2400);
+
+        Assert.False(h.Cash.TryDropCoinForWeight(40, "dagger"));   // 120 needed, 90 droppable
+
+        Assert.Empty(h.AllSent);
+    }
+
+    [Fact]
+    public void DropCoinForWeight_Off_DropsNothing()
+    {
+        using Harness h = new();
+        h.Snapshot = Snap(0, 500, 0, 0, 0, currentWeight: 600, maxWeight: 1000);
+
+        Assert.False(h.Cash.TryDropCoinForWeight(40, "dagger"));
+
+        Assert.Empty(h.AllSent);
+    }
+
     [Fact]
     public void Gate_InFlightDelta_ThreadsConsecutiveBatches()
     {

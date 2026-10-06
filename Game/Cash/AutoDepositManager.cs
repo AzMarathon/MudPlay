@@ -227,6 +227,11 @@ public sealed class AutoDepositManager : IDisposable
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
 
+    // Offered a bank run as it comes due, with the engine to resume and the bank:
+    // true when a sell detour went first (SellDetourManager.SellAheadOfBankRun) and
+    // will hand the run back from the shop through TakeOverFromDetour.
+    public Func<DetourResume, RoomKey, bool>? SellFirst { get; set; }
+
     // One-line reroute status for the bug report — the current phase, plus the
     // light being bought while a return-leg light detour is in flight. "idle" when
     // no reroute is running. Diagnoses a walker stuck mid-errand (the original
@@ -288,6 +293,16 @@ public sealed class AutoDepositManager : IDisposable
             _log?.Info(LogCategory,
                 $"stash room {destination} on the active {resume.Kind} route — "
                 + "no detour, stashing on pass-through");
+            return;
+        }
+
+        // Something to sell and a shop for it near the bank: the sale goes first and
+        // hands the run back from the shop, so one trip does both and the sale's coin
+        // is banked with the rest. The single-fire guard stays latched meanwhile; the
+        // detour re-arms it if it never reaches the hand-over.
+        if (!destinationIsStash && SellFirst?.Invoke(resume, destination) == true)
+        {
+            _log?.Info(LogCategory, $"auto-deposit wealth={wealthValue} dest={destination} follows a sale near the bank");
             return;
         }
 

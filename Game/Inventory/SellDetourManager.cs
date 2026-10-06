@@ -23,6 +23,13 @@ namespace MudPlay.Game.Inventory;
 // the shop won't buy it (report paradigm-20260929-060520 wrote a shop off for the
 // session and ignored every later pickup).
 //
+// A bank run joins in. When an auto-deposit comes due while anything Auto-sell would
+// sell is carried — detour count or no, "Make detours" ticked or not — and a shop for
+// it stands within NearBankSteps of the bank, the sale goes first and the bank run
+// takes over from the shop, so one trip does both and the sale's coins are banked
+// with the rest (user, 2026-10-05; report paradigm-20261005-214728 walked a dagger
+// and a shuriken to the bank and back unsold).
+//
 // Single controller: it only starts when nothing else owns movement (the caller's
 // blocked probe covers combat, party following and the other errand engines) and
 // stands down if movement is stopped externally mid-detour. A walk sends its next
@@ -34,13 +41,20 @@ public sealed class SellDetourManager : IDisposable
     public const string LogCategory = "SellDetour";
 
     // One carried item that can take a sell detour: how many are carried, the keep
-    // floor Auto-sell stops at, the count above which a detour goes, and the shop
-    // rooms it may use (already narrowed to the user's picks).
-    public sealed record Candidate(int Number, string Name, int Carried, int KeepFloor, int DetourAbove,
+    // floor Auto-sell stops at, the count above which a detour goes (null: the item
+    // makes no detours of its own, and is only sold in passing or ahead of a bank
+    // run), and the shop rooms it may use (already narrowed to the user's picks).
+    public sealed record Candidate(int Number, string Name, int Carried, int KeepFloor, int? DetourAbove,
         IReadOnlyList<RoomKey> Shops)
     {
-        public bool Due => Carried > Math.Max(KeepFloor, DetourAbove);
+        public bool Due => DetourAbove is { } above && Carried > Math.Max(KeepFloor, above);
+
+        // Auto-sell would sell some of it at a shop, whatever the detour count says.
+        public bool Sellable => Carried > KeepFloor;
     }
+
+    // A shop this many steps or fewer from the bank is near enough to add to a bank run.
+    public const int NearBankSteps = 25;
 
     private enum Phase { Idle, WalkingToShop, Selling, WalkingBack }
 
@@ -75,6 +89,10 @@ public sealed class SellDetourManager : IDisposable
     private Dictionary<int, int> _carriedAtShop = new();
     private bool _gateHeld;
     private bool _disposed;
+    // The bank this detour goes ahead of (SellAheadOfBankRun). The deposit gate fires
+    // once per crossing and already has, so a detour that ends anywhere but in that
+    // bank run says so through BankRunNotTaken or the gate stays latched.
+    private RoomKey? _bankRun;
     // Why the last Evaluate with a due item didn't detour — logged on change, shown in
     // the bug report, so "it never detoured" names its cause.
     private string? _lastDecline;
@@ -127,6 +145,10 @@ public sealed class SellDetourManager : IDisposable
     // (AutoDepositManager.TakeOverFromDetour) because the sale left a deposit due.
     public Func<DetourResume, RoomKey, bool>? HandOffToBank { get; set; }
 
+    // Raised when a detour that went ahead of a bank run ends without the bank run
+    // taking over (CashManager.NotifyAutoDepositAborted re-arms the deposit gate).
+    public Action? BankRunNotTaken { get; set; }
+
     // The engine this detour will pick back up (meaningful while it runs).
     public DetourResume ResumePlan => _resume;
 
@@ -141,6 +163,7 @@ public sealed class SellDetourManager : IDisposable
                 Phase.WalkingBack => $"walking back to {_returnTo} (resume {_resume.Kind})",
                 _ => $"{_phase} at/to {_shop} (resume {_resume.Kind})",
             };
+            if (_bankRun is { } bank) phase += $", ahead of the bank run to {bank}";
             string refused = _refused.Count == 0 ? "none"
                 : string.Join(", ", _refused.Select(r => $"item #{r.Item} at {r.Shop}"));
             DateTimeOffset now = _now();
@@ -163,24 +186,8 @@ public sealed class SellDetourManager : IDisposable
 
         RoomKey cur = here.Key;
         RoomKey back = resume.WalkDestination ?? cur;
-        List<RoomKey> shops = new();
         List<string> skipped = new();
-        foreach (Candidate c in _candidates())
-        {
-            if (!c.Due) continue;
-            if (c.Shops.Count == 0) { skipped.Add($"{c.Name}: no shop that trades it among your picks"); continue; }
-            List<RoomKey> usable = c.Shops.Where(s => Usable(c.Number, s)).ToList();
-            if (usable.Count == 0) { skipped.Add($"{c.Name}: {WhyNoShop(c)}"); continue; }
-            // The engine reaches one of its shops anyway: Auto-sell sells in passing.
-            RoomKey? passing = usable.Cast<RoomKey?>()
-                .FirstOrDefault(s => s!.Value.Equals(cur) || ReachedAnyway(s.Value, resume));
-            if (passing is not null)
-            {
-                skipped.Add($"{c.Name}: the {resume.Kind} reaches {passing} itself");
-                continue;
-            }
-            shops.AddRange(usable);
-        }
+        List<RoomKey> shops = ShopsToVisit(c => c.Due, cur, resume, skipped);
         if (shops.Count == 0)
         {
             if (skipped.Count > 0) Decline(string.Join("; ", skipped));
@@ -217,6 +224,67 @@ public sealed class SellDetourManager : IDisposable
         ReleaseStop("detour started");
         GoToShop(shop);
     }
+
+    // The shops worth turning aside to for the carried items `wanted` picks: each
+    // one's usable shops, unless the running engine stands in one of them anyway.
+    // Why an item was left out goes in skipped.
+    private List<RoomKey> ShopsToVisit(Func<Candidate, bool> wanted, RoomKey cur, DetourResume resume, List<string> skipped)
+    {
+        List<RoomKey> shops = new();
+        foreach (Candidate c in _candidates())
+        {
+            if (!wanted(c)) continue;
+            if (c.Shops.Count == 0) { skipped.Add($"{c.Name}: no shop that trades it among your picks"); continue; }
+            List<RoomKey> usable = c.Shops.Where(s => Usable(c.Number, s)).ToList();
+            if (usable.Count == 0) { skipped.Add($"{c.Name}: {WhyNoShop(c)}"); continue; }
+            // The engine reaches one of its shops anyway: Auto-sell sells in passing.
+            RoomKey? passing = usable.Cast<RoomKey?>()
+                .FirstOrDefault(s => s!.Value.Equals(cur) || ReachedAnyway(s.Value, resume));
+            if (passing is not null)
+            {
+                skipped.Add($"{c.Name}: the {resume.Kind} reaches {passing} itself");
+                continue;
+            }
+            shops.AddRange(usable);
+        }
+        return shops;
+    }
+
+    // Offered a bank run as it comes due (AutoDepositManager.SellFirst). True when
+    // this detour went first: it stopped the engine, is walking to a shop near the
+    // bank, and hands the run on from there through HandOffToBank. False — the bank
+    // run goes as it always did — when nothing carried sells near the bank.
+    public bool SellAheadOfBankRun(DetourResume resume, RoomKey bank)
+    {
+        if (_phase != Phase.Idle || !_isEnabled() || HandOffToBank is null) return false;
+        if (_tracker.State.CurrentRoom is not { } here) return false;
+        RoomKey cur = here.Key;
+        List<string> skipped = new();
+        List<RoomKey> shops = ShopsToVisit(c => c.Sellable, cur, resume, skipped)
+            .Where(s => NearBank(s, bank)).Distinct().ToList();
+        if (!PathItemShopRouter.TrySelectShop(shops, cur, bank, _distance, out RoomKey shop))
+        {
+            if (skipped.Count > 0)
+                _log?.Debug(LogCategory, $"bank run to {bank}: nothing to sell on the way — {string.Join("; ", skipped)}");
+            return false;
+        }
+
+        ReleaseStop("going ahead of a bank run");
+        _lastDecline = null;
+        _resume = resume;
+        _origin = cur;
+        _bankRun = bank;
+        _visited.Clear();
+        _log?.Info(LogCategory, $"a bank run to {bank} is due — selling at {shop} on the way (from {cur}, resume {resume.Kind})");
+        _drivingWalker = true;
+        try { resume.Stop(_walker, _loops, _lair, "sell detour ahead of a bank run"); }
+        finally { _drivingWalker = false; }
+        GoToShop(shop);
+        return true;
+    }
+
+    private bool NearBank(RoomKey shop, RoomKey bank) =>
+        _distance(shop, bank) is { } steps && steps <= NearBankSteps;
 
     private bool Usable(int item, RoomKey shop)
         => !_refused.Contains((item, shop))
@@ -375,12 +443,14 @@ public sealed class SellDetourManager : IDisposable
             ?? _origin;
         if (here is { } cur)
         {
+            // Ahead of a bank run the count doesn't matter and the next stop is the bank.
             List<RoomKey> shops = _candidates()
-                .Where(c => c.Due)
+                .Where(c => _bankRun is null ? c.Due : c.Sellable)
                 .SelectMany(c => c.Shops.Where(s => !_visited.Contains(s) && Usable(c.Number, s)))
+                .Where(s => _bankRun is not { } bank || NearBank(s, bank))
                 .Distinct().ToList();
             if (shops.Count > 0
-                && PathItemShopRouter.TrySelectShop(shops, cur, _returnTo, _distance, out RoomKey next))
+                && PathItemShopRouter.TrySelectShop(shops, cur, _bankRun ?? _returnTo, _distance, out RoomKey next))
             {
                 _log?.Info(LogCategory, $"on to {next} for what's left");
                 GoToShop(next);
@@ -391,11 +461,13 @@ public sealed class SellDetourManager : IDisposable
         // A deposit the sale made due goes to the bank from here (user, 2026-09-30).
         if (HandOffToBank?.Invoke(_resume, _origin) == true)
         {
+            _bankRun = null;
             _phase = Phase.Idle;
             DetouringChanged?.Invoke();
             _log?.Info(LogCategory, "sold — a bank run is due, so the bank run takes the way back");
             return;
         }
+        DropBankRun("the bank run didn't take over at the shop");
 
         // A walk-to just resumes toward its destination; a loop walks back to its
         // nearest room, a lair to where it was.
@@ -428,6 +500,15 @@ public sealed class SellDetourManager : IDisposable
         _log?.Info(LogCategory, $"detour abandoned — {why}");
         _phase = Phase.Idle;
         DetouringChanged?.Invoke();
+        DropBankRun("the detour ahead of it was abandoned");
+    }
+
+    private void DropBankRun(string why)
+    {
+        if (_bankRun is not { } bank) return;
+        _bankRun = null;
+        _log?.Info(LogCategory, $"the bank run to {bank} isn't going from here — {why}");
+        BankRunNotTaken?.Invoke();
     }
 
     public void Dispose()
