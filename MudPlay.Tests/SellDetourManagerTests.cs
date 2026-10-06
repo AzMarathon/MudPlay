@@ -58,7 +58,10 @@ public sealed class SellDetourManagerTests : IDisposable
         public required AutoSellManager Sell { get; init; }
         public required SellDetourManager Detour { get; init; }
         public List<string> Carried { get; } = new();
-        public int DetourAbove { get; set; }
+        public int? DetourAbove { get; set; } = 0;
+        // Stands in for the map's own step count when set (a shop far from the bank).
+        public Func<RoomKey, RoomKey, int?>? Distance { get; set; }
+        public int NearBankSteps { get; set; } = 25;
         public bool Blocked { get; set; }
         public bool ShopTrades { get; set; } = true;
         public DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
@@ -131,7 +134,7 @@ public sealed class SellDetourManagerTests : IDisposable
             {
                 new SellDetourManager.Candidate(1, "dagger", h.Carried.Count, 0, h.DetourAbove, new[] { Shop }),
             },
-            distance: (a, b) => bfs.DistanceBetween(a, b),
+            distance: (a, b) => h.Distance is { } d ? d(a, b) : bfs.DistanceBetween(a, b),
             tracker: tracker, walker: walker, loops: loop, lair: lair, sell: sell, coordinator: coord,
             isEnabled: () => true,
             blocked: () => h.Blocked,
@@ -141,6 +144,7 @@ public sealed class SellDetourManagerTests : IDisposable
                 IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
                 return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
             },
+            nearBankSteps: () => h.NearBankSteps,
             clock: () => h.Now,
             post: a => { if (h.Defer) h.Posted.Add(a); else a(); });
         h = new Harness
@@ -375,5 +379,127 @@ public sealed class SellDetourManagerTests : IDisposable
         Assert.Equal((DetourResumeKind.Loop, new RoomKey(1, 3)), handedOff);
         Assert.False(h.Detour.IsDetouring);
         Assert.Equal(LoopState.Idle, h.Loop.State);      // the bank run resumes it, not us
+    }
+
+    private static readonly RoomKey Bank = new(1, 1);
+
+    // A loop on 1/2-1/3 with a bank run just come due, the bank one step from the shop.
+    private static bool OfferBankRun(Harness h)
+    {
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 2), new RoomKey(1, 3) })));
+        h.Arrive(new RoomKey(1, 3));
+        return h.Detour.SellAheadOfBankRun(
+            DetourResume.Snapshot(h.Walker, h.Loop, h.Lair, includeWalk: false), Bank);
+    }
+
+    // A bank run coming due sells what's carried at a shop near the bank first, though
+    // the item is under its detour count or makes no detours at all, and the bank run
+    // takes over from the shop (user, 2026-10-05; report paradigm-20261005-214728).
+    [Theory]
+    [InlineData(5)]
+    [InlineData(null)]
+    public void BankRunDue_SellsNearTheBankFirst_WhateverTheDetourCount(int? detourAbove)
+    {
+        using Harness h = NewHarness();
+        (DetourResumeKind Kind, RoomKey Origin)? handedOff = null;
+        int notTaken = 0;
+        h.Detour.HandOffToBank = (resume, origin) => { handedOff = (resume.Kind, origin); return true; };
+        h.Detour.BankRunNotTaken = () => notTaken++;
+        h.DetourAbove = detourAbove;
+        h.Carried.Add("dagger");
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        Assert.True(h.Loop.Start(new Loop("test", new[] { new RoomKey(1, 2), new RoomKey(1, 3) })));
+        h.Arrive(new RoomKey(1, 3));
+        h.Detour.Evaluate();
+        Assert.False(h.Detour.IsDetouring);              // nothing is due on its own
+
+        Assert.True(h.Detour.SellAheadOfBankRun(
+            DetourResume.Snapshot(h.Walker, h.Loop, h.Lair, includeWalk: false), Bank));
+        Assert.True(h.Detour.IsDetouring);
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+        Assert.Equal(Shop, h.Walker.Destination);
+        Assert.Contains($"ahead of the bank run to {Bank}", h.Detour.Status);
+
+        h.Arrive(new RoomKey(1, 2));
+        h.Arrive(new RoomKey(1, 1));
+        h.Arrive(Shop);
+        h.Sold();
+
+        Assert.Equal(DetourResumeKind.Loop, handedOff?.Kind);
+        Assert.False(h.Detour.IsDetouring);
+        Assert.Equal(0, notTaken);
+    }
+
+    [Fact]
+    public void BankRunDue_ShopFarFromTheBank_TheBankRunGoesAlone()
+    {
+        using Harness h = NewHarness();
+        h.Detour.HandOffToBank = (_, _) => true;
+        h.Distance = (_, _) => h.NearBankSteps + 1;
+        h.Carried.Add("dagger");
+
+        Assert.False(OfferBankRun(h));
+
+        Assert.False(h.Detour.IsDetouring);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    [Fact]
+    public void BankRunDue_StepCountZero_TheBankRunGoesAlone()
+    {
+        using Harness h = NewHarness();
+        h.Detour.HandOffToBank = (_, _) => true;
+        h.NearBankSteps = 0;
+        h.Carried.Add("dagger");
+
+        Assert.False(OfferBankRun(h));
+    }
+
+    [Fact]
+    public void BankRunDue_NothingToSell_TheBankRunGoesAlone()
+    {
+        using Harness h = NewHarness();
+        h.Detour.HandOffToBank = (_, _) => true;
+
+        Assert.False(OfferBankRun(h));
+
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    // The deposit gate fired once for this crossing and waits on the hand-over, so a
+    // detour that never gets there has to say so or the gate stays latched.
+    [Fact]
+    public void AheadOfABankRun_StoppedOnTheWay_TellsTheDepositGate()
+    {
+        using Harness h = NewHarness();
+        int notTaken = 0;
+        h.Detour.HandOffToBank = (_, _) => true;
+        h.Detour.BankRunNotTaken = () => notTaken++;
+        h.Carried.Add("dagger");
+        Assert.True(OfferBankRun(h));
+
+        h.Walker.Stop("user");
+
+        Assert.False(h.Detour.IsDetouring);
+        Assert.Equal(1, notTaken);
+    }
+
+    [Fact]
+    public void AheadOfABankRun_TheBankRunDeclinesAtTheShop_TellsTheDepositGateAndWalksBack()
+    {
+        using Harness h = NewHarness();
+        int notTaken = 0;
+        h.Detour.HandOffToBank = (_, _) => false;
+        h.Detour.BankRunNotTaken = () => notTaken++;
+        h.Carried.Add("dagger");
+        Assert.True(OfferBankRun(h));
+        h.Arrive(new RoomKey(1, 2));
+        h.Arrive(new RoomKey(1, 1));
+        h.Arrive(Shop);
+        h.Sold();
+
+        Assert.Equal(1, notTaken);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);   // back to the loop
     }
 }

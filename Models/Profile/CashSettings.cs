@@ -76,6 +76,11 @@ public sealed class CashSettings
     public bool NoCombatOnSellDetour { get; set; }
     public bool NoCombatOnDepositTrip { get; set; }
 
+    // A bank run that comes due while Auto-sell items are carried sells them first
+    // at a shop this many steps or fewer from the bank (SellDetourManager's
+    // SellAheadOfBankRun). 0 never adds the stop.
+    public int SellOnBankRunWithinSteps { get; set; } = 25;
+
     // ----- Coin encumbrance gate + cascade ---------------------------
     // The "Cash + Items" tab exposes these; CashManager.CollectCoins gates coin
     // pickups against the bracket boundary they name.
@@ -122,6 +127,13 @@ public sealed class CashSettings
     // Skip a ground-item pickup that would carry the character past 90% of max
     // (see SkipCollectPast90Percent).
     public bool SkipGetItemPast90Percent { get; set; }
+
+    // An Auto-collect item that is also flagged Auto-sell, and that the item
+    // ceiling above would leave on the ground, is picked up anyway by dropping
+    // held coin first: cheapest denomination first, and none dearer than
+    // DropCoinForSellItemsUpTo (CashManager.TryDropCoinForWeight). Default off.
+    public bool DropCoinForSellItems { get; set; }
+    public CoinDenomination DropCoinForSellItemsUpTo { get; set; } = CoinDenomination.Silver;
 }
 
 // Per-currency pickup decision.

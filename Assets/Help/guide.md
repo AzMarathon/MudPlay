@@ -1071,7 +1071,7 @@ Set the bank and thresholds on Settings → Cash. To bank right now regardless o
 Right-click a **stash room** on the Navigation map and open **Transfer Stash to Bank**. The fly-out lists every bank in the game data, nearest to where you are standing first, each with its map/room and the number of steps to it. Or start from the other end: right-click a **bank room** and open **Transfer Stash to This Bank**, which lists your stash rooms nearest that bank first, each with its steps from the bank and the coin MudPlay believes it holds. Steps are counted the way the trip will travel, through doors and gates whose key or item can be obtained and across boat crossings, so a bank behind one of those still shows its distance; only a bank with no route at all reads *no route found*. Pick one and MudPlay shuttles the stash's coin to it:
 
 - It stops any loop or Auto-Lair that is running (it does not resume it afterwards), walks to the stash room and searches. If you start it already loaded — carrying more coin than you have room left for, as after a transfer that was cut off on its way to the bank — it goes to the bank and deposits that first.
-- It reads the pile the search shows, then takes as much as your coin weight limits allow (**Settings → Cash**: *Don't collect if it makes you Light / Medium / Heavy*, *Don't collect past 90% encumbrance*, and *Drop smaller currency to make room for larger*). With no limit ticked that is everything you can physically carry. The per-coin Collect / Ignore / Discard choices don't decide what it takes — this is your own stash — but a coin set to **Discard** will still be dropped again, so set it to Ignore or Collect first if your stash holds any.
+- It reads the pile the search shows, then takes as much as your coin weight limits allow (**Settings → Cash**: *Don't collect coin if it makes you Light / Medium / Heavy*, *Don't collect coin past 90% encumbrance*, and *Drop smaller currency to make room for larger*). With no limit ticked that is everything you can physically carry. The per-coin Collect / Ignore / Discard choices don't decide what it takes — this is your own stash — but a coin set to **Discard** will still be dropped again, so set it to Ignore or Collect first if your stash holds any.
 - It walks to the bank and deposits everything you are carrying above your **Minimum cash to keep on hand** (Settings → Cash) — the stash's coin, anything picked up off the ground on the way, and whatever was already in your pocket. With that setting at 0 it deposits all of it. If your pocket was below the keep-on-hand amount, the stash's coin tops it up first.
 - If a search finds the stash already empty while you are still carrying coin above your keep-on-hand amount — the last load of a transfer that was cut off, say — it takes that to the bank, deposits it and ends there, rather than stopping at the stash.
 - It goes back for more and repeats until a search shows nothing left, and ends standing in the bank. A notice in the terminal says how much moved and in how many trips.
@@ -1698,6 +1698,7 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 
 - **Which shop:** tick **Sell here** on the shops in the **Bought / sold** list to choose. With none ticked, any shop that trades the item can be used. Among the allowed shops, it picks the one that adds the fewest steps.
 - **The trip:** the route stops at the next room, walks to the shop, sells, then carries on. A walk-to heads on to its destination; a loop walks back to whichever of its rooms is nearest the shop and picks up from there, and Auto-Lair walks back to where it stopped. If the sale pushes you over your auto-deposit threshold, it goes **straight to the bank from the shop** and then back to the loop, instead of walking back first and setting off again.
+- **On a bank run:** when an auto-deposit comes due while you carry anything Auto-sell would sell, and a shop for it is close to the bank (25 steps by default — **Settings → Cash + Items → Detours**), the trip sells there first, then checks again whether a deposit is still due and goes on to the bank, so the sale's coin is deposited too. This goes for every Auto-sell item, under its detour count or with *Make detours to sell it* unticked: you're going to town anyway. A shop further from the bank isn't worth the walk, and the bank run goes alone. Stash rooms don't do this, only a real bank.
 - **Unticking Auto-sell** clears *Make detours to sell it* and its count too, since a detour only walks to the shop and Auto-sell does the selling (batch edit's Auto-sell **Off** does the same).
 - **When it doesn't detour:** if your walk ends at one of those shops, or your loop or Auto-Lair passes through one, it just sells on the way. It also waits while you're fighting, resting, paused, following a party leader, or another errand (a bank trip, a train trip, a token route) has the route.
 - **A shop that didn't buy it:** a shop that refuses the item ("You cannot sell … here.") or can't be reached isn't tried for it again this session. A shop that just didn't sell it — Auto-sell had nothing to sell there, or no sale reply came — waits 10 minutes before it's tried again. The bug report's *Sell detour* line lists both.
@@ -3612,7 +3613,7 @@ Settings → Cash + Items.
 
 **Default:** both `0` (disabled)
 **What it does:** When your total held wealth (converted to a single value) — or, separately, your total raw coin count — passes this number, MudPlay automatically detours to your chosen Bank/Stash and deposits the excess.
-**Important notes:** Either threshold tripping is enough to trigger a deposit; both must fall back below their thresholds before it can trigger again. Requires a Bank/Stash to actually be selected below — without one, nothing happens even if the threshold is crossed.
+**Important notes:** Either threshold tripping is enough to trigger a deposit; both must fall back below their thresholds before it can trigger again. Requires a Bank/Stash to actually be selected below — without one, nothing happens even if the threshold is crossed. If you're carrying items flagged **Auto-sell** and a shop that buys them is close enough to the bank (*On an auto-deposit trip, sell Auto-sell items first…* below), the trip stops there to sell first and banks the proceeds with the rest (see *Sell detours* under the item override editor).
 
 ### Bank
 
@@ -3654,22 +3655,30 @@ Stashing isn't affected; it's governed by the coin-type filter below.
 
 The program log notes each flip, and the bug report shows whether a detour is holding combat off.
 
-### Don't collect if it makes you Light / Medium / Heavy
+### On an auto-deposit trip, sell Auto-sell items first at a shop within this many steps of the bank
 
-**Default:** all Off
-**What it does:** Skips picking up a coin if doing so would push your encumbrance into the named bracket. The three are nested by strictness — checking "Light" implies "Medium" and "Heavy" are also refused, since those are looser thresholds.
-**When you might change it:** Turn on "Don't make you Medium" if you want to stay light on your feet while exploring or fighting.
+**Default:** 25
+**What it does:** When an auto-deposit trip to a **bank** comes due while you carry anything flagged **Auto-sell**, and a shop that buys it is this many steps or fewer from the bank, the trip goes to the shop first, sells, and then goes on to the bank if a deposit is still due. It counts every Auto-sell item, including ones under their detour count or with *Make detours to sell it* unticked.
+**Important notes:** **0** never adds the stop. Raise it if your shop is further from your bank; lower it to keep bank trips short. A stash-room destination never adds a shop stop.
 
-### Don't collect past 90% encumbrance
-
-**Default:** Off
-**What it does:** Lets you pick up coin all the way into Heavy, but stops at 90% of your max carry weight. The spare 10% is there because a debuff such as *frail* can lower your max mid-fight. If you're filled to the brim, that leaves you **too heavy to move** until you drop something or it wears off (see *If leading, wait only*).
-**Important notes:** Any bracket gate above already stops lower, so turning one on ticks and locks this box.
+The pickup rules come in three groups on the tab. **Collection Rules: Coins and Items** holds the one switch both share. **Coin Collection Rules** limit how much weight picking up *coin* may bring you to. **Item Collection Rules** set the same kind of limit for ground *items*, separately, so you can let coin fill you further than items or the other way round.
 
 ### Collect after combat finished (Cash and Items)
 
 **Default:** Off
 **What it does:** Waits until a room's fight is fully over before picking up ground coin and items (this one switch governs both engines), instead of grabbing them mid-fight.
+
+### Don't collect coin if it makes you Light / Medium / Heavy
+
+**Default:** all Off
+**What it does:** Skips picking up a coin if doing so would push your encumbrance into the named bracket. The three are nested by strictness — checking "Light" implies "Medium" and "Heavy" are also refused, since those are looser thresholds.
+**When you might change it:** Turn on "Don't make you Medium" if you want to stay light on your feet while exploring or fighting.
+
+### Don't collect coin past 90% encumbrance
+
+**Default:** Off
+**What it does:** Lets you pick up coin all the way into Heavy, but stops at 90% of your max carry weight. The spare 10% is there because a debuff such as *frail* can lower your max mid-fight. If you're filled to the brim, that leaves you **too heavy to move** until you drop something or it wears off (see *If leading, wait only*).
+**Important notes:** Any bracket gate above already stops lower, so turning one on ticks and locks this box.
 
 ### Drop smaller currency to make room for larger Collect-flagged coin
 
@@ -3679,7 +3688,13 @@ The program log notes each flip, and the bug report shows whether a detour is ho
 ### Don't get item if it makes you Light / Medium / Heavy
 
 **Default:** all Off
-**What it does:** Same nested-strictness idea as the coin version above, but applied to picking up ground *items* instead of coin. **Don't get item past 90% encumbrance** is the item twin of *Don't collect past 90% encumbrance*.
+**What it does:** Same nested-strictness idea as the coin version above, but applied to picking up ground *items* instead of coin. **Don't get item past 90% encumbrance** is the item twin of *Don't collect coin past 90% encumbrance*.
+
+### Drop coin to make room for Auto-sell items, up to
+
+**Default:** Off, up to Silver
+**What it does:** When an item flagged **Auto-collect** and **Auto-sell** is too heavy to pick up under the item limits above (or your carry maximum), this drops just enough coin to fit it and then takes it, instead of leaving it on the ground. Coin goes cheapest first, and never anything dearer than the coin you pick: **Silver** drops copper, then silver, and leaves gold, platinum and runic alone.
+**Important notes:** Three coins weigh one unit, so a 40-weight item costs 120 coins. If the coin it's allowed to drop can't free enough room, nothing is dropped and the item stays where it is. Items that aren't flagged Auto-sell never cost you coin. It doesn't check what the item sells for, so keep the limit at a coin you'd happily trade for the things you sell. While *Collect after combat finished* is holding pickups for a fight, the drop waits for the fight to end too. The dropped coin stays on the floor: coin pickup won't take it back unless your coin limits allow more weight than your item limits.
 
 ---
 
@@ -4613,6 +4628,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Keep wealth (copper) | `0` | 0–100,000,000 | `KeepOnHandWealth` | Models/Profile/CashSettings.cs |
 | Don't collect/get item → Light/Medium/Heavy (6 flags) | false (all) | bool | `SkipCollectIfMakesLight` etc. / `SkipGetItemIfMakesLight` etc. | Models/Profile/CashSettings.cs |
 | Collect after combat finished / Drop smaller for larger | false / false | bool | `CollectAfterCombatFinished` / `DropSmallerForLarger` | Models/Profile/CashSettings.cs |
+| On an auto-deposit trip, sell first at a shop within N steps of the bank | 25 | 0–500 (0 = never) | `SellOnBankRunWithinSteps` | Models/Profile/CashSettings.cs |
+| Drop coin to make room for Auto-sell items / up to | false / Silver | bool / Copper–Runic | `DropCoinForSellItems` / `DropCoinForSellItemsUpTo` | Models/Profile/CashSettings.cs |
 | Stash transfers: party members carry a share too | false | bool | `StashTransferPartyShare` | Models/Profile/CashSettings.cs |
 | Disallow all remote / @party / telepaths / gangpaths / local | false (all) | bool | `DisallowAllRemoteCommands` etc. | Models/Profile/TalkSettings.cs |
 | Warn on invalid remote command / Failure message | true / default text | bool / free text | `WarnOnInvalidRemoteCommand` / `RemoteCommandFailureMessage` | Models/Profile/TalkSettings.cs |

@@ -5492,6 +5492,11 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
     coin up to its own weight limits, and replies `{ok - …}` once its gets have landed. When every
     member has replied (12 s at most) the leader searches again to count what is left, and at the bank
     sends each `@deposit-all` and waits for those replies the same way.
+- `CashManager.TryDropCoinForWeight` (Settings → Cash *Drop coin to make room for Auto-sell items*)
+  relies on the 3-coins-per-unit rule: to fit an Auto-sell item that is over the item weight limit it
+  drops three coins per unit of overshoot, cheapest denomination first and none dearer than the
+  setting's coin (**Client policy**, user 2026-10-05; report `paradigm-20261005-214728`: a 2,028-silver
+  pickup filled the weight limit and every sellable dagger after it was left on the ground).
 - Auto-collect is suppressed in a stash room **only while an auto-search reveal is in flight** — coin
   shown on plain entry or a kill drop still collects, in the stash room and in the room after it.
   Implemented as `AutoSearchManager.IsRevealInFlight` gating the stash-room collect guard.

@@ -59,6 +59,11 @@ public sealed class AutoGetItemsManagerTests
         // Default Empty (MaxWeight 0) disables the gate — the pre-existing tests
         // set no weights and expect ungated collection.
         public EncumbranceReading Enc { get; set; } = EncumbranceReading.Empty;
+        // canonical names Auto-sell would sell, and what the coin drop answers when
+        // asked to free weight for one (each ask is recorded).
+        public HashSet<string> AutoSell { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool CoinDropFrees { get; set; }
+        public List<(long Weight, string Item)> CoinDropAsks { get; } = new();
         public bool GateLight { get; set; }
         public bool GateMedium { get; set; }
         public bool GateHeavy { get; set; }
@@ -77,7 +82,8 @@ public sealed class AutoGetItemsManagerTests
                 encumbrance: () => Enc,
                 itemEncGates: () => (GateLight, GateMedium, GateHeavy, Gate90),
                 log: Log,
-                isParadigm: () => Paradigm);
+                isParadigm: () => Paradigm,
+                dropCoinForWeight: (weight, item) => { CoinDropAsks.Add((weight, item)); return CoinDropFrees; });
             Items.SetWireSender(b => Sent.Add(b));
         }
 
@@ -102,7 +108,7 @@ public sealed class AutoGetItemsManagerTests
             int number = Numbers.GetValueOrDefault(key);
             int cap = Caps.TryGetValue(key, out int c) ? c : int.MaxValue;
             int weight = Weights.GetValueOrDefault(key);
-            return new AutoGetItemsManager.ResolvedItem(number, key, auto, noTake, cap, weight);
+            return new AutoGetItemsManager.ResolvedItem(number, key, auto, noTake, cap, weight, AutoSell.Contains(key));
         }
 
         private static string Strip(string raw)
@@ -552,6 +558,52 @@ public sealed class AutoGetItemsManagerTests
 
         Assert.Single(h.Sent);
         Assert.Equal("get dagger", h.SentText[0]);
+    }
+
+    // An Auto-sell item over the weight cap asks for exactly the overshoot in coin
+    // weight, and is taken once the coin is down.
+    [Fact]
+    public void OverCap_AutoSellItem_TakenOnceCoinIsDroppedForIt()
+    {
+        using Harness h = new() { CoinDropFrees = true };
+        h.Flags["dagger"] = true;
+        h.AutoSell.Add("dagger");
+        h.Weights["dagger"] = 40;
+        h.Enc = Reading(90, 100);
+
+        h.Feed("You notice a dagger here.");
+
+        Assert.Equal(new[] { (30L, "dagger") }, h.CoinDropAsks);
+        Assert.Equal(new[] { "get dagger" }, h.SentText);
+    }
+
+    [Fact]
+    public void OverCap_AutoSellItem_LeftWhenNoCoinCanBeDropped()
+    {
+        using Harness h = new();
+        h.Flags["dagger"] = true;
+        h.AutoSell.Add("dagger");
+        h.Weights["dagger"] = 40;
+        h.Enc = Reading(90, 100);
+
+        h.Feed("You notice a dagger here.");
+
+        Assert.Single(h.CoinDropAsks);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void OverCap_ItemNotForSale_NeverCostsCoin()
+    {
+        using Harness h = new() { CoinDropFrees = true };
+        h.Flags["anvil"] = true;
+        h.Weights["anvil"] = 40;
+        h.Enc = Reading(90, 100);
+
+        h.Feed("You notice an anvil here.");
+
+        Assert.Empty(h.CoinDropAsks);
+        Assert.Empty(h.Sent);
     }
 
     [Fact]

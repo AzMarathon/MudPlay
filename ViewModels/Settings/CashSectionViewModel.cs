@@ -92,8 +92,10 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     // No combat until an auto-sell detour / auto-deposit trip is back on the loop.
     [ObservableProperty] private bool _noCombatOnSellDetour;
     [ObservableProperty] private bool _noCombatOnDepositTrip;
+    // A bank run sells first at a shop within this many steps of the bank; 0 = never.
+    [ObservableProperty] private int _sellOnBankRunWithinSteps = 25;
 
-    // Dropdown source for both denomination pickers (low → high).
+    // Dropdown source for the denomination pickers (low → high).
     public IReadOnlyList<CoinDenomination> DenominationChoices { get; } =
         Enum.GetValues<CoinDenomination>();
 
@@ -112,6 +114,11 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _skipGetItemIfMakesMedium;
     [ObservableProperty] private bool _skipGetItemIfMakesHeavy;
     [ObservableProperty] private bool _skipGetItemPast90Percent;
+
+    // Drop held coin, up to the chosen denomination, to pick up an Auto-sell item
+    // the ceilings above would refuse.
+    [ObservableProperty] private bool _dropCoinForSellItems;
+    [ObservableProperty] private CoinDenomination _dropCoinForSellItemsUpTo = CoinDenomination.Silver;
 
     // Static list of policy choices for the per-currency ComboBoxes. The view
     // binds ItemsSource to this.
@@ -178,6 +185,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             StashTransferPartyShare = StashTransferPartyShare,
             NoCombatOnSellDetour = NoCombatOnSellDetour,
             NoCombatOnDepositTrip = NoCombatOnDepositTrip,
+            SellOnBankRunWithinSteps = Math.Max(0, SellOnBankRunWithinSteps),
 
             SkipCollectIfMakesLight    = SkipCollectIfMakesLight,
             SkipCollectIfMakesMedium   = SkipCollectIfMakesMedium,
@@ -190,6 +198,8 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             SkipGetItemIfMakesMedium   = SkipGetItemIfMakesMedium,
             SkipGetItemIfMakesHeavy    = SkipGetItemIfMakesHeavy,
             SkipGetItemPast90Percent   = SkipGetItemPast90Percent,
+            DropCoinForSellItems       = DropCoinForSellItems,
+            DropCoinForSellItemsUpTo   = DropCoinForSellItemsUpTo,
         };
 
         profile.Settings ??= new();
@@ -252,6 +262,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         StashTransferPartyShare = dto.StashTransferPartyShare;
         NoCombatOnSellDetour = dto.NoCombatOnSellDetour;
         NoCombatOnDepositTrip = dto.NoCombatOnDepositTrip;
+        SellOnBankRunWithinSteps = dto.SellOnBankRunWithinSteps;
 
         SkipCollectIfMakesLight    = dto.SkipCollectIfMakesLight;
         SkipCollectIfMakesMedium   = dto.SkipCollectIfMakesMedium;
@@ -264,6 +275,8 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         SkipGetItemIfMakesMedium   = dto.SkipGetItemIfMakesMedium;
         SkipGetItemIfMakesHeavy    = dto.SkipGetItemIfMakesHeavy;
         SkipGetItemPast90Percent   = dto.SkipGetItemPast90Percent;
+        DropCoinForSellItems       = dto.DropCoinForSellItems;
+        DropCoinForSellItemsUpTo   = dto.DropCoinForSellItemsUpTo;
     }
 
     private CashSettings ReadOrDefault()
@@ -399,6 +412,9 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     }
 
     partial void OnSkipGetItemPast90PercentChanged(bool value)        => MarkDirty();
+    partial void OnSellOnBankRunWithinStepsChanged(int value)         => MarkDirty();
+    partial void OnDropCoinForSellItemsChanged(bool value)            => MarkDirty();
+    partial void OnDropCoinForSellItemsUpToChanged(CoinDenomination value) => MarkDirty();
     partial void OnSelectedBankChanged(BankChoice? value)
     {
         if (value is not null) BankRoomKey = value.Value;

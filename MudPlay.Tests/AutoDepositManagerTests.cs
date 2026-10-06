@@ -392,6 +392,46 @@ public sealed class AutoDepositManagerTests : IDisposable
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
     }
 
+    // A sale near the bank goes first: the crossing is offered to the sell detour, and
+    // the bank run starts when the detour hands it back from the shop (user, 2026-10-05).
+    [Fact]
+    public void GateCross_SaleNearTheBankGoesFirst_BankRunStartsAtTheHandOver()
+    {
+        using Harness h = NewHarness();
+        StartLair(h);
+        ArmBankGate(h);
+        (DetourResumeKind Kind, RoomKey Bank)? offered = null;
+        h.AutoDeposit.SellFirst = (resume, bank) => { offered = (resume.Kind, bank); return true; };
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+
+        Assert.Equal((DetourResumeKind.Lair, new RoomKey(1, 3)), offered);
+        Assert.False(h.AutoDeposit.IsRerouting);
+        Assert.True(h.Lair.IsActive);                    // the sell detour stops it, not the bank run
+
+        h.Lair.Stop("sell detour");
+        Assert.True(h.AutoDeposit.TakeOverFromDetour(new DetourResume(DetourResumeKind.Lair), new RoomKey(1, 1)));
+        Assert.True(h.AutoDeposit.IsRerouting);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+    }
+
+    [Fact]
+    public void GateCross_ToAStashRoom_IsNotOfferedToASale()
+    {
+        using Harness h = NewHarness();
+        StartLair(h);
+        h.Profile.Current!.StashRooms = new List<RoomRef> { new RoomRef(1, 2) };
+        h.Settings.BankRoomKey = "1/2";
+        h.Settings.AutoDepositIfWealthExceeds = 1000;
+        bool offered = false;
+        h.AutoDeposit.SellFirst = (_, _) => offered = true;
+
+        h.SetWealth(copper: 0, silver: 0, gold: 50, platinum: 0, runic: 0, totalCopperValue: 5000);
+
+        Assert.False(offered);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+    }
+
     [Fact]
     public void GateCross_WhileIdle_DoesNotReroute()
     {

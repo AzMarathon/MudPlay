@@ -43,10 +43,12 @@ public sealed class AutoGetItemsManager : IDisposable
     // lookup), the name to send to the game, whether the user flagged it for
     // auto-collection, whether it is marked CannotBeTaken (a hard never-pick-up
     // flag that wins over AutoCollect — the engine never sends get for it), the
-    // MaxToGet carry cap (int.MaxValue = unbounded), and the item's carry Weight
-    // (MDB Encum; 0 when unknown — such items skip the encumbrance gate).
+    // MaxToGet carry cap (int.MaxValue = unbounded), the item's carry Weight
+    // (MDB Encum; 0 when unknown — such items skip the encumbrance gate), and
+    // whether Auto-sell would sell it (coin may be dropped to fit one of those in).
     public sealed record ResolvedItem(int Number, string Name, bool AutoCollect,
-                                      bool CannotBeTaken, int MaxToGet, int Weight);
+                                      bool CannotBeTaken, int MaxToGet, int Weight,
+                                      bool AutoSell = false);
 
     private readonly Func<string, ResolvedItem?> _resolve;
     private readonly Func<int, int> _heldCount;
@@ -57,6 +59,7 @@ public sealed class AutoGetItemsManager : IDisposable
     private readonly Func<bool> _isPeekSuppressed;
     private readonly Func<EncumbranceReading> _encumbrance;
     private readonly Func<(bool Light, bool Medium, bool Heavy, bool Past90)> _itemEncGates;
+    private readonly Func<long, string, bool> _dropCoinForWeight;
     private readonly LogService? _log;
     private readonly IDisposable _noticeSub;
     private readonly IDisposable _gotSub;
@@ -117,7 +120,8 @@ public sealed class AutoGetItemsManager : IDisposable
         Func<EncumbranceReading>? encumbrance = null,
         Func<(bool Light, bool Medium, bool Heavy, bool Past90)>? itemEncGates = null,
         LogService? log = null,
-        Func<bool>? isParadigm = null)
+        Func<bool>? isParadigm = null,
+        Func<long, string, bool>? dropCoinForWeight = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(resolve);
@@ -145,6 +149,9 @@ public sealed class AutoGetItemsManager : IDisposable
         // bracket gates (the "Cash + Items" tab checkboxes).
         _encumbrance = encumbrance ?? (static () => EncumbranceReading.Empty);
         _itemEncGates = itemEncGates ?? (static () => (false, false, false, false));
+        // (weight to free, item name) → whether coin was dropped to free it. Unbound
+        // (tests) → never.
+        _dropCoinForWeight = dropCoinForWeight ?? (static (_, _) => false);
         _log = log;
 
         _noticeSub = router.Subscribe(KnownPatterns.YouNoticeRoom, OnYouNoticeRoom);
@@ -516,9 +523,17 @@ public sealed class AutoGetItemsManager : IDisposable
                 // an over-cap one), so there's no reliable signal to suppress on.
                 if (encKnown && item.Weight > 0 && projectedWeight + item.Weight > capWeight)
                 {
-                    _log?.Info(LogCategory,
-                        $"skipped item={item.Name} (encumbrance: {projectedWeight}+{item.Weight} > cap {capWeight})");
-                    break;   // over the weight cap — leave the rest of the pile
+                    // An item we'd sell may be worth the coin in its way: drop just
+                    // enough to fit it. Not while its get waits on a fight, though —
+                    // the coin would be down long before the item came up.
+                    long over = projectedWeight + item.Weight - capWeight;
+                    if (deferMode || !item.AutoSell || !_dropCoinForWeight(over, item.Name))
+                    {
+                        _log?.Info(LogCategory,
+                            $"skipped item={item.Name} (encumbrance: {projectedWeight}+{item.Weight} > cap {capWeight})");
+                        break;   // over the weight cap — leave the rest of the pile
+                    }
+                    projectedWeight -= over;
                 }
 
                 if (item.MaxToGet != int.MaxValue)

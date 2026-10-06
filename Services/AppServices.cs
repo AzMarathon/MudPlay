@@ -6348,7 +6348,8 @@ public sealed class AppServices
                         c.SkipGetItemPast90Percent);
             },
             log: Log,
-            isParadigm: onParadigm);
+            isParadigm: onParadigm,
+            dropCoinForWeight: (weight, item) => Cash.TryDropCoinForWeight(weight, item));
         AutoGetItems.SetAcquisitionGate(Acquisition);
         AutoGetItems.SetRoomRedisplay(RoomRedisplay);
         // Combat-finished flush: every room-entity observation re-checks
@@ -8191,6 +8192,7 @@ public sealed class AppServices
                 || AutoLightShopRouter.DetourActive
                 || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
             nearestLoopRoom: NearestLoopRoom,
+            nearBankSteps: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").SellOnBankRunWithinSteps,
             log: Log);
 
         // Stop holds a money or training errand instead of ending it, and the next
@@ -8232,6 +8234,10 @@ public sealed class AppServices
                     $"[Stop is holding {held} - Resume carries it on, Stop again ends it]"));
         };
         SellDetour.HandOffToBank = AutoDeposit.TakeOverFromDetour;
+        // And the other way round: a bank run coming due lets a sale near the bank go
+        // first, which then hands the run back as above.
+        AutoDeposit.SellFirst = SellDetour.SellAheadOfBankRun;
+        SellDetour.BankRunNotTaken = Cash.NotifyAutoDepositAborted;
         Tick.HeartbeatElapsed += SellDetour.Evaluate;
         Inventory.Changed += SellDetour.Evaluate;
         // Settings → Cash + Items "No combat during a detour": holds the real Auto-Combat
@@ -11738,7 +11744,8 @@ public sealed class AppServices
         Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
         return new Game.Inventory.AutoGetItemsManager.ResolvedItem(
             number, name, overlay.AutoCollect ?? false, overlay.CannotBeTaken ?? false,
-            MaxCap(overlay), ItemNames.WeightOf(name) ?? 0);
+            MaxCap(overlay), ItemNames.WeightOf(name) ?? 0,
+            AutoSell: ResolveAutoSellItem(name) is { Sell: true });
     }
 
     // Resolve a carried entry for AutoDiscard: map the loose carry wording to an
@@ -12268,10 +12275,11 @@ public sealed class AppServices
         return best;
     }
 
-    // Carried items that can take a sell detour: flagged Make detours + Auto-sell (and
-    // sellable — not loyal, not a light), with their counts, keep floor, detour count
-    // and the shop rooms they may use — the ticked "Sell here" shops that trade the
-    // item, or every shop that trades it when none are ticked.
+    // Carried items a trip to a shop could sell: flagged Auto-sell (and sellable — not
+    // loyal, not a light), with their counts, keep floor, detour count and the shop
+    // rooms they may use — the ticked "Sell here" shops that trade the item, or every
+    // shop that trades it when none are ticked. One without Make detours carries no
+    // detour count: it never starts a trip, but a bank run can still sell it.
     private System.Collections.Generic.IReadOnlyList<Game.Inventory.SellDetourManager.Candidate> SellDetourCandidates()
     {
         System.Collections.Generic.Dictionary<int, (Game.Inventory.AutoSellManager.ResolvedSell Item, int Count)> carried = new();
@@ -12288,8 +12296,9 @@ public sealed class AppServices
             Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
             // "Detour to sell if above" left blank means no detour (user, 2026-09-29);
             // 0 is a real count — go once above Min. to keep.
-            if (overlay.SellDetour != true || string.IsNullOrWhiteSpace(overlay.SellDetourAbove)) continue;
-            int above = ParseCount(overlay.SellDetourAbove, 0);
+            int? above = overlay.SellDetour == true && !string.IsNullOrWhiteSpace(overlay.SellDetourAbove)
+                ? ParseCount(overlay.SellDetourAbove, 0)
+                : null;
             System.Collections.Generic.IReadOnlyList<Game.Map.RoomKey> trading = ShopRoomsSellingItem(number);
             var picks = new System.Collections.Generic.HashSet<Game.Map.RoomKey>();
             foreach (string wire in (overlay.SellShops ?? string.Empty).Split(',',
