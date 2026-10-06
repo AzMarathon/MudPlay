@@ -74,7 +74,7 @@
     },
     {
       "Room": "15/1454",
-      "Command": "go fissure",
+      "Command": null,
       "DelayMs": 0
     }
   ],

@@ -49,7 +49,7 @@
     },
     {
       "Room": "1/1642",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -259,7 +259,7 @@
     },
     {
       "Room": "1/1799",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     }
   ],

@@ -16,6 +16,18 @@
 - A flee to the flee room runs in Sprint Mode
 - @kill naming a player in the room starts a fight with that player, switching evil warnings off first if you allow it
 
+## 3.144.27
+
+- A loop waypoint command that is the same text exit the route takes next is sent once, instead of crossing and walking straight back
+- A loop's own waypoint command no longer pauses the loop as a move you typed
+- A loop waits for the game to answer every command in a waypoint's command before its next move, and stays in the room while a fight the command started runs
+- A blank between two separators in a waypoint's command (`pull book;^M`) sends a bare Enter and waits for the room to be shown again
+- A cast or attack in a waypoint's command is no longer treated as one you typed
+- Packaged loops no longer carry commands the navigation already performs (`go path`, `go fissure`, `move rubble`, `push brick`, `push stone`)
+- The corrected packaged loops replace the copies already in a game-data set, once per correction (the old copy is kept as `.bak`)
+- Quest Editor: a filter box above the quest list narrows it by name
+- bug reports addressed: paradigm-20261005-201733, paradigm-20261005-201859, paradigm-20261005-194751
+
 ## 3.144.22
 
 - Stash amounts are kept per realm and shared by every character on it, instead of per character

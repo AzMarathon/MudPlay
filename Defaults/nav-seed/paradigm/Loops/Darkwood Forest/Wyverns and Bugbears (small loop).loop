@@ -114,7 +114,7 @@
     },
     {
       "Room": "1/413",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -164,7 +164,7 @@
     },
     {
       "Room": "1/436",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -184,7 +184,7 @@
     },
     {
       "Room": "1/471",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -224,7 +224,7 @@
     },
     {
       "Room": "1/277",
-      "Command": "go path",
+      "Command": null,
       "DelayMs": 0
     },
     {

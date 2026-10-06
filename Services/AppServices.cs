@@ -7355,6 +7355,9 @@ public sealed class AppServices
         // confusion!") can bonk several consecutive moves in a row well inside
         // the loop's bounded recovery budget; EnterRecovery reads this to avoid
         // charging those against it (report paradigm-20260902-113201).
+        // A waypoint's command block: the loop moves on once the game has answered it,
+        // and stays while a fight it started runs.
+        LoopRunner.SetInCombatProbe(() => PlayerState.InCombat);
         LoopRunner.SetConfusedCheck(() => Conditions.IsConfused);
         // Trapped exits mid-circuit: the walker's disarm / delegate / walk-through
         // decision, through the same managers.

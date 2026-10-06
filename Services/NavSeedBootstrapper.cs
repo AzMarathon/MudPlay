@@ -22,6 +22,10 @@ namespace MudPlay.Services;
 //    seeds its ledger with EVERYTHING currently bundled and adds nothing, so no
 //    already-shipped item — including ones the user deleted — is resurrected. Only
 //    genuinely-new future items land after that.
+//  - Revised loops replace the copy: a bundled loop we corrected carries a revision
+//    number in the bundle's LoopRevisions.json. A set whose ledger holds an older
+//    revision gets the new file over its copy (the old one kept beside it as .bak),
+//    once per revision. A loop the user deleted or moved is left alone.
 //  - Realm-matched (stock vs paradigm via Info.json Legit); best-effort (a failure
 //    logs and leaves the set as-is rather than blocking).
 public static class NavSeedBootstrapper
@@ -79,11 +83,15 @@ public static class NavSeedBootstrapper
             int before = ledger.Loops.Count + ledger.Favorites.Count + ledger.Folders.Count;
             int loops = ApplyLoops(Path.Combine(bundle, "Loops"), loopsDest, ledger);
             int favs = ApplyFavourites(Path.Combine(bundle, "Favorites.json"), favDest, ledger);
+            (int replaced, bool revisionsMoved) = ApplyLoopRevisions(bundle, loopsDest, ledger);
             bool grew = ledger.Loops.Count + ledger.Favorites.Count + ledger.Folders.Count != before;
-            if (grew) SaveLedger(ledgerPath, ledger);
+            if (grew || revisionsMoved) SaveLedger(ledgerPath, ledger);
             if (loops > 0 || favs > 0)
                 log?.Log(LogSeverity.Info, "NavSeed",
                     $"Seeded set '{setName}' ({realm}): +{loops} loop(s), +{favs} favourite(s).");
+            if (replaced > 0)
+                log?.Log(LogSeverity.Info, "NavSeed",
+                    $"Set '{setName}' ({realm}): {replaced} packaged loop(s) replaced with their corrected version (previous copies kept as .bak).");
         }
         catch (Exception ex)
         {
@@ -113,6 +121,37 @@ public static class NavSeedBootstrapper
             copied++;
         }
         return copied;
+    }
+
+    // Bring the set's copy of each revised bundled loop up to the bundle's revision.
+    // Returns how many files were replaced, and whether the ledger changed.
+    private static (int Replaced, bool LedgerChanged) ApplyLoopRevisions(
+        string bundle, string dstLoops, NavSeedLedger ledger)
+    {
+        string manifest = Path.Combine(bundle, "LoopRevisions.json");
+        if (!File.Exists(manifest)) return (0, false);
+        Dictionary<string, int> revisions =
+            JsonSerializer.Deserialize<Dictionary<string, int>>(File.ReadAllText(manifest)) ?? new();
+
+        int replaced = 0;
+        bool changed = false;
+        foreach ((string rel, int revision) in revisions)
+        {
+            if (ledger.LoopRevisions.GetValueOrDefault(rel) >= revision) continue;
+            ledger.LoopRevisions[rel] = revision;
+            changed = true;
+
+            string relNative = rel.Replace('/', Path.DirectorySeparatorChar);
+            string source = Path.Combine(bundle, "Loops", relNative);
+            string target = Path.Combine(dstLoops, relNative);
+            if (!File.Exists(source) || !File.Exists(target)) continue;
+            byte[] corrected = File.ReadAllBytes(source);
+            if (corrected.AsSpan().SequenceEqual(File.ReadAllBytes(target))) continue;   // just seeded
+            File.Copy(target, target + ".bak", overwrite: true);
+            File.WriteAllBytes(target, corrected);
+            replaced++;
+        }
+        return (replaced, changed);
     }
 
     // Union the bundle's Favorites/FavoriteFolders into the set's — but only entries
@@ -228,5 +267,7 @@ public static class NavSeedBootstrapper
         public List<string> Loops { get; set; } = new();
         public List<string> Favorites { get; set; } = new();
         public List<string> Folders { get; set; } = new();
+        // Bundled loop → the revision of it this set holds (absent = as first shipped).
+        public Dictionary<string, int> LoopRevisions { get; set; } = new();
     }
 }

@@ -1348,6 +1348,7 @@ public static class BugReportBuilder
             loop.CurrentLoop is { } running
                 ? $"{running.Name} — step {loop.CurrentIndex + 1}/{loop.StepCount}"
                 : "(none)");
+        Kv(sb, "Loop holding for a command's replies", loop.AwaitingCommandReplies ? "yes" : "no");
         if (loop.CurrentLoop is { } curLoop)
         {
             Kv(sb, "Loop approach target",
