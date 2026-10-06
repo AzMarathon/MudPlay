@@ -1922,11 +1922,13 @@ public sealed class HealthManager : IDisposable
     // The PvP response's flee: the retreat a low-HP run makes, but `rooms` long, and
     // once it lands the engine stays paused for stayAway before it walks back.
     // Needs a running walk or loop, like every flee; false when none could start.
-    public bool FleeFromPlayer(string reason, int rooms, TimeSpan stayAway)
+    // onLanded is told once, when the last of those rooms is behind us.
+    public bool FleeFromPlayer(string reason, int rooms, TimeSpan stayAway, Action? onLanded = null)
     {
         _fleeDistanceOverride = Math.Max(1, rooms);
         _fleeStayAway = stayAway;
         _fleeResumeNotBefore = null;
+        _playerFleeLanded = onLanded;
         if (TryFlee(reason)) return true;
         ClearPlayerFlee();
         return false;
@@ -1936,9 +1938,11 @@ public sealed class HealthManager : IDisposable
     private int? _fleeDistanceOverride;
     private TimeSpan _fleeStayAway;
     private DateTimeOffset? _fleeResumeNotBefore;
+    private Action? _playerFleeLanded;
 
     private void ClearPlayerFlee()
     {
+        _playerFleeLanded = null;
         _fleeDistanceOverride = null;
         _fleeStayAway = TimeSpan.Zero;
         _fleeResumeNotBefore = null;
@@ -2557,6 +2561,9 @@ public sealed class HealthManager : IDisposable
             // retreat after a landed backstab has no HP change to wake it otherwise.
             _fledThisCombat = false;
             _fleeLanded = true;
+            Action? landed = _playerFleeLanded;
+            _playerFleeLanded = null;
+            landed?.Invoke();
             if (_fleeStayAway > TimeSpan.Zero && _fleeResumeNotBefore is null)
             {
                 _fleeResumeNotBefore = _now() + _fleeStayAway;

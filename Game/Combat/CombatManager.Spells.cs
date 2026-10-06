@@ -292,10 +292,10 @@ public sealed partial class CombatManager
         _autoNukeGate = gate;
     }
 
-    // Wire the room-attack hold: the name of a player in the room our room spells
-    // would hit and mustn't (outside our party, on a realm with PvP on), or null.
-    // While it names someone the chooser is offered no room attack, no room debuff
-    // and no room-scoped spell in a single-target rung, and a room attack already
+    // Wire the room-attack hold: why our room spells mustn't go out (a player
+    // outside our party is here, on a realm with PvP on), or null. While there is a
+    // reason the chooser is offered no room attack, no room debuff and no
+    // room-scoped spell in a single-target rung, and a room attack already
     // repeating is broken off. Until called, nothing is held.
     public void SetRoomAttackHold(Func<string?> heldBy)
     {
@@ -310,10 +310,8 @@ public sealed partial class CombatManager
     private void BreakRoomAttackForBystander()
     {
         if (_roomChannelSpell is not { } spell) return;
-        if (_roomAttackHold?.Invoke() is not { } who) return;
-        _log?.Info(LogCategory,
-            $"room attack '{spell}' broken off: {who} is here and not in our party. "
-            + "Single target until they are");
+        if (_roomAttackHold?.Invoke() is not { } why) return;
+        _log?.Info(LogCategory, $"room attack '{spell}' broken off: {why}. Single target meanwhile");
         _roomChannelSpell = null;
         NoteBetweenRoundCast(manual: false);
         Send("break");

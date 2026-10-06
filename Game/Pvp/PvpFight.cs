@@ -12,14 +12,18 @@ namespace MudPlay.Game.Pvp;
 //
 // One fight at a time. While it lasts the running walk or loop is stopped and the
 // combat engine stands down, so its own pick can't replace the attack on the
-// player; both come back when the fight is over. The PvP spells go out once each,
-// a round apart, and the normal attack is put back after them.
+// player; both come back when the fight is over.
+//
+// The attack is a PvP combat spell while its conditions hold, else the combat
+// profile's own attack. A PvP between-round spell is cast at the start and again
+// each time its duration runs out.
 //
 // The chase: when they leave we step the way they went at once. Arriving without
-// sight of them we track (when that is on) and otherwise guess: the way they were
-// heading, or the room's only other way out. After the set number of rooms
-// without seeing them, or the set wait with no way to follow, the chase is over
-// and the stopped run is picked up again.
+// sight of them we track (when that is on) and otherwise guess: at a crossroads
+// with a door that just opens, behind the door first, a few rooms in and back;
+// else the way they were heading, or the room's only other way out. After the set
+// number of rooms without seeing them, or the set wait with no way to follow, the
+// chase is over and the stopped run is picked up again.
 //
 // An attack on a player who hasn't attacked us is an evil deed, and the game
 // refuses it while evil warnings are on (GAME_MECHANICS "How your alignment moves
@@ -41,8 +45,6 @@ public sealed class PvpFight : IDisposable
     // How long `track` gets to answer before the chase falls back to a guess.
     private static readonly TimeSpan TrackAnswerWait = TimeSpan.FromSeconds(3);
 
-    // Evil warnings go back on after this long back on task with no fight.
-    public static readonly TimeSpan WarningsBackQuiet = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan WarningsBackCheck = TimeSpan.FromSeconds(15);
 
     private readonly RoomEntityClassifier _classifier;
@@ -52,8 +54,10 @@ public sealed class PvpFight : IDisposable
     private readonly Func<string, string> _attackCommandFor;
     private readonly Action<string> _send;
     private readonly Func<string, string, bool> _cast;
+    private readonly Func<string, PvpSpellInfo?> _spellInfo;
+    private readonly Func<int, bool> _manaMeets;
     private readonly Func<Direction, bool> _stepToward;
-    private readonly Func<IReadOnlyCollection<Direction>> _exitsHere;
+    private readonly Func<IReadOnlyCollection<PvpChaseExit>> _exitsHere;
     private readonly Func<string, Action> _suspendEngines;
     private readonly Func<bool> _backOnTask;
     private readonly Action<TimeSpan, Action> _schedule;
@@ -64,9 +68,21 @@ public sealed class PvpFight : IDisposable
     private string? _target;
     private bool _chase;
     private bool _needsAttack;
-    private bool _spellsRunning;
-    private Queue<string> _spellsOwed = new();
     private Action? _resumeEngines;
+
+    // The PvP spells in this fight, and the attack last sent.
+    private sealed class SpellUse
+    {
+        public required string Code { get; init; }
+        public required PvpSpellSlot Slot { get; init; }
+        public PvpSpellInfo? Info { get; init; }
+        public int Casts { get; set; }
+        public DateTimeOffset NextDue { get; set; }
+        public bool Spent { get; set; }
+    }
+    private readonly List<SpellUse> _spells = new();
+    private SpellUse? _attackSpell;
+    private string? _attackSent;
     private DateTimeOffset _lastAttackAt = DateTimeOffset.MinValue;
     private int _fight;
 
@@ -79,6 +95,14 @@ public sealed class PvpFight : IDisposable
     private bool _waiting;
     private bool _awaitingTrack;
     private int _seek;
+
+    // Looking behind a door at a crossroads: the steps taken since the junction,
+    // the heading we had there, and the ways already tried from it. _wayBack is
+    // the walk back to the junction once the look has gone far enough.
+    private List<Direction>? _probeTrail;
+    private Direction? _junctionHeading;
+    private readonly HashSet<Direction> _triedHere = new();
+    private Stack<Direction>? _wayBack;
 
     // Evil warnings we switched off and haven't switched back on. It outlives the
     // fight that did it, so a second fight doesn't send `set warning off` again.
@@ -96,14 +120,18 @@ public sealed class PvpFight : IDisposable
     // Told what happened, for the terminal notice.
     public event Action<string>? Reported;
 
+    // A new fight began with this player.
+    public event Action<string>? Started;
+
     // A fight started or ended.
     public event Action? ActiveChanged;
 
     // The last thing reported, for the bug report.
     public string LastReport { get; private set; } = "(none this session)";
 
-    // backOnTask: whatever the fight interrupted is running again (true when it
-    // interrupted nothing).
+    // spellInfo: a cast code's kind and duration, null when it isn't a spell we know.
+    // manaMeets: whether our mana meets a slot's floor. backOnTask: whatever the
+    // fight interrupted is running again (true when it interrupted nothing).
     public PvpFight(
         MessageRouter router,
         RoomEntityClassifier classifier,
@@ -113,8 +141,10 @@ public sealed class PvpFight : IDisposable
         Func<string, string> attackCommandFor,
         Action<string> send,
         Func<string, string, bool> cast,
+        Func<string, PvpSpellInfo?> spellInfo,
+        Func<int, bool> manaMeets,
         Func<Direction, bool> stepToward,
-        Func<IReadOnlyCollection<Direction>> exitsHere,
+        Func<IReadOnlyCollection<PvpChaseExit>> exitsHere,
         Func<string, Action> suspendEngines,
         Func<bool> backOnTask,
         Action<TimeSpan, Action> schedule,
@@ -129,6 +159,8 @@ public sealed class PvpFight : IDisposable
         _attackCommandFor = attackCommandFor;
         _send = send;
         _cast = cast;
+        _spellInfo = spellInfo;
+        _manaMeets = manaMeets;
         _stepToward = stepToward;
         _exitsHere = exitsHere;
         _suspendEngines = suspendEngines;
@@ -148,7 +180,8 @@ public sealed class PvpFight : IDisposable
 
     // Start (or, for the same player, carry on) a fight. False when it can't be:
     // PvP is off, they are in our party, or another fight is under way.
-    public bool Engage(string given, bool chase, string why)
+    // warningsOffFirst switches evil warnings off before the first attack.
+    public bool Engage(string given, bool chase, string why, bool warningsOffFirst = false)
     {
         if (!_pvpEnabled() || given.Length == 0 || _inParty(given)) return false;
         if (_target is { } current)
@@ -164,31 +197,57 @@ public sealed class PvpFight : IDisposable
         _chase = chase;
         _needsAttack = false;
         ResetChase();
-        _spellsOwed = new Queue<string>();
-        foreach (string? code in new[] { settings.PvpSpell1, settings.PvpSpell2 })
-            if (!string.IsNullOrWhiteSpace(code)) _spellsOwed.Enqueue(code.Trim());
+        LoadSpells(settings);
 
         _resumeEngines = _suspendEngines($"PvP: fighting {given}");
         Report($"{why}: attacking {given}{(chase ? ", and chasing if they run" : "")}");
         ActiveChanged?.Invoke();
+        Started?.Invoke(given);
+
+        if (warningsOffFirst && !_warningsOff)
+        {
+            _warningsOff = true;
+            _log?.Warn(LogCategory, "switching evil warnings off before attacking, as set for @kill");
+            _send("set warning off");
+        }
 
         // Sent whether or not they are listed: an attacker can be one we can't see,
         // and the game's own "You do not see …" ends the fight if they aren't here.
+        if (IsHere(given)) CastDueSpell(given);
         Attack(evenIfUnseen: true);
-        if (_target is not null && _spellsOwed.Count > 0)
-        {
-            _spellsRunning = true;
-            int fight = _fight;
-            _schedule(TimeSpan.Zero, () => CastNextSpell(fight));
-        }
+
+        int fight = _fight;
+        if (_target is not null) _schedule(Round, () => RoundTick(fight));
         return _target is not null;
     }
 
-    // A leader's @kill naming a player who is in the room with us.
+    // A leader's @kill naming a player who is in the room with us. For us it is an
+    // attack on someone who hasn't attacked us, whatever they did to the leader.
     public bool EngageOnOrder(string name)
     {
         string given = PlayerObservation.SplitName(name).Given;
-        return IsHere(given) && Engage(given, chase: false, "ordered by @kill");
+        return IsHere(given)
+            && Engage(given, chase: false, "ordered by @kill",
+                warningsOffFirst: _readSettings().KillOrderTurnsOffEvilWarnings);
+    }
+
+    private void LoadSpells(PvpSettings settings)
+    {
+        _spells.Clear();
+        _attackSpell = null;
+        _attackSent = null;
+        foreach (PvpSpellSlot slot in new[] { settings.Spell1, settings.Spell2 })
+        {
+            if (string.IsNullOrWhiteSpace(slot.SpellName)) continue;
+            string code = slot.SpellName.Trim();
+            PvpSpellInfo? info = _spellInfo(code);
+            if (info is { MonsterOnly: true })
+            {
+                _log?.Warn(LogCategory, $"PvP spell {code} only works on monsters: not used");
+                continue;
+            }
+            _spells.Add(new SpellUse { Code = code, Slot = slot, Info = info, NextDue = DateTimeOffset.MinValue });
+        }
     }
 
     // End the fight. resume false leaves the stopped walk or loop stopped (we died).
@@ -198,8 +257,9 @@ public sealed class PvpFight : IDisposable
         if (_target is not { } target) return;
         _fight++;
         _target = null;
-        _spellsRunning = false;
-        _spellsOwed.Clear();
+        _spells.Clear();
+        _attackSpell = null;
+        _attackSent = null;
         ResetChase();
         _fightEndedAt = _now();
 
@@ -222,7 +282,8 @@ public sealed class PvpFight : IDisposable
         ? $"fighting {target}{(_chase ? " (chasing)" : "")}"
           + (_unseenRooms > 0 ? $", {_unseenRooms} room(s) without sight of them" : "")
           + (_waiting ? ", waiting with no way to follow" : "")
-          + (_spellsOwed.Count > 0 ? $", {_spellsOwed.Count} PvP spell(s) still to cast" : "")
+          + (_probeTrail is not null ? ", looking behind a door" : "")
+          + (_attackSent is { } sent ? $", attack `{sent}`" : "")
         : "no fight")
         + (_warningsOff ? "; evil warnings off, to be switched back on" : "");
 
@@ -234,6 +295,15 @@ public sealed class PvpFight : IDisposable
         _waiting = false;
         _awaitingTrack = false;
         _seek++;
+        EndProbe();
+    }
+
+    private void EndProbe()
+    {
+        _probeTrail = null;
+        _junctionHeading = null;
+        _wayBack = null;
+        _triedHere.Clear();
     }
 
     private void Attack(bool evenIfUnseen = false)
@@ -247,28 +317,62 @@ public sealed class PvpFight : IDisposable
         }
         _needsAttack = false;
         _lastAttackAt = _now();
-        _send(_attackCommandFor(target));
+        _attackSent = AttackFor(target);
+        _send(_attackSent);
     }
 
-    // One PvP spell a round, then the normal attack again: a spell that takes the
-    // round would be cut short by an attack sent straight after it.
-    private void CastNextSpell(int fight)
+    // A PvP combat spell while its conditions hold (casts left, mana above its
+    // floor), else the combat profile's attack.
+    private string AttackFor(string target)
+    {
+        _attackSpell = null;
+        foreach (SpellUse use in _spells)
+        {
+            if (use.Info is not { BetweenRound: false }) continue;
+            if (use.Slot.MaxCasts is { } cap && use.Casts >= cap) continue;
+            if (!_manaMeets(use.Slot.MinManaPerCast)) continue;
+            _attackSpell = use;
+            return $"{use.Code} {target}";
+        }
+        return _attackCommandFor(target);
+    }
+
+    // The first between-round PvP spell that is due: at the start of the fight, and
+    // again each time its duration has run out. One a round, since the game takes
+    // only one between-round cast a round.
+    private bool CastDueSpell(string target)
+    {
+        DateTimeOffset now = _now();
+        foreach (SpellUse use in _spells)
+        {
+            if (use.Info is { BetweenRound: false } || use.Spent || now < use.NextDue) continue;
+            if (use.Slot.MaxCasts is { } cap && use.Casts >= cap) continue;
+            if (!_manaMeets(use.Slot.MinManaPerCast)) continue;
+            if (!_cast(use.Code, target)) return false;
+
+            use.Casts++;
+            // A spell with no duration, or one we know nothing about, is cast once.
+            if (use.Info is { Duration: var lasts } && lasts > TimeSpan.Zero) use.NextDue = now + lasts;
+            else use.Spent = true;
+            _log?.Info(LogCategory, $"PvP spell {use.Code} cast at {target}");
+            return true;
+        }
+        return false;
+    }
+
+    // Once a round while the fight lasts: a due between-round spell, and the attack
+    // again when that cast broke it or when the pick has changed (mana fell under a
+    // combat spell's floor, or its casts ran out).
+    private void RoundTick(int fight)
     {
         if (fight != _fight || _target is not { } target) return;
-
-        if (_spellsOwed.Count == 0)
+        if (IsHere(target) && !_stepPending)
         {
-            _spellsRunning = false;
-            Attack();
-            return;
+            if (_attackSpell is { } spent) spent.Casts++;
+            bool cast = CastDueSpell(target);
+            if (cast || AttackFor(target) != _attackSent) Attack();
         }
-
-        if (IsHere(target) && _cast(_spellsOwed.Peek(), target))
-        {
-            string code = _spellsOwed.Dequeue();
-            _log?.Info(LogCategory, $"PvP spell {code} cast at {target}");
-        }
-        _schedule(Round, () => CastNextSpell(fight));
+        _schedule(Round, () => RoundTick(fight));
     }
 
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
@@ -280,6 +384,7 @@ public sealed class PvpFight : IDisposable
             _waiting = false;
             _awaitingTrack = false;
             _seek++;
+            EndProbe();
             if (_needsAttack && !_stepPending) Attack();
             return;
         }
@@ -322,7 +427,13 @@ public sealed class PvpFight : IDisposable
         if (IsHere(target))
         {
             _unseenRooms = 0;
+            EndProbe();
             if (_needsAttack) Attack();
+            return;
+        }
+        if (_wayBack is not null)
+        {
+            StepBack();
             return;
         }
         OutOfSight();
@@ -333,6 +444,7 @@ public sealed class PvpFight : IDisposable
     {
         if (!_stepPending || _target is null) return;
         _stepPending = false;
+        _wayBack = null;
         Wait();
     }
 
@@ -389,39 +501,69 @@ public sealed class PvpFight : IDisposable
         Guess();
     }
 
-    // No word on which way they went: carry on the way they were heading, or take
-    // the room's only way out other than the one we came in by.
+    // No word on which way they went. At a crossroads with a door that just opens,
+    // look behind the door first, a few rooms in, then come back for the other
+    // ways. Otherwise carry on the way they were heading, or take the room's only
+    // way out other than the one we came in by.
     private void Guess()
     {
         if (_target is null) return;
-        if (!_readSettings().ChaseGuessDirection)
+        PvpSettings settings = _readSettings();
+        if (!settings.ChaseGuessDirection)
         {
             Wait();
             return;
         }
 
-        IReadOnlyCollection<Direction> exits = _exitsHere();
+        if (_probeTrail is { } trail && trail.Count >= Math.Max(1, settings.ChaseDoorRooms))
+        {
+            ReturnToJunction(trail);
+            return;
+        }
+
+        IReadOnlyCollection<PvpChaseExit> exits = _exitsHere();
+        Direction? back = (_probeTrail is { Count: > 0 } t ? t[^1] : _heading)?.Opposite();
+        // What was tried belongs to the junction, not to the rooms behind its door.
+        bool atJunction = _probeTrail is null;
+        List<PvpChaseExit> others = exits
+            .Where(e => e.Way != back && !(atJunction && _triedHere.Contains(e.Way)))
+            .ToList();
+
         Direction? pick = null;
-        if (_heading is { } heading && exits.Contains(heading))
+        bool behindADoor = false;
+        if (_probeTrail is null && others.Count > 1 && others.FirstOrDefault(e => e.Door) is { Door: true } door)
+        {
+            pick = door.Way;
+            behindADoor = true;
+        }
+        else if (_heading is { } heading && others.Any(e => e.Way == heading))
         {
             pick = heading;
         }
-        else
+        else if (others.Count == 1)
         {
-            Direction? back = _heading?.Opposite();
-            List<Direction> others = exits.Where(e => e != back).ToList();
-            if (others.Count == 1) pick = others[0];
+            pick = others[0].Way;
         }
 
-        if (pick is { } way)
+        if (pick is not { } way)
         {
-            _log?.Info(LogCategory, $"no sight of {_target}: guessing {way.ToLongName()}");
-            Follow(way);
+            if (_probeTrail is { Count: > 0 } deadEnd) ReturnToJunction(deadEnd);
+            else Wait();
+            return;
+        }
+
+        if (behindADoor)
+        {
+            _log?.Info(LogCategory, $"no sight of {_target}: looking behind the door {way.ToLongName()} first");
+            _junctionHeading = _heading;
+            _triedHere.Add(way);
+            _probeTrail = new List<Direction>();
         }
         else
         {
-            Wait();
+            _log?.Info(LogCategory, $"no sight of {_target}: guessing {way.ToLongName()}");
         }
+        Follow(way);
     }
 
     private void Follow(Direction direction)
@@ -437,13 +579,48 @@ public sealed class PvpFight : IDisposable
         _heading = direction;
         _waiting = false;
         _seek++;
+        // Moving on from a junction for good: what was tried there no longer matters.
+        if (_probeTrail is null) _triedHere.Clear();
         if (!_stepToward(direction))
         {
             Wait();
             return;
         }
+        _probeTrail?.Add(direction);
         _stepPending = true;
         _unseenRooms++;
+    }
+
+    // The look behind the door found nothing: walk back to the junction, the way we
+    // came, and guess again there without the door.
+    private void ReturnToJunction(List<Direction> trail)
+    {
+        _log?.Info(LogCategory, $"nothing behind the door after {trail.Count} room(s): going back to try another way");
+        _wayBack = new Stack<Direction>();
+        foreach (Direction step in trail) _wayBack.Push(step.Opposite());
+        _probeTrail = null;
+        StepBack();
+    }
+
+    private void StepBack()
+    {
+        if (_wayBack is not { } back) return;
+        if (back.Count == 0)
+        {
+            _wayBack = null;
+            _heading = _junctionHeading;
+            _junctionHeading = null;
+            Guess();
+            return;
+        }
+        Direction step = back.Pop();
+        if (!_stepToward(step))
+        {
+            _wayBack = null;
+            Wait();
+            return;
+        }
+        _stepPending = true;
     }
 
     // Nothing to follow. Stand for the set time in case they come back into sight,
@@ -498,7 +675,7 @@ public sealed class PvpFight : IDisposable
             _engagedSeq = seq;
             return;
         }
-        if (_target is not { } target || _spellsRunning || !IsHere(target)) return;
+        if (_target is not { } target || !IsHere(target)) return;
 
         TimeSpan since = _now() - _lastAttackAt;
         if (since >= ReattackQuiet)
@@ -512,7 +689,7 @@ public sealed class PvpFight : IDisposable
         int fight = _fight;
         _schedule(ReattackQuiet - since, () =>
         {
-            if (fight == _fight && !_spellsRunning && _engagedSeq < seq) Attack(evenIfUnseen: true);
+            if (fight == _fight && _engagedSeq < seq) Attack(evenIfUnseen: true);
         });
     }
 
@@ -561,7 +738,8 @@ public sealed class PvpFight : IDisposable
     {
         _warningsCheckRunning = false;
         if (!_warningsOff) return;
-        if (_target is null && _now() - _fightEndedAt >= WarningsBackQuiet && _backOnTask())
+        TimeSpan quiet = TimeSpan.FromSeconds(Math.Max(0, _readSettings().WarningsBackAfterSeconds));
+        if (_target is null && _now() - _fightEndedAt >= quiet && _backOnTask())
         {
             _warningsOff = false;
             _send("set warning on");

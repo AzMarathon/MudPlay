@@ -106,7 +106,7 @@ public sealed class PvpRoomSafetyTests
         using Harness h = new();
         h.Feed("Also here: Bob, giant rat.");
 
-        Assert.Equal("Bob", h.Safety.RoomAttackHeldBy());
+        Assert.StartsWith("Bob is here", h.Safety.RoomAttackHeldBy());
     }
 
     [Fact]
@@ -130,7 +130,7 @@ public sealed class PvpRoomSafetyTests
         Assert.Null(h.Safety.RoomAttackHeldBy());
 
         h.Feed("Also here: Bob, Ann, giant rat.");
-        Assert.Equal("Ann", h.Safety.RoomAttackHeldBy());
+        Assert.StartsWith("Ann is here", h.Safety.RoomAttackHeldBy());
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class PvpRoomSafetyTests
     {
         using Harness h = new();
         h.Feed("Also here: Bob, giant rat.");
-        Assert.Equal("Bob", h.Safety.RoomAttackHeldBy());
+        Assert.StartsWith("Bob is here", h.Safety.RoomAttackHeldBy());
 
         h.Party.Add("Bob");
         Assert.Null(h.Safety.RoomAttackHeldBy());
@@ -152,7 +152,47 @@ public sealed class PvpRoomSafetyTests
         Assert.Null(h.Safety.RoomAttackHeldBy());
 
         h.Feed("Bob walks into the room from the south.");
-        Assert.Equal("Bob", h.Safety.RoomAttackHeldBy());
+        Assert.StartsWith("Bob is here", h.Safety.RoomAttackHeldBy());
+    }
+
+    // A teleport split the party: whoever dropped out may land in the room any
+    // moment, so room attacks are held until they are back or the hold runs out.
+    [Fact]
+    public void MemberWhoDroppedOutOfTheParty_HoldsRoomAttacks_UntilBackOrTheHoldRunsOut()
+    {
+        using Harness h = new();
+        PartyState party = new();
+        PartyMember bob = new() { Name = "Bob" };
+        party.Members.Add(new PartyMember { Name = "Hero" });
+        party.Members.Add(bob);
+        DateTimeOffset clock = new(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+        using PartySplitTracker split = new(party, () => TimeSpan.FromSeconds(120), () => "Hero", () => clock);
+        h.Safety.SetPartySplit(split);
+        h.Feed("Also here: giant rat.");
+        Assert.Null(h.Safety.RoomAttackHeldBy());
+
+        party.Members.Remove(bob);
+        Assert.StartsWith("Bob dropped out", h.Safety.RoomAttackHeldBy());
+
+        party.Members.Add(bob);
+        Assert.Null(h.Safety.RoomAttackHeldBy());
+
+        party.Members.Clear();                  // the whole party gone, our own row with it
+        Assert.StartsWith("Bob dropped out", h.Safety.RoomAttackHeldBy());
+        clock += TimeSpan.FromSeconds(121);
+        Assert.Null(h.Safety.RoomAttackHeldBy());
+    }
+
+    // A name the room reader couldn't place counts as a player while `who` is asked.
+    [Fact]
+    public void UnplacedNameThatMayBeAPlayer_Holds()
+    {
+        using Harness h = new();
+        h.Feed("Also here: Zed, giant rat.");
+        Assert.Null(h.Safety.RoomAttackHeldBy());
+
+        h.Safety.SetStrangerProbe(name => name == "Zed");
+        Assert.StartsWith("Zed is here", h.Safety.RoomAttackHeldBy());
     }
 
     // ----- Stock: guessing that a resident is rooming -------------------

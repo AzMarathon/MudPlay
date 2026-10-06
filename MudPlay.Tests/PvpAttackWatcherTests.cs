@@ -22,6 +22,8 @@ public sealed class PvpAttackWatcherTests
         public RoomEntityClassifier Classifier { get; }
         public RoomEntryWatcher Entry { get; }
         public PvpRoomSafety Room { get; }
+        public PartySplitTracker PartySplit { get; }
+        public TimeSpan Hold { get; set; } = TimeSpan.FromMinutes(2);
         public PvpAttackWatcher Watcher { get; }
         public List<PvpAttack> Attacks { get; } = new();
 
@@ -45,8 +47,9 @@ public sealed class PvpAttackWatcherTests
                 lastMoveSentAt: () => LastMoveSentAt);
             Entry = new RoomEntryWatcher(Router, Classifier);
             Entry.ArrivalObserved += Room.NoteArrival;
+            PartySplit = new PartySplitTracker(Party, () => Hold, () => "Hero", () => Clock);
             Watcher = new PvpAttackWatcher(
-                Router, Classifier, Room, Players, Party,
+                Router, Classifier, Room, Players, Party, PartySplit,
                 pvpEnabled: () => PvpEnabled,
                 flipFriends: () => FlipFriends,
                 ownGivenName: () => "Hero",
@@ -76,6 +79,7 @@ public sealed class PvpAttackWatcherTests
         public void Dispose()
         {
             Watcher.Dispose();
+            PartySplit.Dispose();
             Room.Dispose();
             Entry.Dispose();
             Classifier.Dispose();
@@ -265,7 +269,7 @@ public sealed class PvpAttackWatcherTests
         h.Feed("Bob moves to attack everyone in the room.");
         Assert.Empty(h.Attacks);
 
-        h.Clock += PvpAttackWatcher.PartySplitGrace + TimeSpan.FromSeconds(1);
+        h.Clock += h.Hold + TimeSpan.FromSeconds(1);
         h.Feed("Bob moves to attack everyone in the room.");
         Assert.Single(h.Attacks);
     }

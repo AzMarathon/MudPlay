@@ -1,4 +1,3 @@
-using System.Collections.Specialized;
 using System.Text.RegularExpressions;
 using MudPlay.Game.Combat;
 using MudPlay.Models.GameData;
@@ -23,10 +22,6 @@ public sealed partial class PvpAttackWatcher : IDisposable
 {
     public const string LogCategory = "PvP";
 
-    // How long after leaving our party a player's room attack still isn't read as
-    // aimed at us: long enough to cover a party re-forming after a teleport.
-    public static readonly TimeSpan PartySplitGrace = TimeSpan.FromMinutes(2);
-
     private const int RecentCap = 12;
     private static readonly TimeSpan RepeatQuiet = TimeSpan.FromSeconds(10);
 
@@ -34,6 +29,7 @@ public sealed partial class PvpAttackWatcher : IDisposable
     private readonly PvpRoomSafety _room;
     private readonly PlayerDatabase _players;
     private readonly PartyState _party;
+    private readonly PartySplitTracker _partySplit;
     private readonly Func<bool> _pvpEnabled;
     private readonly Func<bool> _flipFriends;
     private readonly Func<string?> _ownGivenName;
@@ -41,8 +37,6 @@ public sealed partial class PvpAttackWatcher : IDisposable
     private readonly LogService? _log;
     private readonly List<IDisposable> _subs = new();
 
-    private readonly HashSet<string> _partyNow = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DateTimeOffset> _leftPartyAt = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<PvpAttack> _recent = new();
     private bool _warnedPvpOff;
     private bool _disposed;
@@ -59,6 +53,7 @@ public sealed partial class PvpAttackWatcher : IDisposable
         PvpRoomSafety room,
         PlayerDatabase players,
         PartyState party,
+        PartySplitTracker partySplit,
         Func<bool> pvpEnabled,
         Func<bool> flipFriends,
         Func<string?> ownGivenName,
@@ -70,14 +65,12 @@ public sealed partial class PvpAttackWatcher : IDisposable
         _room = room;
         _players = players;
         _party = party;
+        _partySplit = partySplit;
         _pvpEnabled = pvpEnabled;
         _flipFriends = flipFriends;
         _ownGivenName = ownGivenName;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
-
-        foreach (PartyMember m in _party.Members) _partyNow.Add(GivenOf(m.Name));
-        _party.Members.CollectionChanged += OnPartyChanged;
 
         _subs.Add(router.Subscribe(KnownPatterns.PlayerAttacksYou, OnAttacksYou));
         _subs.Add(router.Subscribe(KnownPatterns.IncomingDamage, OnIncomingDamage));
@@ -118,11 +111,11 @@ public sealed partial class PvpAttackWatcher : IDisposable
                 $"{name}'s room attack isn't taken as an attack on us: they weren't seen coming in after us");
             return;
         }
-        if (_leftPartyAt.TryGetValue(name, out DateTimeOffset left) && _now() - left < PartySplitGrace)
+        if (_partySplit.LeftRecently(name))
         {
             _log?.Info(LogCategory,
                 $"{name}'s room attack isn't taken as an attack on us: they were in our party "
-                + $"{(_now() - left).TotalSeconds:0}s ago");
+                + $"{_partySplit.Since(name)?.TotalSeconds:0}s ago");
             return;
         }
         Note(name, PvpAttackKind.RoomAttack);
@@ -188,26 +181,10 @@ public sealed partial class PvpAttackWatcher : IDisposable
 
     private static string GivenOf(string name) => PlayerObservation.SplitName(name).Given;
 
-    // The roster is rebuilt wholesale at times (a Reset carries no old items), so
-    // departures are found by comparing against our own copy of it.
-    private void OnPartyChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        HashSet<string> current = new(StringComparer.OrdinalIgnoreCase);
-        foreach (PartyMember m in _party.Members) current.Add(GivenOf(m.Name));
-
-        DateTimeOffset now = _now();
-        foreach (string was in _partyNow)
-            if (!current.Contains(was)) _leftPartyAt[was] = now;
-
-        _partyNow.Clear();
-        _partyNow.UnionWith(current);
-    }
-
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _party.Members.CollectionChanged -= OnPartyChanged;
         foreach (IDisposable sub in _subs) sub.Dispose();
     }
 }

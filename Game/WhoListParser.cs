@@ -57,6 +57,10 @@ public sealed partial class WhoListParser : IDisposable
         "Saint", "Lawful", "Good", "Seedy", "Outlaw", "Criminal", "Villain", "Fiend",
     };
 
+    // A who listing has been read to its end. `who` lists everyone online, so a name
+    // it didn't carry isn't a player.
+    public event Action? ListRead;
+
     public WhoListParser(LineExtractor lines, PlayerDatabase db, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
@@ -189,6 +193,7 @@ public sealed partial class WhoListParser : IDisposable
         _log?.Info("WhoListParser",
             $"who response complete — {_rowsThisBlock} player(s) seen ({added} added, {updated} updated)");
         _state = State.Idle;
+        ListRead?.Invoke();
     }
 
     // Number of rows recorded by the most recent who block. Useful for tests / debug.

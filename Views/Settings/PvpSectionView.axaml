@@ -73,7 +73,7 @@
                              ToolTip.Tip="Flee, stay away for the Come back after time, then pick the interrupted walk or loop up again."/>
                 <RadioButton Content="Attack (dangerous)" GroupName="PvpAction"
                              IsChecked="{Binding IsAttack, Mode=TwoWay}"
-                             ToolTip.Tip="Attack an Enemy on sight, and stop when they leave the room. The running walk or loop is stopped for the fight and picked up again after it; monsters in the room are left alone meanwhile."/>
+                             ToolTip.Tip="Attack an Enemy on sight, and stop when they leave the room. The running walk or loop is stopped for the fight and picked up again after it; monsters in the room are left alone meanwhile. The attack is a PvP combat spell (below) when one is set, otherwise your combat profile's."/>
                 <RadioButton Content="Chase and attack (dangerous)" GroupName="PvpAction"
                              IsChecked="{Binding IsChaseAttack, Mode=TwoWay}"
                              ToolTip.Tip="As Attack, and follow them when they leave. See Chasing below for how far and how."/>
@@ -95,14 +95,14 @@
                                    Value="{Binding RoomsToFlee, Mode=TwoWay}"
                                    Minimum="1" Maximum="99" Increment="1" FormatString="0"
                                    Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="How far back along the running walk or loop to run when there is no Flee to room. Needs a walk or loop to be running."/>
+                                   ToolTip.Tip="With no Flee to room, how many rooms to run back along the walk or loop you were on. 'Flee, then hang up' hangs up as soon as they are behind you. Needs a walk or loop to be running."/>
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Flee hangup delay"/>
                     <NumericUpDown Grid.Row="2" Grid.Column="1"
                                    Value="{Binding FleeHangupDelaySeconds, Mode=TwoWay}"
                                    Minimum="0" Maximum="600" Increment="5" FormatString="0"
                                    Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="'Flee, then hang up': seconds from the flee starting to the hang-up."/>
+                                   ToolTip.Tip="'Flee, then hang up': to a Flee to room, the hang-up comes this long after the flee starts. Running back by rooms, it comes when the rooms are done, and this is the latest it can be."/>
                     <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel" Text="seconds"/>
 
                     <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Come back after"/>
@@ -117,7 +117,7 @@
                 <TextBlock Classes="SectionHeader" Text="OPTIONS"/>
                 <CheckBox Content="Notify gang members"
                           IsChecked="{Binding NotifyGang, Mode=TwoWay}"
-                          ToolTip.Tip="Say on the gang channel who it was and where, once per encounter (at most once a minute): 'PvP: &lt;player&gt; attacked me at &lt;room&gt;'."/>
+                          ToolTip.Tip="Say on the gang channel when an Enemy is seen, when a player attacks you, and when you attack one, with the room: 'PvP: &lt;player&gt; attacked me at &lt;room&gt;'. Each kind of line at most once a minute per player."/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <CheckBox Content="Re-connect after PvP in"
                               IsChecked="{Binding ReconnectAfterPvp, Mode=TwoWay}"
@@ -127,6 +127,10 @@
                                    Minimum="1" Maximum="1440" Increment="5" FormatString="0"
                                    Width="120"/>
                     <TextBlock Classes="FieldLabel" Text="minutes"/>
+                    <CheckBox Content="and enter the realm"
+                              IsChecked="{Binding ReconnectEntersRealm, Mode=TwoWay}"
+                              IsEnabled="{Binding ReconnectAfterPvp}"
+                              ToolTip.Tip="Ticked, the dial-back goes on into the game. Unticked, it logs in and waits at the menu, as the login after any other hang-up does."/>
                 </StackPanel>
                 <CheckBox Content="Flip a Friend to Enemy if they attack you"
                           IsChecked="{Binding FlipFriendToEnemyIfAttacked, Mode=TwoWay}"
@@ -134,6 +138,26 @@
                 <CheckBox Content="Turn off my evil warnings if they are on, to attack"
                           IsChecked="{Binding TurnOffEvilWarningsToAttack, Mode=TwoWay}"
                           ToolTip.Tip="With evil warnings on, the game refuses an attack on a player who hasn't attacked you. Ticked, MudPlay sends 'set warning off' and attacks again. The warnings go back on ('set warning on') once you are back at what the fight interrupted, such as your loop, and a minute has passed with no new fight. Unticked, the refusal ends the fight. Hitting back never needs it."/>
+
+                <CheckBox Content="Turn off my evil warnings when a leader's @kill names a player"
+                          IsChecked="{Binding KillOrderTurnsOffEvilWarnings, Mode=TwoWay}"
+                          ToolTip.Tip="An @kill aimed at a player is an attack on someone who hasn't attacked you, even if they attacked your leader: the game only lets the one who was attacked hit back for free. Ticked, 'set warning off' goes out before the attack. Unticked, the attack is still tried, and a refusal ends it unless the box above is ticked."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="Switch my evil warnings back on after"/>
+                    <NumericUpDown Value="{Binding WarningsBackAfterSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="Warnings MudPlay switched off go back on once you are back at what the fight interrupted (your loop, walk or Auto-Lair run going again) and this long has passed with no new fight."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds back on task"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="After a party member drops out, hold room attacks for"/>
+                    <NumericUpDown Value="{Binding PartySplitHoldSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="A teleport that splits the party lands everyone in the same room again, outside the party. Your room attacks are held until whoever dropped out is back in the party, or this long has passed; a room attack of theirs in that time is not taken as an attack on you. 0 turns it off."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
 
                 <TextBlock Classes="SectionHeader" Text="CHASING"/>
                 <TextBlock Classes="Readout"
@@ -148,7 +172,16 @@
                 </StackPanel>
                 <CheckBox Content="Guess the way they went when it wasn't seen"
                           IsChecked="{Binding ChaseGuessDirection, Mode=TwoWay}"
-                          ToolTip.Tip="Carry on the way they were heading; if that way is shut and the room has just one other way out, take that. Never back the way you came. Off, the chase waits where it stands."/>
+                          ToolTip.Tip="At a crossroads with a door that just opens, look behind the door first. Otherwise carry on the way they were heading; if that way is shut and the room has just one other way out, take that. Never back the way you came, and never through a door that needs a key, picking or strength. Off, the chase waits where it stands."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="Behind a door, look"/>
+                    <NumericUpDown Value="{Binding ChaseDoorRooms, Mode=TwoWay}"
+                                   IsEnabled="{Binding ChaseGuessDirection}"
+                                   Minimum="1" Maximum="20" Increment="1" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="How many rooms to go in behind a door at a crossroads before coming back to try another way."/>
+                    <TextBlock Classes="FieldLabel" Text="rooms in, then come back"/>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Classes="FieldLabel" Text="With no way to follow, wait"/>
                     <NumericUpDown Value="{Binding ChaseWaitSeconds, Mode=TwoWay}"
@@ -170,14 +203,31 @@
 
                 <TextBlock Classes="SectionHeader" Text="PVP SPELLS"/>
                 <TextBlock Classes="Readout"
-                           Text="Cast codes thrown at the player at the start of a fight, one a round, each once only. Your normal attack carries on after them."/>
-                <Grid ColumnDefinitions="200,Auto" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="8">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="1"/>
-                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding PvpSpell1, Mode=TwoWay}"
+                           Text="Spells to use on a player in a fight. What a spell does here depends on what it is. A between-round spell (one cast alongside your attack) is cast at the start and again each time its duration runs out. A combat spell becomes your attack, every round, while its conditions hold. With no combat spell here, or its conditions not met, you attack with your combat profile: its normal attack spell, its alternate, then your attack command. A spell that only takes monsters is not used."/>
+                <Grid ColumnDefinitions="30,130,130,150" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldLabel" Text="Cast code"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Max casts"/>
+                    <TextBlock Grid.Row="0" Grid.Column="3" Classes="FieldLabel" Text="Min mana per cast"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="1"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Spell1, Mode=TwoWay}"
                              Width="120" HorizontalAlignment="Left" MaxLength="8" PlaceholderText="cast code"/>
-                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="2"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PvpSpell2, Mode=TwoWay}"
+                    <NumericUpDown Grid.Row="1" Grid.Column="2" Value="{Binding Spell1MaxCasts, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Most casts (a between-round spell) or rounds (a combat spell) in one fight. Blank = no limit."/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="3" Value="{Binding Spell1MinMana, Mode=TwoWay}"
+                                   Minimum="0" Maximum="9999" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Not used below this much mana: a percentage or a mana figure, the same way the Combat tab's spell slots are set."/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="2"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Spell2, Mode=TwoWay}"
                              Width="120" HorizontalAlignment="Left" MaxLength="8" PlaceholderText="cast code"/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="2" Value="{Binding Spell2MaxCasts, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Most casts (a between-round spell) or rounds (a combat spell) in one fight. Blank = no limit."/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="3" Value="{Binding Spell2MinMana, Mode=TwoWay}"
+                                   Minimum="0" Maximum="9999" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Not used below this much mana: a percentage or a mana figure, the same way the Combat tab's spell slots are set."/>
                 </Grid>
 
             </StackPanel>

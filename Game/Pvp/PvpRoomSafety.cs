@@ -61,6 +61,16 @@ public sealed class PvpRoomSafety : IDisposable
     private string? _loggedHeldBy;
     private string? _loggedLeaveReason;
 
+    private PartySplitTracker? _partySplit;
+    private Func<string, bool>? _mayBePlayer;
+
+    // Hold room attacks while someone who dropped out of our party hasn't rejoined.
+    public void SetPartySplit(PartySplitTracker partySplit) => _partySplit = partySplit;
+
+    // A name in the room the room reader couldn't place, which may be a player we
+    // have no record of yet. It counts as one until `who` has settled it.
+    public void SetStrangerProbe(Func<string, bool> mayBePlayer) => _mayBePlayer = mayBePlayer;
+
     // Another player's room attack was just seen, so the answer to LeaveRoomReason
     // may have changed with no room observation to carry it to the combat gate.
     public event Action? RoomAttackSeen;
@@ -99,10 +109,11 @@ public sealed class PvpRoomSafety : IDisposable
     // The game data changed under us: a class's spells may differ in the new set.
     public void ResetClassCache() => _fromLevelByClass.Clear();
 
-    // The first player here our room attack would hit and mustn't: anyone outside
-    // our party, an Enemy included. What is done about an Enemy is their PvP
-    // response, aimed at them; it is never left to a room spell. Null when nobody
-    // is here, or PvP is off for the realm.
+    // Why our room attack must not go out, or null. Someone outside our party is
+    // here, an Enemy included: what is done about an Enemy is their PvP response,
+    // aimed at them, never a room spell. Or someone just dropped out of the party
+    // and may turn up in the room at any moment. Null too when PvP is off for the
+    // realm.
     public string? RoomAttackHeldBy()
     {
         string? heldBy = null;
@@ -111,17 +122,19 @@ public sealed class PvpRoomSafety : IDisposable
             foreach (string given in PlayersHere())
             {
                 if (!IsBystander(given)) continue;
-                heldBy = given;
+                heldBy = $"{given} is here and not in our party";
                 break;
             }
+            if (heldBy is null && _partySplit?.AnyoneOut() is { } out_)
+                heldBy = $"{out_} dropped out of our party and hasn't rejoined";
         }
 
-        if (!string.Equals(heldBy, _loggedHeldBy, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(heldBy, _loggedHeldBy, StringComparison.Ordinal))
         {
             _loggedHeldBy = heldBy;
             _log?.Info(LogCategory, heldBy is null
-                ? "room attacks released: nobody outside our party is here"
-                : $"room attacks held: {heldBy} is here and not in our party");
+                ? "room attacks released"
+                : $"room attacks held: {heldBy}");
         }
         return heldBy;
     }
@@ -221,7 +234,9 @@ public sealed class PvpRoomSafety : IDisposable
         if (_classifier.Current is not { } obs) return names;
         foreach (RoomEntity e in obs.Entities)
         {
-            if (e.Kind != EntityKind.Player) continue;
+            bool player = e.Kind == EntityKind.Player
+                || (e.Kind == EntityKind.Unknown && _mayBePlayer?.Invoke(e.RawName) == true);
+            if (!player) continue;
             string given = PlayerObservation.SplitName(e.ResolvedName).Given;
             if (given.Length > 0) names.Add(given);
         }

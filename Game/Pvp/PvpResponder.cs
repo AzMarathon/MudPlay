@@ -32,7 +32,7 @@ public sealed class PvpResponder : IDisposable
     private readonly Func<string, bool> _inParty;
     private readonly Func<PvpSettings> _readSettings;
     private readonly Func<string, bool> _hangUp;
-    private readonly Func<string, int, TimeSpan, bool> _fleeRooms;
+    private readonly Func<string, int, TimeSpan, Action?, bool> _fleeRooms;
     private readonly Func<RoomRef, TimeSpan?, string, bool> _fleeTo;
     private readonly Func<string, bool, string, bool> _fight;
     private readonly Action<string> _sendGang;
@@ -42,9 +42,9 @@ public sealed class PvpResponder : IDisposable
     private readonly LogService? _log;
 
     private readonly Dictionary<string, DateTimeOffset> _answeredAt = new(StringComparer.OrdinalIgnoreCase);
-    private DateTimeOffset _gangToldAt = DateTimeOffset.MinValue;
+    private readonly Dictionary<string, DateTimeOffset> _gangToldAt = new(StringComparer.OrdinalIgnoreCase);
     private bool _hangupPending;
-    private TimeSpan? _reconnectDelay;
+    private (TimeSpan Delay, bool EnterRealm)? _reconnect;
 
     // The last response taken, for the bug report.
     public string LastResponse { get; private set; } = "(none this session)";
@@ -60,7 +60,7 @@ public sealed class PvpResponder : IDisposable
         Func<string, bool> inParty,
         Func<PvpSettings> readSettings,
         Func<string, bool> hangUp,
-        Func<string, int, TimeSpan, bool> fleeRooms,
+        Func<string, int, TimeSpan, Action?, bool> fleeRooms,
         Func<RoomRef, TimeSpan?, string, bool> fleeTo,
         Func<string, bool, string, bool> fight,
         Action<string> sendGang,
@@ -89,13 +89,17 @@ public sealed class PvpResponder : IDisposable
         _attacks.Attacked += OnAttacked;
     }
 
-    // The dial-back a PvP hang-up asked for. Read once, by the disconnect it caused.
-    public TimeSpan? TakeReconnectDelay()
+    // The dial-back a PvP hang-up asked for, and whether it goes on into the realm
+    // or stops at the menu. Read once, by the disconnect it caused.
+    public (TimeSpan Delay, bool EnterRealm)? TakeReconnect()
     {
-        TimeSpan? delay = _reconnectDelay;
-        _reconnectDelay = null;
-        return delay;
+        (TimeSpan, bool)? reconnect = _reconnect;
+        _reconnect = null;
+        return reconnect;
     }
+
+    // A fight with a player began (ours to start, or a leader's @kill).
+    public void NoteWeAttack(string given) => TellGang(_readSettings(), given, "attacking", _now());
 
     private void OnAttacked(PvpAttack attack)
     {
@@ -134,36 +138,44 @@ public sealed class PvpResponder : IDisposable
         switch (action)
         {
             case PvpAction.HangUp:
-                TellGang(settings, given, attacked, now);
+                TellGang(settings, given, Sighting(attacked), now);
                 Report($"{why}: hanging up");
                 HangUp(settings, why);
                 break;
 
             case PvpAction.FleeThenHangUp:
             {
-                TellGang(settings, given, attacked, now);
+                TellGang(settings, given, Sighting(attacked), now);
                 TimeSpan delay = TimeSpan.FromSeconds(Math.Max(0, settings.FleeHangupDelaySeconds));
-                if (!StartFlee(settings, why, comeBackAfter: null, stayAway: delay + PastHangup))
+                bool hungUp = false;
+                void HangUpOnce()
+                {
+                    if (hungUp) return;
+                    hungUp = true;
+                    _hangupPending = false;
+                    HangUp(settings, why);
+                }
+
+                // Running back along the walk or loop, the hang-up comes as soon as
+                // the set number of rooms is behind us; the delay is the latest it
+                // can be. At a flee room it is the delay.
+                if (!StartFlee(settings, why, comeBackAfter: null, stayAway: delay + PastHangup, HangUpOnce))
                 {
                     Report($"{why}: nowhere to flee, hanging up now");
                     HangUp(settings, why);
                     break;
                 }
-                Report($"{why}: fleeing, then hanging up in {delay.TotalSeconds:0}s");
+                Report($"{why}: fleeing, then hanging up");
                 _hangupPending = true;
-                _schedule(delay, () =>
-                {
-                    _hangupPending = false;
-                    HangUp(settings, why);
-                });
+                _schedule(delay, HangUpOnce);
                 break;
             }
 
             case PvpAction.Flee:
             {
-                TellGang(settings, given, attacked, now);
+                TellGang(settings, given, Sighting(attacked), now);
                 TimeSpan away = TimeSpan.FromSeconds(Math.Max(0, settings.ComeBackAfterSeconds));
-                Report(StartFlee(settings, why, comeBackAfter: away, stayAway: away)
+                Report(StartFlee(settings, why, comeBackAfter: away, stayAway: away, onRoomsLanded: null)
                     ? $"{why}: fleeing, back in {away.TotalSeconds:0}s"
                     : $"{why}: nowhere to flee (no walk or loop is running and no Flee to room is set)");
                 break;
@@ -171,7 +183,7 @@ public sealed class PvpResponder : IDisposable
 
             case PvpAction.Attack:
             case PvpAction.ChaseAttack:
-                TellGang(settings, given, attacked, now);
+                TellGang(settings, given, Sighting(attacked), now);
                 if (!_fight(given, action == PvpAction.ChaseAttack, why))
                     _log?.Info(LogCategory, $"{why}: not attacked (another fight is under way)");
                 break;
@@ -184,28 +196,34 @@ public sealed class PvpResponder : IDisposable
 
     // A Flee to room when one is set and can be reached; otherwise back along the
     // running walk or loop.
-    private bool StartFlee(PvpSettings settings, string why, TimeSpan? comeBackAfter, TimeSpan stayAway)
+    private bool StartFlee(
+        PvpSettings settings, string why, TimeSpan? comeBackAfter, TimeSpan stayAway, Action? onRoomsLanded)
     {
         if (settings.FleeTo is { } room && _fleeTo(room, comeBackAfter, why)) return true;
-        return _fleeRooms(why, Math.Max(1, settings.RoomsToFlee), stayAway);
+        return _fleeRooms(why, Math.Max(1, settings.RoomsToFlee), stayAway, onRoomsLanded);
     }
 
     private void HangUp(PvpSettings settings, string why)
     {
-        _reconnectDelay = settings.ReconnectAfterPvp
-            ? TimeSpan.FromMinutes(Math.Max(1, settings.ReconnectAfterPvpMinutes))
+        _reconnect = settings.ReconnectAfterPvp
+            ? (TimeSpan.FromMinutes(Math.Max(1, settings.ReconnectAfterPvpMinutes)), settings.ReconnectEntersRealm)
             : null;
         if (_hangUp(why)) return;
-        _reconnectDelay = null;
+        _reconnect = null;
         _log?.Warn(LogCategory, $"{why}: the hang-up did not go out (hang-ups are disabled, or no exit command is set)");
     }
 
-    private void TellGang(PvpSettings settings, string given, bool attacked, DateTimeOffset now)
+    private static string Sighting(bool attacked) => attacked ? "attacked me" : "is here";
+
+    // One line per player per kind of event (seen, attacked us, we attack) a minute.
+    private void TellGang(PvpSettings settings, string given, string what, DateTimeOffset now)
     {
-        if (!settings.NotifyGang || now - _gangToldAt < GangQuiet) return;
-        _gangToldAt = now;
+        if (!settings.NotifyGang) return;
+        string key = $"{given}|{what}";
+        if (_gangToldAt.TryGetValue(key, out DateTimeOffset told) && now - told < GangQuiet) return;
+        _gangToldAt[key] = now;
         string where = _roomName() is { Length: > 0 } room ? $" at {room}" : "";
-        _sendGang($"PvP: {given} {(attacked ? "attacked me" : "is here")}{where}");
+        _sendGang(what == "attacking" ? $"PvP: attacking {given}{where}" : $"PvP: {given} {what}{where}");
     }
 
     private void Report(string what)

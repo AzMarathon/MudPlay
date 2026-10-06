@@ -1041,6 +1041,7 @@ public partial class MainWindowViewModel : ObservableObject
         // MessageRouter's stateless dispatch). Feeds every observed
         // player into PlayerDatabase.
         _whoListParser = new Game.WhoListParser(Lines, AppServices.Current.Players, AppServices.Current.Log);
+        _whoListParser.ListRead += AppServices.Current.PvpStrangers.NoteWhoRead;
         _lookParser    = new Game.LookParser   (Lines, AppServices.Current.Players, AppServices.Current.Log);
         // Monster-look HP estimator. Name → Number prefers the record actually
         // placed / summoned in the current room (so an "orc lieutenant" here hits
@@ -2815,13 +2816,16 @@ public partial class MainWindowViewModel : ObservableObject
     // The PvP response hung up with "Re-connect after PvP" on: dial back in once
     // the wait is over. Shares the cleanup reconnect's timer, countdown and cancel
     // (pressing Connect), since only one timed dial-back can be pending.
-    private void SchedulePvpReconnect(TimeSpan delay)
+    private void SchedulePvpReconnect(TimeSpan delay, bool enterRealm)
     {
         // A hang-up normally leaves the next login at the menu for the user to
-        // enter by hand. This dial-back is the user's standing instruction to go
-        // back in, so it enters the realm like any other login.
-        string when = ArmTimedReconnect(delay, beforeDial: AppServices.Current.HangupSignal.AllowNextEntry);
-        AppServices.Current.Log.Info("PvP", $"Reconnect scheduled at {when}, {delay.TotalMinutes:0} min after the PvP hang-up.");
+        // enter by hand. With "enter the realm" set, this dial-back is the user's
+        // standing instruction to go back in, so it enters like any other login.
+        string when = ArmTimedReconnect(
+            delay, beforeDial: enterRealm ? AppServices.Current.HangupSignal.AllowNextEntry : null);
+        AppServices.Current.Log.Info("PvP",
+            $"Reconnect scheduled at {when}, {delay.TotalMinutes:0} min after the PvP hang-up"
+            + (enterRealm ? "." : "; it stops at the menu."));
     }
 
     // Arm the one-shot timed dial-back and announce it. Returns the dial time.
@@ -3377,14 +3381,14 @@ public partial class MainWindowViewModel : ObservableObject
                 // toggles) entirely.
                 // Read whatever the disconnect was, so a delay armed for a hang-up
                 // that never dropped the line can't attach itself to a later one.
-                TimeSpan? pvpReconnect = AppServices.Current.PvpResponse.TakeReconnectDelay();
+                (TimeSpan Delay, bool EnterRealm)? pvpReconnect = AppServices.Current.PvpResponse.TakeReconnect();
                 if (_lastDisconnectCause == DisconnectCause.RelogInitiated)
                 {
                     ScheduleRelogReconnect();
                 }
-                else if (_lastDisconnectCause == DisconnectCause.HangupInitiated && pvpReconnect is { } pvpDelay)
+                else if (_lastDisconnectCause == DisconnectCause.HangupInitiated && pvpReconnect is { } pvp)
                 {
-                    SchedulePvpReconnect(pvpDelay);
+                    SchedulePvpReconnect(pvp.Delay, pvp.EnterRealm);
                 }
                 else
                 {

@@ -180,7 +180,7 @@ public static class BugReportBuilder
             + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
             + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
-            + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held for {heldBy}" : "")
+            + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
         Kv(sb, "PvP response", svc.PvpResponse.LastResponse
             + (svc.PvpFlee.IsActive ? "; fleeing to the flee room now" : ""));

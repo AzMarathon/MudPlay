@@ -31,12 +31,21 @@ public sealed class PvpFightTests
         public List<string> Sent { get; } = new();
         public List<(string Code, string Target)> Casts { get; } = new();
         public List<Direction> Steps { get; } = new();
-        public List<Direction> Exits { get; } = new();
+        public List<PvpChaseExit> Exits { get; } = new();
         public bool BackOnTask { get; set; } = true;
+        public Dictionary<string, PvpSpellInfo> Spells { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public int Mana { get; set; } = 100;
+
+        public void Open(params Direction[] ways) => Exits.AddRange(ways.Select(w => new PvpChaseExit(w, Door: false)));
+        public void Door(Direction way) => Exits.Add(new PvpChaseExit(way, Door: true));
         public List<string> Reports { get; } = new();
         public int Suspended { get; private set; }
         public int Resumed { get; private set; }
         public List<(TimeSpan Delay, Action Action)> Scheduled { get; } = new();
+
+        // What is scheduled apart from the once-a-round tick.
+        public List<(TimeSpan Delay, Action Action)> Waits =>
+            Scheduled.Where(s => s.Delay != TimeSpan.FromSeconds(5)).ToList();
 
         public Harness()
         {
@@ -51,6 +60,8 @@ public sealed class PvpFightTests
                 attackCommandFor: given => $"a {given}",
                 send: Sent.Add,
                 cast: (code, target) => { if (CastWorks) Casts.Add((code, target)); return CastWorks; },
+                spellInfo: code => Spells.TryGetValue(code, out PvpSpellInfo info) ? info : null,
+                manaMeets: floor => Mana >= floor,
                 stepToward: way => { if (StepWorks) Steps.Add(way); return StepWorks; },
                 exitsHere: () => Exits,
                 suspendEngines: _ => { Suspended++; return () => Resumed++; },
@@ -169,37 +180,57 @@ public sealed class PvpFightTests
 
     // ----- the PvP spells --------------------------------------------------
 
+    private static readonly PvpSpellInfo Slow = new(BetweenRound: true, Duration: TimeSpan.FromSeconds(15), MonsterOnly: false);
+    private static readonly PvpSpellInfo Dispel = new(BetweenRound: true, Duration: TimeSpan.Zero, MonsterOnly: false);
+    private static readonly PvpSpellInfo Bolt = new(BetweenRound: false, Duration: TimeSpan.Zero, MonsterOnly: false);
+    private static readonly PvpSpellInfo Charm = new(BetweenRound: false, Duration: TimeSpan.Zero, MonsterOnly: true);
+
+    private static PvpSpellSlot Slot(string code, int? maxCasts = null, int minMana = 0) =>
+        new() { SpellName = code, MaxCasts = maxCasts, MinManaPerCast = minMana };
+
+    // A between-round spell goes out with the attack at the start and again each
+    // time its duration has run out; the attack follows every cast, which broke it.
     [Fact]
-    public void PvpSpells_GoOutOnceEach_ARoundApart_ThenTheAttackIsPutBack()
+    public void BetweenRoundSpell_IsCastAtTheStart_AndAgainWhenItsDurationRunsOut()
     {
-        using Harness h = new() { Settings = new PvpSettings { PvpSpell1 = "slow", PvpSpell2 = " blin " } };
+        using Harness h = new() { Settings = new PvpSettings { Spell1 = Slot("slow") } };
+        h.Spells["slow"] = Slow;
         h.Feed("Also here: Bob.");
 
         h.Fight.Engage("Bob", false, "x");
+        Assert.Equal(("slow", "Bob"), Assert.Single(h.Casts));
         Assert.Equal(new[] { "a Bob" }, h.Sent);
 
-        h.RunScheduled();
-        Assert.Equal(("slow", "Bob"), Assert.Single(h.Casts));
+        h.RunScheduled();                       // 5 s
+        h.RunScheduled();                       // 10 s
+        Assert.Single(h.Casts);
+        Assert.Single(h.Sent);
 
-        h.RunScheduled();
-        Assert.Equal(("blin", "Bob"), h.Casts[^1]);
-
-        h.RunScheduled();                       // nothing left to cast: attack again
+        h.RunScheduled();                       // 15 s: the 15 s spell has run out
         Assert.Equal(2, h.Casts.Count);
         Assert.Equal(new[] { "a Bob", "a Bob" }, h.Sent);
-
-        h.RunScheduled();
-        Assert.Equal(2, h.Sent.Count);          // and that was the end of it
     }
 
     [Fact]
-    public void PvpSpell_ThatCouldNotBeCast_IsTriedAgainNextRound()
+    public void BetweenRoundSpellWithNoDuration_OrOneWeDontKnow_IsCastOnce()
     {
-        using Harness h = new() { CastWorks = false, Settings = new PvpSettings { PvpSpell1 = "slow" } };
+        using Harness h = new() { Settings = new PvpSettings { Spell1 = Slot("disp"), Spell2 = Slot("zzzz") } };
+        h.Spells["disp"] = Dispel;
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", false, "x");
 
-        h.RunScheduled();
+        for (int i = 0; i < 6; i++) h.RunScheduled();
+
+        Assert.Equal(new[] { ("disp", "Bob"), ("zzzz", "Bob") }, h.Casts);
+    }
+
+    [Fact]
+    public void BetweenRoundSpell_ThatCouldNotBeCast_IsTriedAgainNextRound()
+    {
+        using Harness h = new() { CastWorks = false, Settings = new PvpSettings { Spell1 = Slot("slow") } };
+        h.Spells["slow"] = Slow;
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", false, "x");
         Assert.Empty(h.Casts);
 
         h.CastWorks = true;
@@ -207,26 +238,92 @@ public sealed class PvpFightTests
         Assert.Equal(("slow", "Bob"), Assert.Single(h.Casts));
     }
 
-    // A cast of ours breaks combat; during the spell rounds the attack isn't re-sent
-    // on that Off, or it would cut a spell that takes the round short.
+    // A combat spell is the attack itself, sent once and repeated by the game.
     [Fact]
-    public void CombatOff_ReAttacks_ExceptWhileThePvpSpellsAreGoingOut()
+    public void CombatSpell_IsTheAttack_InPlaceOfTheProfiles()
     {
-        using Harness h = new() { Settings = new PvpSettings { PvpSpell1 = "slow" } };
+        using Harness h = new() { Settings = new PvpSettings { Spell1 = Slot("bolt") } };
+        h.Spells["bolt"] = Bolt;
+        h.Feed("Also here: Bob.");
+
+        h.Fight.Engage("Bob", false, "x");
+        h.RunScheduled();
+        h.RunScheduled();
+
+        Assert.Equal(new[] { "bolt Bob" }, h.Sent);
+        Assert.Empty(h.Casts);
+    }
+
+    [Fact]
+    public void CombatSpell_FallsBackToTheProfileAttack_WhenManaDropsUnderItsFloor_AndComesBack()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Spell1 = Slot("bolt", minMana: 40) } };
+        h.Spells["bolt"] = Bolt;
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", false, "x");
+
+        h.Mana = 30;
+        h.RunScheduled();
+        Assert.Equal("a Bob", h.Sent[^1]);
+
+        h.Mana = 80;
+        h.RunScheduled();
+        Assert.Equal(new[] { "bolt Bob", "a Bob", "bolt Bob" }, h.Sent);
+    }
+
+    [Fact]
+    public void CombatSpell_StopsAfterItsMaxCasts_CountedInRounds()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Spell1 = Slot("bolt", maxCasts: 2) } };
+        h.Spells["bolt"] = Bolt;
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", false, "x");
+
+        h.RunScheduled();                       // one round on it
+        Assert.Equal(new[] { "bolt Bob" }, h.Sent);
+        h.RunScheduled();                       // two: spent
+        Assert.Equal(new[] { "bolt Bob", "a Bob" }, h.Sent);
+    }
+
+    [Fact]
+    public void SecondCombatSpell_TakesOverWhenTheFirstCantBeUsed()
+    {
+        using Harness h = new() { Mana = 10, Settings = new PvpSettings { Spell1 = Slot("bolt", minMana: 50), Spell2 = Slot("zap") } };
+        h.Spells["bolt"] = Bolt;
+        h.Spells["zap"] = Bolt;
+        h.Feed("Also here: Bob.");
+
+        h.Fight.Engage("Bob", false, "x");
+
+        Assert.Equal(new[] { "zap Bob" }, h.Sent);
+    }
+
+    [Fact]
+    public void MonsterOnlySpell_IsNotUsed()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Spell1 = Slot("chrm") } };
+        h.Spells["chrm"] = Charm;
+        h.Feed("Also here: Bob.");
+
+        h.Fight.Engage("Bob", false, "x");
+        h.RunScheduled();
+
+        Assert.Equal(new[] { "a Bob" }, h.Sent);
+        Assert.Empty(h.Casts);
+    }
+
+    // A cast of ours breaks combat: the Off that follows is answered with the attack.
+    [Fact]
+    public void CombatOff_WithThemStillHere_IsAnsweredWithTheAttack()
+    {
+        using Harness h = new();
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", false, "x");
 
         h.Clock += TimeSpan.FromSeconds(3);
         h.Feed("*Combat Off*");
-        Assert.Single(h.Sent);
 
-        h.RunScheduled();                       // casts slow
-        h.RunScheduled();                       // attack put back
-        Assert.Equal(2, h.Sent.Count);
-
-        h.Clock += TimeSpan.FromSeconds(3);
-        h.Feed("*Combat Off*");
-        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal(new[] { "a Bob", "a Bob" }, h.Sent);
     }
 
     // Re-issuing an attack prints Off then Engaged. That Off is not the fight ending.
@@ -239,7 +336,7 @@ public sealed class PvpFightTests
 
         h.Feed("*Combat Off*");
         h.Feed("*Combat Engaged*");
-        h.RunScheduled();
+        h.Scheduled.Single(x => x.Delay < TimeSpan.FromSeconds(5)).Action();
 
         Assert.Single(h.Sent);
     }
@@ -252,7 +349,7 @@ public sealed class PvpFightTests
         h.Fight.Engage("Bob", false, "x");
 
         h.Feed("*Combat Off*");
-        h.RunScheduled();
+        h.Scheduled.Single(x => x.Delay < TimeSpan.FromSeconds(5)).Action();
         Assert.Equal(2, h.Sent.Count);
 
         h.Feed("You do not see Bob here!");
@@ -437,7 +534,7 @@ public sealed class PvpFightTests
     public void Chase_OutOfSight_KeepsToTheirHeading()
     {
         using Harness h = new();
-        h.Exits.AddRange(new[] { Direction.N, Direction.S, Direction.E });
+        h.Open(Direction.N, Direction.S, Direction.E);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
@@ -453,7 +550,7 @@ public sealed class PvpFightTests
     public void Chase_HeadingBlocked_TakesTheOnlyOtherWayOut()
     {
         using Harness h = new();
-        h.Exits.AddRange(new[] { Direction.S, Direction.E });
+        h.Open(Direction.S, Direction.E);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
@@ -467,7 +564,7 @@ public sealed class PvpFightTests
     public void Chase_NoGuessToMake_WaitsTheSetTime_ThenGivesUp()
     {
         using Harness h = new() { Settings = new PvpSettings { ChaseWaitSeconds = 25 } };
-        h.Exits.AddRange(new[] { Direction.S, Direction.E, Direction.W });
+        h.Open(Direction.S, Direction.E, Direction.W);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
@@ -475,7 +572,7 @@ public sealed class PvpFightTests
         h.Fight.NoteStepLanded();
         Assert.Single(h.Steps);
         Assert.True(h.Fight.IsActive);
-        Assert.Equal(TimeSpan.FromSeconds(25), Assert.Single(h.Scheduled).Delay);
+        Assert.Equal(TimeSpan.FromSeconds(25), Assert.Single(h.Waits).Delay);
 
         h.RunScheduled();
         Assert.False(h.Fight.IsActive);
@@ -503,7 +600,7 @@ public sealed class PvpFightTests
     public void Chase_GuessingSwitchedOff_WaitsInsteadOfGuessing()
     {
         using Harness h = new() { Settings = new PvpSettings { ChaseGuessDirection = false } };
-        h.Exits.AddRange(new[] { Direction.N, Direction.S });
+        h.Open(Direction.N, Direction.S);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
@@ -511,14 +608,14 @@ public sealed class PvpFightTests
         h.Fight.NoteStepLanded();
 
         Assert.Single(h.Steps);
-        Assert.Single(h.Scheduled);
+        Assert.Single(h.Waits);
     }
 
     [Fact]
     public void Chase_GivesUpAfterTheSetNumberOfRoomsWithoutSight()
     {
         using Harness h = new() { Settings = new PvpSettings { ChaseRoomsUnseen = 3 } };
-        h.Exits.AddRange(new[] { Direction.N, Direction.S });
+        h.Open(Direction.N, Direction.S);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
@@ -539,7 +636,7 @@ public sealed class PvpFightTests
     public void Chase_SeeingThemResetsTheRoomCount()
     {
         using Harness h = new() { Settings = new PvpSettings { ChaseRoomsUnseen = 2 } };
-        h.Exits.AddRange(new[] { Direction.N, Direction.S });
+        h.Open(Direction.N, Direction.S);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
 
@@ -559,7 +656,7 @@ public sealed class PvpFightTests
     public void Chase_MissedTheirLeaving_GuessesFromTheRoom()
     {
         using Harness h = new();
-        h.Exits.Add(Direction.E);
+        h.Open(Direction.E);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
 
@@ -578,7 +675,7 @@ public sealed class PvpFightTests
         h.Feed("Bob just left to the north.");
 
         Assert.Empty(h.Steps);
-        Assert.Single(h.Scheduled);
+        Assert.Single(h.Waits);
         Assert.True(h.Fight.IsActive);
     }
 
@@ -586,7 +683,7 @@ public sealed class PvpFightTests
     public void Chase_WithTracking_TracksOnArrival_AndFollowsTheAnswerOverAGuess()
     {
         using Harness h = new() { Settings = new PvpSettings { TrackEnemies = true } };
-        h.Exits.AddRange(new[] { Direction.N, Direction.S, Direction.E });
+        h.Open(Direction.N, Direction.S, Direction.E);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
@@ -611,7 +708,7 @@ public sealed class PvpFightTests
     public void Chase_TrackThatFailsOrGoesUnanswered_FallsBackToTheGuess(bool failureLine)
     {
         using Harness h = new() { Settings = new PvpSettings { TrackEnemies = true } };
-        h.Exits.AddRange(new[] { Direction.N, Direction.S });
+        h.Open(Direction.N, Direction.S);
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
@@ -643,5 +740,116 @@ public sealed class PvpFightTests
 
         h.Feed("Bob went south from here.");
         Assert.Equal(Direction.S, h.Steps[^1]);
+    }
+
+    // ----- a door at a crossroads -------------------------------------------------
+
+    // Behind the door first, a few rooms in; nothing there, so back to the junction
+    // and on the way they were heading. The walk back isn't counted against the
+    // rooms-without-sight limit.
+    [Fact]
+    public void Chase_CrossroadsWithADoor_LooksBehindItFirst_ThenComesBackForTheOtherWay()
+    {
+        using Harness h = new() { Settings = new PvpSettings { ChaseDoorRooms = 2, ChaseRoomsUnseen = 4 } };
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+        h.Feed("Bob just left to the north.");               // step 1: north, into the crossroads
+
+        h.Open(Direction.N, Direction.S);
+        h.Door(Direction.E);
+        h.Fight.NoteStepLanded();                             // the door first
+        Assert.Equal(Direction.E, h.Steps[^1]);
+
+        h.Exits.Clear();
+        h.Open(Direction.E, Direction.W);
+        h.Fight.NoteStepLanded();                             // one room in: carry on east
+        Assert.Equal(new[] { Direction.N, Direction.E, Direction.E }, h.Steps);
+
+        h.Fight.NoteStepLanded();                             // two rooms in, nothing: turn back
+        h.Fight.NoteStepLanded();
+        Assert.Equal(new[] { Direction.N, Direction.E, Direction.E, Direction.W, Direction.W }, h.Steps);
+
+        h.Exits.Clear();
+        h.Open(Direction.N, Direction.S);
+        h.Door(Direction.E);
+        h.Fight.NoteStepLanded();                             // back at the crossroads: north now
+        Assert.Equal(Direction.N, h.Steps[^1]);
+        Assert.True(h.Fight.IsActive);
+    }
+
+    [Fact]
+    public void Chase_SeenBehindTheDoor_AttacksThere()
+    {
+        using Harness h = new();
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+        h.Feed("Bob just left to the north.");
+        h.Open(Direction.N, Direction.S);
+        h.Door(Direction.E);
+        h.Fight.NoteStepLanded();
+
+        h.Feed("Also here: Bob.");
+        h.Fight.NoteStepLanded();
+
+        Assert.Equal("a Bob", h.Sent[^1]);
+        Assert.Equal(2, h.Steps.Count);
+    }
+
+    // ----- @kill ------------------------------------------------------------------
+
+    [Fact]
+    public void AtKill_WithItsSettingOn_SwitchesWarningsOffBeforeAttacking()
+    {
+        using Harness h = new() { Settings = new PvpSettings { KillOrderTurnsOffEvilWarnings = true } };
+        h.Feed("Also here: Bob.");
+
+        Assert.True(h.Fight.EngageOnOrder("Bob"));
+
+        Assert.Equal(new[] { "set warning off", "a Bob" }, h.Sent);
+    }
+
+    [Fact]
+    public void AtKill_WithItsSettingOff_JustAttacks()
+    {
+        using Harness h = new();
+        h.Feed("Also here: Bob.");
+
+        h.Fight.EngageOnOrder("Bob");
+
+        Assert.Equal(new[] { "a Bob" }, h.Sent);
+    }
+
+    [Fact]
+    public void Started_NamesThePlayer_OncePerFight()
+    {
+        using Harness h = new();
+        List<string> started = new();
+        h.Fight.Started += started.Add;
+        h.Feed("Also here: Bob.");
+
+        h.Fight.Engage("Bob", false, "x");
+        h.Fight.Engage("Bob", true, "x");
+
+        Assert.Equal("Bob", Assert.Single(started));
+    }
+
+    [Fact]
+    public void WarningsBack_WaitsTheSetTime()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { TurnOffEvilWarningsToAttack = true, WarningsBackAfterSeconds = 200 },
+        };
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", false, "x");
+        h.Feed("To do this action, you must turn off your evil warnings.");
+        h.Fight.Stop("done");
+
+        for (int i = 0; i < 12; i++) h.RunScheduled();        // three minutes
+        Assert.DoesNotContain("set warning on", h.Sent);
+
+        h.RunScheduled();
+        h.RunScheduled();
+        Assert.Equal("set warning on", h.Sent[^1]);
     }
 }

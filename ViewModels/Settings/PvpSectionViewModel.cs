@@ -46,7 +46,8 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         "Flee to", "Rooms to flee", "Flee hangup delay", "Come back", "Notify gang",
         "Re-connect after PvP", "Reconnect", "Attack", "Chase", "Evil warnings",
         "set warning", "PvP spells", "Track enemies", "Tracking", "Chasing", "Give up the chase",
-        "Guess the way they went", "Sprint",
+        "Guess the way they went", "Sprint", "Party split", "Hold room attacks", "@kill",
+        "Enter the realm", "Behind a door",
     };
 
     [ObservableProperty]
@@ -75,8 +76,19 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _reconnectAfterPvpMinutes = 30;
     [ObservableProperty] private bool _flipFriendToEnemyIfAttacked;
     [ObservableProperty] private bool _turnOffEvilWarningsToAttack;
-    [ObservableProperty] private string _pvpSpell1 = string.Empty;
-    [ObservableProperty] private string _pvpSpell2 = string.Empty;
+    [ObservableProperty] private bool _killOrderTurnsOffEvilWarnings;
+    [ObservableProperty] private int _warningsBackAfterSeconds = 60;
+    [ObservableProperty] private int _partySplitHoldSeconds = 120;
+    [ObservableProperty] private bool _reconnectEntersRealm = true;
+    [ObservableProperty] private int _chaseDoorRooms = 3;
+
+    // The two PvP spell rows. Max casts blank = no limit.
+    [ObservableProperty] private string _spell1 = string.Empty;
+    [ObservableProperty] private int? _spell1MaxCasts;
+    [ObservableProperty] private int _spell1MinMana;
+    [ObservableProperty] private string _spell2 = string.Empty;
+    [ObservableProperty] private int? _spell2MaxCasts;
+    [ObservableProperty] private int _spell2MinMana;
     [ObservableProperty] private int _chaseRoomsUnseen = 8;
     [ObservableProperty] private bool _chaseGuessDirection = true;
     [ObservableProperty] private int _chaseWaitSeconds = 20;
@@ -133,8 +145,13 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
             ReconnectAfterPvpMinutes = Math.Clamp(ReconnectAfterPvpMinutes, 1, 1440),
             FlipFriendToEnemyIfAttacked = FlipFriendToEnemyIfAttacked,
             TurnOffEvilWarningsToAttack = TurnOffEvilWarningsToAttack,
-            PvpSpell1 = string.IsNullOrWhiteSpace(PvpSpell1) ? null : PvpSpell1.Trim(),
-            PvpSpell2 = string.IsNullOrWhiteSpace(PvpSpell2) ? null : PvpSpell2.Trim(),
+            KillOrderTurnsOffEvilWarnings = KillOrderTurnsOffEvilWarnings,
+            WarningsBackAfterSeconds = Math.Clamp(WarningsBackAfterSeconds, 0, 3600),
+            PartySplitHoldSeconds = Math.Clamp(PartySplitHoldSeconds, 0, 3600),
+            ReconnectEntersRealm = ReconnectEntersRealm,
+            ChaseDoorRooms = Math.Clamp(ChaseDoorRooms, 1, 20),
+            Spell1 = SlotOf(Spell1, Spell1MaxCasts, Spell1MinMana),
+            Spell2 = SlotOf(Spell2, Spell2MaxCasts, Spell2MinMana),
             ChaseRoomsUnseen = Math.Clamp(ChaseRoomsUnseen, 1, 50),
             ChaseGuessDirection = ChaseGuessDirection,
             ChaseWaitSeconds = Math.Clamp(ChaseWaitSeconds, 0, 600),
@@ -187,8 +204,17 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         ReconnectAfterPvpMinutes = dto.ReconnectAfterPvpMinutes;
         FlipFriendToEnemyIfAttacked = dto.FlipFriendToEnemyIfAttacked;
         TurnOffEvilWarningsToAttack = dto.TurnOffEvilWarningsToAttack;
-        PvpSpell1 = dto.PvpSpell1 ?? string.Empty;
-        PvpSpell2 = dto.PvpSpell2 ?? string.Empty;
+        KillOrderTurnsOffEvilWarnings = dto.KillOrderTurnsOffEvilWarnings;
+        WarningsBackAfterSeconds = dto.WarningsBackAfterSeconds;
+        PartySplitHoldSeconds = dto.PartySplitHoldSeconds;
+        ReconnectEntersRealm = dto.ReconnectEntersRealm;
+        ChaseDoorRooms = dto.ChaseDoorRooms;
+        Spell1 = dto.Spell1.SpellName ?? string.Empty;
+        Spell1MaxCasts = dto.Spell1.MaxCasts;
+        Spell1MinMana = dto.Spell1.MinManaPerCast;
+        Spell2 = dto.Spell2.SpellName ?? string.Empty;
+        Spell2MaxCasts = dto.Spell2.MaxCasts;
+        Spell2MinMana = dto.Spell2.MinManaPerCast;
         ChaseRoomsUnseen = dto.ChaseRoomsUnseen;
         ChaseGuessDirection = dto.ChaseGuessDirection;
         ChaseWaitSeconds = dto.ChaseWaitSeconds;
@@ -196,6 +222,13 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         TrackEnemiesEverySeconds = dto.TrackEnemiesEverySeconds;
         RebuildFleeRooms(dto.FleeTo);
     }
+
+    private static PvpSpellSlot SlotOf(string code, int? maxCasts, int minMana) => new()
+    {
+        SpellName = string.IsNullOrWhiteSpace(code) ? null : code.Trim(),
+        MaxCasts = maxCasts is { } cap ? Math.Max(0, cap) : null,
+        MinManaPerCast = Math.Max(0, minMana),
+    };
 
     private RoomRef? CurrentFleeRoom() =>
         _roomByLabel.TryGetValue(SelectedFleeRoom, out RoomRef? room) ? room : null;
@@ -267,8 +300,17 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     partial void OnReconnectAfterPvpMinutesChanged(int value)     => MarkDirty();
     partial void OnFlipFriendToEnemyIfAttackedChanged(bool value) => MarkDirty();
     partial void OnTurnOffEvilWarningsToAttackChanged(bool value) => MarkDirty();
-    partial void OnPvpSpell1Changed(string value)                 => MarkDirty();
-    partial void OnPvpSpell2Changed(string value)                 => MarkDirty();
+    partial void OnKillOrderTurnsOffEvilWarningsChanged(bool value) => MarkDirty();
+    partial void OnWarningsBackAfterSecondsChanged(int value)     => MarkDirty();
+    partial void OnPartySplitHoldSecondsChanged(int value)        => MarkDirty();
+    partial void OnReconnectEntersRealmChanged(bool value)        => MarkDirty();
+    partial void OnChaseDoorRoomsChanged(int value)               => MarkDirty();
+    partial void OnSpell1Changed(string value)                    => MarkDirty();
+    partial void OnSpell1MaxCastsChanged(int? value)              => MarkDirty();
+    partial void OnSpell1MinManaChanged(int value)                => MarkDirty();
+    partial void OnSpell2Changed(string value)                    => MarkDirty();
+    partial void OnSpell2MaxCastsChanged(int? value)              => MarkDirty();
+    partial void OnSpell2MinManaChanged(int value)                => MarkDirty();
     partial void OnChaseRoomsUnseenChanged(int value)             => MarkDirty();
     partial void OnChaseGuessDirectionChanged(bool value)         => MarkDirty();
     partial void OnChaseWaitSecondsChanged(int value)             => MarkDirty();

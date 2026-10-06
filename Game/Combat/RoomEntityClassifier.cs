@@ -807,6 +807,30 @@ public sealed class RoomEntityClassifier : IDisposable
         EntitiesObserved?.Invoke(wiped);
     }
 
+    // Look again at the names the roster couldn't place. A player we had no record
+    // of reads as unknown until `who` (or the top list, or a look) supplies one;
+    // once it has, they are a player here and now, not at the next room display.
+    // Fires EntitiesObserved only when something changed.
+    public void ReclassifyUnknown()
+    {
+        if (Current is not { } cur) return;
+        List<RoomEntity>? updated = null;
+        for (int i = 0; i < cur.Entities.Count; i++)
+        {
+            RoomEntity e = cur.Entities[i];
+            if (e.Kind != EntityKind.Unknown) continue;
+            RoomEntity again = Classify(e.RawName);
+            if (again.Kind == EntityKind.Unknown) continue;
+            updated ??= new List<RoomEntity>(cur.Entities);
+            updated[i] = again;
+        }
+        if (updated is null) return;
+
+        RoomEntitiesObservation obs = cur with { Entities = updated };
+        Current = obs;
+        EntitiesObserved?.Invoke(obs);
+    }
+
     // Re-fire EntitiesObserved with the current observation unchanged, so every
     // subscriber re-evaluates on demand. Used when a state flip that is NOT itself
     // a room observation — the auto-combat master toggle — must reach all

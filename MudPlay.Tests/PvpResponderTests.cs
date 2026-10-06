@@ -21,6 +21,7 @@ public sealed class PvpResponderTests
         public PartyState Party { get; } = new();
         public RoomEntityClassifier Classifier { get; }
         public PvpRoomSafety Room { get; }
+        public PartySplitTracker PartySplit { get; }
         public PvpAttackWatcher Attacks { get; }
         public PvpResponder Responder { get; }
 
@@ -35,6 +36,7 @@ public sealed class PvpResponderTests
         public List<(int Rooms, TimeSpan StayAway)> RoomFlees { get; } = new();
         public List<(RoomRef Room, TimeSpan? ComeBackAfter)> RoomWalks { get; } = new();
         public List<(string Player, bool Chase)> Fights { get; } = new();
+        public Action? RoomFleeLanded { get; private set; }
         public List<string> Gang { get; } = new();
         public List<string> Reports { get; } = new();
         public List<(TimeSpan Delay, Action Action)> Scheduled { get; } = new();
@@ -48,8 +50,9 @@ public sealed class PvpResponderTests
                 pvpEnabled: () => PvpEnabled, inParty: Party.HasMember,
                 classOf: _ => null, levelOf: _ => null, roomAttackFromLevel: _ => null,
                 realm: () => RealmType.ParaMud, lastMoveSentAt: () => null);
+            PartySplit = new PartySplitTracker(Party, () => TimeSpan.FromMinutes(2), () => "Hero", () => Clock);
             Attacks = new PvpAttackWatcher(
-                Router, Classifier, Room, Players, Party,
+                Router, Classifier, Room, Players, Party, PartySplit,
                 pvpEnabled: () => PvpEnabled, flipFriends: () => Settings.FlipFriendToEnemyIfAttacked,
                 ownGivenName: () => "Hero", now: () => Clock);
             Responder = new PvpResponder(
@@ -58,7 +61,12 @@ public sealed class PvpResponderTests
                 inParty: Party.HasMember,
                 readSettings: () => Settings,
                 hangUp: why => { HangUps.Add(why); return HangUpWorks; },
-                fleeRooms: (_, rooms, stayAway) => { RoomFlees.Add((rooms, stayAway)); return FleeRoomsWorks; },
+                fleeRooms: (_, rooms, stayAway, landed) =>
+                {
+                    RoomFlees.Add((rooms, stayAway));
+                    RoomFleeLanded = landed;
+                    return FleeRoomsWorks;
+                },
                 fleeTo: (room, comeBack, _) => { RoomWalks.Add((room, comeBack)); return FleeToWorks; },
                 fight: (player, chase, _) => { Fights.Add((player, chase)); return true; },
                 sendGang: Gang.Add,
@@ -81,6 +89,7 @@ public sealed class PvpResponderTests
         {
             Responder.Dispose();
             Attacks.Dispose();
+            PartySplit.Dispose();
             Room.Dispose();
             Classifier.Dispose();
         }
@@ -191,8 +200,8 @@ public sealed class PvpResponderTests
 
         h.Feed("Also here: Bob.");
 
-        Assert.Equal(TimeSpan.FromMinutes(20), h.Responder.TakeReconnectDelay());
-        Assert.Null(h.Responder.TakeReconnectDelay());
+        Assert.Equal((TimeSpan.FromMinutes(20), true), h.Responder.TakeReconnect());
+        Assert.Null(h.Responder.TakeReconnect());
     }
 
     [Fact]
@@ -207,7 +216,21 @@ public sealed class PvpResponderTests
 
         h.Feed("Also here: Bob.");
 
-        Assert.Null(h.Responder.TakeReconnectDelay());
+        Assert.Null(h.Responder.TakeReconnect());
+    }
+
+    [Fact]
+    public void Reconnect_CanBeSetToStopAtTheMenu()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.HangUp, ReconnectAfterPvp = true, ReconnectEntersRealm = false },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Equal((TimeSpan.FromMinutes(30), false), h.Responder.TakeReconnect());
     }
 
     [Fact]
@@ -259,27 +282,51 @@ public sealed class PvpResponderTests
     }
 
     [Fact]
-    public void FleeThenHangUp_FleesNow_HangsUpAfterTheDelay_AndIgnoresEverythingMeanwhile()
+    public void FleeThenHangUp_ToAFleeRoom_HangsUpAfterTheDelay_AndIgnoresEverythingMeanwhile()
     {
         using Harness h = new()
         {
-            Settings = new PvpSettings { Action = PvpAction.FleeThenHangUp, FleeHangupDelaySeconds = 30 },
+            Settings = new PvpSettings { Action = PvpAction.FleeThenHangUp, FleeTo = new RoomRef(1, 200), FleeHangupDelaySeconds = 30 },
         };
         h.MarkEnemy("Bob");
 
         h.Feed("Also here: Bob.");
 
-        (int _, TimeSpan stayAway) = Assert.Single(h.RoomFlees);
-        Assert.True(stayAway > TimeSpan.FromSeconds(30));      // the run can't walk us back first
+        Assert.Single(h.RoomWalks);
         Assert.Empty(h.HangUps);
         (TimeSpan delay, Action hangUp) = Assert.Single(h.Scheduled);
         Assert.Equal(TimeSpan.FromSeconds(30), delay);
 
         h.Clock += TimeSpan.FromSeconds(15);
         h.Feed("Bob moves to attack you!");
-        Assert.Single(h.RoomFlees);
+        Assert.Single(h.RoomWalks);
 
         hangUp();
+        Assert.Single(h.HangUps);
+    }
+
+    // Running back along the walk or loop: hang up as soon as the rooms are behind
+    // us, and once only, whichever of the landing and the delay comes first.
+    [Fact]
+    public void FleeThenHangUp_ByRooms_HangsUpWhenTheRunIsDone_AndOnlyOnce()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.FleeThenHangUp, RoomsToFlee = 6, FleeHangupDelaySeconds = 30 },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        (int rooms, TimeSpan stayAway) = Assert.Single(h.RoomFlees);
+        Assert.Equal(6, rooms);
+        Assert.True(stayAway > TimeSpan.FromSeconds(30));      // the run can't walk us back first
+        Assert.Empty(h.HangUps);
+
+        h.RoomFleeLanded!();
+        Assert.Single(h.HangUps);
+
+        Assert.Single(h.Scheduled).Action();                   // the delay running out later
         Assert.Single(h.HangUps);
     }
 
@@ -348,22 +395,41 @@ public sealed class PvpResponderTests
     // ----- telling the gang -----------------------------------------------
 
     [Fact]
-    public void NotifyGang_SaysWhoAndWhere_OnceAMinute()
+    public void NotifyGang_SaysWhenAnEnemyIsSeen_AttacksUs_AndWhenWeAttack()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.Attack, NotifyGang = true } };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+        Assert.Equal("PvP: Bob is here at Town Square", Assert.Single(h.Gang));
+
+        h.Responder.NoteWeAttack("Bob");
+        Assert.Equal("PvP: attacking Bob at Town Square", h.Gang[^1]);
+
+        h.Clock += TimeSpan.FromSeconds(11);
+        h.Feed("Bob moves to attack you!");
+        Assert.Equal("PvP: Bob attacked me at Town Square", h.Gang[^1]);
+        Assert.Equal(3, h.Gang.Count);
+    }
+
+    [Fact]
+    public void NotifyGang_EachKindOfLine_OnceAMinutePerPlayer()
     {
         using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.Flee, NotifyGang = true } };
         h.MarkEnemy("Bob");
         h.MarkEnemy("Ann");
 
         h.Feed("Bob moves to attack you!");
-        Assert.Equal("PvP: Bob attacked me at Town Square", Assert.Single(h.Gang));
-
         h.Clock += TimeSpan.FromSeconds(20);
-        h.Feed("Also here: Ann.");
+        h.Feed("Bob moves to attack you!");
         Assert.Single(h.Gang);
 
-        h.Clock += TimeSpan.FromSeconds(61);
-        h.Feed("Also here: Ann.");
+        h.Feed("Also here: Ann.");                  // another player: their own line
         Assert.Equal("PvP: Ann is here at Town Square", h.Gang[^1]);
+
+        h.Clock += TimeSpan.FromSeconds(61);
+        h.Feed("Bob moves to attack you!");
+        Assert.Equal(3, h.Gang.Count);
     }
 
     [Fact]
