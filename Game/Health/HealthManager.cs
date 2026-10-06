@@ -1314,8 +1314,11 @@ public sealed class HealthManager : IDisposable
             // 0 mana and would stay paused forever.
             bool hpRecovered = s.RunIfBelowHp <= 0 || _state.Hp > hpRunTrigger;
             bool maRecovered = s.RunIfBelowMa <= 0 || _state.MaxMa <= 0 || _state.Ma > maRunTrigger;
-            if (hpRecovered && maRecovered && _lastKnownRoom is { } room)
+            // A flee from a player stays away for a while before walking back.
+            bool stayedAway = _fleeResumeNotBefore is not { } notBefore || _now() >= notBefore;
+            if (hpRecovered && maRecovered && stayedAway && _lastKnownRoom is { } room)
             {
+                ClearPlayerFlee();
                 _log?.Combat(LogCategory,
                     $"flee complete — resuming engine={_fleeEngine.Name} at {room} " +
                     $"(HP {_state.Hp}/{_state.MaxHp} > {hpRunTrigger}, MA {_state.Ma}/{_state.MaxMa} > {maRunTrigger})");
@@ -1907,6 +1910,44 @@ public sealed class HealthManager : IDisposable
         return ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop);
     }
 
+    // The PvP response's hang-up: the same escape a received @panic takes, so the
+    // sysop wimpy jump stands in when it is set up, and DisableHangups is honoured.
+    public bool HangUpForPvp(string reason)
+    {
+        bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
+        _log?.Warn(LogCategory, $"PvP — bailing (wimpy-or-hang): {reason}");
+        return ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop);
+    }
+
+    // The PvP response's flee: the retreat a low-HP run makes, but `rooms` long, and
+    // once it lands the engine stays paused for stayAway before it walks back.
+    // Needs a running walk or loop, like every flee; false when none could start.
+    // onLanded is told once, when the last of those rooms is behind us.
+    public bool FleeFromPlayer(string reason, int rooms, TimeSpan stayAway, Action? onLanded = null)
+    {
+        _fleeDistanceOverride = Math.Max(1, rooms);
+        _fleeStayAway = stayAway;
+        _fleeResumeNotBefore = null;
+        _playerFleeLanded = onLanded;
+        if (TryFlee(reason)) return true;
+        ClearPlayerFlee();
+        return false;
+    }
+
+    // Set for a flee the PvP response asked for; a flee of our own leaves them clear.
+    private int? _fleeDistanceOverride;
+    private TimeSpan _fleeStayAway;
+    private DateTimeOffset? _fleeResumeNotBefore;
+    private Action? _playerFleeLanded;
+
+    private void ClearPlayerFlee()
+    {
+        _playerFleeLanded = null;
+        _fleeDistanceOverride = null;
+        _fleeStayAway = TimeSpan.Zero;
+        _fleeResumeNotBefore = null;
+    }
+
     // Deferred flee reaction — runs one dispatch tick after the run-trigger
     // tripped, once the round's death line has settled. Stands down when the room
     // emptied in the meantime (the flee-triggering round also killed the last
@@ -2087,7 +2128,7 @@ public sealed class HealthManager : IDisposable
     private List<Map.Direction> BuildFleeSteps(
         Map.IRecoverableEngine engine, Models.Profile.CombatSettings combat, Map.RoomKey? lastLegFrom = null)
     {
-        int distance = combat.RunDistance;
+        int distance = _fleeDistanceOverride ?? combat.RunDistance;
         if (distance < 1) distance = 1;
 
         var steps = new List<Map.Direction>();
@@ -2423,6 +2464,7 @@ public sealed class HealthManager : IDisposable
         _fledThisCombat = false;
         _deferredFleeReason = null;
         _deferredFleeFromGates = false;
+        ClearPlayerFlee();
         _post(Evaluate);
     }
 
@@ -2480,7 +2522,10 @@ public sealed class HealthManager : IDisposable
             // run from, and "back" would lead straight to it (report
             // paradigm-20260927-011659: a held run sent us back down into the kobold).
             if (_hasHostileInRoom?.Invoke() == false)
+            {
                 _log?.Combat(LogCategory, $"held flee dropped — no hostile where the move landed ({heldReason})");
+                ClearPlayerFlee();
+            }
             else
             {
                 TryFlee(heldReason, _deferredFleeFromGates);
@@ -2516,6 +2561,16 @@ public sealed class HealthManager : IDisposable
             // retreat after a landed backstab has no HP change to wake it otherwise.
             _fledThisCombat = false;
             _fleeLanded = true;
+            Action? landed = _playerFleeLanded;
+            _playerFleeLanded = null;
+            landed?.Invoke();
+            if (_fleeStayAway > TimeSpan.Zero && _fleeResumeNotBefore is null)
+            {
+                _fleeResumeNotBefore = _now() + _fleeStayAway;
+                _log?.Info(LogCategory,
+                    $"flee from a player landed — staying away {_fleeStayAway.TotalSeconds:0}s before walking back");
+                _schedule?.Invoke(_fleeStayAway + TimeSpan.FromMilliseconds(200), Evaluate);
+            }
             _post(Evaluate);
         }
 

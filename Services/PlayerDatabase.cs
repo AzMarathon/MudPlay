@@ -404,8 +404,8 @@ public sealed class PlayerDatabase
         ObservationRecorded?.Invoke(given);
     }
 
-    // Reconcile a party member's live class (from the `par` roster) with their
-    // record. A name showing a different class than the one on file is a different
+    // Reconcile a class the game stated outright — a party member's on the `par`
+    // roster, a player's on the top list — with their record. A name showing a different class than the one on file is a different
     // character now holding that name (a new character after a deletion, a reroll),
     // so everything learned about the old one — its who title and the level band it
     // implies, an exact @level reading, race, alignment, gear — would describe the
@@ -415,7 +415,7 @@ public sealed class PlayerDatabase
     // cleared so the party probe re-asks today. Customization, gang and client
     // version are left alone. Returns the replaced class when the record changed
     // identity, else null (unknown player, first class seen, or same class).
-    public string? RecordPartyClass(string name, string klass)
+    public string? RecordStatedClass(string name, string klass)
     {
         ArgumentNullException.ThrowIfNull(name);
         if (string.IsNullOrWhiteSpace(klass)) return null;
@@ -543,6 +543,28 @@ public sealed class PlayerDatabase
         return true;
     }
 
+    // Set how we stand with a player and, optionally, the response to them that
+    // replaces the PvP settings' general one (null = use the general one). Realm
+    // tier, like the account name: every character we play here sees the same.
+    // Returns false when the player has no record or nothing changed.
+    public bool SetRelationship(string nameOrGiven, PlayerRelationship relationship, PvpAction? response)
+    {
+        if (string.IsNullOrWhiteSpace(nameOrGiven)) return false;
+        (string given, _) = PlayerObservation.SplitName(nameOrGiven);
+        if (string.IsNullOrEmpty(given)) return false;
+        if (!_observations.TryGetValue(given, out PlayerObservation? existing)) return false;
+        if (existing.Relationship == relationship && existing.PvpResponse == response) return false;
+
+        _observations[given] = existing with { Relationship = relationship, PvpResponse = response };
+        Rebuild();
+        SaveObservations();
+        RelationshipChanged?.Invoke(given, relationship);
+        return true;
+    }
+
+    // Raised when a player's relationship or PvP response is set.
+    public event Action<string, PlayerRelationship>? RelationshipChanged;
+
     // Resolve a captured presence-line name (which may be an account name on
     // boards that key logon/logoff lines on the account rather than the
     // character) back to the player's in-game GIVEN name. Checks the authored
@@ -626,6 +648,10 @@ public sealed class PlayerDatabase
             PlayerObservation o = _observations[given];
             if (o.LastSeenUtc >= cutoff) continue;
             if (_customizations.TryGetValue(given, out PlayerCustomization c) && c.DontAutoDelete) continue;
+            // A Friend or an Enemy is something the user told us: it outlasts the
+            // player going unseen, on every character, where the per-character
+            // keep flag above only covers the one that set it.
+            if (o.Relationship != PlayerRelationship.Neutral) continue;
             _observations.Remove(given);
             removed++;
         }

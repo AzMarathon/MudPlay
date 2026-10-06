@@ -30,6 +30,17 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
     // so the disconnect-watcher can map the captured name back to this player.
     [ObservableProperty] private string? _accountName;
 
+    // How we stand with this player, and the response to them in place of the PvP
+    // settings' general one. Both are stored on the realm's player record, so every
+    // character we play on the realm shares them. Index 0 of the response list is
+    // "use the PvP settings".
+    public IReadOnlyList<string> RelationshipChoices { get; } =
+        PvpLabels.Relationships.Select(PvpLabels.Of).ToList();
+    public IReadOnlyList<string> PvpResponseChoices { get; } =
+        new[] { PvpLabels.UseGeneral }.Concat(PvpLabels.Actions.Select(PvpLabels.Of)).ToList();
+    [ObservableProperty] private int _relationshipIndex;
+    [ObservableProperty] private int _pvpResponseIndex;
+
     // ----- 15 remote-control checkboxes (mirror PlayerRemoteControls flags) -----
 
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(AllowsAll))] private bool _rcQueryVersion;
@@ -217,6 +228,8 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
         JoinPartyIfInvited  = original.JoinPartyIfInvited;
         DontAutoDelete      = original.DontAutoDelete;
         AccountName         = original.AccountName;
+        RelationshipIndex   = Math.Max(0, PvpLabels.Relationships.ToList().IndexOf(original.Relationship));
+        PvpResponseIndex    = original.PvpResponse is { } own ? PvpLabels.Actions.ToList().IndexOf(own) + 1 : 0;
         DupeUsedAtUtc       = original.DupeUsedAtUtc;
         DupedPlayer         = original.DupedPlayer;
 
@@ -284,6 +297,10 @@ public sealed partial class PlayerEditDialogViewModel : ObservableObject, IDialo
             // PlayerDatabase.SetAccountName. Carried on the result record so
             // that write has the value.
             AccountName         = string.IsNullOrWhiteSpace(AccountName) ? null : AccountName.Trim(),
+            // Realm-tier too: written through PlayerDatabase.SetRelationship.
+            Relationship        = PvpLabels.Relationships[Math.Clamp(RelationshipIndex, 0, PvpLabels.Relationships.Count - 1)],
+            PvpResponse         = PvpResponseIndex >= 1 && PvpResponseIndex <= PvpLabels.Actions.Count
+                ? PvpLabels.Actions[PvpResponseIndex - 1] : null,
         };
         CloseRequested?.Invoke(new PlayerEditResult(_original.DisplayName, updated, _resetDupeRequested));
     }

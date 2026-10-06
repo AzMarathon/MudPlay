@@ -299,6 +299,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         Sections.Add(new SpellsSectionViewModel(_profileSession));
         Sections.Add(new CombatSectionViewModel(_profileSession));
         Sections.Add(new PartySectionViewModel(_profileSession));
+        Sections.Add(new PvpSectionViewModel());
         Sections.Add(new CashSectionViewModel());
         Sections.Add(new StatlineSectionViewModel(_profile, AppServices.Current.PlayerState, _sendText));
         Sections.Add(new TalkSectionViewModel());

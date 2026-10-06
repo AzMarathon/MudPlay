@@ -83,7 +83,14 @@ public sealed record PlayerObservation(
     // response we could not read (a shadowy figure, a truncated block) still
     // counts -- otherwise the throttle would never engage for exactly the
     // players it can learn nothing from.
-    DateTime? LastLookedUtc = null)
+    DateTime? LastLookedUtc = null,
+    // Authored, and stored here rather than with the per-character settings: how we
+    // stand with a player is a fact about the realm, shared by every character we
+    // play on it. Relationship defaults to Neutral for everyone. PvpResponse is this
+    // player's own answer in place of the PvP settings' general one; null uses the
+    // general one.
+    PlayerRelationship Relationship = PlayerRelationship.Neutral,
+    PvpAction? PvpResponse = null)
 {
     // Combined display name — "GivenName FamilyName", trimmed. Used by the
     // database's case-insensitive lookup and by the customization
@@ -193,7 +200,10 @@ public sealed record PlayerRecord(
     // Mirror of PlayerCustomization.DupeUsedAtUtc / DupedPlayer (Character tier) so
     // the edit dialog can show the @dupe lock and offer the reset.
     DateTime? DupeUsedAtUtc = null,
-    string? DupedPlayer = null)
+    string? DupedPlayer = null,
+    // Mirror of PlayerObservation.Relationship / PvpResponse (realm tier).
+    PlayerRelationship Relationship = PlayerRelationship.Neutral,
+    PvpAction? PvpResponse = null)
 {
     // Combined display name — "GivenName FamilyName", trimmed. Identical
     // contract to PlayerObservation.DisplayName so callers don't have to
@@ -230,7 +240,9 @@ public sealed record PlayerRecord(
         VersionAt:           obs.VersionAt,
         LastPartiedUtc:      obs.LastPartiedUtc,
         DupeUsedAtUtc:       cust.DupeUsedAtUtc,
-        DupedPlayer:         cust.DupedPlayer);
+        DupedPlayer:         cust.DupedPlayer,
+        Relationship:        obs.Relationship,
+        PvpResponse:         obs.PvpResponse);
 
     // Pull just the customization slice off this merged row (used by the edit dialog Save path).
     public PlayerCustomization ToCustomization() => new(

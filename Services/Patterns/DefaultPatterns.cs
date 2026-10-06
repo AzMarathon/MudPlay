@@ -410,6 +410,23 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.PartyRoomPoised,
             @"^(?:\[[^\]]*\]:|:)*(?<player>\w+) is poised to assault the room!");
 
+        // Another player attacking us. Ends in "!" where the announce for a monster
+        // target ends in ".", so PartyAttackAnnounce never takes it for a target
+        // named "you".
+        yield return new RegexPattern(KnownPatterns.PlayerAttacksYou,
+            @"^(?:\[[^\]]*\]:|:)*(?<player>\w+) moves to attack you!");
+
+        yield return new RegexPattern(KnownPatterns.EvilWarningsRefusal,
+            @"^To do this action, you must turn off your evil warnings\.");
+        yield return new RegexPattern(KnownPatterns.PlayerAttackRefused,
+            @"^(?<why>You have progressed too far to the evil side to do this action\."
+          + @"|You have chosen a way of life which does not allow this action\."
+          + @"|Such an attack would result in a very unbalanced combat round\.)");
+        yield return new RegexPattern(KnownPatterns.TrackWentFromHere,
+            @"^(?<name>\w+) went (?<direction>[\w-]+) from here\.");
+        yield return new RegexPattern(KnownPatterns.TrackFailed,
+            @"^Your tracking skills fail you this time\.");
+
         // Guard/redirect announce — "<guard> moves to protect <protected>." A
         // guarded monster can't be attacked while a guard is present; the server
         // redirects the swing to the guard and emits this. Both names are monsters

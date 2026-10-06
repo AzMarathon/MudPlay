@@ -1525,6 +1525,10 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
 
+        // A player outside our party is in the room with our room attack running
+        // (this observation may be their arrival): stop it before its next round.
+        BreakRoomAttackForBystander();
+
         // Score every Monster entity once. We need BOTH names:
         //   RawName       — full prefixed form ("angry kobold thief"),
         //                   used on the wire so the server engages the
@@ -2689,7 +2693,7 @@ public sealed partial class CombatManager : IDisposable
     // "<player> moves to attack everyone in the room." (never "moves to cast … upon …"),
     // and the Paradigm poised line is normalised onto the same token, so attack-last can
     // recognise a room-wide commit with one comparison.
-    private const string RoomWildcardTarget = "everyone in the room";
+    internal const string RoomWildcardTarget = "everyone in the room";
 
     private static bool IsRoomAttackAnnounce(string announcedTarget)
         => string.Equals(announcedTarget, RoomWildcardTarget, StringComparison.OrdinalIgnoreCase);

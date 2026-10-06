@@ -162,6 +162,21 @@ public static class KnownPatterns
     // CombatManager treats it as a room commit for attack-last (room after them).
     public const string PartyRoomPoised      = "combat.party-room-poised";
 
+    // "<player> moves to attack you!" — what the victim of another player's attack
+    // sees, for a weapon and an attack spell alike (onlookers get the two-name form).
+    public const string PlayerAttacksYou     = "pvp.player-attacks-you";
+
+    // The game refusing an attack on a player because our evil warnings are on.
+    public const string EvilWarningsRefusal  = "pvp.evil-warnings-refusal";
+
+    // The game refusing an attack on a player for a reason no setting of ours
+    // changes: too evil already, lawful, or the two characters too far apart.
+    public const string PlayerAttackRefused  = "pvp.attack-refused";
+
+    // `track`'s answers: "<name> went <dir> from here." and the failure line.
+    public const string TrackWentFromHere    = "pvp.track-went";
+    public const string TrackFailed          = "pvp.track-failed";
+
     // "<guard> moves to protect <protected>." — MajorMUD guard/redirect mechanic.
     // A "guarded" monster (e.g. a brigand chief guarded by brigands) can't be
     // attacked directly while a guard is in the room: the server redirects our

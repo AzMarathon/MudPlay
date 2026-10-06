@@ -1,0 +1,252 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="560"
+             x:Class="MudPlay.Views.Settings.PvpSectionView"
+             x:DataType="vm:PvpSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.SectionHeader">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,4"/>
+        </Style>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.Readout">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto">
+
+        <Grid>
+            <!-- No-profile banner. -->
+            <Border IsVisible="{Binding !HasProfile}" Padding="22"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Top">
+                <StackPanel Spacing="10" MaxWidth="520" HorizontalAlignment="Left">
+                    <TextBlock Text="PvP"
+                               Foreground="{StaticResource ChromeFgBrush}"
+                               FontSize="{StaticResource FontSizeLg}"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Text="Load or create a character profile to edit the PvP settings."
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="{StaticResource FontSizeMd}"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+
+            <StackPanel IsVisible="{Binding HasProfile}"
+                        Margin="22" Spacing="4"
+                        MaxWidth="640" HorizontalAlignment="Left">
+
+                <TextBlock Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+                <TextBlock Classes="SettingsSectionSub"
+                           Text="Everything on this tab saves to the loaded character — each character keeps its own copy."/>
+                <Border Classes="SettingsSectionRule"/>
+
+                <TextBlock IsVisible="{Binding PvpOffForRealm}"
+                           Foreground="{StaticResource AccentAmberBrush}" FontSize="{StaticResource FontSizeSm}" TextWrapping="Wrap"
+                           Text="PvP is not enabled for the realm this character plays, so nothing on this tab is acted on. Tick 'PvP is enabled on this realm' on the BBS tab to turn it on."/>
+
+                <TextBlock Classes="SectionHeader" Text="ACTION"/>
+                <TextBlock Classes="Readout"
+                           Text="What to do when a player you marked Enemy is in the room, or a player attacks you (a Neutral who attacks becomes an Enemy on the spot). A player's own PvP response in Game Data → Players replaces this for that player."/>
+
+                <RadioButton Content="Hang up immediately" GroupName="PvpAction"
+                             IsChecked="{Binding IsHangUp, Mode=TwoWay}"
+                             ToolTip.Tip="Send the exit command and drop the connection at once. Honours 'Disable hangups' on the General tab, and the sysop wimpy jump on the Health tab stands in for the hang-up when it is set up."/>
+                <RadioButton Content="Flee, then hang up" GroupName="PvpAction"
+                             IsChecked="{Binding IsFleeThenHangUp, Mode=TwoWay}"
+                             ToolTip.Tip="Start a flee, then hang up once the Flee hangup delay has passed. With nowhere to flee it hangs up at once."/>
+                <RadioButton Content="Flee (come back later)" GroupName="PvpAction"
+                             IsChecked="{Binding IsFlee, Mode=TwoWay}"
+                             ToolTip.Tip="Flee, stay away for the Come back after time, then pick the interrupted walk or loop up again."/>
+                <RadioButton Content="Attack (dangerous)" GroupName="PvpAction"
+                             IsChecked="{Binding IsAttack, Mode=TwoWay}"
+                             ToolTip.Tip="Attack an Enemy on sight, and stop when they leave the room. The running walk or loop is stopped for the fight and picked up again after it; monsters in the room are left alone meanwhile. The attack is a PvP combat spell (below) when one is set, otherwise your combat profile's."/>
+                <RadioButton Content="Chase and attack (dangerous)" GroupName="PvpAction"
+                             IsChecked="{Binding IsChaseAttack, Mode=TwoWay}"
+                             ToolTip.Tip="As Attack, and follow them when they leave. See Chasing below for how far and how."/>
+                <TextBlock Classes="Readout" Foreground="{StaticResource AccentAmberBrush}"
+                           Text="Attacking a player who has not attacked you is an evil deed: it adds evil points and can bring a dark cloud. Hitting back at someone who attacked you first is free."/>
+
+                <TextBlock Classes="SectionHeader" Text="FLEEING"/>
+                <Grid ColumnDefinitions="200,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Flee to"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+                              ItemsSource="{Binding FleeRooms}"
+                              SelectedItem="{Binding SelectedFleeRoom, Mode=TwoWay}"
+                              Width="320" HorizontalAlignment="Left"
+                              ToolTip.Tip="A room from your GOTO favourites to run to. Whatever walk or loop was running is stopped and the walker heads there in Sprint Mode, so nothing on the way is fought, looted or rested for. You stay there; with 'Flee (come back later)' the Come back after time starts on arriving. With none chosen, or no route to it, the flee runs back along the walk or loop instead."/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="No. of rooms to flee"/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                   Value="{Binding RoomsToFlee, Mode=TwoWay}"
+                                   Minimum="1" Maximum="99" Increment="1" FormatString="0"
+                                   Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="With no Flee to room, how many rooms to run back along the walk or loop you were on. 'Flee, then hang up' hangs up as soon as they are behind you. Needs a walk or loop to be running."/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="Flee hangup delay"/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="1"
+                                   Value="{Binding FleeHangupDelaySeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="600" Increment="5" FormatString="0"
+                                   Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="'Flee, then hang up': to a Flee to room, the hang-up comes this long after the flee starts. Running back by rooms, it comes when the rooms are done, and this is the latest it can be."/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Classes="FieldLabel" Text="seconds"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Classes="FieldLabel" Text="Come back after"/>
+                    <NumericUpDown Grid.Row="3" Grid.Column="1"
+                                   Value="{Binding ComeBackAfterSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                                   Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="'Flee (come back later)': seconds to stay where the flee ended, counted from arriving, before going back to what you were doing."/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel" Text="seconds"/>
+                </Grid>
+
+                <TextBlock Classes="SectionHeader" Text="OPTIONS"/>
+                <CheckBox Content="Notify gang members"
+                          IsChecked="{Binding NotifyGang, Mode=TwoWay}"
+                          ToolTip.Tip="Say on the gang channel, with the room, about the events ticked below: 'PvP: &lt;player&gt; attacked me at &lt;room&gt;'."/>
+                <StackPanel Orientation="Horizontal" Spacing="14" Margin="24,0,0,0" IsEnabled="{Binding NotifyGang}">
+                    <CheckBox Content="an Enemy is seen" IsChecked="{Binding GangTellSeen, Mode=TwoWay}"/>
+                    <CheckBox Content="a player attacks me" IsChecked="{Binding GangTellAttacked, Mode=TwoWay}"/>
+                    <CheckBox Content="I attack a player" IsChecked="{Binding GangTellWeAttack, Mode=TwoWay}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0" IsEnabled="{Binding NotifyGang}">
+                    <TextBlock Classes="FieldLabel" Text="The same line about the same player at most every"/>
+                    <NumericUpDown Value="{Binding GangRepeatSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="0 sends the line every time the event happens. Otherwise an Enemy who stays in sight, or keeps attacking, is announced again only after this long."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <CheckBox Content="Re-connect after PvP in"
+                              IsChecked="{Binding ReconnectAfterPvp, Mode=TwoWay}"
+                              ToolTip.Tip="After a PvP hang-up, dial back in this many minutes later and enter the realm. Press Connect to cancel a pending dial-back."/>
+                    <NumericUpDown Value="{Binding ReconnectAfterPvpMinutes, Mode=TwoWay}"
+                                   IsEnabled="{Binding ReconnectAfterPvp}"
+                                   Minimum="1" Maximum="1440" Increment="5" FormatString="0"
+                                   Width="120"/>
+                    <TextBlock Classes="FieldLabel" Text="minutes"/>
+                    <CheckBox Content="and enter the realm"
+                              IsChecked="{Binding ReconnectEntersRealm, Mode=TwoWay}"
+                              IsEnabled="{Binding ReconnectAfterPvp}"
+                              ToolTip.Tip="Ticked, the dial-back goes on into the game. Unticked, it logs in and waits at the menu, as the login after any other hang-up does."/>
+                </StackPanel>
+                <CheckBox Content="Flip a Friend to Enemy if they attack you"
+                          IsChecked="{Binding FlipFriendToEnemyIfAttacked, Mode=TwoWay}"
+                          ToolTip.Tip="Off: a Friend stays a Friend whatever they do, and is never answered. On: a Friend who attacks you is marked Enemy, the way a Neutral is."/>
+                <CheckBox Content="Turn off my evil warnings if they are on, to attack"
+                          IsChecked="{Binding TurnOffEvilWarningsToAttack, Mode=TwoWay}"
+                          ToolTip.Tip="With evil warnings on, the game refuses an attack on a player who hasn't attacked you. Ticked, MudPlay sends 'set warning off' and attacks again. The warnings go back on ('set warning on') once you are back at what the fight interrupted, such as your loop, and a minute has passed with no new fight. Unticked, the refusal ends the fight. Hitting back never needs it."/>
+
+                <CheckBox Content="When I lead a party and start a fight with a player, send @kill to the party"
+                          IsChecked="{Binding LeaderSendsKillOrder, Mode=TwoWay}"
+                          ToolTip.Tip="Says '.@kill &lt;player&gt;' when you start the fight as party leader, so members who take your remote commands attack the same player. Not sent when you are following, when you are alone, or for a fight someone else's @kill started."/>
+                <CheckBox Content="Turn off my evil warnings when a leader's @kill names a player"
+                          IsChecked="{Binding KillOrderTurnsOffEvilWarnings, Mode=TwoWay}"
+                          ToolTip.Tip="An @kill aimed at a player is an attack on someone who hasn't attacked you, even if they attacked your leader: the game only lets the one who was attacked hit back for free. Ticked, 'set warning off' goes out before the attack. Unticked, the attack is still tried, and a refusal ends it unless the box above is ticked."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="Switch my evil warnings back on after"/>
+                    <NumericUpDown Value="{Binding WarningsBackAfterSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="Warnings MudPlay switched off go back on once you are back at what the fight interrupted (your loop, walk or Auto-Lair run going again) and this long has passed with no new fight."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds back on task"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="After a party member drops out, hold room attacks for"/>
+                    <NumericUpDown Value="{Binding PartySplitHoldSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="A teleport that splits the party lands everyone in the same room again, outside the party. Your room attacks are held until whoever dropped out is back in the party, or this long has passed; a room attack of theirs in that time is not taken as an attack on you. 0 turns it off."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
+
+                <TextBlock Classes="SectionHeader" Text="CHASING"/>
+                <TextBlock Classes="Readout"
+                           Text="For 'Chase and attack'. When they leave, MudPlay steps the way they went at once. In a room without them it tracks (if that is on), and otherwise guesses."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="Give up after"/>
+                    <NumericUpDown Value="{Binding ChaseRoomsUnseen, Mode=TwoWay}"
+                                   Minimum="1" Maximum="50" Increment="1" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="How many rooms in a row to follow without seeing them before the chase ends and you go back to what you were doing. Seeing them starts the count again."/>
+                    <TextBlock Classes="FieldLabel" Text="rooms without seeing them"/>
+                </StackPanel>
+                <CheckBox Content="Guess the way they went when it wasn't seen"
+                          IsChecked="{Binding ChaseGuessDirection, Mode=TwoWay}"
+                          ToolTip.Tip="At a crossroads with a door that just opens, look behind the door first. Otherwise carry on the way they were heading; if that way is shut and the room has just one other way out, take that. Never back the way you came, and never through a door that needs a key, picking or strength. Off, the chase waits where it stands."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="Behind a door, look"/>
+                    <NumericUpDown Value="{Binding ChaseDoorRooms, Mode=TwoWay}"
+                                   IsEnabled="{Binding ChaseGuessDirection}"
+                                   Minimum="1" Maximum="20" Increment="1" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="How many rooms to go in behind a door at a crossroads before coming back to try another way."/>
+                    <TextBlock Classes="FieldLabel" Text="rooms in, then come back"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="With no way to follow, wait"/>
+                    <NumericUpDown Value="{Binding ChaseWaitSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="600" Increment="5" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="How long to stand in case they come back into sight before the chase ends."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <CheckBox Content="Track enemies every"
+                              IsChecked="{Binding TrackEnemies, Mode=TwoWay}"
+                              ToolTip.Tip="Out of sight in a chase, send 'track &lt;player&gt;' on arriving in each room and follow the answer, which outranks a guess. While waiting with no way to follow it is sent again this often. Needs the Tracking skill."/>
+                    <NumericUpDown Value="{Binding TrackEnemiesEverySeconds, Mode=TwoWay}"
+                                   IsEnabled="{Binding TrackEnemies}"
+                                   Minimum="5" Maximum="3600" Increment="5" FormatString="0"
+                                   Width="120"/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
+
+                <TextBlock Classes="SectionHeader" Text="PVP SPELLS"/>
+                <TextBlock Classes="Readout"
+                           Text="Spells to use on a player in a fight. What a spell does here depends on what it is. A between-round spell (one cast alongside your attack) is cast at the start and again each time its duration runs out. A combat spell becomes your attack, every round, while its conditions hold. With no combat spell here, or its conditions not met, you attack with your combat profile: its normal attack spell, its alternate, then your attack command. A spell that only takes monsters is not used."/>
+                <Grid ColumnDefinitions="30,130,130,150" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+                    <TextBlock Grid.Row="0" Grid.Column="1" Classes="FieldLabel" Text="Cast code"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="Max casts"/>
+                    <TextBlock Grid.Row="0" Grid.Column="3" Classes="FieldLabel" Text="Min mana per cast"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="1"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Spell1, Mode=TwoWay}"
+                             Width="120" HorizontalAlignment="Left" MaxLength="8" PlaceholderText="cast code"/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="2" Value="{Binding Spell1MaxCasts, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Most casts (a between-round spell) or rounds (a combat spell) in one fight. Blank = no limit."/>
+                    <NumericUpDown Grid.Row="1" Grid.Column="3" Value="{Binding Spell1MinMana, Mode=TwoWay}"
+                                   Minimum="0" Maximum="9999" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Not used below this much mana: a percentage or a mana figure, the same way the Combat tab's spell slots are set."/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Classes="FieldLabel" Text="2"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Spell2, Mode=TwoWay}"
+                             Width="120" HorizontalAlignment="Left" MaxLength="8" PlaceholderText="cast code"/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="2" Value="{Binding Spell2MaxCasts, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Most casts (a between-round spell) or rounds (a combat spell) in one fight. Blank = no limit."/>
+                    <NumericUpDown Grid.Row="2" Grid.Column="3" Value="{Binding Spell2MinMana, Mode=TwoWay}"
+                                   Minimum="0" Maximum="9999" FormatString="0" Increment="1" Width="120" HorizontalAlignment="Left"
+                                   ToolTip.Tip="Not used below this much mana: a percentage or a mana figure, the same way the Combat tab's spell slots are set."/>
+                </Grid>
+
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

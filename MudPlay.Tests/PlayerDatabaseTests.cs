@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using Xunit;
@@ -346,7 +347,7 @@ public sealed class PlayerDatabaseTests
     }
 
     [Fact]
-    public void RecordPartyClass_NewClass_DropsTheOldCharactersObservations()
+    public void RecordStatedClass_NewClass_DropsTheOldCharactersObservations()
     {
         PlayerDatabase db = new();
         DateTime now = new(2026, 9, 24, 0, 0, 0, DateTimeKind.Utc);
@@ -354,7 +355,7 @@ public sealed class PlayerDatabaseTests
         db.RecordLevel("Raijin", 12, now);
         db.RecordVersion("Raijin", "MudPlay 3.74.0", now);
 
-        Assert.Equal("Priest", db.RecordPartyClass("Raijin", "Mage"));
+        Assert.Equal("Priest", db.RecordStatedClass("Raijin", "Mage"));
 
         PlayerRecord r = db.Find("Raijin")!;
         Assert.Equal("Mage", r.Class);
@@ -363,7 +364,89 @@ public sealed class PlayerDatabaseTests
         Assert.Null(r.Race);
         Assert.Equal("asdf", r.Gang);                     // not character-specific
         Assert.Equal("MudPlay 3.74.0", r.Version);
-        Assert.Null(db.RecordPartyClass("Raijin", "mage"));   // same class → no change
+        Assert.Null(db.RecordStatedClass("Raijin", "mage"));   // same class → no change
+    }
+
+    // ----- Relationship and PvP response (realm tier) -------------------
+
+    [Fact]
+    public void EveryPlayerStartsNeutral_WithNoResponseOfTheirOwn()
+    {
+        PlayerDatabase db = new();
+        db.RecordObservation("Raijin Storm", null, null, "Good", "Curate", null, null, DateTime.UtcNow);
+
+        PlayerRecord r = db.Find("Raijin")!;
+        Assert.Equal(PlayerRelationship.Neutral, r.Relationship);
+        Assert.Null(r.PvpResponse);
+    }
+
+    [Fact]
+    public void SetRelationship_StoresBoth_AndSaysWhenNothingChanged()
+    {
+        PlayerDatabase db = new();
+        db.RecordObservation("Raijin Storm", null, null, null, null, null, null, DateTime.UtcNow);
+        List<(string Given, PlayerRelationship Relationship)> raised = new();
+        db.RelationshipChanged += (g, rel) => raised.Add((g, rel));
+
+        Assert.True(db.SetRelationship("Raijin Storm", PlayerRelationship.Enemy, PvpAction.Flee));
+        Assert.False(db.SetRelationship("Raijin", PlayerRelationship.Enemy, PvpAction.Flee));   // unchanged
+        Assert.False(db.SetRelationship("Nobody", PlayerRelationship.Friend, null));           // no record
+
+        PlayerRecord r = db.Find("Raijin")!;
+        Assert.Equal(PlayerRelationship.Enemy, r.Relationship);
+        Assert.Equal(PvpAction.Flee, r.PvpResponse);
+        Assert.Equal(("Raijin", PlayerRelationship.Enemy), Assert.Single(raised));
+    }
+
+    [Fact]
+    public void Relationship_OutlastsANewSighting_AndAClassChange()
+    {
+        PlayerDatabase db = new();
+        DateTime now = new(2026, 10, 5, 0, 0, 0, DateTimeKind.Utc);
+        db.RecordObservation("Raijin", "Priest", null, null, "Curate", null, null, now);
+        db.SetRelationship("Raijin", PlayerRelationship.Friend, null);
+
+        db.RecordObservation("Raijin Storm", null, null, "Good", "Curate", "asdf", null, now.AddHours(1));
+        db.RecordStatedClass("Raijin", "Mage");
+
+        Assert.Equal(PlayerRelationship.Friend, db.Find("Raijin")!.Relationship);
+    }
+
+    [Fact]
+    public void PurgeStale_KeepsFriendsAndEnemies()
+    {
+        PlayerDatabase db = new();
+        DateTime old = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        db.RecordObservation("Stranger", null, null, null, null, null, null, old);
+        db.RecordObservation("Ally", null, null, null, null, null, null, old);
+        db.RecordObservation("Foe", null, null, null, null, null, null, old);
+        db.SetRelationship("Ally", PlayerRelationship.Friend, null);
+        db.SetRelationship("Foe", PlayerRelationship.Enemy, PvpAction.HangUp);
+
+        Assert.Equal(1, db.PurgeStale(30, old.AddDays(90)));
+
+        Assert.Null(db.Find("Stranger"));
+        Assert.NotNull(db.Find("Ally"));
+        Assert.NotNull(db.Find("Foe"));
+    }
+
+    [Fact]
+    public void Relationship_IsSavedByName_AndReadsBackFromAnOlderRecordAsNeutral()
+    {
+        PlayerObservation enemy = new("Raijin", "Storm", null, null, null, null, null, null,
+            DateTime.UtcNow, DateTime.UtcNow) { Relationship = PlayerRelationship.Enemy, PvpResponse = PvpAction.ChaseAttack };
+        string json = System.Text.Json.JsonSerializer.Serialize(enemy, MudPlay.Services.JsonStore.Options);
+        Assert.Contains("\"Enemy\"", json);
+        Assert.Contains("\"ChaseAttack\"", json);
+        PlayerObservation back = System.Text.Json.JsonSerializer.Deserialize<PlayerObservation>(json, MudPlay.Services.JsonStore.Options)!;
+        Assert.Equal(PlayerRelationship.Enemy, back.Relationship);
+        Assert.Equal(PvpAction.ChaseAttack, back.PvpResponse);
+
+        // A record written before the field existed.
+        const string older = """{"GivenName":"Raijin","FamilyName":"","FirstSeenUtc":"2026-01-01T00:00:00Z","LastSeenUtc":"2026-01-01T00:00:00Z"}""";
+        PlayerObservation plain = System.Text.Json.JsonSerializer.Deserialize<PlayerObservation>(older, MudPlay.Services.JsonStore.Options)!;
+        Assert.Equal(PlayerRelationship.Neutral, plain.Relationship);
+        Assert.Null(plain.PvpResponse);
     }
 
     [Fact]

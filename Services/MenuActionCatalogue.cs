@@ -165,6 +165,7 @@ public static class MenuActionCatalogue
         new("settings.spells", "Settings: Spells + Ailments", Kind.SettingsTab, "Settings tabs", Parameter: "spells"),
         new("settings.combat", "Settings: Combat", Kind.SettingsTab, "Settings tabs", Parameter: "combat"),
         new("settings.party", "Settings: Party", Kind.SettingsTab, "Settings tabs", Parameter: "party"),
+        new("settings.pvp", "Settings: PvP", Kind.SettingsTab, "Settings tabs", Parameter: "pvp"),
         new("settings.cash", "Settings: Cash + Items", Kind.SettingsTab, "Settings tabs", Parameter: "cash"),
         new("settings.statline", "Settings: Statline", Kind.SettingsTab, "Settings tabs", Parameter: "statline"),
         new("settings.talk", "Settings: Talk", Kind.SettingsTab, "Settings tabs", Parameter: "talk"),

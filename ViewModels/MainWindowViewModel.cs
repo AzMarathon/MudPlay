@@ -1041,6 +1041,7 @@ public partial class MainWindowViewModel : ObservableObject
         // MessageRouter's stateless dispatch). Feeds every observed
         // player into PlayerDatabase.
         _whoListParser = new Game.WhoListParser(Lines, AppServices.Current.Players, AppServices.Current.Log);
+        _whoListParser.ListRead += AppServices.Current.PvpStrangers.NoteWhoRead;
         _lookParser    = new Game.LookParser   (Lines, AppServices.Current.Players, AppServices.Current.Log);
         // Monster-look HP estimator. Name → Number prefers the record actually
         // placed / summoned in the current room (so an "orc lieutenant" here hits
@@ -2805,21 +2806,42 @@ public partial class MainWindowViewModel : ObservableObject
         TimeSpan delay = reconnectAt - now;
         if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
 
+        string when = ArmTimedReconnect(delay);
+        AppServices.Current.Log.Info("Cleanup",
+            $"Reconnect scheduled at {when} — warning observed at " +
+            $"{warning.ObservedAt.LocalDateTime:HH:mm:ss} with {warning.MinutesRemaining}m remaining " +
+            $"+ {bbs.CleanupPeriodMinutes}m cleanup period.");
+    }
+
+    // The PvP response hung up with "Re-connect after PvP" on: dial back in once
+    // the wait is over. Shares the cleanup reconnect's timer, countdown and cancel
+    // (pressing Connect), since only one timed dial-back can be pending.
+    private void SchedulePvpReconnect(TimeSpan delay, bool enterRealm)
+    {
+        // A hang-up normally leaves the next login at the menu for the user to
+        // enter by hand. With "enter the realm" set, this dial-back is the user's
+        // standing instruction to go back in, so it enters like any other login.
+        string when = ArmTimedReconnect(
+            delay, beforeDial: enterRealm ? AppServices.Current.HangupSignal.AllowNextEntry : null);
+        AppServices.Current.Log.Info("PvP",
+            $"Reconnect scheduled at {when}, {delay.TotalMinutes:0} min after the PvP hang-up"
+            + (enterRealm ? "." : "; it stops at the menu."));
+    }
+
+    // Arm the one-shot timed dial-back and announce it. Returns the dial time.
+    private string ArmTimedReconnect(TimeSpan delay, Action? beforeDial = null)
+    {
         CancelCleanupReconnect(reason: null);
         _cleanupReconnectCts = new CancellationTokenSource();
         NotifyReconnectPendingChanged();
         CancellationToken token = _cleanupReconnectCts.Token;
 
-        string when = reconnectAt.LocalDateTime.ToString("HH:mm:ss");
+        string when = (DateTimeOffset.Now + delay).LocalDateTime.ToString("HH:mm:ss");
         int minutes = (int)delay.TotalMinutes;
         int seconds = delay.Seconds;
         WriteTerminalStatus(
             $"[AUTO-RECONNECT ARMED — DIALING AT {when} (IN {minutes}m{seconds:D2}s). PRESS CONNECT TO CANCEL.]",
             TerminalStatusKind.Notice);
-        AppServices.Current.Log.Info("Cleanup",
-            $"Reconnect scheduled at {when} — warning observed at " +
-            $"{warning.ObservedAt.LocalDateTime:HH:mm:ss} with {warning.MinutesRemaining}m remaining " +
-            $"+ {bbs.CleanupPeriodMinutes}m cleanup period.");
 
         StartReconnectCountdown(delay);
 
@@ -2834,9 +2856,11 @@ public partial class MainWindowViewModel : ObservableObject
                 NotifyReconnectPendingChanged();
                 StopReconnectCountdown();
                 AppServices.Current.Cleanup.Reset();
+                beforeDial?.Invoke();
                 _ = ConnectWithRetriesAsync();
             });
         }, TaskScheduler.Default);
+        return when;
     }
 
     private void CancelCleanupReconnect(string? reason)
@@ -3283,6 +3307,9 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.LoopRunner.NotifyDisconnected();
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
+                // A fight with a player can't outlive the connection; left standing
+                // it would keep the combat engine stood down after the reconnect.
+                AppServices.Current.PvpFight.Stop("disconnected", resume: false, connected: false);
 
                 // Drop per-session condition state so a fresh login starts clean: any
                 // non-auto-clearing condition (no AppliedEndsWith) must not survive the
@@ -3352,9 +3379,16 @@ public partial class MainWindowViewModel : ObservableObject
                 // the sender explicitly asked to relog, so we bypass the
                 // cleanup/reactive scheduling (which gates on per-BBS
                 // toggles) entirely.
+                // Read whatever the disconnect was, so a delay armed for a hang-up
+                // that never dropped the line can't attach itself to a later one.
+                (TimeSpan Delay, bool EnterRealm)? pvpReconnect = AppServices.Current.PvpResponse.TakeReconnect();
                 if (_lastDisconnectCause == DisconnectCause.RelogInitiated)
                 {
                     ScheduleRelogReconnect();
+                }
+                else if (_lastDisconnectCause == DisconnectCause.HangupInitiated && pvpReconnect is { } pvp)
+                {
+                    SchedulePvpReconnect(pvp.Delay, pvp.EnterRealm);
                 }
                 else
                 {

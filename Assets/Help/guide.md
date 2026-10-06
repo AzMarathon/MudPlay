@@ -914,7 +914,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 ### Do something on my behalf
 
 - `@do <command>` — sends the command verbatim to the game (the highest-trust command).
-- `@kill <target>` — retargets your combat onto the named monster this round.
+- `@kill <target>` — retargets your combat onto the named monster this round. On a PvP realm, naming a player who is in your room starts a fight with that player instead (Settings → PvP).
 - `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
 - `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts.
 - `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
@@ -1608,6 +1608,15 @@ Click a section to open it. Each table has its own **Filter…** box (this one f
 The rightmost **Use** column shows which tier owns each row — **Def** for the untouched import, or **Glob / BBS / Char** once you've overridden it.
 
 The **Items** and **Players** tables carry a **Toggles** column that lists, per row, the flags *you've* turned on for it — an item's **Collect / Discard / Open / Buy / Sell / Sell-detour / Stash** (plus **No-take / Keep-min / Loyal / Path-get**), or a player's **Invite-if-seen / Join-if-invited / Don't-delete** followed by each **remote-control permission** you've granted them (a full grant collapses to *All @-permissions*). It reads blank when you've set none; a crowded cell trims with an ellipsis — hover it for the full list, or drag the column wider. Click its header to sort by it, which groups the rows you've configured together. (The Players tab's separate **@'s** column keeps the quick None / Some / All summary of those permissions.) The **Monsters** table surfaces the same kind of per-record settings, but as their own columns — see its column list below.
+
+The **Players** table also has a **Relationship** column, and a player's edit dialog (double-click the row) has the two settings behind it:
+
+- **Relationship** — how you stand with that player on this realm: **Neutral** (the default for everyone: left alone until they attack you, which makes them an Enemy), **Friend** (never attacked) or **Enemy** (the PvP response applies on sight). It is saved with the realm's player list, so every character you play on that realm shares it, and a Friend or Enemy is never removed by the stale-player cleanup.
+- **PvP response** — what to do about that player when they are an Enemy. *Use the PvP settings* follows the general response; any other choice (hang up, flee then hang up, flee, attack, chase and attack) replaces it for that one player.
+
+The column is blank for a Neutral player, so the ones you've marked stand out. So far they decide whose presence holds your room attacks on a PvP realm, and a Neutral who attacks you is moved to Enemy for you (see *Room attacks and other players (PvP realms)* under Combat). What happens next is set on Settings → PvP. If you saved a column layout for the Players table before this release, use **Columns ▾ → Reset to defaults** to see the new column.
+
+A player's **class** is filled in from wherever the game states it: the party list, the **top** list (run `top` and every listed player you already have a record for gets their class), and `look`. Failing those it is worked out from their title on `who` when only one class uses that title.
 
 The **Monsters** table lists only the monsters that can actually be met in the game. The ones the game data marks *out of play* — sysop-only NPCs, unused or test monsters (about 70 in the Paradigm set, such as the extra copies of *dark cleric* or *guardsman* that no room ever spawns) — are not here; they are in the **Unobtainable** table instead, so a name that appears twice in Monsters is two real spawns.
 
@@ -2698,6 +2707,12 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 **What it does:** The negative HP value at which this realm actually kills a character (0 HP alone just "drops" you — bleeding out but revivable). Used by the emergency-hangup safety logic to know how far into negative HP it's safe to let things go.
 **Important notes:** With "Auto-refine the floor from slow deaths" (below) on, MudPlay learns the real number over time from observed deaths and updates this automatically.
 
+### PvP is enabled on this realm
+
+**Default:** Off
+**What it does:** Tells MudPlay that players can attack one another on this realm. Nothing the game prints says so, so it is yours to set, once per realm (a board with a PVE and a PVP realm has it off on one and on on the other).
+**Important notes:** It is the switch the player-versus-player features look at: the care taken not to catch other players in a room attack, and the PvP settings, only apply on a realm where it is ticked. It turns on the room-attack care (see *Room attacks and other players (PvP realms)* under Combat) and everything on Settings → PvP.
+
 ### Boss cleanup time / Boss cleanup zone
 
 **Default:** `21:00`, your computer's local time zone.
@@ -3044,6 +3059,26 @@ The guard needs to know what you've learned: type `spells` (or `stat`) in the ga
 
 Debuffing is a separate "extra" action that can land the same round as your main attack. Once you commit to a single-target spell against a specific monster and it later becomes unaffordable, MudPlay sticks with the weapon for the rest of that fight rather than flip-flopping back once mana regenerates.
 **Important notes:** Once a spell is announced, it auto-repeats server-side every round exactly like a weapon swing — MudPlay does **not** re-send the cast command every round, only when the situation actually changes (target dies, cap hit, mana too low, target proves immune).
+
+### Room attacks and other players (PvP realms)
+
+**Applies when:** *PvP is enabled on this realm* is ticked (Settings → BBS, on the realm). On any other realm none of this happens.
+**What it does:** A room attack or room debuff hits every player in the room who isn't in your party. So on a PvP realm MudPlay looks at who is standing there before it uses one:
+
+- **A player outside your party is in the room** — the two Multi-attack slots and the AOE debuff are held, and the round goes to your single-target spells or your weapon. A room spell you put in the Normal or Alternate attack slot (or in a monster's override) is held the same way. The hold lasts for as long as that player is in the room and not in your party; the moment they join, or leave, your room spells are back. Inviting them is left to the invite settings you already have. (With a full party of six they can't join, so the hold stays.)
+- **A player walks in while your room attack is already running** — a room attack repeats by itself every round, so MudPlay sends `break` to stop it and carries on single-target. When they walk out again (their departure line), the hold is lifted.
+- **You walk into a room where another player is room-attacking** — a walk or a loop carries on to its next room instead of fighting there. On Paradigm the game says so (`<player> is poised to assault the room!`). Stock says nothing, so there it is a guess: the player's class has room attacks (mages and druids mostly; gypsies, warlocks, bards and rangers too) and the room holds three or more monsters. A player whose class isn't known yet is treated as one who can. The same goes for a player who was in the room before you and starts a room attack while you are there. Moving by hand, MudPlay leaves the choice to you.
+
+**Who counts:** only party members are spared. Everyone else holds your room spells: Friend, Neutral or Enemy. An Enemy who walks in on your room attack gets the same `break`, and then their PvP response (Settings → PvP) is carried out: attacked on their own if you are set to attack, or fled from, or hung up on. An Enemy is never left to be hit by a room spell.
+
+**When another player attacks you:** MudPlay reads `<player> moves to attack you!` (and, as a backstop, a damage line that starts with a player's name) as an attack. A **Neutral** who attacks you is marked **Enemy** on the spot, saved with the realm's player list, and the terminal says so: `[PvP: <player> attacked you and is now marked Enemy]`. A **Friend** stays a Friend. A room attack only counts when you watched that player walk in on you and then start it: not when the room was theirs before you arrived, and not from someone who was in your party in the last two minutes (a teleport that splits the party can put a room attack out before everyone has rejoined). What MudPlay then does about an Enemy is chosen on Settings → PvP. Change anyone back in Game Data → Players.
+
+**Knowing a player's class:** it comes from your party list, the realm's player list (`who`, a `look`), or the top list. Type the top-list command once on a realm and every listed player is remembered with their class, including ones you had no record of.
+
+**A player MudPlay has no record of:** `who` lists everyone online, so when a name in the room can't be placed, or someone it doesn't know enters the realm, MudPlay sends one `who` to fill the records in. It is kept from spamming: at most one `who` every 30 seconds however many names turn up, and the same name isn't asked about again for five minutes. Until that `who` has been read the name counts as a player for the room-attack hold; if the list didn't carry it, it wasn't one.
+
+**After a party split:** when a member drops out of your party, room attacks are also held until they are back in it or the hold on Settings → PvP runs out (two minutes by default), whether or not they are in the room yet.
+**Important notes:** A debuff is a single cast: once it has gone out the damage is done, so it can only be held beforehand. The program log says when room attacks are held, released or broken off, and why a room was walked through (category `PvP`).
 
 ### Drain (life-steal) spell
 
@@ -3433,6 +3468,132 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 
 **Default:** `5` seconds
 **What it does:** How often MudPlay checks in-game party status to keep everyone's info current.
+
+---
+
+## PvP
+
+Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Data → Players) who is in the room with you, or about any player who attacks you. Nothing on this tab is acted on unless the realm you are playing has **PvP is enabled on this realm** ticked on the BBS tab; the tab says so when it isn't. The care taken with room attacks around other players is described under *Room attacks and other players (PvP realms)* in Combat, and needs nothing set here.
+
+**Who is answered.** Party members never. A **Friend** never, even one who attacks you, unless *Flip a Friend to Enemy if they attack you* is ticked. A **Neutral** is left alone until they attack you; that marks them Enemy on the spot, saved, and the response follows. An **Enemy** is answered on sight. A player's own **PvP response** in Game Data → Players replaces the action chosen here for that one player.
+
+**One response per encounter.** A player just answered is not answered again for 30 seconds on sight, or 10 seconds when they attack. The terminal shows each response as `[PvP: …]`, and the program log carries it under `PvP`.
+
+### Action
+
+**Default:** Hang up immediately
+**What it does:** The general response. There is no "do nothing" choice: on a realm without PvP the realm simply isn't ticked as a PvP realm, and nothing here applies.
+
+- **Hang up immediately** — sends your exit command and drops the connection. *Disable hangups* (General) is honoured, and when the Health tab's sysop wimpy jump is set up it is taken in place of the hang-up.
+- **Flee, then hang up** — starts a flee, then hangs up once the *Flee hangup delay* has passed. With nowhere to flee it hangs up at once. Nothing else is answered while the hang-up is pending.
+- **Flee (come back later)** — flees, stays away for *Come back after*, then picks the interrupted walk or loop up again. If the Enemy is still there when you return, the response fires again.
+- **Attack (dangerous)** — attacks an Enemy on sight and stops when they leave the room. The running walk or loop is stopped for the fight and picked up again after it, and monsters in the room are left alone meanwhile. The attack is your Combat tab's normal attack spell when the game lets that spell be aimed at a player, otherwise your normal attack command.
+- **Chase and attack (dangerous)** — the same, and follows them when they leave. How far and how is set under *Chasing* below.
+
+**Attacking first is an evil deed.** Attacking a player who has not attacked you adds evil points and can bring a dark cloud (and with it the loss of Good-only gear). The tab says so beside the two attack choices. A fight also ends, with a `[PvP: …]` line, when the game refuses it: your evil warnings are on (see the checkbox below), you are already too evil, you are lawful, or the two of you are too far apart in level.
+
+**A leader's `@kill <player>`** starts the same fight with a player who is in your room, for anyone you have granted the command. Naming a monster still retargets your combat as before.
+
+### Flee to
+
+**Default:** none
+**What it does:** A room from your GOTO favourites to run to. Whatever walk, loop or Auto-Lair run was under way is stopped and the walker heads there in **Sprint Mode**, so nothing on the way is fought, looted, searched or rested for; Sprint ends by itself on arriving. You then stay in that room. For *Flee (come back later)* the *Come back after* time starts on arriving, and when it is up you go back to what you were doing.
+**Important notes:** With none chosen, or no route to the room, the flee runs back along your walk or loop instead (*No. of rooms to flee*). Add the room to your favourites first (map right-click) for it to be listed.
+
+### No. of rooms to flee
+
+**Default:** `10`
+**What it does:** With no *Flee to* room, a flee runs backwards along whatever you were doing, the loop or the walk, this many rooms. It is the same retreat a low-HP flee makes, with this length in place of the Combat tab's run distance. *Flee, then hang up* hangs up as soon as those rooms are behind you.
+**Important notes:** It needs a walk or loop to be running: moving by hand with no *Flee to* room there is nowhere to flee, so *Flee, then hang up* hangs up at once and *Flee (come back later)* tells you so and does nothing.
+
+### Flee hangup delay
+
+**Default:** `30` seconds
+**What it does:** For *Flee, then hang up*. Fleeing to a *Flee to* room, the hang-up comes this long after the flee starts. Running back by rooms, the hang-up comes when the rooms are done, and this is only the latest it can be (a run that gets stuck still ends in a hang-up).
+
+### Come back after
+
+**Default:** `60` seconds
+**What it does:** For *Flee (come back later)*: how long to stay away once the flee has landed before the interrupted walk or loop is picked up again. Resting and healing go on as usual meanwhile.
+
+### Notify gang members
+
+**Default:** Off
+**What it does:** Says on the gang channel, with the room, about the events you tick under it:
+
+- **an Enemy is seen** — `PvP: Raijin is here at Town Square`
+- **a player attacks me** — `PvP: Raijin attacked me at Town Square`
+- **I attack a player** — `PvP: attacking Raijin at Town Square`, including an attack a leader's `@kill` ordered
+
+All three are ticked by default. **The same line about the same player at most every N seconds** (default `60`) sets how often a line may repeat while the situation lasts: an Enemy who stays in sight, or keeps attacking, is announced again only after that long. `0` sends the line every time the event happens.
+
+### Re-connect after PvP in N minutes
+
+**Default:** Off, `30` minutes
+**What it does:** After a PvP hang-up, dials back in that many minutes later. The terminal shows the dial time; pressing Connect cancels it.
+**and enter the realm** (default on): ticked, the dial-back goes on into the game. Unticked, it logs in and waits at the menu for you.
+**Important notes:** Any other hang-up still leaves you at the menu on the next login, as before. This applies only to a hang-up the PvP response made.
+
+### Flip a Friend to Enemy if they attack you
+
+**Default:** Off
+**What it does:** Off, a Friend stays a Friend whatever they do and is never answered. On, a Friend who attacks you is marked Enemy the way a Neutral is, and answered.
+
+### Turn off my evil warnings if they are on, to attack
+
+**Default:** Off
+**What it does:** With evil warnings on, the game refuses an attack on a player who hasn't attacked you (`To do this action, you must turn off your evil warnings.`). Ticked, MudPlay sends `set warning off` and attacks again. Unticked, the refusal ends the fight.
+**When they go back on:** not when the fight ends. MudPlay sends `set warning on` once you are back at what the fight interrupted (your loop, walk or Auto-Lair run going again) and a minute has passed with no new fight; a fight that interrupted nothing only needs the quiet minute. A second fight before then finds them still off and sends nothing more.
+**Important notes:** Hitting back at someone who attacked you never needs it. If the connection drops while they are off, they can't be put back; the terminal tells you, and `set warning on` restores them.
+
+### When I lead a party and start a fight with a player, send @kill to the party
+
+**Default:** On
+**What it does:** When you are the party leader and a fight with a player starts (your PvP action attacking an Enemy), MudPlay also says `.@kill <player>`, so members who take your remote commands attack the same player.
+**Important notes:** It is not sent when you are following or alone, or for a fight that someone else's `@kill` started. A member needs the *Execute commands* permission granted to you for it to act, and their own evil-warning setting below decides whether the attack gets through.
+
+### Turn off my evil warnings when a leader's @kill names a player
+
+**Default:** Off
+**What it does:** A leader's `@kill <player>` is, for you, an attack on someone who hasn't attacked you, even when that player attacked your leader: the game only lets the one who was attacked hit back for free. Ticked, MudPlay sends `set warning off` before attacking the named player. Unticked, the attack is still tried, and a refusal ends it unless the box above is ticked.
+**Important notes:** It costs evil points like any other first attack. A player whose own evil points are 30 or more can be attacked without the warnings mattering.
+
+### Switch my evil warnings back on after N seconds back on task
+
+**Default:** `60` seconds
+**What it does:** How long you must be back at what the fight interrupted, with no new fight, before MudPlay sends `set warning on` for warnings it switched off.
+
+### After a party member drops out, hold room attacks for N seconds
+
+**Default:** `120` seconds
+**What it does:** A teleport that splits the party puts everyone back in the same room a moment later, outside the party, where a room attack would hit them. So when a member drops out of your party, your room attacks are held until they are back in it, or this long has passed. A room attack of theirs in that time is not taken as an attack on you either. `0` turns it off.
+
+### Chasing (Chase and attack)
+
+When the player you are fighting leaves, MudPlay steps the way they went at once. Arriving in a room without them, it tracks them if *Track enemies* is on, and otherwise guesses. Seeing them again means attacking again. The chase's own steps go through the walker, so a door on the way is handled as usual.
+
+**Give up after N rooms without seeing them** — default `8`. How many rooms in a row to follow without sight of them before the chase ends and you go back to what you were doing. Seeing them starts the count again.
+
+**Guess the way they went when it wasn't seen** — default on. At a crossroads with a door that just opens, it looks behind the door first (see the next setting). Otherwise it carries on the way they were heading; if that way is shut and the room has just one other way out, it takes that. It never guesses back the way you came, and never through a door that needs a key, picking or strength, or an exit that takes a command or a search. Off, or with no guess to make, the chase waits where it stands.
+
+**Behind a door, look N rooms in, then come back** — default `3`. How far to go in behind a door at a crossroads. With nothing found it walks back to the crossroads and tries the other way; the walk back is not counted against the rooms-without-sight limit.
+
+**With no way to follow, wait N seconds** — default `20`. How long to stand in case they come back into sight before the chase ends.
+
+**Track enemies every N seconds** — default off, `60` seconds. Out of sight in a chase, sends `track <player>` on arriving in each room and follows the answer, which outranks a guess; with no answer within three seconds, or a failed track, it falls back to the guess. While waiting with no way to follow, the track is sent again this often. It needs the Tracking skill.
+
+### PvP Spells 1 and 2
+
+**Default:** blank
+**What it does:** Spells to use on a player in a fight. What a spell does here depends on what kind it is:
+
+- **A between-round spell** (one cast alongside your attack, like a debuff) is cast at the start of the fight and again each time its duration runs out: a spell that lasts five rounds is cast every five rounds. One with no duration is cast once. Your attack is sent again after each cast.
+- **A combat spell** (one that takes the round) becomes your attack, every round, for as long as its conditions hold.
+- **A spell that only takes monsters** (the charm family) is not used, and the program log says so.
+
+Each row has **Max casts** (casts of a between-round spell, or rounds on a combat spell, in one fight; blank is no limit) and **Min mana per cast** (not used below it; a percentage or a mana figure, the same way the Combat tab's spell slots are set).
+
+**With no combat spell here**, or when its conditions aren't met, you attack with your combat profile: its normal attack spell, then its alternate, each while your mana meets its own floor, then your normal attack command. Anything you can use on a monster can be used on a player, except a spell that only takes monsters; a room spell can't be aimed at one.
 
 ---
 
@@ -4352,6 +4513,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Game entry / exit command | `"E"` / `"=x"` | string | `GameEntryCommand` / `GameExitCommand` | Models/Settings/BbsProfile.cs |
 | Player dies at (HP) | `-25` | -999–0 | `PlayerDiesAtHp` | Models/Settings/RealmProfile.cs |
 | Auto-refine death floor | `true` | bool | `AutoRefineDeathFloor` | Models/Settings/BbsProfile.cs |
+| PvP is enabled on this realm | `false` | bool | `PvpEnabled` | Models/Settings/RealmProfile.cs |
 | Boss cleanup time / zone | `"21:00"` / local zone | `HH:mm` / IANA/Windows tz id | `CleanupTimeOfDay` / `CleanupTimeZoneId` | Models/Settings/RealmProfile.cs |
 | Board disconnect line | `null` | pattern string | `DisconnectPattern` | Models/Settings/BbsProfile.cs |
 | Name of runic currency | `"runic"` | string | `RunicCurrencyName` | Models/Settings/BbsProfile.cs |
@@ -4432,6 +4594,19 @@ This section is a compact, technical lookup table for every setting documented a
 | If leading, wait only (s) / Return distance (rooms) | 90 / 30 | 0–3600 / 1–500 | `IfLeadingWaitTotalSec` / `ReturnDistanceRooms` | Models/Profile/PartySettings.cs |
 | If leading, accept @comeback for (min) | 2 | 0–60 | `AcceptComebackMinutes` | Models/Profile/PartySettings.cs |
 | par poll frequency (s) | `5` | 1–60 | `ParPollFrequencySec` | Models/Profile/PartySettings.cs |
+| PvP action | `HangUp` | HangUp / FleeThenHangUp / Flee / Attack / ChaseAttack | `Action` | Models/Profile/PvpSettings.cs |
+| PvP flee to / rooms to flee | none / `10` | a favourite room / 1–99 | `FleeTo` / `RoomsToFlee` | Models/Profile/PvpSettings.cs |
+| PvP flee hangup delay / come back after (s) | `30` / `60` | 0–600 / 0–3600 | `FleeHangupDelaySeconds` / `ComeBackAfterSeconds` | Models/Profile/PvpSettings.cs |
+| PvP notify gang / re-connect after PvP (min) | `false` / `false`, `30` | bool / bool, 1–1440 | `NotifyGang` / `ReconnectAfterPvp`, `ReconnectAfterPvpMinutes` | Models/Profile/PvpSettings.cs |
+| Flip a Friend to Enemy if they attack you | `false` | bool | `FlipFriendToEnemyIfAttacked` | Models/Profile/PvpSettings.cs |
+| Turn off my evil warnings to attack | `false` | bool | `TurnOffEvilWarningsToAttack` | Models/Profile/PvpSettings.cs |
+| Track enemies every (s) | `false`, `60` | bool, 5–3600 | `TrackEnemies`, `TrackEnemiesEverySeconds` | Models/Profile/PvpSettings.cs |
+| Chase: give up after rooms unseen / guess the way / wait with no way to follow (s) | `8` / `true` / `20` | 1–50 / bool / 0–600 | `ChaseRoomsUnseen` / `ChaseGuessDirection` / `ChaseWaitSeconds` | Models/Profile/PvpSettings.cs |
+| PvP spells 1 / 2: cast code, max casts, min mana per cast | blank, no limit, `0` | cast code / blank or 0–100 / 0–9999 | `Spell1` / `Spell2` (`SpellName`, `MaxCasts`, `MinManaPerCast`) | Models/Profile/PvpSpellSlot.cs |
+| @kill on a player turns off evil warnings / warnings back on after (s) | `false` / `60` | bool / 0–3600 | `KillOrderTurnsOffEvilWarnings` / `WarningsBackAfterSeconds` | Models/Profile/PvpSettings.cs |
+| As leader, send @kill to the party when starting a fight with a player | `true` | bool | `LeaderSendsKillOrder` | Models/Profile/PvpSettings.cs |
+| Gang notice events (seen / attacked / I attack) and repeat (s) | `true` (all) / `60` | bool / 0–3600 | `GangTellSeen`, `GangTellAttacked`, `GangTellWeAttack` / `GangRepeatSeconds` | Models/Profile/PvpSettings.cs |
+| Party-split hold (s) / chase: rooms in behind a door / reconnect enters the realm | `120` / `3` / `true` | 0–3600 / 1–20 / bool | `PartySplitHoldSeconds` / `ChaseDoorRooms` / `ReconnectEntersRealm` | Models/Profile/PvpSettings.cs |
 | Copper / Silver / Gold / Platinum / Runic policy | Ignore/Collect×4 | Collect / Ignore / Discard | `CopperPolicy` etc. | Models/Profile/CashSettings.cs |
 | Auto-deposit if wealth / coins exceed | 0 / 0 | 0–100,000,000 | `AutoDepositIfWealthExceeds` / `AutoDepositIfCoinsExceed` | Models/Profile/CashSettings.cs |
 | Bank | none | dropdown of banks/stashes | `BankRoomKey` | Models/Profile/CashSettings.cs |

@@ -101,6 +101,26 @@ public sealed class KnownSpellCatalog
         return ResolveClassMagery(number, out _) != MageryNone;
     }
 
+    // The level at which a class first learns a room attack: a spell aimed at
+    // everything in the room (Targets 9 / 11 / 12) that costs combat energy, so it
+    // repeats every round and hits players outside the caster's party. 0 when the
+    // class has none, and NULL when the name isn't a class in the active set — an
+    // unknown class must read as "we don't know", never as "can't".
+    public int? RoomAttackFromLevel(string? className)
+    {
+        if (string.IsNullOrWhiteSpace(className)) return null;
+        if (ResolveClassNumber(className) is not { } number) return null;
+
+        int lowest = 0;
+        foreach (KnownSpell spell in Query(number, level: 0))
+        {
+            if (spell.Targets is not (9 or 11 or 12) || spell.Formula.EnergyCost <= 0) continue;
+            int from = Math.Max(1, spell.ReqLevel);
+            if (lowest == 0 || from < lowest) lowest = from;
+        }
+        return lowest;
+    }
+
     // Query/IsUsable's charAlign encoding: 0 = unknown (skip alignment
     // filtering entirely — see IsUsable), 1 = Good, 2 = Neutral, 3 = Evil, 4 = evil
     // but short of Outlaw (Paradigm's Seedy), which counts as Evil except that an

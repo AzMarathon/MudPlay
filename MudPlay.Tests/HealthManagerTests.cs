@@ -2127,9 +2127,15 @@ public sealed class HealthManagerTests
                 log: Log,
                 hasHostileInRoom: () => HostileInRoom,
                 findReversePath: (from, to) => ReversePath?.Invoke(from, to),
-                post: a => { if (DeferFlee) Posted.Enqueue(a); else a(); });
+                post: a => { if (DeferFlee) Posted.Enqueue(a); else a(); },
+                now: () => Clock ?? DateTimeOffset.UtcNow);
             Health.SetWireSender(b => Sent.Add(b));
+            Health.SetScheduler((delay, action) => Scheduled.Add((delay, action)));
         }
+
+        // A fixed clock for the tests that wait something out; null runs on real time.
+        public DateTimeOffset? Clock { get; set; }
+        public List<(TimeSpan Delay, Action Action)> Scheduled { get; } = new();
 
         public List<string> SentLines =>
             Sent.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
@@ -2597,6 +2603,71 @@ public sealed class HealthManagerTests
         h.HostileInRoom = false;
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
         Assert.Equal(new Game.Map.RoomKey(1, 49), h.Engine.ResumedAtRoom);
+    }
+
+    // The PvP response's flee runs its own distance, not Combat's RunDistance, and
+    // the engine is held where it lands until the stay-away time is up.
+    [Fact]
+    public void FleeFromPlayer_RunsItsOwnDistance_AndStaysAwayBeforeResuming()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Clock = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+        h.ReversePath = (_, _) => new[]
+        {
+            Game.Map.Direction.S, Game.Map.Direction.W, Game.Map.Direction.U,
+        };
+
+        Assert.True(h.Health.FleeFromPlayer("Bob attacked us", rooms: 2, stayAway: TimeSpan.FromSeconds(60)));
+        Assert.Equal(new[] { Game.Map.Direction.S }, h.Engine!.SentBacktrackMoves);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+
+        // Landed after two rooms (RunDistance is 1, the trail three long): held.
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 48));
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+        Assert.Null(h.Engine.ResumedAtRoom);
+        (TimeSpan delay, Action wake) = Assert.Single(h.Scheduled);
+        Assert.True(delay >= TimeSpan.FromSeconds(60));
+
+        h.Clock += TimeSpan.FromSeconds(59);
+        h.Health.Evaluate();
+        Assert.Null(h.Engine.ResumedAtRoom);
+
+        h.Clock += TimeSpan.FromSeconds(2);
+        wake();
+        Assert.Equal(new Game.Map.RoomKey(1, 48), h.Engine.ResumedAtRoom);
+    }
+
+    // The next flee of our own goes back to Combat's distance and resumes at once.
+    [Fact]
+    public void FleeFromPlayer_ItsDistanceAndWaitDontOutliveIt()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Clock = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+        h.ReversePath = (_, _) => new[] { Game.Map.Direction.S, Game.Map.Direction.W };
+
+        h.Health.FleeFromPlayer("Bob attacked us", rooms: 2, stayAway: TimeSpan.Zero);
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 48));
+        Assert.Equal(new Game.Map.RoomKey(1, 48), h.Engine!.ResumedAtRoom);
+
+        h.Engine.SentBacktrackMoves.Clear();
+        h.HostileInRoom = true;
+        h.Health.RunFromBackstabFailure();
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 47));
+        Assert.Single(h.Engine.SentBacktrackMoves);          // RunDistance 1 again
+    }
+
+    [Fact]
+    public void FleeFromPlayer_NoEngineRunning_SaysSo()
+    {
+        using FleeHarness h = new() { Engine = null };
+
+        Assert.False(h.Health.FleeFromPlayer("Bob attacked us", rooms: 5, stayAway: TimeSpan.FromSeconds(30)));
     }
 
     // Report paradigm-20260927-011659: one retreat at a time.

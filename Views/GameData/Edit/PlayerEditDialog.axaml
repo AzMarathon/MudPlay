@@ -45,6 +45,16 @@
                              PlaceholderText="(same as in-game name)"
                              ToolTip.Tip="Only needed on boards whose logon/logoff lines key on the BBS account name instead of the character name (e.g. Playpen). Leave blank when they match. Stored per-BBS; used to attribute a party member's disconnect."/>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                    <TextBlock Classes="FieldLabel" Text="Relationship" Width="90"/>
+                    <ComboBox ItemsSource="{Binding RelationshipChoices}" Width="110"
+                              SelectedIndex="{Binding RelationshipIndex, Mode=TwoWay}"
+                              ToolTip.Tip="How you stand with this player on this realm, shared by all your characters there. Neutral: not attacked on sight, fought back if they attack you. Friend: never attacked. Enemy: the PvP response applies on sight."/>
+                    <TextBlock Classes="FieldLabel" Text="PvP response" Margin="10,0,0,0"/>
+                    <ComboBox ItemsSource="{Binding PvpResponseChoices}" Width="190"
+                              SelectedIndex="{Binding PvpResponseIndex, Mode=TwoWay}"
+                              ToolTip.Tip="What to do about this player when they are an Enemy. 'Use the PvP settings' follows the general response on Settings → PvP; anything else replaces it for this player only."/>
+                </StackPanel>
             </StackPanel>
 
             <!-- ===== Remote controls + observation footer ===== -->

@@ -1625,6 +1625,17 @@ public sealed class AppServices
     // RoomClassifier's observation so CombatStateTracker
     // re-evaluates the Combat gate immediately on spawn.
     public Game.Combat.RoomEntryWatcher RoomEntry { get; private set; } = null!;
+    // Other players attacking us, and the Neutral-to-Enemy marking that follows.
+    public Game.Pvp.PvpAttackWatcher PvpAttacks { get; private set; } = null!;
+    // Who dropped out of our party a moment ago (a teleport split it).
+    public Game.Pvp.PartySplitTracker PartySplit { get; private set; } = null!;
+    // Asks `who` about a name we have no player record for.
+    public Game.Pvp.PvpStrangerLookup PvpStrangers { get; private set; } = null!;
+    // The PvP response to an Enemy (hang up, flee), and its flee to a chosen room.
+    public Game.Pvp.PvpResponder PvpResponse { get; private set; } = null!;
+    public Game.Pvp.PvpFleeWalk PvpFlee { get; private set; } = null!;
+    // A fight with another player: attack, chase, hitting back, a leader's @kill.
+    public Game.Pvp.PvpFight PvpFight { get; private set; } = null!;
 
     // Observes mid-room departure lines
     // ("<name> walks out of the room to <dir>.")
@@ -1659,6 +1670,9 @@ public sealed class AppServices
     // line; this watcher reads the name off that line (gated on
     // RoomTracker.IsInDarkRoom) and injects it into RoomClassifier so
     // CombatManager engages it as if it had been listed.
+    // Room attacks on a realm with PvP on: who ours would hit, and whether someone
+    // else is rooming in a room that was theirs first.
+    public Game.Pvp.PvpRoomSafety PvpRoom { get; private set; } = null!;
     public Game.Combat.DarkRoomCombatWatcher DarkRoomCombat { get; private set; } = null!;
     public Game.Combat.MonsterSummonWatcher MonsterSummons { get; private set; } = null!;
 
@@ -3177,7 +3191,11 @@ public sealed class AppServices
         // Lazily resolves Combat (constructed later in this ctor) so the
         // retarget runs against the live engine at @kill time.
         Kill = new Game.Remote.KillHandler(
-            RemoteCommands, name => Combat.RetargetTo(name), Log);
+            RemoteCommands,
+            // A player named by @kill is a fight with a player; anything else is
+            // the combat engine's.
+            name => { if (!PvpFight.EngageOnOrder(name)) Combat.RetargetTo(name); },
+            Log);
         // @trap auto-disarm flow — manager owns the state machine,
         // handler owns the @-command auth boundary. Wire-sender +
         // OtherSettings cadence knobs bind in MainWindowVM /
@@ -3903,6 +3921,28 @@ public sealed class AppServices
         // Also-Here line so toggling takes effect immediately.
         RoomClassifier = new Game.Combat.RoomEntityClassifier(
             Router, MonsterMessages, Players, RoomTracker, Log, GameData, FlavorPrefixes);
+        // Built before the combat tracker and engine so it reads each room roster
+        // ahead of them: they ask it about the room inside their own handlers.
+        PvpRoom = new Game.Pvp.PvpRoomSafety(
+            Router, RoomClassifier,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            inParty: PartyState.HasMember,
+            classOf: ResolveKnownPlayerClass,
+            levelOf: given => Players.Find(given)?.Level,
+            roomAttackFromLevel: cls => SpellCatalog.RoomAttackFromLevel(cls),
+            realm: () => GameData.ActiveRealm,
+            lastMoveSentAt: () => RoomTracker.LastMoveSentAt,
+            log: Log);
+        GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
+        // Another player's room attack shows as a line, not a room observation, so
+        // nothing re-asks the combat gate on its own. Posted: the line is still being
+        // dispatched, and the re-check can send a break.
+        PvpRoom.RoomAttackSeen += () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (Recovery.AttachedEngine is null) return;
+            CombatTracker.OnAutoAttackChanged();
+            RoomClassifier.ReemitCurrent();
+        });
         CombatTracker = new Game.Combat.CombatStateTracker(
             Router, MovementCoordinator, RoomClassifier, MonsterMessages,
             PlayerState,
@@ -4050,6 +4090,25 @@ public sealed class AppServices
         // RoomEntryArrival pattern + appends to the classifier so the
         // Combat gate / CombatManager react to spawns immediately.
         RoomEntry = new Game.Combat.RoomEntryWatcher(Router, RoomClassifier, Log);
+        RoomEntry.ArrivalObserved += PvpRoom.NoteArrival;
+        PartySplit = new Game.Pvp.PartySplitTracker(
+            PartyState,
+            hold: () => TimeSpan.FromSeconds(Math.Max(0,
+                ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp").PartySplitHoldSeconds)),
+            ownGivenName: () => Party.LocalCharacterName ?? Profile.Current?.Name);
+        PvpRoom.SetPartySplit(PartySplit);
+        PvpAttacks = new Game.Pvp.PvpAttackWatcher(
+            Router, RoomClassifier, PvpRoom, Players, PartyState, PartySplit,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            flipFriends: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp")
+                .FlipFriendToEnemyIfAttacked,
+            ownGivenName: () => Party.LocalCharacterName ?? Profile.Current?.Name,
+            log: Log);
+        PvpAttacks.Attacked += attack =>
+        {
+            if (attack.MarkedEnemy)
+                WriteTerminalNotice($"[PvP: {attack.Player} attacked you and is now marked Enemy]");
+        };
         // A reform member who crossed a party-splitting teleport that lands them
         // with a plain "walks into the room from nowhere" (a "go hole"-style CMD
         // teleport, no "blinding flash" line) still needs their withheld re-invite
@@ -4922,6 +4981,7 @@ public sealed class AppServices
         // multi-target attack spell or either debuff (single-target attack
         // spells are not nukes and stay available).
         Combat.SetAutoNukeGate(() => ReadAutoModeFlag(d => d.AutoNuke));
+        Combat.SetRoomAttackHold(PvpRoom.RoomAttackHeldBy);
         // Debuffs are in-between actions, not combat actions — the combat
         // engine owns the decision but CastDirector casts them through the
         // shared in-between window (at PriorityDebuffing, so survival heals
@@ -7252,6 +7312,23 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
         LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, PromptScanner, Log);
+        // The top list states each listed player's class outright; put it on the
+        // records of the players we know. Off the capture, not the store's load: a
+        // realm switch loads the list before the players, and the old realm's
+        // records must not take the new realm's classes.
+        Leaderboards.Captured += snapshot =>
+        {
+            // The top list names players `who` may not be showing right now, with
+            // their class: a record is made for one we had none for.
+            DateTime now = DateTime.UtcNow;
+            foreach (Game.Leaderboard.LeaderboardEntry entry in snapshot.Entries)
+            {
+                if (Players.Find(entry.Name) is null)
+                    Players.RecordObservation(entry.Name, entry.Class, null, null, null, null, null, now);
+                else
+                    Players.RecordStatedClass(entry.Name, entry.Class);
+            }
+        };
         // BFS consults the blacklist to skip placement of hidden
         // rooms (edge still recorded → dangling stub). Cache flushes
         // on every blacklist change so the next layout build picks
@@ -7422,6 +7499,77 @@ public sealed class AppServices
         // Auto-Lair beginning a run is a loop-start for gear purposes — swap to the
         // Default set, same as LoopRunner's ReachedFirstWaypoint above.
         AutoLair.ActiveChanged += active => { if (active) AutoEquip.OnLoopStarted(); };
+
+        PvpFlee = new Game.Pvp.PvpFleeWalk(
+            Walker, LoopRunner, AutoLair, pacedReplyScheduler,
+            startSprint: () => ApplyRunStartMode?.Invoke(Game.Map.RunStartMode.Sprint),
+            Log);
+        PvpFight = new Game.Pvp.PvpFight(
+            Router, RoomClassifier,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            inParty: PartyState.HasMember,
+            readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
+            attackCommandFor: PvpAttackCommandFor,
+            send: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes(text + "\r")),
+            cast: (code, target) => Cast.TryCast(code, target),
+            spellInfo: PvpSpellInfoFor,
+            manaMeets: PvpManaMeets,
+            stepToward: PvpStepToward,
+            exitsHere: PvpChaseExits,
+            // Stop-and-restart, as for the errand detours: the fight may walk (a
+            // chase), which a movement gate would hold.
+            suspendEngines: why =>
+            {
+                Game.Map.DetourResume resume =
+                    Game.Map.DetourResume.Snapshot(Walker, LoopRunner, AutoLair, includeWalk: true);
+                resume.Stop(Walker, LoopRunner, AutoLair, why);
+                _pvpFightInterrupted = resume.Kind;
+                return () => resume.Resume(Walker, LoopRunner, AutoLair);
+            },
+            // A fight that interrupted nothing has nothing to get back to.
+            backOnTask: () => _pvpFightInterrupted == Game.Map.DetourResumeKind.None
+                || MovementControl.State != Game.Map.MovementEngineState.Idle,
+            leadingParty: () => PartyState.SelfIsLeader && PartyState.Members.Count > 1,
+            schedule: pacedReplyScheduler,
+            log: Log);
+        PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");
+        PvpFight.Started += given => PvpResponse.NoteWeAttack(given);
+        PvpStrangers = new Game.Pvp.PvpStrangerLookup(
+            Router, RoomClassifier, Players,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            sendWho: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("who\r")),
+            schedule: pacedReplyScheduler,
+            log: Log);
+        PvpRoom.SetStrangerProbe(PvpStrangers.MayBePlayer);
+        // The combat engine stands down for the fight and picks the room back up
+        // after it; either way it only re-decides on a room observation.
+        PvpFight.ActiveChanged += () => Avalonia.Threading.Dispatcher.UIThread.Post(RoomClassifier.ReemitCurrent);
+        // The chase's own steps go through the walker; its finish is the arrival.
+        Walker.Event += e =>
+        {
+            if (!PvpFight.IsActive) return;
+            if (e.Kind == Game.Map.WalkEventKind.Finished) PvpFight.NoteStepLanded();
+            else if (e.Kind is Game.Map.WalkEventKind.Failed or Game.Map.WalkEventKind.Stopped)
+                PvpFight.NoteStepFailed();
+        };
+        RoomDeparture.PlayerDeparted += PvpFight.NotePlayerDeparted;
+        RoomTracker.PlayerDeathObserved += () => PvpFight.Stop("we died", resume: false);
+        PvpResponse = new Game.Pvp.PvpResponder(
+            RoomClassifier, PvpAttacks, Players,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            inParty: PartyState.HasMember,
+            readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
+            hangUp: Health.HangUpForPvp,
+            fleeRooms: Health.FleeFromPlayer,
+            fleeTo: (room, comeBackAfter, why) =>
+                PvpFlee.Start(new Game.Map.RoomKey(room.Map, room.Room), comeBackAfter, why),
+            fight: (given, chase, why) => PvpFight.Engage(given, chase, why),
+            // `bg` is the gang channel's speak verb (GAME_MECHANICS "Gang channel speak verb").
+            sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
+            roomName: () => RoomTracker.State.CurrentRoom?.Name,
+            schedule: pacedReplyScheduler,
+            log: Log);
+        PvpResponse.Responded += what => WriteTerminalNotice($"[PvP: {what}]");
 
         // Always-alive control surface over the three movement engines.
         // Backs the toolbar Start / Pause / Stop buttons (which outlive
@@ -9054,8 +9202,86 @@ public sealed class AppServices
             if (suppressed && evalKey is { } rk)
                 Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
         }
-        return suppressed;
+        // A fight with a player is the fight: the engine's own pick would replace
+        // the attack on them.
+        return suppressed || PvpFight is { IsActive: true } || PvpLeaveRoomReason() is not null;
     }
+
+    // The combat profile's attack, aimed at a player: its normal attack spell, else
+    // its alternate, each while our mana meets its floor, else the normal attack
+    // command. Anything usable on a monster is usable on a player except a spell
+    // that only takes monsters (GAME_MECHANICS "Damage lines"); a room spell can't
+    // be aimed at all.
+    private string PvpAttackCommandFor(string given)
+    {
+        Models.Profile.CombatSettings combat =
+            ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+        foreach (Models.Profile.CombatSpellSlot slot in new[] { combat.NormalAttackSpell, combat.AlternateAttackSpell })
+        {
+            string? spell = slot.SpellName?.Trim();
+            if (string.IsNullOrEmpty(spell) || Spellbook.FindByCastCode(spell) is not { } known) continue;
+            if (known.Targets == MonsterOnlyTarget || Game.Combat.DebuffTargeting.IsAreaEnemy(known.Targets)) continue;
+            if (!PvpManaMeets(slot.MinManaPerCast)) continue;
+            return $"{spell} {given}";
+        }
+        string verb = string.IsNullOrWhiteSpace(combat.NormalAttackCommand) ? "a" : combat.NormalAttackCommand.Trim();
+        return $"{verb} {given}";
+    }
+
+    // Spells.Targets 4: a monster and nothing else (the charm family).
+    private const int MonsterOnlyTarget = 4;
+
+    private bool PvpManaMeets(int minManaPerCast) =>
+        Game.Combat.CombatSpellChooser.ManaMeetsReserve(
+            minManaPerCast, PlayerState.Ma, PlayerState.MaxMa,
+            ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").SpellManaThresholdMode);
+
+    // What a PvP spell slot's code is: between-round or a combat spell, how long it
+    // lasts at our level, and whether it takes a player at all.
+    private Game.Pvp.PvpSpellInfo? PvpSpellInfoFor(string code)
+    {
+        if (Spellbook.FindByCastCode(code) is not { } spell) return null;
+        long rounds = Game.Spells.SpellCalculator.Duration(spell.Formula, PlayerStats.Level);
+        return new Game.Pvp.PvpSpellInfo(
+            BetweenRound: spell.Formula.EnergyCost == 0,
+            Duration: TimeSpan.FromSeconds(Math.Max(0, rounds) * Game.Spells.SpellCalculator.SpellRoundSecondsWallClock),
+            MonsterOnly: spell.Targets == MonsterOnlyTarget);
+    }
+
+    // The ways out of this room a chase may take: an open way, or a door that just
+    // opens. A door that needs a key, picking or strength is left out, and so is
+    // any exit that takes a command, a search or a trap disarm.
+    private IReadOnlyCollection<Game.Pvp.PvpChaseExit> PvpChaseExits()
+    {
+        List<Game.Pvp.PvpChaseExit> ways = new();
+        if (RoomTracker.State.CurrentRoom is not { } here) return ways;
+        foreach ((Game.Map.Direction way, Game.Map.RoomExit exit) in here.Exits)
+        {
+            if (!Game.Map.DirectionExtensions.IsCardinal(way)) continue;
+            if (exit.Hint == Game.Map.RoomExitHint.None) ways.Add(new Game.Pvp.PvpChaseExit(way, Door: false));
+            else if (exit is { Hint: Game.Map.RoomExitHint.Door, StatRequirement: 0 })
+                ways.Add(new Game.Pvp.PvpChaseExit(way, Door: true));
+        }
+        return ways;
+    }
+
+    // What the last fight with a player stopped, for telling when we are back at it.
+    private Game.Map.DetourResumeKind _pvpFightInterrupted;
+
+    // One step after a player who left, walked through the walker so a door on the
+    // way is handled like any other.
+    private bool PvpStepToward(Game.Map.Direction direction)
+    {
+        if (RoomTracker.State.CurrentRoom is not { } here) return false;
+        if (!here.Exits.TryGetValue(direction, out Game.Map.RoomExit exit)) return false;
+        return Walker.WalkTo(exit.Target);
+    }
+
+    // Why a running walk or loop carries on out of the room we're in rather than
+    // fight beside another player's room attack, or null. Moving by hand there is
+    // no next room to carry on to, so the fight is left to the user.
+    public string? PvpLeaveRoomReason() =>
+        Recovery.AttachedEngine is null ? null : PvpRoom.LeaveRoomReason();
     private bool _lastCombatSuppressed;
     private Game.Map.RoomKey? _lastCombatSuppressedRoom;
 
@@ -12443,8 +12669,10 @@ public sealed class AppServices
     //
     // Class sources in precedence order, strongest first: the party roster (`par`
     // states a member's class outright), our own stat screen, then the player
-    // database — an explicitly observed class from `look`, else the class implied by
-    // their title when exactly one class uses it (a shared title tells us nothing).
+    // database — a class the game stated or showed (the party roster, the top list,
+    // `look`) — then the latest top list itself for a player with no record, else
+    // the class implied by their title when exactly one class uses it (a shared
+    // title tells us nothing).
     private bool? PlayerCanCast(string givenName) =>
         SpellCatalog.ClassCanCast(ResolveKnownPlayerClass(givenName));
 
@@ -12460,10 +12688,14 @@ public sealed class AppServices
             && PlayerStats.Class is { Length: > 0 } own)
             return own;
 
-        if (Players.Find(givenName) is not { } record) return null;
-        if (record.Class is { Length: > 0 } observed) return observed;
+        Models.GameData.PlayerRecord? record = Players.Find(givenName);
+        if (record?.Class is { Length: > 0 } observed) return observed;
+        if (Leaderboards.Snapshots.Count > 0)
+            foreach (Game.Leaderboard.LeaderboardEntry entry in Leaderboards.Snapshots[0].Entries)
+                if (FirstTokenEquals(entry.Name, givenName) && entry.Class.Length > 0)
+                    return entry.Class;
         // A title only identifies a class when it isn't shared across classes.
-        return Game.GameData.ClassTitleTable.LookupClasses(record.Title) is { Count: 1 } implied
+        return Game.GameData.ClassTitleTable.LookupClasses(record?.Title) is { Count: 1 } implied
             ? implied[0]
             : null;
     }

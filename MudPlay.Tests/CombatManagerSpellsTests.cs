@@ -47,6 +47,8 @@ public sealed class CombatManagerSpellsTests
 
         public bool AutoCombatEnabled { get; set; } = true;
         public bool AutoNukeEnabled { get; set; } = true;
+        // The player a room attack would hit and mustn't (see SetRoomAttackHold).
+        public string? RoomAttackHeldBy { get; set; }
         public int Ma { get; set; } = 100;
         public int MaxMa { get; set; } = 100;
         public bool Sneaking { get; set; }
@@ -101,6 +103,7 @@ public sealed class CombatManagerSpellsTests
             Combat.ReadRoundCount = () => _roundCount;
             Combat.SetBackstabHooks(() => Sneaking, n => SeeHidden.Contains(n));
             Combat.SetAutoNukeGate(() => AutoNukeEnabled);
+            Combat.SetRoomAttackHold(() => RoomAttackHeldBy);
             Combat.SetSpellShortResolver(
                 n => SpellShorts.TryGetValue(n, out string? s) ? s : null);
             // Store the settle callback instead of running a real timer so a test
@@ -128,6 +131,12 @@ public sealed class CombatManagerSpellsTests
             => Classifier.AppendArrivalEntity(
                 Classifier.Classify(name),
                 rawWireLine: $"A {name} strides in from the west.");
+
+        // A player walking into the room mid-fight.
+        public void ArrivePlayer(string given)
+            => Classifier.AppendArrivalEntity(
+                new RoomEntity(given, given, EntityKind.Player, MonsterNumber: null),
+                rawWireLine: $"{given} walks into the room from the west.");
 
         public void SetOverlay(int monsterNumber, MonsterAttackPriority? priority = null,
                                MonsterRelationship? relationship = null)
@@ -443,6 +452,87 @@ public sealed class CombatManagerSpellsTests
         h.Combat.NoteMonsterDied("giant rat");
         h.Feed("Also here: dark stalker.");
         Assert.Equal("nuke dark stalker", h.LastSent);
+    }
+
+    // ----- room attacks held for a player outside the party ------------
+
+    // On a realm with PvP on, a room spell hits every player in the room who isn't in
+    // our party. With one here, the room qualifies by count but the round goes to the
+    // single-target spell.
+    [Fact]
+    public void RoomAttackHeld_RoomQualifies_CastsTheSingleTargetSpellInstead()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+        h.RoomAttackHeldBy = "Bob";
+
+        h.Feed("Also here: giant rat, dark stalker.");
+
+        Assert.Equal("nuke giant rat", h.LastSent);
+        Assert.DoesNotContain("blast", h.AllSent);
+    }
+
+    // A room spell slotted as the normal attack is a room attack all the same.
+    [Fact]
+    public void RoomAttackHeld_RoomScopedSpellInTheNormalSlot_FallsToTheWeapon()
+    {
+        using Harness h = new();
+        h.SpellsByCode["esto"] = new KnownSpell(566, "esto", "eldritch storm", 1, 1, 1, 12,
+            new SpellFormulaInput { EnergyCost = 1000 });
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "esto", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+        h.RoomAttackHeldBy = "Bob";
+
+        h.Feed("Also here: giant rat.");
+
+        Assert.Equal("a giant rat", h.LastSent);
+        Assert.DoesNotContain("esto", h.AllSent);
+    }
+
+    // A room attack repeats by itself, so a player walking in on one has to be met with
+    // `break`; the *Combat Off* that answers it re-dispatches the round single-target.
+    [Fact]
+    public void RoomAttackRunning_PlayerWalksIn_BreaksThenGoesSingleTarget()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+
+        h.Feed("Also here: giant rat, dark stalker.");
+        Assert.Equal("blast", h.LastSent);
+
+        h.RoomAttackHeldBy = "Bob";
+        h.ArrivePlayer("Bob");
+        Assert.Equal("break", h.LastSent);
+
+        // A second look at the room before the game answers doesn't break twice.
+        h.Feed("Also here: giant rat, dark stalker, Bob.");
+        Assert.Single(h.AllSent, sent => sent == "break");
+
+        h.FeedOffClosingRound();
+        Assert.Equal("nuke giant rat", h.LastSent);
+        Assert.Single(h.AllSent, sent => sent == "blast");
+    }
+
+    // Nobody to spare: a room attack already running is left alone.
+    [Fact]
+    public void RoomAttackRunning_PartyMemberWalksIn_KeepsRunning()
+    {
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "blast", MinEnemies = 2 };
+        h.AddMonster(1, "giant rat");
+        h.AddMonster(2, "dark stalker");
+
+        h.Feed("Also here: giant rat, dark stalker.");
+        h.ArrivePlayer("Bob");
+
+        Assert.Equal("blast", h.LastSent);
+        Assert.DoesNotContain("break", h.AllSent);
     }
 
     // Simultaneous-arrival settle (report paradigm-20260811-063728 + a live report):

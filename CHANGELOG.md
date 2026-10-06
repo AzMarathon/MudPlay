@@ -1,5 +1,22 @@
 # Version history
 
+## 3.145.0
+
+- Players can be marked Friend, Neutral or Enemy per realm, with an optional PvP response of their own (Game Data → Players)
+- Realm settings gain "PvP is enabled on this realm"
+- A player's class is also taken from the top list
+- On a PvP realm, room attacks and room debuffs are held while a player outside your party is in the room, and one already running is broken off
+- On a PvP realm, a walk or loop carries on past a room where another player is room-attacking
+- A Neutral player who attacks you is marked Enemy, saved on their record
+- New Settings → PvP tab: hang up, flee, or attack and chase when an Enemy is in the room or a player attacks; flee-to room, gang notice, timed reconnect, PvP spells, tracking
+- PvP spells are used by kind: a between-round spell recast when its duration runs out, a combat spell as the attack; otherwise the combat profile attacks
+- Room attacks are held after a party member drops out until they rejoin; a name with no player record sends one who
+- Attacking a player first is refused by evil warnings unless you opt in to switching them off; they go back on once you are back on your loop
+- Chase options: rooms to follow without sight, guessing the way they went, the wait with no way to follow, tracking
+- A flee to the flee room runs in Sprint Mode
+- @kill naming a player in the room starts a fight with that player, switching evil warnings off first if you allow it
+- A party leader who starts a fight with a player sends @kill to the party; gang notices can be set by event and by how often they repeat
+
 ## 3.144.27
 
 - A loop waypoint command that is the same text exit the route takes next is sent once, instead of crossing and walking straight back

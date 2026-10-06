@@ -77,6 +77,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         "Sysop", "Sys Goto", "Terminal", "Cols", "Rows", "NAWS", "Connection",
         "Game entry command", "Game exit command", "Enter realm", "Logoff",
         "Player dies at", "Death floor", "Bleeding out", "Dropped", "Hangup HP",
+        "PvP", "PvP enabled", "Player versus player",
         "Auto-refine death floor", "Trace death floor", "Slow death", "Learn floor",
         "Disconnect pattern", "Party disconnect", "Logoff pattern", "Logs off",
         "Player disconnect line",
@@ -221,6 +222,11 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // deaths (a bleed-out lands right at the true floor). Off pins the manual
     // value. Default on.
     [ObservableProperty] private bool _autoRefineDeathFloor = true;
+
+    // Players can attack one another on the selected realm (RealmProfile.PvpEnabled).
+    // The PvP settings and the care taken with room attacks around other players
+    // only apply where this is ticked.
+    [ObservableProperty] private bool _pvpEnabled;
 
     // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZone) + its zone.
     // Drives the DEAD/ALIVE state of "Respawns @ Cleanup" bosses on the Bosses tab.
@@ -810,6 +816,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         GameExitCommand = realm.GameExitCommand;
         PlayerDiesAtHp = realm.PlayerDiesAtHp;
         AutoRefineDeathFloor = realm.AutoRefineDeathFloor;
+        PvpEnabled = realm.PvpEnabled;
         CleanupTimeOfDay = realm.CleanupTimeOfDay;
         CleanupTimeZoneId = realm.CleanupTimeZoneId;
         RunicCurrencyName = realm.RunicCurrencyName;
@@ -1201,6 +1208,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         // (0 HP already means dropped), so clamp to <= 0 at the point of storage.
         realm.PlayerDiesAtHp = Math.Min(0, PlayerDiesAtHp);
         realm.AutoRefineDeathFloor = AutoRefineDeathFloor;
+        realm.PvpEnabled = PvpEnabled;
         realm.CleanupTimeOfDay = CleanupTimeOfDay?.Trim() ?? string.Empty;
         realm.CleanupTimeZoneId = string.IsNullOrWhiteSpace(CleanupTimeZoneId)
             ? defaults.CleanupTimeZoneId : CleanupTimeZoneId.Trim();
@@ -1296,6 +1304,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnGameExitCommandChanged(string value)         { PushToCache(); Dirty(); }
     partial void OnPlayerDiesAtHpChanged(int value)             { PushToCache(); Dirty(); }
     partial void OnAutoRefineDeathFloorChanged(bool value)      { PushToCache(); Dirty(); }
+    partial void OnPvpEnabledChanged(bool value)                { PushToCache(); Dirty(); }
     partial void OnCleanupTimeOfDayChanged(string value)        { PushToCache(); Dirty(); }
     partial void OnCleanupTimeZoneIdChanged(string value)       { PushToCache(); Dirty(); }
     partial void OnDisconnectPatternChanged(string? value)      { PushToCache(); Dirty(); }

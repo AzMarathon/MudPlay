@@ -174,6 +174,21 @@ public static class BugReportBuilder
             ? $"{bbsRealm.Realm.Name} (game data {bbsRealm.Realm.ActiveGameDataSet ?? "global default"}; "
               + $"{bbsRealm.Bbs.Realms.Count} realm(s) on the BBS)"
             : "(none)");
+        // PvP: whether the realm is marked for it, and how many players carry a
+        // relationship other than the Neutral everyone starts with.
+        Kv(sb, "Realm PvP", (svc.ResolveActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
+            + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
+            + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
+        Kv(sb, "PvP room", svc.PvpRoom.Describe()
+            + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
+            + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
+        Kv(sb, "PvP response", svc.PvpResponse.LastResponse
+            + (svc.PvpFlee.IsActive ? "; fleeing to the flee room now" : ""));
+        Kv(sb, "PvP fight", $"{svc.PvpFight.Describe()}; last: {svc.PvpFight.LastReport}");
+        Kv(sb, "PvP attacks on us", svc.PvpAttacks.Recent.Count == 0
+            ? "(none this session)"
+            : string.Join("; ", svc.PvpAttacks.Recent.Select(a =>
+                $"{a.At.ToLocalTime():HH:mm:ss} {a.Player} ({a.Kind}; {a.Relationship}{(a.MarkedEnemy ? ", marked by this" : "")})")));
         // Retry/reconnect config for the active BBS. A "won't stop redialing" or
         // "never reconnected" report hinges on whether InfiniteRetries is on (which
         // overrides the count+pause to unlimited @ 3s) and which triggers are armed.
@@ -2016,6 +2031,7 @@ public static class BugReportBuilder
         AppendResolved<Models.Profile.AutoLightSettings>(sb, svc, "AutoLight");
         AppendResolved<Models.Profile.AutoLairSettings>(sb, svc, "AutoLair");
         AppendResolved<Models.Profile.AutoTrainerSettings>(sb, svc, "AutoTrainer");
+        AppendResolved<Models.Profile.PvpSettings>(sb, svc, "Pvp");
         return sb.ToString();
     }
 

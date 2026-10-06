@@ -81,6 +81,22 @@ public sealed class LeaderboardSnapshotStoreTests : IDisposable
         Assert.Contains(store.Snapshots, s => s.Entries.Count == 10);
     }
 
+    // The class column is worth reading off every capture, kept in the history or not.
+    [Fact]
+    public void Captured_IsRaisedForEveryListing_EvenOneTheHistoryDiscards()
+    {
+        LeaderboardSnapshotStore store = new();
+        List<LeaderboardSnapshot> captured = new();
+        store.Captured += captured.Add;
+
+        store.Add(Snap(T, 10, 1_000));
+        store.Add(Snap(T.AddMinutes(5), 10, 1_000));     // nothing moved: not kept
+
+        Assert.Single(store.Snapshots);
+        Assert.Equal(2, captured.Count);
+        Assert.Equal("Bard", captured[1].Entries[0].Class);
+    }
+
     [Fact]
     public void Add_DiscardsRecapture_WithNoExperienceOrRosterChange()
     {

@@ -29,6 +29,10 @@ public sealed class LeaderboardSnapshotStore
     // Calculators tab rebuilds its table from this.
     public event Action? Changed;
 
+    // Raised for every listing captured from the game, kept or not: a capture that
+    // adds nothing to the experience history still says who is which class.
+    public event Action<LeaderboardSnapshot>? Captured;
+
     public LeaderboardSnapshotStore(LogService? log = null)
     {
         _log = log;
@@ -48,6 +52,7 @@ public sealed class LeaderboardSnapshotStore
     public void Add(LeaderboardSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
+        Captured?.Invoke(snapshot);
         if (_snapshots.Count > 0 && !DiffersFrom(_snapshots[0], snapshot))
         {
             _log?.Log(LogSeverity.Info, "Leaderboard",

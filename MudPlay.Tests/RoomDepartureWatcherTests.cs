@@ -208,18 +208,37 @@ public sealed class RoomDepartureWatcherTests
         Assert.Empty(h.Observations[1].Entities);
     }
 
+    // A player's presence is acted on now (a room attack is held for one outside
+    // the party), so one who walks out comes off the roster like a monster does.
     [Fact]
-    public void DepartingPlayer_NoRemoval_NoObservation()
+    public void DepartingPlayer_IsRemoved_AndReported()
     {
-        // A departing player holds no combat gate, so a player entry in Current is
-        // harmless — the watcher removes monster-kind only and must not re-fire.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.AddPlayer("Bob");
+        List<(string Name, string Direction)> departed = new();
+        h.Watcher.PlayerDeparted += (name, direction) => departed.Add((name, direction));
+
+        h.Feed("Also here: Bob, giant rat.");
+        h.Feed("Bob just left to the south.");
+
+        RoomEntitiesObservation last = h.Observations[^1];
+        Assert.Equal(RoomObservationSource.Departure, last.Source);
+        Assert.Equal("giant rat", Assert.Single(last.Entities).ResolvedName);
+        Assert.Equal(("Bob", "south"), Assert.Single(departed));
+    }
+
+    [Fact]
+    public void DepartureLineNamingNobodyOnTheRoster_ChangesNothing()
+    {
         using Harness h = new();
         h.AddPlayer("Bob");
+        h.AddPlayer("Ann");
 
         h.Feed("Also here: Bob.");
         int observationsBefore = h.Observations.Count;
 
-        h.Feed("Bob walks out of the room to south.");
+        h.Feed("Ann just left to the south.");
 
         Assert.Equal(observationsBefore, h.Observations.Count);
     }
