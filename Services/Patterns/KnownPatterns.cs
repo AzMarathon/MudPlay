@@ -166,6 +166,16 @@ public static class KnownPatterns
     // sees, for a weapon and an attack spell alike (onlookers get the two-name form).
     public const string PlayerAttacksYou     = "pvp.player-attacks-you";
 
+    // The game refusing an attack on a player because our evil warnings are on.
+    public const string EvilWarningsRefusal  = "pvp.evil-warnings-refusal";
+
+    // The game refusing an attack on a player for a reason no setting of ours
+    // changes: too evil already, lawful, or the two characters too far apart.
+    public const string PlayerAttackRefused  = "pvp.attack-refused";
+
+    // `track`'s answer: "<name> went <dir> from here."
+    public const string TrackWentFromHere    = "pvp.track-went";
+
     // "<guard> moves to protect <protected>." — MajorMUD guard/redirect mechanic.
     // A "guarded" monster (e.g. a brigand chief guarded by brigands) can't be
     // attacked directly while a guard is in the room: the server redirects our

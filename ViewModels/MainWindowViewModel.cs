@@ -3303,6 +3303,9 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.LoopRunner.NotifyDisconnected();
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
+                // A fight with a player can't outlive the connection; left standing
+                // it would keep the combat engine stood down after the reconnect.
+                AppServices.Current.PvpFight.Stop("disconnected", resume: false, connected: false);
 
                 // Drop per-session condition state so a fresh login starts clean: any
                 // non-auto-clearing condition (no AppliedEndsWith) must not survive the

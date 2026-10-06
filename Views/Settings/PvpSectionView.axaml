@@ -72,12 +72,16 @@
                              IsChecked="{Binding IsFlee, Mode=TwoWay}"
                              ToolTip.Tip="Flee, stay away for the Come back after time, then pick the interrupted walk or loop up again."/>
                 <RadioButton Content="Attack (dangerous)" GroupName="PvpAction"
-                             IsChecked="{Binding IsAttack, Mode=TwoWay}"/>
+                             IsChecked="{Binding IsAttack, Mode=TwoWay}"
+                             ToolTip.Tip="Attack an Enemy on sight, and stop when they leave the room. The running walk or loop is stopped for the fight and picked up again after it; monsters in the room are left alone meanwhile."/>
                 <RadioButton Content="Chase and attack (dangerous)" GroupName="PvpAction"
-                             IsChecked="{Binding IsChaseAttack, Mode=TwoWay}"/>
+                             IsChecked="{Binding IsChaseAttack, Mode=TwoWay}"
+                             ToolTip.Tip="As Attack, and follow them when they leave: the way they went, or where tracking says, until they are out of sight too long."/>
                 <RadioButton Content="Do nothing" GroupName="PvpAction"
                              IsChecked="{Binding IsDoNothing, Mode=TwoWay}"
-                             ToolTip.Tip="Mark and log only. An Enemy still holds your room attacks like any other player outside your party."/>
+                             ToolTip.Tip="Nothing on sight. A player who attacks you is still fought back, which costs no alignment. An Enemy still holds your room attacks like any other player outside your party."/>
+                <TextBlock Classes="Readout" Foreground="{StaticResource AccentAmberBrush}"
+                           Text="Attacking a player who has not attacked you is an evil deed: it adds evil points and can bring a dark cloud. Hitting back at someone who attacked you first is free."/>
 
                 <TextBlock Classes="SectionHeader" Text="FLEEING"/>
                 <Grid ColumnDefinitions="200,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="8">
@@ -130,6 +134,31 @@
                 <CheckBox Content="Flip a Friend to Enemy if they attack you"
                           IsChecked="{Binding FlipFriendToEnemyIfAttacked, Mode=TwoWay}"
                           ToolTip.Tip="Off: a Friend stays a Friend whatever they do, and is never answered. On: a Friend who attacks you is marked Enemy, the way a Neutral is."/>
+                <CheckBox Content="Turn off my evil warnings if they are on, to attack"
+                          IsChecked="{Binding TurnOffEvilWarningsToAttack, Mode=TwoWay}"
+                          ToolTip.Tip="With evil warnings on, the game refuses an attack on a player who hasn't attacked you. Ticked, MudPlay sends 'set warning off', attacks again, and sends 'set warning on' when the fight is over. Unticked, the refusal ends the fight. Hitting back never needs it."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <CheckBox Content="Track enemies every"
+                              IsChecked="{Binding TrackEnemies, Mode=TwoWay}"
+                              ToolTip.Tip="While chasing a player who is out of sight, send 'track &lt;player&gt;' this often and follow the answer. Needs the Tracking skill, and only 'Chase and attack' uses it."/>
+                    <NumericUpDown Value="{Binding TrackEnemiesEverySeconds, Mode=TwoWay}"
+                                   IsEnabled="{Binding TrackEnemies}"
+                                   Minimum="5" Maximum="3600" Increment="5" FormatString="0"
+                                   Width="120"/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
+
+                <TextBlock Classes="SectionHeader" Text="PVP SPELLS"/>
+                <TextBlock Classes="Readout"
+                           Text="Cast codes thrown at the player at the start of a fight, one a round, each once only. Your normal attack carries on after them."/>
+                <Grid ColumnDefinitions="200,Auto" RowDefinitions="Auto,Auto" RowSpacing="6" ColumnSpacing="8">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="1"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding PvpSpell1, Mode=TwoWay}"
+                             Width="120" HorizontalAlignment="Left" MaxLength="8" PlaceholderText="cast code"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="2"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PvpSpell2, Mode=TwoWay}"
+                             Width="120" HorizontalAlignment="Left" MaxLength="8" PlaceholderText="cast code"/>
+                </Grid>
 
             </StackPanel>
         </Grid>

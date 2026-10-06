@@ -184,6 +184,7 @@ public static class BugReportBuilder
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
         Kv(sb, "PvP response", svc.PvpResponse.LastResponse
             + (svc.PvpFlee.IsActive ? "; fleeing to the flee room now" : ""));
+        Kv(sb, "PvP fight", $"{svc.PvpFight.Describe()}; last: {svc.PvpFight.LastReport}");
         Kv(sb, "PvP attacks on us", svc.PvpAttacks.Recent.Count == 0
             ? "(none this session)"
             : string.Join("; ", svc.PvpAttacks.Recent.Select(a =>

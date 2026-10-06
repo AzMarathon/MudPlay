@@ -912,7 +912,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 ### Do something on my behalf
 
 - `@do <command>` — sends the command verbatim to the game (the highest-trust command).
-- `@kill <target>` — retargets your combat onto the named monster this round.
+- `@kill <target>` — retargets your combat onto the named monster this round. On a PvP realm, naming a player who is in your room starts a fight with that player instead (Settings → PvP).
 - `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
 - `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts.
 - `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
@@ -3064,10 +3064,10 @@ Debuffing is a separate "extra" action that can land the same round as your main
 **What it does:** A room attack or room debuff hits every player in the room who isn't in your party. So on a PvP realm MudPlay looks at who is standing there before it uses one:
 
 - **A player outside your party is in the room** — the two Multi-attack slots and the AOE debuff are held, and the round goes to your single-target spells or your weapon. A room spell you put in the Normal or Alternate attack slot (or in a monster's override) is held the same way. The hold lasts for as long as that player is in the room and not in your party; the moment they join, or leave, your room spells are back. Inviting them is left to the invite settings you already have. (With a full party of six they can't join, so the hold stays.)
-- **A player walks in while your room attack is already running** — a room attack repeats by itself every round, so MudPlay sends `break` to stop it and carries on single-target.
+- **A player walks in while your room attack is already running** — a room attack repeats by itself every round, so MudPlay sends `break` to stop it and carries on single-target. When they walk out again (their departure line), the hold is lifted.
 - **You walk into a room where another player is room-attacking** — a walk or a loop carries on to its next room instead of fighting there. On Paradigm the game says so (`<player> is poised to assault the room!`). Stock says nothing, so there it is a guess: the player's class has room attacks (mages and druids mostly; gypsies, warlocks, bards and rangers too) and the room holds three or more monsters. A player whose class isn't known yet is treated as one who can. The same goes for a player who was in the room before you and starts a room attack while you are there. Moving by hand, MudPlay leaves the choice to you.
 
-**Who counts:** party members never hold anything. A player you marked **Enemy** with their own PvP response set to **Attack** or **Chase and attack** doesn't hold your room spells either. Everyone else does, Friend, Neutral or Enemy.
+**Who counts:** party members never hold anything. An **Enemy** whose response is **Attack** or **Chase and attack** (their own, or the PvP tab's action when they have none) doesn't hold your room spells either. Everyone else does, Friend, Neutral or Enemy.
 
 **When another player attacks you:** MudPlay reads `<player> moves to attack you!` (and, as a backstop, a damage line that starts with a player's name) as an attack. A **Neutral** who attacks you is marked **Enemy** on the spot, saved with the realm's player list, and the terminal says so: `[PvP: <player> attacked you and is now marked Enemy]`. A **Friend** stays a Friend. A room attack only counts when you watched that player walk in on you and then start it: not when the room was theirs before you arrived, and not from someone who was in your party in the last two minutes (a teleport that splits the party can put a room attack out before everyone has rejoined). What MudPlay then does about an Enemy is chosen on Settings → PvP. Change anyone back in Game Data → Players.
 
@@ -3481,8 +3481,13 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 - **Hang up immediately** — sends your exit command and drops the connection. *Disable hangups* (General) is honoured, and when the Health tab's sysop wimpy jump is set up it is taken in place of the hang-up.
 - **Flee, then hang up** — starts a flee, then hangs up once the *Flee hangup delay* has passed. With nowhere to flee it hangs up at once. Nothing else is answered while the hang-up is pending.
 - **Flee (come back later)** — flees, stays away for *Come back after*, then picks the interrupted walk or loop up again. If the Enemy is still there when you return, the response fires again.
-- **Attack (dangerous)** / **Chase and attack (dangerous)** — not acted on yet; they arrive with the offensive half of the PvP settings. Chosen now, MudPlay only tells the gang (if that is on) and logs it.
-- **Do nothing** — marks and logs only.
+- **Attack (dangerous)** — attacks an Enemy on sight and stops when they leave the room. The running walk or loop is stopped for the fight and picked up again after it, and monsters in the room are left alone meanwhile. The attack is your Combat tab's normal attack spell when the game lets that spell be aimed at a player, otherwise your normal attack command.
+- **Chase and attack (dangerous)** — the same, and follows them when they leave: the way their departure line says, or where *Track enemies* points. Without tracking it waits 20 seconds in the room it followed them into; with it, the chase is given up after three minutes out of sight.
+- **Do nothing** — nothing on sight. A player who attacks you is still fought back: hitting back costs no alignment.
+
+**Attacking first is an evil deed.** Attacking a player who has not attacked you adds evil points and can bring a dark cloud (and with it the loss of Good-only gear). The tab says so beside the two attack choices. A fight also ends, with a `[PvP: …]` line, when the game refuses it: your evil warnings are on (see the checkbox below), you are already too evil, you are lawful, or the two of you are too far apart in level.
+
+**A leader's `@kill <player>`** starts the same fight with a player who is in your room, for anyone you have granted the command. Naming a monster still retargets your combat as before.
 
 ### Flee to
 
@@ -3521,6 +3526,23 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 
 **Default:** Off
 **What it does:** Off, a Friend stays a Friend whatever they do and is never answered. On, a Friend who attacks you is marked Enemy the way a Neutral is, and answered.
+
+### Turn off my evil warnings if they are on, to attack
+
+**Default:** Off
+**What it does:** With evil warnings on, the game refuses an attack on a player who hasn't attacked you (`To do this action, you must turn off your evil warnings.`). Ticked, MudPlay sends `set warning off`, attacks again, and sends `set warning on` when that fight is over. Unticked, the refusal ends the fight.
+**Important notes:** Hitting back at someone who attacked you never needs it. If the connection drops mid-fight the warnings can't be put back; the terminal tells you, and `set warning on` restores them.
+
+### Track enemies every N seconds
+
+**Default:** Off, `60` seconds
+**What it does:** While *Chase and attack* is chasing a player who is out of sight, sends `track <player>` this often and walks the way the answer points.
+**Important notes:** It needs the Tracking skill; without it every track fails and the chase is given up after three minutes.
+
+### PvP Spells 1 and 2
+
+**Default:** blank
+**What it does:** Cast codes thrown at the player at the start of a fight, one a round, each once only. Your normal attack is sent again after them.
 
 ---
 
@@ -4526,6 +4548,9 @@ This section is a compact, technical lookup table for every setting documented a
 | PvP flee hangup delay / come back after (s) | `30` / `60` | 0–600 / 0–3600 | `FleeHangupDelaySeconds` / `ComeBackAfterSeconds` | Models/Profile/PvpSettings.cs |
 | PvP notify gang / re-connect after PvP (min) | `false` / `false`, `30` | bool / bool, 1–1440 | `NotifyGang` / `ReconnectAfterPvp`, `ReconnectAfterPvpMinutes` | Models/Profile/PvpSettings.cs |
 | Flip a Friend to Enemy if they attack you | `false` | bool | `FlipFriendToEnemyIfAttacked` | Models/Profile/PvpSettings.cs |
+| Turn off my evil warnings to attack | `false` | bool | `TurnOffEvilWarningsToAttack` | Models/Profile/PvpSettings.cs |
+| Track enemies every (s) | `false`, `60` | bool, 5–3600 | `TrackEnemies`, `TrackEnemiesEverySeconds` | Models/Profile/PvpSettings.cs |
+| PvP spells 1 / 2 | blank | cast code | `PvpSpell1` / `PvpSpell2` | Models/Profile/PvpSettings.cs |
 | Copper / Silver / Gold / Platinum / Runic policy | Ignore/Collect×4 | Collect / Ignore / Discard | `CopperPolicy` etc. | Models/Profile/CashSettings.cs |
 | Auto-deposit if wealth / coins exceed | 0 / 0 | 0–100,000,000 | `AutoDepositIfWealthExceeds` / `AutoDepositIfCoinsExceed` | Models/Profile/CashSettings.cs |
 | Bank | none | dropdown of banks/stashes | `BankRoomKey` | Models/Profile/CashSettings.cs |

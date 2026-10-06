@@ -1630,6 +1630,8 @@ public sealed class AppServices
     // The PvP response to an Enemy (hang up, flee), and its flee to a chosen room.
     public Game.Pvp.PvpResponder PvpResponse { get; private set; } = null!;
     public Game.Pvp.PvpFleeWalk PvpFlee { get; private set; } = null!;
+    // A fight with another player: attack, chase, hitting back, a leader's @kill.
+    public Game.Pvp.PvpFight PvpFight { get; private set; } = null!;
 
     // Observes mid-room departure lines
     // ("<name> walks out of the room to <dir>.")
@@ -3185,7 +3187,11 @@ public sealed class AppServices
         // Lazily resolves Combat (constructed later in this ctor) so the
         // retarget runs against the live engine at @kill time.
         Kill = new Game.Remote.KillHandler(
-            RemoteCommands, name => Combat.RetargetTo(name), Log);
+            RemoteCommands,
+            // A player named by @kill is a fight with a player; anything else is
+            // the combat engine's.
+            name => { if (!PvpFight.EngageOnOrder(name)) Combat.RetargetTo(name); },
+            Log);
         // @trap auto-disarm flow — manager owns the state machine,
         // handler owns the @-command auth boundary. Wire-sender +
         // OtherSettings cadence knobs bind in MainWindowVM /
@@ -3919,11 +3925,11 @@ public sealed class AppServices
             inParty: PartyState.HasMember,
             // Attacking on sight is the one case where hitting them is the point.
             // Any other Enemy is left to their PvP response, not to a stray room spell.
-            attackOnSight: given => Players.Find(given) is
-            {
-                Relationship: Models.GameData.PlayerRelationship.Enemy,
-                PvpResponse: Models.GameData.PvpAction.Attack or Models.GameData.PvpAction.ChaseAttack,
-            },
+            attackOnSight: given =>
+                Players.Find(given) is { Relationship: Models.GameData.PlayerRelationship.Enemy } enemy
+                && (enemy.PvpResponse
+                    ?? ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp").Action)
+                   is Models.GameData.PvpAction.Attack or Models.GameData.PvpAction.ChaseAttack,
             classOf: ResolveKnownPlayerClass,
             levelOf: given => Players.Find(given)?.Level,
             roomAttackFromLevel: cls => SpellCatalog.RoomAttackFromLevel(cls),
@@ -7481,6 +7487,29 @@ public sealed class AppServices
         AutoLair.ActiveChanged += active => { if (active) AutoEquip.OnLoopStarted(); };
 
         PvpFlee = new Game.Pvp.PvpFleeWalk(Walker, LoopRunner, AutoLair, pacedReplyScheduler, Log);
+        PvpFight = new Game.Pvp.PvpFight(
+            Router, RoomClassifier,
+            pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
+            inParty: PartyState.HasMember,
+            readSettings: () => ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp"),
+            attackCommandFor: PvpAttackCommandFor,
+            send: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes(text + "\r")),
+            cast: (code, target) => Cast.TryCast(code, target),
+            stepToward: PvpStepToward,
+            // Stop-and-restart, as for the errand detours: the fight may walk (a
+            // chase), which a movement gate would hold.
+            suspendEngines: why =>
+            {
+                Game.Map.DetourResume resume =
+                    Game.Map.DetourResume.Snapshot(Walker, LoopRunner, AutoLair, includeWalk: true);
+                resume.Stop(Walker, LoopRunner, AutoLair, why);
+                return () => resume.Resume(Walker, LoopRunner, AutoLair);
+            },
+            schedule: pacedReplyScheduler,
+            log: Log);
+        PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");
+        RoomDeparture.PlayerDeparted += PvpFight.NotePlayerDeparted;
+        RoomTracker.PlayerDeathObserved += () => PvpFight.Stop("we died", resume: false);
         PvpResponse = new Game.Pvp.PvpResponder(
             RoomClassifier, PvpAttacks, Players,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -7490,6 +7519,7 @@ public sealed class AppServices
             fleeRooms: Health.FleeFromPlayer,
             fleeTo: (room, comeBackAfter, why) =>
                 PvpFlee.Start(new Game.Map.RoomKey(room.Map, room.Room), comeBackAfter, why),
+            fight: PvpFight.Engage,
             // `bg` is the gang channel's speak verb (GAME_MECHANICS "Gang channel speak verb").
             sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
             roomName: () => RoomTracker.State.CurrentRoom?.Name,
@@ -9129,7 +9159,41 @@ public sealed class AppServices
                 Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
         }
         // A flee to the PvP flee room walks through whatever is on the way.
-        return suppressed || PvpFlee is { IsActive: true } || PvpLeaveRoomReason() is not null;
+        // And a fight with a player is the fight: the engine's own pick would
+        // replace the attack on them.
+        return suppressed || PvpFlee is { IsActive: true } || PvpFight is { IsActive: true }
+            || PvpLeaveRoomReason() is not null;
+    }
+
+    // The attack sent at a player: the Combat tab's normal attack spell when the
+    // game lets it be aimed at one (scope 8, monster or user), else the normal
+    // attack command.
+    private string PvpAttackCommandFor(string given)
+    {
+        Models.Profile.CombatSettings combat =
+            ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+        string? spell = combat.NormalAttackSpell.SpellName?.Trim();
+        if (!string.IsNullOrEmpty(spell) && Spellbook.FindByCastCode(spell) is { Targets: 8 })
+            return $"{spell} {given}";
+        string verb = string.IsNullOrWhiteSpace(combat.NormalAttackCommand) ? "a" : combat.NormalAttackCommand.Trim();
+        return $"{verb} {given}";
+    }
+
+    // One step after a player who left: the direction word of their departure
+    // line or of a `track` answer, walked through the walker so a door on the way
+    // is handled like any other.
+    private bool PvpStepToward(string directionWord)
+    {
+        string word = directionWord.Trim().ToLowerInvariant() switch
+        {
+            "upwards" or "above" => "up",
+            "downwards" or "below" => "down",
+            string other => other,
+        };
+        if (!Game.Map.DirectionExtensions.TryFromLongName(word, out Game.Map.Direction direction)) return false;
+        if (RoomTracker.State.CurrentRoom is not { } here) return false;
+        if (!here.Exits.TryGetValue(direction, out Game.Map.RoomExit exit)) return false;
+        return Walker.WalkTo(exit.Target);
     }
 
     // Why a running walk or loop carries on out of the room we're in rather than

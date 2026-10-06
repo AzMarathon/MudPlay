@@ -34,6 +34,7 @@ public sealed class PvpResponderTests
         public List<string> HangUps { get; } = new();
         public List<(int Rooms, TimeSpan StayAway)> RoomFlees { get; } = new();
         public List<(RoomRef Room, TimeSpan? ComeBackAfter)> RoomWalks { get; } = new();
+        public List<(string Player, bool Chase)> Fights { get; } = new();
         public List<string> Gang { get; } = new();
         public List<string> Reports { get; } = new();
         public List<(TimeSpan Delay, Action Action)> Scheduled { get; } = new();
@@ -59,6 +60,7 @@ public sealed class PvpResponderTests
                 hangUp: why => { HangUps.Add(why); return HangUpWorks; },
                 fleeRooms: (_, rooms, stayAway) => { RoomFlees.Add((rooms, stayAway)); return FleeRoomsWorks; },
                 fleeTo: (room, comeBack, _) => { RoomWalks.Add((room, comeBack)); return FleeToWorks; },
+                fight: (player, chase, _) => { Fights.Add((player, chase)); return true; },
                 sendGang: Gang.Add,
                 roomName: () => "Town Square",
                 schedule: (delay, action) => Scheduled.Add((delay, action)),
@@ -295,6 +297,55 @@ public sealed class PvpResponderTests
 
         Assert.Single(h.HangUps);
         Assert.Empty(h.Scheduled);
+    }
+
+    [Theory]
+    [InlineData(PvpAction.Attack, false)]
+    [InlineData(PvpAction.ChaseAttack, true)]
+    public void AttackResponses_StartAFight_OnSight(PvpAction action, bool chase)
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = action } };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Equal(("Bob", chase), Assert.Single(h.Fights));
+    }
+
+    // Nothing on sight, but an attack is fought back: it costs no alignment.
+    [Fact]
+    public void DoNothing_LeavesAnEnemyAloneOnSight_ButFightsBackWhenAttacked()
+    {
+        using Harness h = new();
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+        Assert.Empty(h.Fights);
+
+        h.Clock += TimeSpan.FromSeconds(31);
+        h.Feed("Bob moves to attack you!");
+        Assert.Equal(("Bob", false), Assert.Single(h.Fights));
+    }
+
+    [Fact]
+    public void NeutralWhoAttacks_IsFoughtBack_WithNothingSet()
+    {
+        using Harness h = new();
+
+        h.Feed("Bob moves to attack you!");
+
+        Assert.Equal(("Bob", false), Assert.Single(h.Fights));
+    }
+
+    [Fact]
+    public void FleeOrHangUp_IsNotAlsoAFight()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.Flee } };
+
+        h.Feed("Bob moves to attack you!");
+
+        Assert.Single(h.RoomFlees);
+        Assert.Empty(h.Fights);
     }
 
     // ----- telling the gang -----------------------------------------------

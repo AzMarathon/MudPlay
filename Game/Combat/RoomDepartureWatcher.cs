@@ -35,6 +35,10 @@ public sealed class RoomDepartureWatcher : IDisposable
     private readonly IDisposable _departureSub;
     private bool _disposed;
 
+    // A player on the roster left: their given name and the direction word of the
+    // line ("north", "upwards").
+    public event Action<string, string>? PlayerDeparted;
+
     public RoomDepartureWatcher(
         MessageRouter router,
         RoomEntityClassifier classifier,
@@ -64,6 +68,15 @@ public sealed class RoomDepartureWatcher : IDisposable
         bool removed = _classifier.RemoveDepartedEntity(name);
         if (!removed && !string.Equals(name, nameWithArticle, StringComparison.Ordinal))
             removed = _classifier.RemoveDepartedEntity(nameWithArticle);
+
+        // Players leave with the same line. Only a name on the roster as a player
+        // is taken for one, so chat that happens to fit the shape changes nothing.
+        if (!removed && _classifier.RemoveDepartedPlayer(name))
+        {
+            _log?.Info(LogCategory, $"departure player={name} direction={direction} — cleared from room");
+            PlayerDeparted?.Invoke(name, direction);
+            return;
+        }
 
         if (removed)
             _log?.Info(LogCategory,

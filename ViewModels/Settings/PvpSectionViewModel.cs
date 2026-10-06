@@ -44,7 +44,8 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     {
         "PvP", "Player versus player", "Enemy", "Friend", "Hang up", "Hangup", "Flee",
         "Flee to", "Rooms to flee", "Flee hangup delay", "Come back", "Notify gang",
-        "Re-connect after PvP", "Reconnect", "Attack", "Chase",
+        "Re-connect after PvP", "Reconnect", "Attack", "Chase", "Evil warnings",
+        "set warning", "PvP spells", "Track enemies", "Tracking",
     };
 
     [ObservableProperty]
@@ -74,6 +75,11 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _reconnectAfterPvp;
     [ObservableProperty] private int _reconnectAfterPvpMinutes = 30;
     [ObservableProperty] private bool _flipFriendToEnemyIfAttacked;
+    [ObservableProperty] private bool _turnOffEvilWarningsToAttack;
+    [ObservableProperty] private string _pvpSpell1 = string.Empty;
+    [ObservableProperty] private string _pvpSpell2 = string.Empty;
+    [ObservableProperty] private bool _trackEnemies;
+    [ObservableProperty] private int _trackEnemiesEverySeconds = 60;
 
     public PvpSectionViewModel() : this(
         AppServices.Current.Profile, TryGetFavorites(),
@@ -124,6 +130,11 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
             ReconnectAfterPvp = ReconnectAfterPvp,
             ReconnectAfterPvpMinutes = Math.Clamp(ReconnectAfterPvpMinutes, 1, 1440),
             FlipFriendToEnemyIfAttacked = FlipFriendToEnemyIfAttacked,
+            TurnOffEvilWarningsToAttack = TurnOffEvilWarningsToAttack,
+            PvpSpell1 = string.IsNullOrWhiteSpace(PvpSpell1) ? null : PvpSpell1.Trim(),
+            PvpSpell2 = string.IsNullOrWhiteSpace(PvpSpell2) ? null : PvpSpell2.Trim(),
+            TrackEnemies = TrackEnemies,
+            TrackEnemiesEverySeconds = Math.Clamp(TrackEnemiesEverySeconds, 5, 3600),
         };
 
         profile.Settings ??= new();
@@ -168,6 +179,11 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         ReconnectAfterPvp = dto.ReconnectAfterPvp;
         ReconnectAfterPvpMinutes = dto.ReconnectAfterPvpMinutes;
         FlipFriendToEnemyIfAttacked = dto.FlipFriendToEnemyIfAttacked;
+        TurnOffEvilWarningsToAttack = dto.TurnOffEvilWarningsToAttack;
+        PvpSpell1 = dto.PvpSpell1 ?? string.Empty;
+        PvpSpell2 = dto.PvpSpell2 ?? string.Empty;
+        TrackEnemies = dto.TrackEnemies;
+        TrackEnemiesEverySeconds = dto.TrackEnemiesEverySeconds;
         RebuildFleeRooms(dto.FleeTo);
     }
 
@@ -240,4 +256,9 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     partial void OnReconnectAfterPvpChanged(bool value)           => MarkDirty();
     partial void OnReconnectAfterPvpMinutesChanged(int value)     => MarkDirty();
     partial void OnFlipFriendToEnemyIfAttackedChanged(bool value) => MarkDirty();
+    partial void OnTurnOffEvilWarningsToAttackChanged(bool value) => MarkDirty();
+    partial void OnPvpSpell1Changed(string value)                 => MarkDirty();
+    partial void OnPvpSpell2Changed(string value)                 => MarkDirty();
+    partial void OnTrackEnemiesChanged(bool value)                => MarkDirty();
+    partial void OnTrackEnemiesEverySecondsChanged(int value)     => MarkDirty();
 }

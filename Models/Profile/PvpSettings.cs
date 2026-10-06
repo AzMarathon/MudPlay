@@ -33,4 +33,17 @@ public sealed class PvpSettings
     // A Friend who attacks us is marked Enemy, the way a Neutral who does is. Off,
     // a Friend stays a Friend whatever they do and is never answered.
     public bool FlipFriendToEnemyIfAttacked { get; set; }
+
+    // Attacking a player who hasn't attacked us is an evil deed the game refuses
+    // while evil warnings are on. On, the client sends `set warning off`, attacks
+    // again, and puts the warnings back when the fight is over.
+    public bool TurnOffEvilWarningsToAttack { get; set; }
+
+    // Cast codes thrown at the player once each at the start of a fight, one a round.
+    public string? PvpSpell1 { get; set; }
+    public string? PvpSpell2 { get; set; }
+
+    // While chasing a player who is out of sight, `track` them this often.
+    public bool TrackEnemies { get; set; }
+    public int TrackEnemiesEverySeconds { get; set; } = 60;
 }

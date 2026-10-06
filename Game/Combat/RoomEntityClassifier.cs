@@ -704,10 +704,20 @@ public sealed class RoomEntityClassifier : IDisposable
     public bool RemoveDepartedEntity(string monsterName)
         => RemoveMonsterEntity(monsterName, RoomObservationSource.Departure);
 
+    // A player's own departure line. Their place on the roster matters where a
+    // player's presence is acted on (a room attack held for someone outside the
+    // party, an Enemy answered on sight): left listed, they would count as here
+    // until the room next re-displayed.
+    public bool RemoveDepartedPlayer(string givenName)
+        => RemoveEntity(givenName, EntityKind.Player, RoomObservationSource.Departure);
+
     // Shared core for the death / departure removals: drop the first Monster-kind
     // entity whose ResolvedName (then RawName) matches, re-fire EntitiesObserved
     // tagged with the caller's source so consumers can tell why the list shrank.
     private bool RemoveMonsterEntity(string monsterName, RoomObservationSource source)
+        => RemoveEntity(monsterName, EntityKind.Monster, source);
+
+    private bool RemoveEntity(string monsterName, EntityKind kind, RoomObservationSource source)
     {
         if (string.IsNullOrWhiteSpace(monsterName)) return false;
         if (Current is not { } cur) return false;
@@ -716,7 +726,7 @@ public sealed class RoomEntityClassifier : IDisposable
         for (int i = 0; i < cur.Entities.Count; i++)
         {
             RoomEntity e = cur.Entities[i];
-            if (e.Kind != EntityKind.Monster) continue;
+            if (e.Kind != kind) continue;
             if (string.Equals(e.ResolvedName, monsterName, StringComparison.OrdinalIgnoreCase)
              || string.Equals(e.RawName,      monsterName, StringComparison.OrdinalIgnoreCase))
             {

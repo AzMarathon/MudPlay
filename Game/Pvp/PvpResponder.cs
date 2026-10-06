@@ -11,6 +11,8 @@ namespace MudPlay.Game.Pvp;
 //
 // Friends and Neutrals never get here: a Neutral who attacks has already been
 // marked Enemy by PvpAttackWatcher by the time its Attacked event arrives.
+//
+// "Do nothing" is nothing on sight; a player who attacks us is still fought back.
 public sealed class PvpResponder : IDisposable
 {
     public const string LogCategory = "PvP";
@@ -34,6 +36,7 @@ public sealed class PvpResponder : IDisposable
     private readonly Func<string, bool> _hangUp;
     private readonly Func<string, int, TimeSpan, bool> _fleeRooms;
     private readonly Func<RoomRef, TimeSpan?, string, bool> _fleeTo;
+    private readonly Func<string, bool, string, bool> _fight;
     private readonly Action<string> _sendGang;
     private readonly Func<string?> _roomName;
     private readonly Action<TimeSpan, Action> _schedule;
@@ -61,6 +64,7 @@ public sealed class PvpResponder : IDisposable
         Func<string, bool> hangUp,
         Func<string, int, TimeSpan, bool> fleeRooms,
         Func<RoomRef, TimeSpan?, string, bool> fleeTo,
+        Func<string, bool, string, bool> fight,
         Action<string> sendGang,
         Func<string?> roomName,
         Action<TimeSpan, Action> schedule,
@@ -76,6 +80,7 @@ public sealed class PvpResponder : IDisposable
         _hangUp = hangUp;
         _fleeRooms = fleeRooms;
         _fleeTo = fleeTo;
+        _fight = fight;
         _sendGang = sendGang;
         _roomName = roomName;
         _schedule = schedule;
@@ -169,11 +174,15 @@ public sealed class PvpResponder : IDisposable
             case PvpAction.Attack:
             case PvpAction.ChaseAttack:
                 TellGang(settings, given, attacked, now);
-                _log?.Info(LogCategory, $"{why}: the response is {action}, which is not acted on yet");
+                if (!_fight(given, action == PvpAction.ChaseAttack, why))
+                    _log?.Info(LogCategory, $"{why}: not attacked (another fight is under way)");
                 break;
 
             default:
-                _log?.Info(LogCategory, $"{why}: the response is Do nothing");
+                // Nothing on sight. An attack on us is still fought back: it costs
+                // no alignment and needs no warning switched off.
+                if (attacked) _fight(given, false, why);
+                else _log?.Info(LogCategory, $"{why}: the response is Do nothing");
                 break;
         }
     }
