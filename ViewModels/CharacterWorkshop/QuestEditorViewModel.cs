@@ -42,6 +42,17 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     // Every crawled quest in crawl order (flag, then band level), editable.
     public ObservableCollection<QuestEditRowViewModel> Quests { get; } = new();
 
+    // The rows the master list shows: Quests narrowed by FilterText. Edits and Save
+    // always work on Quests, so a quest filtered out of view keeps its changes.
+    public ObservableCollection<QuestEditRowViewModel> VisibleQuests { get; } = new();
+
+    // Typed into the box above the list; matches anywhere in a quest's name or its
+    // flag label, ignoring case.
+    [ObservableProperty]
+    private string _filterText = string.Empty;
+
+    partial void OnFilterTextChanged(string value) => RefreshVisibleQuests();
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
     private QuestEditRowViewModel? _selectedQuest;
@@ -120,7 +131,26 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
         foreach (QuestDefinition def in quests.ManualQuests())
             Quests.Add(BuildManualRow(def));
 
-        SelectedQuest = Quests.FirstOrDefault();
+        // Hooked after the initial fill so the list is built once, not per row.
+        Quests.CollectionChanged += (_, _) => RefreshVisibleQuests();
+        RefreshVisibleQuests();
+    }
+
+    // Rebuild the shown rows. A row isn't re-tested as its name is edited, so the
+    // quest being renamed can't drop out of the list mid-keystroke. The selection
+    // stays when it is still shown; otherwise the first match takes it.
+    private void RefreshVisibleQuests()
+    {
+        QuestEditRowViewModel? keep = SelectedQuest;
+        string filter = FilterText.Trim();
+        List<QuestEditRowViewModel> shown = Quests
+            .Where(q => filter.Length == 0
+                || q.ListLabel.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || q.FallbackLabel.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        VisibleQuests.Clear();
+        foreach (QuestEditRowViewModel q in shown) VisibleQuests.Add(q);
+        SelectedQuest = keep is not null && shown.Contains(keep) ? keep : shown.FirstOrDefault();
     }
 
     // Add a blank custom quest at the next free manual flag and select it for editing.
@@ -132,6 +162,8 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
             if (row.IsManual && row.Flag >= flag) flag = row.Flag + 1;
 
         QuestEditRowViewModel added = BuildManualRow(new QuestDefinition(flag, 0));
+        // A blank quest matches no filter: clear it so the new row is in view.
+        FilterText = string.Empty;
         Quests.Add(added);
         SelectedQuest = added;
     }
@@ -142,9 +174,9 @@ public sealed partial class QuestEditorViewModel : ObservableObject, IDialogView
     private void DeleteSelected()
     {
         if (SelectedQuest is not { IsManual: true } row) return;
-        int index = Quests.IndexOf(row);
+        int index = VisibleQuests.IndexOf(row);
         Quests.Remove(row);
-        SelectedQuest = Quests.Count == 0 ? null : Quests[Math.Min(index, Quests.Count - 1)];
+        SelectedQuest = VisibleQuests.Count == 0 ? null : VisibleQuests[Math.Clamp(index, 0, VisibleQuests.Count - 1)];
     }
 
     // A master-list row for a manual quest: every crawl-baseline field is empty, so the
