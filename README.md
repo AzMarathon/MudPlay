@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.145.6**
+> **Version 3.145.7**
 > - A room spell's Max casts now counts each cast as it lands, so Multi-attack 1 hands over to Multi-attack 2 on time
+> - Max casts also counts spells whose damage line is recorded apart from their cast line (Paradigm mana storm, dragonfire; Stock soul rip)
+> - Round totals spread a room spell over every monster even when its line says "your foe", and keep its later rounds yours
 > - Bug report lists the cast counts behind each spell slot's Max casts
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

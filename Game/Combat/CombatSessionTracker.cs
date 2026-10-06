@@ -139,6 +139,9 @@ public sealed class CombatSessionTracker : IDisposable
     // RoundDamageTracker uses it to own a spell line that names no caster.
     public bool MatchesOwnSpell(string line) => SpellOf(line, out _) is not null;
 
+    // True when that spell is one the game data scopes to the whole room.
+    public bool MatchesOwnRoomSpell(string line) => SpellOf(line, out _) is { HitsRoom: true };
+
     private SpellLineMatcher? SpellOf(string line, out int damage)
     {
         foreach (SpellLineMatcher m in _spellMatchers)

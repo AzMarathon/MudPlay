@@ -32,7 +32,9 @@ namespace MudPlay.Game.Combat;
 // Our room spell names no victim, only the room ("A hellish storm of fire and brimstone
 // scorches your foes for 603 damage!"): every monster in the room at the time takes about that much,
 // each adjusted by its own magic resistance, which no line shows (user, 2026-09-29) —
-// so each is credited the full amount. Someone else's room spell names nobody at all
+// so each is credited the full amount. A room spell of ours whose line says "your foe"
+// is told by the spell's scope in the game data, not its wording. Someone else's room
+// spell names nobody at all
 // ("An acidic tempest blows through the room for 431 damage!"), but the line right
 // before it is the caster's announce ("Midnight summons a powerful tempest into the
 // room!"), so it's theirs, spread over the room's monsters the same way (report
@@ -101,6 +103,8 @@ public sealed class RoundDamageTracker : IDisposable
     private Func<IEnumerable<string>>? _partyNames;
     private Func<string?>? _selfName;
     private Func<string, bool>? _isOwnSpellLine;
+    private Func<string, bool>? _isOwnRoomSpellLine;
+    private Func<bool>? _ownSpellRepeating;
     private DateTimeOffset _lastOwnCastAt = DateTimeOffset.MinValue;
     // The last hit that named both sides — a proc right after it is the hitter's.
     private (string Source, string Target, DateTimeOffset At)? _lastHit;
@@ -170,7 +174,20 @@ public sealed class RoundDamageTracker : IDisposable
         _selfName = selfName;
     }
 
-    public void SetOwnSpellLineCheck(Func<string, bool> isOwnSpellLine) => _isOwnSpellLine = isOwnSpellLine;
+    // isOwnRoomSpellLine: the line is one of our spells that the game data scopes to
+    // the room. Its wording may name one victim or none ("… ravages your foe for N
+    // damage!" from spirit horde, report paradigm-20261006-051627), so the wording
+    // test alone left its damage on nobody.
+    public void SetOwnSpellLineCheck(Func<string, bool> isOwnSpellLine, Func<string, bool>? isOwnRoomSpellLine = null)
+    {
+        _isOwnSpellLine = isOwnSpellLine;
+        _isOwnRoomSpellLine = isOwnRoomSpellLine;
+    }
+
+    // Whether the server is still repeating a spell we announced. It repeats every
+    // round with no new cast from us, so the round after the first lands outside
+    // OwnCastWindow and read as nobody's.
+    public void SetOwnSpellRepeating(Func<bool> repeating) => _ownSpellRepeating = repeating;
 
     // The room's monsters as MonsterHpTracker has them: the one a hit on a name lands on
     // (the first of that name) and every one of them, each with a stable id and its HP
@@ -236,13 +253,14 @@ public sealed class RoundDamageTracker : IDisposable
         string? source = a.Source is null ? null : Display(a.Source, display);
         string? target = a.Target is null ? null : Display(a.Target, display);
         DateTimeOffset now = _now();
-        bool ownSpell = false, proc = false;
+        bool ownSpell = false, proc = false, ownRoomSpell = false;
         if (source is null && !a.NoDealer && target != DamageLineAttributor.Self
-            && now - _lastOwnCastAt <= OwnCastWindow
+            && (now - _lastOwnCastAt <= OwnCastWindow || _ownSpellRepeating?.Invoke() == true)
             && _isOwnSpellLine?.Invoke(text) == true)
         {
             source = DamageLineAttributor.Self;
             ownSpell = true;
+            ownRoomSpell = target is null && _isOwnRoomSpellLine?.Invoke(text) == true;
         }
         // A weapon proc names only its victim ("Flames burn the orc", "The orc takes 3
         // damage from the cold!") and fires right after the swing that connected, so it
@@ -283,7 +301,7 @@ public sealed class RoundDamageTracker : IDisposable
         if (source is not null && target is not null && !a.NoDealer && !reflect) _lastHit = (source, target, now);
 
         bool roomSpell = (source == DamageLineAttributor.Self || othersRoomSpell) && target is null && !a.NoDealer
-            && _foes.Count > 0 && HitsTheRoom(text);
+            && _foes.Count > 0 && (ownRoomSpell || HitsTheRoom(text));
         IReadOnlyList<string> foesHit = roomSpell ? _foes : Array.Empty<string>();
 
         // Worked out before Attributed, whose MonsterHpTracker takes the hit off the HP

@@ -1200,9 +1200,9 @@ public sealed class CombatManagerSpellsTests
         h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "gwra", MinEnemies = 0 };
         h.AddMonster(1, "fat giant squid");
         h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
-        h.Combat.ResolveAttackSpellMatcher = code => string.Equals(code, "soul", StringComparison.OrdinalIgnoreCase)
-            ? CasterMessageMatcher.TryCreate("Spiritual power strikes {target} for {damage} damage!")
-            : null;
+        h.Combat.ResolveAttackSpellMatchers = code => string.Equals(code, "soul", StringComparison.OrdinalIgnoreCase)
+            ? Lines("Spiritual power strikes {target} for {damage} damage!")
+            : Lines();
 
         h.Feed("Also here: fat giant squid.");
         Assert.Equal("soul fat giant squid", h.LastSent);
@@ -1217,6 +1217,32 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Spiritual power strikes fat giant squid for 171 damage!");
         Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
         Assert.Equal("gwra fat giant squid", h.LastSent);
+    }
+
+    private static IReadOnlyList<CasterMessageMatcher> Lines(params string[] templates)
+        => templates.Select(t => CasterMessageMatcher.TryCreate(t)!).ToList();
+
+    // A spell whose own record holds only the cast emote confirms on the damage
+    // wording recorded under the same name (Paradigm dragonfire).
+    [Fact]
+    public void MaxCasts1_DamageLineOnASameNamedRecord_Counts()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "dfir", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mete", MinEnemies = 0 };
+        h.AddMonster(1, "cave bear");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+        h.Combat.ResolveAttackSpellMatchers = _ => Lines(
+            "A withering blast of dragonfire sears {target} for {damage} damage!",
+            "You breath {s} on {s} for {damage} damage!");
+
+        h.Feed("Also here: cave bear.");
+        h.Feed("You make a complex circling gesture!");
+        Assert.Equal(0, h.Combat.ConfirmedAttackCastCount);
+        h.Feed("A withering blast of dragonfire sears cave bear for 90 damage!");
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("mete cave bear", h.LastSent);
     }
 
     // Report paradigm-20261006-051627: a room spell's landing line names no monster
@@ -1234,11 +1260,11 @@ public sealed class CombatManagerSpellsTests
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mete", MinEnemies = 0 };
         h.AddMonster(1, "slimeworm");
         h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
-        h.Combat.ResolveAttackSpellMatcher = code => code.ToLowerInvariant() switch
+        h.Combat.ResolveAttackSpellMatchers = code => code.ToLowerInvariant() switch
         {
-            "spir" => CasterMessageMatcher.TryCreate("A horde of shrieking spirits ravages {target} for {damage} damage!"),
-            "msto" => CasterMessageMatcher.TryCreate("A storm of mana engulfs your foes for {damage} damage!"),
-            _ => null,
+            "spir" => Lines("A horde of shrieking spirits ravages {target} for {damage} damage!"),
+            "msto" => Lines("A swirling mana storm engulfs {target} for {damage} damage!"),
+            _ => Lines(),
         };
 
         h.Feed("Also here: slimeworm, slimeworm, slimeworm, slimeworm.");
@@ -1258,7 +1284,8 @@ public sealed class CombatManagerSpellsTests
 
         // Slot 2 is counted the same way and stays on: nothing more is sent.
         h.AdvanceClock(TimeSpan.FromSeconds(5));
-        h.Feed("A storm of mana engulfs your foes for 140 damage!");
+        h.Feed("You make a complex gesture!");
+        h.Feed("A swirling mana storm engulfs your foe for 140 damage!");
         Assert.Equal(2, h.Combat.ConfirmedAttackCastCount);
         h.DrainPosted();
         Assert.Single(h.AllSent, s => s == "msto");
@@ -1274,8 +1301,7 @@ public sealed class CombatManagerSpellsTests
         h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "gwra", MinEnemies = 0 };
         h.AddMonster(1, "fat giant squid");
         h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
-        h.Combat.ResolveAttackSpellMatcher = _ =>
-            CasterMessageMatcher.TryCreate("Spiritual power strikes {target} for {damage} damage!");
+        h.Combat.ResolveAttackSpellMatchers = _ => Lines("Spiritual power strikes {target} for {damage} damage!");
 
         h.Feed("Also here: fat giant squid.");
         h.Feed("Spiritual power strikes whale shark for 171 damage!");

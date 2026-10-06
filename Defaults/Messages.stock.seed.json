@@ -4753,7 +4753,7 @@
     "Name": "soul rip",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A strange force rips into thin depraved murderer for 413 damage!",
+    "CasterMessage": "A strange force rips into {target} for {damage} damage!",
     "TargetMessage": "A strange force rips into you for {damage} damage!",
     "WitnessMessage": "A strange force rips into {target} for {damage} damage!",
     "AppliedMessage": "{null}",
