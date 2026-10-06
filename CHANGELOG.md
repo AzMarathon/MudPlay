@@ -1,5 +1,10 @@
 # Version history
 
+## 3.145.5
+
+- Test run about five times faster: compiled message patterns are shared instead of rebuilt for every test
+- A build with nothing changed takes seconds: the starter loops are re-zipped only when they change
+
 ## 3.145.3
 
 - A bank run that comes due while you carry Auto-sell items sells them first at a shop near the bank, then deposits (25 steps by default, set under Cash + Items → Detours)

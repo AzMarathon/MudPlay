@@ -16,6 +16,23 @@ public sealed class DefaultPatternsTests
     private static LineExtractor.EmittedLine Line(string text) =>
         new(text, new CellAttributes[text.Length], DateTimeOffset.UnixEpoch, IsPromptLine: false);
 
+    // Compiled regexes are shared between pattern instances. Same text with other
+    // options is another regex, and each instance keeps its own id.
+    [Fact]
+    public void RegexPattern_SameText_SharesNothingButTheCompiledRegex()
+    {
+        RegexPattern strict = new("strict", "^bob waves$");
+        RegexPattern again = new("again", "^bob waves$");
+        RegexPattern loose = new("loose", "^bob waves$", options: System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        Assert.True(strict.TryMatch(Line("bob waves"), out MatchResult first));
+        Assert.True(again.TryMatch(Line("bob waves"), out MatchResult second));
+        Assert.Equal(("strict", "again"), (first.PatternId, second.PatternId));
+
+        Assert.False(strict.TryMatch(Line("BOB WAVES"), out _));
+        Assert.True(loose.TryMatch(Line("BOB WAVES"), out _));
+    }
+
     [Fact]
     public void BuildDefaultPatterns_RegistersEveryKnownId()
     {
