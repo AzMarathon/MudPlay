@@ -77,6 +77,11 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _flipFriendToEnemyIfAttacked;
     [ObservableProperty] private bool _turnOffEvilWarningsToAttack;
     [ObservableProperty] private bool _killOrderTurnsOffEvilWarnings;
+    [ObservableProperty] private bool _leaderSendsKillOrder = true;
+    [ObservableProperty] private bool _gangTellSeen = true;
+    [ObservableProperty] private bool _gangTellAttacked = true;
+    [ObservableProperty] private bool _gangTellWeAttack = true;
+    [ObservableProperty] private int _gangRepeatSeconds = 60;
     [ObservableProperty] private int _warningsBackAfterSeconds = 60;
     [ObservableProperty] private int _partySplitHoldSeconds = 120;
     [ObservableProperty] private bool _reconnectEntersRealm = true;
@@ -146,6 +151,11 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
             FlipFriendToEnemyIfAttacked = FlipFriendToEnemyIfAttacked,
             TurnOffEvilWarningsToAttack = TurnOffEvilWarningsToAttack,
             KillOrderTurnsOffEvilWarnings = KillOrderTurnsOffEvilWarnings,
+            LeaderSendsKillOrder = LeaderSendsKillOrder,
+            GangTellSeen = GangTellSeen,
+            GangTellAttacked = GangTellAttacked,
+            GangTellWeAttack = GangTellWeAttack,
+            GangRepeatSeconds = Math.Clamp(GangRepeatSeconds, 0, 3600),
             WarningsBackAfterSeconds = Math.Clamp(WarningsBackAfterSeconds, 0, 3600),
             PartySplitHoldSeconds = Math.Clamp(PartySplitHoldSeconds, 0, 3600),
             ReconnectEntersRealm = ReconnectEntersRealm,
@@ -205,6 +215,11 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         FlipFriendToEnemyIfAttacked = dto.FlipFriendToEnemyIfAttacked;
         TurnOffEvilWarningsToAttack = dto.TurnOffEvilWarningsToAttack;
         KillOrderTurnsOffEvilWarnings = dto.KillOrderTurnsOffEvilWarnings;
+        LeaderSendsKillOrder = dto.LeaderSendsKillOrder;
+        GangTellSeen = dto.GangTellSeen;
+        GangTellAttacked = dto.GangTellAttacked;
+        GangTellWeAttack = dto.GangTellWeAttack;
+        GangRepeatSeconds = dto.GangRepeatSeconds;
         WarningsBackAfterSeconds = dto.WarningsBackAfterSeconds;
         PartySplitHoldSeconds = dto.PartySplitHoldSeconds;
         ReconnectEntersRealm = dto.ReconnectEntersRealm;
@@ -301,6 +316,11 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     partial void OnFlipFriendToEnemyIfAttackedChanged(bool value) => MarkDirty();
     partial void OnTurnOffEvilWarningsToAttackChanged(bool value) => MarkDirty();
     partial void OnKillOrderTurnsOffEvilWarningsChanged(bool value) => MarkDirty();
+    partial void OnLeaderSendsKillOrderChanged(bool value)        => MarkDirty();
+    partial void OnGangTellSeenChanged(bool value)                => MarkDirty();
+    partial void OnGangTellAttackedChanged(bool value)            => MarkDirty();
+    partial void OnGangTellWeAttackChanged(bool value)            => MarkDirty();
+    partial void OnGangRepeatSecondsChanged(int value)            => MarkDirty();
     partial void OnWarningsBackAfterSecondsChanged(int value)     => MarkDirty();
     partial void OnPartySplitHoldSecondsChanged(int value)        => MarkDirty();
     partial void OnReconnectEntersRealmChanged(bool value)        => MarkDirty();

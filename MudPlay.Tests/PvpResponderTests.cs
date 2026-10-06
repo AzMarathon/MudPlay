@@ -433,6 +433,42 @@ public sealed class PvpResponderTests
     }
 
     [Fact]
+    public void NotifyGang_OnlyTheTickedEvents()
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.Attack, NotifyGang = true, GangTellSeen = false, GangTellWeAttack = false },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+        h.Responder.NoteWeAttack("Bob");
+        Assert.Empty(h.Gang);
+
+        h.Clock += TimeSpan.FromSeconds(11);
+        h.Feed("Bob moves to attack you!");
+        Assert.Equal("PvP: Bob attacked me at Town Square", Assert.Single(h.Gang));
+    }
+
+    [Theory]
+    [InlineData(0, 2)]          // every time it happens
+    [InlineData(300, 1)]        // not again for five minutes
+    public void NotifyGang_RepeatsTheSameLineNoSoonerThanTheSetTime(int repeatSeconds, int expected)
+    {
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { Action = PvpAction.Flee, NotifyGang = true, GangRepeatSeconds = repeatSeconds },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Bob moves to attack you!");
+        h.Clock += TimeSpan.FromSeconds(90);
+        h.Feed("Bob moves to attack you!");
+
+        Assert.Equal(expected, h.Gang.Count);
+    }
+
+    [Fact]
     public void NotifyGangOff_SaysNothing()
     {
         using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };

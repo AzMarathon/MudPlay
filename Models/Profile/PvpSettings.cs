@@ -23,8 +23,14 @@ public sealed class PvpSettings
     // the interrupted walk or loop is picked up again.
     public int ComeBackAfterSeconds { get; set; } = 60;
 
-    // Tell the gang channel who it was and where, once per encounter.
+    // Tell the gang channel who it was and where. The three event switches pick
+    // what is announced; GangRepeatSeconds is the least time between two of the same
+    // line about the same player (0 = every time it happens).
     public bool NotifyGang { get; set; }
+    public bool GangTellSeen { get; set; } = true;
+    public bool GangTellAttacked { get; set; } = true;
+    public bool GangTellWeAttack { get; set; } = true;
+    public int GangRepeatSeconds { get; set; } = 60;
 
     // Dial back in after a PvP hang-up, this many minutes later. ReconnectEntersRealm
     // off stops at the menu, as the login after any other hang-up does.
@@ -50,6 +56,11 @@ public sealed class PvpSettings
     // the attack, since being ordered onto someone who attacked the leader is still
     // an evil deed for us.
     public bool KillOrderTurnsOffEvilWarnings { get; set; }
+
+    // Leading a party, starting a fight with a player also says `.@kill <player>`,
+    // so members who take our remote commands join in. Not sent for a fight a
+    // leader's own @kill started.
+    public bool LeaderSendsKillOrder { get; set; } = true;
 
     // Warnings we switched off go back on this long after we are back at what the
     // fight interrupted, with no new fight in between.

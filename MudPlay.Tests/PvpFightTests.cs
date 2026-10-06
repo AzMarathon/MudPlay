@@ -33,6 +33,7 @@ public sealed class PvpFightTests
         public List<Direction> Steps { get; } = new();
         public List<PvpChaseExit> Exits { get; } = new();
         public bool BackOnTask { get; set; } = true;
+        public bool LeadingParty { get; set; }
         public Dictionary<string, PvpSpellInfo> Spells { get; } = new(StringComparer.OrdinalIgnoreCase);
         public int Mana { get; set; } = 100;
 
@@ -66,6 +67,7 @@ public sealed class PvpFightTests
                 exitsHere: () => Exits,
                 suspendEngines: _ => { Suspended++; return () => Resumed++; },
                 backOnTask: () => BackOnTask,
+                leadingParty: () => LeadingParty,
                 schedule: (delay, action) => Scheduled.Add((delay, action)),
                 now: () => Clock);
             Fight.Reported += Reports.Add;
@@ -817,6 +819,37 @@ public sealed class PvpFightTests
         h.Fight.EngageOnOrder("Bob");
 
         Assert.Equal(new[] { "a Bob" }, h.Sent);
+    }
+
+    // Leading a party, our own fight is passed on to it; an order we were given isn't.
+    [Fact]
+    public void LeadingAParty_StartingAFight_SendsKillToTheParty()
+    {
+        using Harness h = new() { LeadingParty = true };
+        h.Feed("Also here: Bob.");
+
+        h.Fight.Engage("Bob", false, "Bob is here");
+
+        Assert.Equal(new[] { "a Bob", ".@kill Bob" }, h.Sent);
+    }
+
+    [Fact]
+    public void KillOrder_IsNotSent_WhenNotLeading_WhenSwitchedOff_OrForAFightWeWereOrderedInto()
+    {
+        using Harness following = new();
+        following.Feed("Also here: Bob.");
+        following.Fight.Engage("Bob", false, "x");
+        Assert.Equal(new[] { "a Bob" }, following.Sent);
+
+        using Harness off = new() { LeadingParty = true, Settings = new PvpSettings { LeaderSendsKillOrder = false } };
+        off.Feed("Also here: Bob.");
+        off.Fight.Engage("Bob", false, "x");
+        Assert.Equal(new[] { "a Bob" }, off.Sent);
+
+        using Harness ordered = new() { LeadingParty = true };
+        ordered.Feed("Also here: Bob.");
+        ordered.Fight.EngageOnOrder("Bob");
+        Assert.Equal(new[] { "a Bob" }, ordered.Sent);
     }
 
     [Fact]

@@ -7529,6 +7529,7 @@ public sealed class AppServices
             // A fight that interrupted nothing has nothing to get back to.
             backOnTask: () => _pvpFightInterrupted == Game.Map.DetourResumeKind.None
                 || MovementControl.State != Game.Map.MovementEngineState.Idle,
+            leadingParty: () => PartyState.SelfIsLeader && PartyState.Members.Count > 1,
             schedule: pacedReplyScheduler,
             log: Log);
         PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");

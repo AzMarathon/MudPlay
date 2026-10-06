@@ -3519,7 +3519,13 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 ### Notify gang members
 
 **Default:** Off
-**What it does:** Says on the gang channel, with the room, when an Enemy is seen (`PvP: Raijin is here at Town Square`), when a player attacks you (`PvP: Raijin attacked me at Town Square`), and when you attack one (`PvP: attacking Raijin at Town Square`), including an attack a leader's `@kill` ordered. Each of the three lines goes out at most once a minute per player.
+**What it does:** Says on the gang channel, with the room, about the events you tick under it:
+
+- **an Enemy is seen** — `PvP: Raijin is here at Town Square`
+- **a player attacks me** — `PvP: Raijin attacked me at Town Square`
+- **I attack a player** — `PvP: attacking Raijin at Town Square`, including an attack a leader's `@kill` ordered
+
+All three are ticked by default. **The same line about the same player at most every N seconds** (default `60`) sets how often a line may repeat while the situation lasts: an Enemy who stays in sight, or keeps attacking, is announced again only after that long. `0` sends the line every time the event happens.
 
 ### Re-connect after PvP in N minutes
 
@@ -3539,6 +3545,12 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 **What it does:** With evil warnings on, the game refuses an attack on a player who hasn't attacked you (`To do this action, you must turn off your evil warnings.`). Ticked, MudPlay sends `set warning off` and attacks again. Unticked, the refusal ends the fight.
 **When they go back on:** not when the fight ends. MudPlay sends `set warning on` once you are back at what the fight interrupted (your loop, walk or Auto-Lair run going again) and a minute has passed with no new fight; a fight that interrupted nothing only needs the quiet minute. A second fight before then finds them still off and sends nothing more.
 **Important notes:** Hitting back at someone who attacked you never needs it. If the connection drops while they are off, they can't be put back; the terminal tells you, and `set warning on` restores them.
+
+### When I lead a party and start a fight with a player, send @kill to the party
+
+**Default:** On
+**What it does:** When you are the party leader and a fight with a player starts (your PvP action attacking an Enemy), MudPlay also says `.@kill <player>`, so members who take your remote commands attack the same player.
+**Important notes:** It is not sent when you are following or alone, or for a fight that someone else's `@kill` started. A member needs the *Execute commands* permission granted to you for it to act, and their own evil-warning setting below decides whether the attack gets through.
 
 ### Turn off my evil warnings when a leader's @kill names a player
 
@@ -4592,6 +4604,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Chase: give up after rooms unseen / guess the way / wait with no way to follow (s) | `8` / `true` / `20` | 1–50 / bool / 0–600 | `ChaseRoomsUnseen` / `ChaseGuessDirection` / `ChaseWaitSeconds` | Models/Profile/PvpSettings.cs |
 | PvP spells 1 / 2: cast code, max casts, min mana per cast | blank, no limit, `0` | cast code / blank or 0–100 / 0–9999 | `Spell1` / `Spell2` (`SpellName`, `MaxCasts`, `MinManaPerCast`) | Models/Profile/PvpSpellSlot.cs |
 | @kill on a player turns off evil warnings / warnings back on after (s) | `false` / `60` | bool / 0–3600 | `KillOrderTurnsOffEvilWarnings` / `WarningsBackAfterSeconds` | Models/Profile/PvpSettings.cs |
+| As leader, send @kill to the party when starting a fight with a player | `true` | bool | `LeaderSendsKillOrder` | Models/Profile/PvpSettings.cs |
+| Gang notice events (seen / attacked / I attack) and repeat (s) | `true` (all) / `60` | bool / 0–3600 | `GangTellSeen`, `GangTellAttacked`, `GangTellWeAttack` / `GangRepeatSeconds` | Models/Profile/PvpSettings.cs |
 | Party-split hold (s) / chase: rooms in behind a door / reconnect enters the realm | `120` / `3` / `true` | 0–3600 / 1–20 / bool | `PartySplitHoldSeconds` / `ChaseDoorRooms` / `ReconnectEntersRealm` | Models/Profile/PvpSettings.cs |
 | Copper / Silver / Gold / Platinum / Runic policy | Ignore/Collect×4 | Collect / Ignore / Discard | `CopperPolicy` etc. | Models/Profile/CashSettings.cs |
 | Auto-deposit if wealth / coins exceed | 0 / 0 | 0–100,000,000 | `AutoDepositIfWealthExceeds` / `AutoDepositIfCoinsExceed` | Models/Profile/CashSettings.cs |

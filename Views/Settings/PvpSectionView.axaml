@@ -117,7 +117,20 @@
                 <TextBlock Classes="SectionHeader" Text="OPTIONS"/>
                 <CheckBox Content="Notify gang members"
                           IsChecked="{Binding NotifyGang, Mode=TwoWay}"
-                          ToolTip.Tip="Say on the gang channel when an Enemy is seen, when a player attacks you, and when you attack one, with the room: 'PvP: &lt;player&gt; attacked me at &lt;room&gt;'. Each kind of line at most once a minute per player."/>
+                          ToolTip.Tip="Say on the gang channel, with the room, about the events ticked below: 'PvP: &lt;player&gt; attacked me at &lt;room&gt;'."/>
+                <StackPanel Orientation="Horizontal" Spacing="14" Margin="24,0,0,0" IsEnabled="{Binding NotifyGang}">
+                    <CheckBox Content="an Enemy is seen" IsChecked="{Binding GangTellSeen, Mode=TwoWay}"/>
+                    <CheckBox Content="a player attacks me" IsChecked="{Binding GangTellAttacked, Mode=TwoWay}"/>
+                    <CheckBox Content="I attack a player" IsChecked="{Binding GangTellWeAttack, Mode=TwoWay}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="24,0,0,0" IsEnabled="{Binding NotifyGang}">
+                    <TextBlock Classes="FieldLabel" Text="The same line about the same player at most every"/>
+                    <NumericUpDown Value="{Binding GangRepeatSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="3600" Increment="10" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="0 sends the line every time the event happens. Otherwise an Enemy who stays in sight, or keeps attacking, is announced again only after this long."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <CheckBox Content="Re-connect after PvP in"
                               IsChecked="{Binding ReconnectAfterPvp, Mode=TwoWay}"
@@ -139,6 +152,9 @@
                           IsChecked="{Binding TurnOffEvilWarningsToAttack, Mode=TwoWay}"
                           ToolTip.Tip="With evil warnings on, the game refuses an attack on a player who hasn't attacked you. Ticked, MudPlay sends 'set warning off' and attacks again. The warnings go back on ('set warning on') once you are back at what the fight interrupted, such as your loop, and a minute has passed with no new fight. Unticked, the refusal ends the fight. Hitting back never needs it."/>
 
+                <CheckBox Content="When I lead a party and start a fight with a player, send @kill to the party"
+                          IsChecked="{Binding LeaderSendsKillOrder, Mode=TwoWay}"
+                          ToolTip.Tip="Says '.@kill &lt;player&gt;' when you start the fight as party leader, so members who take your remote commands attack the same player. Not sent when you are following, when you are alone, or for a fight someone else's @kill started."/>
                 <CheckBox Content="Turn off my evil warnings when a leader's @kill names a player"
                           IsChecked="{Binding KillOrderTurnsOffEvilWarnings, Mode=TwoWay}"
                           ToolTip.Tip="An @kill aimed at a player is an attack on someone who hasn't attacked you, even if they attacked your leader: the game only lets the one who was attacked hit back for free. Ticked, 'set warning off' goes out before the attack. Unticked, the attack is still tried, and a refusal ends it unless the box above is ticked."/>

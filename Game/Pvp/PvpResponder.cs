@@ -19,7 +19,6 @@ public sealed class PvpResponder : IDisposable
     // answered is left alone, by what brought them up again.
     private static readonly TimeSpan SightQuiet = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan AttackQuiet = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan GangQuiet = TimeSpan.FromSeconds(60);
 
     // "Flee then hang up" keeps the stopped run away at least this long past the
     // hang-up, so it can't walk us back before the line drops.
@@ -215,12 +214,22 @@ public sealed class PvpResponder : IDisposable
 
     private static string Sighting(bool attacked) => attacked ? "attacked me" : "is here";
 
-    // One line per player per kind of event (seen, attacked us, we attack) a minute.
+    // One line per event the user ticked (seen, attacked us, we attack), and the
+    // same line about the same player no sooner than the set time after the last.
     private void TellGang(PvpSettings settings, string given, string what, DateTimeOffset now)
     {
         if (!settings.NotifyGang) return;
+        bool wanted = what switch
+        {
+            "is here" => settings.GangTellSeen,
+            "attacked me" => settings.GangTellAttacked,
+            _ => settings.GangTellWeAttack,
+        };
+        if (!wanted) return;
+
         string key = $"{given}|{what}";
-        if (_gangToldAt.TryGetValue(key, out DateTimeOffset told) && now - told < GangQuiet) return;
+        TimeSpan quiet = TimeSpan.FromSeconds(Math.Max(0, settings.GangRepeatSeconds));
+        if (_gangToldAt.TryGetValue(key, out DateTimeOffset told) && now - told < quiet) return;
         _gangToldAt[key] = now;
         string where = _roomName() is { Length: > 0 } room ? $" at {room}" : "";
         _sendGang(what == "attacking" ? $"PvP: attacking {given}{where}" : $"PvP: {given} {what}{where}");

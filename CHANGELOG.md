@@ -15,6 +15,7 @@
 - Chase options: rooms to follow without sight, guessing the way they went, the wait with no way to follow, tracking
 - A flee to the flee room runs in Sprint Mode
 - @kill naming a player in the room starts a fight with that player, switching evil warnings off first if you allow it
+- A party leader who starts a fight with a player sends @kill to the party; gang notices can be set by event and by how often they repeat
 
 ## 3.144.27
 

@@ -60,6 +60,7 @@ public sealed class PvpFight : IDisposable
     private readonly Func<IReadOnlyCollection<PvpChaseExit>> _exitsHere;
     private readonly Func<string, Action> _suspendEngines;
     private readonly Func<bool> _backOnTask;
+    private readonly Func<bool> _leadingParty;
     private readonly Action<TimeSpan, Action> _schedule;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
@@ -132,6 +133,7 @@ public sealed class PvpFight : IDisposable
     // spellInfo: a cast code's kind and duration, null when it isn't a spell we know.
     // manaMeets: whether our mana meets a slot's floor. backOnTask: whatever the
     // fight interrupted is running again (true when it interrupted nothing).
+    // leadingParty: we lead a party with someone else in it.
     public PvpFight(
         MessageRouter router,
         RoomEntityClassifier classifier,
@@ -147,6 +149,7 @@ public sealed class PvpFight : IDisposable
         Func<IReadOnlyCollection<PvpChaseExit>> exitsHere,
         Func<string, Action> suspendEngines,
         Func<bool> backOnTask,
+        Func<bool> leadingParty,
         Action<TimeSpan, Action> schedule,
         LogService? log = null,
         Func<DateTimeOffset>? now = null)
@@ -165,6 +168,7 @@ public sealed class PvpFight : IDisposable
         _exitsHere = exitsHere;
         _suspendEngines = suspendEngines;
         _backOnTask = backOnTask;
+        _leadingParty = leadingParty;
         _schedule = schedule;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
@@ -180,8 +184,9 @@ public sealed class PvpFight : IDisposable
 
     // Start (or, for the same player, carry on) a fight. False when it can't be:
     // PvP is off, they are in our party, or another fight is under way.
-    // warningsOffFirst switches evil warnings off before the first attack.
-    public bool Engage(string given, bool chase, string why, bool warningsOffFirst = false)
+    // byOrder is a fight a leader's @kill started: evil warnings go off before the
+    // first attack when our setting for that says so, and the order isn't passed on.
+    public bool Engage(string given, bool chase, string why, bool byOrder = false)
     {
         if (!_pvpEnabled() || given.Length == 0 || _inParty(given)) return false;
         if (_target is { } current)
@@ -204,7 +209,7 @@ public sealed class PvpFight : IDisposable
         ActiveChanged?.Invoke();
         Started?.Invoke(given);
 
-        if (warningsOffFirst && !_warningsOff)
+        if (byOrder && settings.KillOrderTurnsOffEvilWarnings && !_warningsOff)
         {
             _warningsOff = true;
             _log?.Warn(LogCategory, "switching evil warnings off before attacking, as set for @kill");
@@ -216,6 +221,14 @@ public sealed class PvpFight : IDisposable
         if (IsHere(given)) CastDueSpell(given);
         Attack(evenIfUnseen: true);
 
+        // `.` is the say prefix: everyone in the room who takes our remote commands
+        // hears the order, the way a leader's other party relays go out.
+        if (!byOrder && _target is not null && settings.LeaderSendsKillOrder && _leadingParty())
+        {
+            _log?.Info(LogCategory, $"leading the party: sending @kill {given}");
+            _send($".@kill {given}");
+        }
+
         int fight = _fight;
         if (_target is not null) _schedule(Round, () => RoundTick(fight));
         return _target is not null;
@@ -226,9 +239,7 @@ public sealed class PvpFight : IDisposable
     public bool EngageOnOrder(string name)
     {
         string given = PlayerObservation.SplitName(name).Given;
-        return IsHere(given)
-            && Engage(given, chase: false, "ordered by @kill",
-                warningsOffFirst: _readSettings().KillOrderTurnsOffEvilWarnings);
+        return IsHere(given) && Engage(given, chase: false, "ordered by @kill", byOrder: true);
     }
 
     private void LoadSpells(PvpSettings settings)
