@@ -6877,7 +6877,7 @@
     "Name": "mana storm",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A swirling mana storm{spellname} engulfs your foe for {damage} damage!",
+    "CasterMessage": "A swirling mana storm engulfs your foe for {damage} damage!",
     "TargetMessage": "A swirling mana storm engulfs you for {damage} damage!",
     "WitnessMessage": "A swirling mana storm{source} engulfs the room for {damage} damage!",
     "AppliedMessage": "{null}",

@@ -10914,7 +10914,7 @@ public sealed class AppServices
     // match the live spellbook by full name (the form a slot stores) or 4-letter cast
     // code, and take the same damage wordings Session Stats recognises it by
     // (OwnSpellLines). A spell's own record can hold only the cast emote, with the
-    // damage line on a same-named record (Paradigm mana storm, dragonfire): matched
+    // damage line on a same-named record (Paradigm dragonfire): matched
     // on its own record alone, such a spell's cast never counted toward Max casts.
     // A chained spell's follow-up line is part of the same cast, so it's left out.
     // Falls back to the own record's caster line when no damage wording is recorded.

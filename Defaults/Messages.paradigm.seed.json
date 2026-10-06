@@ -7867,7 +7867,7 @@
     "Name": "mana storm",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You make a complex gesture!",
+    "CasterMessage": "A swirling mana storm engulfs your foe for {damage} damage!",
     "TargetMessage": "{source} casts {spellname} on the room for {damage} damage!",
     "WitnessMessage": "{source} makes a complex gesture!",
     "AppliedMessage": "{null}",
