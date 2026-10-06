@@ -465,7 +465,11 @@ public sealed partial class CombatManager : IDisposable
     // reached (report paradigm-20260913-040159: soul capped at 1 cast/room, never
     // switched to god's wrath). Null when unwired (tests) or the spell has no usable
     // caster-message record — those callers keep the physical-only behavior.
-    internal Func<string, CasterMessageMatcher?>? ResolveAttackSpellMatcher { get; set; }
+    //
+    // A list, because a spell's own record can hold only its cast emote ("You make a
+    // complex gesture!") while the damage wording sits on another record of the same
+    // name; a cast then confirms on any of them.
+    internal Func<string, IReadOnlyList<CasterMessageMatcher>>? ResolveAttackSpellMatchers { get; set; }
 
     // How many real single-target attack-spell casts OnAttackCastConfirmed has
     // observed landing this session — the precise signal ReadRoundCount is wired to
@@ -625,6 +629,10 @@ public sealed partial class CombatManager : IDisposable
     // Diagnostic view of _spellAttackOwed (surfaced in the combat snapshot / bug
     // report). No longer consulted for between-round cast scheduling — see the field.
     public bool IsSpellAttackOwed => _spellAttackOwed;
+
+    // The server is repeating a spell we announced: every round's landing line is
+    // ours though we send nothing more.
+    public bool IsRepeatingSpell => _announcedSpellCode is not null && !_combatOff;
 
     // A pre-attack DEBUFF fired the combat attack immediately this round
     // (TryPreAttackInBetween → DeferPostDebuffAttack) instead of deferring it to the
@@ -1099,7 +1107,12 @@ public sealed partial class CombatManager : IDisposable
         // the user set, and whether we're currently HOLDING our pick for a party
         // announce ("not-last" / "follow") or have already committed (null).
         string AttackTiming,
-        string? AwaitingAttackOrderHold);
+        string? AwaitingAttackOrderHold,
+        // The cast tallies behind each slot's Max casts, and how many of our attack
+        // casts have been seen landing this session. A cap that never trips shows as
+        // a tally that never moved (report paradigm-20261006-051627).
+        string SpellCastTally,
+        int ConfirmedAttackCasts);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
@@ -1110,7 +1123,8 @@ public sealed partial class CombatManager : IDisposable
         _userEngagedInstances.ToArray(),
         _castingSpellTarget, _spellAttackOwed,
         _readSettings().AttackTiming.ToString(),
-        _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow" : null);
+        _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow" : null,
+        _spellChooser.DescribeCasts(), ConfirmedAttackCastCount);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -3163,7 +3177,7 @@ public sealed partial class CombatManager : IDisposable
     // result, never a swing. The "You " prefix + target-name check (mirroring
     // OnBackstabResolutionLine's filtering — both UserHits and UserMisses also fire
     // for party members' actions and (UserMisses) self-emotes) covers a physical-
-    // shaped line; ResolveAttackSpellMatcher covers the third-person shape some
+    // shaped line; ResolveAttackSpellMatchers covers the third-person shape some
     // attack spells use instead. Consecutive lines inside ConfirmedCastGroupWindow
     // are one cast's own multi-projectile results, not a second cast — only the
     // group's first line increments. The grouping also requires the SAME target: a
@@ -3179,16 +3193,23 @@ public sealed partial class CombatManager : IDisposable
         // physical shape ("You hit the orc for 10 damage!") also covers a first-person
         // attack spell and is checked first since it needs no game-data lookup. Some
         // attack spells instead narrate the hit in third person and never start with
-        // "You " (ResolveAttackSpellMatcher's comment has the full story) — those are
+        // "You " (ResolveAttackSpellMatchers' comment has the full story) — those are
         // confirmed against the announced spell's own caster-message template instead,
         // which pins down the target the same way the physical check's substring
         // search does.
         bool physicalShape = text.StartsWith("You ", StringComparison.Ordinal)
             && text.IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0;
+        // A room spell's line names the room or nobody ("… scorches your foes for N
+        // damage!", "… ravages your foe for N damage!"), never the monster the round
+        // is anchored to, so the wording alone confirms it. Only the caster is shown
+        // that line; a witness and a victim each get their own (GAME_MECHANICS "Damage
+        // lines — who hit whom"). Held to the target name it never counted, so a room
+        // spell's cast cap was never reached (report paradigm-20261006-051627).
+        bool roomSpell = AnnouncedSpellIsRoomWide();
         bool spellShape = !physicalShape
             && _announcedSpellCode is { } announcedSpell
-            && ResolveAttackSpellMatcher?.Invoke(announcedSpell) is { } matcher
-            && matcher.ConfirmsTarget(text, target);
+            && ResolveAttackSpellMatchers?.Invoke(announcedSpell) is { } matchers
+            && matchers.Any(m => roomSpell ? m.TryMatch(text, out _) : m.ConfirmsTarget(text, target));
         if (!physicalShape && !spellShape) return;
 
         DateTimeOffset now = _now();

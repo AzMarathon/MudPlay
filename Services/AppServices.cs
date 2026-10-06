@@ -5045,8 +5045,8 @@ public sealed class AppServices
         Combat.ReadRoundCount = () => Combat.ConfirmedAttackCastCount;
         // Third-person-shaped attack-spell casts (e.g. "Spiritual power strikes X for
         // N damage!") need the spell's own caster-message template to confirm — see
-        // CombatManager.ResolveAttackSpellMatcher's declaration comment.
-        Combat.ResolveAttackSpellMatcher = ResolveAttackSpellMatcherCached;
+        // CombatManager.ResolveAttackSpellMatchers' declaration comment.
+        Combat.ResolveAttackSpellMatchers = ResolveAttackSpellMatchersCached;
         // Idle-stall watchdog: the 1s heartbeat (not the coarse 5s combat tick)
         // drives CombatStateTracker's stuck-gate recovery so it fires within a
         // second of its threshold — a final kill that never triggered a resync
@@ -5437,7 +5437,8 @@ public sealed class AppServices
         // also zeroes the session in lockstep with RoundDamage), a Combat-tab edit
         // (ProfileMutated), a game-data set swap, and a spellbook change.
         CombatSession = new Game.Combat.CombatSessionTracker(Router, RoundDamage, OwnSpellMatchers);
-        RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpell);
+        RoundDamage.SetOwnSpellLineCheck(CombatSession.MatchesOwnSpell, CombatSession.MatchesOwnRoomSpell);
+        RoundDamage.SetOwnSpellRepeating(() => Combat.IsRepeatingSpell);
         Combat.BackstabResolved += CombatSession.OnBackstabResolved;
         Profile.ProfileLoaded  += _ => { CombatSession.Reset(); CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
         Profile.ProfileMutated += _ => { CombatSession.RefreshMatchers(); _attackSpellMatcherCache.Clear(); };
@@ -10867,11 +10868,11 @@ public sealed class AppServices
     // One spell's damage-line matchers, cached by spell number since the whole class
     // list is rebuilt on every refresh. Cleared on a game-data set swap, which can
     // change the messages.
-    //   * Its caster line, when that carries the damage. Some spells' own record holds
-    //     only the cast emote while the damage line sits on a record of the same name
-    //     (Paradigm dragonfire #288 gestures; #263 carries "A withering blast of
-    //     dragonfire sears {target} for {damage} damage!"), so every same-named damage
-    //     wording counts — only ours follows our own cast.
+    //   * Its caster line, when that carries the damage. A spell's own record can lack
+    //     the damage line while a record of the same name has it (Paradigm hail of
+    //     stones #5080 has no caster line; #772 carries "Your foes are battered by a
+    //     hail of stones for {damage} damage!"), so every same-named damage wording
+    //     counts — only ours follows our own cast.
     //   * The damage line of each spell it chains to, as a follow-up (necromantic
     //     bolt's "{target}'s life is drained for {damage} damage!").
     private readonly Dictionary<int, IReadOnlyList<Game.Spells.SpellLineMatcher>> _ownSpellLineCache = new();
@@ -10888,19 +10889,32 @@ public sealed class AppServices
             foreach (Models.GameData.MessageRecord m in sameName)
                 if (HasDamageSlot(m.CasterMessage))
                     AddLine(m.CasterMessage, followUp: false);
-        if (SpellFormulaFor(spell.Number) is { } formula)
+        // The whole chain, not just the next link: elemental fury casts lightning,
+        // which casts fire, which casts ice, each with its own line (GAME_MECHANICS
+        // "Damage lines — who hit whom"). The visited set stops a chain that loops.
+        HashSet<int> chain = new() { spell.Number };
+        Queue<int> pending = new();
+        pending.Enqueue(spell.Number);
+        while (pending.Count > 0)
+        {
+            if (SpellFormulaFor(pending.Dequeue()) is not { } formula) continue;
             foreach (Game.Spells.SpellAbility ability in formula.Abilities)
-                if (ability.Code == 151 && ability.Value > 0
-                    && FindSpellMessage(ability.Value, string.Empty)?.CasterMessage is { } chained
+            {
+                if (ability.Code != 151 || ability.Value <= 0 || !chain.Add(ability.Value)) continue;
+                pending.Enqueue(ability.Value);
+                if (FindSpellMessage(ability.Value, string.Empty)?.CasterMessage is { } chained
                     && HasDamageSlot(chained))
                     AddLine(chained, followUp: true);
+            }
+        }
         _ownSpellLineCache[spell.Number] = lines;
         return lines;
 
         void AddLine(string template, bool followUp)
         {
             if (templates.Add(template) && Game.Spells.CasterMessageMatcher.TryCreate(template) is { } matcher)
-                lines.Add(new Game.Spells.SpellLineMatcher(spell.Name.Trim(), matcher, followUp));
+                lines.Add(new Game.Spells.SpellLineMatcher(spell.Name.Trim(), matcher, followUp,
+                    HitsRoom: !followUp && Game.Combat.DebuffTargeting.IsAreaEnemy(spell.Targets)));
         }
     }
 
@@ -10908,46 +10922,52 @@ public sealed class AppServices
         => template is not null
            && (template.Contains("{d}") || template.Contains("{dmg}") || template.Contains("{damage}"));
 
-    // Resolve one attack-spell slot name to its caster-message matcher: match
-    // the live spellbook by full name (the form a slot stores) or 4-letter
-    // cast code, take its game-data record's
-    // Models.GameData.MessageRecord.CasterMessage, and compile.
-    // Returns null when the name is blank, unknown to the spellbook, has
-    // no record, or the record has no usable caster template.
-    private Game.Spells.CasterMessageMatcher? AttackSpellMatcherFor(string? spellName)
+    // Resolve one attack-spell slot name to the lines that show its cast landing:
+    // match the live spellbook by full name (the form a slot stores) or 4-letter cast
+    // code, and take the same damage wordings Session Stats recognises it by
+    // (OwnSpellLines). A spell's own record can lack the damage line, with it on a
+    // same-named record instead (Paradigm hail of stones): matched on its own record
+    // alone, such a spell's cast never counted toward Max casts.
+    // A chained spell's follow-up line is part of the same cast, so it's left out.
+    // Falls back to the own record's caster line when no damage wording is recorded.
+    // Empty when the name is blank, unknown to the spellbook, or has no usable line.
+    private IReadOnlyList<Game.Spells.CasterMessageMatcher> AttackSpellMatchersFor(string? spellName)
     {
-        if (string.IsNullOrWhiteSpace(spellName)) return null;
+        if (string.IsNullOrWhiteSpace(spellName)) return Array.Empty<Game.Spells.CasterMessageMatcher>();
         string target = spellName.Trim();
         foreach (Game.Spells.KnownSpell s in Spellbook.Available)
         {
             if (!string.Equals(s.Name.Trim(), target, StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(s.Short.Trim(), target, StringComparison.OrdinalIgnoreCase))
                 continue;
-            Models.GameData.MessageRecord? rec = FindSpellMessage(s.Number, s.Name);
-            return rec is null ? null : Game.Spells.CasterMessageMatcher.TryCreate(rec.CasterMessage);
+            List<Game.Spells.CasterMessageMatcher> lines = OwnSpellLines(s)
+                .Where(l => !l.FollowUp).Select(l => l.Matcher).ToList();
+            if (lines.Count == 0
+                && Game.Spells.CasterMessageMatcher.TryCreate(FindSpellMessage(s.Number, s.Name)?.CasterMessage) is { } own)
+                lines.Add(own);
+            return lines;
         }
-        return null;
+        return Array.Empty<Game.Spells.CasterMessageMatcher>();
     }
 
-    // CombatManager.ResolveAttackSpellMatcher's wiring — confirms a single-target
-    // attack-spell cast (MaxCastsPerRoom tally) whose damage line uses the spell's own
-    // (often third-person) caster-message template instead of the physical "You ...
-    // for N damage!" skeleton (see that property's declaration comment). Keyed by
-    // cast-code and cached: this runs off OnAttackCastConfirmed, on every UserHits /
-    // UserMisses line while a spell round is in flight, so recompiling
-    // AttackSpellMatcherFor's regex per line would be wasteful. Cleared alongside
-    // CombatSession's own RefreshMatchers() below — a profile load or game-data set
-    // swap can change which spell a cast-code resolves to.
-    private readonly Dictionary<string, Game.Spells.CasterMessageMatcher?> _attackSpellMatcherCache =
+    // CombatManager.ResolveAttackSpellMatchers' wiring — confirms an attack-spell cast
+    // (MaxCastsPerRoom tally) whose damage line uses the spell's own (often
+    // third-person) wording instead of the physical "You ... for N damage!" skeleton
+    // (see that property's declaration comment). Keyed by cast-code and cached: this
+    // runs off OnAttackCastConfirmed, on every UserHits / UserMisses line while a
+    // spell round is in flight. Cleared alongside CombatSession's own
+    // RefreshMatchers() — a profile load or game-data set swap can change which spell
+    // a cast-code resolves to.
+    private readonly Dictionary<string, IReadOnlyList<Game.Spells.CasterMessageMatcher>> _attackSpellMatcherCache =
         new(StringComparer.OrdinalIgnoreCase);
 
-    private Game.Spells.CasterMessageMatcher? ResolveAttackSpellMatcherCached(string spellCode)
+    private IReadOnlyList<Game.Spells.CasterMessageMatcher> ResolveAttackSpellMatchersCached(string spellCode)
     {
-        if (_attackSpellMatcherCache.TryGetValue(spellCode, out Game.Spells.CasterMessageMatcher? cached))
+        if (_attackSpellMatcherCache.TryGetValue(spellCode, out IReadOnlyList<Game.Spells.CasterMessageMatcher>? cached))
             return cached;
-        Game.Spells.CasterMessageMatcher? matcher = AttackSpellMatcherFor(spellCode);
-        _attackSpellMatcherCache[spellCode] = matcher;
-        return matcher;
+        IReadOnlyList<Game.Spells.CasterMessageMatcher> matchers = AttackSpellMatchersFor(spellCode);
+        _attackSpellMatcherCache[spellCode] = matchers;
+        return matchers;
     }
 
     // Whether the character's pool is mana or kai, from its stat screen — how a custom

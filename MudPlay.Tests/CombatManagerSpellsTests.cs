@@ -1200,9 +1200,9 @@ public sealed class CombatManagerSpellsTests
         h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "gwra", MinEnemies = 0 };
         h.AddMonster(1, "fat giant squid");
         h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
-        h.Combat.ResolveAttackSpellMatcher = code => string.Equals(code, "soul", StringComparison.OrdinalIgnoreCase)
-            ? CasterMessageMatcher.TryCreate("Spiritual power strikes {target} for {damage} damage!")
-            : null;
+        h.Combat.ResolveAttackSpellMatchers = code => string.Equals(code, "soul", StringComparison.OrdinalIgnoreCase)
+            ? Lines("Spiritual power strikes {target} for {damage} damage!")
+            : Lines();
 
         h.Feed("Also here: fat giant squid.");
         Assert.Equal("soul fat giant squid", h.LastSent);
@@ -1217,6 +1217,97 @@ public sealed class CombatManagerSpellsTests
         h.Feed("Spiritual power strikes fat giant squid for 171 damage!");
         Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
         Assert.Equal("gwra fat giant squid", h.LastSent);
+    }
+
+    private static IReadOnlyList<CasterMessageMatcher> Lines(params string[] templates)
+        => templates.Select(t => CasterMessageMatcher.TryCreate(t)!).ToList();
+
+    // A spell whose own record holds only the cast emote confirms on the damage
+    // wording recorded under the same name (Paradigm dragonfire).
+    [Fact]
+    public void MaxCasts1_DamageLineOnASameNamedRecord_Counts()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "dfir", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "mete", MinEnemies = 0 };
+        h.AddMonster(1, "cave bear");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+        h.Combat.ResolveAttackSpellMatchers = _ => Lines(
+            "A withering blast of dragonfire sears {target} for {damage} damage!",
+            "You breath {s} on {s} for {damage} damage!");
+
+        h.Feed("Also here: cave bear.");
+        h.Feed("You make a complex circling gesture!");
+        Assert.Equal(0, h.Combat.ConfirmedAttackCastCount);
+        h.Feed("A withering blast of dragonfire sears cave bear for 90 damage!");
+
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("mete cave bear", h.LastSent);
+    }
+
+    // Report paradigm-20261006-051627: a room spell's landing line names no monster
+    // ("… ravages your foe for N damage!"), so it never counted as a cast, slot 1's
+    // cap of one was never reached, and the second room spell was never cast. The
+    // monsters' own lines open the round and trip the heartbeat first, so the
+    // landing line has to carry the switch itself.
+    [Fact]
+    public void RoomSpellMaxCasts1_LandingLineNamingNoMonster_HandsOverToRoomSpell2()
+    {
+        using Harness h = new(deferPost: true);
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "spir", MinEnemies = 3, MaxCastsPerRoom = 1 };
+        h.Settings.MultiAttack2Enabled = true;
+        h.Settings.MultiAttack2Spell = new CombatSpellSlot { SpellName = "msto", MaxCastsPerRoom = 99 };
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "mete", MinEnemies = 0 };
+        h.AddMonster(1, "slimeworm");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+        h.Combat.ResolveAttackSpellMatchers = code => code.ToLowerInvariant() switch
+        {
+            "spir" => Lines("A horde of shrieking spirits ravages {target} for {damage} damage!"),
+            "msto" => Lines("A swirling mana storm engulfs {target} for {damage} damage!"),
+            _ => Lines(),
+        };
+
+        h.Feed("Also here: slimeworm, slimeworm, slimeworm, slimeworm.");
+        Assert.Equal("spir", h.LastSent);
+
+        h.Feed("The slimeworm lunges at you!");
+        h.Cast.OnCombatTick();
+        h.Combat.OnCombatTick();
+        h.Feed("You scatter some ashes in a sweeping motion!");
+        Assert.Equal(0, h.Combat.ConfirmedAttackCastCount);
+
+        h.Feed("A horde of shrieking spirits ravages your foe for 167 damage!");
+        Assert.Equal(1, h.Combat.ConfirmedAttackCastCount);
+        h.DrainPosted();
+        Assert.Equal("msto", h.LastSent);
+        Assert.Single(h.AllSent, s => s == "spir");
+
+        // Slot 2 is counted the same way and stays on: nothing more is sent.
+        h.AdvanceClock(TimeSpan.FromSeconds(5));
+        h.Feed("You make a complex gesture!");
+        h.Feed("A swirling mana storm engulfs your foe for 140 damage!");
+        Assert.Equal(2, h.Combat.ConfirmedAttackCastCount);
+        h.DrainPosted();
+        Assert.Single(h.AllSent, s => s == "msto");
+    }
+
+    // A single-target spell still needs its line to name the monster we are on: the
+    // same wording aimed elsewhere is not our round.
+    [Fact]
+    public void SingleTargetSpell_LineNamingAnotherMonster_IsNotCounted()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell    = new CombatSpellSlot { SpellName = "soul", MinEnemies = 0, MaxCastsPerRoom = 1 };
+        h.Settings.AlternateAttackSpell = new CombatSpellSlot { SpellName = "gwra", MinEnemies = 0 };
+        h.AddMonster(1, "fat giant squid");
+        h.Combat.ReadRoundCount = () => h.Combat.ConfirmedAttackCastCount;
+        h.Combat.ResolveAttackSpellMatchers = _ => Lines("Spiritual power strikes {target} for {damage} damage!");
+
+        h.Feed("Also here: fat giant squid.");
+        h.Feed("Spiritual power strikes whale shark for 171 damage!");
+
+        Assert.Equal(0, h.Combat.ConfirmedAttackCastCount);
+        Assert.Equal("soul fat giant squid", h.LastSent);
     }
 
     // The other side of the gate: a mid-fight between-round cast's *Combat Off* (even

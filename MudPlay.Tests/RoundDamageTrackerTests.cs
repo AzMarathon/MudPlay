@@ -193,6 +193,67 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal("You → 2 foes 50 each", Assert.Single(tags));
     }
 
+    // Spirit horde is scoped to the room in the game data but its line says "your
+    // foe": the scope decides, and every monster takes the amount (report
+    // paradigm-20261006-051627, where it all went to nobody).
+    [Fact]
+    public void OurRoomSpell_WordedForOneFoe_StillHitsEveryMonster()
+    {
+        using Harness h = new();
+        h.Tracker.SetOwnSpellLineCheck(
+            line => line.StartsWith("A horde of shrieking spirits", StringComparison.Ordinal),
+            line => line.StartsWith("A horde of shrieking spirits", StringComparison.Ordinal));
+        h.Tracker.NoteOwnCast();
+        h.Feed("A horde of shrieking spirits ravages your foe for 167 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(334, Row(r, DamageLineAttributor.Self).Dealt);
+        Assert.Equal(167, Row(r, "large giant rat").Taken);
+        Assert.Equal(167, Row(r, "goblin").Taken);
+        Assert.Equal(0, r.UnknownTaken);
+    }
+
+    // The same wording from a spell that isn't scoped to the room is not spread.
+    [Fact]
+    public void OurSpell_WordedForOneFoe_NotRoomScoped_IsNotSpread()
+    {
+        using Harness h = new();
+        h.Tracker.SetOwnSpellLineCheck(
+            line => line.StartsWith("A horde of shrieking spirits", StringComparison.Ordinal),
+            _ => false);
+        h.Tracker.NoteOwnCast();
+        h.Feed("A horde of shrieking spirits ravages your foe for 167 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(167, Row(r, DamageLineAttributor.Self).Dealt);
+        Assert.Equal(0, Row(r, "goblin").Taken);
+        Assert.Equal(167, r.UnknownTaken);
+    }
+
+    // The server repeats an announced spell every round with no new cast from us, so
+    // a later round lands long after the cast was sent. It is still ours while the
+    // engine says the spell is repeating, and nobody's once it isn't.
+    [Fact]
+    public void RepeatedSpellRound_LongAfterTheCast_IsStillOurs_WhileItRepeats()
+    {
+        using Harness h = new() { OwnSpell = true };
+        h.State.InCombat = true;
+        bool repeating = true;
+        h.Tracker.SetOwnSpellRepeating(() => repeating);
+        h.Tracker.NoteOwnCast();
+        h.Now = h.Now.AddSeconds(12);
+
+        h.Feed("Dark flame sears goblin for 20 damage!");
+        RoundSummary r = h.CloseRound();
+        Assert.Equal(20, Row(r, DamageLineAttributor.Self).Dealt);
+
+        repeating = false;
+        h.Now = h.Now.AddSeconds(12);
+        h.Feed("Dark flame sears goblin for 20 damage!");
+        r = h.CloseRound();
+        Assert.Equal(20, r.UnknownDealt);
+    }
+
     // A party member's room spell names nobody; the caster's announce right before it
     // says whose it is, and every monster in the room takes the amount (report
     // paradigm-20260929-161536).
