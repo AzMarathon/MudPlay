@@ -11,7 +11,12 @@ namespace MudPlay.Game.Map;
 // `ask <noun> <keyword>` at each of its spawn rooms (the noun is the last word of
 // the name, since the game's `ask` parser takes a single-word target), a Room
 // giver becomes the bare room-CMD keyword typed in that room (e.g. "insert fang").
-public readonly record struct GiveSource(RoomKey Room, string Command, string GiverName);
+//
+// RefusalLines are what this giver says when a condition on the hand-over isn't
+// met (the old hermit's "You can't serve your cause like that!"), so a refused ask
+// is recognised at once instead of by the item never arriving.
+public readonly record struct GiveSource(
+    RoomKey Room, string Command, string GiverName, IReadOnlyList<string>? RefusalLines = null);
 
 // Active fulfiller for NeedKind.PathItem needs an NPC / room hands over for
 // free: when a one-shot walk crosses an (Item: N) / (Ticket: N) gate whose item
@@ -86,6 +91,11 @@ public sealed class PathItemGiveRouter : IDisposable
     private readonly Timer _giveTimer;
 
     private Phase _phase = Phase.Idle;
+    // Items a giver didn't hand over on this trip. The resumed walk re-announces
+    // what it still lacks, which would send us straight back to ask again; held
+    // until that walk ends, so a later walk asks afresh.
+    private readonly HashSet<int> _declined = new();
+    private RoomKey? _lastGiverRoom;
     private int _itemId;
     private int _targetCount = 1;
     private RoomKey _origDest;
@@ -146,6 +156,13 @@ public sealed class PathItemGiveRouter : IDisposable
     // (current → giver → this) instead of stopping the route line at the giver.
     public RoomKey? OnwardDestination => _phase == Phase.Idle ? null : _origDest;
 
+    // The giver room of the running detour, or of the last one. A loop on its
+    // approach reads it to tell this router's own walk there from its approach.
+    public RoomKey? LastGiverRoom => _lastGiverRoom;
+
+    // Items asked for and not handed over on the walk in progress (bug report).
+    public IReadOnlyCollection<int> Declined => _declined;
+
     // New-need callback (wired to NeedsRegistry.NeedPosted). Arms a detour toward
     // the fewest-added-steps giver when the item is flagged, no engine walk is
     // driving, a give exists, and we can route both to the giver and on to the
@@ -161,6 +178,7 @@ public sealed class PathItemGiveRouter : IDisposable
             || itemId <= 0)
             return;
         if (!_isEnabled(itemId)) return;   // per-item auto-obtain gate
+        if (_declined.Contains(itemId)) return;   // asked on this trip already; the walk goes on without it
         int target = Math.Max(1, need.Quantity);
         if (_carriedCount(itemId) >= target) return;   // already hold the shortfall
 
@@ -176,6 +194,7 @@ public sealed class PathItemGiveRouter : IDisposable
         _targetCount = target;
         _origDest = dest;
         _giver = giver;
+        _lastGiverRoom = giver.Room;
         _phase = Phase.WalkingToGiver;
         _log?.Info(LogCategory,
             $"path item {itemId} ('{name}') given by {giver.GiverName} — detouring to {giver.Room} to '{giver.Command}'");
@@ -189,6 +208,12 @@ public sealed class PathItemGiveRouter : IDisposable
     {
         switch (_phase)
         {
+            case Phase.Idle:
+                // The walk a failed give resumed is over, one way or the other.
+                if (e.Kind is WalkEventKind.Finished or WalkEventKind.Failed or WalkEventKind.Stopped)
+                    _declined.Clear();
+                break;
+
             case Phase.WalkingToGiver:
                 if (e.Kind == WalkEventKind.Finished && KeyMatches(e.Destination, _giver.Room))
                     BeginAcquiring();
@@ -231,8 +256,33 @@ public sealed class PathItemGiveRouter : IDisposable
     {
         if (_phase != Phase.Acquiring) return;
         if (_carriedCount(_itemId) >= _targetCount) return; // race: OnInventoryChanged handled it
+        GiveFailed("did not land in time");
+    }
+
+    // A line from the server while we wait on the give. The giver's own refusal
+    // (a condition on the hand-over we don't meet) ends the wait at once. A give
+    // refused for a missed quest step prints nothing, and is caught by the timeout.
+    public void OnLine(string text)
+    {
+        if (_phase != Phase.Acquiring || _giver.RefusalLines is not { Count: > 0 } refusals) return;
+        string line = text.Trim();
+        foreach (string refusal in refusals)
+            if (line.EndsWith(refusal, StringComparison.Ordinal))
+            {
+                GiveFailed($"was refused (\"{refusal}\")");
+                return;
+            }
+    }
+
+    // The ask produced no item. The walk goes on regardless: what it needed the
+    // item for may be passable anyway (a key door someone left open), and if not,
+    // the walk stops there and names what it lacks. It isn't asked for again on
+    // this trip.
+    private void GiveFailed(string how)
+    {
+        _declined.Add(_itemId);
         _log?.Info(LogCategory,
-            $"give of path item {_itemId} by {_giver.GiverName} did not land in time — resuming to {_origDest}");
+            $"give of path item {_itemId} by {_giver.GiverName} {how} — going on to {_origDest} without it");
         ResumeToPath();
     }
 

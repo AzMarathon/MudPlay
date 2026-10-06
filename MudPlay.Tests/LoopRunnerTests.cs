@@ -260,6 +260,33 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Approaching, h.Runner.State);
     }
 
+    // Report paradigm-20261006-095806: a loop whose rooms all sit behind a gate (a
+    // door needing a key an NPC hands over) refused to start. A fresh Start now
+    // plans the approach through the gate, arming the fetch first, and a walk to
+    // the giver on the way isn't taken for the approach arriving.
+    [Fact]
+    public void Start_NothingReachableFreely_ApproachesThroughTheGate_AndIgnoresTheDetoursOwnWalk()
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        h.Filter.GatedTargets.Add(new RoomKey(1, 2));
+        List<(RoomKey From, RoomKey Entry)> armed = new();
+        h.Runner.SetGatedApproachArmer((from, entry) => armed.Add((from, entry)));
+        RoomKey giver = new(1, 9);
+        h.Runner.SetPathItemDetourRoomProbe(() => giver);
+
+        Assert.True(h.Runner.Start(AbCycle()));
+
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Equal((new RoomKey(1, 3), new RoomKey(1, 2)), Assert.Single(armed));
+
+        // The fetch walks to the giver first: not the approach finishing or failing.
+        h.Runner.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "reached", giver));
+        h.Runner.OnWalkerEvent(new WalkEvent(WalkEventKind.Failed, "no path", giver));
+        Assert.Equal(LoopState.Approaching, h.Runner.State);
+        Assert.Equal(new RoomKey(1, 2), h.Runner.ApproachTarget);
+    }
+
     // A line A(1/1) ─N─ B(1/2) ─N─ C(1/3), with D(1/4) east of B. Looping A ↔ C runs
     // A→B→C→B→A, so B sits on the cycle without being a waypoint.
     private const string LegGraphJson = """

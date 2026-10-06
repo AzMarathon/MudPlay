@@ -45,7 +45,9 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 25, "Name": "Bloodstone Orb", "ItemType": 2 },
           { "Number": 26, "Name": "Gate Key", "ItemType": 7 },
           { "Number": 27, "Name": "Black Star Key", "ItemType": 7 },
-          { "Number": 28, "Name": "Stone Signet", "ItemType": 2 }
+          { "Number": 28, "Name": "Stone Signet", "ItemType": 2 },
+          { "Number": 29, "Name": "Bone Key", "ItemType": 7 },
+          { "Number": 30, "Name": "Hermit Gift", "ItemType": 2 }
         ]
         """;
 
@@ -61,6 +63,7 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 301, "Name": "Gnome Merchant" },
           { "Number": 302, "Name": "Dragon Lord" },
           { "Number": 303, "Name": "Gnome Commander", "Summoned By": "Room 5/512, Room 5/513" },
+          { "Number": 304, "Name": "old hermit", "Summoned By": "Room 17/1790" },
           { "Number": 347, "Name": "obsidian statue", "Summoned By": "Textblock #863",
             "DropItem-0": 26, "DropItem%-0": 100 },
           { "Number": 348, "Name": "sandstone sphinx", "Summoned By": "Textblock #864",
@@ -98,6 +101,11 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 641, "LinkTo": 0, "Action": "text 640\n", "Called From": "Monster #302" },
           { "Number": 700, "LinkTo": 0, "Action": "orb:701\n", "Called From": "Monster #303" },
           { "Number": 701, "LinkTo": 0, "Action": "giveitem 25\n", "Called From": "Textblock #700" },
+          { "Number": 710, "LinkTo": 0, "Action": "gift:711\nremind:713\n", "Called From": "Monster #304" },
+          { "Number": 711, "LinkTo": 712, "Action": "", "Called From": "Textblock #710" },
+          { "Number": 712, "LinkTo": 0, "Action": "failability 127:goodaligned -51:checkitem 30 2936:takeitem 30:giveability 126 24:giveitem 29:text 9348\n", "Called From": "Textblock #711" },
+          { "Number": 713, "LinkTo": 714, "Action": "", "Called From": "Textblock #710" },
+          { "Number": 714, "LinkTo": 0, "Action": "failability 127:failability 128:goodaligned -51 3075:checkability 126 24:giveitem 29:text 9642\nfailability 126:failability 128:evilaligned -50 3075:goodaligned 29 3075:checkability 127 18:giveitem 29:text 9642\n", "Called From": "Textblock #713" },
           { "Number": 863, "LinkTo": 0, "Action": "touch statue:summon 347\nmove statue:summon 347\n", "Called From": "Room 8/461" },
           { "Number": 864, "LinkTo": 0, "Action": "touch sphinx:summon 348\n", "Called From": "Room 12/2442" }
         ]
@@ -212,6 +220,30 @@ public sealed class ItemSourceIndexTests : IDisposable
         Assert.Equal("orb", giver.Keyword);
         Assert.True(giver.Deterministic);
         Assert.Equal(string.Empty, giver.Requirement);
+    }
+
+    // Report paradigm-20261006-095806: the old hermit's award lines lead with a
+    // condition. Read as the keyword it gave "ask hermit failability 127", and the
+    // quest turn-in (`gift`) and the free re-issue (`remind`) were folded into one
+    // row carrying the wrong keyword.
+    [Fact]
+    public void GiversOf_LineLeadingWithACondition_TakesTheMenuKeyword_OneRowPerKeyword()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        var givers = index.GiversOf(29);
+
+        Assert.Equal(2, givers.Count);
+        ItemGiver gift = Assert.Single(givers, g => g.Keyword == "gift");
+        Assert.False(gift.Deterministic);
+        Assert.Equal("turn in Hermit Gift", gift.Requirement);
+
+        ItemGiver remind = Assert.Single(givers, g => g.Keyword == "remind");
+        Assert.True(remind.Deterministic);
+        Assert.Equal("old hermit", remind.Name);
+        // The message its conditions print when they fail, once, from both lines.
+        Assert.Equal(new[] { 3075 }, remind.RefusalMessages);
+        Assert.Equal(new[] { new RoomKey(17, 1790) }, index.GiverMonsterRoomsOf(304));
     }
 
     [Fact]

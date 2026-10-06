@@ -2385,6 +2385,11 @@
     "CannotBeTaken": true
   },
   {
+    "Number": 1536,
+    "Name": "jagged bone key",
+    "AutoObtainForPath": true
+  },
+  {
     "Number": 1556,
     "Name": "altar of dawn",
     "CannotBeTaken": true

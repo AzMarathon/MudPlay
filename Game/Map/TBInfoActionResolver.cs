@@ -376,6 +376,12 @@ public static class TBInfoActionResolver
     // The directive heads that can legitimately lead a line in a room CMD block.
     // A line starting with one of these is an engine continuation, not something
     // the player types.
+    //
+    // Shared with ItemSourceIndex: an award line that leads with a condition
+    // ("failability 127:…:giveitem 1536") must not have that condition read as the
+    // keyword the player types.
+    internal static bool IsDirectiveHead(string word) => EffectDirectiveHeads.Contains(word);
+
     private static readonly HashSet<string> EffectDirectiveHeads =
         new(StringComparer.OrdinalIgnoreCase)
         {

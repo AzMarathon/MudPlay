@@ -219,6 +219,78 @@ public sealed class PathItemGiveRouterTests
         Assert.Equal(Dest, h.Walks[^1]);
     }
 
+    // Report paradigm-20261006-095806: the old hermit hands a key over only to
+    // those past a quest step. The ask is made regardless; his refusal ends the
+    // wait at once, the walk goes on (the door may be standing open), and the
+    // resumed walk's own re-announce doesn't send us back to ask again.
+    private static Harness WithHermit()
+    {
+        var h = new Harness();
+        h.Names[42] = "jagged bone key";
+        h.Givers[42] = new List<GiveSource>
+        {
+            new(GiverA, "ask old hermit remind", "old hermit",
+                new[] { "The hermit sneers at you, \"You can't serve your cause like that!\"" }),
+        };
+        h.Dist[(Cur, GiverA)] = 3;
+        h.Dist[(GiverA, Dest)] = 2;
+        return h;
+    }
+
+    [Fact]
+    public void RefusalLine_EndsTheWaitAtOnce_AndTheWalkGoesOn()
+    {
+        Harness h = WithHermit();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+        r.OnWalkEvent(Finished(GiverA));
+
+        r.OnLine("You firmly request another key from the hermit, he cackles at you...");
+        Assert.True(r.DetourActive);          // his opening line is not a refusal
+
+        r.OnLine("[HP=100/MA=50]:The hermit sneers at you, \"You can't serve your cause like that!\"");
+
+        Assert.False(r.DetourActive);
+        Assert.Equal(new[] { GiverA, Dest }, h.Walks);
+        Assert.Contains(42, r.Declined);
+    }
+
+    [Fact]
+    public void AfterAFailedGive_TheSameTripDoesNotAskAgain_ButTheNextWalkDoes()
+    {
+        Harness h = WithHermit();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+        r.OnWalkEvent(Finished(GiverA));
+        r.OnGiveTimeout();                    // nothing was handed over and nothing was said
+        Assert.Equal(new[] { GiverA, Dest }, h.Walks);
+
+        // The resumed walk announces the key it still lacks.
+        r.OnNeedPosted(PathNeed(42));
+        Assert.False(r.DetourActive);
+        Assert.Equal(2, h.Walks.Count);
+
+        // That walk ends at the locked door; a later walk asks afresh.
+        r.OnWalkEvent(Failed(Dest));
+        Assert.Empty(r.Declined);
+        r.OnNeedPosted(PathNeed(42));
+        Assert.True(r.DetourActive);
+    }
+
+    [Fact]
+    public void LineThatIsNotThisGiversRefusal_IsIgnored()
+    {
+        Harness h = WithHermit();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(42));
+        r.OnWalkEvent(Finished(GiverA));
+
+        r.OnLine("You do not have that.");
+
+        Assert.True(r.DetourActive);
+        Assert.Equal(GiverA, r.LastGiverRoom);
+    }
+
     [Fact]
     public void WalkToGiverFails_ResumesToDestination()
     {
