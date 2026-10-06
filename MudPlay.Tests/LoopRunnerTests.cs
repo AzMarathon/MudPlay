@@ -2094,6 +2094,40 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("borrow skiff\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
+    // The waypoint's command is the very text exit the route leaves by: sent once,
+    // by the move, not once by each (which crosses and comes straight back).
+    [Fact]
+    public void WaypointCommand_SameAsTheNextTextExit_SentOnce()
+    {
+        Harness h = NewHarness(TextExitGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Runner.Start(new Loop("docks", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "Go Skiff", 0),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("borrow skiff\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    [Fact]
+    public void WaypointCommand_NotTheNextExit_StillSent()
+    {
+        Harness h = NewHarness(TextExitGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Runner.Start(new Loop("docks", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "go boat", 0),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("go boat\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
     [Fact]
     public void Circuit_TextExit_LandsAtTarget_Advances()
     {

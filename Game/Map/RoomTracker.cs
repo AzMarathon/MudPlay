@@ -458,11 +458,21 @@ public sealed class RoomTracker
             return;
         }
         NoteMoveSentCore(command, cardinal: null, isEngineAnnouncement: false, when);
+        if (_engineCommandClaim is { Command: var engineCmd, ExpiresAt: var engineExpiry }
+            && string.Equals(engineCmd, command, StringComparison.OrdinalIgnoreCase)
+            && when < engineExpiry)
+        {
+            _engineCommandClaim = null;
+            _log?.Log(LogSeverity.Debug, "RoomTracker",
+                $"Move '{command}' was an engine's own command; not a typed move.");
+            return;
+        }
         ManualMoveObserved?.Invoke(command);
     }
 
     private (Direction Dir, DateTimeOffset ExpiresAt)? _cardinalEchoClaim;
     private (string Command, DateTimeOffset ExpiresAt)? _textEchoClaim;
+    private (string Command, DateTimeOffset ExpiresAt)? _engineCommandClaim;
     // A move's bytes normally echo back within a few milliseconds, but a
     // synchronous map re-root on entering a new area can stall the round-trip;
     // the expiry only has to outlast that worst-case pump, while staying short
@@ -492,6 +502,17 @@ public sealed class RoomTracker
         ArgumentException.ThrowIfNullOrWhiteSpace(command);
         DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
         _textEchoClaim = (command, when + EchoClaimExpiry);
+    }
+
+    // A command an engine sends on the user's behalf that may or may not be a move —
+    // a loop waypoint's command. If its wording reads as a text exit it is tracked as
+    // a move like any other, but it isn't the user taking over, so it raises no
+    // ManualMoveObserved (report paradigm-20261005-201859: a loop's own `go path`
+    // paused the loop as typed).
+    public void NoteEngineCommandSent(string command, DateTimeOffset? whenUtc = null)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return;
+        _engineCommandClaim = (command, (whenUtc ?? DateTimeOffset.UtcNow) + EchoClaimExpiry);
     }
 
     private void NoteMoveSentCore(string command, Direction? cardinal, bool isEngineAnnouncement, DateTimeOffset when)

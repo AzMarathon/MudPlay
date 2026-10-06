@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.22**
-> - Stash amounts are kept per realm and shared by every character on it, instead of per character
-> - Clients running on the same realm pick up each other's hides and pick-ups
-> - Amounts already recorded on a character move to its realm the next time it loads
+> **Version 3.144.24**
+> - A loop waypoint command that is the same text exit the route takes next is sent once, instead of crossing and walking straight back
+> - A loop's own waypoint command no longer pauses the loop as a move you typed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

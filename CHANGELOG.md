@@ -1,5 +1,11 @@
 # Version history
 
+## 3.144.24
+
+- A loop waypoint command that is the same text exit the route takes next is sent once, instead of crossing and walking straight back
+- A loop's own waypoint command no longer pauses the loop as a move you typed
+- bug reports addressed: paradigm-20261005-201733, paradigm-20261005-201859
+
 ## 3.144.22
 
 - Stash amounts are kept per realm and shared by every character on it, instead of per character

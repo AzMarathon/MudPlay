@@ -1831,6 +1831,17 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void SendCommand(CommandLoopStep step)
     {
+        // A waypoint command that is the text exit the next move takes anyway (a loop
+        // written or imported before the map knew the passage) would cross twice: the
+        // command goes through, then the move sends it again from the far side and
+        // walks back out (report paradigm-20261005-201733, `go path` both ways).
+        if (CrossingTheNextMoveTakes(step) is { } crossing)
+        {
+            _log?.Info("LoopRunner",
+                $"step {_index + 1}: command '{crossing}' skipped — the next move takes that exit itself");
+            AdvanceStep();
+            return;
+        }
         _stepInFlight = true;
         // A waypoint command may chain several commands with `;` or `^M` (the same
         // convention macros / triggers / pre-rest commands use) — send each fragment
@@ -1840,7 +1851,12 @@ public sealed class LoopRunner : IRecoverableEngine
         IReadOnlyList<string> parts = MacroStore.SplitCommandSteps(step.Command);
         if (parts.Count == 0) parts = new[] { step.Command };   // defensive: Save trims/nulls empty
         foreach (string part in parts)
+        {
+            // Ours, not typed: a command worded like a text exit must not pause the loop
+            // as a hand-driven move.
+            _tracker.NoteEngineCommandSent(part.Trim());
             Write(Encoding.Latin1.GetBytes(part + "\r"), $"command '{part}'");
+        }
 
         if (step.DelayMs > 0)
         {
@@ -1856,6 +1872,23 @@ public sealed class LoopRunner : IRecoverableEngine
             // CommandStep on AutoWalkManager uses.
             _awaitingPromptForCommand = true;
         }
+    }
+
+    // The command, when it is one of the text-exit commands of the exit the next move
+    // step leaves this room by. Null for anything else, a chained command included.
+    private string? CrossingTheNextMoveTakes(CommandLoopStep step)
+    {
+        string command = step.Command.Trim();
+        if (MacroStore.SplitCommandSteps(command).Count > 1) return null;
+        if (_expandedSteps[(_index + 1) % _expandedSteps.Count] is not MoveLoopStep next) return null;
+        if (_tracker.State.CurrentRoom is not { } here
+            || !here.Exits.TryGetValue(next.Direction, out RoomExit exit)
+            || exit.Hint != RoomExitHint.Text || exit.TextCommands is not { } crossings)
+            return null;
+        foreach (string crossing in crossings)
+            if (string.Equals(crossing.Trim(), command, StringComparison.OrdinalIgnoreCase))
+                return command;
+        return null;
     }
 
     // ----- custom-command delay timer --------------------------------
