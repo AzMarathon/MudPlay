@@ -464,31 +464,29 @@ public sealed class LoopRunnerTests : IDisposable
             new LoopWaypoint(new RoomKey(1, 1), "ask barmaid pie", 0),
             new LoopWaypoint(new RoomKey(1, 2)),
         }));
-        Assert.Single(h.Sent);            // the waypoint command; move awaits a prompt
+        Assert.Equal(2, h.Sent.Count);    // the waypoint command and the re-display behind it
 
-        // Nothing in flight and no delay running — the state the live gear swap
-        // caught the loop in. The swap's gate assert/clear pauses and resumes it,
-        // and the resume's dispatch is posted past the burst.
+        // The swap's gate assert/clear pauses and resumes the loop while it waits on
+        // the command's replies. The wait carries on; nothing is re-sent.
         h.Coordinator.AssertGate(MovementCoordinator.GearSwapGate);
         Assert.Equal(LoopState.Paused, h.Runner.State);
         h.Coordinator.ClearGate(MovementCoordinator.GearSwapGate);
         Assert.Equal(LoopState.Running, h.Runner.State);
-        Assert.NotEmpty(h.Posted);        // the resume really did queue a dispatch
-
-        // The prompt arrives and the move goes out through the normal path.
-        h.Runner.FirePromptForTests();
+        h.Drain();
         Assert.Equal(2, h.Sent.Count);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
 
-        // Now the deferred body runs. The move is already on the wire, so it must
-        // bail rather than putting a second "n" out and walking into a wall.
+        // The room shows again and the move goes out, once.
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
         h.Drain();
 
-        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal(3, h.Sent.Count);
     }
 
     [Fact]
-    public void Waypoint_WithCommandDelay0_WaitsForPrompt()
+    public void Waypoint_WithCommandDelay0_WaitsForTheRoomShownAgain()
     {
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -499,12 +497,63 @@ public sealed class LoopRunnerTests : IDisposable
         });
         h.Runner.Start(loop);
 
-        Assert.Single(h.Sent);
-        Assert.Equal("ask barmaid pie\r", Encoding.Latin1.GetString(h.Sent[0]));
-
-        h.Runner.FirePromptForTests();
+        // The command, then a bare Enter: the room it re-shows can only arrive after
+        // the command's reply.
         Assert.Equal(2, h.Sent.Count);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+        Assert.Equal("ask barmaid pie\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Equal("\r", Encoding.Latin1.GetString(h.Sent[1]));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
+    }
+
+    // The command brought a monster out: the combat gate holds the loop when the room
+    // shows again, and the loop neither walks out nor repeats the command afterwards
+    // (report paradigm-20261005-194751).
+    [Fact]
+    public void Waypoint_CommandStartsAFight_HoldsThenMovesOn_WithoutRepeatingIt()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("book", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "pull book", 0),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+        Assert.Equal(2, h.Sent.Count);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
+        Assert.Equal(2, h.Sent.Count);              // no move while the fight holds it
+
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        h.Drain();
+        Assert.Equal(2, h.Sent.Count);              // and no second `pull book`
+
+        h.Runner.FireDelayForTests();
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
+    }
+
+    [Fact]
+    public void Waypoint_Command_IsMarkedAsTheLoopsOwnWhileItIsSent()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        List<bool> marks = new();
+        h.Runner.SetWireSender(_ => marks.Add(h.Runner.SendingOwnCommand));
+
+        h.Runner.Start(new Loop("mark", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "blaz ley", 0),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+
+        Assert.Equal(new[] { true, false }, marks);   // the command, then the re-display
+        Assert.False(h.Runner.SendingOwnCommand);
     }
 
     [Fact]
@@ -2124,7 +2173,6 @@ public sealed class LoopRunnerTests : IDisposable
             new LoopWaypoint(new RoomKey(1, 2)),
         }));
 
-        Assert.Single(h.Sent);
         Assert.Equal("go boat\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 

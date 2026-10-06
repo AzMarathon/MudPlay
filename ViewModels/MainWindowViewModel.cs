@@ -3514,10 +3514,13 @@ public partial class MainWindowViewModel : ObservableObject
         // combat spell — the user's attack; the engine holds its auto attack) or arms
         // the between-round-cast resume (an in-between heal/buff so a still-alive target
         // is re-attacked at once instead of a round late).
-        AppServices.Current.OutboundCast.ObserveOutbound(data);
+        // A loop waypoint's command block comes through here too, and the user typed
+        // none of it: a cast or attack in it claims no round and overrides nothing.
+        bool typed = !AppServices.Current.LoopRunner.SendingOwnCommand;
+        if (typed) AppServices.Current.OutboundCast.ObserveOutbound(data);
         // Attack observer — a manually-typed physical attack verb (a/aa/bash/smash/bs/…)
         // is a user override: the engine holds its own swing until the next round.
-        AppServices.Current.OutboundAttack.ObserveOutbound(data);
+        if (typed) AppServices.Current.OutboundAttack.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
         // command, not a paste.

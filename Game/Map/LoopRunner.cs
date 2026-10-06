@@ -122,7 +122,16 @@ public sealed class LoopRunner : IRecoverableEngine
     // don't set this.
     private bool _reExpandAtLapEnd;
     private bool _stepInFlight;
-    private bool _awaitingPromptForCommand;
+    private bool _awaitingRedisplayForCommand;
+    // A no-delay command block is on the wire and the room hasn't been shown again yet.
+    public bool AwaitingCommandReplies => _awaitingRedisplayForCommand;
+    // How long a no-delay command step waits for the room re-display behind it.
+    private static readonly TimeSpan CommandRedisplayWait = TimeSpan.FromSeconds(3);
+
+    // True while a waypoint's command block is being written to the wire. The send is
+    // synchronous through the outbound observers, which read it to tell the loop's
+    // commands from the user's typing.
+    public bool SendingOwnCommand { get; private set; }
     private RoomKey? _expectedMoveTarget;
     // The room the in-flight move was sent FROM. OnTrackerStateChanged ignores
     // tracker transitions while State != Running (a paused loop doesn't react
@@ -884,7 +893,7 @@ public sealed class LoopRunner : IRecoverableEngine
         };
         _index = 0;
         _stepInFlight = false;
-        _awaitingPromptForCommand = false;
+        _awaitingRedisplayForCommand = false;
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
         _approachTarget = null;
@@ -1356,12 +1365,6 @@ public sealed class LoopRunner : IRecoverableEngine
         foreach (RoomKey key in ResolveLoopRoomKeys())
             if (_filter.IsAvoided(key)) return true;
         return false;
-    }
-
-    // Test seam — pretend the prompt scanner fired so command steps can advance.
-    internal void FirePromptForTests()
-    {
-        if (_awaitingPromptForCommand) OnPromptObservedCore();
     }
 
     // ----- internals -------------------------------------------------
@@ -1850,27 +1853,41 @@ public sealed class LoopRunner : IRecoverableEngine
         // prompt-advance below applies once, after the whole batch is on the wire.
         IReadOnlyList<string> parts = MacroStore.SplitCommandSteps(step.Command);
         if (parts.Count == 0) parts = new[] { step.Command };   // defensive: Save trims/nulls empty
-        foreach (string part in parts)
+        // Ours, not typed: nothing that watches outbound input may read these as the
+        // user taking over (a typed move pausing the loop, a typed cast or attack
+        // claiming the round).
+        SendingOwnCommand = true;
+        try
         {
-            // Ours, not typed: a command worded like a text exit must not pause the loop
-            // as a hand-driven move.
-            _tracker.NoteEngineCommandSent(part.Trim());
-            Write(Encoding.Latin1.GetBytes(part + "\r"), $"command '{part}'");
+            foreach (string part in parts)
+            {
+                _tracker.NoteEngineCommandSent(part.Trim());
+                Write(Encoding.Latin1.GetBytes(part + "\r"), $"command '{part}'");
+            }
         }
+        finally { SendingOwnCommand = false; }
 
         if (step.DelayMs > 0)
         {
             // Wait the user-specified duration before advancing. The
             // timer pauses + resumes with the coordinator's pause
             // state so a rest-block doesn't burn the delay window.
-            _awaitingPromptForCommand = false;
+            _awaitingRedisplayForCommand = false;
             StartDelay(TimeSpan.FromMilliseconds(step.DelayMs));
         }
         else
         {
-            // 0 means "advance on the next prompt" — same contract
-            // CommandStep on AutoWalkManager uses.
-            _awaitingPromptForCommand = true;
+            // No delay: hold the next move until the game has answered every command
+            // in the block. A bare Enter goes out behind them; its room re-display can
+            // only arrive after their replies, and it carries whatever the commands
+            // brought into the room in "Also here", so the combat gate holds the loop
+            // before the move does (report paradigm-20261005-194751: `pull book`
+            // summoned a monster and the loop walked out as combat engaged, having
+            // advanced on the prompt of the arrival it had just made). The delay
+            // timer bounds the wait where no re-display can be read (a dark room).
+            Write("\r"u8.ToArray(), "re-display after command");
+            _awaitingRedisplayForCommand = true;
+            StartDelay(CommandRedisplayWait);
         }
     }
 
@@ -1937,6 +1954,7 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         _delayTimer?.Stop();
         _delayRemaining = TimeSpan.Zero;
+        _awaitingRedisplayForCommand = false;
         if (State != LoopState.Running) return;
         _stepInFlight = false;
         AdvanceStep();
@@ -2024,6 +2042,16 @@ public sealed class LoopRunner : IRecoverableEngine
         }
         if (State != LoopState.Running || !_stepInFlight) return;
         if (_loop is null || _index >= _expandedSteps.Count) return;
+        if (_awaitingRedisplayForCommand)
+        {
+            // The room shown again behind a command block: its replies are all in.
+            if (t.NewRoom is null || t.NewConfidence is not (RoomConfidence.Confirmed or RoomConfidence.Pending)) return;
+            StopDelayTimer();
+            _awaitingRedisplayForCommand = false;
+            _stepInFlight = false;
+            AdvanceStep();
+            return;
+        }
         if (_expandedSteps[_index] is not MoveLoopStep) return;
 
         // A door, hidden-reveal, winch or trap sub-FSM owns this step until its reply
@@ -2133,10 +2161,8 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private void OnPromptObserved(PromptObservation _)
     {
-        // Fires before the normal per-step handling below: the reconnect resume
-        // takes priority over — and would otherwise be masked by — the
-        // State != Running early-return in OnPromptObservedCore, since
-        // NotifyDisconnected always leaves State at Idle.
+        // The first genuine in-game prompt after a reconnect restarts the loop
+        // NotifyDisconnected set aside.
         if (_pendingReconnectResume is { } loop)
         {
             _pendingReconnectResume = null;
@@ -2145,17 +2171,6 @@ public sealed class LoopRunner : IRecoverableEngine
             Start(loop);
             return;
         }
-        OnPromptObservedCore();
-    }
-
-    private void OnPromptObservedCore()
-    {
-        if (State != LoopState.Running) return;
-        if (!_awaitingPromptForCommand) return;
-
-        _awaitingPromptForCommand = false;
-        _stepInFlight = false;
-        AdvanceStep();
     }
 
     // Auto-recovery entry: a mid-circuit step landed somewhere we didn't plan for
@@ -2231,7 +2246,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (_awaitingTrapDisarm) { _trapDelegateStopAll?.Invoke(); _awaitingTrapDisarm = false; }
         _trapClearedFor = null;
         _stepInFlight = false;
-        _awaitingPromptForCommand = false;
+        _awaitingRedisplayForCommand = false;
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
         _approachTarget = null;
@@ -2589,7 +2604,7 @@ public sealed class LoopRunner : IRecoverableEngine
                 if (_index != resumeIndex) return;
                 if (_stepInFlight && _tracker.State.Confidence == RoomConfidence.Pending) return;
                 _stepInFlight = false;
-                _awaitingPromptForCommand = false;
+                _awaitingRedisplayForCommand = false;
                 SendNextStep();
             });
         }
@@ -2639,7 +2654,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _expandedSteps = new List<LoopStep>();
         _reExpandAtLapEnd = false;
         _stepInFlight = false;
-        _awaitingPromptForCommand = false;
+        _awaitingRedisplayForCommand = false;
         _expectedMoveTarget = null;
         _expectedMoveSource = null;
         _approachTarget = null;

@@ -1,11 +1,13 @@
 # Version history
 
-## 3.144.25
+## 3.144.26
 
 - A loop waypoint command that is the same text exit the route takes next is sent once, instead of crossing and walking straight back
 - A loop's own waypoint command no longer pauses the loop as a move you typed
+- A loop waits for the game to answer a waypoint's command (and re-show the room) before its next move, so a monster the command brings out is fought there
+- A cast or attack in a waypoint's command is no longer treated as one you typed
 - Packaged loops no longer carry commands the navigation already performs (`go path`, `go fissure`, `move rubble`, `push brick`, `push stone`)
-- bug reports addressed: paradigm-20261005-201733, paradigm-20261005-201859
+- bug reports addressed: paradigm-20261005-201733, paradigm-20261005-201859, paradigm-20261005-194751
 
 ## 3.144.22
 
