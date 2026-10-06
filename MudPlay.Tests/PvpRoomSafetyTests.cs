@@ -25,7 +25,6 @@ public sealed class PvpRoomSafetyTests
         public bool PvpEnabled { get; set; } = true;
         public RealmType Realm { get; set; } = RealmType.Stock;
         public HashSet<string> Party { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public HashSet<string> AttackOnSight { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Classes { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, int> Levels { get; } = new(StringComparer.OrdinalIgnoreCase);
         public DateTimeOffset? LastMoveSentAt { get; private set; }
@@ -47,7 +46,6 @@ public sealed class PvpRoomSafetyTests
                 Router, Classifier,
                 pvpEnabled: () => PvpEnabled,
                 inParty: Party.Contains,
-                attackOnSight: AttackOnSight.Contains,
                 classOf: given => Classes.TryGetValue(given, out string? cls) ? cls : null,
                 levelOf: given => Levels.TryGetValue(given, out int level) ? level : null,
                 roomAttackFromLevel: cls => RoomAttackFrom.TryGetValue(cls, out int from) ? from : null,
@@ -121,15 +119,18 @@ public sealed class PvpRoomSafetyTests
         Assert.Null(h.Safety.LeaveRoomReason());
     }
 
+    // Only party members are spared. Who a non-member is to us (Friend, Neutral,
+    // Enemy) makes no difference to a room spell.
     [Fact]
-    public void PartyMembersAndAttackOnSightEnemies_DontHold()
+    public void PartyMembers_DontHold_EveryoneElseDoes()
     {
         using Harness h = new();
         h.Party.Add("Bob");
-        h.AttackOnSight.Add("Ann");
-        h.Feed("Also here: Bob, Ann, giant rat.");
-
+        h.Feed("Also here: Bob, giant rat.");
         Assert.Null(h.Safety.RoomAttackHeldBy());
+
+        h.Feed("Also here: Bob, Ann, giant rat.");
+        Assert.Equal("Ann", h.Safety.RoomAttackHeldBy());
     }
 
     [Fact]
@@ -241,16 +242,13 @@ public sealed class PvpRoomSafetyTests
     }
 
     [Fact]
-    public void PartyMemberOrAttackOnSightEnemy_IsNoReasonToLeave()
+    public void PartyMember_IsNoReasonToLeave()
     {
         using Harness h = new();
         h.Party.Add("Bob");
         h.Move();
         h.Feed($"Also here: Bob, {ThreeRats}.");
-        Assert.Null(h.Safety.LeaveRoomReason());
 
-        h.Party.Clear();
-        h.AttackOnSight.Add("Bob");
         Assert.Null(h.Safety.LeaveRoomReason());
     }
 

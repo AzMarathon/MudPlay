@@ -45,7 +45,7 @@ public sealed class PvpResponderTests
             Classifier = new RoomEntityClassifier(Router, new MonsterMessageStore(), Players, new LogService());
             Room = new PvpRoomSafety(
                 Router, Classifier,
-                pvpEnabled: () => PvpEnabled, inParty: Party.HasMember, attackOnSight: _ => false,
+                pvpEnabled: () => PvpEnabled, inParty: Party.HasMember,
                 classOf: _ => null, levelOf: _ => null, roomAttackFromLevel: _ => null,
                 realm: () => RealmType.ParaMud, lastMoveSentAt: () => null);
             Attacks = new PvpAttackWatcher(

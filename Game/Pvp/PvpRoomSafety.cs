@@ -29,7 +29,6 @@ public sealed class PvpRoomSafety : IDisposable
     private readonly RoomEntityClassifier _classifier;
     private readonly Func<bool> _pvpEnabled;
     private readonly Func<string, bool> _inParty;
-    private readonly Func<string, bool> _attackOnSight;
     private readonly Func<string, string?> _classOf;
     private readonly Func<string, int?> _levelOf;
     private readonly Func<string, int?> _roomAttackFromLevel;
@@ -71,7 +70,6 @@ public sealed class PvpRoomSafety : IDisposable
         RoomEntityClassifier classifier,
         Func<bool> pvpEnabled,
         Func<string, bool> inParty,
-        Func<string, bool> attackOnSight,
         Func<string, string?> classOf,
         Func<string, int?> levelOf,
         Func<string, int?> roomAttackFromLevel,
@@ -85,7 +83,6 @@ public sealed class PvpRoomSafety : IDisposable
         _classifier = classifier;
         _pvpEnabled = pvpEnabled;
         _inParty = inParty;
-        _attackOnSight = attackOnSight;
         _classOf = classOf;
         _levelOf = levelOf;
         _roomAttackFromLevel = roomAttackFromLevel;
@@ -102,9 +99,10 @@ public sealed class PvpRoomSafety : IDisposable
     // The game data changed under us: a class's spells may differ in the new set.
     public void ResetClassCache() => _fromLevelByClass.Clear();
 
-    // The first player here our room attack would hit and mustn't: outside our
-    // party, and not someone we are set to attack on sight. Null when nobody is,
-    // or PvP is off for the realm.
+    // The first player here our room attack would hit and mustn't: anyone outside
+    // our party, an Enemy included. What is done about an Enemy is their PvP
+    // response, aimed at them; it is never left to a room spell. Null when nobody
+    // is here, or PvP is off for the realm.
     public string? RoomAttackHeldBy()
     {
         string? heldBy = null;
@@ -166,9 +164,7 @@ public sealed class PvpRoomSafety : IDisposable
         List<string> parts = new(here.Count);
         foreach (string given in here)
         {
-            string standing = _inParty(given) ? "party"
-                : _attackOnSight(given) ? "attack on sight"
-                : "bystander";
+            string standing = _inParty(given) ? "party" : "outside the party";
             string where = _residents.Contains(given) ? "here before us" : "arrived after us";
             string rooming = IsRoomAttacking(given) ? ", room-attacking" : "";
             parts.Add($"{given} ({standing}, {_classOf(given) ?? "class unknown"}, {where}{rooming})");
@@ -196,7 +192,7 @@ public sealed class PvpRoomSafety : IDisposable
         return null;
     }
 
-    private bool IsBystander(string given) => !_inParty(given) && !_attackOnSight(given);
+    private bool IsBystander(string given) => !_inParty(given);
 
     private bool IsRoomAttacking(string given) =>
         _roomAttackSeenAt.TryGetValue(given, out DateTimeOffset at)

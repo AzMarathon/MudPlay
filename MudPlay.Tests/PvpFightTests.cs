@@ -103,6 +103,27 @@ public sealed class PvpFightTests
         Assert.Contains("attacking Bob", Assert.Single(h.Reports));
     }
 
+    // The combat engine re-decides on these: stand down for the fight, pick the
+    // room back up after it.
+    [Fact]
+    public void ActiveChanged_IsRaisedWhenAFightStarts_AndWhenItEnds()
+    {
+        using Harness h = new();
+        int changes = 0;
+        h.Fight.ActiveChanged += () => changes++;
+        h.Feed("Also here: Bob.");
+
+        h.Fight.Engage("Bob", false, "x");
+        Assert.Equal(1, changes);
+        h.Fight.Engage("Bob", false, "x");      // the same fight
+        Assert.Equal(1, changes);
+
+        h.Fight.Stop("done");
+        Assert.Equal(2, changes);
+        h.Fight.Stop("done");
+        Assert.Equal(2, changes);
+    }
+
     [Fact]
     public void Engage_Refused_WhenPvpIsOff_OrTheyAreInOurParty_OrAnotherFightIsOn()
     {

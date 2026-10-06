@@ -96,6 +96,9 @@ public sealed class PvpFight : IDisposable
     // Told what happened, for the terminal notice.
     public event Action<string>? Reported;
 
+    // A fight started or ended.
+    public event Action? ActiveChanged;
+
     // The last thing reported, for the bug report.
     public string LastReport { get; private set; } = "(none this session)";
 
@@ -167,6 +170,7 @@ public sealed class PvpFight : IDisposable
 
         _resumeEngines = _suspendEngines($"PvP: fighting {given}");
         Report($"{why}: attacking {given}{(chase ? ", and chasing if they run" : "")}");
+        ActiveChanged?.Invoke();
 
         // Sent whether or not they are listed: an attacker can be one we can't see,
         // and the game's own "You do not see …" ends the fight if they aren't here.
@@ -211,6 +215,7 @@ public sealed class PvpFight : IDisposable
         _resumeEngines = null;
         if (resume) resumeEngines?.Invoke();
         if (_warningsOff) WatchForWarningsBack();
+        ActiveChanged?.Invoke();
     }
 
     public string Describe() => (_target is { } target

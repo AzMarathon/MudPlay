@@ -3923,13 +3923,6 @@ public sealed class AppServices
             Router, RoomClassifier,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
             inParty: PartyState.HasMember,
-            // Attacking on sight is the one case where hitting them is the point.
-            // Any other Enemy is left to their PvP response, not to a stray room spell.
-            attackOnSight: given =>
-                Players.Find(given) is { Relationship: Models.GameData.PlayerRelationship.Enemy } enemy
-                && (enemy.PvpResponse
-                    ?? ReadSection<Models.Profile.PvpSettings>(Profile.Current, "Pvp").Action)
-                   is Models.GameData.PvpAction.Attack or Models.GameData.PvpAction.ChaseAttack,
             classOf: ResolveKnownPlayerClass,
             levelOf: given => Players.Find(given)?.Level,
             roomAttackFromLevel: cls => SpellCatalog.RoomAttackFromLevel(cls),
@@ -7518,6 +7511,9 @@ public sealed class AppServices
             schedule: pacedReplyScheduler,
             log: Log);
         PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");
+        // The combat engine stands down for the fight and picks the room back up
+        // after it; either way it only re-decides on a room observation.
+        PvpFight.ActiveChanged += () => Avalonia.Threading.Dispatcher.UIThread.Post(RoomClassifier.ReemitCurrent);
         // The chase's own steps go through the walker; its finish is the arrival.
         Walker.Event += e =>
         {

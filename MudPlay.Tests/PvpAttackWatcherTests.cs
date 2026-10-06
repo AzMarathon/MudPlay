@@ -38,7 +38,6 @@ public sealed class PvpAttackWatcherTests
                 Router, Classifier,
                 pvpEnabled: () => PvpEnabled,
                 inParty: Party.HasMember,
-                attackOnSight: _ => false,
                 classOf: _ => null,
                 levelOf: _ => null,
                 roomAttackFromLevel: _ => null,
