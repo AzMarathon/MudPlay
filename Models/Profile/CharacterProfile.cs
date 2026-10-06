@@ -208,16 +208,9 @@ public sealed class CharacterProfile
     // null or empty = no stash rooms flagged.
     public List<RoomRef>? StashRooms { get; set; }
 
-    // Running tally of the copper we believe each stash room is holding, keyed
-    // "map/room". Built up by the `You hid N <coin>.` echoes and drawn down when we
-    // collect it back, so auto-train funding can decide a stash is worth a detour
-    // before walking one. Survives a restart because a stash does — unlike the
-    // transaction-history window, which is a rolling display log and keeps no
-    // structured amount to add up.
-    //
-    // A belief, not a balance: another player who searches the room can take the
-    // pile without us ever seeing it, so anything planned against these figures is
-    // confirmed by searching on arrival. null / empty = nothing stashed.
+    // Believed copper per stash room, keyed "map/room", from when the tally was kept
+    // per character. Read once on load and moved to the realm's shared tally
+    // (Services.StashBalanceStore); nothing writes it any more.
     public Dictionary<string, long>? StashedCopper { get; set; }
 
     // Client-tracked use counts for limited-use items, keyed by item number. Populated

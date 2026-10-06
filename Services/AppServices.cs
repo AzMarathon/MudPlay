@@ -1261,10 +1261,12 @@ public sealed class AppServices
     // same session boundary as the other session-stats trackers.
     public Game.Cash.TransactionHistoryTracker TransactionHistory { get; private set; } = null!;
 
-    // Structured per-room tally of coin we believe is stashed, persisted on the
-    // character profile. Backs auto-train funding's "is that stash worth a detour"
+    // Structured per-room tally of coin we believe is stashed, persisted per realm
+    // (StashStore). Backs auto-train funding's "is that stash worth a detour"
     // question, which the display-oriented TransactionHistory above can't answer.
     public Game.Cash.StashLedger StashBalances { get; } = new();
+    // Persists StashBalances in the active realm's folder, shared by its characters.
+    public StashBalanceStore StashStore { get; private set; } = null!;
 
     // The member's side of a leader's stash transfer: @get-stash.
     public Game.Remote.GetStashHandler GetStash { get; private set; } = null!;
@@ -6273,13 +6275,27 @@ public sealed class AppServices
                 BankBalance.NoteWithdrawal(name, copper);
         };
 
-        // Stash beliefs outlive a session because a stash does.
-        Profile.ProfileLoaded += p => StashBalances.Hydrate(p.StashedCopper);
-        Profile.ProfileSaving += p =>
+        // Stash beliefs outlive a session because a stash does, and belong to the
+        // realm: every character on it can reach the same rooms. A profile saved
+        // while they were per character hands its tally over on load.
+        StashStore = new StashBalanceStore(StashBalances, Log);
+        void LoadRealmStash()
         {
-            Dictionary<string, long> snapshot = StashBalances.Snapshot();
-            p.StashedCopper = snapshot.Count > 0 ? snapshot : null;
-        };
+            StashStore.OnRealmChanged(ActiveRealmFolder());
+            if (Profile.Current is not { StashedCopper: { Count: > 0 } carried } p) return;
+            if (StashStore.ActiveRealmFolder is null)
+            {
+                // No realm to hold them (no BBS yet): this session works from the profile's.
+                StashBalances.Hydrate(carried);
+                return;
+            }
+            if (!StashStore.Adopt(carried, p.Name)) return;
+            p.StashedCopper = null;
+            Profile.Save();
+        }
+        Profile.ProfileLoaded += _ => LoadRealmStash();
+        Profile.BbsPinApplied += _ => LoadRealmStash();
+        Profile.ProfileClosed += () => StashStore.OnRealmChanged(ActiveRealmFolder());
         Inventory.ItemHidden += item =>
         {
             // An auto-discard offload uses `hide <item>` in HideMode — that's a

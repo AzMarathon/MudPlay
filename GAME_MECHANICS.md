@@ -5423,6 +5423,9 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 - **Hidden coin persists, but it is not yours.** It stays in the room rather than decaying, but **any
   player who searches that room finds it and can take it**. A stash balance is therefore a *belief*,
   never a fact: plan against it, but confirm it on arrival before spending it.
+- **A stash is in the room for every character on the realm** *([CONFIRMED] 2026-10-05, user)*. Coin
+  one character hides can be searched up and taken by any other character the same player runs on
+  that realm, the same way any player can. It does not carry to another realm.
 - **Stashed (hidden) coin is only re-surfaced by a `search`.** A hidden pile does **not** show on plain
   room entry or a re-`look` — only a `search` / `sea` re-reveals it, re-rendered through the same
   `You notice N <coin> here.` line as visible coin.
@@ -5450,6 +5453,8 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 
 **Client use:**
 - In a stash room the client `hide`s excess coin.
+- `StashLedger` / `StashBalanceStore` keep the believed balances per realm (`stash-balances.json` in the
+  realm folder), shared by every character on it (user 2026-10-05).
 - The auto-train funding errand (`TrainFundingRouter`, with `CashManager.SetCollectLimit` /
   `CollectSurveyed`) holds the pickup while it searches a stash, reads what the search showed, and only
   then decides: a pile that covers the shortfall gives up just that much, dearest coin first; a short
