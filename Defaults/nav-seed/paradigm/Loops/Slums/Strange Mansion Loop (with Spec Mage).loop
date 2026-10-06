@@ -129,7 +129,7 @@
     },
     {
       "Room": "1/428",
-      "Command": "move rubble",
+      "Command": null,
       "DelayMs": 0
     },
     {
@@ -169,7 +169,7 @@
     },
     {
       "Room": "1/193",
-      "Command": "move rubble",
+      "Command": null,
       "DelayMs": 0
     },
     {

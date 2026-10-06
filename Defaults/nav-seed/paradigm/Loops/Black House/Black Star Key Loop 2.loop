@@ -22,7 +22,7 @@
     },
     {
       "Room": "1/1442",
-      "Command": "push brick",
+      "Command": null,
       "DelayMs": 0,
       "DoNotRest": false,
       "DoNotAttack": false,

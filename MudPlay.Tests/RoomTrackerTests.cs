@@ -262,6 +262,23 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.Equal(new[] { "u", "go path" }, typed);
     }
 
+    // A loop waypoint's own command worded like a text exit isn't the user taking over;
+    // the same words typed afterwards are.
+    [Fact]
+    public void EngineCommandWordedAsAMove_NotATypedMove()
+    {
+        RoomTracker tracker = NewTracker();
+        List<string> typed = new();
+        tracker.ManualMoveObserved += typed.Add;
+
+        tracker.NoteEngineCommandSent("go path");
+        tracker.NoteMoveSentByObserver("go path");
+        Assert.Empty(typed);
+
+        tracker.NoteMoveSentByObserver("go path");
+        Assert.Equal(new[] { "go path" }, typed);
+    }
+
     [Fact]
     public void EngineCardinalMove_DoesNotFireManualMoveObserved()
     {

@@ -4124,6 +4124,8 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **[CONFIRMED] A `(Hidden, Needs N Actions, {any|specific} order)` exit unlocks by issuing the listed
   command(s) from the named room + exit direction.** The action room can differ from the room the exit
   lives in (the "cross-room" case): e.g. pull a lever in room A to open an exit in room B.
+- **[CONFIRMED] Repeating the action on an open exit does not close it** *(2026-10-05, user: pushing the
+  brick or the stone a second time)*. A repeat is wasted, not harmful.
 - **[CONFIRMED] Once opened, the exit stays open for a timed window of roughly 3–5 minutes that is NOT
   encoded anywhere in the game data.** Long enough to walk from the action room to the exit room and
   cross without racing a re-lock.

@@ -97,14 +97,7 @@ public sealed class MacroStore
     public static IReadOnlyList<string> SplitCommandSteps(string? command)
     {
         if (string.IsNullOrEmpty(command)) return Array.Empty<string>();
-        // Normalise every separator to `;` (^M is two chars; newlines may be
-        // \r\n or \n), then a single split covers all three.
-        string normalized = command
-            .Replace("^M", ";", StringComparison.Ordinal)
-            .Replace("\r\n", ";", StringComparison.Ordinal)
-            .Replace('\r', ';')
-            .Replace('\n', ';');
-        string[] parts = normalized.Split(';');
+        string[] parts = Fragments(command);
         List<string> steps = new(parts.Length);
         foreach (string p in parts)
         {
@@ -113,6 +106,31 @@ public sealed class MacroStore
         }
         return steps;
     }
+
+    // SplitCommandSteps for a loop waypoint's command, where a blank fragment BETWEEN
+    // two separators is a deliberate bare Enter (`pull book;^M` re-shows the room) and
+    // comes back as an empty string. A single trailing separator still sends nothing.
+    public static IReadOnlyList<string> SplitCommandStepsKeepingEnters(string? command)
+    {
+        if (string.IsNullOrEmpty(command)) return Array.Empty<string>();
+        string[] parts = Fragments(command);
+        List<string> steps = new(parts.Length);
+        for (int i = 0; i < parts.Length; i++)
+        {
+            string trimmed = parts[i].Trim();
+            if (trimmed.Length > 0 || i < parts.Length - 1) steps.Add(trimmed);
+        }
+        return steps;
+    }
+
+    // Normalise every separator to `;` (^M is two chars; newlines may be \r\n or
+    // \n), then a single split covers all three.
+    private static string[] Fragments(string command) => command
+        .Replace("^M", ";", StringComparison.Ordinal)
+        .Replace("\r\n", ";", StringComparison.Ordinal)
+        .Replace('\r', ';')
+        .Replace('\n', ';')
+        .Split(';');
 
     // Split a line the PLAYER just typed (terminal / conversation input) into
     // the commands it should send. Lets a player rapid-fire several commands

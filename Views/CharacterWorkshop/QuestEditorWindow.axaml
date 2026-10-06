@@ -41,7 +41,11 @@
 
             <!-- Master list -->
             <Border Grid.Column="0" Classes="Pane">
-                <ListBox ItemsSource="{Binding Quests}"
+              <Grid RowDefinitions="Auto,*">
+                <TextBox Grid.Row="0" Margin="4"
+                         Text="{Binding FilterText, Mode=TwoWay}"
+                         PlaceholderText="Filter by quest name…"/>
+                <ListBox Grid.Row="1" ItemsSource="{Binding VisibleQuests}"
                          SelectedItem="{Binding SelectedQuest, Mode=TwoWay}"
                          Background="Transparent" BorderThickness="0">
                     <ListBox.ItemTemplate>
@@ -53,6 +57,7 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+              </Grid>
             </Border>
 
             <!-- Detail editor for the selected quest -->
