@@ -663,8 +663,9 @@ public sealed class ProfileService
     // realm, level, race, gear), so what the source read off the game doesn't come
     // along: the copy starts with no stats, Default-gear maxima, carry weight,
     // position or gear-set contents, and is marked StateUnverified so its first
-    // entry reads them. Its learned spells, death history and stash amounts are
-    // the source's own record and stay behind too.
+    // entry reads them. Its learned spells and death history are the source's own
+    // record and stay behind too, as does any stash tally it still carried (those
+    // are the realm's now).
     public void CopyProfile(string bbsName, string fromName, string toName)
     {
         if (string.IsNullOrWhiteSpace(bbsName) || string.IsNullOrWhiteSpace(fromName) || string.IsNullOrWhiteSpace(toName))

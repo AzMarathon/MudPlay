@@ -1907,7 +1907,10 @@ public static class BugReportBuilder
         // will produce, and answering it needs all three money stores plus whether a
         // back-off is currently holding the armed run off.
         var believed = svc.StashBalances.NonEmpty();
-        sb.Append("\n**Stashed coin (believed)** (").Append(believed.Count).Append(")\n\n");
+        sb.Append("\n**Stashed coin (believed, shared by the realm's characters)** (").Append(believed.Count).Append(")\n\n");
+        sb.Append("_store: ").Append(svc.StashStore.ActiveRealmFolder is { } stashFolder
+            ? Path.GetFileName(stashFolder) + "/stash-balances.json"
+            : "memory only (no realm)").Append("_\n\n");
         if (believed.Count == 0) sb.Append("_(none)_\n");
         else foreach ((var room, long copper) in believed)
             sb.Append("- ").Append(room.Map).Append('/').Append(room.Room)
