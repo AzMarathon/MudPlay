@@ -464,29 +464,29 @@ public sealed class LoopRunnerTests : IDisposable
             new LoopWaypoint(new RoomKey(1, 1), "ask barmaid pie", 0),
             new LoopWaypoint(new RoomKey(1, 2)),
         }));
-        Assert.Equal(2, h.Sent.Count);    // the waypoint command and the re-display behind it
+        Assert.Single(h.Sent);            // the waypoint command; the move awaits its reply
 
         // The swap's gate assert/clear pauses and resumes the loop while it waits on
-        // the command's replies. The wait carries on; nothing is re-sent.
+        // the command's reply. The wait carries on; nothing is re-sent.
         h.Coordinator.AssertGate(MovementCoordinator.GearSwapGate);
         Assert.Equal(LoopState.Paused, h.Runner.State);
         h.Coordinator.ClearGate(MovementCoordinator.GearSwapGate);
         Assert.Equal(LoopState.Running, h.Runner.State);
         h.Drain();
-        Assert.Equal(2, h.Sent.Count);
+        Assert.Single(h.Sent);
 
-        // The room shows again and the move goes out, once.
-        h.Tracker.NoteRoomObserved(new RoomObservation("A",
-            new HashSet<Direction> { Direction.N }));
-        Assert.Equal(3, h.Sent.Count);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
+        // The reply's prompt arrives and the move goes out, once.
+        h.Runner.FirePromptForTests();
+        h.Drain();
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
         h.Drain();
 
-        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal(2, h.Sent.Count);
     }
 
     [Fact]
-    public void Waypoint_WithCommandDelay0_WaitsForTheRoomShownAgain()
+    public void Waypoint_WithCommandDelay0_WaitsForItsReply()
     {
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
@@ -497,43 +497,88 @@ public sealed class LoopRunnerTests : IDisposable
         });
         h.Runner.Start(loop);
 
-        // The command, then a bare Enter: the room it re-shows can only arrive after
-        // the command's reply.
-        Assert.Equal(2, h.Sent.Count);
+        Assert.Single(h.Sent);
         Assert.Equal("ask barmaid pie\r", Encoding.Latin1.GetString(h.Sent[0]));
-        Assert.Equal("\r", Encoding.Latin1.GetString(h.Sent[1]));
 
-        h.Tracker.NoteRoomObserved(new RoomObservation("A",
-            new HashSet<Direction> { Direction.N }));
-        Assert.Equal(3, h.Sent.Count);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
+        h.Runner.FirePromptForTests();
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
-    // The command brought a monster out: the combat gate holds the loop when the room
-    // shows again, and the loop neither walks out nor repeats the command afterwards
-    // (report paradigm-20261005-194751).
+    // One prompt per command: the move waits for the last command's reply, not the
+    // first one's (report paradigm-20261005-194751, `pull book;blaz ley`).
     [Fact]
-    public void Waypoint_CommandStartsAFight_HoldsThenMovesOn_WithoutRepeatingIt()
+    public void Waypoint_ChainedCommandDelay0_WaitsForEveryReply()
     {
         Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(new Loop("book", new[]
         {
-            new LoopWaypoint(new RoomKey(1, 1), "pull book", 0),
+            new LoopWaypoint(new RoomKey(1, 1), "pull book;blaz ley", 0),
             new LoopWaypoint(new RoomKey(1, 2)),
         }));
         Assert.Equal(2, h.Sent.Count);
 
-        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
-        h.Tracker.NoteRoomObserved(new RoomObservation("A",
-            new HashSet<Direction> { Direction.N }));
-        Assert.Equal(2, h.Sent.Count);              // no move while the fight holds it
+        h.Runner.FirePromptForTests();
+        Assert.Equal(2, h.Sent.Count);
 
+        h.Runner.FirePromptForTests();
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
+    }
+
+    // The command started a fight: the loop stays in the room until it is over, and
+    // doesn't repeat the command when the combat gate lets it go.
+    [Fact]
+    public void Waypoint_CommandStartsAFight_HoldsThenMovesOn_WithoutRepeatingIt()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        bool inCombat = false;
+        h.Runner.SetInCombatProbe(() => inCombat);
+        h.Runner.Start(new Loop("book", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "blaz ley", 0),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+
+        inCombat = true;                             // *Combat Engaged* came with the reply
+        h.Runner.FirePromptForTests();
+        Assert.Single(h.Sent);                       // no move while the fight runs
+        h.Runner.FireDelayForTests();
+        Assert.Single(h.Sent);                       // the bound timer keeps holding
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        inCombat = false;
         h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
-        h.Drain();
-        Assert.Equal(2, h.Sent.Count);              // and no second `pull book`
+        Assert.Single(h.Sent);                       // and no second `blaz ley`
 
         h.Runner.FireDelayForTests();
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    // A blank fragment between separators is a bare Enter: the loop also waits for the
+    // room to be shown again.
+    [Fact]
+    public void Waypoint_CommandWithABareEnter_WaitsForTheRoomShownAgain()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("book", new[]
+        {
+            new LoopWaypoint(new RoomKey(1, 1), "pull book;^M", 0),
+            new LoopWaypoint(new RoomKey(1, 2)),
+        }));
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("\r", Encoding.Latin1.GetString(h.Sent[1]));
+
+        h.Runner.FirePromptForTests();
+        h.Runner.FirePromptForTests();
+        Assert.Equal(2, h.Sent.Count);               // answered, but the room isn't back yet
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("A",
+            new HashSet<Direction> { Direction.N }));
         Assert.Equal(3, h.Sent.Count);
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[2]));
     }
@@ -552,7 +597,7 @@ public sealed class LoopRunnerTests : IDisposable
             new LoopWaypoint(new RoomKey(1, 2)),
         }));
 
-        Assert.Equal(new[] { true, false }, marks);   // the command, then the re-display
+        Assert.Equal(new[] { true }, marks);
         Assert.False(h.Runner.SendingOwnCommand);
     }
 
