@@ -3,9 +3,8 @@ using MudPlay.Terminal;
 
 namespace MudPlay.Services.Patterns;
 
-// Full Regex match against the line's text. The regex is compiled in the
-// constructor; capture groups from index 1 onward are returned to the handler
-// via MatchResult.Groups.
+// Full Regex match against the line's text. Capture groups from index 1 onward
+// are returned to the handler via MatchResult.Groups.
 public sealed class RegexPattern : IMessagePattern
 {
     private readonly Regex _regex;
@@ -25,8 +24,18 @@ public sealed class RegexPattern : IMessagePattern
 
         Id = id;
         Priority = priority;
-        _regex = new Regex(pattern, options | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        _regex = Compiled.GetOrAdd(
+            (pattern, options | RegexOptions.Compiled | RegexOptions.CultureInvariant),
+            static key => new Regex(key.Pattern, key.Options));
     }
+
+    // Compiling a regex is the expensive part of building a pattern, and the same
+    // pattern text is built again for every router: once in the app, but once per
+    // test in the test run, where the full default set was most of the run's time.
+    // A Regex is immutable and safe to match on from any thread, so instances with
+    // the same text and options share one.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex>
+        Compiled = new();
 
     public bool TryMatch(LineExtractor.EmittedLine line, out MatchResult result)
     {

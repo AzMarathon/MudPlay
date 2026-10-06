@@ -34,7 +34,7 @@
          (~1000+ line) rewrite/expansion of an existing one, PATCH = bug
          fixes AND ordinary enhancements to existing features (one bump per
          report handled or per enhancement). -->
-    <Version>3.145.3</Version>
+    <Version>3.145.5</Version>
 
     <!-- Memory footprint: pin the Workstation GC (one small heap) rather than
          the Server GC (a heap + background thread per core), which on a
@@ -85,16 +85,43 @@
   <!-- nav-seed (starter Loops + Favorites) is a directory tree whose .loop filenames
        carry spaces/parens that don't survive per-file embedded-resource naming, so
        zip each realm and embed the zip; AppPaths unzips it into _bundled/nav-seed on
-       launch. Zipped fresh from the loose Defaults/nav-seed/ source each build (into
-       obj/, gitignored). ZipDirectory + ZipFile are managed .NET, so this is portable
-       across Linux/Windows/macOS. The target runs before the compiler collects
-       @(EmbeddedResource); the added items use explicit LogicalName so their manifest
-       names are stable regardless of build path. -->
-  <Target Name="ZipAndEmbedNavSeed" BeforeTargets="AssignTargetPaths">
+       launch. The zips go into obj/ (gitignored). ZipDirectory is managed .NET, so
+       this is portable across Linux/Windows/macOS.
+
+       Each zip is rebuilt only when its source changed. Zipped on every build, the
+       fresh file made the compiler see a changed embedded resource and recompile the
+       whole app each time, so a build with nothing to do took as long as a real one.
+       A file's own timestamp covers an edit or an addition; the list file covers a
+       removal or a rename, which changes no remaining file: it is rewritten only
+       when the set of names differs.
+
+       The embed target runs before the compiler collects @(EmbeddedResource); the
+       added items use explicit LogicalName so their manifest names are stable
+       regardless of build path. -->
+  <ItemGroup>
+    <NavSeedStock Include="Defaults\nav-seed\stock\**\*" />
+    <NavSeedParadigm Include="Defaults\nav-seed\paradigm\**\*" />
+  </ItemGroup>
+  <Target Name="ListNavSeed">
+    <WriteLinesToFile File="$(IntermediateOutputPath)nav-seed.stock.list" Lines="@(NavSeedStock)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(IntermediateOutputPath)nav-seed.paradigm.list" Lines="@(NavSeedParadigm)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+  <Target Name="ZipNavSeedStock" DependsOnTargets="ListNavSeed"
+          Inputs="@(NavSeedStock);$(IntermediateOutputPath)nav-seed.stock.list"
+          Outputs="$(IntermediateOutputPath)nav-seed.stock.zip">
     <ZipDirectory SourceDirectory="Defaults\nav-seed\stock"
                   DestinationFile="$(IntermediateOutputPath)nav-seed.stock.zip" Overwrite="true" />
+  </Target>
+  <Target Name="ZipNavSeedParadigm" DependsOnTargets="ListNavSeed"
+          Inputs="@(NavSeedParadigm);$(IntermediateOutputPath)nav-seed.paradigm.list"
+          Outputs="$(IntermediateOutputPath)nav-seed.paradigm.zip">
     <ZipDirectory SourceDirectory="Defaults\nav-seed\paradigm"
                   DestinationFile="$(IntermediateOutputPath)nav-seed.paradigm.zip" Overwrite="true" />
+  </Target>
+  <Target Name="ZipAndEmbedNavSeed" BeforeTargets="AssignTargetPaths"
+          DependsOnTargets="ZipNavSeedStock;ZipNavSeedParadigm">
     <ItemGroup>
       <EmbeddedResource Include="$(IntermediateOutputPath)nav-seed.stock.zip"
                         LogicalName="MudPlay.Defaults.nav-seed.stock.zip" />
