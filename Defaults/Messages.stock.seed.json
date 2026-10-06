@@ -6879,7 +6879,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "A swirling mana storm engulfs your foe for {damage} damage!",
     "TargetMessage": "A swirling mana storm engulfs you for {damage} damage!",
-    "WitnessMessage": "A swirling mana storm{source} engulfs the room for {damage} damage!",
+    "WitnessMessage": "A swirling mana storm engulfs the room for {damage} damage!",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
