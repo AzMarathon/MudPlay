@@ -1,13 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.145.11**
+> **Version 3.145.12**
 > - Starting a loop that sits behind a locked door now plans through it and fetches the key from the NPC who hands it over, instead of "no reachable waypoint"
 > - The jagged bone key for the Library is asked for from the old hermit each time a walk needs it; if he hands nothing over the walk goes on to the door and stops there if it's shut
 > - NPC hand-overs are asked for with the right keyword when the game's data lists a condition first
 > - Drop All, Get All and Hide All send up to three times faster
 > - Every window's title ends with the profile and BBS:realm, like the main window's
 > - A new profile reads its spell list on its own, and the Buff Watchdog says why it has no buff to add, with a button to read the list
+> - Transfer Stash to Bank lists each bank by its room name, with the shop name in brackets
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
