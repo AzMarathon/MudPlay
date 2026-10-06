@@ -3039,6 +3039,7 @@ public sealed class AppServices
                 StateVerifier.OnStatScreen();
             }
             SeedSpellbook(snapshot);
+            ReadSpellListIfNeverSeen();
         };
         // Alignment doesn't come from `stat` (see SeedSpellbook above) — it's only
         // ever refreshed by a `who` re-observing our own row. Without this, a
@@ -6062,6 +6063,7 @@ public sealed class AppServices
             log: Log);
         Tick.HeartbeatElapsed += StateVerifier.Poll;
         Profile.ProfileLoaded += _ => StateVerifier.Reset();
+        Profile.ProfileLoaded += _ => _spellListAsked = false;
         // A rested follower's @ok waits until the Pre-rest set is off again; once the
         // swap back to Default lands, a CR re-reads the pools (after the max-pool settle
         // window) and the re-evaluation sends it.
@@ -10977,6 +10979,25 @@ public sealed class AppServices
         IReadOnlyList<Game.Spells.CasterMessageMatcher> matchers = AttackSpellMatchersFor(spellCode);
         _attackSpellMatcherCache[spellCode] = matchers;
         return matchers;
+    }
+
+    // The command that lists what the character has learned: `sp` for a mana class,
+    // `pow` for a kai one (SpellListParser reads either).
+    public string SpellListCommand => PlayerStats.MaxKai > 0 ? "pow" : "sp";
+
+    // A new profile knows every spell its class can learn but not which of them this
+    // character has: that comes only from the game's own list, which nothing asked
+    // for. Until it was read the Buff Watchdog had no buff to offer and no way to say
+    // why. Asked once per session, after a `stat` has named the class, and only while
+    // nothing learned is known.
+    private bool _spellListAsked;
+    private void ReadSpellListIfNeverSeen()
+    {
+        if (_spellListAsked || Spellbook.ObtainedCount > 0 || Spellbook.ClassSpells.Count == 0) return;
+        _spellListAsked = true;
+        string command = SpellListCommand;
+        Log.Info("Spellbook", $"no learned spells are known for this character — sending `{command}` to read them");
+        SendGameCommand(command);
     }
 
     // Whether the character's pool is mana or kai, from its stat screen — how a custom

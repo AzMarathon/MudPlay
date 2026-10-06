@@ -107,6 +107,8 @@ With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you i
 
 In the game, the terminal works like any MUD client — type a command and it's sent to the game. The **numpad is pre-wired to compass movement**, and you can add your own **macros** (key → command) and **aliases** (typed shortcuts). The startup splash plays until you connect or load a profile.
 
+**The first time you enter the game on a new profile**, MudPlay reads your character on its own: `stat` for your stats, `i` for your inventory, and `sp` for the spells you've learned. Nearly everything automated leans on those three — the **Buff Watchdog** can't offer a buff until it knows you've learned it, for one. If a window says it has nothing to work with, typing `stat`, `i` or `sp` in the game is the first thing to try.
+
 The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping, and more — are **toolbar toggles** whose behavior is tuned on the matching Settings tabs. Flip them on to let MudPlay fight, heal, and travel for you. The **Combat**, **Navigation & Looping**, **Party Play**, and **Healing & Spells** sections explain how each engine decides what to do.
 
 ---
@@ -2034,6 +2036,16 @@ Before the first round of a session it reads *Waiting for a round of combat.* Se
 ## Buff Watchdog
 
 Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) brings it forward if it's buried, or closes it if it's already in front.
+
+### Before you can add a buff: your spell list
+
+The Buff Watchdog only offers buffs you have **actually learned**, and MudPlay learns that from the game's own spell list (`sp`, or `pow` for a kai class). On a **new profile** nothing is known yet, so there is nothing to add:
+
+- **MudPlay reads the list for you** the first time it sees your stats in the game and knows of no learned spell. You'll see `sp` go out in the terminal.
+- **If the window still has nothing to add**, it says why in plain words, and when the list simply hasn't been read it shows a **Read my spell list** button that sends the command. Typing `sp` yourself does the same.
+- **After that it stays current on its own**: a spell you learn from a trainer or a scroll is picked up as it happens.
+
+The other reasons it gives: your character hasn't been read yet (enter the game first), your class has no buff spells and you carry no item that casts one, none of the spells you've learned is a buff, or every buff you've learned is already on the list. The **Spell Book** (F2) shows the same learned / not-learned picture for every spell of your class.
 
 ### Building the buff list
 
