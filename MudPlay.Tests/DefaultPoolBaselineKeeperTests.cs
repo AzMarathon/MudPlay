@@ -15,14 +15,21 @@ public sealed class DefaultPoolBaselineKeeperTests
         public int Level = 44;
         public (int Hp, int Ma)? Gear = (25, 0);
         public bool DefaultWorn = true;
+        public bool DefaultSetMissing;
+        public int Changes;
         public bool CanCheck = true;
         public int StatsSent;
         public DateTimeOffset Now = new(2026, 9, 28, 22, 0, 0, TimeSpan.Zero);
         public DefaultPoolBaselineKeeper Keeper { get; }
 
-        public Harness() => Keeper = new DefaultPoolBaselineKeeper(
-            () => Stored, b => Stored = b, () => Level, () => Gear, () => DefaultWorn,
-            () => CanCheck, () => StatsSent++, () => Now);
+        public Harness()
+        {
+            Keeper = new DefaultPoolBaselineKeeper(
+                () => Stored, b => Stored = b, () => Level, () => Gear, () => DefaultWorn,
+                () => DefaultSetMissing, () => Stored = null,
+                () => CanCheck, () => StatsSent++, () => Now);
+            Keeper.Changed += () => Changes++;
+        }
     }
 
     [Fact]
@@ -71,5 +78,38 @@ public sealed class DefaultPoolBaselineKeeperTests
 
         h.Gear = (25, 10);                        // Default set's mana bonus changed
         Assert.True(h.Keeper.IsStale);
+    }
+
+    // A baseline carried over from another character (a different level) with none of
+    // the Default set's items in the pack can never be re-read: it goes.
+    [Fact]
+    public void OtherLevel_NoDefaultItemOwned_Dropped()
+    {
+        Harness h = new();
+        h.Keeper.OnStatScreen(503, 398);
+        h.Level = 30;
+        h.Gear = null;
+        h.DefaultSetMissing = true;
+        int before = h.Changes;
+
+        h.Keeper.Poll();
+
+        Assert.Null(h.Stored);
+        Assert.Equal(before + 1, h.Changes);
+        Assert.Equal(0, h.StatsSent);
+    }
+
+    // Same level: the Default set being gone (a deathpile) keeps the baseline.
+    [Fact]
+    public void SameLevel_NoDefaultItemOwned_Kept()
+    {
+        Harness h = new();
+        h.Keeper.OnStatScreen(503, 398);
+        h.Gear = null;
+        h.DefaultSetMissing = true;
+
+        h.Keeper.Poll();
+
+        Assert.Equal(503, h.Stored!.MaxHp);
     }
 }

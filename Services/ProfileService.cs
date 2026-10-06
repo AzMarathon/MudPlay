@@ -658,6 +658,13 @@ public sealed class ProfileService
     // (profile + character-tier overrides), minus .bak backups, with the copy's
     // Name rewritten. The loaded character is saved first so the copy carries its
     // unsaved session edits. Throws when the new name is taken.
+    //
+    // A copy is usually the settings carried to a different character (another
+    // realm, level, race, gear), so what the source read off the game doesn't come
+    // along: the copy starts with no stats, Default-gear maxima, carry weight,
+    // position or gear-set contents, and is marked StateUnverified so its first
+    // entry reads them. Its learned spells, death history and stash amounts are
+    // the source's own record and stay behind too.
     public void CopyProfile(string bbsName, string fromName, string toName)
     {
         if (string.IsNullOrWhiteSpace(bbsName) || string.IsNullOrWhiteSpace(fromName) || string.IsNullOrWhiteSpace(toName))
@@ -683,9 +690,22 @@ public sealed class ProfileService
         if (JsonStore.Load<CharacterProfile>(path) is { } copy)
         {
             copy.Name = toName;
+            copy.LastKnownStats = null;
+            copy.DefaultPoolBaseline = null;
+            copy.LastKnownEncumbrance = null;
+            copy.LastKnownRoom = null;
+            copy.RecentSteps = null;
+            copy.PendingReconnectLeader = null;
+            // The sets name the source's gear; the set options are settings and stay.
+            copy.Equipment?.Sets.Clear();
+            copy.LearnedSpells = null;
+            copy.DeathHistory = null;
+            copy.StashedCopper = null;
+            copy.StateUnverified = true;
             JsonStore.Save(path, copy);
         }
-        Log?.Info(LogCategory, $"Copied profile '{fromName}' → '{toName}' on '{bbsName}'.");
+        Log?.Info(LogCategory,
+            $"Copied profile '{fromName}' → '{toName}' on '{bbsName}'; the copy re-reads its stats and inventory on first entry.");
     }
 
     // Delete a saved profile's folder. When it's the CURRENTLY loaded profile,
