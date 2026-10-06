@@ -7935,9 +7935,9 @@
     "Name": "dragonfire",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "You make a complex circling gesture!",
-    "TargetMessage": "The {source} breathes {spellname} on you for {damage} damage!",
-    "WitnessMessage": "The {source} breathes {spellname} on {target} for {damage} damage!",
+    "CasterMessage": "A withering blast of dragonfire sears {target} for {damage} damage!",
+    "TargetMessage": "A withering blast of dragonfire sears you for {damage} damage!",
+    "WitnessMessage": "A withering blast of dragonfire sears {target} for {damage} damage!",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -12121,8 +12121,8 @@
     "Flags": "None",
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
-    "TargetMessage": "The {source} breathes {spellname} on you for {damage} damage!",
-    "WitnessMessage": "The {source} breathes {spellname} on {target} for {damage} damage!",
+    "TargetMessage": "The {source} sweeps the room with {spellname} for {damage} damage!",
+    "WitnessMessage": "{null}",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [

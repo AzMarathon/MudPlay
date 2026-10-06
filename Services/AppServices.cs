@@ -10868,11 +10868,11 @@ public sealed class AppServices
     // One spell's damage-line matchers, cached by spell number since the whole class
     // list is rebuilt on every refresh. Cleared on a game-data set swap, which can
     // change the messages.
-    //   * Its caster line, when that carries the damage. Some spells' own record holds
-    //     only the cast emote while the damage line sits on a record of the same name
-    //     (Paradigm dragonfire #288 gestures; #263 carries "A withering blast of
-    //     dragonfire sears {target} for {damage} damage!"), so every same-named damage
-    //     wording counts — only ours follows our own cast.
+    //   * Its caster line, when that carries the damage. A spell's own record can lack
+    //     the damage line while a record of the same name has it (Paradigm hail of
+    //     stones #5080 has no caster line; #772 carries "Your foes are battered by a
+    //     hail of stones for {damage} damage!"), so every same-named damage wording
+    //     counts — only ours follows our own cast.
     //   * The damage line of each spell it chains to, as a follow-up (necromantic
     //     bolt's "{target}'s life is drained for {damage} damage!").
     private readonly Dictionary<int, IReadOnlyList<Game.Spells.SpellLineMatcher>> _ownSpellLineCache = new();
@@ -10913,9 +10913,9 @@ public sealed class AppServices
     // Resolve one attack-spell slot name to the lines that show its cast landing:
     // match the live spellbook by full name (the form a slot stores) or 4-letter cast
     // code, and take the same damage wordings Session Stats recognises it by
-    // (OwnSpellLines). A spell's own record can hold only the cast emote, with the
-    // damage line on a same-named record (Paradigm dragonfire): matched
-    // on its own record alone, such a spell's cast never counted toward Max casts.
+    // (OwnSpellLines). A spell's own record can lack the damage line, with it on a
+    // same-named record instead (Paradigm hail of stones): matched on its own record
+    // alone, such a spell's cast never counted toward Max casts.
     // A chained spell's follow-up line is part of the same cast, so it's left out.
     // Falls back to the own record's caster line when no damage wording is recorded.
     // Empty when the name is blank, unknown to the spellbook, or has no usable line.

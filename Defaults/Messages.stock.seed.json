@@ -6945,9 +6945,9 @@
     "Name": "dragonfire",
     "Flags": "None",
     "RawFlagsHex": 0,
-    "CasterMessage": "A withering blast of dragonfire sears {spellname} for {damage} damage!",
+    "CasterMessage": "A withering blast of dragonfire sears {target} for {damage} damage!",
     "TargetMessage": "A withering blast of dragonfire sears you for {damage} damage!",
-    "WitnessMessage": "A withering blast of dragonfire sears {source} for {damage} damage!",
+    "WitnessMessage": "A withering blast of dragonfire sears {target} for {damage} damage!",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [

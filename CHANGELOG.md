@@ -3,7 +3,7 @@
 ## 3.145.7
 
 - A room spell's Max casts now counts each cast as it lands, so Multi-attack 1 hands over to Multi-attack 2 on time
-- Max casts also counts mana storm on both realms, Paradigm dragonfire and Stock soul rip, whose recorded lines didn't match what the game prints
+- Max casts also counts mana storm, Paradigm dragonfire and Stock soul rip: their messages are corrected against the Stock message table
 - Round totals spread a room spell over every monster even when its line says "your foe", and keep its later rounds yours
 - Bug report lists the cast counts behind each spell slot's Max casts
 - bug reports addressed: paradigm-20261006-051627
