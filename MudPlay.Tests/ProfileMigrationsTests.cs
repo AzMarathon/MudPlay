@@ -227,4 +227,93 @@ public sealed class ProfileMigrationsTests
 
         Assert.False(changed);
     }
+
+    // ----- v7: Priority buffs joins the spell-type priority list -----
+
+    private static SpellsSettings MigratedSpells(string storedSpellsJson)
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 6,
+            Settings = new Dictionary<string, JsonElement>
+            {
+                ["Spells"] = JsonDocument.Parse(storedSpellsJson).RootElement.Clone(),
+            },
+        };
+        Assert.True(ProfileMigrations.Apply(profile));
+        Assert.Equal(CharacterProfile.CurrentSchemaVersion, profile.SchemaVersion);
+        return JsonSerializer.Deserialize<SpellsSettings>(profile.Settings!["Spells"].GetRawText())!;
+    }
+
+    private static int[] Ranks(SpellsSettings s) => new[]
+    {
+        s.PriorityEmergencyHeal, s.PriorityMajorPartyHeal, s.PriorityMinorPartyHeal, s.PriorityMajorSelfHeal,
+        s.PriorityPriorityBuffs, s.PriorityMinorSelfHeal, s.PriorityDownedAllyHeal, s.PriorityCuring,
+        s.PriorityBuffing, s.PriorityDebuffing,
+    };
+
+    private static readonly int[] NewDefault = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
+
+    [Theory]
+    // The nine-rank default nobody reordered.
+    [InlineData("""{"PriorityEmergencyHeal":1,"PriorityMinorPartyHeal":2,"PriorityMajorPartyHeal":3,"PriorityDownedAllyHeal":4,"PriorityMinorSelfHeal":5,"PriorityMajorSelfHeal":6,"PriorityCuring":7,"PriorityBuffing":8,"PriorityDebuffing":9}""")]
+    // The older seven-rank default: Emergency and Downed-ally heal weren't stored.
+    [InlineData("""{"PriorityMinorPartyHeal":1,"PriorityMajorPartyHeal":2,"PriorityMinorSelfHeal":3,"PriorityMajorSelfHeal":4,"PriorityCuring":5,"PriorityBuffing":6,"PriorityDebuffing":7}""")]
+    // A list someone had already arranged in the new default's order.
+    [InlineData("""{"PriorityEmergencyHeal":1,"PriorityMajorPartyHeal":2,"PriorityMinorPartyHeal":3,"PriorityMajorSelfHeal":4,"PriorityMinorSelfHeal":5,"PriorityDownedAllyHeal":6,"PriorityCuring":7,"PriorityBuffing":8,"PriorityDebuffing":9}""")]
+    public void V6Profile_UneditedSpellPriority_TakesTheNewDefault(string stored)
+        => Assert.Equal(NewDefault, Ranks(MigratedSpells(stored)));
+
+    [Fact]
+    public void V6Profile_EditedSpellPriority_KeepsItsOrder_PriorityBuffsLast()
+    {
+        // Curing moved to the top, the rest pushed down one.
+        SpellsSettings s = MigratedSpells(
+            """{"PriorityCuring":1,"PriorityEmergencyHeal":2,"PriorityMinorPartyHeal":3,"PriorityMajorPartyHeal":4,"PriorityDownedAllyHeal":5,"PriorityMinorSelfHeal":6,"PriorityMajorSelfHeal":7,"PriorityBuffing":8,"PriorityDebuffing":9,"MinorHealSpell":"mihe"}""");
+
+        Assert.Equal(1, s.PriorityCuring);
+        Assert.Equal(2, s.PriorityEmergencyHeal);
+        Assert.Equal(5, s.PriorityDownedAllyHeal);
+        Assert.Equal(9, s.PriorityDebuffing);
+        Assert.Equal(10, s.PriorityPriorityBuffs);
+        Assert.Equal("mihe", s.MinorHealSpell);          // the rest of the section is untouched
+    }
+
+    [Fact]
+    public void V6Profile_EditedSevenRankList_KeepsEmergencyFirstAndDownedAllyFourth()
+    {
+        // Stored before those two could be moved: they must stay where the engine had
+        // them, not jump to a fresh profile's defaults.
+        SpellsSettings s = MigratedSpells(
+            """{"PriorityCuring":1,"PriorityMinorPartyHeal":2,"PriorityMajorPartyHeal":3,"PriorityMinorSelfHeal":4,"PriorityMajorSelfHeal":5,"PriorityBuffing":6,"PriorityDebuffing":7}""");
+
+        Assert.Equal(1, s.PriorityEmergencyHeal);
+        Assert.Equal(4, s.PriorityDownedAllyHeal);
+        Assert.Equal(1, s.PriorityCuring);
+        Assert.Equal(8, s.PriorityPriorityBuffs);
+    }
+
+    [Fact]
+    public void V6Profile_CombatProfilesGetPriorityBuffsToo()
+    {
+        CombatSpellProfile unedited = new();
+        unedited.Spells.PriorityEmergencyHeal = 1; unedited.Spells.PriorityMinorPartyHeal = 2;
+        unedited.Spells.PriorityMajorPartyHeal = 3; unedited.Spells.PriorityDownedAllyHeal = 4;
+        unedited.Spells.PriorityMinorSelfHeal = 5; unedited.Spells.PriorityMajorSelfHeal = 6;
+        unedited.Spells.PriorityCuring = 7; unedited.Spells.PriorityBuffing = 8; unedited.Spells.PriorityDebuffing = 9;
+        CombatSpellProfile edited = unedited.Clone(newIdentity: true);
+        edited.Spells.PriorityCuring = 1; edited.Spells.PriorityEmergencyHeal = 7;
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 6,
+            CombatProfiles = new CombatProfileSettings { Profiles = { unedited, edited } },
+        };
+
+        ProfileMigrations.Apply(profile);
+
+        Assert.Equal(5, unedited.Spells.PriorityPriorityBuffs);
+        Assert.Equal(6, unedited.Spells.PriorityMinorSelfHeal);
+        Assert.Equal(10, edited.Spells.PriorityPriorityBuffs);
+        Assert.Equal(1, edited.Spells.PriorityCuring);
+    }
 }

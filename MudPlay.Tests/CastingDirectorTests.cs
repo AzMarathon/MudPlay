@@ -1670,6 +1670,40 @@ public sealed class CastingDirectorTests
         Assert.Equal(new[] { "smal" }, h.CastsSent);
     }
 
+    // ----- Priority buffs: their own rank in the spell-type priority -----
+
+    [Fact]
+    public void PriorityBuff_CastsAtItsOwnRank_AheadOfOrdinaryBuffs()
+    {
+        // The ordinary buff is listed first, yet the starred one goes out first:
+        // its category ranks ahead of Buffing by default.
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "plai", CastOnSelf = true });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "star", CastOnSelf = true, PriorityBuff = true });
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "star" }, h.CastsSent);
+    }
+
+    [Fact]
+    public void PriorityBuff_FollowsWhereTheUserRanksItsCategory()
+    {
+        using CureHarness h = new() { SlotsCarryTheirOwnGates = true };
+        h.Spells.PriorityBuffing = 5;
+        h.Spells.PriorityPriorityBuffs = 9;
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "star", CastOnSelf = true, PriorityBuff = true });
+        h.PartyBuffs.Slots.Add(new BuffSlot { Spell = "plai", CastOnSelf = true });
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+
+        h.Director.Evaluate();
+
+        Assert.Equal(new[] { "plai" }, h.CastsSent);
+    }
+
     [Fact]
     public void Buff_ManaFloorIsPerBuff_HighFloorCastsOnceManaReachesIt()
     {

@@ -16,19 +16,21 @@ public sealed class SpellsSettingsTests
     {
         SpellsSettings dto = new();
 
-        // Category priority defaults are an ordered 1..9 fence — protects
+        // Category priority defaults are an ordered 1..10 fence — protects
         // CastingDirector's between-round dispatch against a future
-        // accidental tie that would scramble cast order. Emergency leads (1),
-        // downed-ally sits at 4 (after the party heals).
+        // accidental tie that would scramble cast order. Emergency leads, the
+        // major heals go ahead of the minor ones, and Priority buffs sit between
+        // the two self heals (user, 2026-10-06).
         Assert.Equal(1, dto.PriorityEmergencyHeal);
-        Assert.Equal(2, dto.PriorityMinorPartyHeal);
-        Assert.Equal(3, dto.PriorityMajorPartyHeal);
-        Assert.Equal(4, dto.PriorityDownedAllyHeal);
-        Assert.Equal(5, dto.PriorityMinorSelfHeal);
-        Assert.Equal(6, dto.PriorityMajorSelfHeal);
-        Assert.Equal(7, dto.PriorityCuring);
-        Assert.Equal(8, dto.PriorityBuffing);
-        Assert.Equal(9, dto.PriorityDebuffing);
+        Assert.Equal(2, dto.PriorityMajorPartyHeal);
+        Assert.Equal(3, dto.PriorityMinorPartyHeal);
+        Assert.Equal(4, dto.PriorityMajorSelfHeal);
+        Assert.Equal(5, dto.PriorityPriorityBuffs);
+        Assert.Equal(6, dto.PriorityMinorSelfHeal);
+        Assert.Equal(7, dto.PriorityDownedAllyHeal);
+        Assert.Equal(8, dto.PriorityCuring);
+        Assert.Equal(9, dto.PriorityBuffing);
+        Assert.Equal(10, dto.PriorityDebuffing);
 
         // All spell-name slots empty by default (user configures per character).
         Assert.Null(dto.MinorHealSpell);
@@ -72,11 +74,12 @@ public sealed class SpellsSettingsTests
         int[] order =
         {
             dto.PriorityEmergencyHeal,
-            dto.PriorityMinorPartyHeal,
             dto.PriorityMajorPartyHeal,
-            dto.PriorityDownedAllyHeal,
-            dto.PriorityMinorSelfHeal,
+            dto.PriorityMinorPartyHeal,
             dto.PriorityMajorSelfHeal,
+            dto.PriorityPriorityBuffs,
+            dto.PriorityMinorSelfHeal,
+            dto.PriorityDownedAllyHeal,
             dto.PriorityCuring,
             dto.PriorityBuffing,
             dto.PriorityDebuffing,

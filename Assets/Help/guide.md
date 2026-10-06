@@ -2053,7 +2053,8 @@ Click **＋ Add buff** to open the Add-buff dialog:
 
 - **Pick a buff** — a **dropdown**, not a text box: it lists every buff spell you've actually **learned** (attacks and heals filtered out), each shown as its **name and the level you learned it at** (e.g. *bless (Lvl 2)*), plus any **cast-on-use buff item** you can actually use — one you own (carried or worn) and meet the level for (an unlimited-use item like a *shimmering greatsword* that casts a buff when used; these show as a `#item` entry). A buff that's **already slotted** stays in the list but is **greyed out / unselectable**, so you can see it's taken rather than wonder where it went. The list is ordered by learn-level, low to high. What targeting a slot offers depends on the spell: a self-only spell can only be cast on you, a single-target spell can be aimed at you and/or party members, and a whole-party spell (chant and the like) blankets everyone with one cast.
 - **Set a recast timer** — "recast (s)" recasts the buff that many seconds before it expires (0 = wait for it to actually wear off). It can also be **negative**, which recasts that many seconds *after* the buff wears off — e.g. `-30` on a 60s buff recasts it every 90s, letting it lapse on purpose to **spread out mana use**. The Watchdog bar shows the post-expiry wait as a **red** extension (see *The buff bars* below).
-- **Set conditions** — per-slot gates. The first three are on every buff; the rest only appear for the spell that uses them:
+- **Set conditions** — per-slot gates. The first four are on every buff; the rest only appear for the spell that uses them:
+  - **Priority buff** — off (the default), the buff casts with your other buffs, at the **Buffing** row of the spell type priority (Settings → Spells). Ticked, it casts at the **Priority buffs** row instead, which by default sits between the major and the minor self heal. Tick it on the one or two buffs that matter more than topping off a little HP. A priority buff has a **★** beside its timer bar.
   - **Cast if mana ≥** — this buff is only cast once your mana is at or above this value (default **50%** for a new buff), so mana recovers past a floor before it goes on upkeep. Each buff has its own: a cheap bless can go out at 30% while an expensive one waits for 80%. `0` never holds it back. It is a percent of max mana, or a raw mana / kai amount when Settings → Health reads its mana thresholds as amounts (the label drops the `%`). Beside the box is what it comes to against your max mana right now, e.g. *125/250*. A free item-cast buff ignores it.
   - **Cast while resting** — off (the default), this buff waits out a **triggered recovery rest** (HP or MA fell below your rest-if-below setting and you're resting back up); ticked, it is cast during one too. An idle rest never holds a buff. The cast stands you up for a moment; MudPlay lies back down and rests on to your rest max.
   - **Cast during combat** — off (the default), this buff waits until the fight is over; ticked, it is also cast mid-fight (the cast spends that round's between-round slot). Tick it on the buffs worth a round and leave the rest for after the fight.
@@ -3162,10 +3163,14 @@ Settings → Spells. This tab picks *which spell* fills each automated role and 
 
 ### Spell type priority
 
-**Default order (highest priority first):** Emergency heal → Minor party heal → Major party heal → Downed-ally heal (rescue) → Minor self heal → Major self heal → Curing → Buffing → Debuffing.
-**What it does:** Every tick, MudPlay checks all nine categories and casts the highest-priority one that has something ready to fire. Use the **▲ / ▼** arrows on each row to reorder them — higher in the list casts earlier.
+**Default order (highest priority first):** Emergency heal → Major party heal → Minor party heal → Major self heal → Priority buffs → Minor self heal → Downed-ally heal (rescue) → Curing → Buffing → Debuffing.
+**What it does:** Every tick, MudPlay checks all ten categories and casts the highest-priority one that has something ready to fire. Use the **▲ / ▼** arrows on each row to reorder them — higher in the list casts earlier.
 **When you might change it:** Move Curing above self-heals if you'd rather cure a debilitating ailment before topping off HP; move Debuffing higher if landing your debuff matters more to you than proactive buffing. Emergency heal defaults to the top so a life-threat save leads, but you can move it like any other row.
-**Important notes:** Emergency heal and the downed-ally rescue used to be hidden always-first casts; they're now ordinary rows in this list (defaulting to slots 1 and 4), so you can rank them wherever you like. Emergency heal keeps its special *gates* — it ignores the mana floor and fires in any state (see below) — but its *position* in the queue is now yours to set.
+**Priority buffs** are the buffs you ticked **Priority buff** in the Buff Watchdog (edit a buff). They cast at this row's rank instead of with the rest under **Buffing**, so by default a priority buff goes up ahead of a minor self heal. A buff that isn't ticked stays under Buffing. With nothing ticked the row does nothing.
+
+**If you had this list before Priority buffs existed:** a list you never reordered moved to the default order above. A list you had reordered kept your order, with Priority buffs added at the **bottom** — move it up to where you want it.
+
+**Important notes:** Emergency heal and the downed-ally rescue used to be hidden always-first casts; they're now ordinary rows in this list (defaulting to slots 1 and 7), so you can rank them wherever you like. Emergency heal keeps its special *gates* — it ignores the mana floor and fires in any state (see below) — but its *position* in the queue is now yours to set.
 
 ### Minor heal / Major heal
 
@@ -4590,7 +4595,8 @@ This section is a compact, technical lookup table for every setting documented a
 
 | Setting | Default | Allowed Values | Config Key | Location |
 |---|---|---|---|---|
-| Spell type priority (9 categories) | Emergency heal(1)…Debuffing(9) | 1–9 permutation | `PriorityEmergencyHeal` … `PriorityDebuffing` | Models/Profile/SpellsSettings.cs |
+| Spell type priority (10 categories) | Emergency heal(1)…Debuffing(10), Priority buffs(5) | 1–10 permutation | `PriorityEmergencyHeal` … `PriorityDebuffing`, `PriorityPriorityBuffs` | Models/Profile/SpellsSettings.cs |
+| Priority buff (per buff, Buff Watchdog) | off | on / off | `BuffSlot.PriorityBuff` | Models/Profile/BuffSettings.cs |
 | Minor / Major / Emergency heal, HP Regen | unset | spell code | `MinorHealSpell`, `MajorHealSpell`, `EmergencyHealSpell`, `HpRegenSpell` | Models/Profile/SpellsSettings.cs |
 | Cure Holds/Poison/Disease/Blindness | unset | spell code | `CureHoldsSpell` etc. | Models/Profile/SpellsSettings.cs |
 | Cure after combat (per cure) | off | checkbox | `CureHoldsAfterCombat` etc. | Models/Profile/SpellsSettings.cs |

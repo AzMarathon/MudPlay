@@ -278,15 +278,17 @@ public sealed class CombatSpellProfile
 // switch never disturbs them.
 public sealed class CombatProfileSpells
 {
+    // The same defaults as SpellsSettings, which says what each slot is.
     public int PriorityEmergencyHeal { get; set; } = 1;
-    public int PriorityMinorPartyHeal { get; set; } = 2;
-    public int PriorityMajorPartyHeal { get; set; } = 3;
-    public int PriorityDownedAllyHeal { get; set; } = 4;
-    public int PriorityMinorSelfHeal { get; set; } = 5;
-    public int PriorityMajorSelfHeal { get; set; } = 6;
-    public int PriorityCuring { get; set; } = 7;
-    public int PriorityBuffing { get; set; } = 8;
-    public int PriorityDebuffing { get; set; } = 9;
+    public int PriorityMajorPartyHeal { get; set; } = 2;
+    public int PriorityMinorPartyHeal { get; set; } = 3;
+    public int PriorityMajorSelfHeal { get; set; } = 4;
+    public int PriorityPriorityBuffs { get; set; } = 5;
+    public int PriorityMinorSelfHeal { get; set; } = 6;
+    public int PriorityDownedAllyHeal { get; set; } = 7;
+    public int PriorityCuring { get; set; } = 8;
+    public int PriorityBuffing { get; set; } = 9;
+    public int PriorityDebuffing { get; set; } = 10;
 
     public string? MinorHealSpell { get; set; }
     public string? MajorHealSpell { get; set; }
@@ -312,6 +314,7 @@ public sealed class CombatProfileSpells
         PriorityMajorSelfHeal = src.PriorityMajorSelfHeal;
         PriorityCuring = src.PriorityCuring;
         PriorityBuffing = src.PriorityBuffing;
+        PriorityPriorityBuffs = src.PriorityPriorityBuffs;
         PriorityDebuffing = src.PriorityDebuffing;
         MinorHealSpell = src.MinorHealSpell;
         MajorHealSpell = src.MajorHealSpell;
@@ -334,6 +337,7 @@ public sealed class CombatProfileSpells
         dst.PriorityMajorSelfHeal = PriorityMajorSelfHeal;
         dst.PriorityCuring = PriorityCuring;
         dst.PriorityBuffing = PriorityBuffing;
+        dst.PriorityPriorityBuffs = PriorityPriorityBuffs;
         dst.PriorityDebuffing = PriorityDebuffing;
         dst.MinorHealSpell = MinorHealSpell;
         dst.MajorHealSpell = MajorHealSpell;
@@ -353,6 +357,7 @@ public sealed class CombatProfileSpells
         PriorityMajorSelfHeal = PriorityMajorSelfHeal,
         PriorityCuring = PriorityCuring,
         PriorityBuffing = PriorityBuffing,
+        PriorityPriorityBuffs = PriorityPriorityBuffs,
         PriorityDebuffing = PriorityDebuffing,
         MinorHealSpell = MinorHealSpell,
         MajorHealSpell = MajorHealSpell,

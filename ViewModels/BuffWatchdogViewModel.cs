@@ -468,7 +468,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
                 // Self-cast + whole-party buffs land on you → your section (both keyed "").
                 if (p.CastOnSelf && !wholeParty)
-                    self.Rows.Add(new BuffWatchdogRowViewModel(code, isParty: false, name, "self", learned));
+                    self.Rows.Add(new BuffWatchdogRowViewModel(code, isParty: false, name, "self", learned)
+                        { IsPriority = p.PriorityBuff });
                 if (wholeParty)
                 {
                     // Show a whole-party buff only when it's actually being maintained
@@ -482,7 +483,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
 
                     // Self always carries a whole-party buff (it lands on us too).
                     self.Rows.Add(new BuffWatchdogRowViewModel(
-                        code, isParty: true, name, "whole party", learned, isWholeParty: true));
+                        code, isParty: true, name, "whole party", learned, isWholeParty: true)
+                        { IsPriority = p.PriorityBuff });
 
                     // One row under each CURRENT member: covered (in the party when it was
                     // cast → reads the shared timer) or NOT covered (joined after → shows
@@ -496,7 +498,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                             GetGroup(byName, display).Rows.Add(new BuffWatchdogRowViewModel(
                                 code, isParty: true, name, display, learned,
                                 isWholeParty: true, memberKey: given,
-                                wholePartyCovered: covered?.Contains(given) ?? false));
+                                wholePartyCovered: covered?.Contains(given) ?? false)
+                                { IsPriority = p.PriorityBuff });
                     }
                     continue;
                 }
@@ -527,7 +530,8 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 {
                     string display = displayByGiven.TryGetValue(given, out string? d) ? d : Capitalise(given);
                     GetGroup(byName, display).Rows.Add(new BuffWatchdogRowViewModel(
-                        code, isParty: true, name, display, learned, isWholeParty: false, memberKey: given));
+                        code, isParty: true, name, display, learned, isWholeParty: false, memberKey: given)
+                        { IsPriority = p.PriorityBuff });
                 }
             }
         }
@@ -655,6 +659,7 @@ public sealed partial class BuffWatchdogViewModel : ObservableObject, IDisposabl
                 sb.Append(p.Spell).Append(':').Append(p.CastOnSelf ? "S" : "")
                   .Append(p.WholePartyOn ? "W" : "").Append(p.AllMembers ? "A" : "")
                   .Append(p.OnlyWhenHpFull ? "H" : "").Append(p.OnlyWhenMaFull ? "M" : "")
+                  .Append(p.PriorityBuff ? "P" : "")
                   .Append(wpActive ? "T" : "");
                 // Which members a whole-party buff currently covers — so a recast that
                 // re-covers a swapped-in member reflows their row (roster joins / leaves

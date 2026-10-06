@@ -86,7 +86,7 @@ public static class CombatSpellProfileReport
         if (s is null) return "spells —";
         return $"spells[prio em{s.PriorityEmergencyHeal}/mph{s.PriorityMinorPartyHeal}/Mph{s.PriorityMajorPartyHeal}/" +
                $"rescue{s.PriorityDownedAllyHeal}/msh{s.PriorityMinorSelfHeal}/Msh{s.PriorityMajorSelfHeal}/" +
-               $"cure{s.PriorityCuring}/buff{s.PriorityBuffing}/deb{s.PriorityDebuffing}" +
+               $"cure{s.PriorityCuring}/pbuff{s.PriorityPriorityBuffs}/buff{s.PriorityBuffing}/deb{s.PriorityDebuffing}" +
                $" · minheal={s.MinorHealSpell ?? "—"} majheal={s.MajorHealSpell ?? "—"}" +
                $" emheal={s.EmergencyHealSpell ?? "—"} hpregen={s.HpRegenSpell ?? "—"}]";
     }

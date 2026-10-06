@@ -477,6 +477,10 @@
                                                                            Foreground="{StaticResource AccentRedBrush}"
                                                                            IsVisible="{Binding IsConflicted}"
                                                                            ToolTip.Tip="{Binding OverwriteWarningTooltip}"/>
+                                                                <TextBlock Text="★" VerticalAlignment="Center" Margin="0,0,3,0"
+                                                                           Foreground="{StaticResource AccentCyanBrush}"
+                                                                           IsVisible="{Binding IsPriority}"
+                                                                           ToolTip.Tip="Priority buff: cast in the Priority buffs slot of the spell type priority (Settings → Spells), ahead of your other buffs."/>
                                                                 <TextBlock Classes="BarName" Classes.covered="{Binding IsCovered}"
                                                                            Text="{Binding Name}"/>
                                                                 <Border Classes="UnlearnedChip" IsVisible="{Binding !IsLearned}">

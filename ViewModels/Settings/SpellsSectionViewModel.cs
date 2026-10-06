@@ -73,6 +73,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Spells",
         "Spell type priority", "Priority", "Emergency heal", "Minor party heal", "Major party heal",
         "Downed-ally heal", "Minor self heal", "Major self heal", "Curing", "Buffing", "Debuffing",
+        "Priority buffs",
         "Healing", "Regeneration", "Minor heal", "Major heal", "Emergency heal",
         "HP Regen",
         "Other spells", "Cure Holds", "Cure poison", "Cure disease", "Cure blindness",
@@ -80,9 +81,9 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         "Ignore poison", "Ignore blindness", "Ignore confusion", "Ignore disease",
     };
 
-    // ----- Category priority (1-9) ----------------------------------
+    // ----- Category priority (1-10) ---------------------------------
 
-    // The nine between-round casting categories in fixed key order; the
+    // The ten between-round casting categories in fixed key order; the
     // ranking VM reorders them and reports each one's rank.
     private static readonly (string Key, string Label, string? Tip)[] _priorityDefs =
     {
@@ -100,14 +101,16 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             "Priority slot for this tab's Major heal pick."),
         ("Curing", "Curing",
             "Priority slot for cure spells."),
+        ("PriorityBuffs", "Priority buffs",
+            "Priority slot for the buffs you ticked \"Priority buff\" in the Buff Watchdog (starred on their timer bars)."),
         ("Buffing", "Buffing",
-            "Priority slot for buff / bless casts."),
+            "Priority slot for every other buff / bless cast."),
         ("Debuffing", "Debuffing",
             "Priority slot for between-round debuffs (CombatSettings' debuff slots)."),
     };
 
     // Reorderable between-round casting order. Row position is the rank, so the
-    // nine categories always form a clean 1..9 permutation.
+    // ten categories always form a clean 1..10 permutation.
     public PriorityRankingViewModel Priority { get; }
 
     // ----- Healing / regen ------------------------------------------
@@ -247,6 +250,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         s.PriorityMajorSelfHeal  = Priority.RankOf("MajorSelfHeal");
         s.PriorityCuring         = Priority.RankOf("Curing");
         s.PriorityBuffing        = Priority.RankOf("Buffing");
+        s.PriorityPriorityBuffs  = Priority.RankOf("PriorityBuffs");
         s.PriorityDebuffing      = Priority.RankOf("Debuffing");
         s.MinorHealSpell = NullIfBlank(MinorHealSpell);
         s.MajorHealSpell = NullIfBlank(MajorHealSpell);
@@ -286,6 +290,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             "MajorSelfHeal"  => s.PriorityMajorSelfHeal,
             "Curing"         => s.PriorityCuring,
             "Buffing"        => s.PriorityBuffing,
+            "PriorityBuffs"  => s.PriorityPriorityBuffs,
             "Debuffing"      => s.PriorityDebuffing,
             _                => 99,
         });
@@ -339,6 +344,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
         PriorityMajorSelfHeal  = Priority.RankOf("MajorSelfHeal"),
         PriorityCuring         = Priority.RankOf("Curing"),
         PriorityBuffing        = Priority.RankOf("Buffing"),
+        PriorityPriorityBuffs  = Priority.RankOf("PriorityBuffs"),
         PriorityDebuffing      = Priority.RankOf("Debuffing"),
 
         MinorHealSpell    = NullIfBlank(MinorHealSpell),
@@ -400,6 +406,7 @@ public sealed partial class SpellsSectionViewModel : SettingsSectionViewModel
             "MajorSelfHeal"  => dto.PriorityMajorSelfHeal,
             "Curing"         => dto.PriorityCuring,
             "Buffing"        => dto.PriorityBuffing,
+            "PriorityBuffs"  => dto.PriorityPriorityBuffs,
             "Debuffing"      => dto.PriorityDebuffing,
             _                => 99,
         });
