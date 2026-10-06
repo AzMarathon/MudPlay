@@ -39,11 +39,21 @@ public partial class App : Application
         // and a fresh view-model.
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            MainWindowViewModel mainViewModel = new();
             MainWindow mainWindow = new()
             {
-                DataContext = new MainWindowViewModel(),
+                DataContext = mainViewModel,
             };
             desktop.MainWindow = mainWindow;
+
+            // Every other window's title ends with the main window's own tail
+            // ("<profile> — <bbs>:<realm>"), kept current as the profile or BBS changes.
+            MudPlay.Controls.WindowTitleTail.Install(mainWindow, () => mainViewModel.TitleTail);
+            mainViewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainWindowViewModel.WindowTitle))
+                    MudPlay.Controls.WindowTitleTail.Refresh();
+            };
 
             // Keep typing directed at the terminal when any OTHER window is
             // focused — an app-wide class handler covers every window (dialogs +

@@ -155,6 +155,8 @@ Select a placed entry (or folder) and type a **Name** to rename it however you l
 
 Each is modeless; pressing its key again brings it to the front if it's buried, or closes it if it's already in front. Default hotkeys are shown; all are rebindable.
 
+**Whose window is it?** Every window's title ends the same way as the main window's: its own name, then your **profile**, then the **BBS and realm** — `Settings — Bob — Paradigm:Paradigm PVE`. Running several clients at once, that tells their Settings, Navigation and other windows apart in the taskbar and on screen. The tail follows the profile and BBS you have loaded, changing in every open window when you switch.
+
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.
 - **Conversation** (Alt+C) — chat, gossip, and telepaths collected in one window with their own input box, per-channel colors, and optional logging. See the **Conversation** section for how to use it.
