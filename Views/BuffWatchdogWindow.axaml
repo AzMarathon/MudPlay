@@ -299,6 +299,12 @@
                             </TextBlock.Text>
                         </TextBlock>
 
+                        <!-- Shown when Add buff is greyed out: every learned buff is listed already. -->
+                        <TextBlock IsVisible="{Binding HasSetupHint}" Margin="8,0,8,6"
+                                   Text="{Binding SetupHint}"
+                                   Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
+                                   TextWrapping="Wrap"/>
+
                         <TextBlock IsVisible="{Binding !HasSlots}" Margin="8,4,8,6"
                                    Text="No buffs configured. Click “Add buff”, pick a spell, then set who receives it."
                                    Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11"
@@ -364,12 +370,30 @@
             <ScrollViewer>
                 <StackPanel>
 
+                <!-- With no config panel to point at (nothing can be added yet), say why
+                     instead, and offer the one step that usually fixes it. -->
                 <TextBlock Margin="10,12,10,10"
                            Text="No buffs up yet. Add buffs in the config panel and tick who each one is cast on (yourself and/or party members)."
                            Foreground="{StaticResource ChromeFgMutedBrush}"
                            FontSize="11"
-                           TextWrapping="Wrap"
-                           IsVisible="{Binding IsEmpty}"/>
+                           TextWrapping="Wrap">
+                    <TextBlock.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="IsEmpty"/>
+                            <Binding Path="Buffs.ShowPanel"/>
+                        </MultiBinding>
+                    </TextBlock.IsVisible>
+                </TextBlock>
+                <StackPanel Margin="10,12,10,10" Spacing="8" IsVisible="{Binding !Buffs.ShowPanel}">
+                    <TextBlock Text="{Binding Buffs.SetupHint}"
+                               Foreground="{StaticResource ChromeFgSecBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                    <Button Content="Read my spell list" Padding="8,2" HorizontalAlignment="Left"
+                            IsVisible="{Binding Buffs.CanReadSpellList}"
+                            Command="{Binding Buffs.ReadSpellListCommand}"
+                            ToolTip.Tip="Asks the game for the spells you have learned, so the ones that are buffs can be added here."/>
+                </StackPanel>
 
                 <!-- ===== Buff timers, grouped by player =====
                      One section per player a buff is on: your own name (self +

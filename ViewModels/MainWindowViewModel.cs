@@ -240,14 +240,25 @@ public partial class MainWindowViewModel : ObservableObject
     {
         get
         {
+            string lead    = _marqueeTimer is null
+                ? $"MudPlay v{AppInfo.Version}"
+                : UpdateTitleMarquee.Frame(_marqueeFrame);
+            return $"{lead} — {TitleTail}";
+        }
+    }
+
+    // "{profile} — {bbs}:{realm}": the part of the title that says whose window it
+    // is. Every other window carries the same tail after its own name
+    // (WindowTitleTail), so two clients' Settings windows can be told apart.
+    public string TitleTail
+    {
+        get
+        {
             string profile = AppServices.Current.Profile.CurrentProfileName ?? "{default}";
             string bbs     = _quickConnectTarget is null && AppServices.Current.ResolveActiveRealm() is { } active
                 ? $"{active.Bbs.Name}:{active.Realm.Name}"
                 : ActiveBbsName ?? "{No BBS}";
-            string lead    = _marqueeTimer is null
-                ? $"MudPlay v{AppInfo.Version}"
-                : UpdateTitleMarquee.Frame(_marqueeFrame);
-            return $"{lead} — {profile} — {bbs}";
+            return $"{profile} — {bbs}";
         }
     }
 

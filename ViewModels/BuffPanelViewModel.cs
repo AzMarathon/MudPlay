@@ -54,6 +54,9 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowPanel))]
     [NotifyPropertyChangedFor(nameof(CanAddBuff))]
+    [NotifyPropertyChangedFor(nameof(SetupHint))]
+    [NotifyPropertyChangedFor(nameof(HasSetupHint))]
+    [NotifyPropertyChangedFor(nameof(CanReadSpellList))]
     private IReadOnlyList<SpellPick> _buffPicks = Array.Empty<SpellPick>();
 
     // True when no slot is configured yet — drives the empty-state hint.
@@ -74,6 +77,50 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
     // Whether the Add button can do anything — every qualifying buff already
     // slotted leaves nothing to add.
     public bool CanAddBuff => BuffPicks.Count > 0;
+
+    // Why there is no buff to add, in the user's terms, or empty when there is one.
+    // The usual case is a new profile: the class's spells are known but which of them
+    // the character has learned is not, until the game's own list has been read. The
+    // window used to show nothing but "add buffs in the config panel" beside a panel
+    // it had hidden.
+    public string SetupHint
+    {
+        get
+        {
+            if (CanAddBuff) return string.Empty;
+            if (_spellbook.ClassNumber == 0)
+                return "MudPlay hasn't read your character yet. Enter the game and it reads your stats "
+                    + "on its own; your buffs can be added here after that.";
+            bool classHasBuffs = false;
+            foreach (KnownSpell s in _spellbook.ClassSpells)
+                if (BuffClassifier.IsAnyBuff(s)) { classHasBuffs = true; break; }
+            if (classHasBuffs && _spellbook.ObtainedCount == 0)
+                return "MudPlay doesn't know which spells you have learned yet, so it has no buffs to offer. "
+                    + $"Click “Read my spell list” (it types `{AppServices.Current.SpellListCommand}` in the game) "
+                    + "and the buffs you know can be added here.";
+            if (HasSlots) return "Every buff you have learned is already listed.";
+            return classHasBuffs
+                ? "None of the spells you have learned is a buff. One you learn later can be added here."
+                : "Your class has no buff spells, and you carry no item that casts one, so there is nothing to set up here.";
+        }
+    }
+
+    public bool HasSetupHint => SetupHint.Length > 0;
+
+    // The learned-spell list has never been read: offer to read it.
+    public bool CanReadSpellList =>
+        !CanAddBuff && _spellbook.ClassNumber != 0 && _spellbook.ObtainedCount == 0
+        && _spellbook.ClassSpells.Count > 0;
+
+    [RelayCommand]
+    private void ReadSpellList() => AppServices.Current.SendGameCommand(AppServices.Current.SpellListCommand);
+
+    private void RaiseSetupHint()
+    {
+        OnPropertyChanged(nameof(SetupHint));
+        OnPropertyChanged(nameof(HasSetupHint));
+        OnPropertyChanged(nameof(CanReadSpellList));
+    }
 
     // "Add all blesses" candidates — recomputed alongside the picker (see
     // RefreshBuffPicks). Self-only and single-target-on-self buffs, with the full
@@ -323,6 +370,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         RefreshMemberTargets();
         RefreshOverwriteWarnings();
         OnPropertyChanged(nameof(HasSlots));
+        RaiseSetupHint();
         OnPropertyChanged(nameof(ShowPanel));
         OnPropertyChanged(nameof(HasManualOrder));
         OnPropertyChanged(nameof(IsPriorityTopDown));
@@ -578,6 +626,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         _selfBlessCandidates = Game.Spells.BuffConflictAnalyzer.SelectSelfBlessCandidates(pool, existing);
         OnPropertyChanged(nameof(CanAddAllBlesses));
         OnPropertyChanged(nameof(CanReportUnlearned));
+        RaiseSetupHint();
     }
 
     // Resolve a slot's cast code to its underlying spell identity — a learnable
@@ -775,6 +824,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Renumber();
         RefreshBuffPicks();   // the just-slotted spell drops out of the picker
         OnPropertyChanged(nameof(HasSlots));
+        RaiseSetupHint();
         OnPropertyChanged(nameof(ShowPanel));
         Persist();
         // A freshly-added roll spell with rerolling on can re-evaluate a roll already up
@@ -817,6 +867,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Renumber();
         RefreshBuffPicks();   // drops the just-slotted spells from both pickers
         OnPropertyChanged(nameof(HasSlots));
+        RaiseSetupHint();
         OnPropertyChanged(nameof(ShowPanel));
         Persist();
     }
@@ -911,6 +962,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Renumber();
         RefreshBuffPicks();   // the freed spell returns to the picker
         OnPropertyChanged(nameof(HasSlots));
+        RaiseSetupHint();
         OnPropertyChanged(nameof(ShowPanel));
         Persist();
     }
@@ -931,6 +983,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         Slots.Clear();
         RefreshBuffPicks();   // every freed spell returns to both pickers
         OnPropertyChanged(nameof(HasSlots));
+        RaiseSetupHint();
         OnPropertyChanged(nameof(ShowPanel));
         Persist();
     }

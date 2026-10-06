@@ -2584,7 +2584,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 Game.GameData.BankShop target = bank;
                 string reach = steps is { } n ? $"{n} step{(n == 1 ? "" : "s")}" : "no route found";
                 ContextTransferChoices.Add(new MudPlay.ViewModels.FavoriteMenuItem(
-                    $"{++number})", $"{bank.Name} {bank.Map}/{bank.Room} — {reach}", GotoWalkBrush,
+                    $"{++number})", $"{BankLabel(bank)} — {reach}", GotoWalkBrush,
                     new RelayCommand(() => StartStashTransfer(stash, target))));
             }
         }
@@ -2604,6 +2604,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ContextTransferHeader));
         OnPropertyChanged(nameof(ContextCanTransferStash));
         OnPropertyChanged(nameof(ContextStashTransferRunning));
+    }
+
+    // How a bank reads in the menu: the room it's in, then the shop's own name in
+    // brackets. Several towns' banks share one shop name ("Bank of Godfrey"), and the
+    // room is the part a player knows it by. A room named the same as its shop is
+    // said once. Falls back to the shop name and its map/room when the room isn't in
+    // the loaded map.
+    private string BankLabel(Game.GameData.BankShop bank)
+    {
+        string? room = _services.RoomGraph.GetRoom(new RoomKey(bank.Map, bank.Room))?.Name?.Trim();
+        if (string.IsNullOrEmpty(room)) return $"{bank.Name} {bank.Map}/{bank.Room}";
+        return string.Equals(room, bank.Name.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? room
+            : $"{room} ({bank.Name})";
     }
 
     private void StartStashTransfer(RoomKey stash, Game.GameData.BankShop bank)

@@ -107,6 +107,8 @@ With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you i
 
 In the game, the terminal works like any MUD client — type a command and it's sent to the game. The **numpad is pre-wired to compass movement**, and you can add your own **macros** (key → command) and **aliases** (typed shortcuts). The startup splash plays until you connect or load a profile.
 
+**The first time you enter the game on a new profile**, MudPlay reads your character on its own: `stat` for your stats, `i` for your inventory, and `sp` for the spells you've learned. Nearly everything automated leans on those three — the **Buff Watchdog** can't offer a buff until it knows you've learned it, for one. If a window says it has nothing to work with, typing `stat`, `i` or `sp` in the game is the first thing to try.
+
 The automation engines — Auto-Combat, Auto-Heal, Auto-Nuke, navigation looping, and more — are **toolbar toggles** whose behavior is tuned on the matching Settings tabs. Flip them on to let MudPlay fight, heal, and travel for you. The **Combat**, **Navigation & Looping**, **Party Play**, and **Healing & Spells** sections explain how each engine decides what to do.
 
 ---
@@ -154,6 +156,8 @@ Select a placed entry (or folder) and type a **Name** to rename it however you l
 ## The windows
 
 Each is modeless; pressing its key again brings it to the front if it's buried, or closes it if it's already in front. Default hotkeys are shown; all are rebindable.
+
+**Whose window is it?** Every window's title ends the same way as the main window's: its own name, then your **profile**, then the **BBS and realm** — `Settings — Bob — Paradigm:Paradigm PVE`. Running several clients at once, that tells their Settings, Navigation and other windows apart in the taskbar and on screen. The tail follows the profile and BBS you have loaded, changing in every open window when you switch.
 
 - **Navigation** (Alt+M) — the room map: where you are, your route lines, and the controls for GOTO, loops, and Auto-Lair.
 - **Backscroll** (Alt+L) — scroll back through terminal history, with search and export. See **Tools & Diagnostics** for how to use it.
@@ -603,13 +607,14 @@ The picker also distinguishes a **genuinely-required** gate (no way to the desti
 
 That shortcut is its own **selectable card**: pick it and — if you're not carrying the item — the walker heads to the item's **source** (a dropping monster's lair, a shop, a giver), tries to get it, then takes the shortcut if it turned up or falls back to the long reliable route if the source was dead or empty. So a shortcut whose item comes off a monster that may be gone is one click, not a manual side-trip.
 
-**Door keys are a special case.** Normally a locked door's key is *not* something MudPlay goes looking for — pick and bash are the usual openers, so a key you simply don't have makes the exit fail in place. The exception is a key whose whole acquisition chain is certain: a **room command that summons a monster which drops it every time**. For those, the run detours to the summoning room, types the command, lets the fight resolve, re-surveys the floor, collects the key, and carries on to where you were going — no prompt, because nothing about it is a gamble.
+**Door keys are a special case.** Normally a locked door's key is *not* something MudPlay goes looking for — pick and bash are the usual openers, so a key you simply don't have makes the exit fail in place. The exception is a key whose whole acquisition chain is certain: a **room command that summons a monster which drops it every time**, or an **NPC who hands it over when asked**. For a summon, the run detours to the summoning room, types the command, lets the fight resolve, re-surveys the floor, collects the key, and carries on to where you were going — no prompt, because nothing about it is a gamble. For an NPC, it walks to them, asks, and carries on.
 
 - **The gate key behind the Black Steel Gate** works this way — `touch statue` summons the obsidian statue, which always drops it.
+- **The jagged bone key for the Library in Arlysia** comes from the old hermit on the Library Steps, who hands another one over (`ask hermit remind`) to anyone far enough along their fifth alignment quest. The key crumbles when used, so one is fetched each time the door needs it. MudPlay doesn't work out your quest step first: it asks, and if he hands nothing over the walk carries on to the door anyway — it may be standing open — and stops there, naming the key, if it isn't. He isn't asked twice on one trip. The key ships ticked **Auto-obtain for path**; untick it in Game Data → Items to stop the detour.
 - **A low-percentage lair drop** — the black star key, for instance — is deliberately left alone: there's no way to promise it, so the walk won't commit you to an open-ended hunt for one.
 - **A key you can pick or bash** is left alone too: the detour only arms when the door is genuinely shut to you.
 
-A path item — key or otherwise — is fetched for you when you **consent to it for that walk**, which is what **accepting a gated route in the route picker** does: the pick itself arms the shop / give / drop acquisition for that one trip (an item flagged **Auto-obtain for path** in Game Data → Items is also fetched automatically on a sole route). While that fetch detour is running the map route line and **Details…** show the **whole journey** — to the shop / giver / summon room, then on to where you actually asked to go — rather than stopping at the fetch stop.
+A path item — key or otherwise — is fetched for you when you **consent to it for that walk**, which is what **accepting a gated route in the route picker** does: the pick itself arms the shop / give / drop acquisition for that one trip (an item flagged **Auto-obtain for path** in Game Data → Items is also fetched automatically on a sole route). **Starting a loop by hand** works the same way: when none of the loop's rooms can be reached as things stand, the approach is planned through the gate and a flagged item an NPC hands over is fetched on the way in, instead of the start failing with "no reachable waypoint". While that fetch detour is running the map route line and **Details…** show the **whole journey** — to the shop / giver / summon room, then on to where you actually asked to go — rather than stopping at the fetch stop.
 
 The *searching* half — hunting a missing item off the floor room-by-room — is driven by the **master Auto-Search toggle**: the picker's **Search en route** card turns it on for the leg so the search actually runs, and turns it back off once the item lands. (There's no longer a separate "search rooms if item needed" setting — Auto-Search is the single switch, and the routing cards carry the per-walk consent.)
 
@@ -1068,7 +1073,7 @@ Set the bank and thresholds on Settings → Cash. To bank right now regardless o
 
 ### Moving a stash into a bank
 
-Right-click a **stash room** on the Navigation map and open **Transfer Stash to Bank**. The fly-out lists every bank in the game data, nearest to where you are standing first, each with its map/room and the number of steps to it. Or start from the other end: right-click a **bank room** and open **Transfer Stash to This Bank**, which lists your stash rooms nearest that bank first, each with its steps from the bank and the coin MudPlay believes it holds. Steps are counted the way the trip will travel, through doors and gates whose key or item can be obtained and across boat crossings, so a bank behind one of those still shows its distance; only a bank with no route at all reads *no route found*. Pick one and MudPlay shuttles the stash's coin to it:
+Right-click a **stash room** on the Navigation map and open **Transfer Stash to Bank**. The fly-out lists every bank in the game data, nearest to where you are standing first, each by the **room it's in** with the bank's own shop name in brackets — `Bank of Khazarad (Bank of Godfrey) — 283 steps` — since several towns' banks share one shop name (a room named the same as its shop is shown once). A bank with no route from where you stand says so. Or start from the other end: right-click a **bank room** and open **Transfer Stash to This Bank**, which lists your stash rooms nearest that bank first, each with its steps from the bank and the coin MudPlay believes it holds. Steps are counted the way the trip will travel, through doors and gates whose key or item can be obtained and across boat crossings, so a bank behind one of those still shows its distance; only a bank with no route at all reads *no route found*. Pick one and MudPlay shuttles the stash's coin to it:
 
 - It stops any loop or Auto-Lair that is running (it does not resume it afterwards), walks to the stash room and searches. If you start it already loaded — carrying more coin than you have room left for, as after a transfer that was cut off on its way to the bank — it goes to the bank and deposits that first.
 - It reads the pile the search shows, then takes as much as your coin weight limits allow (**Settings → Cash**: *Don't collect coin if it makes you Light / Medium / Heavy*, *Don't collect coin past 90% encumbrance*, and *Drop smaller currency to make room for larger*). With no limit ticked that is everything you can physically carry. The per-coin Collect / Ignore / Discard choices don't decide what it takes — this is your own stash — but a coin set to **Discard** will still be dropped again, so set it to Ignore or Collect first if your stash holds any.
@@ -2031,6 +2036,16 @@ Before the first round of a session it reads *Waiting for a round of combat.* Se
 ## Buff Watchdog
 
 Open **Buff Watchdog** from the **View** menu (right after Party) or its toolbar button — it has no default hotkey, but you can assign one on Settings → Shortcuts. This is the **one place you configure every automated buff** — self bless, party bless, room light, mana-regen, and the "when HP/MA full" utility casts all live here now, in a single unified list — **and** it shows a live timer bar for each one as it runs. Re-selecting the menu item (or toolbar button) brings it forward if it's buried, or closes it if it's already in front.
+
+### Before you can add a buff: your spell list
+
+The Buff Watchdog only offers buffs you have **actually learned**, and MudPlay learns that from the game's own spell list (`sp`, or `pow` for a kai class). On a **new profile** nothing is known yet, so there is nothing to add:
+
+- **MudPlay reads the list for you** the first time it sees your stats in the game and knows of no learned spell. You'll see `sp` go out in the terminal.
+- **If the window still has nothing to add**, it says why in plain words, and when the list simply hasn't been read it shows a **Read my spell list** button that sends the command. Typing `sp` yourself does the same.
+- **After that it stays current on its own**: a spell you learn from a trainer or a scroll is picked up as it happens.
+
+The other reasons it gives: your character hasn't been read yet (enter the game first), your class has no buff spells and you carry no item that casts one, none of the spells you've learned is a buff, or every buff you've learned is already on the list. The **Spell Book** (F2) shows the same learned / not-learned picture for every spell of your class.
 
 ### Building the buff list
 

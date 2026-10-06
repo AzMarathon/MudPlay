@@ -17,10 +17,15 @@ namespace MudPlay.Game.Inventory;
 // each prompt the game sends back answers one. A small gap between sends keeps a
 // stray prompt (a regen tick, a combat round) from releasing the rest in a burst.
 // Paradigm's limit is still to be measured; it uses the same pacing.
+//
+// The window is what keeps the queue safe; the gap only sets the top speed. At
+// 150 ms a sweep ran about six commands a second, half the speed of a gear set,
+// which sends its commands all at once (report paradigm-20261006-112434: 38 drops
+// in 6 s, 14 wears in 1 s, none refused).
 public sealed class BulkCommandPacer
 {
     public const int Window = 6;
-    public static readonly TimeSpan MinGap = TimeSpan.FromMilliseconds(150);
+    public static readonly TimeSpan MinGap = TimeSpan.FromMilliseconds(50);
     // A prompt can go unseen (a disconnect, a statline the scanner can't read); after
     // this long with nothing sent or answered, the window is treated as drained.
     public static readonly TimeSpan AnswerTimeout = TimeSpan.FromSeconds(3);

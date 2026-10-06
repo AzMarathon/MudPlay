@@ -834,7 +834,7 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // Start running loop. If a loop is already running, it is stopped first. Returns
     // false when the loop is empty.
-    public bool Start(Loop loop) => StartInternal(loop, isRecovery: false);
+    public bool Start(Loop loop) => StartInternal(loop, isRecovery: false, gateFallback: true);
 
     // Resume a loop after an auto-deposit / bank / trainer detour that Stop()ed it
     // for its own walk. Re-plans from the current room exactly like a fresh Start, but
@@ -857,7 +857,12 @@ public sealed class LoopRunner : IRecoverableEngine
     // — so the reroute continues the same lap instead of re-arming ReachedFirstWaypoint
     // (which would re-fire the party @reset side effect on every recovery). EnterRecovery
     // has already detached the gate + cleared the in-flight step by the time we land here.
-    private bool StartInternal(Loop loop, bool isRecovery, bool suppressFirstWaypointEvent = false, bool throughGates = false)
+    //
+    // gateFallback: a fresh Start that can reach nothing freely plans its approach
+    // through gates instead of failing. A resume or a recovery reroute keeps the
+    // planning its caller asked for.
+    private bool StartInternal(Loop loop, bool isRecovery, bool suppressFirstWaypointEvent = false,
+        bool throughGates = false, bool gateFallback = false)
     {
         ArgumentNullException.ThrowIfNull(loop);
         if (loop.Waypoints.Count < 2)
@@ -970,6 +975,26 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         RoomKey? closest = PickClosestWaypoint(currentKey.Value, loop.Waypoints, throughGates);
+        // Nothing can be reached as things stand, but the loop may sit behind a gate
+        // the approach can open on the way: a door whose key an NPC hands over, a
+        // hidden exit. Plan through those, as a go-to does. The free way in is still
+        // preferred when there is one.
+        if (closest is null && !throughGates && gateFallback)
+        {
+            if (TryEnterAtNearestRoom(loop, currentKey.Value, throughGates: true, firstRun: !isRecovery))
+            {
+                _log?.Info("LoopRunner",
+                    "nothing on the loop can be reached freely; approaching through a gate it can open on the way");
+                return true;
+            }
+            closest = PickClosestWaypoint(currentKey.Value, loop.Waypoints, throughGates: true);
+            if (closest is not null)
+            {
+                throughGates = true;
+                _log?.Info("LoopRunner",
+                    "no waypoint can be reached freely; approaching through a gate it can open on the way");
+            }
+        }
         if (closest is null)
         {
             // No reachable waypoint — bail; gate would fail us anyway.
@@ -992,6 +1017,7 @@ public sealed class LoopRunner : IRecoverableEngine
         Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
         _log?.Info("LoopRunner",
             $"approach: walking from {currentKey} → {closest} (closest of {loop.Waypoints.Count} waypoints)");
+        if (throughGates) _armGatedApproach?.Invoke(currentKey.Value, closest.Value);
         _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates);
         return true;
     }
@@ -1049,6 +1075,7 @@ public sealed class LoopRunner : IRecoverableEngine
         State = LoopState.Approaching;
         _log?.Info("LoopRunner",
             $"approach: walking from {from} → {entry} (nearest loop room, {steps[entry]} step(s); joins at step {_index + 1} of {_expandedSteps.Count})");
+        if (throughGates) _armGatedApproach?.Invoke(from, entry);
         _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates);
         return true;
     }
@@ -1238,7 +1265,27 @@ public sealed class LoopRunner : IRecoverableEngine
         SendNextStep();
     }
 
-    private void OnWalkerEvent(WalkEvent e)
+    // The room a path-item detour walks to (an NPC that hands over a key the
+    // approach needs). Its arrival there, or failing to get there, is not the
+    // approach arriving or failing: the detour resumes the walk to the entry itself.
+    private Func<RoomKey?>? _pathItemDetourRoom;
+    public void SetPathItemDetourRoomProbe(Func<RoomKey?> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _pathItemDetourRoom = probe;
+    }
+
+    // Called with (from, entry) just before an approach walk that plans through
+    // gates, so whatever the way in needs can be armed for fetching first.
+    private Action<RoomKey, RoomKey>? _armGatedApproach;
+    public void SetGatedApproachArmer(Action<RoomKey, RoomKey> armer)
+    {
+        ArgumentNullException.ThrowIfNull(armer);
+        _armGatedApproach = armer;
+    }
+
+    // Internal so a test can hand it a walker event directly.
+    internal void OnWalkerEvent(WalkEvent e)
     {
         // The runner cares about walker events during two shapes of "approach in
         // flight": the live LoopState.Approaching, and the paused-from-approach
@@ -1250,6 +1297,9 @@ public sealed class LoopRunner : IRecoverableEngine
         bool pausedMidApproach = State == LoopState.Paused && _pausedFromApproach;
         if (!approaching && !pausedMidApproach) return;
         if (_approachTarget is null) return;
+        if (e.Destination is { } walked && !walked.Equals(_approachTarget.Value)
+            && _pathItemDetourRoom?.Invoke() is { } detour && walked.Equals(detour))
+            return;
 
         switch (e.Kind)
         {

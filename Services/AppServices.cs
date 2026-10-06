@@ -3039,6 +3039,7 @@ public sealed class AppServices
                 StateVerifier.OnStatScreen();
             }
             SeedSpellbook(snapshot);
+            ReadSpellListIfNeverSeen();
         };
         // Alignment doesn't come from `stat` (see SeedSpellbook above) — it's only
         // ever refreshed by a `who` re-observing our own row. Without this, a
@@ -6062,6 +6063,7 @@ public sealed class AppServices
             log: Log);
         Tick.HeartbeatElapsed += StateVerifier.Poll;
         Profile.ProfileLoaded += _ => StateVerifier.Reset();
+        Profile.ProfileLoaded += _ => _spellListAsked = false;
         // A rested follower's @ok waits until the Pre-rest set is off again; once the
         // swap back to Default lands, a CR re-reads the pools (after the max-pool settle
         // window) and the re-evaluation sends it.
@@ -6947,7 +6949,9 @@ public sealed class AppServices
         // chain with no RNG in it. Every other key gate stays unannounced and fails
         // in place, which is what keeps a low-drop lair key (the black star key)
         // from sending a walk on an open-ended hunt.
-        Walker.SetDoorKeySourceProbe(id => SummonSourcesForItem(id).Count > 0);
+        // A key an NPC hands over for the asking is as fetchable as one a summoned
+        // monster always drops (the old hermit's jagged bone key for the Library).
+        Walker.SetDoorKeySourceProbe(DoorKeyIsFetchable);
 
         // Hold a crossing whose gate item is missing but already being fetched,
         // rather than sending an opener and a move that can only fail. Requires a
@@ -8311,8 +8315,12 @@ public sealed class AppServices
             carriedCount: CountPathItemCoverage,
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
+            // A loop's approach is an ordinary walk to its entry room, so a give can
+            // be fetched on the way in; once the loop is circling, its own steps
+            // drive and a detour would pull it off its lap.
             engineWalkActive: () =>
-                AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
+                AutoLair.IsActive
+                || LoopRunner.State is not (Game.Map.LoopState.Idle or Game.Map.LoopState.Approaching)
                 || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
@@ -8320,6 +8328,9 @@ public sealed class AppServices
         Needs.NeedPosted += PathItemGiveRouter.OnNeedPosted;
         Walker.Event += PathItemGiveRouter.OnWalkEvent;
         Inventory.Changed += PathItemGiveRouter.OnInventoryChanged;
+        Router.LineDispatched += line => PathItemGiveRouter.OnLine(line.Text);
+        LoopRunner.SetPathItemDetourRoomProbe(() => PathItemGiveRouter.LastGiverRoom);
+        LoopRunner.SetGatedApproachArmer(ArmLoopApproachThroughGates);
 
         PathItemShopRouter = new Game.Map.PathItemShopRouter(
             shopRoomsSellingItem: ShopRoomsSellingItem,
@@ -10970,6 +10981,25 @@ public sealed class AppServices
         return matchers;
     }
 
+    // The command that lists what the character has learned: `sp` for a mana class,
+    // `pow` for a kai one (SpellListParser reads either).
+    public string SpellListCommand => PlayerStats.MaxKai > 0 ? "pow" : "sp";
+
+    // A new profile knows every spell its class can learn but not which of them this
+    // character has: that comes only from the game's own list, which nothing asked
+    // for. Until it was read the Buff Watchdog had no buff to offer and no way to say
+    // why. Asked once per session, after a `stat` has named the class, and only while
+    // nothing learned is known.
+    private bool _spellListAsked;
+    private void ReadSpellListIfNeverSeen()
+    {
+        if (_spellListAsked || Spellbook.ObtainedCount > 0 || Spellbook.ClassSpells.Count == 0) return;
+        _spellListAsked = true;
+        string command = SpellListCommand;
+        Log.Info("Spellbook", $"no learned spells are known for this character — sending `{command}` to read them");
+        SendGameCommand(command);
+    }
+
     // Whether the character's pool is mana or kai, from its stat screen — how a custom
     // statline's %m reads when no MA= / KAI= label sits in front of it.
     private void NotePoolType(int maxMana, int maxKai)
@@ -11694,17 +11724,25 @@ public sealed class AppServices
         foreach (ItemGiver g in givers)
         {
             if (!g.Deterministic || g.Keyword.Length == 0) continue;
+            // A give with a condition on it (alignment, a quest step) is still
+            // asked for: whether this character meets it isn't worked out here, and
+            // the giver's own refusal ends the wait (user, 2026-10-06).
+            System.Collections.Generic.List<string>? refusals = null;
+            foreach (int number in g.RefusalMessages ?? System.Array.Empty<int>())
+                if (Game.Map.GiveRefusalLines.For(number) is { } line)
+                    (refusals ??= new System.Collections.Generic.List<string>()).Add(line);
             if (g.Kind == ItemGiverKind.Monster)
             {
                 string noun = Game.Map.GuardDoorCommandResolver.AskTarget(g.Name);
                 if (noun.Length == 0) continue;   // no addressable name — can't ask
                 string command = $"ask {noun} {g.Keyword}";
                 foreach (Game.Map.RoomKey room in ItemSources.GiverMonsterRoomsOf(g.Number))
-                    result.Add(new Game.Map.GiveSource(room, command, g.Name));
+                    result.Add(new Game.Map.GiveSource(room, command, g.Name, refusals));
             }
             else // Room giver — the keyword is the verbatim room CMD.
             {
-                result.Add(new Game.Map.GiveSource(new Game.Map.RoomKey(g.Map, g.Room), g.Keyword, g.Name));
+                result.Add(new Game.Map.GiveSource(
+                    new Game.Map.RoomKey(g.Map, g.Room), g.Keyword, g.Name, refusals));
             }
         }
         return result;
@@ -12128,10 +12166,9 @@ public sealed class AppServices
                 return false;
             if (req.ItemIds.Count != 1 || !IsAutoObtainForPath(req.ItemIds[0]))
                 return false;
-            // A key is only ever auto-sourced off a guaranteed summon; a flagged
-            // key with no such source would otherwise send the walk hunting.
-            if (req.Kind == RouteRequirementKind.DoorKey
-                && SummonSourcesForItem(req.ItemIds[0]).Count == 0)
+            // A key is only ever auto-sourced off a guaranteed summon or a free
+            // give; a flagged key with neither would otherwise send the walk hunting.
+            if (req.Kind == RouteRequirementKind.DoorKey && !DoorKeyIsFetchable(req.ItemIds[0]))
                 return false;
             obtainable++;
         }
@@ -12261,8 +12298,28 @@ public sealed class AppServices
     // dropper for it; any other key has no source to arm, so forcing it would only
     // switch on a per-room `sea` that can never succeed.
     public IReadOnlyList<int> SourceableGateItems(IReadOnlyList<RouteRequirement> requirements)
-        => RouteChoicePlanner.SourceableGateItems(
-            requirements, id => SummonSourcesForItem(id).Count > 0);
+        => RouteChoicePlanner.SourceableGateItems(requirements, DoorKeyIsFetchable);
+
+    // A door key the walk can reliably go and get: a room command summons a
+    // monster that always drops it, or an NPC hands it over for the asking (the
+    // old hermit's jagged bone key for the Library).
+    private bool DoorKeyIsFetchable(int itemId)
+        => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId);
+
+    // A loop is about to approach through gates because nothing on it can be
+    // reached as things stand. Arm the fetch for what the way in needs, exactly as
+    // a go-to over a sole gated route does: only items flagged Auto-obtain for path
+    // with a reliable source. Called before the approach walk plans, since the walk
+    // posts its needs as it starts.
+    private void ArmLoopApproachThroughGates(Game.Map.RoomKey from, Game.Map.RoomKey entry)
+    {
+        if (RouteChoicePlanner.Evaluate(Bfs, Movement, RoomGraph, from, entry) is not { } route) return;
+        if (!ShouldAutoObtainSoleRoute(route.Requirements)) return;
+        if (SourceableGateItems(route.Requirements) is not { Count: > 0 } items) return;
+        ForcePathObtain(items);
+        Log.Info(Game.Map.AutoSearchManager.LogCategory,
+            $"loop approach {from} -> {entry} needs item(s) {string.Join(", ", items)} — fetching on the way in");
+    }
 
     // Per-person copies to provision when auto-obtaining an item for a path. Aims
     // for MaxToGet (the carry target: rope=1, a waterskin its 2–3), never below

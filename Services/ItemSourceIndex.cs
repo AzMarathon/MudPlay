@@ -29,9 +29,17 @@ public enum ItemGiverKind { Monster, Room }
 // command once and receiving the item. These two back the path-item keyword
 // acquisition router: a Monster giver is asked `ask <Name> <Keyword>`, a Room
 // giver is sent `<Keyword>` verbatim.
+//
+// One row per source AND keyword: the old hermit hands the jagged bone key over on
+// `gift` (a quest turn-in) and again on `remind` (free, to anyone past that step),
+// and folding the two together asked him for the wrong one.
+//
+// RefusalMessages are the message-table numbers the award line prints when one of
+// its conditions fails ("goodaligned -51 3075" → message 3075). A give carrying a
+// condition can be refused; these are how the refusal reads on the wire.
 public readonly record struct ItemGiver(
     ItemGiverKind Kind, int Number, int Map, int Room, string Name, string Requirement,
-    string Keyword, bool Deterministic);
+    string Keyword, bool Deterministic, IReadOnlyList<int>? RefusalMessages = null);
 
 // One monster a room command summons on demand, which drops an item at a
 // guaranteed rate. This is the deterministic corner of monster drops, and the
@@ -260,6 +268,7 @@ public sealed class ItemSourceIndex
                 if (line.Length == 0) continue;
 
                 giveItems.Clear();
+                List<int>? refusals = null;
                 int takeId = 0;
                 bool hasPrice = false, hasAbility = false, hasRandom = false;
 
@@ -281,6 +290,7 @@ public sealed class ItemSourceIndex
                     else if (tok.StartsWith("price", StringComparison.OrdinalIgnoreCase)) hasPrice = true;
                     else if (tok.StartsWith("giveability", StringComparison.OrdinalIgnoreCase)) hasAbility = true;
                     else if (tok.StartsWith("random", StringComparison.OrdinalIgnoreCase)) hasRandom = true;
+                    if (RefusalMessageOf(tok) is { } refusal) (refusals ??= new List<int>()).Add(refusal);
                 }
                 if (giveItems.Count == 0) continue;
 
@@ -313,7 +323,7 @@ public sealed class ItemSourceIndex
                         string keyword = lineKeyword.Length > 0 ? lineKeyword : root.Keyword;
                         AddGiver(giversByItem, itemId,
                             new ItemGiver(root.Kind, root.Number, root.Map, root.Room, name, requirement,
-                                keyword, deterministic));
+                                keyword, deterministic, refusals));
                     }
                 }
             }
@@ -500,16 +510,20 @@ public sealed class ItemSourceIndex
         if (!giversByItem.TryGetValue(itemId, out List<ItemGiver>? list))
             giversByItem[itemId] = list = new List<ItemGiver>();
 
-        // Dedup by source identity — the same monster / room reached through
-        // several award lines is one row. Keep the first requirement / keyword
-        // seen, but backfill each if the earlier hit had none, and treat the row
-        // as deterministic if any award line to it is (a reliable hand-over
-        // exists even if another line is gated).
+        // Dedup by source and keyword — the same monster / room reached through
+        // several award lines of one keyword is one row (the hermit's `remind` has a
+        // line per alignment path). Keep the first requirement seen, backfilling it
+        // if the earlier hit had none, treat the row as deterministic if any award
+        // line to it is (a reliable hand-over exists even if another line is gated),
+        // and collect every line's refusal messages. A row with no keyword is the
+        // same give seen before its keyword was known, so it takes the keyword.
         for (int i = 0; i < list.Count; i++)
         {
             ItemGiver e = list[i];
             if (e.Kind == giver.Kind && e.Number == giver.Number
-                && e.Map == giver.Map && e.Room == giver.Room)
+                && e.Map == giver.Map && e.Room == giver.Room
+                && (e.Keyword.Length == 0 || giver.Keyword.Length == 0
+                    || string.Equals(e.Keyword, giver.Keyword, StringComparison.OrdinalIgnoreCase)))
             {
                 if (e.Requirement.Length == 0 && giver.Requirement.Length > 0)
                     e = e with { Requirement = giver.Requirement };
@@ -517,6 +531,8 @@ public sealed class ItemSourceIndex
                     e = e with { Keyword = giver.Keyword };
                 if (!e.Deterministic && giver.Deterministic)
                     e = e with { Deterministic = true };
+                if (giver.RefusalMessages is { Count: > 0 } more)
+                    e = e with { RefusalMessages = (e.RefusalMessages ?? Array.Empty<int>()).Union(more).ToList() };
                 list[i] = e;
                 return;
             }
@@ -642,25 +658,34 @@ public sealed class ItemSourceIndex
         return true;
     }
 
-    // The reserved TBInfo directive verbs. Used to tell a give's own trigger
-    // (the leading token of a single-block "give blade:...:giveitem 22") from a
-    // directive-led award line ("giveitem 807:..."): the former's first token is
-    // a player keyword, the latter's is one of these.
-    private static readonly HashSet<string> s_directiveVerbs = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "giveitem", "takeitem", "summon", "checkitem", "checkability", "giveability",
-        "roomitem", "nomonsters", "price", "message", "text", "random",
-        "minlevel", "maxlevel", "class", "failitem", "teleport", "cast",
-    };
-
     // True when the token's first word is a reserved directive verb — i.e. the
-    // token is a directive, not a player-typed keyword.
+    // token is a directive, not a player-typed keyword. Tells a give's own trigger
+    // (the leading token of a single-block "give blade:...:giveitem 22") from a
+    // directive-led award line ("giveitem 807:...", "failability 127:...").
     private static bool LooksLikeDirective(string tok)
     {
         if (tok.Length == 0) return false;
         int space = tok.IndexOf(' ');
         string head = space < 0 ? tok : tok[..space];
-        return s_directiveVerbs.Contains(head);
+        return TBInfoActionResolver.IsDirectiveHead(head);
+    }
+
+    // The conditions whose last argument is the message printed when they fail
+    // (GAME_MECHANICS "TBInfo directive fail messages").
+    private static readonly HashSet<string> s_refusingVerbs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "minlevel", "maxlevel", "goodaligned", "evilaligned", "checkitem", "failitem",
+        "failability",
+    };
+
+    // The fail-message number a condition token carries ("goodaligned -51 3075" →
+    // 3075), or null when it's not such a condition or names no message.
+    private static int? RefusalMessageOf(string tok)
+    {
+        string[] words = tok.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length != 3 || !s_refusingVerbs.Contains(words[0])) return null;
+        return int.TryParse(words[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) && n > 0
+            ? n : null;
     }
 
     private static int LeadingInt(string s)
