@@ -18,6 +18,9 @@ namespace MudPlay.Game.Cash;
 // searches the room can walk off with the pile. So a caller may plan against
 // these figures, but must confirm by searching before it spends them, and must
 // re-plan in place when the room comes up short.
+//
+// The tally belongs to the realm, not the character: coin hidden in a room is there
+// for every character the player runs on that realm (Services.StashBalanceStore).
 public sealed class StashLedger
 {
     private readonly Dictionary<string, long> _copperByRoom = new(StringComparer.OrdinalIgnoreCase);
@@ -25,16 +28,24 @@ public sealed class StashLedger
     // Raised whenever a believed balance changes, so the owner can persist it.
     public event Action? Changed;
 
+    // Raised before a balance is read or changed, so the owner can first take in what
+    // another client on the realm has written.
+    public event Action? Accessing;
+
     // Believed copper in one room. Zero for a room we've never hidden coin in —
     // indistinguishable from one that's been emptied, which is the honest answer
     // either way.
     public long Believed(RoomKey room)
-        => _copperByRoom.TryGetValue(Key(room), out long v) ? v : 0;
+    {
+        Accessing?.Invoke();
+        return _copperByRoom.TryGetValue(Key(room), out long v) ? v : 0;
+    }
 
     // Every room we believe holds something, as (room, copper). Rooms that have
     // dropped to zero are omitted rather than listed as empty.
     public IReadOnlyList<(RoomKey Room, long Copper)> NonEmpty()
     {
+        Accessing?.Invoke();
         List<(RoomKey, long)> result = new();
         foreach ((string wire, long copper) in _copperByRoom)
             if (copper > 0 && RoomKey.TryParseWire(wire, out RoomKey key))
@@ -47,6 +58,7 @@ public sealed class StashLedger
     public void NoteHidden(RoomKey room, long copper)
     {
         if (copper <= 0) return;
+        Accessing?.Invoke();
         string key = Key(room);
         _copperByRoom[key] = (_copperByRoom.TryGetValue(key, out long v) ? v : 0) + copper;
         Changed?.Invoke();
@@ -58,6 +70,7 @@ public sealed class StashLedger
     public void NoteRecovered(RoomKey room, long copper)
     {
         if (copper <= 0) return;
+        Accessing?.Invoke();
         string key = Key(room);
         if (!_copperByRoom.TryGetValue(key, out long known)) return;
         long left = Math.Max(0, known - copper);
@@ -70,6 +83,7 @@ public sealed class StashLedger
     // stash gets written off instead of being re-planned against forever.
     public void Reconcile(RoomKey room, long observedCopper)
     {
+        Accessing?.Invoke();
         string key = Key(room);
         long known = _copperByRoom.TryGetValue(key, out long v) ? v : 0;
         if (known == observedCopper) return;
@@ -77,7 +91,23 @@ public sealed class StashLedger
         Changed?.Invoke();
     }
 
-    // Replace the whole tally from persisted profile state on load.
+    // Add another tally on top of this one, room by room. Two characters that each
+    // counted only their own hides in a room hold the sum between them.
+    public void Merge(IReadOnlyDictionary<string, long> other)
+    {
+        Accessing?.Invoke();
+        bool any = false;
+        foreach ((string wire, long copper) in other)
+        {
+            if (copper <= 0 || !RoomKey.TryParseWire(wire, out RoomKey room)) continue;
+            string key = Key(room);
+            _copperByRoom[key] = (_copperByRoom.TryGetValue(key, out long v) ? v : 0) + copper;
+            any = true;
+        }
+        if (any) Changed?.Invoke();
+    }
+
+    // Replace the whole tally from persisted state.
     public void Hydrate(IReadOnlyDictionary<string, long>? saved)
     {
         _copperByRoom.Clear();
@@ -87,7 +117,7 @@ public sealed class StashLedger
         Changed?.Invoke();
     }
 
-    // Point-in-time copy for persisting into the character profile.
+    // Point-in-time copy for persisting.
     public Dictionary<string, long> Snapshot() => new(_copperByRoom, StringComparer.OrdinalIgnoreCase);
 
     private static string Key(RoomKey room) => $"{room.Map}/{room.Room}";

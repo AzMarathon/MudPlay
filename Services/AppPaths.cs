@@ -668,6 +668,11 @@ public static class AppPaths
     public static string RealmBossTimersFile(string realmFolder) =>
         Path.Combine(realmFolder, "boss-timers.json");
 
+    // Believed copper in each stash room ({"map/room": copper}). A stash is in the
+    // room for every character on the realm, so they share the tally.
+    public static string RealmStashBalancesFile(string realmFolder) =>
+        Path.Combine(realmFolder, "stash-balances.json");
+
     // The user's quest-definition overlay. QuestStore resolves it ABOVE the
     // universal DefaultQuestDefsSeedFile underlay, so a player's edits belong to
     // the realm they're playing, not the imported game-data set. The mechanical

@@ -1,5 +1,11 @@
 # Version history
 
+## 3.144.22
+
+- Stash amounts are kept per realm and shared by every character on it, instead of per character
+- Clients running on the same realm pick up each other's hides and pick-ups
+- Amounts already recorded on a character move to its realm the next time it loads
+
 ## 3.144.21
 
 - A copied profile no longer carries the original character's stats, max HP and mana, carry weight, position, gear-set items, learned spells, death history or stash amounts; its first entry reads `stat` and `i` for the new character
