@@ -773,6 +773,7 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         dto.BlessIfAboveMa = r.BlessIfAboveMa;
         dto.BlessWhileResting = r.BlessWhileResting;
         dto.BlessDuringCombat = r.BlessDuringCombat;
+        dto.PriorityBuff = r.PriorityBuff;
     }
 
     // The buffs a draw item (a deck of cards) can deal, for the dialog's tick boxes.
@@ -924,7 +925,8 @@ public sealed partial class BuffPanelViewModel : ObservableObject, IDisposable
         AddBuffResult initial = new(
             d.Spell ?? string.Empty, d.RecastMarginSec, d.OnlyWhenHpFull, d.OnlyWhenMaFull,
             d.OnlyWhenDark, d.CastBeforeRestingForMana, d.RerollCount, d.RerollThreshold, d.RerollInfinite,
-            d.RejectedOutcomes.ToList(), d.BlessIfAboveMa, d.BlessWhileResting, d.BlessDuringCombat);
+            d.RejectedOutcomes.ToList(), d.BlessIfAboveMa, d.BlessWhileResting, d.BlessDuringCombat,
+            d.PriorityBuff);
         AddBuffDialogViewModel dlg = new(
             options, IsLightSpell, IsRollSpell,
             IsStockRealm, AppServices.Current.ManaRegenTickSteps, initial,

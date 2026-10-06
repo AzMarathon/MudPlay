@@ -120,6 +120,7 @@ public static class CombatProfileGroupCopy
                 to.Spells.PriorityMajorSelfHeal = from.Spells.PriorityMajorSelfHeal;
                 to.Spells.PriorityCuring = from.Spells.PriorityCuring;
                 to.Spells.PriorityBuffing = from.Spells.PriorityBuffing;
+                to.Spells.PriorityPriorityBuffs = from.Spells.PriorityPriorityBuffs;
                 to.Spells.PriorityDebuffing = from.Spells.PriorityDebuffing;
                 break;
             case CombatProfileGroup.HealingRegen:

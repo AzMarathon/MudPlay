@@ -65,6 +65,9 @@
                                FontSize="11" Foreground="{StaticResource ChromeFgMutedBrush}"
                                ToolTip.Tip="What that comes to against your max mana right now."/>
                 </Grid>
+                <CheckBox Content="Priority buff"
+                          IsChecked="{Binding PriorityBuff, Mode=TwoWay}"
+                          ToolTip.Tip="Cast this buff in the Priority buffs slot of the spell type priority (Settings → Spells) instead of with your other buffs. By default that slot sits between the major and the minor self heal, so a priority buff goes up before a minor heal is cast. Its timer bar is starred."/>
                 <CheckBox Content="Cast while resting"
                           IsChecked="{Binding BlessWhileResting, Mode=TwoWay}"
                           ToolTip.Tip="Cast this buff during a rest the client started to recover HP or mana, on yourself or on the party. Unticked: it waits until the rest is done."/>

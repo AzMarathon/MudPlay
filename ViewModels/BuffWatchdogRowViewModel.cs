@@ -28,6 +28,8 @@ public sealed partial class BuffWatchdogRowViewModel : ObservableObject
     // cast? Covered members read the shared whole-party timer; a member who joined after
     // (not covered) shows "not up", so the menu flags who's missing the party buff.
     public bool WholePartyCovered { get; }
+    // A priority buff (BuffSlot.PriorityBuff): starred beside its bar.
+    public bool IsPriority { get; init; }
 
     [ObservableProperty] private string _name;
     [ObservableProperty] private string _targetText;

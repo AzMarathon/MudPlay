@@ -106,6 +106,11 @@ public sealed class BuffSlot
     // PartySettings.BlessDuringCombat for party casts until schemas 5 and 6.
     public bool BlessDuringCombat { get; set; }
 
+    // A priority buff: cast in the Priority buffs slot of the spell-type priority
+    // (Settings → Spells), which by default sits ahead of the minor self heal, instead
+    // of with the other buffs. Starred on its timer bar.
+    public bool PriorityBuff { get; set; }
+
     // Cast only once we've rested our HP up to the rest-max target — a "topped-off,
     // ready for the next fight" buff. Recasts while up there; a triggered rest-if-below
     // suspends it until we've rested back to max. Replaces the old dedicated

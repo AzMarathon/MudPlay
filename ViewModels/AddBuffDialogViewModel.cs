@@ -27,7 +27,9 @@ public sealed record AddBuffResult(
     // The buff's own mana floor and whether it casts on us in a rest or a fight.
     int BlessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa,
     bool BlessWhileResting = false,
-    bool BlessDuringCombat = false);
+    bool BlessDuringCombat = false,
+    // Cast it in the Priority buffs slot of the spell type priority.
+    bool PriorityBuff = false);
 
 // One entry in the Add-buff dropdown: the cast Code the game accepts, a Display
 // showing the buff's name + the level it's learned at ("bless (Lvl 2)"), and
@@ -133,6 +135,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
     private int _blessIfAboveMa = BuffSlot.DefaultBlessIfAboveMa;
     [ObservableProperty] private bool _blessWhileResting;
     [ObservableProperty] private bool _blessDuringCombat;
+    [ObservableProperty] private bool _priorityBuff;
 
     // The mana floor is a percent of max mana, or a raw amount when Settings → Health
     // reads its mana thresholds as absolute values.
@@ -237,6 +240,7 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             _blessIfAboveMa = i.BlessIfAboveMa;
             _blessWhileResting = i.BlessWhileResting;
             _blessDuringCombat = i.BlessDuringCombat;
+            _priorityBuff = i.PriorityBuff;
             _onlyWhenHpFull = i.OnlyWhenHpFull;
             _onlyWhenMaFull = i.OnlyWhenMaFull;
             _onlyWhenDark = i.OnlyWhenDark;
@@ -267,7 +271,8 @@ public sealed partial class AddBuffDialogViewModel : ObservableObject, IDialogVi
             Outcomes.Where(static o => !o.IsChecked).Select(static o => o.SpellNumber).ToList(),
             Math.Clamp(BlessIfAboveMa, 0, BlessIfAboveMaximum),
             BlessWhileResting,
-            BlessDuringCombat));
+            BlessDuringCombat,
+            PriorityBuff));
     }
 
     [RelayCommand]

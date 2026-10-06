@@ -76,7 +76,79 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v6 → v7: the spell-type priority list gained Priority buffs and a new default
+        // order. A list nobody had reordered moves to the new default; an edited one
+        // keeps its order and gets Priority buffs at the end.
+        if (profile.SchemaVersion < 7)
+        {
+            AdoptPriorityBuffsRank(profile);
+            profile.SchemaVersion = 7;
+            changed = true;
+        }
+
         return changed;
+    }
+
+    // Place Priority buffs in the stored spell-type priority lists: the character's
+    // own Spells section and each combat profile's copy. The section is read as raw
+    // JSON because an older profile lacks some ranks altogether, and a rank missing
+    // from the file must count as what it meant then (Emergency heal first,
+    // Downed-ally heal fourth), not as today's default for a fresh profile.
+    private static void AdoptPriorityBuffsRank(CharacterProfile profile)
+    {
+        if (profile.Settings is { } settings && settings.TryGetValue("Spells", out JsonElement json)
+            && json.ValueKind == JsonValueKind.Object)
+        {
+            int Stored(string name, int thenDefault) =>
+                json.TryGetProperty(name, out JsonElement v) && v.TryGetInt32(out int n) ? n : thenDefault;
+            int[] nine =
+            {
+                Stored(nameof(SpellsSettings.PriorityEmergencyHeal), 1),
+                Stored(nameof(SpellsSettings.PriorityMinorPartyHeal), 2),
+                Stored(nameof(SpellsSettings.PriorityMajorPartyHeal), 3),
+                Stored(nameof(SpellsSettings.PriorityDownedAllyHeal), 4),
+                Stored(nameof(SpellsSettings.PriorityMinorSelfHeal), 5),
+                Stored(nameof(SpellsSettings.PriorityMajorSelfHeal), 6),
+                Stored(nameof(SpellsSettings.PriorityCuring), 7),
+                Stored(nameof(SpellsSettings.PriorityBuffing), 8),
+                Stored(nameof(SpellsSettings.PriorityDebuffing), 9),
+            };
+            SpellsSettings spells = ReadStored<SpellsSettings>(profile, "Spells");
+            (int[] kept, int priorityBuffs) = SpellCategoryRanks.AdoptPriorityBuffs(nine);
+            spells.PriorityEmergencyHeal = kept[0];
+            spells.PriorityMinorPartyHeal = kept[1];
+            spells.PriorityMajorPartyHeal = kept[2];
+            spells.PriorityDownedAllyHeal = kept[3];
+            spells.PriorityMinorSelfHeal = kept[4];
+            spells.PriorityMajorSelfHeal = kept[5];
+            spells.PriorityCuring = kept[6];
+            spells.PriorityBuffing = kept[7];
+            spells.PriorityDebuffing = kept[8];
+            spells.PriorityPriorityBuffs = priorityBuffs;
+            settings["Spells"] = JsonSerializer.SerializeToElement(spells);
+        }
+
+        // A combat profile's copy has always been saved with all nine ranks.
+        foreach (CombatSpellProfile combat in profile.CombatProfiles?.Profiles ?? new List<CombatSpellProfile>())
+        {
+            CombatProfileSpells s = combat.Spells;
+            (int[] kept, int priorityBuffs) = SpellCategoryRanks.AdoptPriorityBuffs(new[]
+            {
+                s.PriorityEmergencyHeal, s.PriorityMinorPartyHeal, s.PriorityMajorPartyHeal,
+                s.PriorityDownedAllyHeal, s.PriorityMinorSelfHeal, s.PriorityMajorSelfHeal,
+                s.PriorityCuring, s.PriorityBuffing, s.PriorityDebuffing,
+            });
+            s.PriorityEmergencyHeal = kept[0];
+            s.PriorityMinorPartyHeal = kept[1];
+            s.PriorityMajorPartyHeal = kept[2];
+            s.PriorityDownedAllyHeal = kept[3];
+            s.PriorityMinorSelfHeal = kept[4];
+            s.PriorityMajorSelfHeal = kept[5];
+            s.PriorityCuring = kept[6];
+            s.PriorityBuffing = kept[7];
+            s.PriorityDebuffing = kept[8];
+            s.PriorityPriorityBuffs = priorityBuffs;
+        }
     }
 
     // Fold the stored Party rest / combat switches into the buff slots, which carry

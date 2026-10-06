@@ -1,13 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.145.11**
-> - Starting a loop that sits behind a locked door now plans through it and fetches the key from the NPC who hands it over, instead of "no reachable waypoint"
-> - The jagged bone key for the Library is asked for from the old hermit each time a walk needs it; if he hands nothing over the walk goes on to the door and stops there if it's shut
-> - NPC hand-overs are asked for with the right keyword when the game's data lists a condition first
-> - Drop All, Get All and Hide All send up to three times faster
-> - Every window's title ends with the profile and BBS:realm, like the main window's
-> - A new profile reads its spell list on its own, and the Buff Watchdog says why it has no buff to add, with a button to read the list
+> **Version 3.146.0**
+> - New spell type priority category, Priority buffs: tick "Priority buff" on a buff in the Buff Watchdog and it casts at that rank instead of with the rest
+> - A priority buff has a star beside its timer bar
+> - Default spell type priority reordered: major heals before minor, Priority buffs between the two self heals, downed-ally rescue after them
+> - A list you never reordered moves to the new default; one you reordered keeps its order with Priority buffs at the bottom
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

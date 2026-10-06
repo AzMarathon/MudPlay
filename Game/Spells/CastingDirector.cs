@@ -1815,7 +1815,8 @@ public sealed class CastingDirector : IDisposable
                 SpellCategory.MinorSelfHeal   => healEnabled ? Wrap(PickMinorSelfHeal(spells, health)) : null,
                 SpellCategory.MajorSelfHeal   => healEnabled ? Wrap(PickMajorSelfHeal(spells, health)) : null,
                 SpellCategory.Curing          => healEnabled ? PickCure(spells) : null,
-                SpellCategory.Buffing         => blessEnabled ? PickBuff(health) : null,
+                SpellCategory.Buffing         => blessEnabled ? PickBuff(health, priority: false) : null,
+                SpellCategory.PriorityBuffing => blessEnabled ? PickBuff(health, priority: true) : null,
                 SpellCategory.Debuffing       => healEnabled ? PickDebuff() : null,
                 _                              => null,
             };
@@ -1848,7 +1849,8 @@ public sealed class CastingDirector : IDisposable
             // Item-cast buff (#-token in a Bless slot): bypass the raw cast path
             // entirely — run the equip → use → re-equip sequence and key the
             // recast timer by the token. Only buff slots carry tokens.
-            if (category == SpellCategory.Buffing && ItemCastToken.IsToken(cand.Spell))
+            if (category is SpellCategory.Buffing or SpellCategory.PriorityBuffing
+                && ItemCastToken.IsToken(cand.Spell))
             {
                 if (TryFireItemCast(cand.Spell, cand.RecastMarginSec)) return cand.Spell;
                 continue; // unresolved / non-buff item — let a later category try
@@ -1918,7 +1920,7 @@ public sealed class CastingDirector : IDisposable
             // the observed land; a self buff (null target) starts an optimistic
             // timer NOW so a stale re-evaluation this round can't re-issue it
             // before the AppliedMessage confirms with the true duration.
-            if (category == SpellCategory.Buffing)
+            if (category is SpellCategory.Buffing or SpellCategory.PriorityBuffing)
             {
                 if (cand.Target is { } tgt) ArmPartyBuffConfirm(cand.Spell, tgt, cand.RecastMarginSec);
                 else StartSelfBuffTimer(cand.Spell, cand.RecastMarginSec);
@@ -1984,7 +1986,8 @@ public sealed class CastingDirector : IDisposable
         }
         if (blessEnabled)
         {
-            int buffPrio = CategoryPriority(spells, SpellCategory.Buffing);
+            int plainPrio = CategoryPriority(spells, SpellCategory.Buffing);
+            int starredPrio = CategoryPriority(spells, SpellCategory.PriorityBuffing);
             // The unified buff list, in priority (list) order. Self / whole-party slots
             // key their recast to "" (they land on us); a member-target slot's per-member
             // timers aren't enumerated here (best-effort self view). Only-when-dark light
@@ -1997,6 +2000,7 @@ public sealed class CastingDirector : IDisposable
                     slotNo++;
                     string? code = slot.Spell?.Trim();
                     if (string.IsNullOrWhiteSpace(code) || slot.OnlyWhenDark || !IsRecastDue("", code)) continue;
+                    int buffPrio = slot.PriorityBuff ? starredPrio : plainPrio;
                     q.Add((buffPrio, slotNo, $"{code}({buffPrio}-{slotNo})"));
                 }
             }
@@ -2016,7 +2020,7 @@ public sealed class CastingDirector : IDisposable
     // The configured type-priority number for a between-round category (the Spells-tab
     // priorities). Every category — Emergency and DownedAlly included — reads a
     // user-reorderable slot; the defaults put Emergency first (1) and DownedAlly
-    // fourth, but the user can move any of them.
+    // seventh, but the user can move any of them.
     private static int CategoryPriority(SpellsSettings s, SpellCategory cat) => cat switch
     {
         SpellCategory.EmergencyHeal => s.PriorityEmergencyHeal,
@@ -2027,6 +2031,7 @@ public sealed class CastingDirector : IDisposable
         SpellCategory.MajorSelfHeal => s.PriorityMajorSelfHeal,
         SpellCategory.Curing => s.PriorityCuring,
         SpellCategory.Buffing => s.PriorityBuffing,
+        SpellCategory.PriorityBuffing => s.PriorityPriorityBuffs,
         SpellCategory.Debuffing => s.PriorityDebuffing,
         _ => int.MaxValue,
     };
@@ -2065,7 +2070,7 @@ public sealed class CastingDirector : IDisposable
     {
         // Every between-round category, Emergency and DownedAlly included, walked
         // in the user's Spells-tab priority order. Emergency defaults to slot 1
-        // (leads), DownedAlly to slot 4, but both are reorderable like the rest.
+        // (leads), DownedAlly to slot 7, but both are reorderable like the rest.
         (SpellCategory Cat, int Prio)[] order =
         {
             (SpellCategory.EmergencyHeal,  s.PriorityEmergencyHeal),
@@ -2076,6 +2081,7 @@ public sealed class CastingDirector : IDisposable
             (SpellCategory.MajorSelfHeal,  s.PriorityMajorSelfHeal),
             (SpellCategory.Curing,         s.PriorityCuring),
             (SpellCategory.Buffing,        s.PriorityBuffing),
+            (SpellCategory.PriorityBuffing, s.PriorityPriorityBuffs),
             (SpellCategory.Debuffing,      s.PriorityDebuffing),
         };
         Array.Sort(order, (a, b) =>
@@ -2425,7 +2431,11 @@ public sealed class CastingDirector : IDisposable
     // MA-floor gate: a buff is considered only while MA is at or above its own
     // BlessIfAboveMa (BuffSlot). Mirrors MegaMUD's "don't burn buff mana when we'll
     // need it for heals soon" behaviour, per buff.
-    private CastCandidate? PickBuff(HealthSettings health)
+    //
+    // priority: the buffs ticked "Priority buff" (BuffSlot.PriorityBuff) when true,
+    // every other buff when false. The two are separate between-round categories with
+    // their own rank; everything else about a buff is the same in either.
+    private CastCandidate? PickBuff(HealthSettings health, bool priority)
     {
         // Buff-strip-room gate: the room casts a buff-removal spell on entry, so
         // any buff we put up is torn straight back off. Skip the whole category
@@ -2449,8 +2459,8 @@ public sealed class CastingDirector : IDisposable
         // (front of the queue). Then the ONE unified buff list (self bless / regen /
         // when-full, whole-party, per-member). Mana-regen maintenance is just a
         // CastOnSelf slot in that list, so PickUnifiedBuff handles it in place.
-        if (PickManaRegenReroll(health) is { } rr) return rr;
-        return PickUnifiedBuff(health);
+        if (PickManaRegenReroll(health, priority) is { } rr) return rr;
+        return PickUnifiedBuff(health, priority);
     }
 
     // Whether mana is at or above this buff's own floor (BuffSlot.BlessIfAboveMa,
@@ -2481,7 +2491,7 @@ public sealed class CastingDirector : IDisposable
     // now, drop it (the reroller re-stages on the next landing if still below
     // threshold) rather than stall the walk. The mana-regen buff's own MAINTENANCE
     // recast is a normal CastOnSelf slot in the unified list (PickUnifiedBuff).
-    private CastCandidate? PickManaRegenReroll(HealthSettings health)
+    private CastCandidate? PickManaRegenReroll(HealthSettings health, bool priority)
     {
         if (_pendingManaRegenReroll is not { } reroll) return null;
         // The slot the reroll belongs to carries its conditions; a reroll whose slot
@@ -2489,6 +2499,7 @@ public sealed class CastingDirector : IDisposable
         Models.Profile.BuffSlot? slot = _readPartyBuffs?.Invoke()?.Slots.Find(
             s => string.Equals(s.Spell?.Trim(), reroll, StringComparison.OrdinalIgnoreCase));
         if (slot is null) { _pendingManaRegenReroll = null; return null; }
+        if (slot.PriorityBuff != priority) return null;   // the other buff category's to cast
         if (!BuffTimingAllowed(slot)) return null;
         if (IsBuffAffordable(slot, health))
             return new CastCandidate(reroll, Target: null, DefaultRecastMarginSec);
@@ -2520,7 +2531,7 @@ public sealed class CastingDirector : IDisposable
     // a roster name is in the room) — the one exception being a member who's HIDING:
     // the cast returns "You do not see <name> here!" and we back off (_hiddenTargets)
     // until we move or they reappear in "Also here:".
-    private CastCandidate? PickUnifiedBuff(HealthSettings health)
+    private CastCandidate? PickUnifiedBuff(HealthSettings health, bool priority)
     {
         if (_readPartyBuffs?.Invoke() is not { } buffs) return null;
 
@@ -2570,6 +2581,7 @@ public sealed class CastingDirector : IDisposable
         foreach (Models.Profile.BuffSlot slot in ordered)
         {
             if (string.IsNullOrWhiteSpace(slot.Spell)) continue;
+            if (slot.PriorityBuff != priority) continue;
 
             // Permanently removed by another configured buff — never maintain it (the
             // winner keeps stripping it). Skips self, member, and whole-party casts alike.
@@ -2754,7 +2766,7 @@ public enum SpellCategory
     // (defaults to slot 1, so it leads). See CastingDirector.PickEmergencySelfHeal.
     EmergencyHeal  = 0,
     // A downed-ally rescue. Reorderable via SpellsSettings.PriorityDownedAllyHeal
-    // (defaults to slot 4).
+    // (defaults to slot 7).
     DownedAllyHeal = 1,
     MinorPartyHeal = 2,
     MajorPartyHeal = 3,
@@ -2763,4 +2775,7 @@ public enum SpellCategory
     Curing         = 6,
     Buffing        = 7,
     Debuffing      = 8,
+    // The buffs ticked "Priority buff" (BuffSlot.PriorityBuff), cast at their own
+    // rank (SpellsSettings.PriorityPriorityBuffs) instead of with the rest.
+    PriorityBuffing = 9,
 }
