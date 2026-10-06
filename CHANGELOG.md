@@ -8,6 +8,7 @@
 - A blank between two separators in a waypoint's command (`pull book;^M`) sends a bare Enter and waits for the room to be shown again
 - A cast or attack in a waypoint's command is no longer treated as one you typed
 - Packaged loops no longer carry commands the navigation already performs (`go path`, `go fissure`, `move rubble`, `push brick`, `push stone`)
+- The corrected packaged loops replace the copies already in a game-data set (the old copy is kept as `.bak`)
 - bug reports addressed: paradigm-20261005-201733, paradigm-20261005-201859, paradigm-20261005-194751
 
 ## 3.144.22

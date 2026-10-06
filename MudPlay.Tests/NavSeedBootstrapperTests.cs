@@ -54,6 +54,62 @@ public sealed class NavSeedBootstrapperTests : IDisposable
     private void Apply() =>
         NavSeedBootstrapper.Apply("stock", Bundle, LoopsDest, FavDest, LedgerPath, LegacyMarker, "testset");
 
+    private void BundleRevision(string relPath, int revision, string body)
+    {
+        File.WriteAllText(Path.Combine(Bundle, "Loops", relPath.Replace('/', Path.DirectorySeparatorChar)), body);
+        File.WriteAllText(Path.Combine(Bundle, "LoopRevisions.json"), "{\"" + relPath + "\":" + revision + "}");
+    }
+
+    // A corrected packaged loop replaces the set's copy once; the old copy is kept
+    // beside it, and a later edit by the user isn't overwritten again.
+    [Fact]
+    public void RevisedLoop_ReplacesTheSetsCopy_OncePerRevision()
+    {
+        BundleLoop("Zone/A.loop");
+        BundleLoop("Zone/B.loop");
+        Apply();
+        string a = Path.Combine(LoopsDest, "Zone", "A.loop");
+        File.WriteAllText(a, "my-edit");
+
+        BundleRevision("Zone/A.loop", 1, "corrected");
+        Apply();
+
+        Assert.Equal("corrected", File.ReadAllText(a));
+        Assert.Equal("my-edit", File.ReadAllText(a + ".bak"));
+        Assert.Equal("loop-body", File.ReadAllText(Path.Combine(LoopsDest, "Zone", "B.loop")));
+
+        File.WriteAllText(a, "edited-again");
+        Apply();
+        Assert.Equal("edited-again", File.ReadAllText(a));
+    }
+
+    [Fact]
+    public void RevisedLoop_TheUserDeleted_StaysDeleted()
+    {
+        BundleLoop("Zone/A.loop");
+        Apply();
+        string a = Path.Combine(LoopsDest, "Zone", "A.loop");
+        File.Delete(a);
+
+        BundleRevision("Zone/A.loop", 1, "corrected");
+        Apply();
+
+        Assert.False(File.Exists(a));
+    }
+
+    [Fact]
+    public void FreshSet_GetsTheCorrectedLoop_WithNoBackup()
+    {
+        BundleLoop("Zone/A.loop");
+        BundleRevision("Zone/A.loop", 1, "corrected");
+
+        Apply();
+
+        string a = Path.Combine(LoopsDest, "Zone", "A.loop");
+        Assert.Equal("corrected", File.ReadAllText(a));
+        Assert.False(File.Exists(a + ".bak"));
+    }
+
     [Fact]
     public void FreshApply_CopiesLoopsAndFavourites_AndRecordsLedger()
     {
