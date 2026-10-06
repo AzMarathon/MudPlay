@@ -177,6 +177,10 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
         _profile.ProfileMutated += OnProfileMutatedRefreshWimpy;
         if (_state is not null) _state.PropertyChanged += OnStateChanged;
         if (_gameData is not null) _gameData.ActiveSetChanged += OnActiveSetChanged;
+        // The conversions resolve against the Default-gear maxima, which a `stat` can
+        // re-record without the live max moving at all.
+        Game.Health.DefaultPoolBaselineKeeper? baseline = AppServices.CurrentOrNull?.PoolBaseline;
+        if (baseline is not null) baseline.Changed += OnPoolBaselineChanged;
 
         // The Health section of the shared working profiles is folded / loaded on the
         // same events the Combat tab drives.
@@ -200,6 +204,7 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
             _profile.ProfileMutated -= OnProfileMutatedRefreshWimpy;
             if (_state is not null) _state.PropertyChanged -= OnStateChanged;
             if (_gameData is not null) _gameData.ActiveSetChanged -= OnActiveSetChanged;
+            if (baseline is not null) baseline.Changed -= OnPoolBaselineChanged;
             _session.CaptureRequested -= CaptureHealthBoxesToActive;
             _session.LoadRequested -= OnSessionLoad;
             _session.ReloadAllRequested -= OnSessionLoad;
@@ -624,6 +629,12 @@ public sealed partial class HealthSectionViewModel : SettingsSectionViewModel
     partial void OnHealIfAboveMaRestingChanged(int value)     { OnPropertyChanged(nameof(HealIfAboveMaRestingConverted)); MarkDirty(); }
     partial void OnHealIfAboveMaCombatChanged(int value)      { OnPropertyChanged(nameof(HealIfAboveMaCombatConverted));  MarkDirty(); }
     partial void OnRunIfBelowMaChanged(int value)             { OnPropertyChanged(nameof(RunIfBelowMaConverted));         MarkDirty(); }
+
+    private void OnPoolBaselineChanged()
+    {
+        RefreshAllHpConverted();
+        RefreshAllMaConverted();
+    }
 
     private void RefreshAllHpConverted()
     {

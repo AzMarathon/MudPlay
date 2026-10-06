@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.144.20**
-> - Player Workshop, CP Allocation: a Buy spells button runs the trainer's shop trip on its own, whether Auto-obtain spells from shops is on or off
-> - A scroll that shares its name with another item (scroll of resist lightning) is read after it's bought instead of being left in the pack
-> - The spell trip reads a shop's list at once instead of waiting it out, and skips scrolls marked (You can't use) or (Too powerful)
+> **Version 3.144.21**
+> - A copied profile no longer carries the original character's stats, max HP and mana, carry weight, position, gear-set items, learned spells, death history or stash amounts; its first entry reads `stat` and `i` for the new character
+> - Health tab's converted figures update as soon as a `stat` re-records the Default-gear max, instead of on the next reopen
+> - Default-gear max read at another level is dropped when none of the Default set's items are owned, so the live max is used
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

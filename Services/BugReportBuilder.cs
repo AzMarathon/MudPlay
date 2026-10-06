@@ -162,6 +162,8 @@ public static class BugReportBuilder
         Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
+        if (svc.Profile.Current is { StateUnverified: true })
+            Kv(sb, "Copied profile", "state not yet read off this character (stat + inventory pending)");
         Kv(sb, "Our alignment", $"{svc.Alignment.SelfAlignment ?? "(unknown)"}"
             + (svc.Alignment.EvilPoints is { } ep ? $" · EPs {ep:0.##}" : "")
             + (svc.Alignment.MinEvilPoints is { } floor ? $" · min EPs {floor:0.##}" : "")

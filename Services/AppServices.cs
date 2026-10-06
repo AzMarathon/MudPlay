@@ -2077,6 +2077,8 @@ public sealed class AppServices
     // The Default-gear max HP / pool the rest engine resolves against (recorded from a
     // `stat` screen with the Default set on).
     public Game.Health.DefaultPoolBaselineKeeper PoolBaseline { get; private set; } = null!;
+    // Reads a copied profile's character (stat + inventory) on its first entry.
+    public Game.ProfileStateVerifier StateVerifier { get; private set; } = null!;
 
     // Sell detours — an item flagged "Make detours to sell this item" turns a walk,
     // loop or Auto-Lair aside to a shop that trades it (see SellDetourManager).
@@ -3015,8 +3017,11 @@ public sealed class AppServices
             NotePoolType(snapshot.MaxMana, snapshot.MaxKai);
             // A full `stat` with the Default set on records the rest engine's basis.
             if (Stats.LastCaptureReadHits && Stats.LastCaptureReadPool)
+            {
                 PoolBaseline.OnStatScreen(snapshot.MaxHits,
                     snapshot.MaxMana > 0 ? snapshot.MaxMana : snapshot.MaxKai);
+                StateVerifier.OnStatScreen();
+            }
             SeedSpellbook(snapshot);
         };
         // Alignment doesn't come from `stat` (see SeedSpellbook above) — it's only
@@ -5972,6 +5977,8 @@ public sealed class AppServices
             level: () => PlayerStats.Level,
             defaultGearBonus: DefaultGearPoolBonus,
             defaultWorn: DefaultSetWorn,
+            defaultSetMissing: () => Inventory.IsLoaded && DefaultSetEquippedItems().Count == 0,
+            clear: () => { if (Profile.Current is { } p) { p.DefaultPoolBaseline = null; Profile.Save(); } },
             // A stat already on its way (auto-train's after a level-up) answers the
             // same question — don't send a second (report paradigm-20260928-231447).
             canCheckNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
@@ -5980,6 +5987,18 @@ public sealed class AppServices
             sendStat: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("stat\r")),
             log: Log);
         Tick.HeartbeatElapsed += PoolBaseline.Poll;
+        // A copied profile reads its own character before anything is trusted.
+        StateVerifier = new Game.ProfileStateVerifier(
+            pending: () => Profile.Current is { StateUnverified: true },
+            markVerified: () => { if (Profile.Current is { } p) { p.StateUnverified = false; Profile.Save(); } },
+            canAskNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
+                && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard
+                && !Stats.ScreenExpected,
+            inventoryLoaded: () => Inventory.IsLoaded,
+            send: command => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes(command + "\r")),
+            log: Log);
+        Tick.HeartbeatElapsed += StateVerifier.Poll;
+        Profile.ProfileLoaded += _ => StateVerifier.Reset();
         // A rested follower's @ok waits until the Pre-rest set is off again; once the
         // swap back to Default lands, a CR re-reads the pools (after the max-pool settle
         // window) and the re-evaluation sends it.
