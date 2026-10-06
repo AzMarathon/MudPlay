@@ -159,6 +159,14 @@
                           IsChecked="{Binding NoCombatOnDepositTrip, Mode=TwoWay}"
                           ToolTip.Tip="Turns Auto-Combat off while auto-deposit takes a loop or Auto-Lair to the bank (or an off-route stash room), once the trip has left the loop's rooms, and back on when it's back or done. A rest on the way still clears the room first."/>
 
+                <TextBlock Classes="FieldLabel" Margin="0,8,0,2"
+                           Text="On an auto-deposit trip, sell Auto-sell items first at a shop within this many steps of the bank"/>
+                <NumericUpDown Value="{Binding SellOnBankRunWithinSteps, Mode=TwoWay}"
+                               Minimum="0" Maximum="500" Increment="1"
+                               FormatString="0" ParsingNumberStyle="Integer"
+                               Width="160" HorizontalAlignment="Left"
+                               ToolTip.Tip="When an auto-deposit trip to a bank comes due while you carry anything flagged Auto-sell, and a shop that buys it is this many steps or fewer from the bank, the trip sells there first and then goes on to the bank if a deposit is still due. Counts every Auto-sell item, whatever its detour count. 0 never adds the stop. Stash rooms never do."/>
+
                 <!-- ============ Collection Rules ============ -->
                 <TextBlock Classes="SectionHeader" Text="Collection Rules: Coins and Items"/>
 

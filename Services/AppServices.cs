@@ -8192,6 +8192,7 @@ public sealed class AppServices
                 || AutoLightShopRouter.DetourActive
                 || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
             nearestLoopRoom: NearestLoopRoom,
+            nearBankSteps: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").SellOnBankRunWithinSteps,
             log: Log);
 
         // Stop holds a money or training errand instead of ending it, and the next

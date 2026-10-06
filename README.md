@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.145.3**
-> - A bank run that comes due while you carry Auto-sell items sells them first at a shop within 25 steps of the bank, then deposits
+> - A bank run that comes due while you carry Auto-sell items sells them first at a shop near the bank, then deposits (25 steps by default, set under Cash + Items → Detours)
 > - New Cash + Items option: drop coin, up to a coin you choose, to pick up an Auto-sell item that is over your weight limit
 > - Cash + Items tab: the coin and item pickup limits are labelled as separate groups
 >

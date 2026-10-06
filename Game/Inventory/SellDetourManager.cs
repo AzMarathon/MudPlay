@@ -25,7 +25,7 @@ namespace MudPlay.Game.Inventory;
 //
 // A bank run joins in. When an auto-deposit comes due while anything Auto-sell would
 // sell is carried — detour count or no, "Make detours" ticked or not — and a shop for
-// it stands within NearBankSteps of the bank, the sale goes first and the bank run
+// it stands within the Cash setting's step count of the bank, the sale goes first and the bank run
 // takes over from the shop, so one trip does both and the sale's coins are banked
 // with the rest (user, 2026-10-05; report paradigm-20261005-214728 walked a dagger
 // and a shuriken to the bank and back unsold).
@@ -53,9 +53,6 @@ public sealed class SellDetourManager : IDisposable
         public bool Sellable => Carried > KeepFloor;
     }
 
-    // A shop this many steps or fewer from the bank is near enough to add to a bank run.
-    public const int NearBankSteps = 25;
-
     private enum Phase { Idle, WalkingToShop, Selling, WalkingBack }
 
     private static readonly TimeSpan UnsoldRetry = TimeSpan.FromMinutes(10);
@@ -70,6 +67,9 @@ public sealed class SellDetourManager : IDisposable
     private readonly MovementCoordinator _coordinator;
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _blocked;
+    // A shop this many steps or fewer from the bank is near enough to add to a bank
+    // run; 0 adds none (CashSettings.SellOnBankRunWithinSteps).
+    private readonly Func<int> _nearBankSteps;
     private readonly LogService? _log;
     private readonly Func<DateTimeOffset> _now;
     private readonly Func<RoomKey, Loop, RoomKey?> _nearestLoopRoom;
@@ -109,6 +109,7 @@ public sealed class SellDetourManager : IDisposable
         Func<bool> isEnabled,
         Func<bool> blocked,
         Func<RoomKey, Loop, RoomKey?> nearestLoopRoom,
+        Func<int> nearBankSteps,
         LogService? log = null,
         Func<DateTimeOffset>? clock = null,
         Action<Action>? post = null)
@@ -123,6 +124,7 @@ public sealed class SellDetourManager : IDisposable
         _sell = sell;
         _isEnabled = isEnabled;
         _blocked = blocked;
+        _nearBankSteps = nearBankSteps;
         _log = log;
         _now = clock ?? (static () => DateTimeOffset.Now);
         _nearestLoopRoom = nearestLoopRoom;
@@ -284,7 +286,7 @@ public sealed class SellDetourManager : IDisposable
     }
 
     private bool NearBank(RoomKey shop, RoomKey bank) =>
-        _distance(shop, bank) is { } steps && steps <= NearBankSteps;
+        _distance(shop, bank) is { } steps && steps <= _nearBankSteps();
 
     private bool Usable(int item, RoomKey shop)
         => !_refused.Contains((item, shop))

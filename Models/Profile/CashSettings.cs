@@ -76,6 +76,11 @@ public sealed class CashSettings
     public bool NoCombatOnSellDetour { get; set; }
     public bool NoCombatOnDepositTrip { get; set; }
 
+    // A bank run that comes due while Auto-sell items are carried sells them first
+    // at a shop this many steps or fewer from the bank (SellDetourManager's
+    // SellAheadOfBankRun). 0 never adds the stop.
+    public int SellOnBankRunWithinSteps { get; set; } = 25;
+
     // ----- Coin encumbrance gate + cascade ---------------------------
     // The "Cash + Items" tab exposes these; CashManager.CollectCoins gates coin
     // pickups against the bracket boundary they name.

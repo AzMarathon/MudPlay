@@ -61,6 +61,7 @@ public sealed class SellDetourManagerTests : IDisposable
         public int? DetourAbove { get; set; } = 0;
         // Stands in for the map's own step count when set (a shop far from the bank).
         public Func<RoomKey, RoomKey, int?>? Distance { get; set; }
+        public int NearBankSteps { get; set; } = 25;
         public bool Blocked { get; set; }
         public bool ShopTrades { get; set; } = true;
         public DateTimeOffset Now = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
@@ -143,6 +144,7 @@ public sealed class SellDetourManagerTests : IDisposable
                 IReadOnlyDictionary<RoomKey, int> steps = bfs.ComputeDistancesTo(from, rooms);
                 return rooms.Where(steps.ContainsKey).OrderBy(r => steps[r]).Cast<RoomKey?>().FirstOrDefault();
             },
+            nearBankSteps: () => h.NearBankSteps,
             clock: () => h.Now,
             post: a => { if (h.Defer) h.Posted.Add(a); else a(); });
         h = new Harness
@@ -434,13 +436,24 @@ public sealed class SellDetourManagerTests : IDisposable
     {
         using Harness h = NewHarness();
         h.Detour.HandOffToBank = (_, _) => true;
-        h.Distance = (_, _) => SellDetourManager.NearBankSteps + 1;
+        h.Distance = (_, _) => h.NearBankSteps + 1;
         h.Carried.Add("dagger");
 
         Assert.False(OfferBankRun(h));
 
         Assert.False(h.Detour.IsDetouring);
         Assert.NotEqual(LoopState.Idle, h.Loop.State);
+    }
+
+    [Fact]
+    public void BankRunDue_StepCountZero_TheBankRunGoesAlone()
+    {
+        using Harness h = NewHarness();
+        h.Detour.HandOffToBank = (_, _) => true;
+        h.NearBankSteps = 0;
+        h.Carried.Add("dagger");
+
+        Assert.False(OfferBankRun(h));
     }
 
     [Fact]

@@ -1698,7 +1698,7 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 
 - **Which shop:** tick **Sell here** on the shops in the **Bought / sold** list to choose. With none ticked, any shop that trades the item can be used. Among the allowed shops, it picks the one that adds the fewest steps.
 - **The trip:** the route stops at the next room, walks to the shop, sells, then carries on. A walk-to heads on to its destination; a loop walks back to whichever of its rooms is nearest the shop and picks up from there, and Auto-Lair walks back to where it stopped. If the sale pushes you over your auto-deposit threshold, it goes **straight to the bank from the shop** and then back to the loop, instead of walking back first and setting off again.
-- **On a bank run:** when an auto-deposit comes due while you carry anything Auto-sell would sell, and a shop for it is within 25 steps of the bank, the trip sells there first, then checks again whether a deposit is still due and goes on to the bank, so the sale's coin is deposited too. This goes for every Auto-sell item, under its detour count or with *Make detours to sell it* unticked: you're going to town anyway. A shop further from the bank isn't worth the walk, and the bank run goes alone. Stash rooms don't do this, only a real bank.
+- **On a bank run:** when an auto-deposit comes due while you carry anything Auto-sell would sell, and a shop for it is close to the bank (25 steps by default — **Settings → Cash + Items → Detours**), the trip sells there first, then checks again whether a deposit is still due and goes on to the bank, so the sale's coin is deposited too. This goes for every Auto-sell item, under its detour count or with *Make detours to sell it* unticked: you're going to town anyway. A shop further from the bank isn't worth the walk, and the bank run goes alone. Stash rooms don't do this, only a real bank.
 - **Unticking Auto-sell** clears *Make detours to sell it* and its count too, since a detour only walks to the shop and Auto-sell does the selling (batch edit's Auto-sell **Off** does the same).
 - **When it doesn't detour:** if your walk ends at one of those shops, or your loop or Auto-Lair passes through one, it just sells on the way. It also waits while you're fighting, resting, paused, following a party leader, or another errand (a bank trip, a train trip, a token route) has the route.
 - **A shop that didn't buy it:** a shop that refuses the item ("You cannot sell … here.") or can't be reached isn't tried for it again this session. A shop that just didn't sell it — Auto-sell had nothing to sell there, or no sale reply came — waits 10 minutes before it's tried again. The bug report's *Sell detour* line lists both.
@@ -3613,7 +3613,7 @@ Settings → Cash + Items.
 
 **Default:** both `0` (disabled)
 **What it does:** When your total held wealth (converted to a single value) — or, separately, your total raw coin count — passes this number, MudPlay automatically detours to your chosen Bank/Stash and deposits the excess.
-**Important notes:** Either threshold tripping is enough to trigger a deposit; both must fall back below their thresholds before it can trigger again. Requires a Bank/Stash to actually be selected below — without one, nothing happens even if the threshold is crossed. If you're carrying items flagged **Auto-sell** and a shop that buys them is within 25 steps of the bank, the trip stops there to sell first and banks the proceeds with the rest (see *Sell detours* under the item override editor).
+**Important notes:** Either threshold tripping is enough to trigger a deposit; both must fall back below their thresholds before it can trigger again. Requires a Bank/Stash to actually be selected below — without one, nothing happens even if the threshold is crossed. If you're carrying items flagged **Auto-sell** and a shop that buys them is close enough to the bank (*On an auto-deposit trip, sell Auto-sell items first…* below), the trip stops there to sell first and banks the proceeds with the rest (see *Sell detours* under the item override editor).
 
 ### Bank
 
@@ -3654,6 +3654,12 @@ Stashing isn't affected; it's governed by the coin-type filter below.
 - **Your own changes win.** It only turns back on a toggle it turned off, so if you change Auto-Combat yourself during the trip, that stays.
 
 The program log notes each flip, and the bug report shows whether a detour is holding combat off.
+
+### On an auto-deposit trip, sell Auto-sell items first at a shop within this many steps of the bank
+
+**Default:** 25
+**What it does:** When an auto-deposit trip to a **bank** comes due while you carry anything flagged **Auto-sell**, and a shop that buys it is this many steps or fewer from the bank, the trip goes to the shop first, sells, and then goes on to the bank if a deposit is still due. It counts every Auto-sell item, including ones under their detour count or with *Make detours to sell it* unticked.
+**Important notes:** **0** never adds the stop. Raise it if your shop is further from your bank; lower it to keep bank trips short. A stash-room destination never adds a shop stop.
 
 The pickup rules come in three groups on the tab. **Collection Rules: Coins and Items** holds the one switch both share. **Coin Collection Rules** limit how much weight picking up *coin* may bring you to. **Item Collection Rules** set the same kind of limit for ground *items*, separately, so you can let coin fill you further than items or the other way round.
 
@@ -4622,6 +4628,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Keep wealth (copper) | `0` | 0–100,000,000 | `KeepOnHandWealth` | Models/Profile/CashSettings.cs |
 | Don't collect/get item → Light/Medium/Heavy (6 flags) | false (all) | bool | `SkipCollectIfMakesLight` etc. / `SkipGetItemIfMakesLight` etc. | Models/Profile/CashSettings.cs |
 | Collect after combat finished / Drop smaller for larger | false / false | bool | `CollectAfterCombatFinished` / `DropSmallerForLarger` | Models/Profile/CashSettings.cs |
+| On an auto-deposit trip, sell first at a shop within N steps of the bank | 25 | 0–500 (0 = never) | `SellOnBankRunWithinSteps` | Models/Profile/CashSettings.cs |
 | Drop coin to make room for Auto-sell items / up to | false / Silver | bool / Copper–Runic | `DropCoinForSellItems` / `DropCoinForSellItemsUpTo` | Models/Profile/CashSettings.cs |
 | Stash transfers: party members carry a share too | false | bool | `StashTransferPartyShare` | Models/Profile/CashSettings.cs |
 | Disallow all remote / @party / telepaths / gangpaths / local | false (all) | bool | `DisallowAllRemoteCommands` etc. | Models/Profile/TalkSettings.cs |

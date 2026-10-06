@@ -92,6 +92,8 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     // No combat until an auto-sell detour / auto-deposit trip is back on the loop.
     [ObservableProperty] private bool _noCombatOnSellDetour;
     [ObservableProperty] private bool _noCombatOnDepositTrip;
+    // A bank run sells first at a shop within this many steps of the bank; 0 = never.
+    [ObservableProperty] private int _sellOnBankRunWithinSteps = 25;
 
     // Dropdown source for the denomination pickers (low → high).
     public IReadOnlyList<CoinDenomination> DenominationChoices { get; } =
@@ -183,6 +185,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
             StashTransferPartyShare = StashTransferPartyShare,
             NoCombatOnSellDetour = NoCombatOnSellDetour,
             NoCombatOnDepositTrip = NoCombatOnDepositTrip,
+            SellOnBankRunWithinSteps = Math.Max(0, SellOnBankRunWithinSteps),
 
             SkipCollectIfMakesLight    = SkipCollectIfMakesLight,
             SkipCollectIfMakesMedium   = SkipCollectIfMakesMedium,
@@ -259,6 +262,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
         StashTransferPartyShare = dto.StashTransferPartyShare;
         NoCombatOnSellDetour = dto.NoCombatOnSellDetour;
         NoCombatOnDepositTrip = dto.NoCombatOnDepositTrip;
+        SellOnBankRunWithinSteps = dto.SellOnBankRunWithinSteps;
 
         SkipCollectIfMakesLight    = dto.SkipCollectIfMakesLight;
         SkipCollectIfMakesMedium   = dto.SkipCollectIfMakesMedium;
@@ -408,6 +412,7 @@ public sealed partial class CashSectionViewModel : SettingsSectionViewModel
     }
 
     partial void OnSkipGetItemPast90PercentChanged(bool value)        => MarkDirty();
+    partial void OnSellOnBankRunWithinStepsChanged(int value)         => MarkDirty();
     partial void OnDropCoinForSellItemsChanged(bool value)            => MarkDirty();
     partial void OnDropCoinForSellItemsUpToChanged(CoinDenomination value) => MarkDirty();
     partial void OnSelectedBankChanged(BankChoice? value)
