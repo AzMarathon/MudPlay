@@ -10889,12 +10889,24 @@ public sealed class AppServices
             foreach (Models.GameData.MessageRecord m in sameName)
                 if (HasDamageSlot(m.CasterMessage))
                     AddLine(m.CasterMessage, followUp: false);
-        if (SpellFormulaFor(spell.Number) is { } formula)
+        // The whole chain, not just the next link: elemental fury casts lightning,
+        // which casts fire, which casts ice, each with its own line (GAME_MECHANICS
+        // "Damage lines — who hit whom"). The visited set stops a chain that loops.
+        HashSet<int> chain = new() { spell.Number };
+        Queue<int> pending = new();
+        pending.Enqueue(spell.Number);
+        while (pending.Count > 0)
+        {
+            if (SpellFormulaFor(pending.Dequeue()) is not { } formula) continue;
             foreach (Game.Spells.SpellAbility ability in formula.Abilities)
-                if (ability.Code == 151 && ability.Value > 0
-                    && FindSpellMessage(ability.Value, string.Empty)?.CasterMessage is { } chained
+            {
+                if (ability.Code != 151 || ability.Value <= 0 || !chain.Add(ability.Value)) continue;
+                pending.Enqueue(ability.Value);
+                if (FindSpellMessage(ability.Value, string.Empty)?.CasterMessage is { } chained
                     && HasDamageSlot(chained))
                     AddLine(chained, followUp: true);
+            }
+        }
         _ownSpellLineCache[spell.Number] = lines;
         return lines;
 

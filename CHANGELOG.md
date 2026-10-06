@@ -3,7 +3,8 @@
 ## 3.145.7
 
 - A room spell's Max casts now counts each cast as it lands, so Multi-attack 1 hands over to Multi-attack 2 on time
-- Max casts also counts mana storm, Paradigm dragonfire and Stock soul rip: their messages are corrected against the Stock message table
+- Max casts also counts mana storm, fireball, song of shockwave, thunderclap, Paradigm dragonfire and Stock soul rip: their messages are corrected against the game's message table
+- All four of elemental fury's lines count as elemental fury in Session Stats
 - Round totals spread a room spell over every monster even when its line says "your foe", and keep its later rounds yours
 - Bug report lists the cast counts behind each spell slot's Max casts
 - bug reports addressed: paradigm-20261006-051627
