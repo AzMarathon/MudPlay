@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.145.5**
-> - Test run about five times faster: compiled message patterns are shared instead of rebuilt for every test
-> - A build with nothing changed takes seconds: the starter loops are re-zipped only when they change
+> **Version 3.145.6**
+> - A room spell's Max casts now counts each cast as it lands, so Multi-attack 1 hands over to Multi-attack 2 on time
+> - Bug report lists the cast counts behind each spell slot's Max casts
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

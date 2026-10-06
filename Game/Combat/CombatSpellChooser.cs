@@ -91,6 +91,13 @@ public sealed class CombatSpellChooser
     private bool _attackSpellLatchedOff;
     private bool _castSingleTargetAttackThisTarget;
 
+    // The cast tallies the caps are checked against, for a bug report: a cap that
+    // never trips shows here as a count that never moved.
+    public string DescribeCasts()
+        => $"multi-attack 1 = {_multiAttackCasts}, multi-attack 2 = {_multiAttack2Casts}, "
+           + $"normal = {_normalAttackCasts}, alternate = {_alternateAttackCasts}, "
+           + $"drain = {_drainCasts}, area debuff = {_areaDebuffCasts}, single debuff = {_singleDebuffCasts}";
+
     // Reset the cast bookkeeping a fresh ROSTER owns — the single-target economy,
     // the multi-attack tally, and the weapon latches — WITHOUT touching the AoE
     // area-debuff per-room cap (_areaDebuffCasts / _areaDebuffedMobs). Called on an

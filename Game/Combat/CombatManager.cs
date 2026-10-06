@@ -1099,7 +1099,12 @@ public sealed partial class CombatManager : IDisposable
         // the user set, and whether we're currently HOLDING our pick for a party
         // announce ("not-last" / "follow") or have already committed (null).
         string AttackTiming,
-        string? AwaitingAttackOrderHold);
+        string? AwaitingAttackOrderHold,
+        // The cast tallies behind each slot's Max casts, and how many of our attack
+        // casts have been seen landing this session. A cap that never trips shows as
+        // a tally that never moved (report paradigm-20261006-051627).
+        string SpellCastTally,
+        int ConfirmedAttackCasts);
 
     // UI-thread only (router handlers + the capture both run there), so no lock.
     public DebugState Snapshot() => new(
@@ -1110,7 +1115,8 @@ public sealed partial class CombatManager : IDisposable
         _userEngagedInstances.ToArray(),
         _castingSpellTarget, _spellAttackOwed,
         _readSettings().AttackTiming.ToString(),
-        _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow" : null);
+        _awaitingNotLast ? "not-last" : _awaitingFollowAnnounce ? "follow" : null,
+        _spellChooser.DescribeCasts(), ConfirmedAttackCastCount);
 
     // Wire the backstab gating delegates: isStealthed reports whether the character
     // holds any stealth that opens a backstab — sneaking OR (optimistically) hidden
@@ -3185,10 +3191,17 @@ public sealed partial class CombatManager : IDisposable
         // search does.
         bool physicalShape = text.StartsWith("You ", StringComparison.Ordinal)
             && text.IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0;
+        // A room spell's line names the room or nobody ("… scorches your foes for N
+        // damage!", "… ravages your foe for N damage!"), never the monster the round
+        // is anchored to, so the wording alone confirms it. Only the caster is shown
+        // that line; a witness and a victim each get their own (GAME_MECHANICS "Damage
+        // lines — who hit whom"). Held to the target name it never counted, so a room
+        // spell's cast cap was never reached (report paradigm-20261006-051627).
+        bool roomSpell = AnnouncedSpellIsRoomWide();
         bool spellShape = !physicalShape
             && _announcedSpellCode is { } announcedSpell
             && ResolveAttackSpellMatcher?.Invoke(announcedSpell) is { } matcher
-            && matcher.ConfirmsTarget(text, target);
+            && (roomSpell ? matcher.TryMatch(text, out _) : matcher.ConfirmsTarget(text, target));
         if (!physicalShape && !spellShape) return;
 
         DateTimeOffset now = _now();

@@ -579,6 +579,8 @@ public static class BugReportBuilder
         // "DrainSpell" here means the drain override is currently taking the round.
         Kv(sb, "Round spell action", combat.LastCastAction ?? "(weapon / idle)");
         Kv(sb, "Announced spell", combat.AnnouncedSpell ?? "(none)");
+        Kv(sb, "Spell casts counted (this room / target)", combat.SpellCastTally);
+        Kv(sb, "Attack casts seen landing (session)", combat.ConfirmedAttackCasts.ToString());
         // The attack-spell cascade's own latch, surfaced separately — it can go
         // stale relative to CurrentTarget/AnnouncedSpell above (report
         // paradigm-20260824-012300). A CastingSpellTarget the current room doesn't

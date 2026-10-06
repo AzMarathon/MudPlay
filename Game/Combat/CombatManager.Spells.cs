@@ -943,7 +943,9 @@ public sealed partial class CombatManager
         if (_announcedSpellCode is not { } announced
             || _lastCastAction is not (CombatSpellAction.NormalAttackSpell
                 or CombatSpellAction.AlternateAttackSpell
-                or CombatSpellAction.DrainSpell))
+                or CombatSpellAction.DrainSpell
+                or CombatSpellAction.MultiAttack
+                or CombatSpellAction.MultiAttack2))
             return;
         if (ReadRoundCount is not { } readRound) return;
 
@@ -1093,6 +1095,12 @@ public sealed partial class CombatManager
     private bool IsRoomScoped(string? code)
         => code is not null && _resolveSpellByCode?.Invoke(code) is { } spell
            && DebuffTargeting.IsAreaEnemy(spell.Targets);
+
+    // The spell the server is repeating for us hits the room: a multi-attack slot,
+    // or a room spell sitting in another slot.
+    private bool AnnouncedSpellIsRoomWide()
+        => _lastCastAction is CombatSpellAction.MultiAttack or CombatSpellAction.MultiAttack2
+           || IsRoomScoped(_announcedSpellCode);
 
     private static bool IsAttackSpellRoundOwner(CombatSpellAction action) => action is
         CombatSpellAction.NormalAttackSpell or CombatSpellAction.AlternateAttackSpell
