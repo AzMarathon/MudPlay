@@ -7486,7 +7486,10 @@ public sealed class AppServices
         // Default set, same as LoopRunner's ReachedFirstWaypoint above.
         AutoLair.ActiveChanged += active => { if (active) AutoEquip.OnLoopStarted(); };
 
-        PvpFlee = new Game.Pvp.PvpFleeWalk(Walker, LoopRunner, AutoLair, pacedReplyScheduler, Log);
+        PvpFlee = new Game.Pvp.PvpFleeWalk(
+            Walker, LoopRunner, AutoLair, pacedReplyScheduler,
+            startSprint: () => ApplyRunStartMode?.Invoke(Game.Map.RunStartMode.Sprint),
+            Log);
         PvpFight = new Game.Pvp.PvpFight(
             Router, RoomClassifier,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -7496,6 +7499,9 @@ public sealed class AppServices
             send: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes(text + "\r")),
             cast: (code, target) => Cast.TryCast(code, target),
             stepToward: PvpStepToward,
+            exitsHere: () => RoomTracker.State.CurrentRoom is { } here
+                ? here.Exits.Keys.Where(Game.Map.DirectionExtensions.IsCardinal).ToList()
+                : Array.Empty<Game.Map.Direction>(),
             // Stop-and-restart, as for the errand detours: the fight may walk (a
             // chase), which a movement gate would hold.
             suspendEngines: why =>
@@ -7503,11 +7509,23 @@ public sealed class AppServices
                 Game.Map.DetourResume resume =
                     Game.Map.DetourResume.Snapshot(Walker, LoopRunner, AutoLair, includeWalk: true);
                 resume.Stop(Walker, LoopRunner, AutoLair, why);
+                _pvpFightInterrupted = resume.Kind;
                 return () => resume.Resume(Walker, LoopRunner, AutoLair);
             },
+            // A fight that interrupted nothing has nothing to get back to.
+            backOnTask: () => _pvpFightInterrupted == Game.Map.DetourResumeKind.None
+                || MovementControl.State != Game.Map.MovementEngineState.Idle,
             schedule: pacedReplyScheduler,
             log: Log);
         PvpFight.Reported += what => WriteTerminalNotice($"[PvP: {what}]");
+        // The chase's own steps go through the walker; its finish is the arrival.
+        Walker.Event += e =>
+        {
+            if (!PvpFight.IsActive) return;
+            if (e.Kind == Game.Map.WalkEventKind.Finished) PvpFight.NoteStepLanded();
+            else if (e.Kind is Game.Map.WalkEventKind.Failed or Game.Map.WalkEventKind.Stopped)
+                PvpFight.NoteStepFailed();
+        };
         RoomDeparture.PlayerDeparted += PvpFight.NotePlayerDeparted;
         RoomTracker.PlayerDeathObserved += () => PvpFight.Stop("we died", resume: false);
         PvpResponse = new Game.Pvp.PvpResponder(
@@ -9158,11 +9176,9 @@ public sealed class AppServices
             if (suppressed && evalKey is { } rk)
                 Log.Combat("Combat", $"combat suppressed in {rk} — loop 'do not attack' / 'only lair rooms'");
         }
-        // A flee to the PvP flee room walks through whatever is on the way.
-        // And a fight with a player is the fight: the engine's own pick would
-        // replace the attack on them.
-        return suppressed || PvpFlee is { IsActive: true } || PvpFight is { IsActive: true }
-            || PvpLeaveRoomReason() is not null;
+        // A fight with a player is the fight: the engine's own pick would replace
+        // the attack on them.
+        return suppressed || PvpFight is { IsActive: true } || PvpLeaveRoomReason() is not null;
     }
 
     // The attack sent at a player: the Combat tab's normal attack spell when the
@@ -9179,18 +9195,13 @@ public sealed class AppServices
         return $"{verb} {given}";
     }
 
-    // One step after a player who left: the direction word of their departure
-    // line or of a `track` answer, walked through the walker so a door on the way
-    // is handled like any other.
-    private bool PvpStepToward(string directionWord)
+    // What the last fight with a player stopped, for telling when we are back at it.
+    private Game.Map.DetourResumeKind _pvpFightInterrupted;
+
+    // One step after a player who left, walked through the walker so a door on the
+    // way is handled like any other.
+    private bool PvpStepToward(Game.Map.Direction direction)
     {
-        string word = directionWord.Trim().ToLowerInvariant() switch
-        {
-            "upwards" or "above" => "up",
-            "downwards" or "below" => "down",
-            string other => other,
-        };
-        if (!Game.Map.DirectionExtensions.TryFromLongName(word, out Game.Map.Direction direction)) return false;
         if (RoomTracker.State.CurrentRoom is not { } here) return false;
         if (!here.Exits.TryGetValue(direction, out Game.Map.RoomExit exit)) return false;
         return Walker.WalkTo(exit.Target);

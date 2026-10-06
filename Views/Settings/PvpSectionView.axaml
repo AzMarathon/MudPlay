@@ -76,10 +76,7 @@
                              ToolTip.Tip="Attack an Enemy on sight, and stop when they leave the room. The running walk or loop is stopped for the fight and picked up again after it; monsters in the room are left alone meanwhile."/>
                 <RadioButton Content="Chase and attack (dangerous)" GroupName="PvpAction"
                              IsChecked="{Binding IsChaseAttack, Mode=TwoWay}"
-                             ToolTip.Tip="As Attack, and follow them when they leave: the way they went, or where tracking says, until they are out of sight too long."/>
-                <RadioButton Content="Do nothing" GroupName="PvpAction"
-                             IsChecked="{Binding IsDoNothing, Mode=TwoWay}"
-                             ToolTip.Tip="Nothing on sight. A player who attacks you is still fought back, which costs no alignment. An Enemy still holds your room attacks like any other player outside your party."/>
+                             ToolTip.Tip="As Attack, and follow them when they leave. See Chasing below for how far and how."/>
                 <TextBlock Classes="Readout" Foreground="{StaticResource AccentAmberBrush}"
                            Text="Attacking a player who has not attacked you is an evil deed: it adds evil points and can bring a dark cloud. Hitting back at someone who attacked you first is free."/>
 
@@ -91,7 +88,7 @@
                               ItemsSource="{Binding FleeRooms}"
                               SelectedItem="{Binding SelectedFleeRoom, Mode=TwoWay}"
                               Width="320" HorizontalAlignment="Left"
-                              ToolTip.Tip="A room from your GOTO favourites to run to. Whatever walk or loop was running is stopped and the walker heads there, fighting nothing on the way. With none chosen, or no route to it, the flee runs back along the walk or loop instead."/>
+                              ToolTip.Tip="A room from your GOTO favourites to run to. Whatever walk or loop was running is stopped and the walker heads there in Sprint Mode, so nothing on the way is fought, looted or rested for. You stay there; with 'Flee (come back later)' the Come back after time starts on arriving. With none chosen, or no route to it, the flee runs back along the walk or loop instead."/>
 
                     <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="No. of rooms to flee"/>
                     <NumericUpDown Grid.Row="1" Grid.Column="1"
@@ -113,7 +110,7 @@
                                    Value="{Binding ComeBackAfterSeconds, Mode=TwoWay}"
                                    Minimum="0" Maximum="3600" Increment="10" FormatString="0"
                                    Width="120" HorizontalAlignment="Left"
-                                   ToolTip.Tip="'Flee (come back later)': seconds to stay away once the flee has landed before the interrupted walk or loop is picked up again."/>
+                                   ToolTip.Tip="'Flee (come back later)': seconds to stay where the flee ended, counted from arriving, before going back to what you were doing."/>
                     <TextBlock Grid.Row="3" Grid.Column="2" Classes="FieldLabel" Text="seconds"/>
                 </Grid>
 
@@ -136,11 +133,34 @@
                           ToolTip.Tip="Off: a Friend stays a Friend whatever they do, and is never answered. On: a Friend who attacks you is marked Enemy, the way a Neutral is."/>
                 <CheckBox Content="Turn off my evil warnings if they are on, to attack"
                           IsChecked="{Binding TurnOffEvilWarningsToAttack, Mode=TwoWay}"
-                          ToolTip.Tip="With evil warnings on, the game refuses an attack on a player who hasn't attacked you. Ticked, MudPlay sends 'set warning off', attacks again, and sends 'set warning on' when the fight is over. Unticked, the refusal ends the fight. Hitting back never needs it."/>
+                          ToolTip.Tip="With evil warnings on, the game refuses an attack on a player who hasn't attacked you. Ticked, MudPlay sends 'set warning off' and attacks again. The warnings go back on ('set warning on') once you are back at what the fight interrupted, such as your loop, and a minute has passed with no new fight. Unticked, the refusal ends the fight. Hitting back never needs it."/>
+
+                <TextBlock Classes="SectionHeader" Text="CHASING"/>
+                <TextBlock Classes="Readout"
+                           Text="For 'Chase and attack'. When they leave, MudPlay steps the way they went at once. In a room without them it tracks (if that is on), and otherwise guesses."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="Give up after"/>
+                    <NumericUpDown Value="{Binding ChaseRoomsUnseen, Mode=TwoWay}"
+                                   Minimum="1" Maximum="50" Increment="1" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="How many rooms in a row to follow without seeing them before the chase ends and you go back to what you were doing. Seeing them starts the count again."/>
+                    <TextBlock Classes="FieldLabel" Text="rooms without seeing them"/>
+                </StackPanel>
+                <CheckBox Content="Guess the way they went when it wasn't seen"
+                          IsChecked="{Binding ChaseGuessDirection, Mode=TwoWay}"
+                          ToolTip.Tip="Carry on the way they were heading; if that way is shut and the room has just one other way out, take that. Never back the way you came. Off, the chase waits where it stands."/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="FieldLabel" Text="With no way to follow, wait"/>
+                    <NumericUpDown Value="{Binding ChaseWaitSeconds, Mode=TwoWay}"
+                                   Minimum="0" Maximum="600" Increment="5" FormatString="0"
+                                   Width="120"
+                                   ToolTip.Tip="How long to stand in case they come back into sight before the chase ends."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <CheckBox Content="Track enemies every"
                               IsChecked="{Binding TrackEnemies, Mode=TwoWay}"
-                              ToolTip.Tip="While chasing a player who is out of sight, send 'track &lt;player&gt;' this often and follow the answer. Needs the Tracking skill, and only 'Chase and attack' uses it."/>
+                              ToolTip.Tip="Out of sight in a chase, send 'track &lt;player&gt;' on arriving in each room and follow the answer, which outranks a guess. While waiting with no way to follow it is sent again this often. Needs the Tracking skill."/>
                     <NumericUpDown Value="{Binding TrackEnemiesEverySeconds, Mode=TwoWay}"
                                    IsEnabled="{Binding TrackEnemies}"
                                    Minimum="5" Maximum="3600" Increment="5" FormatString="0"

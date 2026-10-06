@@ -149,12 +149,12 @@ public sealed class PvpResponderTests
     public void ThePlayersOwnResponse_ReplacesTheGeneralOne()
     {
         using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
-        h.MarkEnemy("Bob", PvpAction.DoNothing);
+        h.MarkEnemy("Bob", PvpAction.Flee);
 
         h.Feed("Also here: Bob.");
 
         Assert.Empty(h.HangUps);
-        Assert.Empty(h.Reports);
+        Assert.Single(h.RoomFlees);
     }
 
     [Fact]
@@ -312,29 +312,26 @@ public sealed class PvpResponderTests
         Assert.Equal(("Bob", chase), Assert.Single(h.Fights));
     }
 
-    // Nothing on sight, but an attack is fought back: it costs no alignment.
     [Fact]
-    public void DoNothing_LeavesAnEnemyAloneOnSight_ButFightsBackWhenAttacked()
+    public void NeutralWhoAttacks_GetsTheGeneralAction()
     {
-        using Harness h = new();
-        h.MarkEnemy("Bob");
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.Attack } };
 
-        h.Feed("Also here: Bob.");
-        Assert.Empty(h.Fights);
-
-        h.Clock += TimeSpan.FromSeconds(31);
         h.Feed("Bob moves to attack you!");
+
         Assert.Equal(("Bob", false), Assert.Single(h.Fights));
     }
 
+    // With nothing set, the response is to hang up.
     [Fact]
-    public void NeutralWhoAttacks_IsFoughtBack_WithNothingSet()
+    public void DefaultAction_IsHangUp()
     {
         using Harness h = new();
 
         h.Feed("Bob moves to attack you!");
 
-        Assert.Equal(("Bob", false), Assert.Single(h.Fights));
+        Assert.Single(h.HangUps);
+        Assert.Empty(h.Fights);
     }
 
     [Fact]
@@ -370,16 +367,11 @@ public sealed class PvpResponderTests
     }
 
     [Fact]
-    public void NotifyGangOff_OrDoNothing_SaysNothing()
+    public void NotifyGangOff_SaysNothing()
     {
         using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.HangUp } };
         h.MarkEnemy("Bob");
         h.Feed("Also here: Bob.");
         Assert.Empty(h.Gang);
-
-        using Harness quiet = new() { Settings = new PvpSettings { Action = PvpAction.DoNothing, NotifyGang = true } };
-        quiet.MarkEnemy("Bob");
-        quiet.Feed("Also here: Bob.");
-        Assert.Empty(quiet.Gang);
     }
 }

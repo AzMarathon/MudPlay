@@ -14,7 +14,7 @@ public static class PvpLabels
     public static readonly IReadOnlyList<PvpAction> Actions = new[]
     {
         PvpAction.HangUp, PvpAction.FleeThenHangUp, PvpAction.Flee,
-        PvpAction.Attack, PvpAction.ChaseAttack, PvpAction.DoNothing,
+        PvpAction.Attack, PvpAction.ChaseAttack,
     };
 
     public static string Of(PlayerRelationship relationship) => relationship switch
@@ -30,8 +30,7 @@ public static class PvpLabels
         PvpAction.FleeThenHangUp => "Flee, then hang up",
         PvpAction.Flee           => "Flee (come back later)",
         PvpAction.Attack         => "Attack",
-        PvpAction.ChaseAttack    => "Chase and attack",
-        _                        => "Do nothing",
+        _                        => "Chase and attack",
     };
 
     // A player's own response, where null means the PvP settings' general one.

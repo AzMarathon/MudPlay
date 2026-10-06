@@ -424,6 +424,8 @@ public static class DefaultPatterns
           + @"|Such an attack would result in a very unbalanced combat round\.)");
         yield return new RegexPattern(KnownPatterns.TrackWentFromHere,
             @"^(?<name>\w+) went (?<direction>[\w-]+) from here\.");
+        yield return new RegexPattern(KnownPatterns.TrackFailed,
+            @"^Your tracking skills fail you this time\.");
 
         // Guard/redirect announce — "<guard> moves to protect <protected>." A
         // guarded monster can't be attacked while a guard is present; the server

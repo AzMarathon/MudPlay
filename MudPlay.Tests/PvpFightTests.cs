@@ -1,4 +1,5 @@
 using MudPlay.Game.Combat;
+using MudPlay.Game.Map;
 using MudPlay.Game.Pvp;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
@@ -29,7 +30,9 @@ public sealed class PvpFightTests
 
         public List<string> Sent { get; } = new();
         public List<(string Code, string Target)> Casts { get; } = new();
-        public List<string> Steps { get; } = new();
+        public List<Direction> Steps { get; } = new();
+        public List<Direction> Exits { get; } = new();
+        public bool BackOnTask { get; set; } = true;
         public List<string> Reports { get; } = new();
         public int Suspended { get; private set; }
         public int Resumed { get; private set; }
@@ -48,8 +51,10 @@ public sealed class PvpFightTests
                 attackCommandFor: given => $"a {given}",
                 send: Sent.Add,
                 cast: (code, target) => { if (CastWorks) Casts.Add((code, target)); return CastWorks; },
-                stepToward: word => { Steps.Add(word); return StepWorks; },
+                stepToward: way => { if (StepWorks) Steps.Add(way); return StepWorks; },
+                exitsHere: () => Exits,
                 suspendEngines: _ => { Suspended++; return () => Resumed++; },
+                backOnTask: () => BackOnTask,
                 schedule: (delay, action) => Scheduled.Add((delay, action)),
                 now: () => Clock);
             Fight.Reported += Reports.Add;
@@ -126,7 +131,7 @@ public sealed class PvpFightTests
         Assert.Single(h.Sent);
 
         h.Feed("Bob just left to the north.");
-        Assert.Equal("north", Assert.Single(h.Steps));
+        Assert.Equal(Direction.N, Assert.Single(h.Steps));
     }
 
     [Fact]
@@ -250,10 +255,12 @@ public sealed class PvpFightTests
         Assert.Equal(1, h.Resumed);
     }
 
+    // The warnings stay off past the end of the fight: they go back on once what
+    // the fight interrupted is running again and a minute has gone by quietly.
     [Fact]
-    public void WarningsRefusal_WithTheOptIn_SwitchesThemOff_AttacksAgain_AndPutsThemBackAfter()
+    public void WarningsRefusal_WithTheOptIn_SwitchesThemOff_AndPutsThemBackOnceBackOnTask()
     {
-        using Harness h = new() { Settings = new PvpSettings { TurnOffEvilWarningsToAttack = true } };
+        using Harness h = new() { BackOnTask = false, Settings = new PvpSettings { TurnOffEvilWarningsToAttack = true } };
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", false, "x");
 
@@ -262,7 +269,38 @@ public sealed class PvpFightTests
         Assert.True(h.Fight.IsActive);
 
         h.Fight.Stop("done");
+        Assert.DoesNotContain("set warning on", h.Sent);
+
+        for (int i = 0; i < 8; i++) h.RunScheduled();       // two minutes, still not back at it
+        Assert.DoesNotContain("set warning on", h.Sent);
+
+        h.BackOnTask = true;
+        h.RunScheduled();
         Assert.Equal("set warning on", h.Sent[^1]);
+        Assert.Contains("back on task", h.Reports[^1]);
+
+        h.RunScheduled();
+        Assert.Single(h.Sent, s => s == "set warning on");
+    }
+
+    [Fact]
+    public void WarningsStayOff_ForASecondFightBeforeTheyWentBackOn_WithoutBeingSentAgain()
+    {
+        using Harness h = new() { Settings = new PvpSettings { TurnOffEvilWarningsToAttack = true } };
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", false, "x");
+        h.Feed("To do this action, you must turn off your evil warnings.");
+        h.Fight.Stop("done");
+
+        h.RunScheduled();                                   // 15 s on: too soon
+        Assert.True(h.Fight.Engage("Bob", false, "x"));
+        for (int i = 0; i < 8; i++) h.RunScheduled();       // back on task, but a fight is on
+        Assert.Single(h.Sent, s => s == "set warning off");
+        Assert.DoesNotContain("set warning on", h.Sent);
+
+        h.Fight.Stop("done");
+        for (int i = 0; i < 6; i++) h.RunScheduled();
+        Assert.Single(h.Sent, s => s == "set warning on");
     }
 
     [Fact]
@@ -357,96 +395,232 @@ public sealed class PvpFightTests
     // ----- the chase ------------------------------------------------------------
 
     [Fact]
-    public void Chase_FollowsTheWayTheyLeft_AndAttacksWhenTheyAreSeenAgain()
+    public void Chase_StepsTheWayTheyLeftAtOnce_AndAttacksWhenTheyAreSeenAgain()
     {
         using Harness h = new();
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
 
         h.Feed("Bob just left upwards.");
-        Assert.Equal("upwards", Assert.Single(h.Steps));
+        Assert.Equal(Direction.U, Assert.Single(h.Steps));
         Assert.True(h.Fight.IsActive);
 
-        h.Feed("Also here: Bob.");
+        h.Feed("Also here: Bob.");              // the new room, before the step is confirmed
+        Assert.Single(h.Sent);
+        h.Fight.NoteStepLanded();
         Assert.Equal(new[] { "a Bob", "a Bob" }, h.Sent);
     }
 
+    // Followed them and they aren't there: carry on the way they were heading.
     [Fact]
-    public void Chase_WithoutTracking_GivesUpAfterAShortWaitOutOfSight()
+    public void Chase_OutOfSight_KeepsToTheirHeading()
     {
         using Harness h = new();
+        h.Exits.AddRange(new[] { Direction.N, Direction.S, Direction.E });
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
 
-        h.Feed("Also here: Ann.");              // followed, and they aren't here
+        h.Feed("Also here: Ann.");
+        h.Fight.NoteStepLanded();
+
+        Assert.Equal(new[] { Direction.N, Direction.N }, h.Steps);
+    }
+
+    // The heading runs out: with one other way on, that is the guess; never back.
+    [Fact]
+    public void Chase_HeadingBlocked_TakesTheOnlyOtherWayOut()
+    {
+        using Harness h = new();
+        h.Exits.AddRange(new[] { Direction.S, Direction.E });
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+        h.Feed("Bob just left to the north.");
+
+        h.Fight.NoteStepLanded();
+
+        Assert.Equal(new[] { Direction.N, Direction.E }, h.Steps);
+    }
+
+    [Fact]
+    public void Chase_NoGuessToMake_WaitsTheSetTime_ThenGivesUp()
+    {
+        using Harness h = new() { Settings = new PvpSettings { ChaseWaitSeconds = 25 } };
+        h.Exits.AddRange(new[] { Direction.S, Direction.E, Direction.W });
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+        h.Feed("Bob just left to the north.");
+
+        h.Fight.NoteStepLanded();
+        Assert.Single(h.Steps);
         Assert.True(h.Fight.IsActive);
+        Assert.Equal(TimeSpan.FromSeconds(25), Assert.Single(h.Scheduled).Delay);
 
         h.RunScheduled();
         Assert.False(h.Fight.IsActive);
         Assert.Contains("lost Bob", h.Reports[^1]);
+        Assert.Equal(1, h.Resumed);
     }
 
     [Fact]
-    public void Chase_SeenAgainBeforeTheWaitIsUp_CarriesOn()
+    public void Chase_SeenAgainWhileWaiting_CarriesOn()
     {
         using Harness h = new();
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
-        h.Feed("Also here: Ann.");
+        h.Fight.NoteStepLanded();               // no exits known: waiting
 
-        h.Feed("Also here: Ann, Bob.");
+        h.Feed("Also here: Bob.");
         h.RunScheduled();
 
+        Assert.True(h.Fight.IsActive);
+        Assert.Equal("a Bob", h.Sent[^1]);
+    }
+
+    [Fact]
+    public void Chase_GuessingSwitchedOff_WaitsInsteadOfGuessing()
+    {
+        using Harness h = new() { Settings = new PvpSettings { ChaseGuessDirection = false } };
+        h.Exits.AddRange(new[] { Direction.N, Direction.S });
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+        h.Feed("Bob just left to the north.");
+
+        h.Fight.NoteStepLanded();
+
+        Assert.Single(h.Steps);
+        Assert.Single(h.Scheduled);
+    }
+
+    [Fact]
+    public void Chase_GivesUpAfterTheSetNumberOfRoomsWithoutSight()
+    {
+        using Harness h = new() { Settings = new PvpSettings { ChaseRoomsUnseen = 3 } };
+        h.Exits.AddRange(new[] { Direction.N, Direction.S });
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+        h.Feed("Bob just left to the north.");
+
+        h.Fight.NoteStepLanded();
+        h.Fight.NoteStepLanded();
+        Assert.Equal(3, h.Steps.Count);
+        Assert.True(h.Fight.IsActive);
+
+        h.Fight.NoteStepLanded();
+        Assert.Equal(3, h.Steps.Count);
+        Assert.False(h.Fight.IsActive);
+        Assert.Contains("after 3 room(s)", h.Reports[^1]);
+        Assert.Equal(1, h.Resumed);
+    }
+
+    [Fact]
+    public void Chase_SeeingThemResetsTheRoomCount()
+    {
+        using Harness h = new() { Settings = new PvpSettings { ChaseRoomsUnseen = 2 } };
+        h.Exits.AddRange(new[] { Direction.N, Direction.S });
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+
+        for (int i = 0; i < 4; i++)
+        {
+            h.Feed("Bob just left to the north.");
+            h.Feed("Also here: Bob.");
+            h.Fight.NoteStepLanded();
+        }
+
+        Assert.Equal(4, h.Steps.Count);
+        Assert.True(h.Fight.IsActive);
+    }
+
+    // They vanished with no departure line: the chase still looks for a way.
+    [Fact]
+    public void Chase_MissedTheirLeaving_GuessesFromTheRoom()
+    {
+        using Harness h = new();
+        h.Exits.Add(Direction.E);
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+
+        h.Feed("Also here: Ann.");
+
+        Assert.Equal(Direction.E, Assert.Single(h.Steps));
+    }
+
+    [Fact]
+    public void Chase_StepThatCantBeMade_Waits()
+    {
+        using Harness h = new() { StepWorks = false };
+        h.Feed("Also here: Bob.");
+        h.Fight.Engage("Bob", chase: true, "x");
+
+        h.Feed("Bob just left to the north.");
+
+        Assert.Empty(h.Steps);
+        Assert.Single(h.Scheduled);
         Assert.True(h.Fight.IsActive);
     }
 
     [Fact]
-    public void Chase_WithTracking_TracksOnTheSetInterval_AndFollowsTheAnswer()
+    public void Chase_WithTracking_TracksOnArrival_AndFollowsTheAnswerOverAGuess()
     {
-        using Harness h = new() { Settings = new PvpSettings { TrackEnemies = true, TrackEnemiesEverySeconds = 30 } };
+        using Harness h = new() { Settings = new PvpSettings { TrackEnemies = true } };
+        h.Exits.AddRange(new[] { Direction.N, Direction.S, Direction.E });
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
-        h.Feed("Also here: Ann.");
 
-        h.RunScheduled();
+        h.Fight.NoteStepLanded();
         Assert.Equal("track Bob", h.Sent[^1]);
-        Assert.Equal(TimeSpan.FromSeconds(30), Assert.Single(h.Scheduled).Delay);
-
-        h.Feed("Bob went east from here.");
-        Assert.Equal("east", h.Steps[^1]);
+        Assert.Single(h.Steps);                 // no guess while the answer is awaited
 
         h.Feed("Ann went west from here.");     // someone else's trail
+        Assert.Single(h.Steps);
+
+        h.Feed("Bob went east from here.");
+        Assert.Equal(Direction.E, h.Steps[^1]);
+
+        h.RunScheduled();                       // the answer already came: no guess on top
         Assert.Equal(2, h.Steps.Count);
     }
 
-    [Fact]
-    public void Chase_WithTracking_GivesUpInTheEnd()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Chase_TrackThatFailsOrGoesUnanswered_FallsBackToTheGuess(bool failureLine)
     {
-        using Harness h = new() { Settings = new PvpSettings { TrackEnemies = true, TrackEnemiesEverySeconds = 60 } };
+        using Harness h = new() { Settings = new PvpSettings { TrackEnemies = true } };
+        h.Exits.AddRange(new[] { Direction.N, Direction.S });
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
         h.Feed("Bob just left to the north.");
-        h.Feed("Also here: Ann.");
+        h.Fight.NoteStepLanded();
 
-        for (int i = 0; i < 6 && h.Fight.IsActive; i++) h.RunScheduled();
+        if (failureLine) h.Feed("Your tracking skills fail you this time.");
+        else h.RunScheduled();
 
-        Assert.False(h.Fight.IsActive);
-        Assert.True(h.Sent.Count(s => s == "track Bob") is >= 2 and <= 4);
+        Assert.Equal(new[] { Direction.N, Direction.N }, h.Steps);
     }
 
     [Fact]
-    public void Chase_WithNoWayToFollow_StartsLookingAtOnce()
+    public void Chase_WaitingWithTrackingOn_TracksAgainOnTheSetInterval()
     {
-        using Harness h = new() { StepWorks = false, Settings = new PvpSettings { TrackEnemies = true } };
+        using Harness h = new()
+        {
+            Settings = new PvpSettings { TrackEnemies = true, TrackEnemiesEverySeconds = 10, ChaseWaitSeconds = 60, ChaseGuessDirection = false },
+        };
         h.Feed("Also here: Bob.");
         h.Fight.Engage("Bob", chase: true, "x");
-
         h.Feed("Bob just left to the north.");
-        h.RunScheduled();
+        h.Fight.NoteStepLanded();               // tracks
+        h.Feed("Your tracking skills fail you this time.");   // no guessing: waits
 
-        Assert.Equal("track Bob", h.Sent[^1]);
+        int tracksBefore = h.Sent.Count(s => s == "track Bob");
+        (TimeSpan delay, Action retrack) = h.Scheduled.Single(s => s.Delay == TimeSpan.FromSeconds(10));
+        retrack();
+        Assert.Equal(tracksBefore + 1, h.Sent.Count(s => s == "track Bob"));
+
+        h.Feed("Bob went south from here.");
+        Assert.Equal(Direction.S, h.Steps[^1]);
     }
 }

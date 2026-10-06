@@ -9,7 +9,9 @@
 > - On a PvP realm, a walk or loop carries on past a room where another player is room-attacking
 > - A Neutral player who attacks you is marked Enemy, saved on their record
 > - New Settings → PvP tab: hang up, flee, or attack and chase when an Enemy is in the room or a player attacks; flee-to room, gang notice, timed reconnect, PvP spells, tracking
-> - A player who attacks you is fought back; attacking first is refused by evil warnings unless you opt in to switching them off for the fight
+> - Attacking a player first is refused by evil warnings unless you opt in to switching them off; they go back on once you are back on your loop
+> - Chase options: rooms to follow without sight, guessing the way they went, the wait with no way to follow, tracking
+> - A flee to the flee room runs in Sprint Mode
 > - @kill naming a player in the room starts a fight with that player
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

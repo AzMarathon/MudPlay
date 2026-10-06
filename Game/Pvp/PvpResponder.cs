@@ -11,8 +11,6 @@ namespace MudPlay.Game.Pvp;
 //
 // Friends and Neutrals never get here: a Neutral who attacks has already been
 // marked Enemy by PvpAttackWatcher by the time its Attacked event arrives.
-//
-// "Do nothing" is nothing on sight; a player who attacks us is still fought back.
 public sealed class PvpResponder : IDisposable
 {
     public const string LogCategory = "PvP";
@@ -179,10 +177,7 @@ public sealed class PvpResponder : IDisposable
                 break;
 
             default:
-                // Nothing on sight. An attack on us is still fought back: it costs
-                // no alignment and needs no warning switched off.
-                if (attacked) _fight(given, false, why);
-                else _log?.Info(LogCategory, $"{why}: the response is Do nothing");
+                _log?.Warn(LogCategory, $"{why}: the saved response ({(int)action}) isn't one of the choices, so nothing is done");
                 break;
         }
     }

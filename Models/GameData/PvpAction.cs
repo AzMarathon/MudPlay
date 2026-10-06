@@ -8,7 +8,8 @@ namespace MudPlay.Models.GameData;
 //   Flee — run, and come back later.
 //   Attack — fight where we stand.
 //   ChaseAttack — fight, and follow them if they leave.
-//   DoNothing — for a realm without PvP.
+// MegaMUD's sixth choice, "Do nothing (for non-pvp boards)", has no place here: a
+// realm without PvP simply isn't ticked as a PvP realm.
 public enum PvpAction
 {
     HangUp         = 0,
@@ -16,5 +17,4 @@ public enum PvpAction
     Flee           = 2,
     Attack         = 3,
     ChaseAttack    = 4,
-    DoNothing      = 5,
 }

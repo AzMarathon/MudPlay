@@ -45,7 +45,8 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         "PvP", "Player versus player", "Enemy", "Friend", "Hang up", "Hangup", "Flee",
         "Flee to", "Rooms to flee", "Flee hangup delay", "Come back", "Notify gang",
         "Re-connect after PvP", "Reconnect", "Attack", "Chase", "Evil warnings",
-        "set warning", "PvP spells", "Track enemies", "Tracking",
+        "set warning", "PvP spells", "Track enemies", "Tracking", "Chasing", "Give up the chase",
+        "Guess the way they went", "Sprint",
     };
 
     [ObservableProperty]
@@ -54,15 +55,13 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     [NotifyPropertyChangedFor(nameof(IsFlee))]
     [NotifyPropertyChangedFor(nameof(IsAttack))]
     [NotifyPropertyChangedFor(nameof(IsChaseAttack))]
-    [NotifyPropertyChangedFor(nameof(IsDoNothing))]
-    private PvpAction _action = PvpAction.DoNothing;
+    private PvpAction _action = PvpAction.HangUp;
 
     public bool IsHangUp         { get => Action == PvpAction.HangUp;         set { if (value) Action = PvpAction.HangUp; } }
     public bool IsFleeThenHangUp { get => Action == PvpAction.FleeThenHangUp; set { if (value) Action = PvpAction.FleeThenHangUp; } }
     public bool IsFlee           { get => Action == PvpAction.Flee;           set { if (value) Action = PvpAction.Flee; } }
     public bool IsAttack         { get => Action == PvpAction.Attack;         set { if (value) Action = PvpAction.Attack; } }
     public bool IsChaseAttack    { get => Action == PvpAction.ChaseAttack;    set { if (value) Action = PvpAction.ChaseAttack; } }
-    public bool IsDoNothing      { get => Action == PvpAction.DoNothing;      set { if (value) Action = PvpAction.DoNothing; } }
 
     // GOTO favourites by label, led by the "none" entry.
     public ObservableCollection<string> FleeRooms { get; } = new();
@@ -78,6 +77,9 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _turnOffEvilWarningsToAttack;
     [ObservableProperty] private string _pvpSpell1 = string.Empty;
     [ObservableProperty] private string _pvpSpell2 = string.Empty;
+    [ObservableProperty] private int _chaseRoomsUnseen = 8;
+    [ObservableProperty] private bool _chaseGuessDirection = true;
+    [ObservableProperty] private int _chaseWaitSeconds = 20;
     [ObservableProperty] private bool _trackEnemies;
     [ObservableProperty] private int _trackEnemiesEverySeconds = 60;
 
@@ -133,6 +135,9 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
             TurnOffEvilWarningsToAttack = TurnOffEvilWarningsToAttack,
             PvpSpell1 = string.IsNullOrWhiteSpace(PvpSpell1) ? null : PvpSpell1.Trim(),
             PvpSpell2 = string.IsNullOrWhiteSpace(PvpSpell2) ? null : PvpSpell2.Trim(),
+            ChaseRoomsUnseen = Math.Clamp(ChaseRoomsUnseen, 1, 50),
+            ChaseGuessDirection = ChaseGuessDirection,
+            ChaseWaitSeconds = Math.Clamp(ChaseWaitSeconds, 0, 600),
             TrackEnemies = TrackEnemies,
             TrackEnemiesEverySeconds = Math.Clamp(TrackEnemiesEverySeconds, 5, 3600),
         };
@@ -171,7 +176,9 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     private void LoadFromProfile()
     {
         PvpSettings dto = ReadOrDefault();
-        Action = dto.Action;
+        // A value that is no longer one of the choices reads as the default, so the
+        // group never shows with nothing picked.
+        Action = Enum.IsDefined(dto.Action) ? dto.Action : new PvpSettings().Action;
         RoomsToFlee = dto.RoomsToFlee;
         FleeHangupDelaySeconds = dto.FleeHangupDelaySeconds;
         ComeBackAfterSeconds = dto.ComeBackAfterSeconds;
@@ -182,6 +189,9 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
         TurnOffEvilWarningsToAttack = dto.TurnOffEvilWarningsToAttack;
         PvpSpell1 = dto.PvpSpell1 ?? string.Empty;
         PvpSpell2 = dto.PvpSpell2 ?? string.Empty;
+        ChaseRoomsUnseen = dto.ChaseRoomsUnseen;
+        ChaseGuessDirection = dto.ChaseGuessDirection;
+        ChaseWaitSeconds = dto.ChaseWaitSeconds;
         TrackEnemies = dto.TrackEnemies;
         TrackEnemiesEverySeconds = dto.TrackEnemiesEverySeconds;
         RebuildFleeRooms(dto.FleeTo);
@@ -259,6 +269,9 @@ public sealed partial class PvpSectionViewModel : SettingsSectionViewModel
     partial void OnTurnOffEvilWarningsToAttackChanged(bool value) => MarkDirty();
     partial void OnPvpSpell1Changed(string value)                 => MarkDirty();
     partial void OnPvpSpell2Changed(string value)                 => MarkDirty();
+    partial void OnChaseRoomsUnseenChanged(int value)             => MarkDirty();
+    partial void OnChaseGuessDirectionChanged(bool value)         => MarkDirty();
+    partial void OnChaseWaitSecondsChanged(int value)             => MarkDirty();
     partial void OnTrackEnemiesChanged(bool value)                => MarkDirty();
     partial void OnTrackEnemiesEverySecondsChanged(int value)     => MarkDirty();
 }

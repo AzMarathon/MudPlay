@@ -173,8 +173,9 @@ public static class KnownPatterns
     // changes: too evil already, lawful, or the two characters too far apart.
     public const string PlayerAttackRefused  = "pvp.attack-refused";
 
-    // `track`'s answer: "<name> went <dir> from here."
+    // `track`'s answers: "<name> went <dir> from here." and the failure line.
     public const string TrackWentFromHere    = "pvp.track-went";
+    public const string TrackFailed          = "pvp.track-failed";
 
     // "<guard> moves to protect <protected>." — MajorMUD guard/redirect mechanic.
     // A "guarded" monster (e.g. a brigand chief guarded by brigands) can't be

@@ -1609,8 +1609,8 @@ The **Items** and **Players** tables carry a **Toggles** column that lists, per 
 
 The **Players** table also has a **Relationship** column, and a player's edit dialog (double-click the row) has the two settings behind it:
 
-- **Relationship** — how you stand with that player on this realm: **Neutral** (the default for everyone: not attacked on sight, fought back if they attack you), **Friend** (never attacked) or **Enemy** (the PvP response applies on sight). It is saved with the realm's player list, so every character you play on that realm shares it, and a Friend or Enemy is never removed by the stale-player cleanup.
-- **PvP response** — what to do about that player when they are an Enemy. *Use the PvP settings* follows the general response; any other choice (hang up, flee then hang up, flee, attack, chase and attack, do nothing) replaces it for that one player.
+- **Relationship** — how you stand with that player on this realm: **Neutral** (the default for everyone: left alone until they attack you, which makes them an Enemy), **Friend** (never attacked) or **Enemy** (the PvP response applies on sight). It is saved with the realm's player list, so every character you play on that realm shares it, and a Friend or Enemy is never removed by the stale-player cleanup.
+- **PvP response** — what to do about that player when they are an Enemy. *Use the PvP settings* follows the general response; any other choice (hang up, flee then hang up, flee, attack, chase and attack) replaces it for that one player.
 
 The column is blank for a Neutral player, so the ones you've marked stand out. So far they decide whose presence holds your room attacks on a PvP realm, and a Neutral who attacks you is moved to Enemy for you (see *Room attacks and other players (PvP realms)* under Combat). What happens next is set on Settings → PvP. If you saved a column layout for the Players table before this release, use **Columns ▾ → Reset to defaults** to see the new column.
 
@@ -3475,15 +3475,14 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 
 ### Action
 
-**Default:** Do nothing
-**What it does:** The general response.
+**Default:** Hang up immediately
+**What it does:** The general response. There is no "do nothing" choice: on a realm without PvP the realm simply isn't ticked as a PvP realm, and nothing here applies.
 
 - **Hang up immediately** — sends your exit command and drops the connection. *Disable hangups* (General) is honoured, and when the Health tab's sysop wimpy jump is set up it is taken in place of the hang-up.
 - **Flee, then hang up** — starts a flee, then hangs up once the *Flee hangup delay* has passed. With nowhere to flee it hangs up at once. Nothing else is answered while the hang-up is pending.
 - **Flee (come back later)** — flees, stays away for *Come back after*, then picks the interrupted walk or loop up again. If the Enemy is still there when you return, the response fires again.
 - **Attack (dangerous)** — attacks an Enemy on sight and stops when they leave the room. The running walk or loop is stopped for the fight and picked up again after it, and monsters in the room are left alone meanwhile. The attack is your Combat tab's normal attack spell when the game lets that spell be aimed at a player, otherwise your normal attack command.
-- **Chase and attack (dangerous)** — the same, and follows them when they leave: the way their departure line says, or where *Track enemies* points. Without tracking it waits 20 seconds in the room it followed them into; with it, the chase is given up after three minutes out of sight.
-- **Do nothing** — nothing on sight. A player who attacks you is still fought back: hitting back costs no alignment.
+- **Chase and attack (dangerous)** — the same, and follows them when they leave. How far and how is set under *Chasing* below.
 
 **Attacking first is an evil deed.** Attacking a player who has not attacked you adds evil points and can bring a dark cloud (and with it the loss of Good-only gear). The tab says so beside the two attack choices. A fight also ends, with a `[PvP: …]` line, when the game refuses it: your evil warnings are on (see the checkbox below), you are already too evil, you are lawful, or the two of you are too far apart in level.
 
@@ -3492,7 +3491,7 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 ### Flee to
 
 **Default:** none
-**What it does:** A room from your GOTO favourites to run to. Whatever walk, loop or Auto-Lair run was under way is stopped and the walker heads there, fighting nothing on the way. For *Flee (come back later)* the stopped run is started again once *Come back after* has passed since arriving.
+**What it does:** A room from your GOTO favourites to run to. Whatever walk, loop or Auto-Lair run was under way is stopped and the walker heads there in **Sprint Mode**, so nothing on the way is fought, looted, searched or rested for; Sprint ends by itself on arriving. You then stay in that room. For *Flee (come back later)* the *Come back after* time starts on arriving, and when it is up you go back to what you were doing.
 **Important notes:** With none chosen, or no route to the room, the flee runs back along your walk or loop instead (*No. of rooms to flee*). Add the room to your favourites first (map right-click) for it to be listed.
 
 ### No. of rooms to flee
@@ -3514,7 +3513,7 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 ### Notify gang members
 
 **Default:** Off
-**What it does:** Says on the gang channel who it was and where, for example `PvP: Raijin attacked me at Town Square`, when a response other than *Do nothing* is taken. At most once a minute.
+**What it does:** Says on the gang channel who it was and where, for example `PvP: Raijin attacked me at Town Square`, when a response is taken. At most once a minute.
 
 ### Re-connect after PvP in N minutes
 
@@ -3530,14 +3529,21 @@ Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Da
 ### Turn off my evil warnings if they are on, to attack
 
 **Default:** Off
-**What it does:** With evil warnings on, the game refuses an attack on a player who hasn't attacked you (`To do this action, you must turn off your evil warnings.`). Ticked, MudPlay sends `set warning off`, attacks again, and sends `set warning on` when that fight is over. Unticked, the refusal ends the fight.
-**Important notes:** Hitting back at someone who attacked you never needs it. If the connection drops mid-fight the warnings can't be put back; the terminal tells you, and `set warning on` restores them.
+**What it does:** With evil warnings on, the game refuses an attack on a player who hasn't attacked you (`To do this action, you must turn off your evil warnings.`). Ticked, MudPlay sends `set warning off` and attacks again. Unticked, the refusal ends the fight.
+**When they go back on:** not when the fight ends. MudPlay sends `set warning on` once you are back at what the fight interrupted (your loop, walk or Auto-Lair run going again) and a minute has passed with no new fight; a fight that interrupted nothing only needs the quiet minute. A second fight before then finds them still off and sends nothing more.
+**Important notes:** Hitting back at someone who attacked you never needs it. If the connection drops while they are off, they can't be put back; the terminal tells you, and `set warning on` restores them.
 
-### Track enemies every N seconds
+### Chasing (Chase and attack)
 
-**Default:** Off, `60` seconds
-**What it does:** While *Chase and attack* is chasing a player who is out of sight, sends `track <player>` this often and walks the way the answer points.
-**Important notes:** It needs the Tracking skill; without it every track fails and the chase is given up after three minutes.
+When the player you are fighting leaves, MudPlay steps the way they went at once. Arriving in a room without them, it tracks them if *Track enemies* is on, and otherwise guesses. Seeing them again means attacking again. The chase's own steps go through the walker, so a door on the way is handled as usual.
+
+**Give up after N rooms without seeing them** — default `8`. How many rooms in a row to follow without sight of them before the chase ends and you go back to what you were doing. Seeing them starts the count again.
+
+**Guess the way they went when it wasn't seen** — default on. Carry on the way they were heading; if that way is shut and the room has just one other way out, take that. It never guesses back the way you came. Off, or with no guess to make, the chase waits where it stands.
+
+**With no way to follow, wait N seconds** — default `20`. How long to stand in case they come back into sight before the chase ends.
+
+**Track enemies every N seconds** — default off, `60` seconds. Out of sight in a chase, sends `track <player>` on arriving in each room and follows the answer, which outranks a guess; with no answer within three seconds, or a failed track, it falls back to the guess. While waiting with no way to follow, the track is sent again this often. It needs the Tracking skill.
 
 ### PvP Spells 1 and 2
 
@@ -4543,13 +4549,14 @@ This section is a compact, technical lookup table for every setting documented a
 | If leading, wait only (s) / Return distance (rooms) | 90 / 30 | 0–3600 / 1–500 | `IfLeadingWaitTotalSec` / `ReturnDistanceRooms` | Models/Profile/PartySettings.cs |
 | If leading, accept @comeback for (min) | 2 | 0–60 | `AcceptComebackMinutes` | Models/Profile/PartySettings.cs |
 | par poll frequency (s) | `5` | 1–60 | `ParPollFrequencySec` | Models/Profile/PartySettings.cs |
-| PvP action | `DoNothing` | HangUp / FleeThenHangUp / Flee / Attack / ChaseAttack / DoNothing | `Action` | Models/Profile/PvpSettings.cs |
+| PvP action | `HangUp` | HangUp / FleeThenHangUp / Flee / Attack / ChaseAttack | `Action` | Models/Profile/PvpSettings.cs |
 | PvP flee to / rooms to flee | none / `10` | a favourite room / 1–99 | `FleeTo` / `RoomsToFlee` | Models/Profile/PvpSettings.cs |
 | PvP flee hangup delay / come back after (s) | `30` / `60` | 0–600 / 0–3600 | `FleeHangupDelaySeconds` / `ComeBackAfterSeconds` | Models/Profile/PvpSettings.cs |
 | PvP notify gang / re-connect after PvP (min) | `false` / `false`, `30` | bool / bool, 1–1440 | `NotifyGang` / `ReconnectAfterPvp`, `ReconnectAfterPvpMinutes` | Models/Profile/PvpSettings.cs |
 | Flip a Friend to Enemy if they attack you | `false` | bool | `FlipFriendToEnemyIfAttacked` | Models/Profile/PvpSettings.cs |
 | Turn off my evil warnings to attack | `false` | bool | `TurnOffEvilWarningsToAttack` | Models/Profile/PvpSettings.cs |
 | Track enemies every (s) | `false`, `60` | bool, 5–3600 | `TrackEnemies`, `TrackEnemiesEverySeconds` | Models/Profile/PvpSettings.cs |
+| Chase: give up after rooms unseen / guess the way / wait with no way to follow (s) | `8` / `true` / `20` | 1–50 / bool / 0–600 | `ChaseRoomsUnseen` / `ChaseGuessDirection` / `ChaseWaitSeconds` | Models/Profile/PvpSettings.cs |
 | PvP spells 1 / 2 | blank | cast code | `PvpSpell1` / `PvpSpell2` | Models/Profile/PvpSettings.cs |
 | Copper / Silver / Gold / Platinum / Runic policy | Ignore/Collect×4 | Collect / Ignore / Discard | `CopperPolicy` etc. | Models/Profile/CashSettings.cs |
 | Auto-deposit if wealth / coins exceed | 0 / 0 | 0–100,000,000 | `AutoDepositIfWealthExceeds` / `AutoDepositIfCoinsExceed` | Models/Profile/CashSettings.cs |

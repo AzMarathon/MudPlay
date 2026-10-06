@@ -8,7 +8,7 @@ public sealed class PvpSettings
 {
     // What to do about an Enemy who is in the room or attacks us. A player's own
     // PvP response (Game Data → Players) replaces it for that player.
-    public PvpAction Action { get; set; } = PvpAction.DoNothing;
+    public PvpAction Action { get; set; } = PvpAction.HangUp;
 
     // Where a flee goes. Null runs back along the walk or loop instead, RoomsToFlee
     // rooms.
@@ -43,7 +43,19 @@ public sealed class PvpSettings
     public string? PvpSpell1 { get; set; }
     public string? PvpSpell2 { get; set; }
 
-    // While chasing a player who is out of sight, `track` them this often.
+    // Chase and attack: how many rooms to follow without seeing them before the
+    // chase is given up.
+    public int ChaseRoomsUnseen { get; set; } = 8;
+
+    // When the way they went wasn't seen, carry on the way they were heading, or
+    // take the room's only other way out. Off, the chase waits where it stands.
+    public bool ChaseGuessDirection { get; set; } = true;
+
+    // With no way to follow, how long to stand in case they come back into sight.
+    public int ChaseWaitSeconds { get; set; } = 20;
+
+    // Out of sight in a chase, `track` them: on arriving in each room, and on this
+    // interval while standing with no way to follow.
     public bool TrackEnemies { get; set; }
     public int TrackEnemiesEverySeconds { get; set; } = 60;
 }

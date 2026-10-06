@@ -4,9 +4,11 @@ using MudPlay.Services;
 namespace MudPlay.Game.Pvp;
 
 // The PvP flee to a chosen room: whatever walk, loop or lair run was under way is
-// stopped, the walker heads for the room, and for "come back later" the stopped
-// run is picked up again some time after arriving. Stop-and-restart rather than a
-// movement gate, as for the errand detours: a gate would hold the flee itself.
+// stopped, the walker heads for the room in Sprint Mode (no stopping to fight, loot
+// or rest on the way), stays there, and for "come back later" the stopped run is
+// picked up again once the wait, counted from arriving, is over. Stop-and-restart
+// rather than a movement gate, as for the errand detours: a gate would hold the
+// flee itself.
 public sealed class PvpFleeWalk : IDisposable
 {
     public const string LogCategory = "PvP";
@@ -15,6 +17,7 @@ public sealed class PvpFleeWalk : IDisposable
     private readonly LoopRunner _loops;
     private readonly AutoLairManager _lair;
     private readonly Action<TimeSpan, Action> _schedule;
+    private readonly Action _startSprint;
     private readonly LogService? _log;
 
     private RoomKey _destination;
@@ -23,17 +26,19 @@ public sealed class PvpFleeWalk : IDisposable
     private int _run;
 
     // True from the flee starting until the walker arrives, fails or is stopped.
-    // Combat is suppressed meanwhile so a monster on the way can't hold us there.
     public bool IsActive { get; private set; }
 
+    // startSprint turns Sprint Mode on for the walk; like any Sprint start it ends
+    // by itself when the walk arrives.
     public PvpFleeWalk(
         AutoWalkManager walker, LoopRunner loops, AutoLairManager lair,
-        Action<TimeSpan, Action> schedule, LogService? log = null)
+        Action<TimeSpan, Action> schedule, Action startSprint, LogService? log = null)
     {
         _walker = walker;
         _loops = loops;
         _lair = lair;
         _schedule = schedule;
+        _startSprint = startSprint;
         _log = log;
         _walker.Event += OnWalkEvent;
     }
@@ -53,6 +58,7 @@ public sealed class PvpFleeWalk : IDisposable
         IsActive = true;
         if (_walker.WalkTo(destination, planThroughAcquirableGates: true))
         {
+            _startSprint();
             _log?.Warn(LogCategory,
                 $"fleeing to {destination} ({reason}); interrupted: {resume.Kind}");
             return true;
