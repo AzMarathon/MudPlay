@@ -55,8 +55,27 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     [ObservableProperty] private string _activeSummary = string.Empty;
     [ObservableProperty] private string _filterText = string.Empty;
 
-    public BossesSectionViewModel(GameDataCache gameData, BossStore bosses, BossTimerStore timers, TickEngine tick)
+    private readonly ProfileService? _profile;
+
+    // The column widths the user dragged the table to, by column key.
+    public IReadOnlyDictionary<string, double> ColumnWidths =>
+        _profile?.Current?.BossColumnWidths ?? (IReadOnlyDictionary<string, double>)new Dictionary<string, double>();
+
+    // Remember dragged column widths on the character. The view calls this as it
+    // goes away, with only the columns whose width differs from what it showed.
+    public void SaveColumnWidths(IReadOnlyDictionary<string, double> changed)
     {
+        if (changed.Count == 0 || _profile?.Current is not { } current) return;
+        Dictionary<string, double> widths = current.BossColumnWidths is { } had ? new(had) : new();
+        foreach ((string key, double width) in changed) widths[key] = width;
+        current.BossColumnWidths = widths;
+        _profile.Save();
+    }
+
+    public BossesSectionViewModel(GameDataCache gameData, BossStore bosses, BossTimerStore timers, TickEngine tick,
+        ProfileService? profile = null)
+    {
+        _profile = profile;
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(bosses);
         ArgumentNullException.ThrowIfNull(timers);

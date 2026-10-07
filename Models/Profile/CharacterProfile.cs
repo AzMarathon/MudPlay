@@ -284,6 +284,10 @@ public sealed class CharacterProfile
     // Navigation goto-button dropdown. null or empty = no history yet.
     public List<string>? GotoHistory { get; set; }
 
+    // Widths the user dragged the Bosses tab's columns to, by column key. A column
+    // with no entry keeps its built-in width.
+    public Dictionary<string, double>? BossColumnWidths { get; set; }
+
     // Per-table column-visibility choices in the Game Data Browser, keyed by the
     // table's Title (e.g. "Monsters"). Value = the ordered list of column keys the
     // user wants shown for that table. A missing table entry = its built-in default

@@ -4173,22 +4173,6 @@ public sealed class AppServices
         // for any matched boss; we gate on the flag here, where the catalog + item
         // names + wire sender are all reachable.
         BossTimers.BossKilled += FireBossGrabAll;
-        // The grab goes out blind and the game can throw it away, so the floor is
-        // checked after it and what is still there is asked for again.
-        _bossGrabRetry = new Game.Inventory.BossGrabRetry(
-            send: cmd =>
-            {
-                // An empty command is the bare Enter that re-draws the room.
-                if (cmd.Length == 0) _engineWireSend?.Invoke(new[] { (byte)'\r' });
-                else SendGameCommand(cmd);
-            },
-            scheduleAfter: (delay, action) =>
-            {
-                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
-                timer.Tick += (_, _) => { timer.Stop(); action(); };
-                timer.Start();
-            },
-            log: Log);
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
@@ -6403,7 +6387,6 @@ public sealed class AppServices
         // the deferred queue (CombatStateTracker's handler ran first, so
         // the hostile flag is current).
         RoomClassifier.EntitiesObserved += _ => AutoGetItems.OnRoomObserved();
-        AutoGetItems.NoticeSurveyed += list => _bossGrabRetry?.OnNoticeSurvey(list);
 
         // Force-clear flush: the normal end-of-fight flushes deferred cash/item
         // pickups off the clean room re-look that follows a kill, but a FORCE-clear
@@ -6732,7 +6715,6 @@ public sealed class AppServices
             // deferred in the room we died in (report paradigm-20260820-090736).
             AutoSearch.OnRoomChanged(t.NewRoom?.Key);
             if (t.NewRoom is null) return;   // the other engines have nothing to do on death
-            _bossGrabRetry?.Clear();
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
@@ -10326,13 +10308,58 @@ public sealed class AppServices
             Log.Info("GrabAll", $"'{def.Name}' died — no known droppable items to grab");
             return;
         }
+        // A boss whose death casts a "... temp" spell leaves the room unable to act
+        // until that spell runs out, and the game throws away what is sent before
+        // then (GAME_MECHANICS "Silent death spells that stall the room"). The grab
+        // waits it out and goes once.
+        TimeSpan stall = DeathStallOf(num);
+        if (stall > TimeSpan.Zero)
+        {
+            Log.Info("GrabAll",
+                $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")} in {stall.TotalMilliseconds:F0} ms, once its death spell has run out");
+            HoldThroughDeathStall(stall, $"Grab All for '{def.Name}'",
+                () => { foreach (string cmd in cmds) SendGameCommand(cmd); });
+            return;
+        }
         Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
         foreach (string cmd in cmds) SendGameCommand(cmd);
-        _bossGrabRetry?.Arm(cmds.Select(cmd => cmd["get ".Length..]));
     }
 
-    // Set where the Grab All is wired; null until then.
-    private Game.Inventory.BossGrabRetry? _bossGrabRetry;
+    // How long a monster's death leaves the room unable to act: the length of its
+    // "... temp" death spell, or zero when it has none.
+    private TimeSpan DeathStallOf(int monsterNumber)
+    {
+        int deathSpell = MonsterCatalog.Get(monsterNumber)?.DeathSpell ?? 0;
+        if (deathSpell <= 0) return TimeSpan.Zero;
+        if (GameData.FindRowByNumber("Spells", deathSpell) is not System.Text.Json.JsonElement spell) return TimeSpan.Zero;
+        string? name = spell.TryGetProperty("Name", out System.Text.Json.JsonElement n) ? n.GetString() : null;
+        if (!Game.Combat.TempDeathResponse.IsTempSpell(name)) return TimeSpan.Zero;
+        int dur = spell.TryGetProperty("Dur", out System.Text.Json.JsonElement d) && d.TryGetInt32(out int rounds) ? rounds : 0;
+        return Game.Combat.TempDeathResponse.StallTime(dur);
+    }
+
+    // Run a pickup once a death spell has run out, keeping the walker in the room
+    // until then. Counted: a grab and a coin re-look can wait on the same death.
+    private int _deathStallHolds;
+
+    private void HoldThroughDeathStall(TimeSpan stall, string reason, Action pickUp)
+    {
+        if (_deathStallHolds++ == 0)
+            MovementCoordinator.AssertGate(Game.Map.MovementCoordinator.DeathStallGate, "DeathStall", reason);
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = stall };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            try { pickUp(); }
+            finally
+            {
+                if (--_deathStallHolds == 0)
+                    MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.DeathStallGate, "DeathStall",
+                        "the death spell has run out");
+            }
+        };
+        timer.Start();
+    }
 
     // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no
     // wire line but stall the game engine, so send the temp spell's MessageRecord.CastResponse
@@ -10392,9 +10419,14 @@ public sealed class AppServices
             if (deathSpell <= 0) continue;
             string? spellName = GameData.FindNameByNumber("Spells", deathSpell);
             if (!Game.Combat.TempDeathResponse.IsTempSpell(spellName)) continue;
-            // What was sent in this moment may have been thrown away: the coin
-            // pickup checks the floor again.
+            // The coin get went out on the drop line, before the death was known,
+            // so the game threw it away. Once the death spell has run out the room
+            // is drawn again, and the coins still lying there are asked for then.
             Cash.NoteDeathStall();
+            TimeSpan stall = DeathStallOf(num);
+            if (stall > TimeSpan.Zero && Cash.HasUnansweredGet)
+                HoldThroughDeathStall(stall, "coins dropped at the kill",
+                    () => _engineWireSend?.Invoke(new[] { (byte)'\r' }));
 
             foreach (Models.GameData.MessageRecord r in Messages.Messages)
             {

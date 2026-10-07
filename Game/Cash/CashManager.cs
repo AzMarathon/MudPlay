@@ -145,7 +145,7 @@ public sealed class CashManager : IDisposable
     // pickup line: when it went out, and how often it has been asked again.
     private readonly Dictionary<string, (DateTime SentAt, int Retries)> _unansweredGets =
         new(StringComparer.OrdinalIgnoreCase);
-    private const int MaxGetRetries = 2;
+    private const int MaxGetRetries = 1;
     // A room display this soon after the get may have been drawn before the get ran.
     private static readonly TimeSpan GetAnswerTime = TimeSpan.FromSeconds(1);
 
@@ -169,6 +169,9 @@ public sealed class CashManager : IDisposable
     private static readonly TimeSpan DeathStallReach = TimeSpan.FromSeconds(5);
 
     public void NoteDeathStall() => _deathStallAt = UnansweredClock();
+
+    // A coin get is out that the game has not answered with a pickup line.
+    public bool HasUnansweredGet => _unansweredGets.Count > 0;
 
     private void NoteGetSent(string currency)
     {

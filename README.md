@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.147.3**
-> - A boss's Grab All checks the floor again and re-asks for drops the game threw away at the kill; the coin pickup does the same
+> **Version 3.147.4**
+> - A boss's Grab All waits out the boss's death spell and is sent once, instead of being thrown away at the kill; coins dropped by the kill are picked up then too
 > - Bosses whose death spell had no cast response on record now get the default one
 > - Bosses tab: Last Killed is wide enough to show the whole date and time
+> - Bosses tab: column widths you drag are remembered
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

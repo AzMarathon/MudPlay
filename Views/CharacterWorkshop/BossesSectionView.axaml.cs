@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia;
@@ -20,6 +21,18 @@ public partial class BossesSectionView : UserControl
     // Shifted +1 by the "Grab All" column inserted after "Stop before".
     private const int Early1 = 5, Early2 = 6, Early3 = 7;
 
+    // One key per column, in the order the grid declares them: what a dragged width
+    // is remembered under. By position, not header, since the early-window headers
+    // change with the realm.
+    private static readonly string[] ColumnKeys =
+    {
+        "StopBefore", "GrabAll", "Boss", "Respawn", "Full", "Early1", "Early2", "Early3",
+        "Timer", "LastKilled", "Notes",
+    };
+
+    // The width each column was shown at, so only a column the user dragged is saved.
+    private readonly Dictionary<string, double> _shownWidths = new();
+
     private BossesSectionViewModel? _vm;
     private string? _sortPath;
     private ListSortDirection _sortDir = ListSortDirection.Ascending;
@@ -33,16 +46,57 @@ public partial class BossesSectionView : UserControl
         // always surfaces the running timers instead of a name-ordered list that reads
         // as empty.
         AttachedToVisualTree += (_, _) => ApplyDefaultSort();
+        // The view is rebuilt each time the section opens, so widths the user
+        // dragged are put back as it attaches and collected as it goes away.
+        AttachedToVisualTree += (_, _) => ApplyColumnWidths();
+        DetachedFromVisualTree += (_, _) => SaveColumnWidths();
+    }
+
+    private void ApplyColumnWidths()
+    {
+        DataGrid? grid = BossGrid ?? this.FindControl<DataGrid>("BossGrid");
+        if (grid is null || _vm is null) return;
+        IReadOnlyDictionary<string, double> saved = _vm.ColumnWidths;
+        _shownWidths.Clear();
+        for (int i = 0; i < grid.Columns.Count && i < ColumnKeys.Length; i++)
+        {
+            DataGridColumn column = grid.Columns[i];
+            if (saved.TryGetValue(ColumnKeys[i], out double width) && width >= column.MinWidth)
+                column.Width = new DataGridLength(width);
+            _shownWidths[ColumnKeys[i]] = column.Width.IsAbsolute ? column.Width.Value : double.NaN;
+        }
+    }
+
+    private void SaveColumnWidths()
+    {
+        DataGrid? grid = BossGrid ?? this.FindControl<DataGrid>("BossGrid");
+        if (grid is null || _vm is null) return;
+        Dictionary<string, double> changed = new();
+        for (int i = 0; i < grid.Columns.Count && i < ColumnKeys.Length; i++)
+        {
+            DataGridColumn column = grid.Columns[i];
+            // A hidden column (Stock's unused early windows) has no width to read.
+            if (!column.IsVisible || column.ActualWidth <= 0) continue;
+            double now = Math.Round(column.ActualWidth);
+            if (_shownWidths.TryGetValue(ColumnKeys[i], out double shown) && Math.Abs(shown - now) < 1) continue;
+            changed[ColumnKeys[i]] = now;
+            _shownWidths[ColumnKeys[i]] = now;
+        }
+        _vm.SaveColumnWidths(changed);
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
+        // The outgoing view-model is where dragged widths are saved; collect them
+        // before it is let go.
+        SaveColumnWidths();
         if (_vm is not null) _vm.PropertyChanged -= OnVmPropertyChanged;
         _vm = DataContext as BossesSectionViewModel;
         if (_vm is not null) _vm.PropertyChanged += OnVmPropertyChanged;
         ApplyRealmColumns();
+        ApplyColumnWidths();
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)

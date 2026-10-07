@@ -1597,10 +1597,10 @@ public sealed class CashManagerTests
         }
     }
 
-    // Report paradigm-20261007-111929: a boss died, the coin get went out, and the
-    // game echoed it without running it (the boss's death leaves the room unable to
-    // act for a moment). The next room display still listed the coins and the
-    // collector skipped them as already handled.
+    // Report paradigm-20261007-111929: a boss died, the coin get went out on the
+    // drop line, and the game echoed it without running it (the boss's death spell
+    // leaves the room unable to act until it runs out). The room is drawn again
+    // once it has; the coins are still listed and are asked for once more.
     [Fact]
     public void GetThrownAwayByADeathStall_IsAskedAgain_WhenTheCoinsAreStillThere()
     {
@@ -1616,6 +1616,11 @@ public sealed class CashManagerTests
         now = now.AddSeconds(2);
         h.Feed("You notice 5 platinum pieces here.");
 
+        Assert.Equal(2, h.AllSent.Count(c => c.StartsWith("get ")));
+
+        // Once more only: a pile that still won't come is left.
+        now = now.AddSeconds(2);
+        h.Feed("You notice 5 platinum pieces here.");
         Assert.Equal(2, h.AllSent.Count(c => c.StartsWith("get ")));
     }
 

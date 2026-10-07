@@ -15,6 +15,17 @@ public static partial class TempDeathResponse
     // two carriage returns the seeds give every one they list.
     public const string DefaultResponse = "^M^M";
 
+    // How long a temp death spell keeps the room from acting: its Dur in spell
+    // rounds (a round runs about 3.04 s), plus a few milliseconds so what is sent
+    // lands after it has run out and not on its last instant. Zero for no duration.
+    public static TimeSpan StallTime(int durRounds) =>
+        durRounds <= 0
+            ? TimeSpan.Zero
+            : TimeSpan.FromMilliseconds(durRounds * SpellRoundMs + AfterStallMs);
+
+    private const int SpellRoundMs = 3040;
+    private const int AfterStallMs = 50;
+
     // True when a spell name carries the whole word "temp" — the naming convention
     // for these death-cast spells ("lich temp", "necromancer temp"). Whole-word so
     // "acid tempest" (a real "tempest" spell) doesn't match.
