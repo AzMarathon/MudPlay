@@ -4084,7 +4084,7 @@ The walks it covers are the ones nobody is there to approve: bank and sell trips
 
 The **filter** box narrows the list to lines holding what you type: a room name, a map/room number, or a command such as `go hatch`. **Allow all** and **Allow none** tick or clear the lines the filter is showing.
 
-**Important notes:** Walks **you** start aren't affected. A walk-to asks you on the route cards (**Walk it** or **Teleport**), and a loop you start or a **Recover Now** on a death takes the shortest route to get there, as before. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
+**Important notes:** Walks **you** start aren't affected: they ask you on the route cards (**Walk it** or **Teleport**) whenever the shortest way there teleports and it could also be walked. That covers a walk-to, the walk to a **loop you start**, and **Recover Now** on a death. A loop started by an event or by another player's remote command is an automatic walk and uses this list. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
 
 ## Other
 

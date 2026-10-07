@@ -2539,6 +2539,80 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(firstSend, Encoding.Latin1.GetString(h.Sent[0]));
     }
 
+    // A loop the user starts asks, on the route cards, how to get there, the way a
+    // walk-to does: nothing is sent until the pick comes back.
+    private (LoopRunner Runner, Harness H, List<(RoomKey From, RoomKey Entry)> Asked, Action<bool?> Answer) UserLoopAtTheArch()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
+            walker: h.Walker, postToUi: a => a());
+        runner.SetWireSender(b => h.Sent.Add(b));
+        List<(RoomKey, RoomKey)> asked = new();
+        Action<bool?> answer = _ => { };
+        runner.SetUserApproachAsker((from, entry, reply) => { asked.Add((from, entry)); answer = reply; });
+        Assert.True(runner.Start(new Loop("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) }), userStarted: true));
+        return (runner, h, asked, pick => answer(pick));
+    }
+
+    [Theory]
+    [InlineData(true, "n\r")]          // "Walk it"
+    [InlineData(false, "go arch\r")]   // "Teleport"
+    public void UserStartedLoop_AsksOnTheRouteCards_ThenWalksAsPicked(bool walkIt, string firstSend)
+    {
+        var (runner, h, asked, answer) = UserLoopAtTheArch();
+
+        Assert.Equal((new RoomKey(1, 10), new RoomKey(7, 131)), Assert.Single(asked));
+        Assert.Equal(LoopState.Approaching, runner.State);
+        Assert.Empty(h.Sent);
+
+        answer(walkIt);
+
+        Assert.Equal(firstSend, Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Equal(LoopState.Approaching, runner.State);
+    }
+
+    [Fact]
+    public void UserStartedLoop_CardsCancelled_StopsTheLoop()
+    {
+        var (runner, h, _, answer) = UserLoopAtTheArch();
+
+        answer(null);
+
+        Assert.Equal(LoopState.Idle, runner.State);
+        Assert.Empty(h.Sent);
+    }
+
+    // The loop was stopped while the cards were up: a late pick starts nothing.
+    [Fact]
+    public void UserStartedLoop_AnswerAfterAStop_IsDropped()
+    {
+        var (runner, h, _, answer) = UserLoopAtTheArch();
+        runner.Stop("test");
+
+        answer(false);
+
+        Assert.Equal(LoopState.Idle, runner.State);
+        Assert.Empty(h.Sent);
+    }
+
+    // A loop nobody at the keyboard started is never asked: it is an automatic walk.
+    [Fact]
+    public void AutomaticLoopStart_IsNotAsked()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
+            walker: h.Walker, postToUi: a => a());
+        runner.SetWireSender(b => h.Sent.Add(b));
+        int asked = 0;
+        runner.SetUserApproachAsker((_, _, _) => asked++);
+
+        Assert.True(runner.Start(new Loop("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) })));
+
+        Assert.Equal(0, asked);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
     // ----- the list of teleports, built from the game data ----------------
 
     // A teleport to somewhere that can also be walked to is a shortcut: nothing lies

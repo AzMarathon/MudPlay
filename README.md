@@ -4,7 +4,7 @@
 > **Version 3.149.0**
 > - New Settings → Teleports tab: Allow automatic walks to use the following teleports, one line per teleport spot from your game data with both ends' map/room numbers; none are ticked by default
 > - Automatic walks (bank and sell trips, training trips, Auto-Lair, events, remote commands) use only the teleports you tick; a trip that needs another stops and names it
-> - Walks you start yourself are unchanged: a walk-to asks on the route cards, a loop you start and Recover Now take the shortest route
+> - Starting a loop yourself and Recover Now go through the route cards like a walk-to: when the shortest way there teleports, you pick Walk it or Teleport
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -447,6 +447,25 @@ public sealed class DeathRecoveryManagerTests
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 
+    // Recover Now away from the corpse is a walk the user asked for: it is handed to
+    // the route cards like any walk-to, and the grab is armed for the arrival.
+    [Fact]
+    public void RecoverNow_AwayFromTheDeathRoom_GoesThroughTheRouteCards()
+    {
+        using GraphHarness h = new();
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        List<RoomKey> asked = new();
+        h.Recovery.SetDemandedWalk(room => { asked.Add(room); return true; });
+
+        Assert.True(h.Recovery.RecoverNow(h.Latest));
+
+        Assert.Equal(new RoomKey(1, 1), Assert.Single(asked));
+
+        h.EnterGates();                                    // arrived, however the cards routed it
+        h.FeedSurvey("corpse of Ermias");
+        Assert.Contains("recover corpse Ermias", h.Sent);
+    }
+
     [Fact]
     public void RecoverNow_InRoom_LooksThenRecoversOnSurvey()
     {

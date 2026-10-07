@@ -774,6 +774,52 @@ public static class RouteChoicePrompt
         }
     }
 
+    // The walk-or-teleport question alone, for a walk the user asked for that another
+    // engine makes: the walk to a loop the user just started, which the loop runner
+    // plans and owns. When the shortest route there teleports and a walking route
+    // also exists, the same cards a walk-to shows are put up and the pick comes back:
+    // true for "Walk it", false for "Teleport". False too when there is nothing to
+    // ask (no teleport on the way, or no way but the teleport), and null when the
+    // user closes the cards without picking.
+    public static async Task<bool?> AskWalkOrTeleportAsync(
+        AppServices services, RoomKey source, RoomKey destination,
+        Action<IReadOnlyList<RoomKey>?>? previewSink = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
+            services.Bfs, services.Movement, services.RoomGraph, source, destination,
+            () => services.Bfs.FindPath(source, destination, services.Movement));
+        if (choice is null) return false;
+
+        services.Log.Info(LogCat,
+            $"route pick {source} -> {destination} (walk to a loop): teleport fork — walk {choice.FreeStepCount} "
+            + $"vs teleport {choice.GatedStepCount} hop(s) via {choice.TeleportLanding}; showing picker");
+        TimeSpan Eta(IReadOnlyList<RoomKey> path) => RouteEtaEstimator.Estimate(
+            path, services.AutoLair.TravelCostModel, services.RoomGraph.GetRoom,
+            includeLairDwell: services.IsAutoCombatEnabled, lairWillBeFought: services.LairWillBeFought);
+        RouteChoiceDialogViewModel vm = new(
+            choice, DestinationLabel(services, destination), services.ItemNames.GetName,
+            freeEta: Eta(choice.FreePath), gatedEta: Eta(choice.GatedPath),
+            sourceLabel: DestinationLabel(services, source));
+        if (previewSink is not null)
+            vm.PreviewRequested += r => previewSink(r == RouteChoiceResult.Free ? choice.FreePath : choice.GatedPath);
+        RouteChoiceResult? result;
+        try
+        {
+            result = await services.Dialogs.OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
+        }
+        finally
+        {
+            previewSink?.Invoke(null);
+        }
+        return result switch
+        {
+            RouteChoiceResult.Free => true,
+            RouteChoiceResult.Gated => false,
+            _ => null,
+        };
+    }
+
     // Start the walk, first lifting any lingering manual pause. A user picking a
     // fresh destination is an explicit "go here now" that outranks a mid-walk
     // Pause: without clearing the UserGate the new walk would immediately re-pause

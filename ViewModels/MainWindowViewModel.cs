@@ -1559,6 +1559,16 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Walker.SetPartyLeaderCheck(isLeaderWithFollowers);
         AppServices.Current.LoopRunner.SetTeleportResolver(teleportResolver);
         AppServices.Current.LoopRunner.SetPartyLeaderCheck(isLeaderWithFollowers);
+        // Walks the user asked for that an engine makes go through the route cards
+        // like a walk-to: the walk to a loop just started asks walk-or-teleport when
+        // its shortest route teleports, and Recover Now is a walk-to to the death room.
+        AppServices.Current.LoopRunner.SetUserApproachAsker(
+            (from, entry, answer) => _ = AskLoopApproachAsync(from, entry, answer));
+        AppServices.Current.DeathRecovery.SetDemandedWalk(room =>
+        {
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
+            return true;
+        });
         // A party-splitting CMD teleport (chime-style, Darkwood's `go vortex`)
         // dissolves the follow chain even though the `.@party <kw>` relay sent
         // everyone through, so the party must be re-invited on landing. Both
@@ -4968,6 +4978,25 @@ public partial class MainWindowViewModel : ObservableObject
     // Start a favourited loop from the flyout — stop any conflicting engine
     // first, then hand the loop to the runner (which approaches the start
     // waypoint and begins the cycle).
+    private static async Task AskLoopApproachAsync(
+        Game.Map.RoomKey from, Game.Map.RoomKey entry, Action<bool?> answer)
+    {
+        bool? pick;
+        try
+        {
+            pick = await MudPlay.ViewModels.Navigation.RouteChoicePrompt.AskWalkOrTeleportAsync(
+                AppServices.Current, from, entry);
+        }
+        catch (Exception ex)
+        {
+            // The cards couldn't be shown: start the loop as it always has, by the
+            // shortest route, rather than leave it waiting on an answer.
+            AppServices.Current.Log.Warn("RoutePick", $"loop approach cards failed ({ex.Message}); taking the shortest route");
+            pick = false;
+        }
+        answer(pick);
+    }
+
     private void StartLoopFavorite(Game.Map.Loop loop)
     {
         var s = AppServices.Current;
