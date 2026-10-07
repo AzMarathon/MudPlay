@@ -297,7 +297,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 
         (ChestDrops, ChestSummary) = BuildChest(chest);
         FoundInContainers = BuildContainerSources(containerSources);
-        Givers = BuildGivers(givers, RoomCommands);
+        Givers = BuildGivers(givers, RoomCommands, ItemMdbViewBuilder.RoomIsBlacklisted);
 
         AutoCollect     = existing?.AutoCollect     ?? false;
         AutoDiscard     = existing?.AutoDiscard     ?? false;
@@ -398,16 +398,18 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     // An item with a Room command group has its room hand-overs shown there, with
     // the command, the chance and a walk link, so Given by leaves every room out and
     // keeps only the NPCs that hand the item over (user, 2026-10-06). An export
-    // without room commands has no such group and its Given by is whole.
+    // without room commands has no such group and its Given by is whole, less any
+    // room the user blacklisted.
     internal static IReadOnlyList<ItemGiverRow> BuildGivers(
-        IReadOnlyList<ItemGiver>? givers, IReadOnlyList<RoomCommandRow> roomCommands)
+        IReadOnlyList<ItemGiver>? givers, IReadOnlyList<RoomCommandRow> roomCommands,
+        Func<int, int, bool> isRoomBlacklisted)
     {
         if (givers is null || givers.Count == 0) return Array.Empty<ItemGiverRow>();
         bool roomsShownBelow = roomCommands.Count > 0;
         var rows = new List<ItemGiverRow>(givers.Count);
         foreach (ItemGiver g in givers)
         {
-            if (roomsShownBelow && g.Kind == ItemGiverKind.Room) continue;
+            if (g.Kind == ItemGiverKind.Room && (roomsShownBelow || isRoomBlacklisted(g.Map, g.Room))) continue;
             rows.Add(new ItemGiverRow(g));
         }
         return rows;

@@ -20,12 +20,21 @@ public sealed class ItemMdbViewBuilder
 {
     private readonly GameDataCache _cache;
     private readonly int _charm;   // resolved: playerCharm > 0 ? playerCharm : 50
+    private readonly Func<int, int, bool> _isRoomBlacklisted;
 
-    public ItemMdbViewBuilder(GameDataCache cache, int playerCharm)
+    // isRoomBlacklisted defaults to the realm's room blacklist; a test passes its own.
+    public ItemMdbViewBuilder(GameDataCache cache, int playerCharm, Func<int, int, bool>? isRoomBlacklisted = null)
     {
         _cache = cache;
         _charm = playerCharm > 0 ? playerCharm : 50;
+        _isRoomBlacklisted = isRoomBlacklisted ?? RoomIsBlacklisted;
     }
+
+    // A blacklisted room is one the user took off the map and out of room search, so
+    // an item record doesn't offer it either: not as a place the item lies, nor a
+    // room whose command hands it over, nor a room under Given by (user, 2026-10-07).
+    internal static bool RoomIsBlacklisted(int map, int room) =>
+        AppServices.CurrentOrNull?.RoomBlacklist.IsBlacklisted(new Game.Map.RoomKey(map, room)) == true;
 
     // Builds the read-only views the dialog needs from the active set's Items.json row: a
     // curated "Other Info" key/value list for the right pane plus the Details-section derived
@@ -314,6 +323,7 @@ public sealed class ItemMdbViewBuilder
             List<PlacedInRow> rooms = new(source.Rooms.Count);
             foreach ((int mapNo, int roomNo) in source.Rooms)
             {
+                if (_isRoomBlacklisted(mapNo, roomNo)) continue;
                 string? name = ResolveRoomName(mapNo, roomNo);
                 string locator = $"{mapNo}/{roomNo}";
                 rooms.Add(new PlacedInRow(
@@ -322,6 +332,8 @@ public sealed class ItemMdbViewBuilder
             string chance = source.ChanceUnknown ? "?%"
                 : source.ChancePercent is { } p ? p.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%"
                 : string.Empty;
+            // Every room of the entry blacklisted: nowhere left to use the command.
+            if (rooms.Count == 0) continue;
             rows.Add(new RoomCommandRow(source.Commands, chance, rooms));
         }
         return rows;
@@ -349,6 +361,7 @@ public sealed class ItemMdbViewBuilder
             if (!int.TryParse(rest[..slash].Trim(), out int mapNo)) continue;
             if (!int.TryParse(rest[(slash + 1)..].Trim(), out int roomNo)) continue;
             if (!seen.Add((mapNo, roomNo))) continue;
+            if (_isRoomBlacklisted(mapNo, roomNo)) continue;
             string? name = ResolveRoomName(mapNo, roomNo);
             string locator = $"{mapNo}/{roomNo}";
             string label = string.IsNullOrEmpty(name) ? $"Room {locator}" : $"{name} - {locator}";
