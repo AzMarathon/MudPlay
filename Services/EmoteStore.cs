@@ -43,27 +43,73 @@ public sealed class EmoteDraft
     public string? DisplayName { get; set; }
 }
 
-// The user's personal, shareable emote library (GLOBAL — shared across all characters
-// and BBSes, under AppPaths.EmotesDir). Layers on the built-in catalog and publishes
+// The user's shareable emote library, one per BBS (shared across the characters on
+// it, under its Emotes folder; the shared folder stands in while no BBS is active). Layers on the built-in catalog and publishes
 // the merged scanner to EmoteRuntime. The editor stages changes and Commit()s them all
 // at once (on Settings Apply / OK); nothing here mutates until then, except Export which
 // reads the committed set. Import extracts a package's images to a temp dir and returns
 // drafts for the editor to stage.
 public sealed partial class EmoteStore
 {
-    private readonly string _dir;
-    private readonly string _manifestPath;
+    private string _dir;
+    private string _manifestPath;
+    // Where the library was one folder for every BBS; a BBS with none takes a copy.
+    private readonly string _sharedDir;
+    private readonly SharedFileStamp _stamp = new();
     private readonly LogService? _log;
     private EmoteSet _set = new();
 
     public EmoteStore(string? dir = null, LogService? log = null)
     {
-        _dir = dir ?? AppPaths.EmotesDir;
+        _sharedDir = dir ?? AppPaths.EmotesDir;
+        _dir = _sharedDir;
         _manifestPath = Path.Combine(_dir, "emotes.json");
         _log = log;
         Directory.CreateDirectory(_dir);
         _set = LoadFromDisk();
         Republish();
+    }
+
+    // Switch to a BBS's own library (its Emotes folder), or back to the shared one
+    // when no BBS is active. The emotes are a BBS's: its players and their
+    // shortcodes. A BBS with no library yet takes a copy of the shared one, which is
+    // what every BBS used before.
+    public void OnBbsChanged(string? bbsName)
+    {
+        string dir = string.IsNullOrWhiteSpace(bbsName) ? _sharedDir : AppPaths.BbsEmotesDir(bbsName);
+        if (PathsEqual(dir, _dir)) return;
+        if (!Directory.Exists(dir)) CopyLibrary(_sharedDir, dir);
+        Directory.CreateDirectory(dir);
+        _dir = dir;
+        _manifestPath = Path.Combine(dir, "emotes.json");
+        _set = LoadFromDisk();
+        Republish();
+    }
+
+    // Re-read the library when another client on the BBS has saved it. Called on
+    // the heartbeat. True when it was re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (!_stamp.ChangedOutside(_manifestPath)) return false;
+        _set = LoadFromDisk();
+        Republish();
+        return true;
+    }
+
+    private void CopyLibrary(string from, string to)
+    {
+        if (!Directory.Exists(from)) return;
+        try
+        {
+            Directory.CreateDirectory(to);
+            foreach (string file in Directory.EnumerateFiles(from))
+                File.Copy(file, Path.Combine(to, Path.GetFileName(file)), overwrite: false);
+        }
+        catch (System.Exception ex) when (ex is IOException or System.UnauthorizedAccessException)
+        {
+            // Another client copied it first, or a file was in use: what did copy stands.
+            _log?.Warn("Emotes", $"copy of the emote library to '{to}' was incomplete: {ex.Message}");
+        }
     }
 
     public string Dir => _dir;
@@ -299,13 +345,14 @@ public sealed partial class EmoteStore
 
     private EmoteSet LoadFromDisk()
     {
+        _stamp.Mark(_manifestPath);
         try { return JsonStore.Load<EmoteSet>(_manifestPath) ?? new EmoteSet(); }
         catch (System.Exception ex) { _log?.Warn("Emotes", $"failed to load '{_manifestPath}': {ex.Message}"); return new EmoteSet(); }
     }
 
     private void Save()
     {
-        try { JsonStore.Save(_manifestPath, _set); }
+        try { JsonStore.Save(_manifestPath, _set); _stamp.Mark(_manifestPath); }
         catch (System.Exception ex) { _log?.Warn("Emotes", $"failed to save '{_manifestPath}': {ex.Message}"); }
     }
 }

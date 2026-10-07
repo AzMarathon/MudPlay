@@ -96,7 +96,7 @@ public sealed class FavoritesStoreTests : IDisposable
         Assert.False(betaAgain.IsFavorite(new RoomKey(2, 10)));
     }
 
-    // A character made now starts from the bundled starters, not from whatever the
+    // A character made now starts with no favourites, not with whatever the
     // characters before it had collected in the shared list.
     [Fact]
     public void NewCharacter_DoesNotTakeTheSharedList()
@@ -106,7 +106,7 @@ public sealed class FavoritesStoreTests : IDisposable
 
         (ProfileService profile, FavoritesStore store) = LoadCharacter("Fresh");
 
-        Assert.False(store.IsFavorite(new RoomKey(99, 9999)));
+        Assert.Empty(store.All);
         Assert.NotNull(profile.Current!.Favorites);   // it has its own list now
     }
 

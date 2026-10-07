@@ -1326,6 +1326,8 @@ Encumbrance isn't applied on top — the Stealth value already carries it.
 
 A journal of the realm's quests. Expand a card for its requirements, reward, and step checklist; tick every step (or the **Complete** box) to fold its permanent bonus into your character.
 
+**What you've completed is the character's; the guides are the game data's.** Your ticks and completed quests are saved on the character. The names, notes and step write-ups you make in **Edit Quests…** belong to the game-data set, so every realm and character on that set reads the same guides, and a second client open on the set picks up your edits within a second or two. (The guides were kept per realm for a while; each realm's were taken into its set the first time it loaded under this version, the first realm's whole and any later realm's for the quests the set still lacked.)
+
 Inside a step, two kinds of token are **clickable**: a `(map/room)` coordinate (cyan) walks you there — through the same route picker as the map, so a room past a hazard, gate, or teleport offers its route choices instead of just failing — and a single-quoted `'command'` (green) is typed at the game for you, exactly as if you'd entered it in the terminal — so annotate a step with `'ask jorah transport'` and clicking it sends that line.
 
 **Edit Quests…** lets you name, hide, or annotate them (type in the **Filter by quest name** box above its list to narrow it to the quests whose name or flag label holds what you typed) — and for the handful of quests that are class-locked in a way the crawler can't see (Magebane, Tarl), its **Restrict to classes** dropdown (a checklist of every class) pins the quest to the ticked class(es), so any other class is marked *Cannot complete*.
@@ -1591,7 +1593,7 @@ MudPlay also ships **built-in defaults** for the automation-facing bits (a monst
 
 The same applies to the **starter navigation loops** that come bundled with each set: they're baked into the program too, so **new ones added in a later release are added to your existing sets on the next launch** — added only, never overwriting a loop you already have, and **never re-adding one you deleted** (MudPlay remembers what it has already offered each set). Your own loops are always left untouched.
 
-**GOTO favourites belong to the character.** A new character starts with the bundled starter favourites for its realm and keeps its own list from there; nothing another character adds or removes reaches it. (Favourites used to be one list per game-data set, shared by every character on it. Each character from then took its own copy of that list the first time it loaded under this version.)
+**GOTO favourites belong to the character.** A new character starts with none and keeps its own list from there; nothing another character adds or removes reaches it. (Favourites used to be one list per game-data set, shared by every character on it. Each character from then took its own copy of that list the first time it loaded under this version.)
 
 ## Importing and switching sets
 
@@ -2227,8 +2229,8 @@ Two related editors live outside this window: the **keybind rebind dialog** (ope
 Every tab makes this visible: its controls sit under **banner-headed sections** naming the tier they save to (Global client settings / BBS settings / Character profile settings), so you can see at a glance where a change lands. A tab whose settings are all one tier shows a single banner; the mixed tabs (BBS + Display, General, Toolbar + Shortcuts, Other) split into a section per tier. The tiers:
 
 - **Character-tier** (the vast majority of settings — Combat, Spells, Health, Party, Cash, Talk, Auto-Light, Auto-Lair, Auto-Trainer, most of General, keybinds, macros) live inside that character's own profile file and only apply to that one character.
-- **BBS-tier** (connection info, reconnect behavior, terminal size, and the board's realms with their own settings) live in that BBS's own file and are shared by every character who plays there; each **realm** also keeps its own collected data, shared by the characters playing it. Characters that are online together, a client each, see each other's changes to that shared data within a second or two, and whatever a character saw last is what stands: the **boss list** and **boss timers**, **stash balances**, the **player database**, **Roomba** room labels and item sightings, **leaderboard** captures and **unrecognized lines**. (GOTO favourites and triggers are each character's own and aren't shared.)
-- **Global-tier** (a handful of install-wide toggles — navigation-line colors, the Pyramid/Asylum puzzle solvers, confirmation prompts, the Help-menu website list, player-database cleanup) apply to every character on every BBS on this install.
+- **BBS-tier** (connection info, reconnect behavior, terminal size, and the board's realms with their own settings) live in that BBS's own file and are shared by every character who plays there; each **realm** also keeps its own collected data, shared by the characters playing it. Characters that are online together, a client each, see each other's changes to that shared data within a second or two, and whatever a character saw last is what stands: the **boss list** and **boss timers**, **stash balances**, the **player database**, the **room blacklist**, **Roomba** room labels and item sightings, **leaderboard** captures and **unrecognized lines**. The same goes for a Game Data Browser edit saved **for all characters** or **only for this realm**, and for the quest guides. A BBS's settings are saved a change at a time, so two clients changing different things both keep theirs. (GOTO favourites and triggers are each character's own and aren't shared.)
+- **Global-tier** (a handful of install-wide toggles — navigation-line colors, the Pyramid/Asylum puzzle solvers, confirmation prompts, the Help-menu website list, player-database cleanup) apply to every character on every BBS on this install. Every open client shares them: change one in a client and the others take it up within a second or two, and two clients changing different settings both keep theirs.
 
 All of this is stored under a single MudPlay data folder (`~/.local/share/MudPlay/` on Linux, `%AppData%\MudPlay\` on Windows, `~/Library/Application Support/MudPlay/` on macOS) as JSON files that only record *deltas* from the tier below them — so an unmodified setting isn't written to disk at all.
 
@@ -3794,7 +3796,7 @@ Settings → Talk.
 
 ### Custom emotes
 
-Under the toggle, the **Custom emotes** area lists **every** emote — the built-in ones and your own — with a filter box. This is a **global, all-characters** library (not part of any one character's profile), and — like the rest of this tab — edits only take effect when you press **Apply / OK**; **Cancel** discards them.
+Under the toggle, the **Custom emotes** area lists **every** emote — the built-in ones and your own — with a filter box. This library belongs to the **BBS**: every character on that BBS shares it, and another BBS has its own. (It used to be one library for every BBS; each BBS took a copy of it the first time it was loaded under this version.) It is not part of any one character's profile, and — like the rest of this tab — edits only take effect when you press **Apply / OK**; **Cancel** discards them.
 
 **Define your own.** Type a **shortcode**, then set its value one of two ways:
 

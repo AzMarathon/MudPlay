@@ -13,9 +13,8 @@ namespace MudPlay.Services;
 //
 // A profile takes its list the first time it loads (Favorites is null until then):
 // a character from before the move takes a copy of the list its game data carried,
-// and a character made since, or the default profile, takes the bundled starters
-// for its realm. That needs the profile's game-data set, so a profile loaded with
-// none waits for one.
+// which needs its game-data set, so one loaded with none waits for it. A character
+// made since, or the default profile, starts with no favourites (user, 2026-10-06).
 //
 // Singleton in AppServices. Consumers (Navigation view-model) subscribe to
 // Changed for refresh; the store doesn't push a sorted view itself — sort order
@@ -308,13 +307,16 @@ public sealed class FavoritesStore
     // carries it, and until then a reload takes the same list again.
     private void TakeFirstList(CharacterProfile profile)
     {
+        bool shared = profile.PredatesOwnLists && _profile.CurrentProfileName is not null;
+        if (!shared)
+        {
+            profile.Favorites = new List<FavoriteRoom>();
+            profile.FavoriteFolders = new List<string>();
+            return;
+        }
         if (_profileSet() is not { Length: > 0 } set) return;
 
-        bool shared = profile.PredatesOwnLists && _profile.CurrentProfileName is not null;
-        string source = shared
-            ? AppPaths.GameDataSetFavoritesFile(set)
-            : Path.Combine(AppPaths.BundledNavSeedDir(GameDataRealm.Resolve(set)), "Favorites.json");
-
+        string source = AppPaths.GameDataSetFavoritesFile(set);
         FavoritesFile? file = null;
         try { file = JsonStore.Load<FavoritesFile>(source); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
@@ -325,14 +327,13 @@ public sealed class FavoritesStore
 
         profile.Favorites = file?.Favorites ?? new List<FavoriteRoom>();
         profile.FavoriteFolders = file?.FavoriteFolders ?? new List<string>();
-        _log?.Info("Favorites", shared
-            ? $"took a copy of the {profile.Favorites.Count} favourite(s) shared on game data '{set}'"
-            : $"started with the {profile.Favorites.Count} bundled favourite(s)");
+        _log?.Info("Favorites",
+            $"took a copy of the {profile.Favorites.Count} favourite(s) shared on game data '{set}'");
     }
 }
 
-// On-disk shape of a Favorites.json (a set's old shared list, or the bundled
-// starters) — favourites plus any empty folders.
+// On-disk shape of a set's old shared Favorites.json — favourites plus any empty
+// folders.
 internal sealed class FavoritesFile
 {
     public List<FavoriteRoom>? Favorites { get; set; }

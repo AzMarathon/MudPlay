@@ -2744,6 +2744,13 @@ public sealed class AppServices
         // resolution chain stay the single source of truth.
         Players = new PlayerDatabase(Profile, ActiveRealmFolder);
         Tick.HeartbeatElapsed += () => Players.TakeInOutsideChanges();
+        // The settings files every client shares: global.json, and the game-data
+        // edits made for all characters or for a realm.
+        Tick.HeartbeatElapsed += () =>
+        {
+            Settings.TakeInOutsideChanges();
+            Resolver.TakeInOutsideOverrideChanges();
+        };
         // Board-specific disconnect line: PartyManager reads the active BBS's
         // custom DisconnectPattern live (empty on boards that use the standard
         // lines) and resolves a captured presence name — which on some boards is
@@ -3565,8 +3572,16 @@ public sealed class AppServices
         // (the store subscribes to Profile.BbsPinApplied / ProfileClosed via the
         // ResolveActiveBbs provider). The mechanical step + bonus data the Quest
         // Status tab shows is crawled from TBInfo at runtime, not stored here.
-        Quests = new QuestStore(Profile, ActiveRealmFolder, Log);
+        Quests = new QuestStore(Profile, ProfileGameDataSet, ActiveRealmFolder, Log);
+        // A set picked from the Game Data menu changes with no profile event.
+        GameData.ActiveSetChanged += set => Quests.OnActiveSetChanged(set, ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () => Quests.TakeInOutsideChanges();
         Emotes = new EmoteStore(log: Log);
+        Profile.ProfileLoaded += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Profile.ProfileClosed += () => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Tick.HeartbeatElapsed += () => Emotes.TakeInOutsideChanges();
 
         // Boss catalog — the realm's list (seed + the realm's overlay); timer values
         // are looked up from game data at runtime. Reloads its overlay on a realm
@@ -7329,6 +7344,7 @@ public sealed class AppServices
         RoomBlacklist = new RoomBlacklistStore(Log);
         Profile.ProfileLoaded += _ => RoomBlacklist.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => RoomBlacklist.OnRealmChanged(ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () => RoomBlacklist.TakeInOutsideChanges();
 
         // Per-BBS "top N" leaderboard history + its live capture tracker. The
         // store loads on BBS pin (same shape as the blacklist); the tracker binds

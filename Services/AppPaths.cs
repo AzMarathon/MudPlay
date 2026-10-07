@@ -412,6 +412,18 @@ public static class AppPaths
     public static string LegacySetBossesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "bosses.json");
 
+    // The user's quest-guide overlay for a game-data set: names, visibility and
+    // edited step write-ups. QuestStore resolves it ABOVE the universal
+    // DefaultQuestDefsSeedFile underlay. A guide describes the game the set holds,
+    // so it is the set's, shared by every realm and character on it; which quests a
+    // character has finished is kept on the character.
+    public static string QuestsFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), "quests.json");
+
+    // The realm folders whose old quest-guide file a set has already taken in.
+    public static string QuestsAdoptedRealmsFile(string setName) =>
+        Path.Combine(GameDataSetDir(setName), ".quests-adopted.json");
+
     // Where boss kill-times used to live, per game-data set, before they moved to
     // the realm (RealmBossTimersFile). Read once by RealmMigration.
     public static string LegacySetBossTimersFile(string setName) =>
@@ -574,6 +586,11 @@ public static class AppPaths
     public static string BbsFolder(string bbsName) =>
         Path.Combine(BbsDir, bbsName);
 
+    // A BBS's emote library: emotes.json plus its images. AppPaths.EmotesDir is the
+    // library every BBS used before, and what a BBS with none of its own copies.
+    public static string BbsEmotesDir(string bbsName) =>
+        Path.Combine(BbsFolder(bbsName), "Emotes");
+
     // Primary BBS settings file inside BbsFolder.
     public static string BbsProfileFile(string bbsName) =>
         Path.Combine(BbsFolder(bbsName), "bbs.json");
@@ -682,11 +699,9 @@ public static class AppPaths
     public static string RealmStashBalancesFile(string realmFolder) =>
         Path.Combine(realmFolder, "stash-balances.json");
 
-    // The user's quest-definition overlay. QuestStore resolves it ABOVE the
-    // universal DefaultQuestDefsSeedFile underlay, so a player's edits belong to
-    // the realm they're playing, not the imported game-data set. The mechanical
-    // data (ordered steps + stat bonuses) is crawled from the active set's TBInfo.
-    public static string RealmQuestsFile(string realmFolder) =>
+    // Where a realm's quest-guide edits used to be kept, before the guides went
+    // back to the game-data set (QuestsFile). A set takes each realm's in once.
+    public static string LegacyRealmQuestsFile(string realmFolder) =>
         Path.Combine(realmFolder, "quests.json");
 
     // Per-BBS folder holding every character that connects to that BBS. Profiles

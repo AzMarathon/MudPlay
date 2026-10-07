@@ -4,11 +4,13 @@ namespace MudPlay.Services;
 
 // Loads and resolves quest definitions. Two layers merge per (flag, step) in
 // priority order:
-//   1. the user's overlay, the active realm's quests.json — display name,
-//      show/hide visibility, edited step markdown. A player's edits belong to the
-//      realm they play, so the overlay follows the active realm (it wins over the
-//      seed), reloading on ProfileService.ProfileLoaded / BbsPinApplied /
-//      ProfileClosed;
+//   1. the user's overlay, the active game-data set's quests.json — display name,
+//      show/hide visibility, edited step markdown. A guide describes the game the
+//      set holds, so it is the set's (it wins over the seed) and every realm and
+//      character on the set shares it; which quests a character has finished is
+//      kept on the character (CharacterProfile.QuestLog). The overlay was kept per
+//      realm for a while: a set takes in each realm's old file once, as that realm
+//      loads (the first one whole, later ones for the quests the set lacks);
 //   2. the universal read-only seed QuestDefs.seed.json in Data/Global, built
 //      from the bundled Defaults seed, keyed by game-data flag numbers (custom
 //      realms reuse the numbers) so a curated default ports across every board;
@@ -27,55 +29,112 @@ public sealed class QuestStore
 {
     private readonly LogService? _log;
     private readonly string _seedPath;
+    private readonly Func<string?>? _activeSet;
     private readonly Func<string?>? _activeRealmFolder;
     private readonly Dictionary<(int Flag, int Step), QuestDefinition> _seed = new();
     private readonly Dictionary<(int Flag, int Step), QuestDefinition> _overlay = new();
+    private readonly SharedFileStamp _stamp = new();
 
-    // Folder of the realm whose overlay is loaded, or null when none.
-    public string? ActiveRealmFolder { get; private set; }
+    // The game-data set whose overlay is loaded, or null when none.
+    public string? ActiveSet { get; private set; }
 
-    // Raised after the overlay reloads (realm change / profile close) so consumers
-    // re-resolve their displayed quest text.
+    // Raised after the overlay reloads (set change, a realm's old file taken in,
+    // another client's save) so consumers re-resolve their displayed quest text.
     public event Action? Reloaded;
 
-    // Production ctor: seed from Data/Global; the overlay tracks the active realm,
-    // reloading on ProfileService.ProfileLoaded / BbsPinApplied / ProfileClosed.
-    // profile + activeRealmFolder are parameterized so tests can drive the store
-    // without a live ProfileService (pass a null provider and call
-    // OnActiveRealmChanged directly). seedPath defaults to
-    // AppPaths.DefaultQuestDefsSeedFile so a test can point at a scratch seed.
-    public QuestStore(ProfileService? profile = null, Func<string?>? activeRealmFolder = null,
-                      LogService? log = null, string? seedPath = null)
+    // Production ctor: seed from Data/Global; the overlay tracks the profile's
+    // game-data set, reloading on ProfileService.ProfileLoaded / BbsPinApplied /
+    // ProfileClosed. The providers are parameterized so tests can drive the store
+    // without a live ProfileService (pass none and call OnActiveSetChanged
+    // directly). seedPath defaults to AppPaths.DefaultQuestDefsSeedFile so a test
+    // can point at a scratch seed.
+    public QuestStore(ProfileService? profile = null, Func<string?>? activeSet = null,
+                      Func<string?>? activeRealmFolder = null, LogService? log = null, string? seedPath = null)
     {
         _log = log;
+        _activeSet = activeSet;
         _activeRealmFolder = activeRealmFolder;
         _seedPath = seedPath ?? AppPaths.DefaultQuestDefsSeedFile;
         LoadInto(_seed, _seedPath, "seed");
-
         if (profile is not null)
         {
-            // ProfileLoaded too: a profile swap otherwise kept the realm resolved
-            // mid-swap (while no profile was current), which could be another board's.
-            profile.ProfileLoaded += _ => ReloadForActiveRealm();
-            profile.BbsPinApplied += _ => ReloadForActiveRealm();
-            profile.ProfileClosed += ReloadForActiveRealm;
+            profile.ProfileLoaded += _ => ReloadForProfile();
+            profile.BbsPinApplied += _ => ReloadForProfile();
+            profile.ProfileClosed += ReloadForProfile;
         }
-        ReloadForActiveRealm();
+        ReloadForProfile();
     }
 
-    // Reload the overlay for whatever realm the provider reports as active.
-    private void ReloadForActiveRealm() => OnActiveRealmChanged(_activeRealmFolder?.Invoke());
+    private void ReloadForProfile() => OnActiveSetChanged(_activeSet?.Invoke(), _activeRealmFolder?.Invoke());
 
-    // Swap the loaded overlay to the realm folder's quests.json (empty when the
-    // realm has no overlay yet, or the folder is blank). Public so tests can drive
-    // it directly; production reloads via the profile hooks.
-    public void OnActiveRealmChanged(string? realmFolder)
+    // Swap the loaded overlay to the set's quests.json (empty when the set has none
+    // yet, or the name is blank), first taking in realmFolder's old per-realm file
+    // when the set hasn't had it. Public so tests can drive it directly.
+    public void OnActiveSetChanged(string? setName, string? realmFolder = null)
     {
         _overlay.Clear();
-        ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
-        if (ActiveRealmFolder is not null)
-            LoadInto(_overlay, AppPaths.RealmQuestsFile(ActiveRealmFolder), "overlay");
+        ActiveSet = string.IsNullOrWhiteSpace(setName) ? null : setName;
+        if (ActiveSet is not null)
+        {
+            TakeInRealmFile(ActiveSet, realmFolder);
+            Load();
+        }
         Reloaded?.Invoke();
+    }
+
+    // Re-read the overlay when another client on the set has saved it. Called on
+    // the heartbeat. True when anything was re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (ActiveSet is null || !_stamp.ChangedOutside(AppPaths.QuestsFile(ActiveSet))) return false;
+        Load();
+        Reloaded?.Invoke();
+        return true;
+    }
+
+    private void Load()
+    {
+        string path = AppPaths.QuestsFile(ActiveSet!);
+        _stamp.Mark(path);
+        LoadInto(_overlay, path, "overlay");
+    }
+
+    // A realm's guide edits from when they were kept per realm. The first realm a
+    // set takes in replaces the set's own file, which dates from before the guides
+    // went to the realm and is older than any realm's; a later realm only adds the
+    // quests the set still lacks, so the first one's edits stand.
+    private void TakeInRealmFile(string setName, string? realmFolder)
+    {
+        if (string.IsNullOrWhiteSpace(realmFolder)) return;
+        string realmFile = AppPaths.LegacyRealmQuestsFile(realmFolder);
+        if (!System.IO.File.Exists(realmFile)) return;
+
+        string marker = AppPaths.QuestsAdoptedRealmsFile(setName);
+        try
+        {
+            List<string> taken = JsonStore.Load<List<string>>(marker) ?? new List<string>();
+            if (taken.Contains(realmFolder, StringComparer.OrdinalIgnoreCase)) return;
+
+            Dictionary<(int Flag, int Step), QuestDefinition> theirs = new();
+            LoadInto(theirs, realmFile, "realm overlay");
+            Dictionary<(int Flag, int Step), QuestDefinition> ours = new();
+            string setFile = AppPaths.QuestsFile(setName);
+            if (taken.Count > 0) LoadInto(ours, setFile, "overlay");
+            else if (System.IO.File.Exists(setFile))
+                System.IO.File.Copy(setFile, setFile + ".bak", overwrite: true);
+
+            foreach (((int Flag, int Step) key, QuestDefinition def) in theirs) ours.TryAdd(key, def);
+            JsonStore.Save(setFile, ours.Values.OrderBy(d => d.Flag).ThenBy(d => d.Step).ToList());
+            taken.Add(realmFolder);
+            JsonStore.Save(marker, taken);
+            _log?.Info("Quests", $"quest guides from '{realmFolder}' taken into game-data set '{setName}'");
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException
+                                       or System.IO.InvalidDataException)
+        {
+            // Left for the next load; the set's own overlay still loads.
+            _log?.Warn("Quests", $"couldn't take in the quest guides from '{realmFolder}': {ex.Message}");
+        }
     }
 
     // Resolve the effective definition for a quest: the user overlay if it names
@@ -89,17 +148,17 @@ public sealed class QuestStore
         return new QuestDefinition(flag, step);
     }
 
-    // Persist the user's edited definitions to the active realm's overlay
+    // Persist the user's edited definitions to the active set's overlay
     // (its quests.json) and refresh the in-memory layer so later
     // Resolve calls see the edits immediately. The overlay stays a delta: a
     // definition that matches what Resolve would return with no overlay (the seed
     // entry, or a blank auto-draft) is dropped rather than frozen into the file,
     // so a later seed update still flows through for untouched quests. No-op when
-    // no realm is active.
+    // no set is active.
     public void Save(IEnumerable<QuestDefinition> defs)
     {
         ArgumentNullException.ThrowIfNull(defs);
-        if (ActiveRealmFolder is null) return;
+        if (ActiveSet is null) return;
 
         _overlay.Clear();
         foreach (QuestDefinition raw in defs)
@@ -121,13 +180,15 @@ public sealed class QuestStore
             .ToList();
         try
         {
-            JsonStore.Save(AppPaths.RealmQuestsFile(ActiveRealmFolder), list);
+            string path = AppPaths.QuestsFile(ActiveSet);
+            JsonStore.Save(path, list);
+            _stamp.Mark(path);
         }
         catch (Exception ex)
         {
             // A failed write (permissions, disk) shouldn't crash the editor — the
             // in-memory overlay still reflects the edits for this session.
-            _log?.Warn("Quests", $"Failed to save overlay to '{ActiveRealmFolder}': {ex.Message}");
+            _log?.Warn("Quests", $"Failed to save overlay for '{ActiveSet}': {ex.Message}");
         }
     }
 
