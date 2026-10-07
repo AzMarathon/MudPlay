@@ -362,10 +362,10 @@ public static class AppPaths
     public static string BundledItemOverlaySeedFile(string realm) =>
         Path.Combine(BundledSeedsDir, $"ItemOverlay.{realm}.seed.json");
 
-    // Per-set Triggers file scoped inside the game-data set's folder. Stores
-    // only the TriggerLocation.GameData-scoped triggers; the
-    // TriggerLocation.Profile-scoped ones live on CharacterProfile.Triggers.
-    public static string TriggersFile(string setName) =>
+    // Where the triggers saved "to the game data" used to live, per set, before
+    // every trigger became the character's own. A profile from then takes a copy
+    // (TriggerEngine).
+    public static string LegacySetTriggersFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "triggers.json");
 
 
@@ -409,11 +409,9 @@ public static class AppPaths
     public static string BundledQuestDefsSeedFile =>
         Path.Combine(BundledSeedsDir, "QuestDefs.seed.json");
 
-    // Per-set boss-catalog overlay scoped inside the game-data set's folder — the
-    // user-owned boss layer (added/removed bosses, edited rooms, stop-before flags),
-    // a delta over DefaultBossDefsSeedFile. The boss list is realm-wide, so it lives
-    // with the set, not the profile.
-    public static string BossesFile(string setName) =>
+    // Where the user's boss list used to live, per game-data set, before it moved
+    // to the realm (RealmBossesFile). A realm with no list of its own takes a copy.
+    public static string LegacySetBossesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "bosses.json");
 
     // Where boss kill-times used to live, per game-data set, before they moved to
@@ -592,9 +590,10 @@ public static class AppPaths
     public static string GameDataSetLoopsFolder(string setName) =>
         Path.Combine(GameDataSetDir(setName), "Loops");
 
-    // Per-game-data-set GOTO favourites file. Keyed on the set (the realm's MDB)
-    // rather than the character, so favourites follow the realm across every BBS /
-    // character that points at that set — same rationale as the loop library above.
+    // The GOTO favourites every character on a set once shared. Favourites are the
+    // character's own now (CharacterProfile.Favorites); this file is what a
+    // character from before copies on its first load, and NavSeedBootstrapper still
+    // keeps the bundled starters in it for that.
     public static string GameDataSetFavoritesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "Favorites.json");
 
@@ -662,6 +661,12 @@ public static class AppPaths
     // update far more often than the room labels do.
     public static string RealmRoombaItemsFile(string realmFolder) =>
         Path.Combine(realmFolder, "roomba_items.json");
+
+    // The realm's boss list — the user-owned layer (added / removed bosses, edited
+    // rooms, stop-before flags), a delta over DefaultBossDefsSeedFile. Two realms on
+    // the same game data keep their own.
+    public static string RealmBossesFile(string realmFolder) =>
+        Path.Combine(realmFolder, "bosses.json");
 
     // Tracked boss kill-times ({name: killed-at UTC}), persisted so a long respawn
     // timer survives an app restart. Observed in play, so they belong to the realm.

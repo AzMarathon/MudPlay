@@ -231,18 +231,18 @@ public sealed class GameDataSetManagerTests : IDisposable
         string src = CreateSet();
         string dst = CreateSet();
         SeedLoop(src, "a.loop");
-        File.WriteAllText(AppPaths.GameDataSetFavoritesFile(src), "old favourites");
-        File.WriteAllText(AppPaths.BossesFile(src), "old bosses");
-        File.WriteAllText(AppPaths.GameDataSetFavoritesFile(dst), "seeded favourites");
+        File.WriteAllText(AppPaths.MessagesFile(src), "old messages");
+        File.WriteAllText(AppPaths.MessageCandidatesFile(src), "old lines");
+        File.WriteAllText(AppPaths.MessagesFile(dst), "the new set's messages");
 
         GameDataSetManager.OpResult result = NewManager(cache)
-            .Copy(src, dst, GameDataSetPart.Favorites | GameDataSetPart.Bosses);
+            .Copy(src, dst, GameDataSetPart.Messages | GameDataSetPart.UnrecognizedLines);
 
         Assert.True(result.Ok, result.Message);
-        Assert.Equal("old favourites", File.ReadAllText(AppPaths.GameDataSetFavoritesFile(dst)));
-        Assert.Equal("old bosses", File.ReadAllText(AppPaths.BossesFile(dst)));
+        Assert.Equal("old messages", File.ReadAllText(AppPaths.MessagesFile(dst)));
+        Assert.Equal("old lines", File.ReadAllText(AppPaths.MessageCandidatesFile(dst)));
         Assert.False(Directory.Exists(AppPaths.GameDataSetLoopsFolder(dst)));   // loops weren't ticked
-        Assert.True(File.Exists(AppPaths.GameDataSetFavoritesFile(src)));       // a copy keeps the source
+        Assert.True(File.Exists(AppPaths.MessagesFile(src)));                   // a copy keeps the source
     }
 
     [Fact]
@@ -316,17 +316,17 @@ public sealed class GameDataSetManagerTests : IDisposable
         GameDataCache cache = new();
         string src = CreateSet();
         string dst = CreateSet();
-        File.WriteAllText(AppPaths.TriggersFile(src), "t");
+        File.WriteAllText(AppPaths.MessagesFile(src), "m");
         cache.SwitchSet(dst);
 
         GameDataSetPart changed = GameDataSetPart.None;
         GameDataSetManager manager = new(cache, c => changed = c, _ => { });
         GameDataSetManager.OpResult result =
-            manager.Copy(src, dst, GameDataSetPart.Triggers | GameDataSetPart.Bosses);
+            manager.Copy(src, dst, GameDataSetPart.Messages | GameDataSetPart.UnrecognizedLines);
 
         Assert.True(result.Ok, result.Message);
-        Assert.Equal(GameDataSetPart.Triggers, changed);
-        Assert.Contains("Nothing there for: boss list", result.Message);
+        Assert.Equal(GameDataSetPart.Messages, changed);
+        Assert.Contains("Nothing there for: unrecognized lines", result.Message);
     }
 
     // ----- Delete ----------------------------------------------------

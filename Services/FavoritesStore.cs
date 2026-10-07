@@ -1,23 +1,21 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
 
-// Per-game-data-set favourite-room bookmarks for the Navigation GOTO pane. Keyed
-// on the active game-data set (the realm's MDB) rather than the character, so
-// favourites follow the realm across every BBS / character that points at that
-// set — the same model the loop library (LoopManager) uses. Hydrates the
-// in-memory cache from Data/game data/{set}/Favorites.json on
-// GameDataCache.ActiveSetChanged and rewrites the whole file on every mutation.
+// Per-character favourite-room bookmarks for the Navigation GOTO pane, kept on the
+// profile (CharacterProfile.Favorites). They were kept per game-data set, shared by
+// every character on it, and two realms on the same game data then shared one
+// list; they are the character's own now, like its macros and aliases.
 //
-// Every client on that set shares the file, and they are often open together, each
-// with its own copy of the list. So the file is re-read whenever another client
-// wrote it, on a poll and before every change, and a change is then written on top
-// of what that client last saved. Written from its own copy alone, each client's
-// save threw away what the other had added, and after a restart one character's
-// favourites had become the other's.
+// A profile takes its list the first time it loads (Favorites is null until then):
+// a character from before the move takes a copy of the list its game data carried,
+// and a character made since, or the default profile, takes the bundled starters
+// for its realm. That needs the profile's game-data set, so a profile loaded with
+// none waits for one.
 //
 // Singleton in AppServices. Consumers (Navigation view-model) subscribe to
 // Changed for refresh; the store doesn't push a sorted view itself — sort order
@@ -32,29 +30,38 @@ public sealed class FavoritesStore
     // Favorites flyout) at once. Enforced on the write side by SetStarred.
     public const int MaxStarred = 10;
 
-    private readonly GameDataCache _cache;
+    private readonly ProfileService _profile;
+    private readonly Func<string?> _profileSet;
     private readonly LogService? _log;
     private readonly Dictionary<RoomKey, FavoriteRoom> _favorites = new();
 
     // Empty folders the user created but hasn't filled yet.
     private readonly HashSet<string> _emptyFolders = new(StringComparer.OrdinalIgnoreCase);
 
-    // Active game-data set the favourites are sourced from; null when no set is active.
-    private string? _setName;
-
-    public FavoritesStore(GameDataCache cache, LogService? log = null)
+    // profileSet names the game-data set the loaded profile runs on (its realm's,
+    // else the default), which is where a first list is copied from.
+    public FavoritesStore(ProfileService profile, GameDataCache cache, Func<string?> profileSet,
+        LogService? log = null)
     {
+        ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(cache);
-        _cache = cache;
+        ArgumentNullException.ThrowIfNull(profileSet);
+        _profile = profile;
+        _profileSet = profileSet;
         _log = log;
 
-        _cache.ActiveSetChanged += OnActiveSetChanged;
-
-        // Pick up the already-active set, if any.
-        LoadForSet(_cache.ActiveSet);
+        _profile.ProfileLoaded += Hydrate;
+        _profile.ProfileClosed += OnProfileClosed;
+        // A profile that loaded before any game data was there takes its list once
+        // a set is.
+        cache.ActiveSetChanged += _ =>
+        {
+            if (_profile.Current is { Favorites: null } waiting) Hydrate(waiting);
+        };
+        if (_profile.Current is { } current) Hydrate(current);
     }
 
-    // Read-only snapshot of every favourite for the active game-data set.
+    // Read-only snapshot of every favourite the loaded character has.
     public IReadOnlyCollection<FavoriteRoom> All => _favorites.Values;
 
     // True when key is currently bookmarked.
@@ -75,12 +82,11 @@ public sealed class FavoritesStore
     // Toggle key's quick-access star. Persists + fires Changed on a real change.
     // Returns false without changing anything when turning the star ON would push
     // past MaxStarred (the write-side cap), when the key isn't bookmarked, or when
-    // no set is active. Turning OFF and no-op re-sets (already in the wanted state)
+    // no profile is loaded. Turning OFF and no-op re-sets (already in the wanted state)
     // return true.
     public bool SetStarred(RoomKey key, bool starred)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return false;
+        if (_profile.Current is null) return false;
         if (!_favorites.TryGetValue(key, out FavoriteRoom? entry)) return false;
         if (entry.Starred == starred) return true;
         if (starred && StarredCount >= MaxStarred) return false;
@@ -109,16 +115,15 @@ public sealed class FavoritesStore
         }
     }
 
-    // Fires after every mutation (add / rename / remove / move / folder op / set-swap).
+    // Fires after every mutation (add / rename / remove / move / folder op / profile swap).
     public event Action? Changed;
 
     // Bookmark key with an optional user-typed label and target folder. No-op
     // when the key is already in the list (rename via Rename or remove + add) or
-    // no set is active. Persists immediately.
+    // no profile is loaded. Persists immediately.
     public void Add(RoomKey key, string? label = null, string? folder = null)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return;
+        if (_profile.Current is null) return;
         if (_favorites.ContainsKey(key)) return;
 
         string norm = NavFolders.Normalize(folder);
@@ -131,11 +136,10 @@ public sealed class FavoritesStore
         Changed?.Invoke();
     }
 
-    // Update an existing favourite's label. No-op when not bookmarked or no set active.
+    // Update an existing favourite's label. No-op when not bookmarked or no profile is loaded.
     public void Rename(RoomKey key, string? newLabel)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return;
+        if (_profile.Current is null) return;
         if (!_favorites.TryGetValue(key, out FavoriteRoom? entry)) return;
 
         entry.Label = newLabel;
@@ -149,7 +153,6 @@ public sealed class FavoritesStore
     // the new key carrying the folder over; a same-coordinate edit is a relabel.
     public void Edit(RoomKey oldKey, RoomKey newKey, string? newLabel)
     {
-        TakeInOutsideChanges();
         if (oldKey.Equals(newKey))
         {
             Rename(oldKey, newLabel);
@@ -160,11 +163,10 @@ public sealed class FavoritesStore
         Add(newKey, newLabel, folder);
     }
 
-    // Remove the favourite. No-op when not bookmarked or no set active.
+    // Remove the favourite. No-op when not bookmarked or no profile is loaded.
     public void Remove(RoomKey key)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return;
+        if (_profile.Current is null) return;
         if (!_favorites.Remove(key)) return;
 
         Persist();
@@ -173,11 +175,10 @@ public sealed class FavoritesStore
     }
 
     // Move a bookmarked room into folder (empty = root). No-op when not
-    // bookmarked, no set active, or already there. Persists immediately.
+    // bookmarked, no profile loaded, or already there. Persists immediately.
     public void MoveFavorite(RoomKey key, string? folder)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return;
+        if (_profile.Current is null) return;
         if (!_favorites.TryGetValue(key, out FavoriteRoom? entry)) return;
 
         string norm = NavFolders.Normalize(folder);
@@ -192,12 +193,11 @@ public sealed class FavoritesStore
     }
 
     // Create an empty folder so it shows in the tree before any favourite is
-    // filed under it. No-op when no set active or the folder already exists
+    // filed under it. No-op when no profile is loaded or the folder already exists
     // (as an empty record or via a favourite).
     public void AddFolder(string path)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return;
+        if (_profile.Current is null) return;
         string norm = NavFolders.Normalize(path);
         if (norm.Length == 0) return;
         if (AllFolders.Any(f => string.Equals(f, norm, StringComparison.OrdinalIgnoreCase))) return;
@@ -208,11 +208,10 @@ public sealed class FavoritesStore
     }
 
     // Rename folder oldPath (and every sub-folder / favourite beneath it) to
-    // newPath. No-op when no set active or the path is the root.
+    // newPath. No-op when no profile is loaded or the path is the root.
     public void RenameFolder(string oldPath, string newPath)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return;
+        if (_profile.Current is null) return;
         string from = NavFolders.Normalize(oldPath);
         string to = NavFolders.Normalize(newPath);
         if (from.Length == 0 || to.Length == 0) return;
@@ -233,11 +232,10 @@ public sealed class FavoritesStore
     // Remove folder path. When moveContentsToParent is true, favourites and
     // sub-folders beneath it are re-parented one level up; otherwise the caller
     // must have emptied it first (anything still inside is also re-parented to
-    // keep favourites from being orphaned). No-op at the root or with no set active.
+    // keep favourites from being orphaned). No-op at the root or with no profile loaded.
     public void RemoveFolder(string path, bool moveContentsToParent = true)
     {
-        TakeInOutsideChanges();
-        if (_setName is null) return;
+        if (_profile.Current is null) return;
         string from = NavFolders.Normalize(path);
         if (from.Length == 0) return;
         string parent = NavFolders.Parent(from);
@@ -271,66 +269,70 @@ public sealed class FavoritesStore
         foreach (string r in rebased) _emptyFolders.Add(r);
     }
 
-    // Write the whole cache back to the active set's Favorites.json.
+    // Put the whole list back on the profile and save it.
     private void Persist()
     {
-        if (_setName is null) return;
-        FavoritesFile file = new()
-        {
-            Favorites = _favorites.Values.ToList(),
-            FavoriteFolders = _emptyFolders.ToList(),
-        };
-        string path = AppPaths.GameDataSetFavoritesFile(_setName);
-        JsonStore.Save(path, file);
-        _seenWrite = WriteTime(path);
+        if (_profile.Current is not { } current) return;
+        current.Favorites = _favorites.Values.ToList();
+        current.FavoriteFolders = _emptyFolders.ToList();
+        _profile.Save();
     }
 
-    // Write time of the file as this client last read or wrote it.
-    private DateTime _seenWrite = DateTime.MinValue;
-
-    // Re-read the favourites when another client on this set has written them.
-    // Called on the heartbeat and before every change. True when anything was re-read.
-    public bool TakeInOutsideChanges()
-    {
-        if (_setName is null) return false;
-        if (WriteTime(AppPaths.GameDataSetFavoritesFile(_setName)) == _seenWrite) return false;
-        LoadForSet(_setName);
-        _log?.Debug("Favorites", "favourites re-read: another client on this game-data set changed them");
-        return true;
-    }
-
-    private static DateTime WriteTime(string path) =>
-        File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
-
-    private void OnActiveSetChanged(string? setName) => LoadForSet(setName);
-
-    private void LoadForSet(string? setName)
+    private void OnProfileClosed()
     {
         _favorites.Clear();
         _emptyFolders.Clear();
-        _setName = string.IsNullOrWhiteSpace(setName) ? null : setName;
-        _seenWrite = _setName is null ? DateTime.MinValue : WriteTime(AppPaths.GameDataSetFavoritesFile(_setName));
-
-        if (_setName is not null)
-        {
-            FavoritesFile? file = null;
-            try { file = JsonStore.Load<FavoritesFile>(AppPaths.GameDataSetFavoritesFile(_setName)); }
-            catch { /* malformed / unreadable — start empty rather than crash */ }
-
-            if (file?.Favorites is { } list)
-                foreach (FavoriteRoom f in list) _favorites[new RoomKey(f.Map, f.Room)] = f;
-            if (file?.FavoriteFolders is { } folders)
-                foreach (string e in folders)
-                {
-                    string norm = NavFolders.Normalize(e);
-                    if (norm.Length != 0) _emptyFolders.Add(norm);
-                }
-        }
         Changed?.Invoke();
+    }
+
+    private void Hydrate(CharacterProfile profile)
+    {
+        _favorites.Clear();
+        _emptyFolders.Clear();
+        if (profile.Favorites is null) TakeFirstList(profile);
+
+        if (profile.Favorites is { } list)
+            foreach (FavoriteRoom f in list) _favorites[new RoomKey(f.Map, f.Room)] = f;
+        if (profile.FavoriteFolders is { } folders)
+            foreach (string e in folders)
+            {
+                string norm = NavFolders.Normalize(e);
+                if (norm.Length != 0) _emptyFolders.Add(norm);
+            }
+        Changed?.Invoke();
+    }
+
+    // Give a profile its first list. Only set on the profile here, not saved: this
+    // runs inside the profile load, when the other stores still hold the previous
+    // profile's state and a save would write theirs into this one. The next save
+    // carries it, and until then a reload takes the same list again.
+    private void TakeFirstList(CharacterProfile profile)
+    {
+        if (_profileSet() is not { Length: > 0 } set) return;
+
+        bool shared = profile.PredatesOwnLists && _profile.CurrentProfileName is not null;
+        string source = shared
+            ? AppPaths.GameDataSetFavoritesFile(set)
+            : Path.Combine(AppPaths.BundledNavSeedDir(GameDataRealm.Resolve(set)), "Favorites.json");
+
+        FavoritesFile? file = null;
+        try { file = JsonStore.Load<FavoritesFile>(source); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            // Unreadable — start empty rather than fail the load.
+            _log?.Warn("Favorites", $"couldn't read '{source}' for a first list ({ex.Message}); starting empty");
+        }
+
+        profile.Favorites = file?.Favorites ?? new List<FavoriteRoom>();
+        profile.FavoriteFolders = file?.FavoriteFolders ?? new List<string>();
+        _log?.Info("Favorites", shared
+            ? $"took a copy of the {profile.Favorites.Count} favourite(s) shared on game data '{set}'"
+            : $"started with the {profile.Favorites.Count} bundled favourite(s)");
     }
 }
 
-// On-disk shape of a set's Favorites.json — favourites plus any empty folders.
+// On-disk shape of a Favorites.json (a set's old shared list, or the bundled
+// starters) — favourites plus any empty folders.
 internal sealed class FavoritesFile
 {
     public List<FavoriteRoom>? Favorites { get; set; }

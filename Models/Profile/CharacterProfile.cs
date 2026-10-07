@@ -14,7 +14,7 @@ public sealed class CharacterProfile
 {
     // The schema version a freshly-authored (fully-migrated) profile carries.
     // Bump in lockstep with a new Services.ProfileMigrations step.
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     // JSON schema version (see GlobalSettings.SchemaVersion for the contract).
     // A fresh profile is authored at CurrentSchemaVersion so it never triggers a
@@ -43,6 +43,23 @@ public sealed class CharacterProfile
     // profile load. Named capture variables emitted by matches are
     // app-session-scoped in the engine, not persisted here.
     public List<GameData.Trigger>? Triggers { get; set; }
+
+    // The trigger list is this character's whole list. False on a profile that has
+    // not yet taken its copy of the triggers that used to be kept with the game data
+    // (or the default ones, for a new character); TriggerEngine does that on load.
+    public bool OwnsTriggers { get; set; }
+
+    // The profile is older than per-character favourites and triggers, so the copy
+    // it takes is of the list every character on its game data shared. A character
+    // made since starts from the bundled starters instead. Set once by the schema
+    // upgrade and never cleared.
+    public bool PredatesOwnLists { get; set; }
+
+    // GOTO favourites and the empty folders made for them. Per character, kept by
+    // FavoritesStore. null = not taken yet (see PredatesOwnLists); an empty list is
+    // a character with no favourites.
+    public List<FavoriteRoom>? Favorites { get; set; }
+    public List<string>? FavoriteFolders { get; set; }
 
     // User-defined outgoing-text aliases. Per-character; loaded into AliasEngine
     // on profile load. Variables substitution inside an alias's expansion reads

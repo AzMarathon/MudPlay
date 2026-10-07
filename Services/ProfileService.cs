@@ -626,6 +626,9 @@ public sealed class ProfileService
         if (Current is null)
             throw new InvalidOperationException("No profile loaded to save.");
 
+        // Naming the default profile makes a new character: one that starts from
+        // the starters it holds, not from the lists older characters shared.
+        if (CurrentProfileName is null) Current.PredatesOwnLists = false;
         Current.Name = profileName;
         CurrentProfileName = profileName;
         CurrentBbsName = bbsName;
@@ -651,6 +654,11 @@ public sealed class ProfileService
 
         CharacterProfile fresh = ReadDefaultProfileFile();
         fresh.Name = profileName;
+        // Upgrade the template now: a default-profile file from an older version
+        // would otherwise mark the new character as older than per-character
+        // favourites and triggers, and it would take the shared lists as its own.
+        ProfileMigrations.Apply(fresh);
+        fresh.PredatesOwnLists = false;
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), fresh);
         Log?.Info(LogCategory, $"Created profile '{profileName}' on '{bbsName}'.");

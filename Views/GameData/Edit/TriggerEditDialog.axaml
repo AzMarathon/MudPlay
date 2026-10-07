@@ -30,7 +30,7 @@
     </Window.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto" RowSpacing="8">
 
             <!-- ===== Name + Enabled ===== -->
             <Grid Grid.Row="0" ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
@@ -41,20 +41,8 @@
                            Margin="12,0,0,0"/>
             </Grid>
 
-            <!-- ===== Location ===== -->
-            <Grid Grid.Row="1" ColumnDefinitions="100,*" ColumnSpacing="8">
-                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Location"/>
-                <ComboBox  Grid.Column="1"
-                           ItemsSource="{Binding LocationOptions}"
-                           SelectedValue="{Binding Location, Mode=TwoWay}"
-                           SelectedValueBinding="{Binding Value}"
-                           DisplayMemberBinding="{Binding Label}"
-                           HorizontalAlignment="Stretch"
-                           ToolTip.Tip="Where this trigger saves to. 'Game data' lives in the active set's triggers.json and travels with the realm; 'Profile' lives on the character and follows them across realms."/>
-            </Grid>
-
             <!-- ===== Scope + Match Type ===== -->
-            <Grid Grid.Row="2" ColumnDefinitions="100,*,100,180" ColumnSpacing="8">
+            <Grid Grid.Row="1" ColumnDefinitions="100,*,100,180" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Scope"/>
                 <ComboBox  Grid.Column="1"
                            ItemsSource="{Binding ScopeOptions}"
@@ -73,7 +61,7 @@
             </Grid>
 
             <!-- ===== Pattern ===== -->
-            <Grid Grid.Row="3" ColumnDefinitions="100,*" ColumnSpacing="8">
+            <Grid Grid.Row="2" ColumnDefinitions="100,*" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Pattern"
                            VerticalAlignment="Top" Margin="0,6,0,0"/>
                 <TextBox   Grid.Column="1"
@@ -87,7 +75,7 @@
                  stranded as a doubled gap above the Response box. The inner
                  StackPanel only spaces its *visible* children, so each piece
                  that's absent contributes nothing. -->
-            <StackPanel Grid.Row="4" Spacing="4">
+            <StackPanel Grid.Row="3" Spacing="4">
                 <!-- Status line — muted hint when valid, red when not.
                      Two TextBlocks overlap, gated by HasError. -->
                 <TextBlock Margin="108,0,0,0"
@@ -111,7 +99,7 @@
             </StackPanel>
 
             <!-- ===== Response (multi-line) ===== -->
-            <Grid Grid.Row="5" RowDefinitions="Auto,*,Auto" RowSpacing="3">
+            <Grid Grid.Row="4" RowDefinitions="Auto,*,Auto" RowSpacing="3">
                 <TextBlock Grid.Row="0" Classes="SectionHeader" Text="Response"/>
                 <TextBox   Grid.Row="1"
                            Text="{Binding Response, Mode=TwoWay}"
@@ -126,9 +114,9 @@
             </Grid>
 
             <!-- ===== Optional sidecars ===== -->
-            <TextBlock Grid.Row="6" Classes="SectionHeader" Text="Optional"/>
+            <TextBlock Grid.Row="5" Classes="SectionHeader" Text="Optional"/>
 
-            <Grid Grid.Row="7" ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
+            <Grid Grid.Row="6" ColumnDefinitions="100,*,Auto" ColumnSpacing="8">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Sound"/>
                 <TextBox   Grid.Column="1"
                            Text="{Binding SoundFile, Mode=TwoWay}"
@@ -140,7 +128,7 @@
             </Grid>
 
             <!-- ===== Buttons ===== -->
-            <StackPanel Grid.Row="8" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+            <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
                 <Button Content="Save"   Command="{Binding SaveCommand}"
                         IsEnabled="{Binding CanSave}"
                         IsDefault="True" MinWidth="80"/>

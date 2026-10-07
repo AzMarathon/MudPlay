@@ -2731,7 +2731,7 @@ public sealed class AppServices
         // RemoteCommands is constructed AFTER Chat / Party / Players are
         // ready (they're all dependencies). Handlers register later — the
         // engine is empty here; we just wire the plumbing.
-        Triggers = new TriggerEngine(Profile, Chat, Log);
+        Triggers = new TriggerEngine(Profile, Chat, Log, ProfileGameDataSet);
         Aliases = new AliasEngine(Profile);
         Macros = new MacroStore(Profile);
         MacroDispatcher = new MacroDispatcher(Macros);
@@ -3476,15 +3476,6 @@ public sealed class AppServices
         // ItemOverlaySeed.GetOverlay(number).
         ItemOverlaySeed = new ItemOverlaySeedStore(Log);
         GameData.ActiveSetChanged += ItemOverlaySeed.Load;
-        // Triggers split storage: GameData-scoped triggers live in the
-        // active set's per-set triggers.json; Profile-scoped triggers
-        // stay on CharacterProfile.Triggers. The engine reloads its
-        // GameData slice on every set switch — the Profile slice is
-        // owned by ProfileLoaded, wired inside TriggerEngine's ctor.
-        GameData.ActiveSetChanged += Triggers.OnActiveSetChanged;
-        if (GameData.ActiveSet is not null)
-            Triggers.OnActiveSetChanged(GameData.ActiveSet);
-
         // Coverage audit — fires on every set switch + every Messages
         // CollectionChanged; emits a summary LogEntry tagged
         // SpellCoverageAuditor.LogSource that the LogPane's
@@ -3572,12 +3563,16 @@ public sealed class AppServices
         Quests = new QuestStore(Profile, ActiveRealmFolder, Log);
         Emotes = new EmoteStore(log: Log);
 
-        // Boss catalog — realm-wide list (seed + per-set overlay); timer values are
-        // looked up from game data at runtime. Reloads its overlay on set change.
+        // Boss catalog — the realm's list (seed + the realm's overlay); timer values
+        // are looked up from game data at runtime. Reloads its overlay on a realm
+        // change, ahead of the timers below, which read it.
         Bosses = new BossStore(Log);
-        GameData.ActiveSetChanged += Bosses.OnActiveSetChanged;
-        if (GameData.ActiveSet is not null)
-            Bosses.OnActiveSetChanged(GameData.ActiveSet);
+        Profile.ProfileLoaded += _ => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.BbsPinApplied += _ => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.ProfileClosed += () => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        GameData.ActiveSetChanged += _ => Bosses.NoteGameDataChanged();
+        Tick.HeartbeatElapsed += () => Bosses.TakeInOutsideChanges();
 
         // Persisted boss kill-times, per realm. Kill detection is wired later (needs
         // MonsterDeath + RoomTracker); here we just load the active realm's saved
@@ -3587,8 +3582,8 @@ public sealed class AppServices
         Profile.BbsPinApplied += _ => BossTimers.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileClosed += () => BossTimers.OnRealmChanged(ActiveRealmFolder());
         BossTimers.OnRealmChanged(ActiveRealmFolder());
-        // Several clients share the realm's boss timers and the set's favourites, one
-        // file each; pick up what another client wrote within a heartbeat.
+        // Several clients share the realm's boss timers, one file; pick up what
+        // another client wrote within a heartbeat.
         Tick.HeartbeatElapsed += () => BossTimers.TakeInOutsideChanges();
         // Cleanup-boss DEAD/ALIVE state reads the active realm's nightly-cleanup time.
         BossTimers.SetCleanupConfig(ResolveBossCleanupConfig);
@@ -3841,8 +3836,7 @@ public sealed class AppServices
         Movement.MaxBashableStrengthProvider = () => MaxStrength.MaxAchievableStrength;
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
-        Favorites = new FavoritesStore(GameData, Log);
-        Tick.HeartbeatElapsed += () => Favorites.TakeInOutsideChanges();
+        Favorites = new FavoritesStore(Profile, GameData, ProfileGameDataSet, Log);
         GotoHistory = new GotoHistoryStore(Profile);
 
         // Coordinator + walker. Coordinator is the
@@ -12914,11 +12908,13 @@ public sealed class AppServices
     // default) and flip GameData if it differs. Idempotent — the cache
     // short-circuits no-op switches so calling this on every profile / BBS /
     // mutate signal is cheap.
-    private void ApplyActiveGameDataSet()
-    {
-        string? resolved = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
-        GameData.SwitchSet(resolved);
-    }
+    private void ApplyActiveGameDataSet() => GameData.SwitchSet(ProfileGameDataSet());
+
+    // The game-data set the loaded profile runs on: its realm's, else the default.
+    // Read straight from the settings, so it is right inside a profile-load handler
+    // that runs before the set has been switched.
+    private string? ProfileGameDataSet() =>
+        ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
 
     // Drop any persisted reference to a just-deleted game-data set so a
     // later resolve doesn't point GameData at a folder

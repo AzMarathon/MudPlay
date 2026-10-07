@@ -140,7 +140,7 @@ public sealed class BossTimerTests : IDisposable
         GameDataCache cache = new();
         cache.SwitchSet(_set);
         BossStore bosses = new(seedPath: _seedPath);
-        bosses.OnActiveSetChanged(_set);
+        bosses.OnRealmChanged(AppPaths.GameDataSetDir(_set));
         BossTimerStore timers = new(bosses, cache);
         timers.OnRealmChanged(AppPaths.GameDataSetDir(_set));
         return (bosses, timers, cache);
@@ -157,7 +157,7 @@ public sealed class BossTimerTests : IDisposable
         Assert.NotNull(timers.StatusFor(Boss("ogre king", number: 50, rooms: "3/300"), RealmType.ParaMud));
 
         // A fresh store for the same realm reloads the persisted kill time.
-        BossStore bosses2 = new(seedPath: _seedPath); bosses2.OnActiveSetChanged(_set);
+        BossStore bosses2 = new(seedPath: _seedPath); bosses2.OnRealmChanged(AppPaths.GameDataSetDir(_set));
         GameDataCache cache2 = new(); cache2.SwitchSet(_set);
         BossTimerStore reloaded = new(bosses2, cache2);
         reloaded.OnRealmChanged(AppPaths.GameDataSetDir(_set));

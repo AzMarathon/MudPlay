@@ -86,7 +86,9 @@ public sealed class MovePlayerHandlerStopGotoTests : IDisposable
         AutoLairManager autoLair = new(walker, tracker, graph, bfs, timers, log: null, coordinator: coord);
         MovementController controller = new(walker, loopRunner, autoLair, coord);
         RoomBlacklistStore blacklist = new();
-        FavoritesStore favorites = new(cache);
+        ProfileService favoritesProfile = new();
+        favoritesProfile.LoadBlank();
+        FavoritesStore favorites = new(favoritesProfile, cache, () => cache.ActiveSet);
         BossStore bosses = new();
         RoomSearchService search = new(graph, cache, bfs, blacklist, favorites: favorites, bosses: bosses);
 

@@ -30,12 +30,6 @@ public sealed partial class GameDataManagerViewModel
     {
         new(GameDataSetPart.Loops, "Loops and lair setups",
             "Loops, Auto-Lair setups and the nav folders they sit in. Added to the destination's; a loop of the same name is replaced."),
-        new(GameDataSetPart.Favorites, "GOTO favourites",
-            "Replaces the destination's favourites."),
-        new(GameDataSetPart.Bosses, "Boss list",
-            "Bosses you added, removed or edited. Replaces the destination's. Kill timers are kept per realm and stay where they are."),
-        new(GameDataSetPart.Triggers, "Game-data triggers",
-            "Triggers saved to the game data rather than to a character. Replaces the destination's."),
         new(GameDataSetPart.Messages, "Message edits",
             "Your changes to spell and condition messages, monster messages and flavor prefixes. Replaces the destination's."),
         new(GameDataSetPart.UnrecognizedLines, "Unrecognized lines",

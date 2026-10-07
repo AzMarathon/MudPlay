@@ -50,9 +50,6 @@ public sealed class GameDataSetManager
     public static readonly IReadOnlyList<(GameDataSetPart Part, string Name)> Parts = new[]
     {
         (GameDataSetPart.Loops,             "loops and lair setups"),
-        (GameDataSetPart.Favorites,         "GOTO favourites"),
-        (GameDataSetPart.Bosses,            "boss list"),
-        (GameDataSetPart.Triggers,          "game-data triggers"),
         (GameDataSetPart.Messages,          "message edits"),
         (GameDataSetPart.UnrecognizedLines, "unrecognized lines"),
         (GameDataSetPart.RecordOverrides,   "Game Data Browser edits"),
@@ -168,9 +165,6 @@ public sealed class GameDataSetManager
 
     private static string[] SetFilesOf(string setName, GameDataSetPart part) => part switch
     {
-        GameDataSetPart.Favorites         => new[] { AppPaths.GameDataSetFavoritesFile(setName) },
-        GameDataSetPart.Bosses            => new[] { AppPaths.BossesFile(setName) },
-        GameDataSetPart.Triggers          => new[] { AppPaths.TriggersFile(setName) },
         GameDataSetPart.Messages          => new[]
         {
             AppPaths.MessagesFile(setName),
