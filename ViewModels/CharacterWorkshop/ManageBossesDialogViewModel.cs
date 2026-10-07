@@ -50,7 +50,7 @@ public sealed partial class ManageBossesDialogViewModel : ObservableObject, IDia
 
         foreach (BossDef def in _bosses.ResolveForRealm(_realm)
                      .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase))
-            _allRows.Add(new ManageBossRowViewModel(def, BossCatalog.ResolveRegenHours(_gameData, def.Name)));
+            _allRows.Add(new ManageBossRowViewModel(def, BossCatalog.ResolveRegenHours(_gameData, def)));
 
         Rows = new DataGridCollectionView(_allRows);
     }

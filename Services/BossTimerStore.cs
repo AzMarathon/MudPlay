@@ -29,7 +29,8 @@ namespace MudPlay.Services;
 // name, then it died (awarded exp). Monster numbers aren't observable in-game, so
 // attribution is by NAME — the engaged target name (CombatManager.CurrentTarget,
 // read live at death) matched against the boss list, confirmed by the current room
-// being one of the boss's rooms. This covers the common "exp + *Combat Off*"
+// being one of the boss's rooms. Two bosses the game gives one name (BossDef.GameName)
+// are told apart by that room. This covers the common "exp + *Combat Off*"
 // fallback death, which carries no candidate identity of its own; a specific
 // death-line candidate name is accepted as a secondary match. Deaths we can't
 // attribute (no engaged name, no candidate) fall to the tab's manual override.
@@ -268,12 +269,12 @@ public sealed class BossTimerStore
         foreach (BossDef def in _bosses.Current)
         {
             if (!RoomsContain(def, here)) continue;
-            bool named = NameMatches(def.Name, engagedName)
-                         || evt.Candidates.Any(c => NameMatches(def.Name, c.Name));
+            bool named = NameMatches(def.MatchName, engagedName)
+                         || evt.Candidates.Any(c => NameMatches(def.MatchName, c.Name));
             if (!named)
             {
                 if (!unnamed || recentFoes is not { Count: > 0 }
-                    || !recentFoes.Any(n => NameMatches(def.Name, n)))
+                    || !recentFoes.Any(n => NameMatches(def.MatchName, n)))
                     continue;
                 if (!UnnamedDeathIsTheBosss(def, here, evt.ExperienceGained, recentFoes, out string why)) continue;
                 _log?.Info("Bosses", $"boss '{def.Name}' was in the fight's damage lines and {why} — taken as the kill");
@@ -324,7 +325,7 @@ public sealed class BossTimerStore
             return true;
         }
         why = "nothing else was named";
-        return recentFoes.All(n => NameMatches(def.Name, n));
+        return recentFoes.All(n => NameMatches(def.MatchName, n));
     }
 
     // Fallback kill signal: a boss-table monster we saw in the room roster is
@@ -394,7 +395,7 @@ public sealed class BossTimerStore
                 $"boss '{name}' vanished from a re-parse of {pending.Room} — marking killed (roster fallback)");
             MarkKilled(name);
             foreach (BossDef def in _bosses.Current)
-                if (NameMatches(def.Name, name)) { BossKilled?.Invoke(def); break; }
+                if (string.Equals(def.Name, name, StringComparison.OrdinalIgnoreCase)) { BossKilled?.Invoke(def); break; }
         }
     }
 
@@ -409,7 +410,7 @@ public sealed class BossTimerStore
             foreach (RoomEntity e in obs.Entities)
             {
                 if (e.Kind != EntityKind.Monster) continue;
-                if (NameMatches(def.Name, e.ResolvedName) || NameMatches(def.Name, e.RawName))
+                if (NameMatches(def.MatchName, e.ResolvedName) || NameMatches(def.MatchName, e.RawName))
                 {
                     present.Add(def.Name);
                     break;

@@ -8,9 +8,11 @@ namespace MudPlay.Models.Profile;
 // cleanup (Cleanup — no live timer, shown as "Cleanup").
 public enum BossRespawnType { Timed, Cleanup }
 
-// One boss in the boss-timer catalog. Name is the game-data monster spelling — the
-// match key for the runtime timer lookup (Monsters.RegenTime, in hours) AND for
-// kill detection. Rooms are "map/room" strings; a boss may be placed in several.
+// One boss in the boss-timer catalog. Name is what the list knows the boss by: its
+// key there, in the kill-times and in events. It is usually the game-data monster
+// spelling too, which the timer lookup (Monsters.RegenTime, in hours) and kill
+// detection match on; GameName says otherwise. Rooms are "map/room" strings; a boss
+// may be placed in several.
 // InStock/InParadigm gate visibility per active realm. Timer VALUES are NOT stored
 // here — resolved from game data so they stay correct across game versions.
 // StopBefore is a user flag: walk-to halts one room short of this boss's rooms. On
@@ -23,6 +25,16 @@ public enum BossRespawnType { Timed, Cleanup }
 public sealed class BossDef
 {
     public string Name { get; set; } = string.Empty;
+    // What the game calls it, when Name can't be that. The game has bosses that share
+    // a name (two Nahrs, two master assassins, each with its own room and timer), and
+    // the list holds one boss per Name, so each of those gets a Name that tells it
+    // apart and keeps the shared one here. The same goes for a box whose item name
+    // ("wooden box") says nothing about where it is. Empty means Name is the game's.
+    public string GameName { get; set; } = string.Empty;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string MatchName => string.IsNullOrWhiteSpace(GameName) ? Name : GameName;
+    // The Monsters record this boss is. Several records can share a name with
+    // different timers, so the timer is read from this one (BossCatalog).
     public int? MonsterNumber { get; set; }
     public List<string> Rooms { get; set; } = new();
     public bool InStock { get; set; }
@@ -56,7 +68,7 @@ public sealed class BossDef
     // loaded seed/overlay instances.
     public BossDef Clone() => new()
     {
-        Name = Name, MonsterNumber = MonsterNumber, Rooms = new List<string>(Rooms),
+        Name = Name, GameName = GameName, MonsterNumber = MonsterNumber, Rooms = new List<string>(Rooms),
         InStock = InStock, InParadigm = InParadigm, RespawnType = RespawnType,
         StopBefore = StopBefore, GrabAll = GrabAll,
         DefaultStopBefore = DefaultStopBefore, DefaultGrabAll = DefaultGrabAll,
@@ -68,6 +80,7 @@ public sealed class BossDef
     // signal BossStore uses to keep the overlay a delta (drop unchanged entries).
     public bool MatchesSeed(BossDef seed) =>
         string.Equals(Name, seed.Name, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(MatchName, seed.MatchName, StringComparison.OrdinalIgnoreCase)
         && MonsterNumber == seed.MonsterNumber
         && InStock == seed.InStock && InParadigm == seed.InParadigm
         && RespawnType == seed.RespawnType

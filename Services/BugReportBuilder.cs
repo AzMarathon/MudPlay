@@ -1585,7 +1585,11 @@ public static class BugReportBuilder
         Kv(sb, "Active boss timers", bossTimers.Count.ToString());
         foreach (var (def, state) in bossTimers.Take(15))
             Kv(sb, $"  {def.Name}",
-                $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
+                // Which monster record the timer is read from, and its length: a boss
+                // whose name several records share is only right when it's its own.
+                $"{(def.MonsterNumber is { } n ? $"#{n}" : "no number")}, "
+                + $"{Game.GameData.BossCatalog.EffectiveRegenHours(svc.GameData, def)?.ToString() ?? "?"}h, "
+                + $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
                 + $"next {state.NextLabel} {Game.Map.BossTimerMath.FormatHours(state.NextRemaining.TotalHours)}");
 
         return sb.ToString();

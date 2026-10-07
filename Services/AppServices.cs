@@ -4190,14 +4190,14 @@ public sealed class AppServices
             // its name gives.
             long bossExp = def.MonsterNumber is { } n ? MonsterCatalog.Get(n)?.EffectiveExp ?? 0 : 0;
             foreach (Game.Combat.MonsterCatalogEntry sameName in MonsterCatalog.All)
-                if (string.Equals(sameName.Name, def.Name, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(sameName.Name, def.MatchName, StringComparison.OrdinalIgnoreCase))
                     bossExp = Math.Max(bossExp, sameName.EffectiveExp);
 
             List<long> others = new();
             foreach (int id in MonsterSpawns.MonsterIdsSummonedAt(room))
             {
                 if (id == def.MonsterNumber || MonsterCatalog.Get(id) is not { } other) continue;
-                if (string.Equals(other.Name, def.Name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(other.Name, def.MatchName, StringComparison.OrdinalIgnoreCase)) continue;
                 others.Add(other.EffectiveExp);
             }
             return (bossExp, others);
@@ -10372,7 +10372,7 @@ public sealed class AppServices
     private void FireBossGrabAll(Models.Profile.BossDef def)
     {
         if (!def.GrabAll) return;
-        int? number = def.MonsterNumber ?? ResolveMonsterNumberByName(def.Name);
+        int? number = def.MonsterNumber ?? ResolveMonsterNumberByName(def.MatchName);
         if (number is not { } num)
         {
             Log.Info("GrabAll", $"'{def.Name}' died but has no monster number — can't read its drop table");
@@ -10551,7 +10551,7 @@ public sealed class AppServices
             if (!def.GrabAll) continue;
             if (BossGrabClassifier.Classify(GameData, def) != Game.Inventory.BossGrabKind.Item) continue;
             if (!BossDefRoomsContain(def, room)) continue;
-            string getName = BossGrabClassifier.ItemGetName(GameData, def.Name) ?? def.Name.Trim();
+            string getName = BossGrabClassifier.ItemGetName(GameData, def.MatchName) ?? def.MatchName.Trim();
             SendGameCommand($"get {getName}");
             Log.Info("GrabAll", $"entered {room} — grabbing item boss '{def.Name}'");
         }

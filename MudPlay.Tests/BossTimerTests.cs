@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
+using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
 using MudPlay.Game.Remote;
 using MudPlay.Models.GameData;
@@ -1003,5 +1004,82 @@ public sealed class BossTimerTests : IDisposable
             recentFoes: new[] { "Darken Beast Lord" });
 
         Assert.Null(timers.KilledAt("darken beast lord"));
+    }
+
+    // ----- Bosses the game gives one name ------------------------------------
+
+    private static BossDef Named(string name, string gameName, int number, string room) => new()
+    {
+        Name = name, GameName = gameName, MonsterNumber = number, Rooms = new() { room },
+        InStock = true, InParadigm = true, RespawnType = BossRespawnType.Timed,
+    };
+
+    // The Nahr in the throne room and the one in the pit are two bosses with one name
+    // and two timers. Read by name, both took the first Nahr record's hours.
+    [Fact]
+    public void TwoBossesOfOneGameName_EachReadTheirOwnRecordsTimer()
+    {
+        SeedGameData(RealmType.ParaMud, ("Nahr", 1004, 3, 1), ("Nahr", 1010, 10, 1), ("Nahr", 1011, 4, 1));
+        SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
+        var (bosses, _, cache) = NewStores();
+
+        Assert.Equal(2, bosses.Resolve().Count);
+        Assert.Equal(10, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().First(b => b.Name == "nahr (spheres)")));
+        Assert.Equal(4, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().First(b => b.Name == "nahr (spaceghost)")));
+    }
+
+    [Fact]
+    public void TwoBossesOfOneGameName_AreToldApartByTheRoomOfTheKill()
+    {
+        SeedGameData(RealmType.ParaMud, ("Nahr", 1010, 10, 1), ("Nahr", 1011, 4, 1));
+        SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(12, 2378), engagedName: "Nahr");
+
+        Assert.NotNull(timers.KilledAt("nahr (spaceghost)"));
+        Assert.Null(timers.KilledAt("nahr (spheres)"));
+    }
+
+    [Fact]
+    public void RosterFallback_MarksTheBossOfThatRoom_WhenTwoShareAGameName()
+    {
+        SeedGameData(RealmType.ParaMud, ("Nahr", 1010, 10, 1), ("Nahr", 1011, 4, 1));
+        SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
+        var (_, timers, _) = NewStores();
+        RoomKey throne = new(17, 3087);
+        List<string> killed = new();
+        timers.BossKilled += def => killed.Add(def.Name);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "Nahr"), throne, "Vaulted Throne Room");
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), throne, "Vaulted Throne Room");
+        timers.OnRoomDisplayed("Vaulted Throne Room");
+
+        Assert.NotNull(timers.KilledAt("nahr (spheres)"));
+        Assert.Null(timers.KilledAt("nahr (spaceghost)"));
+        Assert.Equal(new[] { "nahr (spheres)" }, killed);
+    }
+
+    // A boss with one name can still have several records: the great green dragon of
+    // the cavern is 15 hours, and an earlier record of the same name is 1.
+    [Fact]
+    public void RegenHours_AreReadFromTheBosssOwnRecord_NotTheFirstOfItsName()
+    {
+        SeedGameData(RealmType.ParaMud, ("great green dragon", 1038, 1, 1), ("great green dragon", 1058, 15, 1));
+        var (_, _, cache) = NewStores();
+
+        Assert.Equal(15, BossCatalog.ResolveRegenHours(cache, Boss("great green dragon", number: 1058, rooms: "1/3111")));
+        Assert.Equal(1, BossCatalog.ResolveRegenHours(cache, Boss("great green dragon", number: null, rooms: "1/3111")));
+    }
+
+    // In other game data the number may be some other monster, or one that isn't a
+    // boss: the name is what's left to go on.
+    [Fact]
+    public void RegenHours_FallBackToTheName_WhenTheNumberIsAnotherMonster()
+    {
+        SeedGameData(RealmType.ParaMud, ("giant rat", 792, 0, 0), ("giant roc", 571, 8, 1));
+        var (_, _, cache) = NewStores();
+
+        Assert.Equal(8, BossCatalog.ResolveRegenHours(cache, Boss("giant roc", number: 792, rooms: "10/159")));
     }
 }
