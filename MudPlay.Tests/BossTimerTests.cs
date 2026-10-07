@@ -888,4 +888,49 @@ public sealed class BossTimerTests : IDisposable
         Assert.Equal("DEAD", row.StatusDisplay);
         Assert.True(row.IsActive);                      // Clear button shows while dead
     }
+
+    // The Darken Beast Lord sits in a den too dark to list what is in it, and its
+    // death line isn't on record, so nothing named the kill and no timer started.
+    // The damage lines still name it: when it is the only monster they named, the
+    // unnamed death is the boss's.
+    [Fact]
+    public void UnnamedDeathInTheDark_NamedOnlyByTheDamageLines_MarksTheBoss()
+    {
+        SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
+        SeedBosses(Boss("darken beast lord", number: 930, rooms: "17/2812"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2812), engagedName: null,
+            recentFoes: new[] { "Darken Beast Lord" });
+
+        Assert.NotNull(timers.KilledAt("darken beast lord"));
+    }
+
+    // Something else was in the fight: the unnamed death could be that one's.
+    [Fact]
+    public void UnnamedDeath_WithAnotherMonsterInTheDamageLines_DoesNotMarkTheBoss()
+    {
+        SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
+        SeedBosses(Boss("darken beast lord", number: 930, rooms: "17/2812"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2812), engagedName: null,
+            recentFoes: new[] { "Darken Beast Lord", "darken beast" });
+
+        Assert.Null(timers.KilledAt("darken beast lord"));
+    }
+
+    // With the dead monster named some other way, the damage lines decide nothing.
+    [Fact]
+    public void NamedDeathOfAnAdd_IsNotTakenForTheBoss()
+    {
+        SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
+        SeedBosses(Boss("darken beast lord", number: 930, rooms: "17/2812"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2812), engagedName: "shadow wolf",
+            recentFoes: new[] { "Darken Beast Lord" });
+
+        Assert.Null(timers.KilledAt("darken beast lord"));
+    }
 }

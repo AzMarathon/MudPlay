@@ -3939,13 +3939,41 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // context menu) is the immediate way back.
             bool mapBrowsing = IsMapBrowsing?.Invoke() ?? false;
 
+            bool offTheDrawnFloor = Layout is not null && !Layout.Positions.ContainsKey(here.Key);
             if (Layout is null
                 || exitedBlacklistedOrigin
-                || (!mapBrowsing && !Layout.Positions.ContainsKey(here.Key)))
+                || (!mapBrowsing && offTheDrawnFloor))
             {
                 RebuildAroundPlayer(here.Key);
             }
+            else if (mapBrowsing && offTheDrawnFloor)
+            {
+                OweFollow();
+            }
         }
+    }
+
+    // A step off the drawn floor made while the map was being browsed is not
+    // followed (above), on the understanding that the next step will be. But a walk
+    // can end on that very step: picking a destination on the map is itself a browse,
+    // a short walk finishes inside the hold, and with no step left the map stayed on
+    // the floor below with the character drawn on a dimmed one (walking up to the
+    // aged titan's keep). So a skipped follow is owed, and paid when the hold lapses.
+    private Avalonia.Threading.DispatcherTimer? _followOwed;
+
+    private void OweFollow()
+    {
+        if (_followOwed is not null) return;
+        _followOwed = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _followOwed.Tick += (_, _) =>
+        {
+            bool stillOff = CurrentRoomKey is { } here && Layout is { } layout && !layout.Positions.ContainsKey(here);
+            if (stillOff && (IsMapBrowsing?.Invoke() ?? false)) return;   // still looking elsewhere
+            _followOwed?.Stop();
+            _followOwed = null;
+            if (stillOff) RebuildAroundPlayer(CurrentRoomKey!.Value);
+        };
+        _followOwed.Start();
     }
 
     // A step off the drawn map rebuilds it around the player, off the UI thread:

@@ -251,15 +251,29 @@ public sealed class BossTimerStore
     // timer marking so a cleanup boss (no timer) still notifies.
     public event Action<BossDef>? BossKilled;
 
-    public void OnMonsterDied(MonsterDeathEvent evt, RoomKey? key, string? engagedName)
+    //
+    // recentFoes are the monsters named by the fight's damage lines. They decide only
+    // when nothing else names the dead monster: no engaged target (the room was too
+    // dark to list anyone) and no death line on record. Then a boss of this room is
+    // taken as the kill when every monster the damage lines named is that boss; a
+    // second name means something else was in the fight and could be what died.
+    public void OnMonsterDied(MonsterDeathEvent evt, RoomKey? key, string? engagedName,
+        IReadOnlyCollection<string>? recentFoes = null)
     {
         if (key is not { } here) return;   // can't confirm placement
 
+        bool unnamed = string.IsNullOrWhiteSpace(engagedName) && evt.Candidates.Count == 0;
         foreach (BossDef def in _bosses.Current)
         {
             if (!RoomsContain(def, here)) continue;
-            if (!(NameMatches(def.Name, engagedName)
-                  || evt.Candidates.Any(c => NameMatches(def.Name, c.Name)))) continue;
+            bool named = NameMatches(def.Name, engagedName)
+                         || evt.Candidates.Any(c => NameMatches(def.Name, c.Name));
+            bool onlyFoe = !named && unnamed && recentFoes is { Count: > 0 }
+                           && recentFoes.All(n => NameMatches(def.Name, n));
+            if (!named && !onlyFoe) continue;
+            if (onlyFoe)
+                _log?.Info("Bosses",
+                    $"boss '{def.Name}' named only by the damage lines (no room list, no death line) — taken as the kill");
 
             // A timed boss starts its respawn countdown; a cleanup boss has none. Both
             // notify BossKilled so Grab-All can fire regardless of respawn type.

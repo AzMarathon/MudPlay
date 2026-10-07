@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.148.0**
-> - New loop option, Wait to enter lairs until I can debuff: the loop stops one step short of a lair until the round's between-round cast is free, so the debuff goes out on entry
-> - Two ways to wait: Wait for spells (cast what is due first, three rounds at most) or Block spells (hold buffs back and enter within a round)
+> **Version 3.148.2**
+> - The map switches to the floor you are on once you stop browsing it, even when the walk ended on the step that changed floors
+> - A boss killed in a room too dark to list it starts its timer when it is the only monster the damage lines named
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
