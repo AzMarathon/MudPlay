@@ -58,6 +58,11 @@ public sealed class Loop
     // Settings" entry in the nav rail.
     public bool OnlyAttackInLairRooms { get; set; }
 
+    // Loop-wide: wait one step short of a lair until the combat profile's pre-attack
+    // debuff can be cast, and how (LairEntryDebuffMode). Off by default, so older
+    // loop files behave as before. Set from the same places as the option above.
+    public LairEntryDebuffMode LairEntryDebuff { get; set; }
+
     // Folder this loop lives under inside the BBS Loops directory, relative
     // to it, using / separators (e.g. "Sewers/Lower"). Empty = the Loops
     // root. Not serialised — the on-disk subdirectory is the source of

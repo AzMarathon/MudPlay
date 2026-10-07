@@ -54,6 +54,8 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
     // is walked through as if auto-combat were off. Mirrored by the nav rail's
     // Entire Loop Settings flyout.
     [ObservableProperty] private bool _onlyAttackInLairRooms;
+    [ObservableProperty] private bool _waitToDebuffBeforeLairs;
+    [ObservableProperty] private int _lairDebuffWaitChoice;
 
     public ObservableCollection<LoopWaypointRowViewModel> Waypoints { get; } = new();
 
@@ -115,6 +117,8 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         _notes = loop.Notes ?? string.Empty;
         _favorite = loop.Favorite;
         _onlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
+        _waitToDebuffBeforeLairs = LairEntryDebuffModes.IsOn(loop.LairEntryDebuff);
+        _lairDebuffWaitChoice = LairEntryDebuffModes.ChoiceOf(loop.LairEntryDebuff);
         foreach (LoopWaypoint w in loop.Waypoints)
             Waypoints.Add(new LoopWaypointRowViewModel(w, graph));
         RenumberRows();
@@ -399,6 +403,7 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         _original.Notes                 = Notes ?? string.Empty;
         _original.Favorite              = Favorite;
         _original.OnlyAttackInLairRooms = OnlyAttackInLairRooms;
+        _original.LairEntryDebuff = LairEntryDebuffModes.From(WaitToDebuffBeforeLairs, LairDebuffWaitChoice);
         _original.Waypoints             = waypoints;
 
         // Rename → delete the old file (LoopManager keys by Loop.Name

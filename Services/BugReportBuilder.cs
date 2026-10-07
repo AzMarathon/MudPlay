@@ -1363,6 +1363,7 @@ public static class BugReportBuilder
             // Loop combat-suppression state — answers "why didn't it fight
             // here?" for a do-not-attack / only-attack-in-lair report.
             Kv(sb, "Loop only-attack-in-lair", curLoop.OnlyAttackInLairRooms.ToString());
+            Kv(sb, "Loop wait-to-debuff before lairs", curLoop.LairEntryDebuff.ToString());
             Kv(sb, "Loop do-not-attack waypoints",
                 curLoop.Waypoints.Count(w => w.DoNotAttack).ToString());
             Kv(sb, "Loop do-not-rest waypoints",

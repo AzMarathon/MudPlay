@@ -46,7 +46,9 @@ public static class LoopShareCodec
         [property: JsonPropertyName("n")] string Name,
         [property: JsonPropertyName("o")] string? Notes,
         [property: JsonPropertyName("l")] bool OnlyAttackInLairRooms,
-        [property: JsonPropertyName("w")] List<Waypoint> Waypoints);
+        [property: JsonPropertyName("w")] List<Waypoint> Waypoints,
+        // Added after the first share format; an older client just ignores it.
+        [property: JsonPropertyName("ld")] int LairEntryDebuff = 0);
 
     private sealed record Waypoint(
         [property: JsonPropertyName("r")] string Room,
@@ -68,7 +70,8 @@ public static class LoopShareCodec
             loop.Waypoints.Select(w => new Waypoint(
                 w.Room,
                 string.IsNullOrEmpty(w.Command) ? null : w.Command,
-                w.DelayMs, w.DoNotRest, w.DoNotAttack, w.RestHereHp, w.RestHereMana)).ToList());
+                w.DelayMs, w.DoNotRest, w.DoNotAttack, w.RestHereHp, w.RestHereMana)).ToList(),
+            (int)loop.LairEntryDebuff);
 
         byte[] json = JsonSerializer.SerializeToUtf8Bytes(payload, Json);
         using MemoryStream packed = new();
@@ -119,6 +122,9 @@ public static class LoopShareCodec
         {
             Notes = payload.Notes ?? string.Empty,
             OnlyAttackInLairRooms = payload.OnlyAttackInLairRooms,
+            LairEntryDebuff = Enum.IsDefined(typeof(LairEntryDebuffMode), payload.LairEntryDebuff)
+                ? (LairEntryDebuffMode)payload.LairEntryDebuff
+                : LairEntryDebuffMode.Off,
         };
     }
 

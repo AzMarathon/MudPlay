@@ -50,6 +50,7 @@ public static class LocalApiCatalog
             notes = loop.Notes,
             favorite = loop.Favorite,
             onlyAttackInLairRooms = loop.OnlyAttackInLairRooms,
+            lairEntryDebuff = loop.LairEntryDebuff.ToString(),
             summary = Summarise(svc, loop),
             waypoints = loop.Waypoints.Select(w =>
             {

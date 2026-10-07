@@ -52,7 +52,10 @@ public sealed class LoopShareTests : IDisposable
         new LoopWaypoint(new RoomKey(1, 298), doNotRest: true),
         new LoopWaypoint(new RoomKey(2, 14), doNotAttack: true),
     })
-    { Notes = "watch the bridge", OnlyAttackInLairRooms = true, Favorite = true };
+    {
+        Notes = "watch the bridge", OnlyAttackInLairRooms = true, Favorite = true,
+        LairEntryDebuff = LairEntryDebuffMode.BlockSpells,
+    };
 
     // ----- Codec -----------------------------------------------------
 
@@ -64,6 +67,7 @@ public sealed class LoopShareTests : IDisposable
         Assert.Equal("King's Road", decoded.Name);
         Assert.Equal("watch the bridge", decoded.Notes);
         Assert.True(decoded.OnlyAttackInLairRooms);
+        Assert.Equal(LairEntryDebuffMode.BlockSpells, decoded.LairEntryDebuff);
         Assert.False(decoded.Favorite);   // the receiver's own choice
         Assert.Equal(new[] { "1/297", "1/298", "2/14" }, decoded.Waypoints.Select(w => w.Room));
         Assert.Equal("ask barmaid ale", decoded.Waypoints[0].Command);

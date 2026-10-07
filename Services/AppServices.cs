@@ -7408,10 +7408,25 @@ public sealed class AppServices
             TrapDelegation.Delegate, trapDelegateGate, TrapDelegation.Cancel);
         // Same proactive pre-move approach sequence for loop circuits — backstab
         // gear before the sneak (equipping breaks sneak), then the move.
+        // A loop set to wait for its debuff stands one step short of a lair until the
+        // round's between-round cast is free (LairEntryDebuffHold).
+        LairDebuffHold = new Game.Map.LairEntryDebuffHold(
+            MovementCoordinator,
+            slotUsed: () => CastDirector.BetweenRoundSlotUsed,
+            castDue: () => CastDirector.HasCastDue(),
+            scheduleAfter: (delay, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
+        CastDirector.SetLairEntryBuffHold(() => LairDebuffHold.BlockingBuffs);
         LoopRunner.SetMoveReadyCheck(() =>
         {
             // A "rest up here" room holds the step until the rest is done.
             if (Health.HoldForRestHere()) return false;
+            if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
             return Stealth.ReadyToMoveSneaking();
         });
@@ -9723,6 +9738,30 @@ public sealed class AppServices
     // current room in `dir`. Null when there's no planned cardinal step, no known
     // current room, or the direction isn't a graph exit (a command / boat / special
     // step). Feeds the pre-move gear swap for boss / lair rooms.
+    public Game.Map.LairEntryDebuffHold LairDebuffHold { get; private set; } = null!;
+
+    // How the running loop wants its next step taken with respect to the debuff:
+    // the loop's own setting when that step enters a lair we would fight in and the
+    // combat profile has a debuff to cast on entry, else Off (nothing to wait for).
+    private Game.Map.LairEntryDebuffMode LairEntryDebuffModeForNextStep()
+    {
+        if (LoopRunner.CurrentLoop is not { LairEntryDebuff: not Game.Map.LairEntryDebuffMode.Off } loop)
+            return Game.Map.LairEntryDebuffMode.Off;
+        if (!IsAutoCombatEnabled) return Game.Map.LairEntryDebuffMode.Off;
+        if (NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()) is not { } next
+            || RoomGraph.GetRoom(next) is not { HasLair: true })
+            return Game.Map.LairEntryDebuffMode.Off;
+        // A lair the loop is told not to fight in gets no debuff either.
+        if (Game.Map.LoopCombatSuppression.IsSuppressed(loop, next, currentIsLair: true))
+            return Game.Map.LairEntryDebuffMode.Off;
+
+        Models.Profile.CombatSettings combat =
+            ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+        bool debuffConfigured = !string.IsNullOrWhiteSpace(combat.AreaDebuffSpell.SpellName)
+                                || !string.IsNullOrWhiteSpace(combat.SingleTargetDebuffSpell.SpellName);
+        return debuffConfigured ? loop.LairEntryDebuff : Game.Map.LairEntryDebuffMode.Off;
+    }
+
     private Game.Map.RoomKey? NextPlannedRoomForEquip(Game.Map.Direction? dir)
     {
         if (dir is not { } d || RoomTracker.State.CurrentRoom is not { } cur) return null;

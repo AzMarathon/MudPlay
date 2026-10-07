@@ -56,6 +56,16 @@
                                IsChecked="{Binding OnlyAttackInLairRooms, Mode=TwoWay}"
                                FontSize="11"
                                ToolTip.Tip="When on, the loop only engages hostiles in game-data lair rooms; every other room is walked through as if auto-combat were off. A per-room 'do not attack' still skips even a lair room, and a triggered rest still clears any room so it can rest."/>
+                    <CheckBox Content="Wait to enter lairs until I can debuff"
+                              FontSize="11"
+                              IsChecked="{Binding WaitToDebuffBeforeLairs, Mode=TwoWay}"
+                              ToolTip.Tip="Stand one step short of each lair until the round's between-round cast is free, so your combat profile's debuff goes out as you walk in instead of behind the attack. Does nothing unless the profile has a debuff set, and skips lairs marked 'do not attack'."/>
+                    <ComboBox Margin="22,0,0,0" FontSize="11" MinWidth="160"
+                              IsVisible="{Binding WaitToDebuffBeforeLairs}"
+                              SelectedIndex="{Binding LairDebuffWaitChoice, Mode=TwoWay}">
+                        <ComboBoxItem Content="Wait for spells" ToolTip.Tip="Cast the buffs, heals and cures that are due first (one a round, three rounds at most), then enter. Keeps buffs up; costs the wait."/>
+                        <ComboBoxItem Content="Block spells" ToolTip.Tip="Hold buffs back and enter as soon as the cast is free (a round at most). Buffs go out after the fight. Heals and cures are never held."/>
+                    </ComboBox>
                 </StackPanel>
             </Grid>
 
