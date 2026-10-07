@@ -4,7 +4,8 @@
 > **Version 3.148.5**
 > - Bosses the game gives one name are separate rows, each with its own room and timer: nahr (spheres) and nahr (spaceghost), master assassin (cob key) and master assassin (dying assassin)
 > - A boss's respawn time is read from its own monster record, not the first monster of its name: the great green dragon is 15 hours and the giant roc 6 on Paradigm
-> - Seven bosses added to the list: haggard witch, master torturer, giant toad-beast, malformation, small stone box, dark-elf queen chests, pastor lander's box
+> - Six bosses added to the list: haggard witch, master torturer, giant toad-beast, small stone box, dark-elf queen chests, pastor lander's box
+> - Lord Chisholm's row is now lord chisholm (malformation): his death summons the malformation, so they share his 1 hour timer
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

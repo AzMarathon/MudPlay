@@ -41,14 +41,14 @@ public sealed class BossCatalogTests
         Assert.NotNull(seed);
 
         List<BossDef> bosses = seed!;
-        Assert.Equal(247, bosses.Count);
+        Assert.Equal(246, bosses.Count);
 
         List<BossDef> timed = bosses.Where(b => b.RespawnType == BossRespawnType.Timed).ToList();
-        Assert.Equal(239, timed.Count);
+        Assert.Equal(238, timed.Count);
         Assert.Equal(8, bosses.Count(b => b.RespawnType == BossRespawnType.Cleanup));
         Assert.Equal(145, bosses.Count(b => b.InStock));
-        Assert.Equal(245, bosses.Count(b => b.InParadigm));
-        Assert.Equal(44, bosses.Count(b => b.Rooms.Count > 1));
+        Assert.Equal(244, bosses.Count(b => b.InParadigm));
+        Assert.Equal(43, bosses.Count(b => b.Rooms.Count > 1));
         Assert.Equal(4, bosses.Count(b => b.RespawnHoursOverride is not null));   // curated manual timers
 
         // Every timed boss resolved a game-data monster (name is the runtime match key).

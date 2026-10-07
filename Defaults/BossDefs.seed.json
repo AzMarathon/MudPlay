@@ -1229,7 +1229,8 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "lord chisholm",
+    "Name": "lord chisholm (malformation)",
+    "GameName": "lord chisholm",
     "MonsterNumber": 1297,
     "Rooms": [
       "14/5829",
@@ -2837,18 +2838,5 @@
     "InParadigm": true,
     "RespawnType": "Timed",
     "Notes": "No timer of its own: summoned by placing the glass, crystal, granite and marble orbs in the shrine."
-  },
-  {
-    "Name": "malformation",
-    "MonsterNumber": 1298,
-    "Rooms": [
-      "14/5829",
-      "14/5883",
-      "14/6216"
-    ],
-    "InStock": false,
-    "InParadigm": true,
-    "RespawnType": "Timed",
-    "Notes": "No timer of its own: summoned when Lord Chisholm dies."
   }
 ]

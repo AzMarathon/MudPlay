@@ -1082,4 +1082,26 @@ public sealed class BossTimerTests : IDisposable
 
         Assert.Equal(8, BossCatalog.ResolveRegenHours(cache, Boss("giant roc", number: 792, rooms: "10/159")));
     }
+
+    // Malformation comes only from Lord Chisholm's death, so the two are one entry on
+    // his record: the hour runs from his death, and the malformation dying afterwards
+    // leaves it where it was (user, 2026-10-07).
+    [Fact]
+    public void BossThatDiesIntoAnother_IsTimedFromItsOwnDeath()
+    {
+        SeedGameData(RealmType.ParaMud, ("Lord Chisholm", 1297, 1, 1), ("malformation", 1298, 0, 1));
+        SeedBosses(Named("lord chisholm (malformation)", "lord chisholm", 1297, "14/6216"));
+        var (bosses, timers, cache) = NewStores();
+        RoomKey chambers = new(14, 6216);
+
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        DateTimeOffset? atHisDeath = timers.KilledAt("lord chisholm (malformation)");
+        Assert.NotNull(atHisDeath);
+        Assert.Equal(1, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().Single()));
+
+        timers.MarkKilled("lord chisholm (malformation)", DateTimeOffset.UtcNow.AddMinutes(-10));
+        DateTimeOffset? before = timers.KilledAt("lord chisholm (malformation)");
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        Assert.Equal(before, timers.KilledAt("lord chisholm (malformation)"));
+    }
 }

@@ -204,7 +204,7 @@ public sealed class BossStoreTests : IDisposable
                 "justicar halford",
                 "kai master",
                 "lallim whitemane",
-                "lord chisholm",
+                "lord chisholm (malformation)",
                 "lord of the hunt",
                 "massive cocoon",
                 "mayor godfrey",
