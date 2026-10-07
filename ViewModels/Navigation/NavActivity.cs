@@ -79,6 +79,7 @@ public static class NavActivity
         (MovementCoordinator.DarkRoomSettleGate, "checking the dark", NavActivityKind.Moving, false),
         (MovementCoordinator.CombatRedisplaySettleGate, "checking for an ambush", NavActivityKind.Moving, false),
         (MovementCoordinator.SummonDeathSettleGate, "checking for a summon", NavActivityKind.Moving, false),
+        (MovementCoordinator.DeathStallGate, "waiting to loot", NavActivityKind.Waiting, false),
     ];
 
     public static (string Text, NavActivityKind Kind) Describe(

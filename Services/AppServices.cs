@@ -9381,7 +9381,10 @@ public sealed class AppServices
         }
 
         bool suppressed =
-            LoopRunner.State != Game.Map.LoopState.Idle
+            Game.Map.LoopCombatSuppression.LoopIsDriving(
+                LoopRunner.State,
+                heldByUser: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
+                following: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate))
             && LoopRunner.CurrentLoop is { } loop
             && evalKey is { } key
             && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair);
@@ -10308,8 +10311,57 @@ public sealed class AppServices
             Log.Info("GrabAll", $"'{def.Name}' died — no known droppable items to grab");
             return;
         }
+        // A boss whose death casts a "... temp" spell leaves the room unable to act
+        // until that spell runs out, and the game throws away what is sent before
+        // then (GAME_MECHANICS "Silent death spells that stall the room"). The grab
+        // waits it out and goes once.
+        TimeSpan stall = DeathStallOf(num);
+        if (stall > TimeSpan.Zero)
+        {
+            Log.Info("GrabAll",
+                $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")} in {stall.TotalMilliseconds:F0} ms, once its death spell has run out");
+            HoldThroughDeathStall(stall, $"Grab All for '{def.Name}'",
+                () => { foreach (string cmd in cmds) SendGameCommand(cmd); });
+            return;
+        }
         Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
         foreach (string cmd in cmds) SendGameCommand(cmd);
+    }
+
+    // How long a monster's death leaves the room unable to act: the length of its
+    // "... temp" death spell, or zero when it has none.
+    private TimeSpan DeathStallOf(int monsterNumber)
+    {
+        int deathSpell = MonsterCatalog.Get(monsterNumber)?.DeathSpell ?? 0;
+        if (deathSpell <= 0) return TimeSpan.Zero;
+        if (GameData.FindRowByNumber("Spells", deathSpell) is not System.Text.Json.JsonElement spell) return TimeSpan.Zero;
+        string? name = spell.TryGetProperty("Name", out System.Text.Json.JsonElement n) ? n.GetString() : null;
+        if (!Game.Combat.TempDeathResponse.IsTempSpell(name)) return TimeSpan.Zero;
+        int dur = spell.TryGetProperty("Dur", out System.Text.Json.JsonElement d) && d.TryGetInt32(out int rounds) ? rounds : 0;
+        return Game.Combat.TempDeathResponse.StallTime(dur);
+    }
+
+    // Run a pickup once a death spell has run out, keeping the walker in the room
+    // until then. Counted: a grab and a coin re-look can wait on the same death.
+    private int _deathStallHolds;
+
+    private void HoldThroughDeathStall(TimeSpan stall, string reason, Action pickUp)
+    {
+        if (_deathStallHolds++ == 0)
+            MovementCoordinator.AssertGate(Game.Map.MovementCoordinator.DeathStallGate, "DeathStall", reason);
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = stall };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            try { pickUp(); }
+            finally
+            {
+                if (--_deathStallHolds == 0)
+                    MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.DeathStallGate, "DeathStall",
+                        "the death spell has run out");
+            }
+        };
+        timer.Start();
     }
 
     // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no
@@ -10370,6 +10422,14 @@ public sealed class AppServices
             if (deathSpell <= 0) continue;
             string? spellName = GameData.FindNameByNumber("Spells", deathSpell);
             if (!Game.Combat.TempDeathResponse.IsTempSpell(spellName)) continue;
+            // The coin get went out on the drop line, before the death was known,
+            // so the game threw it away. Once the death spell has run out the room
+            // is drawn again, and the coins still lying there are asked for then.
+            Cash.NoteDeathStall();
+            TimeSpan stall = DeathStallOf(num);
+            if (stall > TimeSpan.Zero && Cash.HasUnansweredGet)
+                HoldThroughDeathStall(stall, "coins dropped at the kill",
+                    () => _engineWireSend?.Invoke(new[] { (byte)'\r' }));
 
             foreach (Models.GameData.MessageRecord r in Messages.Messages)
             {
@@ -10383,6 +10443,18 @@ public sealed class AppServices
                 Log.Info("TempDeath",
                     $"'{spellName}' (#{deathSpell}) death-cast — sent cast response to unstick the engine");
                 return;   // one response per death
+            }
+
+            // No message record names a response for this one (37 of the Paradigm
+            // bosses' temp spells had none): the same two carriage returns every
+            // listed one is given.
+            if (Game.Combat.TempDeathResponse.ExpandToWireBytes(Game.Combat.TempDeathResponse.DefaultResponse)
+                is { } fallback)
+            {
+                _engineWireSend(fallback);
+                Log.Info("TempDeath",
+                    $"'{spellName}' (#{deathSpell}) death-cast — no cast response on record, sent the default to unstick the engine");
+                return;
             }
         }
     }

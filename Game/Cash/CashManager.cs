@@ -129,7 +129,56 @@ public sealed class CashManager : IDisposable
     // least `count` coins — a passive re-render of the same/smaller pile skips, a
     // reveal of more coins (search / fresh drop) falls through and re-collects.
     private bool AlreadyCollected(string currency, int count)
-        => _collectedGround.TryGetValue(currency, out int had) && had >= count;
+    {
+        if (!_collectedGround.TryGetValue(currency, out int had) || had < count) return false;
+        if (!GetWentUnanswered(currency)) return true;
+        // The pile is still on the floor a moment after we asked for it and the game
+        // never said we picked it up: the get was thrown away (a boss's death can
+        // leave the room unable to act for a moment). Un-claim it and ask again.
+        _log?.Info(LogCategory,
+            $"collect currency={currency} — the get was never answered and the coins are still here, asking again");
+        _collectedGround.Remove(currency);
+        return false;
+    }
+
+    // The `get` sent for each currency that the game has not yet answered with a
+    // pickup line: when it went out, and how often it has been asked again.
+    private readonly Dictionary<string, (DateTime SentAt, int Retries)> _unansweredGets =
+        new(StringComparer.OrdinalIgnoreCase);
+    private const int MaxGetRetries = 1;
+    // A room display this soon after the get may have been drawn before the get ran.
+    private static readonly TimeSpan GetAnswerTime = TimeSpan.FromSeconds(1);
+
+    // Only a get sent around a death that stalls the room counts: any other get the
+    // game didn't answer with a pickup was refused for a reason asking again won't
+    // change (too heavy to carry it), and a swap of smaller coin for larger would
+    // shed coin on each repeat.
+    private bool GetWentUnanswered(string currency) =>
+        _unansweredGets.TryGetValue(currency, out (DateTime SentAt, int Retries) get)
+        && get.Retries < MaxGetRetries
+        && UnansweredClock() - get.SentAt >= GetAnswerTime
+        && (get.SentAt - _deathStallAt).Duration() <= DeathStallReach;
+
+    // Test seam for the unanswered-get timing.
+    internal Func<DateTime> UnansweredClock { get; set; } = static () => DateTime.UtcNow;
+
+    // When a monster last died casting a silent spell that leaves the room unable
+    // to act for a moment (FireTempDeathResponse). The coin get goes out on the
+    // drop line, just before the death is recognised, hence the reach both ways.
+    private DateTime _deathStallAt = DateTime.MinValue;
+    private static readonly TimeSpan DeathStallReach = TimeSpan.FromSeconds(5);
+
+    public void NoteDeathStall() => _deathStallAt = UnansweredClock();
+
+    // A coin get is out that the game has not answered with a pickup line.
+    public bool HasUnansweredGet => _unansweredGets.Count > 0;
+
+    private void NoteGetSent(string currency)
+    {
+        int retries = _unansweredGets.TryGetValue(currency, out (DateTime SentAt, int Retries) earlier)
+            ? earlier.Retries + 1 : 0;
+        _unansweredGets[currency] = (UnansweredClock(), retries);
+    }
 
     // Record a collect of `count` of this currency this visit, keeping the high mark.
     private void MarkCollected(string currency, int count)
@@ -554,6 +603,7 @@ public sealed class CashManager : IDisposable
         if (currency is null) return;
 
         AdjustHeld(currency, count);
+        _unansweredGets.Remove(currency);
         CoinCollected?.Invoke(currency, count);
         // Confirm our pending `get` — drain the matching in-flight delta so
         // the next gate evaluation works against the parser's fresh view.
@@ -838,6 +888,7 @@ public sealed class CashManager : IDisposable
         if (_collectedGround.Count > 0)
             _log?.Debug(LogCategory, $"room changed — resetting collect latch (was: {string.Join(", ", _collectedGround.Keys)})");
         _collectedGround.Clear();
+        _unansweredGets.Clear();
         CancelDeferredCollect("room changed");
     }
 
@@ -1004,6 +1055,7 @@ public sealed class CashManager : IDisposable
             _gate?.NoteGetSent();
             _log?.Info(LogCategory, $"collect currency={currency} get={count} (ungated)");
             Send($"get {count} {_naming.WireNoun(currency)}");
+            NoteGetSent(currency);
             SpendCollectLimit(slot, count);
             return;
         }
@@ -1090,6 +1142,7 @@ public sealed class CashManager : IDisposable
             ? $"collect currency={currency} get={totalPickup} (free={freePickup} + {swapDone} via drop-smaller-for-larger)"
             : $"collect currency={currency} get={totalPickup}");
         Send($"get {totalPickup} {_naming.WireNoun(currency)}");
+        NoteGetSent(currency);
         SpendCollectLimit(slot, totalPickup);
         _inFlightCoinDelta[slot] += totalPickup;
         _inFlightCoinDeltaSetAt[slot] = now;

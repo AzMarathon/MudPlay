@@ -370,7 +370,7 @@ While a loop is **running**, the CURRENT NAV rail shows its rooms as **green** r
 
 Some settings apply to the **whole loop**, not one room. Reach them from **⚙ Entire Loop Settings** — it appears at the top of the CURRENT NAV area **while you're building a loop** and again at the top of the rail **while a loop is running** (click it for a flyout), and it's mirrored by a checkbox next to **Set as favorite** in the Edit Loop window.
 
-- **Only attack in lair rooms** — the loop only engages hostiles in **lair rooms** (rooms the game data tags as monster lairs); every other room is walked through as if auto-combat were off. The inverse of per-room "no atk": instead of opting rooms out one by one, you opt the whole loop *in* to lair rooms only. A per-room **"do not attack"** still skips even a lair room (it wins), and a triggered rest still clears any suppressed room so it can rest. Note the suppressed rooms include the walked-through connectors between waypoints, not just the marked waypoints.
+- **Only attack in lair rooms** — the loop only engages hostiles in **lair rooms** (rooms the game data tags as monster lairs); every other room is walked through as if auto-combat were off. The inverse of per-room "no atk": instead of opting rooms out one by one, you opt the whole loop *in* to lair rooms only. A per-room **"do not attack"** still skips even a lair room (it wins), and a triggered rest still clears any suppressed room so it can rest. Note the suppressed rooms include the walked-through connectors between waypoints, not just the marked waypoints. The rule (and a room's **no atk**) is about walking on instead of fighting, so it only applies while the loop is moving you: stop the loop (Pause, or a party member's `@stop`) or start following a party leader and the client fights what attacks you as usual.
 
 ## Estimating a loop's exp/hour
 
@@ -1355,13 +1355,15 @@ The tab **opens sorted by the 100% timer with running timers on top**, so a fres
 
 **The boss list belongs to the realm too.** Bosses you add, remove or edit (rooms, Stop before, and the rest) are the realm's: every character on it sees the same list, and two realms keep their own even on the same game data. (The list used to be kept with the game-data set; each realm took a copy of its set's list the first time it loaded under this version.)
 
+**Column widths you drag are remembered** for the character, so the table opens the way you left it.
+
 **Boss timers belong to the realm, and every character on it shares them.** Run two characters on the same realm, a client each, and a kill on one shows on the other within a second or two; both clients keep each other's timers. (Two realms never share timers, even on the same game data.)
 
 **Double-click a boss** to walk to it. A boss with a **single** room walks there straight away; one with **several** rooms opens a picker listing them **nearest first**, where **Run** starts the walk and **Load** only arms the destination (so you can start it later, the same as a GOTO's Load). (Double-tapping the Stop-before / Grab-All checkboxes just toggles them — it never fires the walk.)
 
 Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's available — a "throw a get at everything" spray straight from game data, never a corpse scan. What it does depends on what the boss's name resolves to:
 
-- a **monster** — the instant it dies, `get` every item in its drop table (one `get <item>` per item it could drop, percentages ignored); works for cleanup bosses too (no timer needed).
+- a **monster** — the instant it dies, `get` every item in its drop table (one `get <item>` per item it could drop, percentages ignored); works for cleanup bosses too (no timer needed). Some bosses cast a silent spell as they die that leaves the room unable to act until it runs out (about three seconds), and the game throws away what is sent before then. For those the grab waits out that spell and is sent once, right after; you stay in the room meanwhile (the nav line reads *waiting to loot*). Coins the kill dropped are picked up then too.
 - an **item** that just sits in the room (a box, e.g. a bogwood box or Pastor Landor's box) — `get` it every time you **walk into** the room.
 - **neither** (an unresolvable name — a touch-to-awaken mechanic like Iceforge) — Grab All doesn't apply, so its cell shows a muted dash reading *"Cannot resolve to a specific monster or item"*.
 

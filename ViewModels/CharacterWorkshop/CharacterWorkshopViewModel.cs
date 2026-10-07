@@ -78,7 +78,7 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
             () => new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile, leaderboards)));
 
         Sections.Add(new LazyWorkshopSection(BossesSectionViewModel.SectionId, BossesSectionViewModel.SectionTitle,
-            () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick)));
+            () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick, AppServices.Current.Profile)));
 
         Sections.Add(new GhManagementSectionViewModel(AppServices.Current.GhRoomLabels, AppServices.Current.GhSweep, AppServices.Current.RoomGraph, AppServices.Current.GhItemLocations, AppServices.Current.GhManagedRooms));
 

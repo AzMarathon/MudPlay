@@ -1,3 +1,4 @@
+using System;
 using MudPlay.Game.Combat;
 using Xunit;
 
@@ -37,4 +38,20 @@ public sealed class TempDeathResponseTests
     [InlineData(null)]
     public void ExpandToWireBytes_EmptyIsNull(string? s)
         => Assert.Null(TempDeathResponse.ExpandToWireBytes(s));
+
+    // Report paradigm-20261007-111929: a boss's Grab All went out at the kill and
+    // the game threw it away. The death spell's own length says how long the room
+    // can't act (its Dur, in spell rounds of about 3.04 s); the grab waits that
+    // long and a few milliseconds more.
+    [Theory]
+    [InlineData(1, 3090)]
+    [InlineData(2, 6130)]
+    [InlineData(0, 0)]
+    [InlineData(-1, 0)]
+    public void StallTime_IsTheSpellsRounds_PlusAFewMilliseconds(int dur, int expectedMs)
+        => Assert.Equal(TimeSpan.FromMilliseconds(expectedMs), TempDeathResponse.StallTime(dur));
+
+    [Fact]
+    public void DefaultResponse_IsTwoCarriageReturns()
+        => Assert.Equal(new byte[] { 13, 13 }, TempDeathResponse.ExpandToWireBytes(TempDeathResponse.DefaultResponse));
 }

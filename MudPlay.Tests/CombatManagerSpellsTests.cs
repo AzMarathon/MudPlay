@@ -2352,6 +2352,32 @@ public sealed class CombatManagerSpellsTests
         Assert.NotEqual(0, lastMonsterCount);   // roster NOT wiped to empty (no premature clear)
     }
 
+    // Report paradigm-20261007-131120: a room spell (hsto, two or more) killed one of
+    // two. A running room spell draws no *Combat Off*, so the corpse stayed on the
+    // roster, the count never fell under the spell's minimum, and the survivor was
+    // roomed again instead of getting the single-target attack. One kill under a room
+    // spell re-reads the room, and the thinned roster picks the single-target spell.
+    [Fact]
+    public void RoomSpellKillsOneOfTwo_ReReadsTheRoom_ThenSingleTargetsTheSurvivor()
+    {
+        using Harness h = new();
+        h.Settings.MultiAttackSpell = new CombatSpellSlot { SpellName = "hsto", MinEnemies = 2 };
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nebo" };
+        h.AddMonster(1, "elder leprechaun");
+        h.AddMonster(2, "dark sprite");
+
+        h.Feed("Also here: elder leprechaun, dark sprite.");
+        Assert.Equal("hsto", h.LastSent);
+        int sentAfterEngage = h.AllSent.Count();
+
+        h.Feed("You gain 12500 experience.");
+
+        Assert.Contains("", h.AllSent.Skip(sentAfterEngage));          // the room is read again
+
+        h.Feed("Also here: dark sprite.");
+        Assert.Equal("nebo dark sprite", h.LastSent);
+    }
+
     [Fact]
     public void PreAttackDebuff_DefersToHigherPrioritySurvivalCast()
     {

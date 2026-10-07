@@ -1,5 +1,17 @@
 # Version history
 
+## 3.147.9
+
+- A boss's Grab All waits out the boss's death spell and is sent once, instead of being thrown away at the kill; coins dropped by the kill are picked up then too
+- Bosses whose death spell had no cast response on record now get the default one
+- A room spell that kills one of two now re-reads the room and switches to the single-target attack for the survivor
+- The attack is no longer sent twice when a monster walks in right after the pre-attack debuff
+- A loop's "only attack in lair rooms" and "no atk" no longer switch combat off while the loop is stopped (Pause or @stop) or you are following a party leader
+- A custom statline with exp-to-level no longer raises a mismatch when that number goes negative
+- Bosses tab: Last Killed is wide enough to show the whole date and time
+- Bosses tab: column widths you drag are remembered
+- bug reports addressed: paradigm-20261007-111929, paradigm-20261007-122734, paradigm-20261007-125228, paradigm-20261007-125915, paradigm-20261007-131120
+
 ## 3.147.1
 
 - A blacklisted room is left out of an item record's Placed in, Room command and Given by lists

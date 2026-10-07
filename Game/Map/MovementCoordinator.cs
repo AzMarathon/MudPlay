@@ -74,6 +74,13 @@ public sealed class MovementCoordinator
     // the next room observation or a short timeout.
     public const string SummonDeathSettleGate = "SummonDeathSettle";
 
+    // Asserted for the length of a monster's "... temp" death spell when something
+    // is waiting to be picked up there: a boss's Grab All, or coins whose get went
+    // out before the death was known. The spell leaves the room unable to act and
+    // the game throws away what is sent before it runs out, so the pickup waits,
+    // and the walker with it. Engine-wait tier. Clears when the wait is over.
+    public const string DeathStallGate = "DeathStall";
+
     // Asserted by HealthManager when HP drops below the configured rest
     // trigger; clears when HP recovers past the configured rest target.
     public const string HealthRecoveryGate = "HealthRecovery";
