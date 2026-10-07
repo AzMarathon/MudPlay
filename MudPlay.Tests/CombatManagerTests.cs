@@ -3128,6 +3128,28 @@ public sealed class CombatManagerTests
         Assert.Equal("crystal golem", h.Combat.CurrentTarget);
     }
 
+    // Report paradigm-20261007-143049: with Auto-Combat off, a force-clear fights
+    // the room, and the kill has to hand it the next monster. The death path asked
+    // the toggle alone and did nothing: the harpy stayed on the roster and the gorgon
+    // beside it went unattacked for two rounds.
+    [Fact]
+    public void SeeHiddenOverride_CombatOff_AKillMovesOnToTheNextMonster()
+    {
+        using Harness h = new();
+        h.AutoCombatEnabled = false;
+        h.Combat.SetSeeHiddenClearGate(() => true);
+        h.AddMonster(1, "harpy", killable: true);
+        h.AddMonster(2, "gorgon", killable: true);
+
+        h.Feed("Also here: harpy, gorgon.");
+        Assert.Equal("a harpy", h.LastSent);
+
+        h.Combat.NoteUnattributedDeath();
+
+        Assert.Equal("a gorgon", h.LastSent);
+        Assert.Equal("gorgon", h.Combat.CurrentTarget);
+    }
+
     [Fact]
     public void SeeHiddenOverride_CombatOff_NoLatch_DoesNotEngage()
     {

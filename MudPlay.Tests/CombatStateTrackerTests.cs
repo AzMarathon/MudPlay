@@ -954,6 +954,38 @@ public sealed class CombatStateTrackerTests
         Assert.True(h.CombatGateHeld);
     }
 
+    // Report paradigm-20261007-143049: the see-hidden room came after a 78-second
+    // walk with no fighting. The stall watchdog counted that silence against the gate
+    // it had just seen go up, dropped it on the next one-second poll, and the walker
+    // left the room the character had just attacked in.
+    [Fact]
+    public void SeeHiddenOverride_GateRaisedAfterAQuietWalk_IsNotDroppedByTheStallWatchdog()
+    {
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSender();
+        h.WireSeeHiddenGate();
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "gorgon", killable: true);
+        h.Feed("The gorgon lunges at you with its horns, but misses!");   // the last fight
+        h.FakeNow = h.FakeNow.AddSeconds(78);
+
+        h.Feed("Also here: gorgon.");
+        Assert.True(h.CombatGateHeld);
+
+        h.FakeNow = h.FakeNow.AddSeconds(0.1);
+        h.Tracker.OnCombatTick();
+        Assert.True(h.CombatGateHeld);
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+        Assert.Empty(h.SentRaw);
+
+        // Six quiet seconds from there is a stall, as for any other fight.
+        h.FakeNow = h.FakeNow.AddSeconds(7);
+        h.Tracker.OnCombatTick();
+        Assert.False(h.CombatGateHeld);
+    }
+
     [Fact]
     public void SeeHiddenOverride_NotWired_BehavesAsBefore()
     {

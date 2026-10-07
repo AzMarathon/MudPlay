@@ -1,6 +1,6 @@
 # Version history
 
-## 3.148.7
+## 3.148.8
 
 - Bosses the game gives one name are separate rows, each with its own room and timer: nahr (spheres) and nahr (spaceghost), master assassin (cob key) and master assassin (dying assassin)
 - A boss's respawn time is read from its own monster record, not the first monster of its name: the great green dragon is 15 hours and the giant roc 6 on Paradigm
@@ -8,7 +8,9 @@
 - Two rows are named for what the boss dies into: lord chisholm (malformation) and mayor of arlysia (arachnigoth). Each keeps the first one's timer, started at its death
 - Grab All follows a boss that dies into another monster (Lord Chisholm into the malformation, the mayor of Arlysia into arachnigoth): it grabs the drops of whichever one just died
 - Out of combat, a between-round cast (a buff, a deck of cards draw) no longer runs into "You have already cast a spell this round!": rounds are projected at the board's measured length and the cast goes just after the round
-- bug reports addressed: paradigm-20261007-141844
+- A see-hidden room met after a quiet walk is held and cleared: the stall watchdog no longer drops the fight a moment after it starts and lets the walker leave
+- With Auto-Combat off, a see-hidden, failed-sneak or rest-blocker clear moves straight on to the next monster after a kill
+- bug reports addressed: paradigm-20261007-141844, paradigm-20261007-143049
 
 ## 3.148.2
 

@@ -612,6 +612,7 @@ public sealed class CombatStateTracker : IDisposable
             if (actionable > 0)
             {
                 _seeHiddenClearLatch = true;
+                NoteLiveFight("see-hidden clear");
                 AssertGate("seehidden clear (force-clear room)");
                 return;
             }
@@ -636,6 +637,7 @@ public sealed class CombatStateTracker : IDisposable
                 if (!_sneakFailClearLatch)
                     _log?.Info(LogCategory, $"sneak failed entering — clearing {actionable} hostile(s) here before sneaking on");
                 _sneakFailClearLatch = true;
+                NoteLiveFight("sneak-fail clear");
                 AssertGate("sneak-fail clear (clear the room, then re-sneak)");
                 return;
             }
@@ -671,12 +673,7 @@ public sealed class CombatStateTracker : IDisposable
         bool withinCountWindow = IsWithinMonsterCountWindow(targetable);
         if (actionable > 0 && withinCountWindow)
         {
-            // A fresh observation still holding a killable monster is a live
-            // fight — refresh the watchdog stamp (AssertGate early-outs when the
-            // gate's already held, so stamp here regardless so a slow-but-real
-            // fight never trips the stall watchdog).
-            _lastCombatActivityAt = _now();
-            _lastCombatActivityDesc = "room-entry hostile";
+            NoteLiveFight("room-entry hostile");
             string reason = first is null
                 ? $"room-entry actionable={actionable}/{targetable}"
                 : $"room-entry actionable={actionable}/{targetable} first={first}";
@@ -848,6 +845,22 @@ public sealed class CombatStateTracker : IDisposable
         if (e.MonsterNumber is not int n) return true;   // unknown number → fail open
         try { return _canEngage(n); }
         catch { return true; }
+    }
+
+    // A fresh observation still holding a killable monster is a live fight: refresh
+    // the stall watchdog's stamp (AssertGate early-outs when the gate's already held,
+    // so this is stamped regardless, and a slow-but-real fight never trips it).
+    //
+    // Every path that holds the gate for a fight stamps it. The two combat-off clears
+    // didn't, so the watchdog measured the silence from the last fight's final line:
+    // a see-hidden room met after a quiet walk had its gate dropped by the next
+    // one-second poll, a tenth of a second after it went up, and the walker took the
+    // character out of the room it had just attacked in (report
+    // paradigm-20261007-143049).
+    private void NoteLiveFight(string what)
+    {
+        _lastCombatActivityAt = _now();
+        _lastCombatActivityDesc = what;
     }
 
     private void AssertGate(string reason)

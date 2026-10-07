@@ -925,7 +925,7 @@ public sealed partial class CombatManager : IDisposable
     {
         if (!_attackHeldByGate) return;
         _attackHeldByGate = false;
-        if (_disposed || !_isEnabled()) return;
+        if (_disposed || !Fighting()) return;
         _log?.Combat(LogCategory, $"send hold lifted — re-deciding the attack on '{_currentTarget}' it held");
         _currentTarget = null;
         if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
@@ -1180,6 +1180,20 @@ public sealed partial class CombatManager : IDisposable
         _hitAndRunInsteadOfFight = runInsteadOfFight;
     }
 
+    // A force-clear is making the engine fight this room with Auto-Combat off: a
+    // stealth runner's see-hidden or failed-sneak clear, or a rest-blocker clear.
+    private bool ForceClearActive() =>
+        _seeHiddenClearActive?.Invoke() == true || _restClearActive?.Invoke() == true;
+
+    // Whether the engine is fighting: Auto-Combat is on, or a force-clear has it
+    // fighting this room regardless. Every handler asks this, not the toggle alone.
+    // Asking the toggle alone left a force-clear with only its first attack: the kill
+    // wasn't taken off the roster, nothing re-picked the next monster, and the
+    // character stood being hit until something re-displayed the room (report
+    // paradigm-20261007-143049: two rounds between a harpy's death and the attack on
+    // the gorgon beside it).
+    private bool Fighting() => _isEnabled() || ForceClearActive();
+
     // Wire the combat-off stealth-runner clears: seeHiddenClearActive reports whether
     // CombatStateTracker has latched a force-clear for the current room (a stealth
     // runner hit a SeeHidden monster, or its sneak failed into a room inside the
@@ -1263,7 +1277,7 @@ public sealed partial class CombatManager : IDisposable
     // hold flag so an ordinary recovery (no held neutral) doesn't churn.
     public void ResumeAfterRecovery()
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (!_holdingForRecovery) return;
         _holdingForRecovery = false;
         if (_classifier.Current is { } live) OnEntitiesObserved(live);
@@ -1281,7 +1295,7 @@ public sealed partial class CombatManager : IDisposable
     // hold has lifted. No-op when combat is off or no observation is cached.
     public void ResumeAfterShadowRest()
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_classifier.Current is { } live) OnEntitiesObserved(live);
     }
 
@@ -1523,8 +1537,7 @@ public sealed partial class CombatManager : IDisposable
         // blocking a needed rest with Auto-Combat OFF makes us engage-to-clear it
         // anyway, on the same footing as the see-hidden override — both bypass the
         // disabled gate here and the Min/Max gate below.
-        bool forceClearOverride = _seeHiddenClearActive?.Invoke() == true
-                                  || _restClearActive?.Invoke() == true;
+        bool forceClearOverride = ForceClearActive();
         if (!_isEnabled() && !forceClearOverride)
         {
             _currentTarget = null;
@@ -2386,7 +2399,7 @@ public sealed partial class CombatManager : IDisposable
     // — log + leave it.
     private void OnWeaponNoEffect(MatchResult _)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_currentTarget is null) return;
 
         // Canonicalize the target to base species — strip any flavor
@@ -2551,7 +2564,7 @@ public sealed partial class CombatManager : IDisposable
     // as Unkillable, no matter how much damage the very next round deals.
     private void OnUserWeaponLanded(MatchResult match)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (match.Groups.Count < 3) return;
         // Only our OWN swing counts. UserHits also fires for party members ("Bob
         // hacks ...") and for reactive gear ("The armour spikes stab ..."), neither
@@ -2618,7 +2631,7 @@ public sealed partial class CombatManager : IDisposable
             string.Equals(announcer, ownName, StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         CombatSettings settings = _readSettings();
 
         // AttackNotLast: if we're holding for the first party announce, this is it —
@@ -2677,7 +2690,7 @@ public sealed partial class CombatManager : IDisposable
             string.Equals(announcer, ownName, StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (TryReleaseNotLastHold(announcer)) return;
         HandleAttackOrderRefire(_readSettings(), announcer, announcedTarget);
     }
@@ -2698,7 +2711,7 @@ public sealed partial class CombatManager : IDisposable
             string.Equals(announcer, ownName, StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (TryReleaseNotLastHold(announcer)) return;
         HandleAttackOrderRefire(_readSettings(), announcer, RoomWildcardTarget);
     }
@@ -2973,7 +2986,7 @@ public sealed partial class CombatManager : IDisposable
         _refireTarget = null;
         _refireAnnouncer = null;
 
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
             return;
 
@@ -3070,7 +3083,7 @@ public sealed partial class CombatManager : IDisposable
     // since keeping its roster true is what the re-display is for.
     public bool RequestRoomRefresh(string context)
     {
-        if (!_isEnabled()) return false;
+        if (!Fighting()) return false;
         bool sent = TrySendRoomRefresh(context);
         if (sent) _log?.Combat(LogCategory, $"room re-display ({context})");
         return sent;
@@ -3106,7 +3119,7 @@ public sealed partial class CombatManager : IDisposable
     // room description, exits block, and ground-item enumeration that `l` dumps.
     private void OnCombatLine(MatchResult _)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
 
         // Resume-after-interrupt: a combat line arrived while our
         // auto-attack is off (we cast a buff/heal mid-round, got
@@ -3155,7 +3168,7 @@ public sealed partial class CombatManager : IDisposable
     // that shows nothing engageable — an already-tracked room needs no refresh.
     private void OnRoomSpawnArrival(MatchResult _)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_currentTarget is not null) return;
         if (_wireSender is null) return;
         if (_classifier.Current is { } cur && HasEngageable(cur)) return;
@@ -3420,7 +3433,7 @@ public sealed partial class CombatManager : IDisposable
 
     private void DropMissingTarget(string reason)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_wireSender is null) return;
         if (_currentTarget is null) return;
 
@@ -3467,7 +3480,7 @@ public sealed partial class CombatManager : IDisposable
     // is ignored.
     private void OnCommandNoEffect(MatchResult _)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_wireSender is null) return;
         if (_currentTarget is null) return;
 
@@ -3532,7 +3545,7 @@ public sealed partial class CombatManager : IDisposable
     // re-display, letting the server hand back the true roster.
     public void NoteUnattributedDeath()
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_wireSender is null) return;
 
         // AoE room-wipe: ≥2 exp lines this round means an AoE (ours or a hand-cast one)
@@ -3720,7 +3733,7 @@ public sealed partial class CombatManager : IDisposable
 
         void Dispatch()
         {
-            if (_disposed || !_isEnabled()) return;
+            if (_disposed || !Fighting()) return;
             if (_lastAttackSentAt != attackAtSchedule)
             {
                 _log?.Combat(LogCategory,
@@ -3776,7 +3789,7 @@ public sealed partial class CombatManager : IDisposable
     public void NoteGearSwapInterrupt()
     {
         if (_disposed) return;
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_classifier.Current is not { } live || !HasEngageable(live)) return;
         _log?.Combat(LogCategory, "gear swap during a live fight — arming interrupt resume for the wear's *Combat Off*");
         NoteBetweenRoundCast();
@@ -3859,7 +3872,7 @@ public sealed partial class CombatManager : IDisposable
     // stuck / idle engine picks it up immediately.
     private void OnAttackedInSelfDefense(MatchResult match)
     {
-        if (_disposed || !_isEnabled()) return;
+        if (_disposed || !Fighting()) return;
         // Running a walk-to through a hostile town (e.g. an evil character in a guarded
         // city): keep running rather than turning to fight. Looping / Auto-Lair / idle
         // still defend.
@@ -4385,7 +4398,7 @@ public sealed partial class CombatManager : IDisposable
     // some other room monster isn't ours to chase.
     private void OnMonsterProtect(MatchResult match)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (match.Groups.Count < 2) return;
         string guard = match.Groups[0].Trim();
         string protectedName = match.Groups[1].Trim();
@@ -4415,7 +4428,7 @@ public sealed partial class CombatManager : IDisposable
     private void TryGuardRetry()
     {
         if (_guardBlockedTarget is not { Length: > 0 } priority) return;
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_castingSpellTarget is not null) return;   // spell mode owns its re-cast
         if (_wireSender is null) return;
 
@@ -4554,7 +4567,7 @@ public sealed partial class CombatManager : IDisposable
     // attack SPELL / item-use / other client commands.
     public bool OnActionFailed()
     {
-        if (_disposed || !_isEnabled()) return false;
+        if (_disposed || !Fighting()) return false;
         if (_castingSpellTarget is not null) return false;
         if (_currentTarget is null) return false;
         if (_lastAttackCommand is not { Length: > 0 } line) return false;
@@ -4604,7 +4617,7 @@ public sealed partial class CombatManager : IDisposable
     private void VerifyEngagement()
     {
         if (_awaitingEngageSince is not { } since) return;
-        if (!_isEnabled()) { _awaitingEngageSince = null; return; }
+        if (!Fighting()) { _awaitingEngageSince = null; return; }
         if (_engageConfirmed) { _awaitingEngageSince = null; return; }
         if (DateTimeOffset.Now - since < EngageConfirmWindow) return;
 
