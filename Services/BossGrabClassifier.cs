@@ -18,8 +18,8 @@ public static class BossGrabClassifier
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(def);
-        bool isMonster = gameData.FindRowByName("Monsters", def.Name) is not null;
-        bool isItem = ItemGetName(gameData, def.Name) is not null;
+        bool isMonster = gameData.FindRowByName("Monsters", def.MatchName) is not null;
+        bool isItem = ItemGetName(gameData, def.MatchName) is not null;
         return BossGrabAllCommands.ClassifyKind(def.MonsterNumber is not null, isMonster, isItem);
     }
 

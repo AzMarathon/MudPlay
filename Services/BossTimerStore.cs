@@ -29,7 +29,8 @@ namespace MudPlay.Services;
 // name, then it died (awarded exp). Monster numbers aren't observable in-game, so
 // attribution is by NAME — the engaged target name (CombatManager.CurrentTarget,
 // read live at death) matched against the boss list, confirmed by the current room
-// being one of the boss's rooms. This covers the common "exp + *Combat Off*"
+// being one of the boss's rooms. Two bosses the game gives one name (BossDef.GameName)
+// are told apart by that room. This covers the common "exp + *Combat Off*"
 // fallback death, which carries no candidate identity of its own; a specific
 // death-line candidate name is accepted as a secondary match. Deaths we can't
 // attribute (no engaged name, no candidate) fall to the tab's manual override.
@@ -246,10 +247,25 @@ public sealed class BossTimerStore
     // the current room. key/engagedName are read live at the death (the event itself
     // carries neither location nor the engaged name).
     // Fires when a death is attributed to a tracked boss in the current room — the
-    // matched BossDef (whichever respawn type). Fires for EVERY matched boss; a
-    // subscriber (the Grab-All engine) gates on def.GrabAll. Kept separate from the
-    // timer marking so a cleanup boss (no timer) still notifies.
+    // matched BossDef (whichever respawn type). Fires for EVERY matched boss. Kept
+    // separate from the timer marking so a cleanup boss (no timer) still notifies.
     public event Action<BossDef>? BossKilled;
+
+    // Fires for every death that leaves a boss's loot on the floor: the boss's own
+    // (alongside BossKilled), and the death of a monster the boss's death summoned
+    // (Lord Chisholm's malformation, the mayor of Arlysia's arachnigoth), which is
+    // not a kill of the boss and starts no timer. Carries what was seen of the dead
+    // monster, its name and the exp it paid, either of them null when unseen, for
+    // Grab All to read the right record's drops.
+    public event Action<BossDef, string?, int?>? BossLootDropped;
+
+    // The names of the monsters a boss's death summons, down the whole chain.
+    private Func<BossDef, IReadOnlyList<string>>? _deathSummons;
+    public void SetDeathSummonResolver(Func<BossDef, IReadOnlyList<string>> deathSummons)
+    {
+        ArgumentNullException.ThrowIfNull(deathSummons);
+        _deathSummons = deathSummons;
+    }
 
     //
     // recentFoes are the monsters named by the fight's damage lines. They matter only
@@ -268,12 +284,12 @@ public sealed class BossTimerStore
         foreach (BossDef def in _bosses.Current)
         {
             if (!RoomsContain(def, here)) continue;
-            bool named = NameMatches(def.Name, engagedName)
-                         || evt.Candidates.Any(c => NameMatches(def.Name, c.Name));
+            bool named = NameMatches(def.MatchName, engagedName)
+                         || evt.Candidates.Any(c => NameMatches(def.MatchName, c.Name));
             if (!named)
             {
                 if (!unnamed || recentFoes is not { Count: > 0 }
-                    || !recentFoes.Any(n => NameMatches(def.Name, n)))
+                    || !recentFoes.Any(n => NameMatches(def.MatchName, n)))
                     continue;
                 if (!UnnamedDeathIsTheBosss(def, here, evt.ExperienceGained, recentFoes, out string why)) continue;
                 _log?.Info("Bosses", $"boss '{def.Name}' was in the fight's damage lines and {why} — taken as the kill");
@@ -283,7 +299,28 @@ public sealed class BossTimerStore
             // notify BossKilled so Grab-All can fire regardless of respawn type.
             if (def.RespawnType == BossRespawnType.Timed) MarkKilled(def.Name);
             BossKilled?.Invoke(def);
+            // The name that matched is the dead monster's; an unnamed death has none.
+            string? sawDie = !named ? null
+                : NameMatches(def.MatchName, engagedName) ? engagedName
+                : evt.Candidates.First(c => NameMatches(def.MatchName, c.Name)).Name;
+            BossLootDropped?.Invoke(def, sawDie, evt.ExperienceGained);
             return;
+        }
+
+        // Not a boss of this room by name: it may be what one of them turned into.
+        if (unnamed || _deathSummons is null) return;
+        foreach (BossDef def in _bosses.Current)
+        {
+            if (!RoomsContain(def, here)) continue;
+            foreach (string summoned in _deathSummons(def))
+            {
+                string? sawDie = NameMatches(summoned, engagedName) ? engagedName
+                    : evt.Candidates.Where(c => NameMatches(summoned, c.Name)).Select(c => c.Name).FirstOrDefault();
+                if (sawDie is null) continue;
+                _log?.Info("Bosses", $"'{sawDie}' died in {here}: what the death of boss '{def.Name}' summons");
+                BossLootDropped?.Invoke(def, sawDie, evt.ExperienceGained);
+                return;
+            }
         }
     }
 
@@ -298,13 +335,7 @@ public sealed class BossTimerStore
         _roomExp = roomExp;
     }
 
-    // A kill's exp is shared by the party, six at most (GAME_MECHANICS "Party size
-    // bounds"), so a monster worth E pays each of them somewhere from a sixth of E up
-    // to all of it.
-    private const int MaxPartySize = 6;
-
-    private static bool CouldPay(long worth, long gained) =>
-        worth > 0 && gained <= worth && gained >= worth / MaxPartySize - 1;
+    private static bool CouldPay(long worth, long gained) => Game.Inventory.BossDeathLoot.CouldPay(worth, gained);
 
     // The unnamed death is the boss's when the exp gained is something the boss could
     // have paid and nothing else in the room could have (user, 2026-10-07): a gain
@@ -324,7 +355,7 @@ public sealed class BossTimerStore
             return true;
         }
         why = "nothing else was named";
-        return recentFoes.All(n => NameMatches(def.Name, n));
+        return recentFoes.All(n => NameMatches(def.MatchName, n));
     }
 
     // Fallback kill signal: a boss-table monster we saw in the room roster is
@@ -394,7 +425,12 @@ public sealed class BossTimerStore
                 $"boss '{name}' vanished from a re-parse of {pending.Room} — marking killed (roster fallback)");
             MarkKilled(name);
             foreach (BossDef def in _bosses.Current)
-                if (NameMatches(def.Name, name)) { BossKilled?.Invoke(def); break; }
+                if (string.Equals(def.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    BossKilled?.Invoke(def);
+                    BossLootDropped?.Invoke(def, null, null);
+                    break;
+                }
         }
     }
 
@@ -409,7 +445,7 @@ public sealed class BossTimerStore
             foreach (RoomEntity e in obs.Entities)
             {
                 if (e.Kind != EntityKind.Monster) continue;
-                if (NameMatches(def.Name, e.ResolvedName) || NameMatches(def.Name, e.RawName))
+                if (NameMatches(def.MatchName, e.ResolvedName) || NameMatches(def.MatchName, e.RawName))
                 {
                     present.Add(def.Name);
                     break;

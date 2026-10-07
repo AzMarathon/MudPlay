@@ -50,6 +50,37 @@
     "RespawnType": "Cleanup"
   },
   {
+    "Name": "small stone box",
+    "MonsterNumber": null,
+    "Rooms": [
+      "14/5083"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Cleanup"
+  },
+  {
+    "Name": "dark-elf queen chests",
+    "MonsterNumber": null,
+    "Rooms": [
+      "8/707"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Cleanup"
+  },
+  {
+    "Name": "pastor lander's box",
+    "GameName": "wooden box",
+    "MonsterNumber": null,
+    "Rooms": [
+      "17/2590"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Cleanup"
+  },
+  {
     "Name": "ancient willow",
     "MonsterNumber": 278,
     "Rooms": [
@@ -165,7 +196,8 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "master assassin",
+    "Name": "master assassin (cob key)",
+    "GameName": "master assassin",
     "MonsterNumber": 178,
     "Rooms": [
       "7/1283"
@@ -533,8 +565,9 @@
     "RespawnHoursOverride": 250
   },
   {
-    "Name": "nahr",
-    "MonsterNumber": 1004,
+    "Name": "nahr (spheres)",
+    "GameName": "nahr",
+    "MonsterNumber": 1010,
     "Rooms": [
       "17/3087"
     ],
@@ -731,8 +764,9 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "nahr",
-    "MonsterNumber": 1004,
+    "Name": "nahr (spaceghost)",
+    "GameName": "nahr",
+    "MonsterNumber": 1011,
     "Rooms": [
       "12/2378"
     ],
@@ -828,7 +862,8 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "mayor of arlysia",
+    "Name": "mayor of arlysia (arachnigoth)",
+    "GameName": "mayor of arlysia",
     "MonsterNumber": 854,
     "Rooms": [
       "17/2269",
@@ -996,7 +1031,7 @@
   },
   {
     "Name": "great green dragon",
-    "MonsterNumber": 1038,
+    "MonsterNumber": 1058,
     "Rooms": [
       "1/3111"
     ],
@@ -1195,7 +1230,8 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "lord chisholm",
+    "Name": "lord chisholm (malformation)",
+    "GameName": "lord chisholm",
     "MonsterNumber": 1297,
     "Rooms": [
       "14/5829",
@@ -1931,7 +1967,7 @@
   },
   {
     "Name": "giant roc",
-    "MonsterNumber": 571,
+    "MonsterNumber": 792,
     "Rooms": [
       "10/159"
     ],
@@ -2263,8 +2299,9 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "master assassin",
-    "MonsterNumber": 178,
+    "Name": "master assassin (dying assassin)",
+    "GameName": "master assassin",
+    "MonsterNumber": 740,
     "Rooms": [
       "15/416"
     ],
@@ -2771,5 +2808,36 @@
     "RespawnType": "Timed",
     "StopBefore": false,
     "DefaultStopBefore": false
+  },
+  {
+    "Name": "haggard witch",
+    "MonsterNumber": 2742,
+    "Rooms": [
+      "14/8832"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed"
+  },
+  {
+    "Name": "master torturer",
+    "MonsterNumber": 344,
+    "Rooms": [
+      "8/512"
+    ],
+    "InStock": true,
+    "InParadigm": true,
+    "RespawnType": "Timed"
+  },
+  {
+    "Name": "giant toad-beast",
+    "MonsterNumber": 1157,
+    "Rooms": [
+      "5/2160"
+    ],
+    "InStock": false,
+    "InParadigm": true,
+    "RespawnType": "Timed",
+    "Notes": "No timer of its own: summoned by placing the glass, crystal, granite and marble orbs in the shrine."
   }
 ]

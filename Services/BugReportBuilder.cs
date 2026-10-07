@@ -72,6 +72,12 @@ public static class BugReportBuilder
             new("Tick timing (last 400 events)", SafeSection(() =>
                 $"HP regen expected per gain: {svc.HpRegenExpected.Current?.ToString() ?? "(no `stat` read yet — gains judged on timing alone)"}"
                 + (svc.HpRegenExpected.Current is { } expected ? $"; a gain above +{expected.Largest} is a heal." : string.Empty)
+                // The length projected rounds step by, and whether the last one could
+                // be placed: a cast refused as "already cast this round" out of a
+                // fight is a projection running ahead of the game's round.
+                + $"\n\nRound length: {svc.Tick.RoundLength.TotalSeconds:F3} s"
+                + (svc.Tick.RoundLengthMeasured ? " (measured)" : " (nominal: no regen pass has measured it yet)")
+                + $"; last round tick {(svc.Tick.LastCombatTickWasDamageDriven ? "seen on the wire" : svc.Tick.LastCombatTickWasPlaced ? "projected from a recent sighting" : "projected with nothing seen lately: it freed no cast slot")}."
                 + "\n\n" + svc.TickTiming.Render())),
             new("Session combat stats", SafeSection(() => BuildSessionCombat(svc))),
             new("Session activity", SafeSection(() => BuildSessionActivity(svc))),
@@ -604,6 +610,7 @@ public static class BugReportBuilder
         // so recovery can proceed (report paradigm-20260901-093301).
         Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
+        Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
         // Alternating action-order phase — pairs with the resolved Combat "ActionOrder"
         // setting below to explain why an alternate-order character is casting or
@@ -1585,7 +1592,11 @@ public static class BugReportBuilder
         Kv(sb, "Active boss timers", bossTimers.Count.ToString());
         foreach (var (def, state) in bossTimers.Take(15))
             Kv(sb, $"  {def.Name}",
-                $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
+                // Which monster record the timer is read from, and its length: a boss
+                // whose name several records share is only right when it's its own.
+                $"{(def.MonsterNumber is { } n ? $"#{n}" : "no number")}, "
+                + $"{Game.GameData.BossCatalog.EffectiveRegenHours(svc.GameData, def)?.ToString() ?? "?"}h, "
+                + $"full {Game.Map.BossTimerMath.FormatHours(state.FullRemaining.TotalHours)}, "
                 + $"next {state.NextLabel} {Game.Map.BossTimerMath.FormatHours(state.NextRemaining.TotalHours)}");
 
         return sb.ToString();

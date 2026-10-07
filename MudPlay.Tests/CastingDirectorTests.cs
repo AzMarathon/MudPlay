@@ -1347,8 +1347,9 @@ public sealed class CastingDirectorTests
     [Fact]
     public void Buff_OnTimerFallbackCombatTick_Casts()
     {
-        // Same setup, but a timer-fallback tick (not damage-driven) is HP-fresh,
-        // so the buff fires normally — proves the guard is tick-source-specific.
+        // Same setup, but a timer-fallback tick (not damage-driven) is HP-fresh, so
+        // the buff isn't held for HP to settle. It is a round nobody saw, though, so
+        // it goes a moment after the projected boundary, not on it.
         using CureHarness h = new();
         h.EnableBurstSettle();
         h.AutoBlessEnabled = false;
@@ -1362,9 +1363,31 @@ public sealed class CastingDirectorTests
         h.CombatTickDamageDriven = false;
 
         h.Director.OnCombatTick();
+        Assert.Empty(h.CastsSent);
+        Assert.Equal(TimeSpan.FromMilliseconds(200), Assert.Single(h.SettledPasses).Delay);
 
+        h.RunSettledPass();
         Assert.Single(h.CastsSent);
         Assert.Equal("bless", h.CastsSent[0]);
+    }
+
+    // Report paradigm-20261007-141844: a tick long after anything placed the round
+    // grid is only the timer counting. It frees no slot, so a cast made since the
+    // last real boundary isn't followed by another on the client's say-so.
+    [Fact]
+    public void UnplacedTick_DoesNotFreeTheBetweenRoundSlot()
+    {
+        using CureHarness h = new();
+        bool placed = false;
+        h.Director.SetCombatTickPlacement(() => placed);
+        h.Director.MarkBetweenRoundSlotUsed();
+
+        h.Director.NotifyRoundComplete();
+        Assert.True(h.Director.BetweenRoundSlotUsed);
+
+        placed = true;
+        h.Director.NotifyRoundComplete();
+        Assert.False(h.Director.BetweenRoundSlotUsed);
     }
 
     // ProfileMigrations' v4 → v5 and v5 → v6 steps, for the harnesses: the

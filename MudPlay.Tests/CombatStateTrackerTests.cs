@@ -954,6 +954,167 @@ public sealed class CombatStateTrackerTests
         Assert.True(h.CombatGateHeld);
     }
 
+    // Report paradigm-20261007-143049: the see-hidden room came after a 78-second
+    // walk with no fighting. The stall watchdog counted that silence against the gate
+    // it had just seen go up, dropped it on the next one-second poll, and the walker
+    // left the room the character had just attacked in.
+    [Fact]
+    public void SeeHiddenOverride_GateRaisedAfterAQuietWalk_IsNotDroppedByTheStallWatchdog()
+    {
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSender();
+        h.WireSeeHiddenGate();
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "gorgon", killable: true);
+        h.Feed("The gorgon lunges at you with its horns, but misses!");   // the last fight
+        h.FakeNow = h.FakeNow.AddSeconds(78);
+
+        h.Feed("Also here: gorgon.");
+        Assert.True(h.CombatGateHeld);
+
+        h.FakeNow = h.FakeNow.AddSeconds(0.1);
+        h.Tracker.OnCombatTick();
+        Assert.True(h.CombatGateHeld);
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+        Assert.Empty(h.SentRaw);
+
+        // Six quiet seconds from there is a stall, as for any other fight.
+        h.FakeNow = h.FakeNow.AddSeconds(7);
+        h.Tracker.OnCombatTick();
+        Assert.False(h.CombatGateHeld);
+    }
+
+    // Report paradigm-20261007-143049 and the user's ruling on it (2026-10-07): the
+    // sneak a see-hidden monster broke stays broken until the character sneaks
+    // again. Carried into the next room before that, it is exposed there for the
+    // same reason, so that room is cleared too.
+    private static Harness RunnerWhoseSneakAGorgonBroke()
+    {
+        Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "gorgon", killable: true);
+        h.AddMonster(2, "brigand", killable: true);
+
+        h.Feed("Also here: gorgon.");
+        Assert.True(h.Tracker.SneakBrokenBySeeHidden);
+        h.Classifier.NoteRoomChanged();          // carried out of the gorgon's room
+        Assert.False(h.CombatGateHeld);
+        return h;
+    }
+
+    [Fact]
+    public void SeeHiddenBreak_IsCarriedIntoTheNextRoom_WhichIsClearedToo()
+    {
+        using Harness h = RunnerWhoseSneakAGorgonBroke();
+
+        h.Feed("Also here: brigand.");           // nothing here sees hidden
+
+        Assert.True(h.CombatGateHeld);
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+
+        h.Feed("Also here: Bob.");               // cleared: free to re-sneak
+        Assert.False(h.CombatGateHeld);
+        Assert.True(h.Tracker.SneakBrokenBySeeHidden);   // until the sneak takes
+    }
+
+    [Fact]
+    public void SeeHiddenBreak_EndsOnceSneakingAgain()
+    {
+        using Harness h = RunnerWhoseSneakAGorgonBroke();
+
+        h.Tracker.NoteSneakRegained();
+        h.Feed("Also here: brigand.");
+
+        Assert.False(h.Tracker.SneakBrokenBySeeHidden);
+        Assert.False(h.CombatGateHeld);          // sneaking past it, as before the break
+        Assert.False(h.Tracker.SeeHiddenClearActive);
+    }
+
+    [Fact]
+    public void SeeHiddenBreak_IsDroppedWhenTheOptionIsSwitchedOff()
+    {
+        using Harness h = RunnerWhoseSneakAGorgonBroke();
+
+        h.ClearWhenSeenHidden = false;
+        h.Feed("Also here: brigand.");
+
+        Assert.False(h.CombatGateHeld);
+        Assert.False(h.Tracker.SneakBrokenBySeeHidden);
+    }
+
+    // The user's rule (2026-10-07): a see-hidden room over the room thresholds isn't
+    // stopped in, like any other fight outside them. The break is still on, so the
+    // first room that does meet them is where the character stops and clears.
+    [Fact]
+    public void SeeHiddenBreak_RoomOutsideTheMonsterWindow_IsWalkedThrough_StillBroken()
+    {
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.WireMonsterCountWindow();
+        h.MovementActive = true;
+        h.Settings.MaxMonstersInRoom = 2;
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "gorgon", killable: true);
+        h.AddMonster(2, "brigand", killable: true);
+        h.AddMonster(3, "harpy", killable: true);
+
+        h.Feed("Also here: gorgon, brigand, harpy.");    // three, over the max of two
+        Assert.False(h.CombatGateHeld);
+        Assert.False(h.Tracker.SeeHiddenClearActive);
+        Assert.True(h.Tracker.SneakBrokenBySeeHidden);
+
+        h.Classifier.NoteRoomChanged();
+        h.Feed("Also here: brigand, harpy.");            // two: inside the window
+        Assert.True(h.CombatGateHeld);
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+    }
+
+    // Once stopped, the room is cleared whatever the count does: a third monster
+    // walking in doesn't turn the clear into a room to leave.
+    [Fact]
+    public void SeeHiddenClear_OnceStopped_IsHeldPastTheWindow()
+    {
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.WireMonsterCountWindow();
+        h.MovementActive = true;
+        h.Settings.MaxMonstersInRoom = 2;
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "gorgon", killable: true);
+        h.AddMonster(2, "brigand", killable: true);
+        h.AddMonster(3, "harpy", killable: true);
+
+        h.Feed("Also here: gorgon, brigand.");
+        Assert.True(h.CombatGateHeld);
+
+        h.Feed("Also here: gorgon, brigand, harpy.");
+        Assert.True(h.CombatGateHeld);
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+    }
+
+    // The stall watchdog gives up on a room, not on the break; Reset States is the
+    // user starting over.
+    [Fact]
+    public void SeeHiddenBreak_SurvivesTheStallWatchdog_ButNotResetStates()
+    {
+        using Harness h = RunnerWhoseSneakAGorgonBroke();
+
+        h.Tracker.ResetCombatState("idle-stall watchdog");
+        Assert.True(h.Tracker.SneakBrokenBySeeHidden);
+
+        h.Tracker.ResetCombatState("Reset States (manual)", forgetSneakBreak: true);
+        Assert.False(h.Tracker.SneakBrokenBySeeHidden);
+    }
+
     [Fact]
     public void SeeHiddenOverride_NotWired_BehavesAsBefore()
     {

@@ -28,6 +28,9 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
     [ObservableProperty] private bool _defaultGrabAll;
 
     public int? MonsterNumber { get; private set; }
+    // What the game calls the boss when its name here is a label (BossDef.GameName).
+    // Not edited in the dialog; carried through so a save doesn't drop it.
+    private readonly string _gameName = string.Empty;
     // The live flags are edited on the main table and carried through unchanged; a
     // boss added here starts on its defaults.
     private readonly bool _isNew;
@@ -53,11 +56,13 @@ public sealed partial class ManageBossRowViewModel : ObservableObject
         InParadigm = def.InParadigm;
         ShowInTable = def.ShowInTable;
         MonsterNumber = def.MonsterNumber;
+        _gameName = def.GameName;
     }
 
     public BossDef ToDef() => new()
     {
         Name = Name.Trim().ToLowerInvariant(),
+        GameName = _gameName,
         MonsterNumber = MonsterNumber,
         Rooms = BossRoomText.Parse(Rooms),
         InStock = InStock,

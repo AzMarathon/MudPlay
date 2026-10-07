@@ -253,6 +253,18 @@ public sealed class CastingDirector : IDisposable
     private DateTime _hpBurstAt = DateTime.MinValue;
     private int _lastSeenHp;
     private static readonly TimeSpan BurstSettleWindow = TimeSpan.FromMilliseconds(400);
+
+    // Projected-round margin. A round nobody saw is where the client worked out it
+    // should be, good to a few tens of milliseconds, and a cast is refused when it
+    // reaches the game before the round it is for has begun (the game hands the
+    // round's one cast back at its own tick). Sent a moment after the projected
+    // boundary it costs nothing; sent on it, a projection running slightly ahead put
+    // two casts in one round: `You have already cast a spell this round!` (report
+    // paradigm-20261007-141844). So after a tick that wasn't seen on the wire, every
+    // pick waits this long, an Emergency heal too: refused, it would lose the round.
+    private DateTime _projectedTickAt = DateTime.MinValue;
+    private static readonly TimeSpan ProjectedTickMargin = TimeSpan.FromMilliseconds(200);
+    private Func<bool>? _combatTickPlaced;
     // Runs the settled pass after a delay (a one-shot dispatcher timer in the app, a
     // captured callback in tests). Unset = the guard is off, so a hold can never be
     // stranded without a scheduled re-evaluation.
@@ -449,6 +461,13 @@ public sealed class CastingDirector : IDisposable
     public void SetCombatTickSource(Func<bool> isDamageDriven) =>
         _combatTickDamageDriven = isDamageDriven;
 
+    // Wire the "can this combat tick be placed against the game's rounds?" probe
+    // (TickEngine.LastCombatTickWasPlaced). A false read is the timer counting with
+    // nothing seen for a long while: it frees no slot. Optional — unset means every
+    // tick is a round boundary.
+    public void SetCombatTickPlacement(Func<bool> isPlaced) =>
+        _combatTickPlaced = isPlaced;
+
     // Wire the delayed-callback scheduler that runs the settled pass once a round
     // burst goes quiet (see _hpBurstAt). Without it the burst-settle hold is off.
     public void SetSettledPassScheduler(Action<TimeSpan, Action> schedule) =>
@@ -460,7 +479,13 @@ public sealed class CastingDirector : IDisposable
     // an Emergency heal until HP settles.
     public void OnCombatTick()
     {
-        if (_combatTickDamageDriven?.Invoke() == true) _hpBurstAt = _now();
+        // _combatTickDamageDriven unset is a caller with no tick source: nothing to
+        // hold for either way.
+        if (_combatTickDamageDriven?.Invoke() is { } seenOnTheWire)
+        {
+            if (seenOnTheWire) _hpBurstAt = _now();
+            else _projectedTickAt = _now();
+        }
         Evaluate();
     }
 
@@ -1098,8 +1123,12 @@ public sealed class CastingDirector : IDisposable
     // in the slot this tick would free, so a cast sent inside the burst keeps the slot
     // spent: freeing it let a second heal out into "You have already cast a spell this
     // round!" (report paradigm-20261004-054304).
+    //
+    // A tick that can't be placed against the game's rounds frees nothing: the slot
+    // runs out its RoundWindow instead (see SetCombatTickPlacement).
     public void NotifyRoundComplete()
     {
+        if (_combatTickPlaced?.Invoke() == false) return;
         if (_combatTickDamageDriven?.Invoke() == true
             && _now() - _betweenRoundSlotUsedAt < BurstSettleWindow)
             return;
@@ -1764,12 +1793,19 @@ public sealed class CastingDirector : IDisposable
         if (_settledPassPending || _scheduleSettledPass is null) return;
         _settledPassPending = true;
         TimeSpan wait = _hpBurstAt + BurstSettleWindow - _now();
+        TimeSpan margin = _projectedTickAt + ProjectedTickMargin - _now();
+        if (margin > wait) wait = margin;
         _scheduleSettledPass(wait < TimeSpan.Zero ? TimeSpan.Zero : wait, () =>
         {
             _settledPassPending = false;
             if (!_disposed) Evaluate();
         });
     }
+
+    // True for ProjectedTickMargin after a round tick that wasn't seen on the wire.
+    // Always false when no scheduler is wired, like the burst hold.
+    private bool PastProjectedTickOnly() =>
+        _scheduleSettledPass is not null && _now() - _projectedTickAt < ProjectedTickMargin;
 
     // True while an AttackPrevented condition (stun / petrify / bind) is active —
     // see CombatManager.AttacksBlocked, the identical check for the attack slot.
@@ -1795,6 +1831,14 @@ public sealed class CastingDirector : IDisposable
         HealthSettings health = _readHealth();
 
         PartySettings? partySettings = _readPartySettings?.Invoke();
+
+        // Projected-round margin (see _projectedTickAt): nothing goes out on a round
+        // boundary the client only worked out, until a moment after it.
+        if (PastProjectedTickOnly())
+        {
+            ScheduleSettledPass();
+            return null;
+        }
 
         // Burst-settle guard (see _hpBurstAt): while a round's hits are still landing,
         // HP is a partial read. Only an Emergency heal already due on it may fire;
