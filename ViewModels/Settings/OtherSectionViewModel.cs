@@ -153,9 +153,18 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _sprintStopEndsSprint;
 
     // The teleports automatic walks may use (OtherSettings.AutomaticWalkTeleports),
-    // one tick box per line of the game data's own list (AppServices.TeleportChoices):
-    // the areas with most rooms behind them first.
+    // one tick box per teleport spot in the game data (AppServices.TeleportChoices):
+    // the ones with most rooms behind them first.
     public ObservableCollection<TeleportChoiceViewModel> AutomaticWalkTeleports { get; } = new();
+
+    // Narrows the list to the spots whose line holds this text. Not saved.
+    [ObservableProperty] private string _automaticWalkTeleportFilter = string.Empty;
+
+    partial void OnAutomaticWalkTeleportFilterChanged(string value)
+    {
+        string filter = value.Trim();
+        foreach (TeleportChoiceViewModel row in AutomaticWalkTeleports) row.IsShown = row.Matches(filter);
+    }
 
     // Stored teleports the loaded game data doesn't list (another data set's): kept
     // as they are, so a look at this tab on the wrong data doesn't lose them.
@@ -164,13 +173,13 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     [RelayCommand]
     private void AllowAllAutomaticWalkTeleports()
     {
-        foreach (TeleportChoiceViewModel row in AutomaticWalkTeleports) row.IsAllowed = true;
+        foreach (TeleportChoiceViewModel row in AutomaticWalkTeleports) if (row.IsShown) row.IsAllowed = true;
     }
 
     [RelayCommand]
     private void AllowNoAutomaticWalkTeleports()
     {
-        foreach (TeleportChoiceViewModel row in AutomaticWalkTeleports) row.IsAllowed = false;
+        foreach (TeleportChoiceViewModel row in AutomaticWalkTeleports) if (row.IsShown) row.IsAllowed = false;
     }
 
     private void LoadAutomaticWalkTeleports(IReadOnlyList<string> stored)
@@ -184,6 +193,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             AutomaticWalkTeleports.Add(new TeleportChoiceViewModel(
                 choice, allowed: choice.Exits.All(allowed.Contains), changed: MarkDirty));
         }
+        OnAutomaticWalkTeleportFilterChanged(AutomaticWalkTeleportFilter);
         _unlistedAutomaticWalkTeleports.Clear();
         foreach (string key in stored)
             if (!Game.Map.TeleportCatalog.TryParseKey(key, out (Game.Map.RoomKey From, Game.Map.RoomKey To) exit) || !listed.Contains(exit))

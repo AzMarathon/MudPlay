@@ -11,7 +11,7 @@ namespace MudPlay.Game.Map;
 // reached no other way. So the map is split into the mainland (the largest part
 // that can be walked or sailed around freely, and everywhere that can be walked to
 // from it) and the areas off it, each a group of rooms joined on foot, and every
-// teleport is listed by the area it lands in and the area it leaves from.
+// teleport spot is listed with the area it leads to and how big that is.
 public static class TeleportCatalog
 {
     // The setting stores a teleport as "map/room>map/room": where it is, where it lands.
@@ -109,47 +109,44 @@ public static class TeleportCatalog
                 .Take(2).Select(g => g.Key)))
             .ToArray();
 
-        // One line per (area landed in, area left from). A landing on the mainland
-        // is a shortcut to somewhere walkable, named by the room it lands in.
-        Dictionary<(string To, string From), List<(int From, int To)>> lines = new();
-        Dictionary<(string To, string From), int> beyond = new();
-        foreach ((int from, int to) in teleports)
-        {
-            string toName = mainland[to] ? NameOf(to) : areaName[area[to]];
-            string fromName = mainland[from] ? "the mainland" : areaName[area[from]];
-            (string, string) key = (toName, fromName);
-            if (!lines.TryGetValue(key, out List<(int, int)>? exits)) lines[key] = exits = new();
-            exits.Add((from, to));
-            if (!mainland[to])
-                beyond[key] = Math.Max(beyond.GetValueOrDefault(key), areas[area[to]].Count);
-        }
-
+        // One line per teleport spot: a teleport and the one that runs straight back
+        // between the same two rooms are a single choice.
+        HashSet<(int From, int To)> all = new(teleports);
         List<TeleportChoice> choices = new();
-        foreach (((string toName, string fromName), List<(int From, int To)> exits) in lines)
+        foreach ((int from, int to) in all.OrderBy(t => t.From).ThenBy(t => t.To))
         {
-            List<string> sources = exits.Select(e => NameOf(e.From)).Distinct().Take(3).ToList();
-            int moreSources = exits.Select(e => NameOf(e.From)).Distinct().Count() - sources.Count;
-            // The rooms they leave from; an area off the mainland is named first,
-            // unless its name already is those rooms'.
-            string leaving = string.Join(", ", sources) + (moreSources > 0 ? $" and {moreSources} more" : string.Empty);
-            bool sayArea = fromName != "the mainland"
-                && !sources.All(n => fromName.Split(" / ").Contains(n, StringComparer.Ordinal));
-            string from = sayArea ? $"{fromName} ({leaving})" : leaving;
-            List<string> commands = exits
-                .Select(e => commandOf(rooms[e.From].Key, rooms[e.To].Key))
-                .Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase).Take(3).ToList();
+            bool twoWay = all.Contains((to, from));
+            if (twoWay && to < from) continue;   // listed from its other end
+
+            // What the spot leads to: the far end's area when that is off the
+            // mainland, else (a two-way spot) the near end's.
+            int beyondRoom = !mainland[to] ? to : twoWay && !mainland[from] ? from : -1;
+            List<string> commands = new();
+            void AddCommand(int a, int b)
+            {
+                if (commandOf(rooms[a].Key, rooms[b].Key) is { } c && !string.IsNullOrWhiteSpace(c)
+                    && !commands.Contains(c.Trim(), StringComparer.OrdinalIgnoreCase))
+                    commands.Add(c.Trim());
+            }
+            AddCommand(from, to);
+            if (twoWay) AddCommand(to, from);
+
             choices.Add(new TeleportChoice(
-                toName,
-                beyond.GetValueOrDefault((toName, fromName)),
-                from,
-                string.Join(", ", commands),
-                exits.Select(e => (rooms[e.From].Key, rooms[e.To].Key)).Distinct().ToList()));
+                rooms[from].Key, rooms[from].Name,
+                rooms[to].Key, rooms[to].Name,
+                twoWay,
+                string.Join(" / ", commands),
+                beyondRoom < 0 ? string.Empty : areaName[area[beyondRoom]],
+                beyondRoom < 0 ? 0 : areas[area[beyondRoom]].Count,
+                twoWay
+                    ? new[] { (rooms[from].Key, rooms[to].Key), (rooms[to].Key, rooms[from].Key) }
+                    : new[] { (rooms[from].Key, rooms[to].Key) }));
         }
         return choices
             .OrderByDescending(c => c.RoomsBeyond)
             .ThenBy(c => c.Area, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(c => c.From, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.FromName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.From.Map).ThenBy(c => c.From.Room)
             .ToList();
     }
 

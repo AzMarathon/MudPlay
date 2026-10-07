@@ -126,7 +126,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         public void Dispose() { /* nothing to dispose */ }
     }
 
-    private Harness NewHarness(string json = LineGraphJson, bool wireRecovery = false)
+    private Harness NewHarness(string json = LineGraphJson, bool wireRecovery = false, string? tbinfoJson = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -135,7 +135,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         // teleporting to the exit's target (only rooms with CMD 100 + an exit to
         // 7/131, i.e. the teleport tests, are affected).
         File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"),
-            """[ { "Number": 100, "Action": "go arch:teleport 131 7\n" } ]""");
+            tbinfoJson ?? """[ { "Number": 100, "Action": "go arch:teleport 131 7\n" } ]""");
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         TBInfoStore tbinfo = new(cache);
@@ -2550,10 +2550,11 @@ public sealed class AutoWalkManagerTests : IDisposable
 
         TeleportChoice choice = Assert.Single(TeleportCatalog.Build(h.Graph, (_, _) => "go arch"));
 
-        Assert.Equal("Stone Arch", choice.Area);
+        Assert.Equal((new RoomKey(1, 10), "Grove"), (choice.From, choice.FromName));
+        Assert.Equal((new RoomKey(7, 131), "Stone Arch"), (choice.To, choice.ToName));
+        Assert.False(choice.TwoWay);
         Assert.Equal(0, choice.RoomsBeyond);
         Assert.Equal(new[] { Arch }, choice.Exits);
-        Assert.Equal("Grove", choice.From);
         Assert.Equal("go arch", choice.Commands);
     }
 
@@ -2581,6 +2582,38 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("Stone Arch", choice.Area);
         Assert.Equal(2, choice.RoomsBeyond);
         Assert.Equal(string.Empty, choice.Commands);
+    }
+
+    // A teleport and the one straight back are one spot: one line, allowed together.
+    [Fact]
+    public void TeleportCatalog_ATeleportAndItsWayBack_AreOneSpot()
+    {
+        const string json = """
+            [
+              { "Map Number": 1, "Room Number": 10, "Name": "Grove", "CMD": 100,
+                "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0",
+                "SW": "7/131 (Item: 474)", "U": "0", "D": "0" },
+              { "Map Number": 7, "Room Number": 131, "Name": "Stone Arch", "CMD": 101,
+                "N": "0", "S": "0", "E": "0", "W": "0", "NE": "1/10 (Item: 474)", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        Harness h = NewHarness(json, tbinfoJson: """
+            [ { "Number": 100, "Action": "go arch:teleport 131 7\n" },
+              { "Number": 101, "Action": "go grove:teleport 10 1\n" } ]
+            """);
+
+        TeleportChoice choice = Assert.Single(TeleportCatalog.Build(h.Graph,
+            (from, _) => from.Map == 1 ? "go arch" : "go grove"));
+
+        Assert.True(choice.TwoWay);
+        Assert.Equal("go arch / go grove", choice.Commands);
+        Assert.Equal(new[] { Arch, (Arch.To, Arch.From) }, choice.Exits);
+
+        MudPlay.ViewModels.Settings.TeleportChoiceViewModel row = new(choice, allowed: false, changed: () => { });
+        Assert.Equal("Grove (1/10) ⇄ Stone Arch (7/131)", row.Title);
+        Assert.True(row.Matches("7/131"));
+        Assert.True(row.Matches("go grove"));
+        Assert.False(row.Matches("vortex"));
     }
 
     [Fact]

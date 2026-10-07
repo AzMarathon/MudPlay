@@ -4146,7 +4146,9 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 The walks it covers are the ones nobody is there to approve: bank and sell trips, training and spell-buying trips, Auto-Lair's walks between lairs, events, and a walk-to or loop another player starts for you with a remote command.
 
-**The list comes from your game data.** Each line is every teleport from one area into another, with where they are, what is typed, and **how many rooms lie beyond that can be reached no other way**. The areas with the most rooms behind them come first, so the big regions and the hubs (the Black Wasteland, the Negative Power Plane) are at the top and one-room cupboards are at the bottom. A line marked *a shortcut* lands somewhere you could also walk to. **Allow all** and **Allow none** tick or clear the whole list.
+**The list comes from your game data.** Each line is one teleport spot: the room it's in and the room it lands in, each with its **map/room number** so you can find a spot you don't know by name on the map. **→** is a one-way teleport; **⇄** is one that also runs straight back, and both directions are ticked together. Under it is what is typed there and what the spot leads to: the area at its far end and **how many rooms there can be reached no other way**. The spots with the most rooms behind them come first, so the ways into the big regions and the hubs (the Black Wasteland, the Negative Power Plane) are at the top. A line marked *a shortcut* joins two places you could also walk between.
+
+The **filter** box narrows the list to lines holding what you type: a room name, a map/room number, or a command such as `go hatch`. **Allow all** and **Allow none** tick or clear the lines the filter is showing.
 
 **Important notes:** Walks **you** start aren't affected. A walk-to asks you on the route cards (**Walk it** or **Teleport**), and a loop you start or a **Recover Now** on a death takes the shortest route to get there, as before. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
 

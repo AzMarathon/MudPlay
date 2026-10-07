@@ -14,17 +14,27 @@ public sealed partial class TeleportChoiceViewModel : ObservableObject
 
     [ObservableProperty] private bool _isAllowed;
 
+    // Hidden by the list's filter box.
+    [ObservableProperty] private bool _isShown = true;
+
+    public bool Matches(string filter) =>
+        filter.Length == 0
+        || Title.Contains(filter, StringComparison.OrdinalIgnoreCase)
+        || Detail.Contains(filter, StringComparison.OrdinalIgnoreCase);
+
     public TeleportChoiceViewModel(TeleportChoice choice, bool allowed, Action changed)
     {
         Choice = choice;
         _changed = changed;
         _isAllowed = allowed;
-        Title = choice.RoomsBeyond > 0
-            ? $"{choice.Area}  ({choice.RoomsBeyond:N0} rooms reached no other way)"
-            : $"{choice.Area}  (a shortcut: it can be walked to)";
-        string count = choice.Exits.Count == 1 ? "1 teleport" : $"{choice.Exits.Count} teleports";
-        Detail = $"{count} from {choice.From}"
-            + (choice.Commands.Length > 0 ? $"  ·  {choice.Commands}" : string.Empty);
+        // Map/room numbers beside both names: a spot the user doesn't know by
+        // name can be looked up on the map.
+        Title = $"{choice.FromName} ({choice.From.Map}/{choice.From.Room}) {(choice.TwoWay ? "⇄" : "→")} "
+            + $"{choice.ToName} ({choice.To.Map}/{choice.To.Room})";
+        string leadsTo = choice.RoomsBeyond > 0
+            ? $"leads to {choice.Area}: {choice.RoomsBeyond:N0} rooms reached no other way"
+            : "a shortcut: both ends can be walked to";
+        Detail = (choice.Commands.Length > 0 ? $"{choice.Commands}  ·  " : string.Empty) + leadsTo;
     }
 
     partial void OnIsAllowedChanged(bool value) => _changed();
