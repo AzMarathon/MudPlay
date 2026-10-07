@@ -894,13 +894,14 @@ public sealed class BossTimerTests : IDisposable
     // Its name in the fight's damage lines says it is there. It is worth 4,000,000
     // exp against 17,750 for the biggest thing that shares its den, so even split six
     // ways its kill is the only gain that size: the exp line marks it.
-    private (BossTimerStore Timers, Func<int, MonsterDeathEvent> Gain) DarkDen(long bossExp = 4_000_000, long maxOther = 17_750)
+    private (BossTimerStore Timers, Func<int, MonsterDeathEvent> Gain) DarkDen(long bossExp = 4_000_000, params long[] others)
     {
+        if (others.Length == 0) others = new long[] { 17_750, 14_750 };
         SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
         SeedBosses(Boss("darken beast lord", number: 930,
             rooms: new[] { "17/2812", "17/2813", "17/2814", "17/2815" }));
         var (_, timers, _) = NewStores();
-        timers.SetRoomExpResolver((_, _) => (bossExp, maxOther));
+        timers.SetRoomExpResolver((_, _) => (bossExp, others));
         return (timers, exp => new MonsterDeathEvent(
             Array.Empty<MonsterDeathIdentity>(), ExperienceGained: exp, At: DateTimeOffset.UtcNow, IsFallback: true));
     }
@@ -958,18 +959,36 @@ public sealed class BossTimerTests : IDisposable
         Assert.Null(timers.KilledAt("darken beast lord"));
     }
 
-    // Where exp can't tell the boss from its adds (a sixth of the boss is no more than
-    // an add gives), it is taken as the kill only when nothing else was named.
+    // The rule fits a boss worth far less than its neighbours as well: a monkey spirit
+    // pays 40,000 among monsters worth 400,000, whose smallest share is 66,666.
+    [Theory]
+    [InlineData(40_000, true)]      // the spirit, solo
+    [InlineData(6_667, true)]       // the spirit, shared six ways
+    [InlineData(400_000, false)]    // one of the others
+    [InlineData(66_667, false)]     // one of the others, shared six ways
+    public void UnnamedDeath_OfABossWorthLessThanItsNeighbours_IsToldByWhatItPays(int gained, bool isBoss)
+    {
+        var (timers, gain) = DarkDen(bossExp: 40_000, 400_000);
+
+        timers.OnMonsterDied(gain(gained), new RoomKey(17, 2812), engagedName: null,
+            recentFoes: new[] { "Darken Beast Lord", "darken beast" });
+
+        Assert.Equal(isBoss, timers.KilledAt("darken beast lord") is not null);
+    }
+
+    // Where the boss and an add could both have paid the gain, exp can't say: then it
+    // is the boss's only when nothing else was named.
     [Fact]
     public void UnnamedDeath_WhereExpCantTell_NeedsTheBossToBeTheOnlyOneNamed()
     {
-        var (timers, gain) = DarkDen(bossExp: 60_000, maxOther: 17_750);
+        var (timers, gain) = DarkDen(bossExp: 60_000, 17_750);
 
-        timers.OnMonsterDied(gain(60_000), new RoomKey(17, 2812), engagedName: null,
+        // 12,000 is a fifth of the boss, and also within what the add pays.
+        timers.OnMonsterDied(gain(12_000), new RoomKey(17, 2812), engagedName: null,
             recentFoes: new[] { "Darken Beast Lord", "darken beast" });
         Assert.Null(timers.KilledAt("darken beast lord"));
 
-        timers.OnMonsterDied(gain(60_000), new RoomKey(17, 2812), engagedName: null,
+        timers.OnMonsterDied(gain(12_000), new RoomKey(17, 2812), engagedName: null,
             recentFoes: new[] { "Darken Beast Lord" });
         Assert.NotNull(timers.KilledAt("darken beast lord"));
     }

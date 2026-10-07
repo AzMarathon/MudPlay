@@ -4179,8 +4179,8 @@ public sealed class AppServices
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
                 Combat.DeathAttributionTarget, RecentFoes.Within(TimeSpan.FromSeconds(12)));
-        // What the boss is worth against the most anything else in its room is: an
-        // unnamed death there is told apart by the size of the exp gained.
+        // What the boss is worth, and what everything else in its room is: an unnamed
+        // death there is told apart by the exp it paid.
         BossTimers.SetRoomExpResolver((def, room) =>
         {
             // A boss can have two records under one name: the neutral one standing
@@ -4193,14 +4193,14 @@ public sealed class AppServices
                 if (string.Equals(sameName.Name, def.Name, StringComparison.OrdinalIgnoreCase))
                     bossExp = Math.Max(bossExp, sameName.EffectiveExp);
 
-            long maxOther = 0;
+            List<long> others = new();
             foreach (int id in MonsterSpawns.MonsterIdsSummonedAt(room))
             {
                 if (id == def.MonsterNumber || MonsterCatalog.Get(id) is not { } other) continue;
                 if (string.Equals(other.Name, def.Name, StringComparison.OrdinalIgnoreCase)) continue;
-                maxOther = Math.Max(maxOther, other.EffectiveExp);
+                others.Add(other.EffectiveExp);
             }
-            return (bossExp, maxOther);
+            return (bossExp, others);
         });
         // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
         // every item in its game-data drop table — no room re-parse. BossKilled fires
