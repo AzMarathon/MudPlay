@@ -9,6 +9,10 @@
 > - The program log no longer says a profile's keybindings were reset on every upgrade
 > - A held character with a step just sent fights back instead of waiting on a move that can't happen
 > - A walk no longer sends a step twice after swapping gear for the room ahead
+> - The MDB IMPORT COMPLETE line says whether the export has a lairs table and room commands, instead of "old / new format"
+> - Manage Game Data copies or moves what you tick between sets: loops, favourites, boss list, triggers, message edits, unrecognized lines and Game Data Browser edits
+> - An item's Given by no longer repeats the rooms its Room command group lists
+> - Item records with long room lists open in a moment instead of a couple of seconds
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

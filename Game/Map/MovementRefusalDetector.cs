@@ -270,8 +270,8 @@ public sealed partial class MovementRefusalDetector : IDisposable
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FlatOnYourBack();
 
-    // The Stock engine's own refusal of a move by a character who can't move
-    // (GAME_MECHANICS "Moving while held").
+    // The Stock engine's one refusal of a move by a held character, whatever the
+    // hold (GAME_MECHANICS "Moving while held").
     [GeneratedRegex(
         @"^\s*You can't seem to move anywhere[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

@@ -624,23 +624,13 @@ public sealed class ItemMdbViewBuilder
         return (markup, rooms);
     }
 
-    // Map/room → the room's Name from the active set's Rooms.json, or null when
-    // the table is absent or the room isn't found.
-    private string? ResolveRoomName(int mapNo, int roomNo)
-    {
-        JsonDocument? roomsDoc = _cache.GetRawTable("Rooms");
-        if (roomsDoc is null) return null;
-        foreach (JsonElement el in roomsDoc.RootElement.EnumerateArray())
-        {
-            if (!el.TryGetProperty("Map Number",  out JsonElement m)) continue;
-            if (!el.TryGetProperty("Room Number", out JsonElement r)) continue;
-            if (m.ValueKind != JsonValueKind.Number || r.ValueKind != JsonValueKind.Number) continue;
-            if (m.GetInt32() != mapNo || r.GetInt32() != roomNo) continue;
-            string name = ReadString(el, "Name");
-            return string.IsNullOrEmpty(name) ? null : name;
-        }
-        return null;
-    }
+    // Map/room → the room's name, or null when the room isn't found or has none.
+    // From the per-set name index: a room-command item lists a few hundred rooms,
+    // and scanning the Rooms table once per room took seconds.
+    private string? ResolveRoomName(int mapNo, int roomNo) =>
+        Game.GameData.RoomNameIndex.For(_cache).TryGetValue((mapNo, roomNo), out string? name) && name.Length > 0
+            ? name
+            : null;
 
     // One clickable DroppedByRow per "Monster #N(X%)" token in Obtained From,
     // resolved to its Monsters.Name (+ drop-rate suffix), de-duplicated by label.

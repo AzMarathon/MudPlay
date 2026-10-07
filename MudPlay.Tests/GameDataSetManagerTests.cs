@@ -28,6 +28,17 @@ public sealed class GameDataSetManagerTests : IDisposable
             }
             catch { /* best-effort */ }
         }
+        foreach (string file in _createdFiles)
+        {
+            try { if (File.Exists(file)) File.Delete(file); }
+            catch { /* best-effort */ }
+        }
+        try
+        {
+            foreach (string dir in Directory.EnumerateDirectories(AppPaths.BbsDir, "test-bbs-*"))
+                Directory.Delete(dir, recursive: true);
+        }
+        catch { /* best-effort */ }
     }
 
     // ----- fixture ---------------------------------------------------
@@ -57,7 +68,7 @@ public sealed class GameDataSetManagerTests : IDisposable
 
     private static GameDataSetManager NewManager(
         GameDataCache cache, Action? reload = null, Action<string>? onDeleted = null) =>
-        new(cache, reload ?? (() => { }), onDeleted ?? (_ => { }));
+        new(cache, _ => reload?.Invoke(), onDeleted ?? (_ => { }));
 
     // ----- Copy ------------------------------------------------------
 
@@ -70,7 +81,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         SeedLoop(src, "a.loop");
         SeedLoop(src, "b.lair");
 
-        GameDataSetManager.OpResult result = NewManager(cache).CopyLoops(src, dst);
+        GameDataSetManager.OpResult result = NewManager(cache).Copy(src, dst, GameDataSetPart.Loops);
 
         Assert.True(result.Ok);
         Assert.True(File.Exists(Path.Combine(AppPaths.GameDataSetLoopsFolder(dst), "a.loop")));
@@ -89,7 +100,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         Directory.CreateDirectory(nested);
         File.WriteAllText(Path.Combine(nested, "deep.loop"), "x");
 
-        GameDataSetManager.OpResult result = NewManager(cache).CopyLoops(src, dst);
+        GameDataSetManager.OpResult result = NewManager(cache).Copy(src, dst, GameDataSetPart.Loops);
 
         Assert.True(result.Ok);
         Assert.True(File.Exists(Path.Combine(
@@ -106,7 +117,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         string dst = CreateSet();
         SeedLoop(src, "a.loop");
 
-        GameDataSetManager.OpResult result = NewManager(cache).MoveLoops(src, dst);
+        GameDataSetManager.OpResult result = NewManager(cache).Move(src, dst, GameDataSetPart.Loops);
 
         Assert.True(result.Ok);
         Assert.True(File.Exists(Path.Combine(AppPaths.GameDataSetLoopsFolder(dst), "a.loop")));
@@ -123,7 +134,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         string s = CreateSet();
         SeedLoop(s, "a.loop");
 
-        GameDataSetManager.OpResult result = NewManager(cache).CopyLoops(s, s);
+        GameDataSetManager.OpResult result = NewManager(cache).Copy(s, s, GameDataSetPart.Loops);
 
         Assert.False(result.Ok);
     }
@@ -134,7 +145,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         GameDataCache cache = new();
         string dst = CreateSet();
 
-        GameDataSetManager.OpResult result = NewManager(cache).CopyLoops("", dst);
+        GameDataSetManager.OpResult result = NewManager(cache).Copy("", dst, GameDataSetPart.Loops);
 
         Assert.False(result.Ok);
     }
@@ -147,7 +158,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         SeedLoop(src, "a.loop");
         string ghost = NewSetName(); // never created on disk
 
-        GameDataSetManager.OpResult result = NewManager(cache).CopyLoops(src, ghost);
+        GameDataSetManager.OpResult result = NewManager(cache).Copy(src, ghost, GameDataSetPart.Loops);
 
         Assert.False(result.Ok);
     }
@@ -159,7 +170,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         string src = CreateSet(); // exists but empty Loops/
         string dst = CreateSet();
 
-        GameDataSetManager.OpResult result = NewManager(cache).CopyLoops(src, dst);
+        GameDataSetManager.OpResult result = NewManager(cache).Copy(src, dst, GameDataSetPart.Loops);
 
         Assert.False(result.Ok);
     }
@@ -176,7 +187,7 @@ public sealed class GameDataSetManagerTests : IDisposable
         cache.SwitchSet(dst);
 
         int reloads = 0;
-        NewManager(cache, reload: () => reloads++).CopyLoops(src, dst);
+        NewManager(cache, reload: () => reloads++).Copy(src, dst, GameDataSetPart.Loops);
 
         Assert.Equal(1, reloads);
     }
@@ -192,9 +203,130 @@ public sealed class GameDataSetManagerTests : IDisposable
         cache.SwitchSet(other);
 
         int reloads = 0;
-        NewManager(cache, reload: () => reloads++).CopyLoops(src, dst);
+        NewManager(cache, reload: () => reloads++).Copy(src, dst, GameDataSetPart.Loops);
 
         Assert.Equal(0, reloads);
+    }
+
+    // ----- Picking what goes across ----------------------------------
+
+    private readonly List<string> _createdFiles = new();
+
+    // An override side-file for a set, beside a tier: Global, or a folder under BBS/.
+    private string SeedOverride(string folder, string table, string setName, string content = "{}")
+    {
+        Directory.CreateDirectory(folder);
+        string path = Path.Combine(folder, $"{table}_overrides.{setName}.json");
+        File.WriteAllText(path, content);
+        _createdFiles.Add(path);
+        return path;
+    }
+
+    private static string GlobalFolder => Path.Combine(AppPaths.DataRoot, "Global");
+
+    [Fact]
+    public void Copy_OnlyTheTickedParts_GoAcross_AndReplaceTheDestinations()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        SeedLoop(src, "a.loop");
+        File.WriteAllText(AppPaths.GameDataSetFavoritesFile(src), "old favourites");
+        File.WriteAllText(AppPaths.BossesFile(src), "old bosses");
+        File.WriteAllText(AppPaths.GameDataSetFavoritesFile(dst), "seeded favourites");
+
+        GameDataSetManager.OpResult result = NewManager(cache)
+            .Copy(src, dst, GameDataSetPart.Favorites | GameDataSetPart.Bosses);
+
+        Assert.True(result.Ok, result.Message);
+        Assert.Equal("old favourites", File.ReadAllText(AppPaths.GameDataSetFavoritesFile(dst)));
+        Assert.Equal("old bosses", File.ReadAllText(AppPaths.BossesFile(dst)));
+        Assert.False(Directory.Exists(AppPaths.GameDataSetLoopsFolder(dst)));   // loops weren't ticked
+        Assert.True(File.Exists(AppPaths.GameDataSetFavoritesFile(src)));       // a copy keeps the source
+    }
+
+    [Fact]
+    public void Move_Messages_TakesAllThreeFilesAndRemovesThemFromTheSource()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        File.WriteAllText(AppPaths.MessagesFile(src), "m");
+        File.WriteAllText(AppPaths.MonsterMessagesFile(src), "mm");
+        File.WriteAllText(AppPaths.FlavorPrefixesFile(src), "fp");
+
+        GameDataSetManager.OpResult result = NewManager(cache).Move(src, dst, GameDataSetPart.Messages);
+
+        Assert.True(result.Ok, result.Message);
+        Assert.Equal("m", File.ReadAllText(AppPaths.MessagesFile(dst)));
+        Assert.Equal("mm", File.ReadAllText(AppPaths.MonsterMessagesFile(dst)));
+        Assert.Equal("fp", File.ReadAllText(AppPaths.FlavorPrefixesFile(dst)));
+        Assert.False(File.Exists(AppPaths.MessagesFile(src)));
+        Assert.False(File.Exists(AppPaths.MonsterMessagesFile(src)));
+        Assert.False(File.Exists(AppPaths.FlavorPrefixesFile(src)));
+    }
+
+    // Record overrides sit beside each tier, named for the set. A set whose name
+    // only begins with the source's ("x" and "x (room commands)") is another set.
+    [Fact]
+    public void Copy_RecordOverrides_RenamesEveryTiersFileForTheDestination()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        string realmFolder = Path.Combine(AppPaths.BbsDir, "test-bbs-" + src, "realm");
+        string profileFolder = Path.Combine(realmFolder, "profiles", "char");
+        SeedOverride(GlobalFolder, "items", src, "global items");
+        SeedOverride(realmFolder, "monsters", src, "realm monsters");
+        SeedOverride(profileFolder, "items", src, "char items");
+        string other = SeedOverride(GlobalFolder, "items", src + " (room commands)", "another set");
+
+        GameDataSetManager manager = NewManager(cache);
+        Assert.Equal(3, manager.FileCount(src, GameDataSetPart.RecordOverrides));
+        GameDataSetManager.OpResult result = manager.Copy(src, dst, GameDataSetPart.RecordOverrides);
+
+        Assert.True(result.Ok, result.Message);
+        string global = Path.Combine(GlobalFolder, $"items_overrides.{dst}.json");
+        string realm = Path.Combine(realmFolder, $"monsters_overrides.{dst}.json");
+        string character = Path.Combine(profileFolder, $"items_overrides.{dst}.json");
+        _createdFiles.AddRange(new[] { global, realm, character });
+        Assert.Equal("global items", File.ReadAllText(global));
+        Assert.Equal("realm monsters", File.ReadAllText(realm));
+        Assert.Equal("char items", File.ReadAllText(character));
+        Assert.Equal("another set", File.ReadAllText(other));
+        Assert.False(File.Exists(Path.Combine(GlobalFolder, $"items_overrides.{dst} (room commands).json")));
+    }
+
+    [Fact]
+    public void Copy_NothingTicked_Fails()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        SeedLoop(src, "a.loop");
+
+        Assert.False(NewManager(cache).Copy(src, dst, GameDataSetPart.None).Ok);
+    }
+
+    // The reload is told what changed, and a ticked part the source has none of is
+    // named in the result rather than failing the rest.
+    [Fact]
+    public void Copy_IntoActiveSet_ReloadsWhatChanged_AndNamesWhatWasMissing()
+    {
+        GameDataCache cache = new();
+        string src = CreateSet();
+        string dst = CreateSet();
+        File.WriteAllText(AppPaths.TriggersFile(src), "t");
+        cache.SwitchSet(dst);
+
+        GameDataSetPart changed = GameDataSetPart.None;
+        GameDataSetManager manager = new(cache, c => changed = c, _ => { });
+        GameDataSetManager.OpResult result =
+            manager.Copy(src, dst, GameDataSetPart.Triggers | GameDataSetPart.Bosses);
+
+        Assert.True(result.Ok, result.Message);
+        Assert.Equal(GameDataSetPart.Triggers, changed);
+        Assert.Contains("Nothing there for: boss list", result.Message);
     }
 
     // ----- Delete ----------------------------------------------------

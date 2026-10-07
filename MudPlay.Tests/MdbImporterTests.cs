@@ -141,6 +141,30 @@ public sealed class MdbImporterTests
 
     // The safety guard: a failed re-import over an EXISTING populated set must never
     // delete that set's files.
+    // An export may or may not carry the Lairs table, and may or may not carry
+    // room-command item sources: four kinds, each named for what it has.
+    [Theory]
+    [InlineData(9, false, 0, "9 tables, 1,234 entries — lairs table: no, room commands: no]")]
+    [InlineData(10, true, 0, "10 tables, 1,234 entries — lairs table: yes, room commands: no]")]
+    [InlineData(9, false, 187, "9 tables, 1,234 entries — lairs table: no, room commands: yes (187 items)]")]
+    [InlineData(10, true, 187, "10 tables, 1,234 entries — lairs table: yes, room commands: yes (187 items)]")]
+    public void CompleteStatus_NamesWhatTheExportCarries(int tables, bool lairs, int roomCommandItems, string tail)
+    {
+        MdbImportResult r = new(true, "", "set", tables, tables, 0, 1234, lairs, roomCommandItems);
+
+        Assert.Equal("[MDB IMPORT COMPLETE: set — " + tail,
+            MudPlay.ViewModels.MainWindowViewModel.BuildMdbCompleteStatus(r));
+    }
+
+    [Fact]
+    public void CompleteStatus_TooFewTables_SaysSoAndPointsAtTheLog()
+    {
+        MdbImportResult r = new(true, "", "set", 4, 4, 0, 50, false, 0);
+
+        Assert.EndsWith("UNEXPECTED TABLE COUNT — see Program Log]",
+            MudPlay.ViewModels.MainWindowViewModel.BuildMdbCompleteStatus(r));
+    }
+
     [Fact]
     public void RemoveDirectoryIfEmpty_KeepsAPopulatedFolder()
     {

@@ -13,6 +13,8 @@ namespace MudPlay.ViewModels.GameData.Edit;
 public sealed class PlacedInRow
 {
     public string Location { get; }
+    public int Map { get; }
+    public int Room { get; }
 
     // False when the room coordinate couldn't be resolved (map/room <= 0) — the
     // row still shows the raw locator but has nothing to navigate to, so the view
@@ -24,6 +26,8 @@ public sealed class PlacedInRow
     public PlacedInRow(string location, int map, int room)
     {
         Location = location;
+        Map = map;
+        Room = room;
         CanOpen = map > 0 && room > 0;
         Open = new RelayCommand(
             () => AppServices.Current.OpenRoomGameData(map, room),

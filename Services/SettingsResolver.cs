@@ -433,6 +433,13 @@ public sealed class SettingsResolver
         }
     }
 
+    // Forget every override file read so far. For when the files changed under us:
+    // Manage Game Data Sets copying or moving a set's overrides.
+    public void DropOverrideCache()
+    {
+        lock (_overrideCacheLock) _overrideCache.Clear();
+    }
+
     private Dictionary<string, JsonElement>? GetCachedOverrideFile(string path)
     {
         lock (_overrideCacheLock)

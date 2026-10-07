@@ -297,7 +297,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 
         (ChestDrops, ChestSummary) = BuildChest(chest);
         FoundInContainers = BuildContainerSources(containerSources);
-        Givers = BuildGivers(givers);
+        Givers = BuildGivers(givers, RoomCommands);
 
         AutoCollect     = existing?.AutoCollect     ?? false;
         AutoDiscard     = existing?.AutoDiscard     ?? false;
@@ -395,12 +395,24 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         return rows;
     }
 
-    private static IReadOnlyList<ItemGiverRow> BuildGivers(IReadOnlyList<ItemGiver>? givers)
+    // A room the Room command group lists is the same hand-over, shown there with
+    // its command, its chance and a walk link, so it is left out of Given by. Matched
+    // on the room alone: a rolled give's keyword is its roll bracket, not the command.
+    internal static IReadOnlyList<ItemGiverRow> BuildGivers(
+        IReadOnlyList<ItemGiver>? givers, IReadOnlyList<RoomCommandRow> roomCommands)
     {
         if (givers is null || givers.Count == 0) return Array.Empty<ItemGiverRow>();
+        HashSet<(int Map, int Room)> listedBelow = new();
+        foreach (RoomCommandRow row in roomCommands)
+            foreach (PlacedInRow room in row.Rooms)
+                listedBelow.Add((room.Map, room.Room));
+
         var rows = new List<ItemGiverRow>(givers.Count);
         foreach (ItemGiver g in givers)
+        {
+            if (g.Kind == ItemGiverKind.Room && listedBelow.Contains((g.Map, g.Room))) continue;
             rows.Add(new ItemGiverRow(g));
+        }
         return rows;
     }
 

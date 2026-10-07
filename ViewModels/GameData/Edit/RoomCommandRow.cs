@@ -22,6 +22,9 @@ public sealed partial class RoomCommandRow : ObservableObject
 
     public ObservableCollection<PlacedInRow> ShownRooms { get; } = new();
 
+    // Every room of the entry, shown or not.
+    public IReadOnlyList<PlacedInRow> Rooms => _rooms;
+
     public bool CanExpand => _rooms.Count > ShownWhenCollapsed;
 
     [ObservableProperty]

@@ -3469,18 +3469,22 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Client policy** (report `paradigm-20261004-201232`): a flee move the game refuses is not sent again in that run. `HealthManager.NoteMoveBlocked` records the room and direction; `BuildFleeSteps` then takes another way out of the room (away from the plan first, then the plan's own way), and with every way refused returns no route, so combat fights back. The record is dropped when the run ends.
 
 ### Moving while held
-*Status: OBSERVED 2026-10-06 (report `paradigm-20261006-221209`; `wccmmud.dll` 1.11p `_cmd_move`) · Realm: differs*
+*Status: OBSERVED 2026-10-06 (report `paradigm-20261006-221209`; `wccmmud.dll` 1.11p) and CONFIRMED in part 2026-10-06 (user) · Realm: differs*
 
-- **Paradigm answers a held character's move with the hold's own applied line.** *([OBSERVED] report `paradigm-20261006-221209`.)* A stitched abomination's roar (`The stitched abomination beats his chest and roars deafeningly!`) printed `You are too scared to flee!` in bold red as it landed. Each move sent after that (`w`, `w`, `s`) was answered with the same `You are too scared to flee!` in the plain colour, with no room display. The hold ends with `You feel braver.`.
-  - The roar's lines are message 194 on Stock (`You are too scared to flee!` / `You feel braver.`). Four Paradigm seed records share the applied line: roar (spell #193), a second roar, giant skeleton shriek (#770) and fear2.
+- **Every hold refuses a move with a line and no room display.** *([CONFIRMED] 2026-10-06, user.)* Whether that line is always the hold's own applied line is not known (user, 2026-10-06); the two forms below are the ones on record.
+- **The Stock engine has one fixed refusal for every hold, `You can't seem to move anywhere!`.** *([OBSERVED] `wccmmud.dll` 1.11p; [CONFIRMED] 2026-10-06, user: it is a hold's move refusal.)*
+  - HoldPerson (ability 74) sets a bit on the character record (byte +0x7c8, bit 0x20) in `_update_dynamic_with_ability` @0x43dde4, so any spell carrying ability 74 does it.
+  - `_cmd_move` @0x4689c4 and `_move_user` @0x4176c8 test that bit before anything else (encumbrance, the exit, doors) and print the line.
+  - The hold's own message text plays no part in the refusal on Stock: `You are too scared to flee!` is the third text of message 194, printed when the roar lands.
+- **Paradigm was captured answering a held character's move with the hold's own applied line.** *([OBSERVED] report `paradigm-20261006-221209`.)* A stitched abomination's roar (`The stitched abomination beats his chest and roars deafeningly!`) printed `You are too scared to flee!` in bold red as it landed. Each move sent after that (`w`, `w`, `s`) was answered with the same `You are too scared to flee!` in the plain colour, with no room display. The hold ends with `You feel braver.`.
+  - A move with no exit that way was answered `There is no exit in that direction!` while held, so Paradigm checks the exit before the hold; Stock checks the hold first.
+  - Four Paradigm seed records share the applied line: roar (spell #193), a second roar, giant skeleton shriek (#770) and fear2.
   - Knockdown has the same shape: `You are flat on your back!` is both its status line and its move refusal (see *Spells, buffs & conditions → Knockdown — a movement-preventing hold*).
-  - `[NEEDS CONFIRMATION]` Does every hold on Paradigm answer a move with its own applied line, or only some? Seen for the roar and knockdown.
-- **The Stock engine has one fixed refusal, `You can't seem to move anywhere!`.** *([OBSERVED] `wccmmud.dll` 1.11p, `_cmd_move` @0x4689c4.)* It is the first check the move command makes: a bit on the character record (byte +0x7c8, bit 0x20) refuses the move before the encumbrance and exit checks.
-  - `[NEEDS CONFIRMATION]` Which states set that bit was not traced. Is it the hold flag (HoldPerson, ability 74)?
+  - `[NEEDS CONFIRMATION]` Does Paradigm ever print Stock's `You can't seem to move anywhere!`, and does every Paradigm hold repeat its own applied line? The user's guidance (2026-10-06) is to assume Stock's lines hold on Paradigm; the client matches both forms on both realms.
 - **A hold stops movement, not fighting** (HoldPerson is "can't move, can still act": see *Spells, buffs & conditions → Condition Effects flags derive from the linked spell's ability codes*).
 
 **Client use:**
-- `MovementRefusalDetector` reverts a pending move on the applied line of a hold the character is under (`ConditionTracker.IsActiveHoldLine`: whole line, a `MovementPrevented` record that is active), and on `You can't seem to move anywhere!`. The hold's line also prints when the hold lands or is renewed, so it reverts a move only while one is Pending.
+- `MovementRefusalDetector` reverts a pending move on `You can't seem to move anywhere!`, and on the applied line of a hold the character is under (`ConditionTracker.IsActiveHoldLine`: whole line, a `MovementPrevented` record that is active), on both realms. The hold's own line also prints when the hold lands or is renewed, so it reverts a move only while one is Pending.
 - `CombatManager`'s move-in-flight probe (`SetMoveInFlightProbe`) reads false while `ConditionTracker.IsMovementPrevented`, so a monster arriving doesn't wait for a room display that a held character's move can't bring. In the report the unanswered `w` kept the tracker Pending for 25 s; combat stood down on every round and the character died without attacking.
 
 ### Too heavy to move (over max encumbrance)

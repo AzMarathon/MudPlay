@@ -7280,16 +7280,23 @@ public sealed class AppServices
         // and reloads both managers, instead of either racing the dir.
         NavFolders = new Game.Map.NavFolderManager(Loops, Lairs, Log);
 
-        // Game Data → "Manage Sets…" backend. The reload callback re-pulls
-        // the active set's loop/lair caches after a copy/move touches it;
-        // the delete callback clears any profile / global reference that
-        // still names a just-deleted set.
+        // Game Data → "Manage Sets…" backend. The reload callback re-pulls what
+        // a copy/move changed in the active set: the loop/lair caches alone when
+        // only the library moved, otherwise the whole set, the way a re-import
+        // does, since every per-set store reloads on that. The delete callback
+        // clears any profile / global reference that still names a deleted set.
         GameDataSetManager = new GameDataSetManager(
             GameData,
-            reloadActiveLibrary: () =>
+            reloadActive: changed =>
             {
-                Loops.LoadAll(GameData.ActiveSet);
-                Lairs.LoadAll(GameData.ActiveSet);
+                if (changed == GameDataSetPart.Loops)
+                {
+                    Loops.LoadAll(GameData.ActiveSet);
+                    Lairs.LoadAll(GameData.ActiveSet);
+                    return;
+                }
+                if (changed.HasFlag(GameDataSetPart.RecordOverrides)) Resolver.DropOverrideCache();
+                GameData.ReloadActiveSet();
             },
             onSetDeleted: ClearGameDataSetReferences,
             Log);

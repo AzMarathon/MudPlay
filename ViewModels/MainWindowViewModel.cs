@@ -4664,9 +4664,9 @@ public partial class MainWindowViewModel : ObservableObject
     }
 
     // Game Data menu → "Manage Sets…". Immediate-action dialog: copy or
-    // move a set's loop library into another set, or delete a set
-    // (game-data tables + loops). A delete drops the set from the menu, so
-    // rebuild the set list once the dialog closes.
+    // move the ticked kinds of a set's data into another set, or delete a
+    // set (game-data tables + loops). A delete drops the set from the menu,
+    // so rebuild the set list once the dialog closes.
     [RelayCommand]
     private async Task OpenGameDataManagerAsync()
     {
@@ -5094,14 +5094,13 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Compose the terminal-status line for a successful MDB import.
-    // Carries entry + table totals plus a format-tag derived from the
-    // MajorMUD MDB shape: 9 user tables = old realm format, 10 = new
-    // format. FEWER than 9 (a truncated MDB) flips the line red; MORE than
-    // 10 (a newer export with extra tables) is fine — the extras are
-    // imported but unused. A zero-table MDB never reaches here: ImportAsync
-    // now fails such an import outright rather than reporting success.
-    private static string BuildMdbCompleteStatus(MdbImportResult r)
+    // Compose the terminal-status line for a successful MDB import: the totals, then
+    // what this export carries. A Lairs table and room-command item sources each come
+    // or don't, independently, so each is named rather than folded into one "format".
+    // FEWER than 9 tables (a truncated MDB) flips the line red; MORE than 10 (a newer
+    // export with extra tables) is fine — the extras are imported but unused. A
+    // zero-table MDB never reaches here: ImportAsync fails such an import outright.
+    internal static string BuildMdbCompleteStatus(MdbImportResult r)
     {
         string entries = $"{r.RowsImported:N0} entries";
 
@@ -5109,21 +5108,19 @@ public partial class MainWindowViewModel : ObservableObject
             ? $"{r.TablesImported} tables"
             : $"{r.TablesImported}/{r.TablesFound} tables ({r.TablesSkipped} skipped)";
 
-        string formatTag = r.TablesFound switch
-        {
-            9    => " (old format)",
-            10   => " (new format)",
-            > 10 => $" ({r.TablesFound} tables)",   // extra tables: imported but unused, not an error
-            _    => " — UNEXPECTED TABLE COUNT",    // 1..8: fewer than a MajorMUD MDB should carry
-        };
+        string lairs = r.HasLairsTable ? "lairs table: yes" : "lairs table: no";
+        string roomCommands = r.RoomCommandItems > 0
+            ? $"room commands: yes ({r.RoomCommandItems:N0} items)"
+            : "room commands: no";
 
         // The "see Program Log" hint fires whenever the user has reason to dig
         // in — skipped tables OR a suspiciously small MDB (fewer game tables
         // than any MajorMUD export ships).
+        string tooFew = r.TablesFound < 9 ? " — UNEXPECTED TABLE COUNT" : string.Empty;
         bool needsLogPointer = r.TablesSkipped > 0 || r.TablesFound < 9;
         string logHint = needsLogPointer ? " — see Program Log" : string.Empty;
 
-        return $"[MDB IMPORT COMPLETE: {r.FolderName} — {tablesPart}{formatTag}, {entries}{logHint}]";
+        return $"[MDB IMPORT COMPLETE: {r.FolderName} — {tablesPart}, {entries} — {lairs}, {roomCommands}{tooFew}{logHint}]";
     }
 
     private static TerminalStatusKind TerminalStatusKindFor(MdbImportResult r)
