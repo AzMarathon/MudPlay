@@ -609,6 +609,44 @@ public sealed class CastingDirector : IDisposable
         _tokenBuffPause = isTokenUseImminent;
     }
 
+    // Wire the lair-entry buff hold (Game.Map.LairEntryDebuffHold.BlockingBuffs).
+    // While it returns true the buff categories wait: a loop is about to step into a
+    // lair and the round's one between-round cast is being kept for the combat
+    // profile's pre-attack debuff. Heals and cures still go out. Optional.
+    public void SetLairEntryBuffHold(Func<bool> holdBuffs)
+    {
+        ArgumentNullException.ThrowIfNull(holdBuffs);
+        _lairEntryBuffHold = holdBuffs;
+    }
+    private Func<bool>? _lairEntryBuffHold;
+
+    // A heal, cure or buff is due and would be cast as soon as the round's
+    // between-round cast is free. The debuff isn't counted: it is what a caller
+    // waiting on this wants the cast kept for.
+    public bool HasCastDue()
+    {
+        if (_isConnected?.Invoke() == false || _suspended) return false;
+        bool healEnabled = _isEnabled();
+        bool blessEnabled = _autoBlessEnabled?.Invoke() ?? true;
+        if (!healEnabled && !blessEnabled) return false;
+        if (!_state.HasPromptData || _state.MaxHp <= 0 || _state.Hp <= 0) return false;
+
+        SpellsSettings spells = _readSpells();
+        HealthSettings health = _readHealth();
+        PartySettings? party = _readPartySettings?.Invoke();
+        if (healEnabled
+            && (PickEmergencySelfHeal(spells, health) is not null
+                || PickDownedAllyHeal(party, spells) is not null
+                || PickMinorPartyHeal(party) is not null
+                || PickMajorPartyHeal(party) is not null
+                || PickMinorSelfHeal(spells, health) is not null
+                || PickMajorSelfHeal(spells, health) is not null
+                || PickCure(spells) is not null))
+            return true;
+        return blessEnabled
+            && (PickBuff(health, priority: true) is not null || PickBuff(health, priority: false) is not null);
+    }
+
     // Wire the sneak-keeping gate (Game.Stealth.SneakGuard.Holds). While it returns
     // true every in-between category but debuffing is HELD rather than cast (see the
     // decision pass). Optional — until wired, nothing defers.
@@ -2454,6 +2492,10 @@ public sealed class CastingDirector : IDisposable
             _log?.Combat(LogCategory, "buff skipped — token use imminent (buffs about to be wiped).");
             return null;
         }
+
+        // A loop is about to step into a lair and is keeping the round's cast for the
+        // pre-attack debuff (LairEntryDebuffHold logs its own wait).
+        if (_lairEntryBuffHold?.Invoke() == true) return null;
 
         // A staged mana-regen reroll leads — it's an immediate below-threshold recast
         // (front of the queue). Then the ONE unified buff list (self bless / regen /

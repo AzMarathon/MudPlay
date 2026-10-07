@@ -4922,6 +4922,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         builder.ProposedName          = loop.Name;
         builder.Notes                 = loop.Notes;
         builder.OnlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
+        builder.WaitToDebuffBeforeLairs = LairEntryDebuffModes.IsOn(loop.LairEntryDebuff);
+        builder.LairDebuffWaitChoice    = LairEntryDebuffModes.ChoiceOf(loop.LairEntryDebuff);
         foreach (LoopWaypoint w in loop.Waypoints)
         {
             int before = builder.Clicks.Count;
@@ -5056,6 +5058,23 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // Persist only when the loop is catalogued — a transient "Run this
         // loop" instance isn't on disk, and Save would silently create a file
         // (breaking the Run-never-writes rule). The flag still applies in-memory.
+        if (_services.Loops.Get(loop.Name) is not null)
+            _services.Loops.Save(loop);
+    }
+
+    // The same flyout's "Wait to enter lairs until I can debuff" tick box and its
+    // way-of-waiting choice, hydrated and written through like the toggle above.
+    [ObservableProperty] private bool _loopWaitToDebuffBeforeLairs;
+    [ObservableProperty] private int _loopLairDebuffWaitChoice;
+
+    partial void OnLoopWaitToDebuffBeforeLairsChanged(bool value) => WriteLoopLairEntryDebuff();
+    partial void OnLoopLairDebuffWaitChoiceChanged(int value) => WriteLoopLairEntryDebuff();
+
+    private void WriteLoopLairEntryDebuff()
+    {
+        if (_suppressLoopSettingWrite) return;
+        if (_services.LoopRunner.CurrentLoop is not { } loop) return;
+        loop.LairEntryDebuff = LairEntryDebuffModes.From(LoopWaitToDebuffBeforeLairs, LoopLairDebuffWaitChoice);
         if (_services.Loops.Get(loop.Name) is not null)
             _services.Loops.Save(loop);
     }
@@ -5212,6 +5231,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 // synthetic settings row and the running green list's ⚙ button.
                 _suppressLoopSettingWrite = true;
                 LoopOnlyAttackInLairRooms = loop.OnlyAttackInLairRooms;
+                LoopWaitToDebuffBeforeLairs = LairEntryDebuffModes.IsOn(loop.LairEntryDebuff);
+                LoopLairDebuffWaitChoice = LairEntryDebuffModes.ChoiceOf(loop.LairEntryDebuff);
                 _suppressLoopSettingWrite = false;
 
                 // Approach phase (incl. a pause taken mid-approach — IsApproachInFlight):

@@ -41,6 +41,11 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
     // on Save/BuildTransient. Loop-wide, not per-waypoint.
     [ObservableProperty] private bool _onlyAttackInLairRooms;
 
+    // Entire Loop Settings: wait one step short of a lair until the debuff can be
+    // cast, and how (Game.Map.LairEntryDebuffModes: 0 wait for spells, 1 block them).
+    [ObservableProperty] private bool _waitToDebuffBeforeLairs;
+    [ObservableProperty] private int _lairDebuffWaitChoice;
+
     [ObservableProperty] private int _expandedStepCount;
     [ObservableProperty] private string _unreachableSummary = string.Empty;
 
@@ -181,6 +186,8 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         PreviewedRoomKeys = null;
         WaypointKeys = null;
         OnlyAttackInLairRooms = false;
+        WaitToDebuffBeforeLairs = false;
+        LairDebuffWaitChoice = LairEntryDebuffModes.WaitForSpellsChoice;
         OnPropertyChanged(nameof(HasClicks));
         OnPropertyChanged(nameof(CanSave));
     }
@@ -223,6 +230,7 @@ public sealed partial class LoopBuilderSessionViewModel : ObservableObject
         {
             Notes = Notes ?? string.Empty,
             OnlyAttackInLairRooms = OnlyAttackInLairRooms,
+            LairEntryDebuff = LairEntryDebuffModes.From(WaitToDebuffBeforeLairs, LairDebuffWaitChoice),
         };
     }
 

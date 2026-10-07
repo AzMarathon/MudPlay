@@ -74,6 +74,12 @@ public sealed class MovementCoordinator
     // the next room observation or a short timeout.
     public const string SummonDeathSettleGate = "SummonDeathSettle";
 
+    // Asserted by LairEntryDebuffHold while a loop with "wait to enter lairs until
+    // the debuff can be cast" stands one step short of a lair, waiting for the
+    // round's between-round cast to come free. Engine-wait tier. Clears when the
+    // cast is free, or the loop turns away.
+    public const string LairDebuffGate = "LairDebuff";
+
     // Asserted for the length of a monster's "... temp" death spell when something
     // is waiting to be picked up there: a boss's Grab All, or coins whose get went
     // out before the death was known. The spell leaves the room unable to act and

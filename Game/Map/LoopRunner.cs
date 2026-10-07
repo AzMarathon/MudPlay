@@ -906,6 +906,7 @@ public sealed class LoopRunner : IRecoverableEngine
         {
             Notes = loop.Notes,
             OnlyAttackInLairRooms = loop.OnlyAttackInLairRooms,
+            LairEntryDebuff = loop.LairEntryDebuff,
         };
         _index = 0;
         _stepInFlight = false;

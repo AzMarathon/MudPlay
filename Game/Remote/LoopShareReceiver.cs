@@ -150,6 +150,7 @@ public sealed class LoopShareReceiver : IDisposable
 
     private static bool SameRoute(Loop a, Loop b) =>
         a.OnlyAttackInLairRooms == b.OnlyAttackInLairRooms
+        && a.LairEntryDebuff == b.LairEntryDebuff
         && a.Waypoints.Count == b.Waypoints.Count
         && a.Waypoints.Zip(b.Waypoints).All(p =>
             p.First.Room == p.Second.Room
