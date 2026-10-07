@@ -266,6 +266,31 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Started);
     }
 
+    // Report paradigm-20261006-221209: the pre-step gear swap (worn from the ready
+    // check) asserted and cleared its gate in one go. The resume sent the step, then
+    // the send the check was guarding sent it again: two `w` on the wire.
+    [Fact]
+    public void MoveReadyCheck_ThatPausesAndResumes_SendsTheStepOnce()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        bool swapped = false;
+        h.Walker.SetMoveReadyCheck(() =>
+        {
+            if (swapped) return true;
+            swapped = true;
+            h.Coordinator.AssertGate(MovementCoordinator.GearSwapGate);
+            h.Coordinator.ClearGate(MovementCoordinator.GearSwapGate);
+            return true;
+        });
+
+        h.Walker.WalkTo(new RoomKey(1, 3));
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
     // Reports stock-20260914-000112 / -000155: a step went out, its echo was displaced
     // off the prompt, and the tracker held the landing Pending as an ambiguous re-look
     // in an identically-named grid. The walker had no bound on that wait — it sat in

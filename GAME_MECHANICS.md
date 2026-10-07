@@ -3435,6 +3435,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `You can't go that way.` / `You can't move (in) that direction.` (the forms the client's refusal detector matches; an earlier note wrote `You can't move that way.`, never seen in a capture)
   - `The door is closed.` / `The door is Closed!` / `The gate is closed!` (the client matches these case-insensitively, ending in `.` or `!`)
   - impairment forms (paralyzed / confused / stunned / dazed / too encumbered / can't see well enough to move).
+  - a hold's own line (see *Moving while held*).
 - **The Stock 1.11p engine's full set of refusals** *([OBSERVED] `wccmmud.dll` 1.11p string table, the movement code's strings; treated as refusals by the user's call 2026-09-27 · Realm: Stock — Paradigm wordings not recorded)*:
   - `There is a closed door in that direction!`
   - `You are too stunned to move anywhere!`
@@ -3466,6 +3467,21 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - The tracker ignores a source-room redisplay while a move is pending and keeps waiting for the move's real outcome (a different room), rather than inferring a refusal from the redisplay alone.
 - A retreat step crosses a text exit by its command: `SpecialExitDispatch.EncodeBacktrack` (behind the walker's and the loop runner's `SendBacktrackMove`) sends the exit's first text command when the tracker is Confirmed in a room whose exit that way is a text exit, and the bare direction otherwise (report `paradigm-20261004-201232`: a flee back along a trail sent `nw` into the `go path` exit 23 times and the character died).
 - **Client policy** (report `paradigm-20261004-201232`): a flee move the game refuses is not sent again in that run. `HealthManager.NoteMoveBlocked` records the room and direction; `BuildFleeSteps` then takes another way out of the room (away from the plan first, then the plan's own way), and with every way refused returns no route, so combat fights back. The record is dropped when the run ends.
+
+### Moving while held
+*Status: OBSERVED 2026-10-06 (report `paradigm-20261006-221209`; `wccmmud.dll` 1.11p `_cmd_move`) · Realm: differs*
+
+- **Paradigm answers a held character's move with the hold's own applied line.** *([OBSERVED] report `paradigm-20261006-221209`.)* A stitched abomination's roar (`The stitched abomination beats his chest and roars deafeningly!`) printed `You are too scared to flee!` in bold red as it landed. Each move sent after that (`w`, `w`, `s`) was answered with the same `You are too scared to flee!` in the plain colour, with no room display. The hold ends with `You feel braver.`.
+  - The roar's lines are message 194 on Stock (`You are too scared to flee!` / `You feel braver.`). Four Paradigm seed records share the applied line: roar (spell #193), a second roar, giant skeleton shriek (#770) and fear2.
+  - Knockdown has the same shape: `You are flat on your back!` is both its status line and its move refusal (see *Spells, buffs & conditions → Knockdown — a movement-preventing hold*).
+  - `[NEEDS CONFIRMATION]` Does every hold on Paradigm answer a move with its own applied line, or only some? Seen for the roar and knockdown.
+- **The Stock engine has one fixed refusal, `You can't seem to move anywhere!`.** *([OBSERVED] `wccmmud.dll` 1.11p, `_cmd_move` @0x4689c4.)* It is the first check the move command makes: a bit on the character record (byte +0x7c8, bit 0x20) refuses the move before the encumbrance and exit checks.
+  - `[NEEDS CONFIRMATION]` Which states set that bit was not traced. Is it the hold flag (HoldPerson, ability 74)?
+- **A hold stops movement, not fighting** (HoldPerson is "can't move, can still act": see *Spells, buffs & conditions → Condition Effects flags derive from the linked spell's ability codes*).
+
+**Client use:**
+- `MovementRefusalDetector` reverts a pending move on the applied line of a hold the character is under (`ConditionTracker.IsActiveHoldLine`: whole line, a `MovementPrevented` record that is active), and on `You can't seem to move anywhere!`. The hold's line also prints when the hold lands or is renewed, so it reverts a move only while one is Pending.
+- `CombatManager`'s move-in-flight probe (`SetMoveInFlightProbe`) reads false while `ConditionTracker.IsMovementPrevented`, so a monster arriving doesn't wait for a room display that a held character's move can't bring. In the report the unanswered `w` kept the tracker Pending for 25 s; combat stood down on every round and the character died without attacking.
 
 ### Too heavy to move (over max encumbrance)
 *Status: CONFIRMED 2026-09-26 (user; report `paradigm-20260926-195517`) · Realm: Paradigm (not recorded for Stock)*

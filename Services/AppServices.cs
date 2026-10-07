@@ -5143,7 +5143,11 @@ public sealed class AppServices
         Combat.SetHitAndRunHooks(Health.BackstabLanded, Health.RunInsteadOfFight);
         Combat.SetFleeInFlightProbe(() => Health.IsFleeInFlight);
         Combat.SetKeepRunning(Health.KeepRunning);
-        Combat.SetMoveInFlightProbe(() => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
+        // A held character's move can't land, so one still unanswered is no reason
+        // to hold a fight back.
+        Combat.SetMoveInFlightProbe(() =>
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+            && !Conditions.IsMovementPrevented);
         RoomTracker.MoveBlocked += () => Combat.NoteMoveRefused();
 
         // ShadowRest (Paradigm): a race or class carrying ability code 1103 can rest

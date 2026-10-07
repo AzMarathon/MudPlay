@@ -1135,7 +1135,8 @@ public partial class MainWindowViewModel : ObservableObject
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.SummonSettle.NoteRoomDisplayed();
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
-            AppServices.Current.Conditions.IsConfuseFumbleLine);
+            AppServices.Current.Conditions.IsConfuseFumbleLine,
+            AppServices.Current.Conditions.IsActiveHoldLine);
         // Feeds the server's move-command echo ("[HP=..]:e") to the tracker so it
         // confirms a move's landing on that causal signal rather than guessing by
         // timing — the fix for phantom-advancing through identically-named grids.

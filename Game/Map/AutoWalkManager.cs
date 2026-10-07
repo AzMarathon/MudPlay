@@ -1758,6 +1758,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
         // meanwhile and the resume re-drives this step.
         if (step is MoveStep && _moveReadyCheck?.Invoke() == false) return;
+        // The ready check sends the pre-step gear, and a swap that asserts and clears
+        // its gate in one go re-enters this method through the resume, which sends the
+        // step. Sending it again here put the move on the wire twice.
+        if (_stepInFlight || State != WalkState.Walking) return;
         switch (step)
         {
             case MoveStep move:

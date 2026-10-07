@@ -7,6 +7,8 @@
 > - A set imported by an old version that damaged long text is now detected and named, with the fix (import its MDB again)
 > - Two clients on the same realm no longer overwrite each other's boss timers, and two on the same game data no longer overwrite each other's favourites; each sees the other's changes within a second
 > - The program log no longer says a profile's keybindings were reset on every upgrade
+> - A held character with a step just sent fights back instead of waiting on a move that can't happen
+> - A walk no longer sends a step twice after swapping gear for the room ahead
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

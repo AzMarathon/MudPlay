@@ -1489,6 +1489,10 @@ public sealed class LoopRunner : IRecoverableEngine
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
         // meanwhile and the resume re-drives this step.
         if (step is MoveLoopStep && _moveReadyCheck?.Invoke() == false) return;
+        // The ready check sends the pre-step gear, and a swap that asserts and clears
+        // its gate in one go re-enters this method through the resume, which sends the
+        // step. Sending it again here put the move on the wire twice.
+        if (_loop is null || State != LoopState.Running || _stepInFlight) return;
         switch (step)
         {
             case MoveLoopStep move:    SendMove(move);    break;
