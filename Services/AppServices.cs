@@ -3443,6 +3443,7 @@ public sealed class AppServices
         Messages = new MessageStore(Log);
         Messages.Messages.CollectionChanged += (_, _) => _spellMessages = null;
         GameData.ActiveSetChanged += Messages.Load;
+        GameData.ActiveSetChanged += _ => CheckActiveSetForImportDamage();
         // The apply-cast matcher list + spell-formula cache (PartyAilmentTracker's
         // witness-SET + duration clear) are derived from Messages + the Spells
         // table, so drop them when either changes: a set switch (reseeds both) or a
@@ -10979,6 +10980,44 @@ public sealed class AppServices
         IReadOnlyList<Game.Spells.CasterMessageMatcher> matchers = AttackSpellMatchersFor(spellCode);
         _attackSpellMatcherCache[spellCode] = matchers;
         return matchers;
+    }
+
+    // Long cells of the active set that an old import left damaged (see
+    // GameDataLongTextCheck); 0 for a sound set. For the bug report.
+    public int ActiveSetDamagedCells { get; private set; }
+
+    // A set imported before the Access reader was corrected keeps its damaged cells:
+    // room command scripts, spawn lists and item sources with characters missing.
+    // Nothing can mend them in place, so say so, once per time the set is made
+    // active, and name the cure. The scan reads every long cell of two tables, so it
+    // runs off the UI thread; the result is posted back.
+    private void CheckActiveSetForImportDamage()
+    {
+        ActiveSetDamagedCells = 0;
+        if (GameData.ActiveSet is not { } set) return;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            int damaged;
+            try { damaged = GameDataLongTextCheck.CountDamagedCells(GameData); }
+            catch (Exception ex)
+            {
+                Log.Warn("GameData", $"could not check set '{set}' for import damage ({ex.GetType().Name}: {ex.Message}).");
+                return;
+            }
+            if (damaged == 0) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!string.Equals(GameData.ActiveSet, set, StringComparison.Ordinal)) return;   // another set by now
+                ActiveSetDamagedCells = damaged;
+                Log.Warn("GameData",
+                    $"set '{set}' was imported by an older version that damaged long text: {damaged} cell(s) "
+                    + "have characters missing (monster spawn lists, item sources, room command scripts). "
+                    + "Import its MDB again to repair it.");
+                WriteTerminalNotice(
+                    $"[Game data '{set}' was imported by an older MudPlay that damaged long text. "
+                    + "Import its MDB again (Manage Game Data Sets) to repair it.]");
+            });
+        });
     }
 
     // The command that lists what the character has learned: `sp` for a mana class,

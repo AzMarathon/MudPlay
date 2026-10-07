@@ -170,9 +170,11 @@ public sealed class ProfileService
             // after ProfileLoaded so the keybind snapshot reflects the reset
             // defaults, not the outgoing profile's bindings.
             Save();
+            // Says only that it was upgraded: which steps ran depends on the version
+            // it came from, and naming one (it used to say the keybindings were
+            // reset, on every upgrade) misleads whoever reads a report.
             Log?.Info(LogCategory,
-                $"Migrated profile '{profileName}' to schema v{CharacterProfile.CurrentSchemaVersion} " +
-                "(reset keybindings + toolbar layout to the new defaults).");
+                $"Upgraded profile '{profileName}' to schema v{CharacterProfile.CurrentSchemaVersion}.");
         }
         return loaded;
     }

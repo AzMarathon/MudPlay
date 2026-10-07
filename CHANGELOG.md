@@ -1,5 +1,12 @@
 # Version history
 
+## 3.147.0
+
+- Item records show a Room command group: commands that hand the item over in a room, with the chance and the rooms, for game data exported by Nightmare Redux for Linux
+- Those entries also fill in rooms the export's cut room lists dropped; other exports work as before
+- A set imported by an old version that damaged long text is now detected and named, with the fix (import its MDB again)
+- The program log no longer says a profile's keybindings were reset on every upgrade
+
 ## 3.146.0
 
 - New spell type priority category, Priority buffs: tick "Priority buff" on a buff in the Buff Watchdog and it casts at that rank instead of with the rest

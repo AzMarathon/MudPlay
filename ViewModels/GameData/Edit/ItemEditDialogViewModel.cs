@@ -166,6 +166,11 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     public IReadOnlyList<PlacedInRow> PlacedIn { get; }
     public bool HasPlacedIn => PlacedIn.Count > 0;
 
+    // Commands that can hand the item over when typed in a room, each with the rooms
+    // it works in. Only exports that list them have any.
+    public IReadOnlyList<RoomCommandRow> RoomCommands { get; }
+    public bool HasRoomCommands => RoomCommands.Count > 0;
+
     // Spells the item casts (use-cast / proc), each a clickable link to that spell's
     // record — where the cast's on-use / proc wording lives, shared across every item
     // casting it. Empty for an item that casts nothing.
@@ -265,6 +270,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         IReadOnlyList<DroppedByRow>? summons = null,
         IReadOnlyList<PlacedInRow>? teleportsTo = null,
         Func<Task<string?>>? editAttachedMessage = null,
+        IReadOnlyList<RoomCommandRow>? roomCommands = null,
         string? attachedMessageSummary = null)
     {
         WccNoStr     = wccNoStr;
@@ -282,6 +288,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         SetShopRows(shops);
         DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
         PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
+        RoomCommands = roomCommands ?? Array.Empty<RoomCommandRow>();
         CastsSpells  = castsSpells ?? Array.Empty<CastsSpellRow>();
         Summons      = summons ?? Array.Empty<DroppedByRow>();
         TeleportsTo  = teleportsTo ?? Array.Empty<PlacedInRow>();

@@ -53,6 +53,7 @@ public static class ItemRecordOpener
             shopSalesForCharm: ShopsForCharm,
             droppedBy:         mdb.DroppedBy,
             placedIn:          mdb.PlacedIn,
+            roomCommands:      mdb.RoomCommands,
             castsSpells:       mdb.CastsSpells,
             summons:           mdb.Summons,
             teleportsTo:       mdb.TeleportsTo);

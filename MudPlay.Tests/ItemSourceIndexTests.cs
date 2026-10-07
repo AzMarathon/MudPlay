@@ -47,6 +47,10 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 27, "Name": "Black Star Key", "ItemType": 7 },
           { "Number": 28, "Name": "Stone Signet", "ItemType": 2 },
           { "Number": 29, "Name": "Bone Key", "ItemType": 7 },
+          { "Number": 31, "Name": "Cave Roots", "ItemType": 2,
+            "Obtained From": "Textblock #720, Room(get roots|pick roots) 9/500|9/501-503" },
+          { "Number": 32, "Name": "Copper Ore", "ItemType": 2,
+            "Obtained From": "Room(mine ore) 6/1664(25%)" },
           { "Number": 30, "Name": "Hermit Gift", "ItemType": 2 }
         ]
         """;
@@ -78,7 +82,8 @@ public sealed class ItemSourceIndexTests : IDisposable
         [
           { "Map Number": 3, "Room Number": 606, "Name": "Dragon Statue", "CMD": 0 },
           { "Map Number": 8, "Room Number": 461, "Name": "Black Steel Gate", "CMD": 863 },
-          { "Map Number": 12, "Room Number": 2442, "Name": "Sphinx Chamber", "CMD": 864 }
+          { "Map Number": 12, "Room Number": 2442, "Name": "Sphinx Chamber", "CMD": 864 },
+          { "Map Number": 9, "Room Number": 502, "Name": "Root Cellar", "CMD": 0 }
         ]
         """;
 
@@ -106,6 +111,7 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 712, "LinkTo": 0, "Action": "failability 127:goodaligned -51:checkitem 30 2936:takeitem 30:giveability 126 24:giveitem 29:text 9348\n", "Called From": "Textblock #711" },
           { "Number": 713, "LinkTo": 714, "Action": "", "Called From": "Textblock #710" },
           { "Number": 714, "LinkTo": 0, "Action": "failability 127:failability 128:goodaligned -51 3075:checkability 126 24:giveitem 29:text 9642\nfailability 126:failability 128:evilaligned -50 3075:goodaligned 29 3075:checkability 127 18:giveitem 29:text 9642\n", "Called From": "Textblock #713" },
+          { "Number": 720, "LinkTo": 0, "Action": "get roots:giveitem 31\npick roots:giveitem 31\n", "Called From": "Room 9/500, R+" },
           { "Number": 863, "LinkTo": 0, "Action": "touch statue:summon 347\nmove statue:summon 347\n", "Called From": "Room 8/461" },
           { "Number": 864, "LinkTo": 0, "Action": "touch sphinx:summon 348\n", "Called From": "Room 12/2442" }
         ]
@@ -244,6 +250,32 @@ public sealed class ItemSourceIndexTests : IDisposable
         // The message its conditions print when they fail, once, from both lines.
         Assert.Equal(new[] { 3075 }, remind.RefusalMessages);
         Assert.Equal(new[] { new RoomKey(17, 1790) }, index.GiverMonsterRoomsOf(304));
+    }
+
+    // An export that lists "Room(<command>) <rooms>" on the item names every room a
+    // command works in, where the textblock's own Called-From is cut short ("R+").
+    [Fact]
+    public void GiversOf_RoomCommandSource_FillsInTheRoomsTheCutCalledFromDropped()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        var getRoots = index.GiversOf(31).Where(g => g.Keyword == "get roots").ToList();
+
+        Assert.Equal(new[] { (9, 500), (9, 501), (9, 502), (9, 503) },
+            getRoots.Select(g => (g.Map, g.Room)).OrderBy(r => r).ToArray());
+        Assert.All(getRoots, g => Assert.True(g.Deterministic));
+        Assert.Equal("Root Cellar", getRoots.Single(g => g.Room == 502).Name);
+        Assert.Equal(4, index.GiversOf(31).Count(g => g.Keyword == "pick roots"));
+        Assert.Equal(2, index.RoomCommandItemCount);
+    }
+
+    // A rolled room command ("(25%)") is no hand-over to walk to and ask for.
+    [Fact]
+    public void GiversOf_RolledRoomCommand_AddsNoGiver()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        Assert.Empty(index.GiversOf(32));
     }
 
     [Fact]

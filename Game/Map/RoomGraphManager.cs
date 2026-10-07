@@ -1029,12 +1029,21 @@ public sealed class RoomGraphManager
             System.Text.RegularExpressions.RegexOptions.Compiled
             | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-    // Pull every "Room M/R" out of an item's "Obtained From" text as a RoomKey.
+    // Pull every "Room M/R" entry out of an item's "Obtained From" text as a RoomKey:
+    // the rooms the item lies in. The cell is split into its entries first, and only
+    // one that starts "Room " counts. Searching the whole cell would also pick a room
+    // out of a "Room(<command>) M/R" entry (a room where a command hands the item
+    // over, not one where it lies) or out of a command's own wording.
     private static IEnumerable<RoomKey> ParseObtainedFromRooms(string obtainedFrom)
     {
-        foreach (System.Text.RegularExpressions.Match m in s_obtainedFromRoom.Matches(obtainedFrom))
-            if (int.TryParse(m.Groups[1].Value, out int map) && int.TryParse(m.Groups[2].Value, out int room))
+        foreach (string entry in GameData.RoomCommandSourceParser.Entries(obtainedFrom))
+        {
+            if (!entry.StartsWith("Room ", StringComparison.Ordinal)) continue;
+            System.Text.RegularExpressions.Match m = s_obtainedFromRoom.Match(entry);
+            if (m.Success && m.Index == 0
+                && int.TryParse(m.Groups[1].Value, out int map) && int.TryParse(m.Groups[2].Value, out int room))
                 yield return new RoomKey(map, room);
+        }
     }
 
     // NPC ask-transport edges. A placed/lair monster whose greet dialogue ports

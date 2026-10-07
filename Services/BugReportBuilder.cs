@@ -160,6 +160,9 @@ public static class BugReportBuilder
         Kv(sb, "Captured at", now.ToString("yyyy-MM-dd HH:mm:ss zzz"));
         Kv(sb, "Realm", $"{RealmLabel(realm)} ({realm})");
         Kv(sb, "Active game-data set", svc.GameData.ActiveSet ?? "(none)");
+        Kv(sb, "Game data: long text damaged by an old import",
+            svc.ActiveSetDamagedCells == 0 ? "no" : $"{svc.ActiveSetDamagedCells} cell(s) - import the MDB again");
+        Kv(sb, "Game data: items with room-command sources", svc.ItemSources.RoomCommandItemCount.ToString());
         Kv(sb, "Character", svc.Profile.CurrentProfileName ?? "(none loaded)");
         Kv(sb, "BBS", svc.Profile.CurrentBbsName ?? "(none)");
         if (svc.Profile.Current is { StateUnverified: true })

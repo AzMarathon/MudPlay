@@ -91,6 +91,7 @@ public sealed class ItemRecordDialogService
             shopSalesForCharm: ShopsForCharm,
             droppedBy:        mdb.DroppedBy,
             castsSpells:      mdb.CastsSpells,
+            roomCommands:     mdb.RoomCommands,
             editAttachedMessage:    editMsg,
             attachedMessageSummary: msgSummary);
 
