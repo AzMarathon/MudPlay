@@ -969,7 +969,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // never a route under way. Unwired (tests, tooling) nothing is refused.
     private Func<IReadOnlySet<(RoomKey From, RoomKey To)>?>? _automaticWalkTeleports;
 
-    // Wired by AppServices from Settings → Other (OtherSettings.AutomaticWalkTeleports).
+    // Wired by AppServices from Settings → Teleports (TeleportSettings.AutomaticWalkTeleports).
     public void SetAutomaticWalkTeleports(Func<IReadOnlySet<(RoomKey From, RoomKey To)>?>? allowed) =>
         _automaticWalkTeleports = allowed;
 
@@ -1042,7 +1042,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool preferFree = preferTeleportFree ?? false;
         if (preferTeleportFree is null && !_replanningInPlace && automaticTeleports is not null)
             _log?.Info("Walker",
-                $"automatic walk to {destination}: may use {automaticTeleports.Count} allowed teleport(s) (Settings → Other)");
+                $"automatic walk to {destination}: may use {automaticTeleports.Count} allowed teleport(s) (Settings → Teleports)");
 
         if (State is WalkState.Walking or WalkState.Paused)
         {
@@ -1558,7 +1558,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     }
 
     // "no route without the teleport from 3/784 (Darkwood Forest) to 3/740 (Black
-    // Wasteland), which automatic walks aren't allowed to use (Settings → Other)":
+    // Wasteland), which automatic walks aren't allowed to use (Settings → Teleports)":
     // the first teleport the route would take with the allow-list lifted that the
     // list refuses. Null when lifting it finds no route either, so the walk is
     // blocked by something else and the usual wording names that.
@@ -1572,7 +1572,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
             if (teleports.IsTeleportRefused(at, in exit))
                 return $"no route without the teleport from {at} ({room.Name}) to {exit.Target} "
-                    + $"({_graph.GetRoom(exit.Target)?.Name ?? "?"}), which automatic walks aren't allowed to use (Settings → Other)";
+                    + $"({_graph.GetRoom(exit.Target)?.Name ?? "?"}), which automatic walks aren't allowed to use (Settings → Teleports)";
             at = exit.Target;
         }
         return null;

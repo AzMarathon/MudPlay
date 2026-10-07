@@ -306,6 +306,7 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
         Sections.Add(new AutoLightSectionViewModel());
         Sections.Add(new AutoLairSectionViewModel());
         Sections.Add(new AutoTrainerSectionViewModel());
+        Sections.Add(new TeleportsSectionViewModel());
         Sections.Add(new OtherSectionViewModel());
         Sections.Add(new EventsSectionViewModel());
         Sections.Add(new SoundsSectionViewModel());

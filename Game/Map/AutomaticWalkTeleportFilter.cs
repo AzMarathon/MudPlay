@@ -2,7 +2,7 @@ namespace MudPlay.Game.Map;
 
 // The route filter of a walk the client started on its own: everything the
 // movement filter says, and on top of it only the teleports the user allowed such
-// walks to use (Settings → Other). To the route search a teleport is one step, so
+// walks to use (Settings → Teleports). To the route search a teleport is one step, so
 // it is nearly always on the shortest route, and where it lands is a call the
 // client can't make: the vortex into the Black Wasteland is one step from the
 // Darkwood Forest. A walk the user starts is asked on the route cards and never

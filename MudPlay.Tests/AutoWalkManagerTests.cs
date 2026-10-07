@@ -2463,7 +2463,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Idle, h.Walker.State);
         WalkEvent failed = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Failed);
         Assert.Contains("the teleport from 1/10 (Grove) to 7/131 (Stone Arch)", failed.Detail);
-        Assert.Contains("Settings → Other", failed.Detail);
+        Assert.Contains("Settings → Teleports", failed.Detail);
     }
 
     // A walk the user started says which route it wants (the route cards pass it),

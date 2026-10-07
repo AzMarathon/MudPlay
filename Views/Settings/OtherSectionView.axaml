@@ -171,38 +171,6 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked: stopping a walk-to, loop or Auto-Lair you started with Sprint (Go in Sprint Mode) before it began ends Sprint Mode at once, turning back on the autos it turned off. When unchecked (default), Sprint Mode stays on until your next walk arrives. (A Sprint that isn't stopped ends by itself once it reaches its destination, loop or first lair.) Applies only for this character."/>
 
-            <!-- Teleports on walks the client starts by itself. A walk the user starts
-                 is asked about on the route cards and never reads this. The list is
-                 built from the loaded game data. Char-tier. -->
-            <TextBlock Classes="FieldLabel" Text="Allow automatic walks to use the following teleports:" Margin="0,12,0,0"/>
-            <TextBlock Classes="HelpText" TextWrapping="Wrap"
-                       Text="Automatic walks are the ones the client starts by itself: bank and sell trips, training and spell-buying trips, Auto-Lair, events, another player's remote commands. They use only the teleports ticked here; if a trip needs one that isn't ticked, it stops and names it. Walks you start yourself are asked on the route cards and aren't affected. Each line is one teleport spot, with the map/room number of both ends; ⇄ is one that runs both ways. The ones with the most rooms behind them come first."/>
-            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,4">
-                <TextBox Width="220" PlaceholderText="Filter (a name, a map/room, a command)"
-                         Text="{Binding AutomaticWalkTeleportFilter, Mode=TwoWay}"/>
-                <Button Content="Allow all" Command="{Binding AllowAllAutomaticWalkTeleportsCommand}"
-                        ToolTip.Tip="Ticks every teleport the filter is showing."/>
-                <Button Content="Allow none" Command="{Binding AllowNoAutomaticWalkTeleportsCommand}"
-                        ToolTip.Tip="Clears every teleport the filter is showing."/>
-            </StackPanel>
-            <Border BorderBrush="{StaticResource ChromeFgMutedBrush}" BorderThickness="1" Padding="6" MaxHeight="260">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding AutomaticWalkTeleports}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:TeleportChoiceViewModel">
-                                <CheckBox IsChecked="{Binding IsAllowed, Mode=TwoWay}" Margin="0,0,0,2"
-                                          IsVisible="{Binding IsShown}">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Title}"/>
-                                        <TextBlock Text="{Binding Detail}" TextWrapping="Wrap"
-                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
-                                    </StackPanel>
-                                </CheckBox>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Border>
 
             <!-- The yellow monster-HP line a look prints in the terminal. The status
                  bar's target readout is its own item on the bar. Char-tier setting. -->

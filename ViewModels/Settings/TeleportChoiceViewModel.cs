@@ -3,7 +3,7 @@ using MudPlay.Game.Map;
 
 namespace MudPlay.ViewModels.Settings;
 
-// One tick box in Settings → Other's list of teleports automatic walks may use.
+// One tick box in Settings → Teleports' list of teleports automatic walks may use.
 public sealed partial class TeleportChoiceViewModel : ObservableObject
 {
     private readonly Action _changed;

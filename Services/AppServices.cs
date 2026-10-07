@@ -2159,7 +2159,7 @@ public sealed class AppServices
     // any cached room references.
     public Game.Map.RoomGraphManager RoomGraph { get; private set; } = null!;
 
-    // The teleports in the loaded game data, grouped by where they lead, for the
+    // The teleport spots in the loaded game data, for the
     // setting that says which of them automatic walks may use. Worked out from the
     // room graph on first use and again after the graph reloads.
     public IReadOnlyList<Game.Map.TeleportChoice> TeleportChoices =>
@@ -6811,7 +6811,7 @@ public sealed class AppServices
         // its own preference and never reads this). Read live from the character, so a
         // change reaches the next walk and a profile swap brings its own list.
         Walker.SetAutomaticWalkTeleports(() => Game.Map.TeleportCatalog.ParseKeys(
-            ReadSection<Models.Profile.OtherSettings>(Profile.Current, "Other").AutomaticWalkTeleports));
+            ReadSection<Models.Profile.TeleportSettings>(Profile.Current, "Teleports").AutomaticWalkTeleports));
         RoomGraph.GraphReloaded += () => _teleportChoices = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
