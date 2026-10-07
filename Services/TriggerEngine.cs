@@ -50,33 +50,9 @@ public sealed class TriggerEngine
     public Action<string>? PlaySound { get; set; }
     private LineExtractor? _lines;
     private Action<byte[]>? _sender;
-    // The set whose per-set triggers (TriggerLocation.GameData) are currently in
-    // the live collection. null when no set is active — GameData-scoped triggers
-    // can't be loaded or saved. Tracked here so save routing knows which file to
-    // write.
-    private string? _activeSet;
-
-    // Game-data triggers live in one file per set, shared by every client running on
-    // this machine — but each client only read it when its set loaded, so a trigger one
-    // client moved to (or edited at) the game-data location never reached another open
-    // client until it restarted. The watcher reloads the game-data slice when another
-    // process rewrites the file. _syncedText is the file content we last loaded or
-    // wrote, so our own save (or a no-op rewrite) doesn't bounce back as a reload.
-    private System.IO.FileSystemWatcher? _setFileWatcher;
-    private string? _syncedText;
-    private int _reloadGeneration;
-    private static readonly TimeSpan ExternalReloadDebounce = TimeSpan.FromMilliseconds(300);
-
-    // True while the active set's triggers file exists but our last read of it failed —
-    // on Windows a just-written file is briefly held (the antivirus scan, the other
-    // client's rename), and a client on another version may not parse a newer file.
-    // The live list is kept as it was rather than cleared, the read is retried, and
-    // until one succeeds we never WRITE the file: saving our stale (or empty) slice over
-    // it would wipe the other client's triggers for both.
-    private bool _gameDataUnread;
-    private int _readRetries;
-    private const int MaxReadRetries = 10;
-    private static readonly TimeSpan ReadRetryDelay = TimeSpan.FromSeconds(2);
+    // Names the game-data set the loaded profile runs on. Only for a profile from
+    // before triggers were per character, which takes a copy of that set's list.
+    private readonly Func<string?>? _profileSet;
 
     // Compiled-regex cache, keyed by (match type, raw pattern). Built lazily as
     // triggers fire.
@@ -99,10 +75,13 @@ public sealed class TriggerEngine
     // dispatch path is already marshalled there upstream.
     public event Action? WildcardsChanged;
 
-    public TriggerEngine(ProfileService profile)
+    public TriggerEngine(ProfileService profile, Func<string?>? profileSet = null, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
+        _profileSet = profileSet;
+        // Before the first load below, which logs what a profile took.
+        _log = log;
         profile.ProfileLoaded += LoadFrom;
         profile.ProfileClosed += Clear;
         profile.ProfileSaving += SnapshotForSave;
@@ -114,12 +93,12 @@ public sealed class TriggerEngine
     }
 
     // Production ctor — wires the chat + log subscriptions at construction time.
-    public TriggerEngine(ProfileService profile, ChatRouter chat, LogService log) : this(profile)
+    public TriggerEngine(ProfileService profile, ChatRouter chat, LogService log, Func<string?>? profileSet = null)
+        : this(profile, profileSet, log)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentNullException.ThrowIfNull(log);
         _chat = chat;
-        _log = log;
         chat.EntryClassified += OnChatClassified;
         log.EntryAdded       += OnLogEntry;
     }
@@ -148,19 +127,16 @@ public sealed class TriggerEngine
         _sender = sender;
     }
 
-    // Insert a new trigger and persist to its Location-matching file
-    // (GameData-scoped → per-set; Profile-scoped → profile).
+    // Insert a new trigger and save the profile.
     public void Add(Trigger trigger)
     {
         ArgumentNullException.ThrowIfNull(trigger);
         Triggers.Add(trigger);
-        PersistAll();
+        _profile?.Save();
     }
 
-    // Replace an existing trigger by reference. Always writes both buckets
-    // because the edit may have moved the trigger between Locations — the entry
-    // needs to disappear from the old file and appear in the new. Returns false
-    // when the original isn't found.
+    // Replace an existing trigger by reference. Returns false when the original
+    // isn't found.
     public bool Replace(Trigger original, Trigger updated)
     {
         ArgumentNullException.ThrowIfNull(original);
@@ -168,46 +144,17 @@ public sealed class TriggerEngine
         int index = Triggers.IndexOf(original);
         if (index < 0) return false;
         Triggers[index] = updated;
-        PersistAll();
+        _profile?.Save();
         return true;
     }
 
-    // Remove a trigger by reference. Persists both buckets. Returns false if not found.
+    // Remove a trigger by reference. Returns false if not found.
     public bool Remove(Trigger trigger)
     {
         ArgumentNullException.ThrowIfNull(trigger);
         bool removed = Triggers.Remove(trigger);
-        if (removed) PersistAll();
+        if (removed) _profile?.Save();
         return removed;
-    }
-
-    // Write both the per-set file (GameData-scoped triggers) and the profile
-    // (Profile-scoped triggers via SnapshotForSave). Two writes on every edit is
-    // wasteful but correct under all the Location-change cases; trigger lists are
-    // small enough that the cost is negligible.
-    private void PersistAll()
-    {
-        SavePerSetTriggers();
-        _profile?.Save();
-    }
-
-    private void SavePerSetTriggers()
-    {
-        if (string.IsNullOrWhiteSpace(_activeSet)) return;
-        if (_gameDataUnread)
-        {
-            _log?.Log(LogSeverity.Warn, LogSource,
-                $"Not saving game-data triggers for '{_activeSet}': the file couldn't be read, so "
-                + "writing now would overwrite triggers another client saved. Retrying the read.");
-            ScheduleExternalReload(_activeSet, ReadRetryDelay);
-            return;
-        }
-        List<Trigger> gd = Triggers
-            .Where(t => t.Location == TriggerLocation.GameData)
-            .ToList();
-        string path = AppPaths.TriggersFile(_activeSet);
-        JsonStore.Save(path, gd);
-        _syncedText = ReadTextOrNull(path);
     }
 
     // Empty the wildcard store — the viewer's "Clear" affordance. Fires
@@ -500,247 +447,70 @@ public sealed class TriggerEngine
         return false;
     }
 
-    // ----- Per-set sync (GameData-scoped triggers) -----------------------
+    // ----- Profile sync ---------------------------------------------------
 
-    // External hook (wired from AppServices) — called whenever the active
-    // game-data set changes. Drops the prior set's GameData-scoped triggers from
-    // the live collection and loads the new set's per-set file (or seeds from
-    // defaults when the file doesn't exist yet). Profile-scoped triggers are left
-    // untouched.
-    public void OnActiveSetChanged(string? newSet)
-    {
-        _activeSet = string.IsNullOrWhiteSpace(newSet) ? null : newSet;
-        DropTriggersByLocation(TriggerLocation.GameData);
-        WatchPerSetFile(_activeSet);
-        if (_activeSet is null) return;
-        LoadPerSetTriggers(_activeSet);
-    }
-
-    // Watch the active set's triggers file for another client's writes. Watches the
-    // directory rather than the file: the save lands as a temp file renamed over the
-    // target, which a plain file watch can miss.
-    private void WatchPerSetFile(string? setName)
-    {
-        _setFileWatcher?.Dispose();
-        _setFileWatcher = null;
-        if (setName is null) return;
-
-        string path = AppPaths.TriggersFile(setName);
-        string? dir = System.IO.Path.GetDirectoryName(path);
-        if (string.IsNullOrEmpty(dir)) return;
-        try
-        {
-            System.IO.Directory.CreateDirectory(dir);
-            System.IO.FileSystemWatcher w = new(dir)
-            {
-                NotifyFilter = System.IO.NotifyFilters.FileName | System.IO.NotifyFilters.LastWrite
-                             | System.IO.NotifyFilters.Size,
-            };
-            string file = System.IO.Path.GetFileName(path);
-            w.Changed += (_, e) => { if (e.Name == file) ScheduleExternalReload(setName); };
-            w.Created += (_, e) => { if (e.Name == file) ScheduleExternalReload(setName); };
-            w.Renamed += (_, e) => { if (e.Name == file) ScheduleExternalReload(setName); };
-            w.EnableRaisingEvents = true;
-            _setFileWatcher = w;
-        }
-        catch (Exception ex)
-        {
-            // Watching is a convenience — without it the file still loads on the next
-            // set switch or restart, exactly as before.
-            _log?.Log(LogSeverity.Warn, LogSource, $"Can't watch '{path}' for other clients' edits: {ex.Message}");
-        }
-    }
-
-    // Watcher events arrive on a pool thread, several per save; coalesce them and
-    // reload on the UI thread (the live collection is bound to the Triggers tab).
-    private void ScheduleExternalReload(string setName) => ScheduleExternalReload(setName, ExternalReloadDebounce);
-
-    private void ScheduleExternalReload(string setName, TimeSpan delay)
-    {
-        int generation = Interlocked.Increment(ref _reloadGeneration);
-        _ = Task.Delay(delay).ContinueWith(_ =>
-        {
-            if (generation != Volatile.Read(ref _reloadGeneration)) return;
-            Dispatcher.UIThread.Post(() => ReloadIfChangedExternally(setName));
-        }, TaskScheduler.Default);
-    }
-
-    private void ReloadIfChangedExternally(string setName)
-    {
-        if (!string.Equals(_activeSet, setName, StringComparison.Ordinal)) return;
-        string path = AppPaths.TriggersFile(setName);
-        if (!_gameDataUnread && ReadTextOrNull(path) is { } current && current == _syncedText)
-            return;   // our own save, or nothing new
-        if (TryReadPerSet(setName, out _))
-            _log?.Log(LogSeverity.Info, LogSource,
-                $"Game-data triggers for '{setName}' changed in another client — reloaded.");
-    }
-
-    // Read the set's triggers file and, only on success, replace the game-data slice
-    // with it. On failure the slice is left alone, _gameDataUnread blocks saving over
-    // the file, and the read is retried a few times.
-    private bool TryReadPerSet(string setName, out bool fileExists)
-    {
-        string path = AppPaths.TriggersFile(setName);
-        fileExists = System.IO.File.Exists(path);
-        if (!fileExists) { _gameDataUnread = false; return false; }
-        List<Trigger>? loaded;
-        string? text;
-        try
-        {
-            text = System.IO.File.ReadAllText(path);
-            loaded = JsonStore.Load<List<Trigger>>(path);
-        }
-        catch (Exception ex)
-        {
-            _gameDataUnread = true;
-            if (_readRetries++ < MaxReadRetries)
-                ScheduleExternalReload(setName, ReadRetryDelay);
-            _log?.Log(LogSeverity.Warn, LogSource,
-                $"Couldn't read game-data triggers '{path}' ({ex.Message}) — keeping the current list"
-                + (_readRetries <= MaxReadRetries ? ", retrying." : "; giving up until the set reloads."));
-            return false;
-        }
-        DropTriggersByLocation(TriggerLocation.GameData);
-        foreach (Trigger t in loaded ?? new List<Trigger>())
-            Triggers.Add(t with { Location = TriggerLocation.GameData });
-        _syncedText = text;
-        _gameDataUnread = false;
-        _readRetries = 0;
-        return true;
-    }
-
-    private static string? ReadTextOrNull(string path)
-    {
-        try { return System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : null; }
-        catch (System.IO.IOException) { return null; }   // mid-rename; the next event re-reads
-        catch (UnauthorizedAccessException) { return null; }
-    }
-
-    // Read the active set's triggers.json. Falls back to the universal seed when
-    // the per-set file doesn't exist; that seed "promotes" to a per-set file on
-    // the next edit (PersistAll writes the new file).
-    private void LoadPerSetTriggers(string setName)
-    {
-        _readRetries = 0;
-        TryReadPerSet(setName, out bool fileExists);
-        if (fileExists) return;
-        // No per-set file yet → seed from the universal default.
-        AppendFromFile(AppPaths.DefaultTriggersSeedFile, TriggerLocation.GameData);
-    }
-
-    // ----- Profile sync (Profile-scoped triggers) ------------------------
-
-    // Apply the loaded profile's persisted Profile-scoped triggers.
-    // GameData-scoped triggers from the active set are left in place; only the
-    // Profile-scoped slice is refreshed.
-    //
-    // One-time migration runs inline: before the per-set storage model existed,
-    // the universal seed was written straight into CharacterProfile.Triggers.
-    // Any entry on the profile whose (Name, Pattern) matches the seed is treated
-    // as legacy seed-leakage and dropped — it'll re-appear from the per-set
-    // bucket via LoadPerSetTriggers, so the user doesn't see duplicates. Entries
-    // that don't match the seed are genuine personal triggers and load as
-    // Profile-scoped. The migration is idempotent: once profile.Triggers
-    // contains no seed-matching entries, subsequent loads are a no-op.
+    // Apply the loaded profile's triggers: every trigger is the character's own,
+    // like its macros and aliases. Triggers were once split between the profile and
+    // a list kept with the game-data set, shared by every character on it; a profile
+    // that hasn't taken its own copy of that list does so first.
     private void LoadFrom(CharacterProfile profile)
     {
-        DropTriggersByLocation(TriggerLocation.Profile);
+        Triggers.Clear();
+        if (!profile.OwnsTriggers) TakeFirstList(profile);
         if (profile.Triggers is null) return;
-
-        HashSet<(string Name, string Pattern)> seedKeys = LoadSeedKeys();
-
-        int dropped = 0;
-        foreach (Trigger t in profile.Triggers)
-        {
-            if (seedKeys.Contains((t.Name, t.Pattern)))
-            {
-                dropped++;
-                continue;
-            }
-            // Storage location is the truth — anything persisted on
-            // the profile is Profile-scoped, regardless of any
-            // Location value the record carries from disk.
-            Triggers.Add(t with { Location = TriggerLocation.Profile });
-        }
-
-        if (dropped > 0)
-        {
-            _log?.Log(LogSeverity.Info, LogSource,
-                $"Migrated profile triggers: dropped {dropped} entries that match the universal seed (they now load as GameData-scoped from the active set's triggers.json). Re-save the profile to persist the cleanup.");
-        }
+        foreach (Trigger t in profile.Triggers) Triggers.Add(t);
     }
 
-    // Memoised (Name, Pattern) set for every entry in the universal seed, used
-    // by LoadFrom to spot legacy seed-leakage on the profile. Empty when the seed
-    // is missing (dev build / no Defaults folder) — degrades to no migration,
-    // safe.
-    private static HashSet<(string, string)>? _seedKeysCache;
-    private static HashSet<(string, string)> LoadSeedKeys()
+    // Give a profile the triggers it used to get from outside itself. A character
+    // from before the move takes its game-data set's list (or the default ones,
+    // where that set never had a list of its own, which is what it was running); a
+    // character made since, or the default profile, takes the default ones. Anything
+    // the profile already holds under the same name and pattern is kept as it is.
+    //
+    // Only set on the profile here, not saved: this runs inside the profile load,
+    // when the other stores still hold the previous profile's state and a save would
+    // write theirs into this one. The next save carries it.
+    private void TakeFirstList(CharacterProfile profile)
     {
-        if (_seedKeysCache is not null) return _seedKeysCache;
-        HashSet<(string, string)> set = new();
-        string path = AppPaths.DefaultTriggersSeedFile;
-        if (System.IO.File.Exists(path))
+        bool shared = profile.PredatesOwnLists && _profile?.CurrentProfileName is not null;
+        string source = AppPaths.DefaultTriggersSeedFile;
+        if (shared && _profileSet?.Invoke() is { Length: > 0 } set
+            && System.IO.File.Exists(AppPaths.LegacySetTriggersFile(set)))
+            source = AppPaths.LegacySetTriggersFile(set);
+
+        List<Trigger> own = profile.Triggers ?? new List<Trigger>();
+        HashSet<(string, string)> held = own.Select(t => (t.Name, t.Pattern)).ToHashSet();
+        int taken = 0;
+        foreach (Trigger t in ReadTriggers(source))
         {
-            try
-            {
-                List<Trigger>? loaded = JsonStore.Load<List<Trigger>>(path);
-                if (loaded is not null)
-                    foreach (Trigger t in loaded) set.Add((t.Name, t.Pattern));
-            }
-            catch
-            {
-                // Corrupt seed ⇒ empty set; migration falls through harmless.
-            }
+            if (!held.Add((t.Name, t.Pattern))) continue;
+            own.Add(t);
+            taken++;
         }
-        _seedKeysCache = set;
-        return set;
+        profile.Triggers = own;
+        profile.OwnsTriggers = true;
+        _log?.Log(LogSeverity.Info, LogSource, shared
+            ? $"Took a copy of {taken} trigger(s) that were kept with the game data; they are this character's now."
+            : $"Started with the {taken} default trigger(s).");
     }
 
     private void Clear() => Triggers.Clear();
 
-    // Snapshot only the Profile-scoped slice onto the profile DTO. GameData-scoped
-    // triggers persist via SavePerSetTriggers to the active set's per-set file
-    // instead.
-    private void SnapshotForSave(CharacterProfile profile)
-    {
-        profile.Triggers = Triggers
-            .Where(t => t.Location == TriggerLocation.Profile)
-            .Select(t => t with { Location = TriggerLocation.Profile })
-            .ToList();
-    }
+    private void SnapshotForSave(CharacterProfile profile) => profile.Triggers = Triggers.ToList();
 
-    // ----- Shared helpers ------------------------------------------------
-
-    // Remove every trigger whose Location matches location. Used by both refresh
-    // paths to clear their own slice without touching the other.
-    private void DropTriggersByLocation(TriggerLocation location)
+    // The triggers in a file, or none when it is missing or unreadable.
+    private List<Trigger> ReadTriggers(string path)
     {
-        for (int i = Triggers.Count - 1; i >= 0; i--)
-        {
-            if (Triggers[i].Location == location) Triggers.RemoveAt(i);
-        }
-    }
-
-    // Read a list of triggers from path and append them to the live collection,
-    // forcing each record's Location to forceLocation. The
-    // file-location-is-the-truth rule lets us safely round-trip records between
-    // the two buckets.
-    private void AppendFromFile(string path, TriggerLocation forceLocation)
-    {
-        if (!System.IO.File.Exists(path)) return;
+        if (!System.IO.File.Exists(path)) return new List<Trigger>();
         try
         {
-            List<Trigger>? loaded = JsonStore.Load<List<Trigger>>(path);
-            if (loaded is null) return;
-            foreach (Trigger t in loaded)
-                Triggers.Add(t with { Location = forceLocation });
+            return JsonStore.Load<List<Trigger>>(path) ?? new List<Trigger>();
         }
         catch (Exception ex)
         {
             _log?.Log(LogSeverity.Warn, LogSource,
                 $"Failed to load triggers from '{path}': {ex.Message}");
+            return new List<Trigger>();
         }
     }
 }

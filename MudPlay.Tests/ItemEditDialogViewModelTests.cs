@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
@@ -135,5 +136,43 @@ public sealed class ItemEditDialogViewModelTests
         ItemOverlay stale = Save(MakeVm(new ItemOverlay { SellDetour = true, SellDetourAbove = "5" }, null)).Overlay;
         Assert.Null(stale.SellDetour);
         Assert.Null(stale.SellDetourAbove);
+    }
+
+    // A real export's room-command items came up with every coffin room under Given
+    // by and again under Room command. With a Room command group on the item, Given
+    // by leaves every room out, listed below or not, and keeps the NPCs.
+    [Fact]
+    public void Givers_WithARoomCommandGroup_KeepOnlyNpcs()
+    {
+        RoomCommandRow pry = new(new[] { "pry coffin" }, "1.5%", new[]
+        {
+            new PlacedInRow("Tomb - 17/278", 17, 278),
+        });
+        ItemGiver[] givers =
+        {
+            new(ItemGiverKind.Room, 0, 17, 278, "Tomb", "", "14", false),
+            new(ItemGiverKind.Room, 0, 17, 1792, "Library", "", "search shelves", true),
+            new(ItemGiverKind.Monster, 278, 0, 0, "old hermit", "", "key", true),
+        };
+
+        IReadOnlyList<ItemGiverRow> rows = ItemEditDialogViewModel.BuildGivers(givers, new[] { pry });
+
+        Assert.Equal(new[] { "old hermit" }, rows.Select(r => r.Name));
+    }
+
+    // An export without room commands has no such group: Given by is whole.
+    [Fact]
+    public void Givers_WithNoRoomCommandGroup_AreAllShown()
+    {
+        ItemGiver[] givers =
+        {
+            new(ItemGiverKind.Room, 0, 17, 278, "Tomb", "", "14", false),
+            new(ItemGiverKind.Monster, 278, 0, 0, "old hermit", "", "key", true),
+        };
+
+        IReadOnlyList<ItemGiverRow> rows =
+            ItemEditDialogViewModel.BuildGivers(givers, Array.Empty<RoomCommandRow>());
+
+        Assert.Equal(new[] { "Tomb", "old hermit" }, rows.Select(r => r.Name));
     }
 }

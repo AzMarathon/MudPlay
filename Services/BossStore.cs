@@ -6,17 +6,21 @@ using MudPlay.Models.Profile;
 
 namespace MudPlay.Services;
 
-// Loads and resolves the boss catalog for the active game-data set. Two layers,
-// keyed by boss Name (game-data spelling):
-//   1. the user's per-set overlay {set}/bosses.json — added / removed bosses,
-//      edited rooms, StopBefore + ExactSpawn overrides;
+// Loads and resolves the boss catalog for the active realm. Two layers, keyed by
+// boss Name (game-data spelling):
+//   1. the realm's overlay {realm}/bosses.json — added / removed bosses, edited
+//      rooms, StopBefore + ExactSpawn overrides;
 //   2. the universal read-only seed BossDefs.seed.json (curated from the boss-timer
 //      sheet).
 // Timer VALUES are not stored — resolved from game data (BossCatalog.ResolveRegenHours)
 // so they track the loaded set's version. Mirrors QuestStore: the overlay is a delta
-// (entries equal to the seed are dropped) and reloads on OnActiveSetChanged. The
-// boss list is realm-wide (shared across the user's characters), so it keys off the
-// active set, not the profile.
+// (entries equal to the seed are dropped) and reloads on OnRealmChanged. The boss
+// list is the realm's: every character on it shares one, and two realms on the same
+// game data keep their own (it used to live with the game-data set, which they
+// shared).
+//
+// Clients on the same realm share the file, so it is re-read when another one has
+// written it, on a poll and before a save.
 public sealed class BossStore
 {
     private readonly LogService? _log;
@@ -25,11 +29,14 @@ public sealed class BossStore
     private readonly Dictionary<string, BossDef> _seedByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, BossDef> _overlay = new(StringComparer.OrdinalIgnoreCase);
 
-    // Active set whose overlay is loaded, or null when none.
-    public string? ActiveSet { get; private set; }
+    // Realm folder whose overlay is loaded, or null when none.
+    public string? ActiveRealmFolder { get; private set; }
+
+    // Write time of the overlay file as this client last read or wrote it.
+    private DateTime _seenWrite = DateTime.MinValue;
 
     // Fires when the resolved boss list changes — a Save (add / edit / remove /
-    // StopBefore toggle) or an active-set swap. Consumers that derive state from the
+    // StopBefore toggle), a realm swap, or new game data under the same list. Consumers that derive state from the
     // boss list (the nav-map boss-room markers) re-read Resolve*/on this. Mirrors
     // BossTimerStore.Changed; the def store lacked one, so map markers had no way to
     // refresh on an edit.
@@ -46,19 +53,76 @@ public sealed class BossStore
             foreach (BossDef b in seed) { _seed.Add(b); _seedByName[b.Name] = b; }
     }
 
-    public void OnActiveSetChanged(string? setName)
+    // Load realmFolder's boss list. legacySet names the game-data set the realm
+    // runs on: a realm with no list of its own yet takes a copy of the one that set
+    // carried, from when the list was kept per set.
+    public void OnRealmChanged(string? realmFolder, string? legacySet = null)
     {
-        _overlay.Clear();
-        ActiveSet = string.IsNullOrWhiteSpace(setName) ? null : setName;
-        if (ActiveSet is not null)
-        {
-            List<BossDef>? ov = JsonStore.Load<List<BossDef>>(AppPaths.BossesFile(ActiveSet));
-            if (ov is not null)
-                foreach (BossDef b in ov) _overlay[b.Name] = b;
-        }
-        _current = null;
+        ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
+        if (ActiveRealmFolder is not null) AdoptLegacyList(ActiveRealmFolder, legacySet);
+        Load();
         Changed?.Invoke();   // fire even when cleared to null, so derived markers clear
     }
+
+    // New game data under the same boss list: what consumers derive from both (the
+    // realm's bosses, their timers) has to be worked out again.
+    public void NoteGameDataChanged()
+    {
+        _current = null;
+        Changed?.Invoke();
+    }
+
+    // Re-read the list when another client on the realm has saved it. Called on the
+    // heartbeat and before a save. True when anything was re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (ActiveRealmFolder is null) return false;
+        if (WriteTime(AppPaths.RealmBossesFile(ActiveRealmFolder)) == _seenWrite) return false;
+        try { Load(); }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException
+                                       or System.Text.Json.JsonException)
+        {
+            // Caught mid-write by the other client; the next poll reads it whole.
+            _log?.Debug("Bosses", $"boss list re-read failed, will retry: {ex.Message}");
+            return false;
+        }
+        _log?.Debug("Bosses", "boss list re-read: another client on this realm changed it");
+        Changed?.Invoke();
+        return true;
+    }
+
+    private void Load()
+    {
+        _overlay.Clear();
+        _current = null;
+        _seenWrite = DateTime.MinValue;
+        if (ActiveRealmFolder is null) return;
+        string path = AppPaths.RealmBossesFile(ActiveRealmFolder);
+        _seenWrite = WriteTime(path);
+        if (JsonStore.Load<List<BossDef>>(path) is { } ov)
+            foreach (BossDef b in ov) _overlay[b.Name] = b;
+    }
+
+    private void AdoptLegacyList(string realmFolder, string? legacySet)
+    {
+        if (string.IsNullOrWhiteSpace(legacySet)) return;
+        string realmFile = AppPaths.RealmBossesFile(realmFolder);
+        string legacy = AppPaths.LegacySetBossesFile(legacySet);
+        if (System.IO.File.Exists(realmFile) || !System.IO.File.Exists(legacy)) return;
+        try
+        {
+            System.IO.Directory.CreateDirectory(realmFolder);
+            System.IO.File.Copy(legacy, realmFile);
+            _log?.Info("Bosses", $"boss list copied to the realm from game-data set '{legacySet}'");
+        }
+        catch (System.IO.IOException)
+        {
+            // Another client on the realm copied it first — the list is where it belongs.
+        }
+    }
+
+    private static DateTime WriteTime(string path) =>
+        System.IO.File.Exists(path) ? System.IO.File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
 
     // The merged boss list. Overlay wins per Name; a Removed overlay entry hides the
     // seed boss; an overlay entry with no seed match is user-added. Returns clones so
@@ -122,14 +186,19 @@ public sealed class BossStore
         return null;
     }
 
-    // Persist the user's boss list to the active set's overlay as a DELTA: a boss
+    // Persist the user's boss list to the realm's overlay as a DELTA: a boss
     // matching the seed is dropped (so a later seed update still flows through); an
     // edited / added boss is written; a seed boss the user deleted is written as a
-    // Removed tombstone. No-op when no set is active.
+    // Removed tombstone. No-op when no realm is active. The caller hands over the
+    // whole list as its window showed it, so this replaces whatever is on file.
     public void Save(IEnumerable<BossDef> current)
     {
         ArgumentNullException.ThrowIfNull(current);
-        if (ActiveSet is null) return;
+        if (ActiveRealmFolder is null)
+        {
+            _log?.Warn("Bosses", "boss list not saved: no realm is active (load a character on a BBS first)");
+            return;
+        }
 
         var overlay = new List<BossDef>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -145,8 +214,10 @@ public sealed class BossStore
 
         _overlay.Clear();
         foreach (BossDef b in overlay) _overlay[b.Name] = b;
-        JsonStore.Save(AppPaths.BossesFile(ActiveSet), overlay);
-        _log?.Debug("Bosses", $"saved {overlay.Count} overlay delta(s) for set {ActiveSet}");
+        string path = AppPaths.RealmBossesFile(ActiveRealmFolder);
+        JsonStore.Save(path, overlay);
+        _seenWrite = WriteTime(path);
+        _log?.Debug("Bosses", $"saved {overlay.Count} overlay delta(s) for realm {ActiveRealmFolder}");
         _current = null;
         Changed?.Invoke();
     }

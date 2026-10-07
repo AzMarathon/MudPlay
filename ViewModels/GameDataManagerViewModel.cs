@@ -6,9 +6,9 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels;
 
 // Game Data → "Manage Sets…". Two immediate-action sections over
-// GameDataSetManager: copy / move a set's loop library to another set, and
-// delete a set (tables + loops). No staged Save — each button performs its
-// op and reports via Status.
+// GameDataSetManager: copy / move the ticked kinds of a set's data to another
+// set, and delete a set (tables + loops). No staged Save — each button performs
+// its op and reports via Status.
 //
 // All-windows-modeless rule: the destructive delete can't pop a confirm
 // dialog, so it arms in place — the first click flips the button to "Click
@@ -24,6 +24,17 @@ public sealed partial class GameDataManagerViewModel
 
     // Imported sets on disk, snapshotted on open and after each delete.
     public ObservableCollection<string> Sets { get; } = new();
+
+    // What can go across, each with how much of it the source set holds.
+    public IReadOnlyList<GameDataSetPartOption> Parts { get; } = new GameDataSetPartOption[]
+    {
+        new(GameDataSetPart.Loops, "Loops and lair setups",
+            "Loops, Auto-Lair setups and the nav folders they sit in. Added to the destination's; a loop of the same name is replaced."),
+        new(GameDataSetPart.Messages, "Message edits",
+            "Your changes to spell and condition messages, monster messages and flavor prefixes. Replaces the destination's."),
+        new(GameDataSetPart.RecordOverrides, "Game Data Browser edits",
+            "Your changes to items, monsters, spells, rooms and the other tables, at every level: all characters, each realm and each character. Replaces the destination's."),
+    };
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanCopyOrMove))]
@@ -73,11 +84,40 @@ public sealed partial class GameDataManagerViewModel
     // "click again" never deletes the wrong set.
     partial void OnDeleteSetChanged(string? value) => ConfirmingDelete = false;
 
-    [RelayCommand]
-    private void CopyLoops() => Status = _manager.CopyLoops(SourceSet ?? string.Empty, DestSet ?? string.Empty).Message;
+    // Show how much of each kind the picked source holds.
+    partial void OnSourceSetChanged(string? value) => RefreshPartCounts();
+
+    private void RefreshPartCounts()
+    {
+        bool known = !string.IsNullOrWhiteSpace(SourceSet);
+        foreach (GameDataSetPartOption option in Parts)
+        {
+            option.FileCount = known ? _manager.FileCount(SourceSet!, option.Part) : 0;
+            option.SourceKnown = known;
+        }
+    }
+
+    private GameDataSetPart TickedParts()
+    {
+        GameDataSetPart parts = GameDataSetPart.None;
+        foreach (GameDataSetPartOption option in Parts)
+            if (option.IsChecked && option.IsAvailable) parts |= option.Part;
+        return parts;
+    }
 
     [RelayCommand]
-    private void MoveLoops() => Status = _manager.MoveLoops(SourceSet ?? string.Empty, DestSet ?? string.Empty).Message;
+    private void CopyParts()
+    {
+        Status = _manager.Copy(SourceSet ?? string.Empty, DestSet ?? string.Empty, TickedParts()).Message;
+        RefreshPartCounts();
+    }
+
+    [RelayCommand]
+    private void MoveParts()
+    {
+        Status = _manager.Move(SourceSet ?? string.Empty, DestSet ?? string.Empty, TickedParts()).Message;
+        RefreshPartCounts();
+    }
 
     [RelayCommand]
     private void DeleteSelectedSet()

@@ -3435,6 +3435,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
   - `You can't go that way.` / `You can't move (in) that direction.` (the forms the client's refusal detector matches; an earlier note wrote `You can't move that way.`, never seen in a capture)
   - `The door is closed.` / `The door is Closed!` / `The gate is closed!` (the client matches these case-insensitively, ending in `.` or `!`)
   - impairment forms (paralyzed / confused / stunned / dazed / too encumbered / can't see well enough to move).
+  - a hold's own line (see *Moving while held*).
 - **The Stock 1.11p engine's full set of refusals** *([OBSERVED] `wccmmud.dll` 1.11p string table, the movement code's strings; treated as refusals by the user's call 2026-09-27 · Realm: Stock — Paradigm wordings not recorded)*:
   - `There is a closed door in that direction!`
   - `You are too stunned to move anywhere!`
@@ -3466,6 +3467,25 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - The tracker ignores a source-room redisplay while a move is pending and keeps waiting for the move's real outcome (a different room), rather than inferring a refusal from the redisplay alone.
 - A retreat step crosses a text exit by its command: `SpecialExitDispatch.EncodeBacktrack` (behind the walker's and the loop runner's `SendBacktrackMove`) sends the exit's first text command when the tracker is Confirmed in a room whose exit that way is a text exit, and the bare direction otherwise (report `paradigm-20261004-201232`: a flee back along a trail sent `nw` into the `go path` exit 23 times and the character died).
 - **Client policy** (report `paradigm-20261004-201232`): a flee move the game refuses is not sent again in that run. `HealthManager.NoteMoveBlocked` records the room and direction; `BuildFleeSteps` then takes another way out of the room (away from the plan first, then the plan's own way), and with every way refused returns no route, so combat fights back. The record is dropped when the run ends.
+
+### Moving while held
+*Status: OBSERVED 2026-10-06 (report `paradigm-20261006-221209`; `wccmmud.dll` 1.11p) and CONFIRMED in part 2026-10-06 (user) · Realm: differs*
+
+- **Every hold refuses a move with a line and no room display.** *([CONFIRMED] 2026-10-06, user.)* Whether that line is always the hold's own applied line is not known (user, 2026-10-06); the two forms below are the ones on record.
+- **The Stock engine has one fixed refusal for every hold, `You can't seem to move anywhere!`.** *([OBSERVED] `wccmmud.dll` 1.11p; [CONFIRMED] 2026-10-06, user: it is a hold's move refusal.)*
+  - HoldPerson (ability 74) sets a bit on the character record (byte +0x7c8, bit 0x20) in `_update_dynamic_with_ability` @0x43dde4, so any spell carrying ability 74 does it.
+  - `_cmd_move` @0x4689c4 and `_move_user` @0x4176c8 test that bit before anything else (encumbrance, the exit, doors) and print the line.
+  - The hold's own message text plays no part in the refusal on Stock: `You are too scared to flee!` is the third text of message 194, printed when the roar lands.
+- **Paradigm was captured answering a held character's move with the hold's own applied line.** *([OBSERVED] report `paradigm-20261006-221209`.)* A stitched abomination's roar (`The stitched abomination beats his chest and roars deafeningly!`) printed `You are too scared to flee!` in bold red as it landed. Each move sent after that (`w`, `w`, `s`) was answered with the same `You are too scared to flee!` in the plain colour, with no room display. The hold ends with `You feel braver.`.
+  - A move with no exit that way was answered `There is no exit in that direction!` while held, so Paradigm checks the exit before the hold; Stock checks the hold first.
+  - Four Paradigm seed records share the applied line: roar (spell #193), a second roar, giant skeleton shriek (#770) and fear2.
+  - Knockdown has the same shape: `You are flat on your back!` is both its status line and its move refusal (see *Spells, buffs & conditions → Knockdown — a movement-preventing hold*).
+  - `[NEEDS CONFIRMATION]` Does Paradigm ever print Stock's `You can't seem to move anywhere!`, and does every Paradigm hold repeat its own applied line? The user's guidance (2026-10-06) is to assume Stock's lines hold on Paradigm; the client matches both forms on both realms.
+- **A hold stops movement, not fighting** (HoldPerson is "can't move, can still act": see *Spells, buffs & conditions → Condition Effects flags derive from the linked spell's ability codes*).
+
+**Client use:**
+- `MovementRefusalDetector` reverts a pending move on `You can't seem to move anywhere!`, and on the applied line of a hold the character is under (`ConditionTracker.IsActiveHoldLine`: whole line, a `MovementPrevented` record that is active), on both realms. The hold's own line also prints when the hold lands or is renewed, so it reverts a move only while one is Pending.
+- `CombatManager`'s move-in-flight probe (`SetMoveInFlightProbe`) reads false while `ConditionTracker.IsMovementPrevented`, so a monster arriving doesn't wait for a room display that a held character's move can't bring. In the report the unanswered `w` kept the tracker Pending for 25 s; combat stood down on every round and the character died without attacking.
 
 ### Too heavy to move (over max encumbrance)
 *Status: CONFIRMED 2026-09-26 (user; report `paradigm-20260926-195517`) · Realm: Paradigm (not recorded for Stock)*
@@ -4948,6 +4968,25 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 *Status: CONFIRMED*
 
 - **[CONFIRMED] The acquisition verbs are `buy` / `get` / `search`+`get`** (plus NPC `ask` gives and chest opens). There is no "hunt" verb, so don't describe path-item sourcing as "hunting."
+
+### `Obtained From` entries (item sources in the game data)
+*Status: [OBSERVED] 2026-10-06 (the exporter's own format notes, with stock v1.11p cells quoted in them; the imported sets on hand, none of which carries the room-command kind) · Realm: both — a property of the export, not of the game*
+
+- **An item's `Obtained From` cell is a list of sources separated by a comma and a space.** The kinds: `Room 7/1008` (the item lies in that room), `Monster #63(1%)`, `Shop #12`, `Shop(sell) #163`, `Shop(nogen) #167`, `Textblock #874(2%)`, `Item #906(2%)`, `NPC #38`.
+- **Nightmare Redux for Linux adds one more kind, `Room(<command>) <rooms>`**: typing the command in any of the rooms can give the item. Example: `Room(pry coffin) 17/278|17/287|17/2073-2096(18.6%)`. The Windows Nightmare Redux (to v1.8.3) doesn't write it and the `Info` table doesn't say which wrote an export, so the entries are found by being there.
+  - Several commands joined with `|` are alternatives that give the item with the same chance (`mine ore|mine vein|mine copper vein`).
+  - Rooms are `map/room`, joined with `|`; `17/2073-2096` is every room from 2073 to 2096 on map 17, both ends included.
+  - **No chance suffix** means the command's own script line has the `giveitem`. `(18.6%)` is the chance per use when the line draws from a `random` textblock, worked out as the chest (`Item #n(p%)`) figures are and as rough; `(?%)` is a random give with no figure.
+  - **What the command needs isn't in the entry** (an item held or handed in, a class, a level, an alignment, a price). That is in the room's command script: `Rooms.CMD` names a textblock whose `Action` holds one line per command.
+  - Inside a command the exporter writes `;` `[` `]` `/` for `,` `(` `)` `|`, so a command read from an entry is for showing, not for sending.
+  - A line with no real command word is reported by its first action (`Room(message 1421) 1/291(2%)`, the Library's room script); nothing is typed for it.
+- **`Room 7/1008` and `Room(pry coffin) 17/278` are different things.** The first is a floor placement, the second never is. They are told apart by the character after `Room`, a blank or a bracket, at the start of an entry.
+- **An empty cell holds one NUL character. A cell over 2,000 characters is cut to 1,995 and ends `+` NUL**, and the cut can fall inside an entry, so a cut cell's last entry is incomplete. `TBInfo.Called From` is cut the same way at 250 characters: textblock 9350 (the coffin commands) is called from 94 rooms and the cell names 18, ending `R+`.
+
+**Client use:**
+- `RoomCommandSourceParser` reads the cell an entry at a time, dropping a cut cell's last entry. The item record lists them under **Room command** (`ItemMdbViewBuilder.ResolveRoomCommandSources`), never under Placed in.
+- `ItemSourceIndex.CompleteRoomGiversFromItemSources` uses a direct entry to fill in the rooms of a room-command give that the cut `Called From` dropped; a rolled entry adds no giver.
+- `RoomGraphManager.ParseObtainedFromRooms` anchors an item-use teleport only on plain `Room ` entries, so a room where a command gives the fixture is never taken for one where it stands.
 
 ### Monster drops land on the ground
 *Status: CONFIRMED 2026-07-16 (user)*

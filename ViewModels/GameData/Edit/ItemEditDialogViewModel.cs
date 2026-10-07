@@ -166,6 +166,11 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
     public IReadOnlyList<PlacedInRow> PlacedIn { get; }
     public bool HasPlacedIn => PlacedIn.Count > 0;
 
+    // Commands that can hand the item over when typed in a room, each with the rooms
+    // it works in. Only exports that list them have any.
+    public IReadOnlyList<RoomCommandRow> RoomCommands { get; }
+    public bool HasRoomCommands => RoomCommands.Count > 0;
+
     // Spells the item casts (use-cast / proc), each a clickable link to that spell's
     // record — where the cast's on-use / proc wording lives, shared across every item
     // casting it. Empty for an item that casts nothing.
@@ -265,6 +270,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         IReadOnlyList<DroppedByRow>? summons = null,
         IReadOnlyList<PlacedInRow>? teleportsTo = null,
         Func<Task<string?>>? editAttachedMessage = null,
+        IReadOnlyList<RoomCommandRow>? roomCommands = null,
         string? attachedMessageSummary = null)
     {
         WccNoStr     = wccNoStr;
@@ -282,6 +288,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         SetShopRows(shops);
         DroppedBy    = droppedBy ?? Array.Empty<DroppedByRow>();
         PlacedIn     = placedIn  ?? Array.Empty<PlacedInRow>();
+        RoomCommands = roomCommands ?? Array.Empty<RoomCommandRow>();
         CastsSpells  = castsSpells ?? Array.Empty<CastsSpellRow>();
         Summons      = summons ?? Array.Empty<DroppedByRow>();
         TeleportsTo  = teleportsTo ?? Array.Empty<PlacedInRow>();
@@ -290,7 +297,7 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
 
         (ChestDrops, ChestSummary) = BuildChest(chest);
         FoundInContainers = BuildContainerSources(containerSources);
-        Givers = BuildGivers(givers);
+        Givers = BuildGivers(givers, RoomCommands);
 
         AutoCollect     = existing?.AutoCollect     ?? false;
         AutoDiscard     = existing?.AutoDiscard     ?? false;
@@ -388,12 +395,21 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         return rows;
     }
 
-    private static IReadOnlyList<ItemGiverRow> BuildGivers(IReadOnlyList<ItemGiver>? givers)
+    // An item with a Room command group has its room hand-overs shown there, with
+    // the command, the chance and a walk link, so Given by leaves every room out and
+    // keeps only the NPCs that hand the item over (user, 2026-10-06). An export
+    // without room commands has no such group and its Given by is whole.
+    internal static IReadOnlyList<ItemGiverRow> BuildGivers(
+        IReadOnlyList<ItemGiver>? givers, IReadOnlyList<RoomCommandRow> roomCommands)
     {
         if (givers is null || givers.Count == 0) return Array.Empty<ItemGiverRow>();
+        bool roomsShownBelow = roomCommands.Count > 0;
         var rows = new List<ItemGiverRow>(givers.Count);
         foreach (ItemGiver g in givers)
+        {
+            if (roomsShownBelow && g.Kind == ItemGiverKind.Room) continue;
             rows.Add(new ItemGiverRow(g));
+        }
         return rows;
     }
 

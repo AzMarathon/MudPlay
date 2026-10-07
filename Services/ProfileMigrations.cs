@@ -86,6 +86,16 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v7 → v8: GOTO favourites and game-data triggers moved from the game-data
+        // set to the character. A profile from before takes a copy of the shared
+        // lists the first time it loads (FavoritesStore, TriggerEngine).
+        if (profile.SchemaVersion < 8)
+        {
+            profile.PredatesOwnLists = true;
+            profile.SchemaVersion = 8;
+            changed = true;
+        }
+
         return changed;
     }
 

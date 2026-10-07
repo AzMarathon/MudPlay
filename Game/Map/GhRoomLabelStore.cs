@@ -51,6 +51,7 @@ public sealed class GhRoomLabelStore
     public void SetSearchesPerRoom(int count)
     {
         if (_realmFolder is null) return;
+        TakeInOutsideChanges();
         _settings.SearchesPerRoom = Math.Max(1, count);
         Persist();
         _log?.Info("GhSweep", $"searches per room set to {_settings.SearchesPerRoom}");
@@ -60,6 +61,7 @@ public sealed class GhRoomLabelStore
     public void SetSearchForHidden(bool on)
     {
         if (_realmFolder is null) return;
+        TakeInOutsideChanges();
         _settings.SearchForHidden = on;
         Persist();
         _log?.Info("GhSweep", $"search for hidden items {(on ? "enabled" : "disabled")}");
@@ -78,6 +80,7 @@ public sealed class GhRoomLabelStore
     public void SetLabel(RoomKey key, IReadOnlyList<GhCategoryRule> rules, bool isCatchAll)
     {
         if (_realmFolder is null) return;
+        TakeInOutsideChanges();
 
         GhRoomLabel label = new(key.Map, key.Room) { Rules = rules.ToList(), IsCatchAll = isCatchAll };
         _labels[key] = label;
@@ -95,6 +98,7 @@ public sealed class GhRoomLabelStore
     public void ClearLabel(RoomKey key)
     {
         if (_realmFolder is null) return;
+        TakeInOutsideChanges();
         if (!_labels.Remove(key)) return;
 
         _settings.RoomLabels?.RemoveAll(l => l.Map == key.Map && l.Room == key.Room);
@@ -112,6 +116,7 @@ public sealed class GhRoomLabelStore
     {
         ArgumentNullException.ThrowIfNull(incoming);
         if (_realmFolder is null || incoming.Count == 0) return 0;
+        TakeInOutsideChanges();
 
         int added = 0;
         foreach (GhRoomLabel lbl in incoming)
@@ -159,10 +164,32 @@ public sealed class GhRoomLabelStore
         }
 
         _realmFolder = realmFolder;
-        _settings = JsonStore.Load<RoombaSettings>(AppPaths.RealmRoombaFile(realmFolder)) ?? new RoombaSettings();
+        Load();
         MigrateLegacyCharacterData();
         RebuildLabelIndex();
         Changed?.Invoke();
+    }
+
+    private readonly SharedFileStamp _stamp = new();
+
+    // Re-read the labels and sweep settings when another client on the realm has
+    // saved them. Called on the heartbeat and before a change.
+    public bool TakeInOutsideChanges()
+    {
+        if (_realmFolder is null) return false;
+        if (!_stamp.ChangedOutside(AppPaths.RealmRoombaFile(_realmFolder))) return false;
+        Load();
+        RebuildLabelIndex();
+        _log?.Debug("GhSweep", "room labels re-read: another client on this realm changed them");
+        Changed?.Invoke();
+        return true;
+    }
+
+    private void Load()
+    {
+        string path = AppPaths.RealmRoombaFile(_realmFolder!);
+        _stamp.Mark(path);
+        _settings = JsonStore.Load<RoombaSettings>(path) ?? new RoombaSettings();
     }
 
     // One-time lift of a pre-upgrade character's GH data into this realm's
@@ -207,6 +234,8 @@ public sealed class GhRoomLabelStore
     private void Persist()
     {
         if (_realmFolder is null) return;
-        JsonStore.Save(AppPaths.RealmRoombaFile(_realmFolder), _settings);
+        string path = AppPaths.RealmRoombaFile(_realmFolder);
+        JsonStore.Save(path, _settings);
+        _stamp.Mark(path);
     }
 }

@@ -99,6 +99,7 @@ public sealed class PlayerDatabase
         string? role,
         DateTime nowUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         (string given, string family) = PlayerObservation.SplitName(name);
         if (string.IsNullOrEmpty(given)) return;
@@ -160,6 +161,7 @@ public sealed class PlayerDatabase
         IReadOnlyList<EquipmentItem>? equipment,
         DateTime nowUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         (string given, string family) = PlayerObservation.SplitName(name);
         if (string.IsNullOrEmpty(given)) return;
@@ -238,6 +240,7 @@ public sealed class PlayerDatabase
     // file. Called by GreetManager right after emitting greet / look.
     public void RecordGreeted(string name, DateTime whenUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         (string given, string family) = PlayerObservation.SplitName(name);
         if (string.IsNullOrEmpty(given)) return;
@@ -284,6 +287,7 @@ public sealed class PlayerDatabase
     // PlayerLookManager right after it writes the look to the wire.
     public void RecordLooked(string name, DateTime whenUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         (string given, string family) = PlayerObservation.SplitName(name);
         if (string.IsNullOrEmpty(given)) return;
@@ -324,6 +328,7 @@ public sealed class PlayerDatabase
     // Saves the realm observation file.
     public void RecordLevel(string name, int level, DateTime nowUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         if (level <= 0) return;
         (string given, string family) = PlayerObservation.SplitName(name);
@@ -372,6 +377,7 @@ public sealed class PlayerDatabase
     // LastSeenUtc (answering a telepath proves presence). Saves the realm file.
     public void RecordVersion(string name, string version, DateTime nowUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         if (string.IsNullOrWhiteSpace(version)) return;
         string trimmed = version.Trim();
@@ -417,6 +423,7 @@ public sealed class PlayerDatabase
     // identity, else null (unknown player, first class seen, or same class).
     public string? RecordStatedClass(string name, string klass)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         if (string.IsNullOrWhiteSpace(klass)) return null;
         (string given, _) = PlayerObservation.SplitName(name);
@@ -461,6 +468,7 @@ public sealed class PlayerDatabase
     // Saves the realm observation file.
     public void RecordPartied(string name, DateTime whenUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(name);
         (string given, string family) = PlayerObservation.SplitName(name);
         if (string.IsNullOrEmpty(given)) return;
@@ -525,6 +533,7 @@ public sealed class PlayerDatabase
     // unchanged.
     public bool SetAccountName(string nameOrGiven, string? accountName)
     {
+        TakeInOutsideChanges();
         if (string.IsNullOrWhiteSpace(nameOrGiven)) return false;
         (string given, _) = PlayerObservation.SplitName(nameOrGiven);
         if (string.IsNullOrEmpty(given)) return false;
@@ -549,6 +558,7 @@ public sealed class PlayerDatabase
     // Returns false when the player has no record or nothing changed.
     public bool SetRelationship(string nameOrGiven, PlayerRelationship relationship, PvpAction? response)
     {
+        TakeInOutsideChanges();
         if (string.IsNullOrWhiteSpace(nameOrGiven)) return false;
         (string given, _) = PlayerObservation.SplitName(nameOrGiven);
         if (string.IsNullOrEmpty(given)) return false;
@@ -599,6 +609,7 @@ public sealed class PlayerDatabase
     // row.
     public bool AddManual(string givenName, string familyName, DateTime nowUtc)
     {
+        TakeInOutsideChanges();
         ArgumentNullException.ThrowIfNull(givenName);
         string given  = givenName.Trim();
         string family = (familyName ?? string.Empty).Trim();
@@ -623,6 +634,7 @@ public sealed class PlayerDatabase
     // customization entry once PlayerCustomization.IsDefault is true).
     public bool RemoveByGivenName(string givenName)
     {
+        TakeInOutsideChanges();
         if (string.IsNullOrWhiteSpace(givenName)) return false;
         (string given, _) = PlayerObservation.SplitName(givenName);
         if (string.IsNullOrEmpty(given)) return false;
@@ -638,6 +650,7 @@ public sealed class PlayerDatabase
     // a later observation re-binds them automatically.
     public int PurgeStale(int days, DateTime nowUtc)
     {
+        TakeInOutsideChanges();
         if (days <= 0) return 0;
         DateTime cutoff = nowUtc.AddDays(-days);
         int removed = 0;
@@ -689,20 +702,7 @@ public sealed class PlayerDatabase
         // by given-name, picking the newer LastSeen as the canonical
         // observation. The next save rewrites the file in the merged
         // form, so this migration is one-shot.
-        _observations.Clear();
-        if (!string.IsNullOrEmpty(_realmFolder))
-        {
-            string path = AppPaths.RealmPlayersFile(_realmFolder);
-            List<PlayerObservation>? loaded = JsonStore.Load<List<PlayerObservation>>(path);
-            if (loaded is not null)
-            {
-                foreach (PlayerObservation o in loaded)
-                {
-                    if (string.IsNullOrEmpty(o.GivenName)) continue;
-                    MergeOnLoad(o);
-                }
-            }
-        }
+        LoadObservations();
 
         // Char layer: pull off the loaded profile (null when no profile).
         // Same migration story: customization dicts written before the
@@ -807,6 +807,39 @@ public sealed class PlayerDatabase
         JsonStore.Save(path, _observations.Values
             .OrderBy(o => o.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList());
+        _stamp.Mark(path);
+    }
+
+    private readonly SharedFileStamp _stamp = new();
+
+    // Re-read the realm's observations when another client on it has written them.
+    // Every character on the realm records into the one file, and each used to
+    // write the whole file from its own copy, so what one learned (a class from a
+    // look, a level from a party probe) was gone the next time another saw anyone.
+    // Called on the heartbeat and before every change, so a change is made to what
+    // the last character recorded. True when anything was re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (string.IsNullOrEmpty(_realmFolder)) return false;
+        if (!_stamp.ChangedOutside(AppPaths.RealmPlayersFile(_realmFolder))) return false;
+        LoadObservations();
+        Rebuild();
+        return true;
+    }
+
+    private void LoadObservations()
+    {
+        _observations.Clear();
+        if (string.IsNullOrEmpty(_realmFolder)) return;
+        string path = AppPaths.RealmPlayersFile(_realmFolder);
+        _stamp.Mark(path);
+        List<PlayerObservation>? loaded = JsonStore.Load<List<PlayerObservation>>(path);
+        if (loaded is null) return;
+        foreach (PlayerObservation o in loaded)
+        {
+            if (string.IsNullOrEmpty(o.GivenName)) continue;
+            MergeOnLoad(o);
+        }
     }
 
     // ----- Merged view rebuild ------------------------------------------

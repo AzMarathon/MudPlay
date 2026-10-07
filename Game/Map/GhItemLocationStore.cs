@@ -74,6 +74,7 @@ public sealed class GhItemLocationStore
     public void RecordRoom(RoomKey room, IReadOnlyList<string> items)
     {
         if (_realmFolder is null) return;
+        TakeInOutsideChanges();
 
         DateTimeOffset now = DateTimeOffset.Now;
         HashSet<string> freshNames = new(StringComparer.OrdinalIgnoreCase);
@@ -179,6 +180,7 @@ public sealed class GhItemLocationStore
     public int MergeSyncRecords(IReadOnlyList<GhItemSyncRecord> records)
     {
         if (_realmFolder is null) return 0;
+        TakeInOutsideChanges();
         int applied = 0;
         foreach (GhItemSyncRecord r in records)
         {
@@ -230,27 +232,50 @@ public sealed class GhItemLocationStore
         }
 
         _realmFolder = realmFolder;
-        _sightings.Clear();
-        List<GhItemSighting>? loaded = JsonStore.Load<List<GhItemSighting>>(AppPaths.RealmRoombaItemsFile(realmFolder));
-        if (loaded is not null)
-        {
-            foreach (GhItemSighting s in loaded)
-            {
-                if (!_sightings.TryGetValue(s.ItemName, out Dictionary<RoomKey, GhItemSighting>? byRoom))
-                {
-                    byRoom = new Dictionary<RoomKey, GhItemSighting>();
-                    _sightings[s.ItemName] = byRoom;
-                }
-                byRoom[new RoomKey(s.Map, s.Room)] = s;
-            }
-        }
+        Load();
         Changed?.Invoke();
+    }
+
+    private readonly SharedFileStamp _stamp = new();
+
+    // Re-read the sightings when another client on the realm has written them: every
+    // character on it sweeps into the one file, and the room a character saw last
+    // is what stands for that room. Called on the heartbeat and before a change.
+    public bool TakeInOutsideChanges()
+    {
+        if (_realmFolder is null) return false;
+        if (!_stamp.ChangedOutside(AppPaths.RealmRoombaItemsFile(_realmFolder))) return false;
+        Load();
+        _log?.Debug("GhSweep", "item sightings re-read: another client on this realm changed them");
+        Changed?.Invoke();
+        return true;
+    }
+
+    private void Load()
+    {
+        _sightings.Clear();
+        if (_realmFolder is null) return;
+        string path = AppPaths.RealmRoombaItemsFile(_realmFolder);
+        _stamp.Mark(path);
+        List<GhItemSighting>? loaded = JsonStore.Load<List<GhItemSighting>>(path);
+        if (loaded is null) return;
+        foreach (GhItemSighting s in loaded)
+        {
+            if (!_sightings.TryGetValue(s.ItemName, out Dictionary<RoomKey, GhItemSighting>? byRoom))
+            {
+                byRoom = new Dictionary<RoomKey, GhItemSighting>();
+                _sightings[s.ItemName] = byRoom;
+            }
+            byRoom[new RoomKey(s.Map, s.Room)] = s;
+        }
     }
 
     private void Persist()
     {
         if (_realmFolder is null) return;
         List<GhItemSighting> flat = _sightings.Values.SelectMany(byRoom => byRoom.Values).ToList();
-        JsonStore.Save(AppPaths.RealmRoombaItemsFile(_realmFolder), flat);
+        string path = AppPaths.RealmRoombaItemsFile(_realmFolder);
+        JsonStore.Save(path, flat);
+        _stamp.Mark(path);
     }
 }

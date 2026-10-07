@@ -55,6 +55,7 @@ public sealed class ItemMdbViewBuilder
         List<ShopSaleRow> shops = new();
         List<DroppedByRow> droppedBy = new();
         List<PlacedInRow> placedIn = new();
+        List<RoomCommandRow> roomCommands = new();
         List<CastsSpellRow> castsSpells = new();
         // Referenced-textblock action targets, rendered as clickable links like the
         // drop/floor rows: a summoned monster → its Monsters record, a teleport
@@ -284,6 +285,10 @@ public sealed class ItemMdbViewBuilder
             // (no shop / no monster / no giver) rendered nothing before this.
             placedIn.AddRange(ResolvePlacedInLinks(obtainedFrom));
 
+            // Room command — a command typed in a room that can hand the item over
+            // ("Room(pry coffin) 17/278|…(18.6%)"). Only some exports carry these.
+            roomCommands.AddRange(ResolveRoomCommandSources(obtainedFrom));
+
             // Bought / sold — one clickable row per shop buy/sell location, each
             // with a "BUY: … SELL: …" line priced for the given charm under the
             // active realm's formula (the dialog re-runs this as its charm picker
@@ -294,7 +299,32 @@ public sealed class ItemMdbViewBuilder
 
             break;
         }
-        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells, summons, teleportsTo);
+        return new ItemMdbView(otherInfo, shops, isLight, isContainer, droppedBy, placedIn, castsSpells, summons, teleportsTo,
+            roomCommands);
+    }
+
+    // Room command: one row per "Room(<command>) <rooms>" entry in Obtained From,
+    // each with its rooms as links. Two entries over the same rooms (prying a coffin
+    // and tipping it roll different tables) stay two rows; their chances aren't one.
+    private List<RoomCommandRow> ResolveRoomCommandSources(string obtainedFrom)
+    {
+        List<RoomCommandRow> rows = new();
+        foreach (Game.GameData.RoomCommandSource source in Game.GameData.RoomCommandSourceParser.ParseCell(obtainedFrom))
+        {
+            List<PlacedInRow> rooms = new(source.Rooms.Count);
+            foreach ((int mapNo, int roomNo) in source.Rooms)
+            {
+                string? name = ResolveRoomName(mapNo, roomNo);
+                string locator = $"{mapNo}/{roomNo}";
+                rooms.Add(new PlacedInRow(
+                    string.IsNullOrEmpty(name) ? $"Room {locator}" : $"{name} - {locator}", mapNo, roomNo));
+            }
+            string chance = source.ChanceUnknown ? "?%"
+                : source.ChancePercent is { } p ? p.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%"
+                : string.Empty;
+            rows.Add(new RoomCommandRow(source.Commands, chance, rooms));
+        }
+        return rows;
     }
 
     // Placed In: one clickable room row per "Room {map}/{room}" token in Obtained
@@ -594,23 +624,13 @@ public sealed class ItemMdbViewBuilder
         return (markup, rooms);
     }
 
-    // Map/room → the room's Name from the active set's Rooms.json, or null when
-    // the table is absent or the room isn't found.
-    private string? ResolveRoomName(int mapNo, int roomNo)
-    {
-        JsonDocument? roomsDoc = _cache.GetRawTable("Rooms");
-        if (roomsDoc is null) return null;
-        foreach (JsonElement el in roomsDoc.RootElement.EnumerateArray())
-        {
-            if (!el.TryGetProperty("Map Number",  out JsonElement m)) continue;
-            if (!el.TryGetProperty("Room Number", out JsonElement r)) continue;
-            if (m.ValueKind != JsonValueKind.Number || r.ValueKind != JsonValueKind.Number) continue;
-            if (m.GetInt32() != mapNo || r.GetInt32() != roomNo) continue;
-            string name = ReadString(el, "Name");
-            return string.IsNullOrEmpty(name) ? null : name;
-        }
-        return null;
-    }
+    // Map/room → the room's name, or null when the room isn't found or has none.
+    // From the per-set name index: a room-command item lists a few hundred rooms,
+    // and scanning the Rooms table once per room took seconds.
+    private string? ResolveRoomName(int mapNo, int roomNo) =>
+        Game.GameData.RoomNameIndex.For(_cache).TryGetValue((mapNo, roomNo), out string? name) && name.Length > 0
+            ? name
+            : null;
 
     // One clickable DroppedByRow per "Monster #N(X%)" token in Obtained From,
     // resolved to its Monsters.Name (+ drop-rate suffix), de-duplicated by label.
@@ -758,4 +778,6 @@ public sealed record ItemMdbView(
     // Referenced-textblock action targets: monsters the item's action summons and the
     // rooms it teleports to, each a clickable link (reusing the drop / floor row types).
     IReadOnlyList<DroppedByRow>? Summons = null,
-    IReadOnlyList<PlacedInRow>? TeleportsTo = null);
+    IReadOnlyList<PlacedInRow>? TeleportsTo = null,
+    // Commands that hand the item over when typed in a room (not floor placements).
+    IReadOnlyList<RoomCommandRow>? RoomCommands = null);

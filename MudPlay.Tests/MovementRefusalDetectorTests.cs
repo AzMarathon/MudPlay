@@ -37,7 +37,7 @@ public sealed class MovementRefusalDetectorTests : IDisposable
         """;
 
     private (RoomTracker Tracker, MovementRefusalDetector Detector) NewDetector(
-        Func<string, bool>? isConfuseFumble = null)
+        Func<string, bool>? isConfuseFumble = null, Func<string, bool>? isActiveHoldLine = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
@@ -47,7 +47,7 @@ public sealed class MovementRefusalDetectorTests : IDisposable
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
         LineExtractor lines = new(new TerminalEmulator(80, 25));
-        MovementRefusalDetector detector = new(lines, tracker, null, isConfuseFumble);
+        MovementRefusalDetector detector = new(lines, tracker, null, isConfuseFumble, isActiveHoldLine);
         return (tracker, detector);
     }
 
@@ -210,6 +210,50 @@ public sealed class MovementRefusalDetectorTests : IDisposable
 
         Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
         Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // Report paradigm-20261006-221209: a roar held the character with a step just
+    // sent. Paradigm answered the step with the hold's own line, the move stayed
+    // Pending, and combat stood down for "a move in flight" until the character died.
+    [Fact]
+    public void ActiveHoldLine_RevertsThePendingMove()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector(
+            isActiveHoldLine: t => t.Trim() == "You are too scared to flee!");
+        SetupPending(tracker);
+
+        detector.FeedTestLine("You are too scared to flee!");
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), tracker.State.CurrentRoom!.Key);
+    }
+
+    // The same line prints when the hold lands or is renewed with nothing sent.
+    [Fact]
+    public void ActiveHoldLine_WithNoMovePending_ChangesNothing()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector(
+            isActiveHoldLine: t => t.Trim() == "You are too scared to flee!");
+        tracker.SetLocated(new RoomKey(1, 1));
+        int blocked = 0;
+        tracker.MoveBlocked += () => blocked++;
+
+        detector.FeedTestLine("You are too scared to flee!");
+
+        Assert.Equal(0, blocked);
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
+    }
+
+    // The Stock engine's refusal of a move by a character who can't move.
+    [Fact]
+    public void CantSeemToMoveAnywhere_RevertsThePendingMove()
+    {
+        (RoomTracker tracker, MovementRefusalDetector detector) = NewDetector();
+        SetupPending(tracker);
+
+        detector.FeedTestLine("You can't seem to move anywhere!");
+
+        Assert.Equal(RoomConfidence.Confirmed, tracker.State.Confidence);
     }
 
     // Fully data-driven: with no predicate wired, a confuse-fumble line no longer bonks

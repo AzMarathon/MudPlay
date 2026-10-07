@@ -16,16 +16,7 @@ namespace MudPlay.Models.GameData;
 // and sends a bare carriage return. SoundFile is an optional sound file
 // played on match, gated and levelled by the Trigger cue on Settings → Sounds.
 //
-// Location is where this trigger persists on disk:
-//   GameData (default) — saved into Data/game data/{set}/triggers.json next
-//     to the MDB tables. Travels with the set; every character on the same
-//     realm sees it. Right choice for chase / trap / NPC-event patterns
-//     that anchor to game-data records.
-//   Profile — saved on CharacterProfile.Triggers. Follows the character
-//     across realms. Right choice for personal alerts (your name was
-//     mentioned, a specific friend logged on, etc.).
-// The runtime dispatch is location-agnostic — both buckets merge into the
-// live TriggerEngine.Triggers collection.
+// Every trigger is the character's own, saved on CharacterProfile.Triggers.
 public sealed record Trigger(
     string Name,
     bool Enabled,
@@ -33,8 +24,7 @@ public sealed record Trigger(
     TriggerMatchType MatchType,
     string Pattern,
     string Response,
-    string? SoundFile = null,
-    TriggerLocation Location = TriggerLocation.GameData);
+    string? SoundFile = null);
 
 // What syntax Trigger.Pattern uses.
 public enum TriggerMatchType
@@ -46,19 +36,6 @@ public enum TriggerMatchType
     // Full PCRE-flavoured regex (.NET). Named groups (?<name>…) populate
     // {name} in the trigger-wildcard store.
     Regex,
-}
-
-// Which on-disk file a Trigger persists into. Triggers tab shows the value
-// as a "Location" column; the edit dialog exposes a dropdown so the user
-// can move triggers between buckets at edit time. Default is GameData —
-// most of the seeded defaults are chase / trap / NPC-event patterns that
-// belong with the set.
-public enum TriggerLocation
-{
-    // Saved at Data/game data/{set}/triggers.json — travels with the set.
-    GameData,
-    // Saved on CharacterProfile.Triggers — travels with the character.
-    Profile,
 }
 
 // Which subset of incoming lines a trigger considers.

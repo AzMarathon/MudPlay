@@ -9,13 +9,16 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// BossStore resolution + per-set delta overlay, mirroring QuestStoreTests: the
+// BossStore resolution + the realm's delta overlay, mirroring QuestStoreTests: the
 // overlay wins over the universal seed, a Removed tombstone hides a seed boss,
 // added bosses surface, realm flags gate visibility, and Save keeps the overlay a
 // delta. Uses a unique scratch set under AppPaths.DataRoot + a temp seed file.
 public sealed class BossStoreTests : IDisposable
 {
     private readonly string _scratchSet = "boss-test-" + Path.GetRandomFileName();
+
+    // The boss list is the realm's; a set folder stands in for a realm folder here.
+    private string RealmFolder => AppPaths.GameDataSetDir(_scratchSet);
     private readonly string _seedPath = Path.Combine(Path.GetTempPath(), "bossseed-" + Path.GetRandomFileName() + ".json");
 
     public void Dispose()
@@ -36,7 +39,7 @@ public sealed class BossStoreTests : IDisposable
     public void Resolve_SeedOnly_ReturnsSeed()
     {
         WriteSeed(Boss("crimson mist", rooms: "3/560"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
 
         BossDef b = Assert.Single(s.Resolve());
         Assert.Equal("crimson mist", b.Name);
@@ -47,12 +50,12 @@ public sealed class BossStoreTests : IDisposable
     public void Resolve_OverlayWins_OverSeed()
     {
         WriteSeed(Boss("cyclops", rooms: "7/730"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
         s.Save([new BossDef { Name = "cyclops", MonsterNumber = 1, Rooms = new() { "7/730" },
             InStock = true, InParadigm = true, StopBefore = false }]);
 
         // The seed's Stop before is on by default; the user's explicit off wins.
-        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnRealmChanged(RealmFolder);
         Assert.False(Assert.Single(reloaded.Resolve()).StopBefore);
     }
 
@@ -60,11 +63,11 @@ public sealed class BossStoreTests : IDisposable
     public void Resolve_RemovedTombstone_HidesSeedBoss()
     {
         WriteSeed(Boss("cyclops", rooms: "7/730"), Boss("chimera", rooms: "3/583"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
 
         s.Save([s.Resolve().First(b => b.Name == "chimera")]);   // cyclops omitted → removed
 
-        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnRealmChanged(RealmFolder);
         Assert.Equal(new[] { "chimera" }, reloaded.Resolve().Select(b => b.Name).ToArray());
     }
 
@@ -72,13 +75,13 @@ public sealed class BossStoreTests : IDisposable
     public void Resolve_UserAddedBoss_Surfaces()
     {
         WriteSeed(Boss("cyclops", rooms: "7/730"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
 
         List<BossDef> list = s.Resolve().ToList();
         list.Add(Boss("my custom boss", rooms: "1/100"));
         s.Save(list);
 
-        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnRealmChanged(RealmFolder);
         Assert.Contains(reloaded.Resolve(), b => b.Name == "my custom boss");
     }
 
@@ -87,7 +90,7 @@ public sealed class BossStoreTests : IDisposable
     {
         WriteSeed(Boss("shared boss", stock: true, para: true, rooms: "1/1"),
                   Boss("para only boss", stock: false, para: true, rooms: "5/5"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
 
         Assert.Equal(2, s.ResolveForRealm(RealmType.ParaMud).Count);
         Assert.Equal(new[] { "shared boss" }, s.ResolveForRealm(RealmType.Stock).Select(b => b.Name).ToArray());
@@ -97,21 +100,69 @@ public sealed class BossStoreTests : IDisposable
     public void Save_UnchangedBoss_IsDropped_SoLaterSeedFlowsThrough()
     {
         WriteSeed(Boss("cyclops", rooms: "7/730"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
         s.Save(s.Resolve());   // re-save unchanged
 
         // A changed seed (same set) now resolves through — proving no frozen overlay.
         WriteSeed(new BossDef { Name = "cyclops", MonsterNumber = 1, Rooms = new() { "7/999" }, InStock = true, InParadigm = true });
-        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnRealmChanged(RealmFolder);
         Assert.Equal(new[] { "7/999" }, Assert.Single(reloaded.Resolve()).Rooms);
     }
 
     [Fact]
-    public void Save_NoActiveSet_IsNoOp()
+    public void Save_NoActiveRealm_IsNoOp()
     {
-        BossStore s = new(seedPath: _seedPath);   // never OnActiveSetChanged
+        BossStore s = new(seedPath: _seedPath);   // never OnRealmChanged
         s.Save([Boss("x", rooms: "1/1")]);          // must not throw
-        Assert.Null(s.ActiveSet);
+        Assert.Null(s.ActiveRealmFolder);
+    }
+
+    // The list used to be kept with the game-data set. A realm with none of its own
+    // takes a copy of its set's; one that has its own keeps it.
+    [Fact]
+    public void RealmWithNoList_TakesACopyOfItsGameDataSets()
+    {
+        WriteSeed(Boss("cyclops", rooms: "7/730"));
+        string legacySet = "boss-legacy-" + Path.GetRandomFileName();
+        string realm = Path.Combine(AppPaths.GameDataSetDir(_scratchSet), "realm-a");
+        try
+        {
+            Directory.CreateDirectory(AppPaths.GameDataSetDir(legacySet));
+            JsonStore.Save(AppPaths.LegacySetBossesFile(legacySet),
+                new List<BossDef> { Boss("added by hand", rooms: "1/1") });
+
+            BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(realm, legacySet);
+            Assert.Contains(s.Resolve(), b => b.Name == "added by hand");
+            Assert.True(File.Exists(AppPaths.RealmBossesFile(realm)));
+
+            // Its own list now: a change to the set's old file no longer reaches it.
+            JsonStore.Save(AppPaths.LegacySetBossesFile(legacySet), new List<BossDef>());
+            BossStore again = new(seedPath: _seedPath); again.OnRealmChanged(realm, legacySet);
+            Assert.Contains(again.Resolve(), b => b.Name == "added by hand");
+        }
+        finally
+        {
+            try { Directory.Delete(AppPaths.GameDataSetDir(legacySet), true); } catch { }
+        }
+    }
+
+    // Clients on one realm share the file: a save made by another is picked up.
+    [Fact]
+    public void TakeInOutsideChanges_ReadsWhatAnotherClientSaved()
+    {
+        WriteSeed(Boss("cyclops", rooms: "7/730"));
+        BossStore first = new(seedPath: _seedPath); first.OnRealmChanged(RealmFolder);
+        BossStore second = new(seedPath: _seedPath); second.OnRealmChanged(RealmFolder);
+        Assert.False(first.TakeInOutsideChanges());
+
+        second.Save(second.Resolve().Append(Boss("added elsewhere", rooms: "2/2")));
+        File.SetLastWriteTimeUtc(AppPaths.RealmBossesFile(RealmFolder), DateTime.UtcNow.AddSeconds(5));
+
+        int changed = 0;
+        first.Changed += () => changed++;
+        Assert.True(first.TakeInOutsideChanges());
+        Assert.Equal(1, changed);
+        Assert.Contains(first.Resolve(), b => b.Name == "added elsewhere");
     }
 
     // Stop before ships off for the bosses that won't attack on sight — the Neutral
@@ -182,13 +233,13 @@ public sealed class BossStoreTests : IDisposable
         Assert.False(new BossDef().ResetGrabAll);
 
         WriteSeed(Boss("cyclops", rooms: "7/730"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
         BossDef edited = Assert.Single(s.Resolve());
         edited.DefaultStopBefore = false;
         edited.DefaultGrabAll = true;
         s.Save([edited]);
 
-        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnRealmChanged(RealmFolder);
         BossDef back = Assert.Single(reloaded.Resolve());
         Assert.False(back.ResetStopBefore);
         Assert.True(back.ResetGrabAll);
@@ -203,11 +254,11 @@ public sealed class BossStoreTests : IDisposable
         BossDef quiet = Boss("mayor godfrey", rooms: "1/1");
         quiet.StopBefore = false; quiet.DefaultStopBefore = false;
         WriteSeed(quiet);
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
         s.Save([new BossDef { Name = "mayor godfrey", MonsterNumber = 1, Rooms = new() { "1/2" },
             InStock = true, InParadigm = true, StopBefore = false }]);
 
-        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnActiveSetChanged(_scratchSet);
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnRealmChanged(RealmFolder);
         BossDef back = Assert.Single(reloaded.Resolve());
         Assert.Equal(new[] { "1/2" }, back.Rooms);
         Assert.False(back.ResetStopBefore);
@@ -219,7 +270,7 @@ public sealed class BossStoreTests : IDisposable
     {
         Assert.True(new BossDef().StopBefore);
         WriteSeed(Boss("cyclops", rooms: "7/730"));
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
         Assert.True(Assert.Single(s.Resolve()).StopBefore);
     }
 
@@ -241,7 +292,7 @@ public sealed class BossStoreTests : IDisposable
     public void FindInCatalog_RecoversRemovedSeedBoss_ByNumberOrName()
     {
         WriteSeed(new BossDef { Name = "shadow lord", MonsterNumber = 412, InStock = true, InParadigm = true });
-        BossStore s = new(seedPath: _seedPath); s.OnActiveSetChanged(_scratchSet);
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
         s.Save(Array.Empty<BossDef>());          // remove it (Removed tombstone)
         Assert.Empty(s.Resolve());               // hidden from the normal list
 

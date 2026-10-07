@@ -24,8 +24,14 @@ public sealed partial class MovementRefusalDetector : IDisposable
     // in tests that don't exercise the confusion path.
     private readonly Func<string, bool>? _isConfuseFumbleLine;
 
+    // Recognizes the line a hold we are under prints (ConditionTracker.IsActiveHoldLine).
+    // Paradigm refuses a held character's move with the hold's own applied line, which
+    // differs per spell, so it comes from game data too. Left null in tests that don't
+    // exercise it.
+    private readonly Func<string, bool>? _isActiveHoldLine;
+
     public MovementRefusalDetector(LineExtractor lines, RoomTracker tracker, LogService? log = null,
-        Func<string, bool>? isConfuseFumbleLine = null)
+        Func<string, bool>? isConfuseFumbleLine = null, Func<string, bool>? isActiveHoldLine = null)
     {
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(tracker);
@@ -33,6 +39,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         _tracker = tracker;
         _log = log;
         _isConfuseFumbleLine = isConfuseFumbleLine;
+        _isActiveHoldLine = isActiveHoldLine;
         _lines.LineEmitted += OnLineEmitted;
     }
 
@@ -137,6 +144,18 @@ public sealed partial class MovementRefusalDetector : IDisposable
             return;
         }
 
+        // Held: the hold's line is also what answers a move, and it prints when the
+        // hold lands or is renewed with nothing sent. A hold that lands with a move
+        // still unanswered refuses that move too, so any of them reverts one — but
+        // only while one is Pending.
+        if (_isActiveHoldLine?.Invoke(text) == true)
+        {
+            if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+            _tracker.NoteMoveBlocked(when);
+            _log?.Info("MoveRefusal", $"held, the move never left the room: {text.Trim()}");
+            return;
+        }
+
         // A confusion fumble consumes the just-sent command — for a MOVE the step never
         // lands, so revert like any other refusal. The wordings come from game data
         // (Confused records' ConfuseFumbleLine) via the injected predicate, not a
@@ -162,6 +181,7 @@ public sealed partial class MovementRefusalDetector : IDisposable
         TooEncumberedToMove(),
         TooHeavyToMove(),
         FlatOnYourBack(),
+        CantSeemToMove(),
         AlignmentBlocksExit(),
     };
 
@@ -249,6 +269,13 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*You are flat on your back[.!]?\s*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FlatOnYourBack();
+
+    // The Stock engine's one refusal of a move by a held character, whatever the
+    // hold (GAME_MECHANICS "Moving while held").
+    [GeneratedRegex(
+        @"^\s*You can't seem to move anywhere[.!]?\s*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CantSeemToMove();
 
     // Door / gate blocking — server returns this when the user issues a direction
     // whose exit is shut. Both the plain and the "in that direction" long form are

@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using JetDatabaseReader;
+using MudPlay.Game.GameData;
 
 namespace MudPlay.Services;
 
@@ -124,6 +125,7 @@ public sealed class MdbImporter
 
             int tablesDone = 0;
             int totalRows = 0;
+            _roomCommandItems = 0;
             List<string> imported = new();
             List<string> skipped = new();
             OnProgressChanged?.Invoke(0, tables.Count);
@@ -185,7 +187,11 @@ public sealed class MdbImporter
             if (skipped.Count > 0)
                 message += $"\n\nSkipped {skipped.Count}:\n" +
                            string.Join("\n", skipped.Select(t => $"  ⚠ {t}"));
-            message += $"\n\nTotal rows imported: {totalRows:N0}\nOutput: {outputPath}";
+            bool hasLairs = imported.Any(t => t.StartsWith("Lairs (", StringComparison.OrdinalIgnoreCase));
+            message += $"\n\nTotal rows imported: {totalRows:N0}"
+                     + $"\nLairs table: {(hasLairs ? "yes" : "no")}"
+                     + $"\nItems with a room-command source: {_roomCommandItems:N0}"
+                     + $"\nOutput: {outputPath}";
 
             return new MdbImportResult(
                 Success: true,
@@ -194,7 +200,9 @@ public sealed class MdbImporter
                 TablesFound: tables.Count,
                 TablesImported: imported.Count,
                 TablesSkipped: skipped.Count,
-                RowsImported: totalRows);
+                RowsImported: totalRows,
+                HasLairsTable: hasLairs,
+                RoomCommandItems: _roomCommandItems);
         }
         catch (OperationCanceledException)
         {
@@ -241,6 +249,11 @@ public sealed class MdbImporter
 
     // ----- Per-table export -------------------------------------------------
 
+    // Items whose `Obtained From` carries a room-command entry, counted as the Items
+    // table is written. Nothing in an export says which tool wrote it, so the entries
+    // are found by being there (RoomCommandSourceParser).
+    private int _roomCommandItems;
+
     private async Task<int> ExportTableAsync(
         AccessReader reader,
         string tableName,
@@ -284,6 +297,11 @@ public sealed class MdbImporter
                 }
             }
         }
+
+        if (tableName.Equals("Items", StringComparison.OrdinalIgnoreCase))
+            _roomCommandItems = rows.Count(r =>
+                r.TryGetValue("Obtained From", out object? cell)
+                && RoomCommandSourceParser.ParseCell(cell as string).Count > 0);
 
         string json = JsonSerializer.Serialize(rows, JsonOpts);
         string fileName = MakeFilesystemSafe(tableName) + ".json";
@@ -369,9 +387,10 @@ public sealed class MdbImporter
 }
 
 // Outcome of one MdbImporter.ImportAsync invocation. The caller uses the counts
-// to compose status text and to recognise the MajorMUD MDB shape (9 user tables
-// = old realm format, 10 = new format; extra tables beyond that are imported but
-// unused, not an error).
+// to compose status text and to recognise the MajorMUD MDB shape: 9 user tables,
+// or 10 with a Lairs table; extra tables beyond that are imported but unused, not
+// an error. An export may also carry room-command item sources, with or without
+// the Lairs table, so the two are reported separately.
 //   Success        — true when the database opened AND at least one table was
 //                    imported. An import that yields zero tables is a FAILURE:
 //                    the caller must not switch to an empty set, so ImportAsync
@@ -385,6 +404,8 @@ public sealed class MdbImporter
 //   TablesSkipped  — tables the importer attempted but a per-table error
 //                    aborted (see OnError for the reasons).
 //   RowsImported   — sum of rows across every imported table.
+//   HasLairsTable  — the export carries the Lairs table.
+//   RoomCommandItems — items whose sources include a room command.
 public readonly record struct MdbImportResult(
     bool   Success,
     string Message,
@@ -392,9 +413,11 @@ public readonly record struct MdbImportResult(
     int    TablesFound,
     int    TablesImported,
     int    TablesSkipped,
-    int    RowsImported)
+    int    RowsImported,
+    bool   HasLairsTable,
+    int    RoomCommandItems)
 {
     // Build a failure result. All counts zero, folder name empty.
     public static MdbImportResult Failure(string message)
-        => new(false, message, string.Empty, 0, 0, 0, 0);
+        => new(false, message, string.Empty, 0, 0, 0, 0, false, 0);
 }

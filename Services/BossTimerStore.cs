@@ -18,6 +18,13 @@ namespace MudPlay.Services;
 // play, so they belong to the realm (two realms on the same game data don't share
 // them); every character on the realm shares them.
 //
+// Those characters are often online together, one client each, and each holds its
+// own copy of the timers. So the file is re-read whenever another client wrote it,
+// on a poll and before every change, and a change is then written on top of what
+// that client last saved. Written from its own copy alone, the file lost every kill
+// the other client had made: after a restart one character's timers had been
+// replaced by the other's.
+//
 // Kill detection matches the in-game signal: we were ENGAGED with a monster by
 // name, then it died (awarded exp). Monster numbers aren't observable in-game, so
 // attribution is by NAME — the engaged target name (CombatManager.CurrentTarget,
@@ -90,14 +97,45 @@ public sealed class BossTimerStore
     public void OnRealmChanged(string? realmFolder)
     {
         ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
-        _killed = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
-        if (ActiveRealmFolder is not null &&
-            JsonStore.Load<Dictionary<string, DateTimeOffset>>(AppPaths.RealmBossTimersFile(ActiveRealmFolder)) is { } loaded)
-        {
-            foreach ((string name, DateTimeOffset at) in loaded) _killed[name] = at;
-        }
+        Load();
         Changed?.Invoke();
     }
+
+    // Write time of the file as this client last read or wrote it.
+    private DateTime _seenWrite = DateTime.MinValue;
+
+    private void Load()
+    {
+        _killed = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+        _seenWrite = DateTime.MinValue;
+        if (ActiveRealmFolder is null) return;
+        string path = AppPaths.RealmBossTimersFile(ActiveRealmFolder);
+        _seenWrite = WriteTime(path);
+        if (JsonStore.Load<Dictionary<string, DateTimeOffset>>(path) is { } loaded)
+            foreach ((string name, DateTimeOffset at) in loaded) _killed[name] = at;
+    }
+
+    // Re-read the timers when another client on the realm has written them. Called on
+    // the heartbeat, so a kill made on one client shows on the others within a
+    // moment. True when anything was re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (ActiveRealmFolder is null) return false;
+        if (WriteTime(AppPaths.RealmBossTimersFile(ActiveRealmFolder)) == _seenWrite) return false;
+        try { Load(); }
+        catch (Exception ex)
+        {
+            // Caught mid-write by the other client: try again on the next poll.
+            _log?.Debug("Bosses", $"boss timers not re-read yet ({ex.GetType().Name}: {ex.Message})");
+            return false;
+        }
+        _log?.Debug("Bosses", "boss timers re-read: another client on this realm changed them");
+        Changed?.Invoke();
+        return true;
+    }
+
+    private static DateTime WriteTime(string path) =>
+        File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
 
     public DateTimeOffset? KilledAt(string name)
         => _killed.TryGetValue(name, out DateTimeOffset at) ? at : null;
@@ -110,6 +148,7 @@ public sealed class BossTimerStore
     public void MarkKilled(string name, DateTimeOffset at)
     {
         if (string.IsNullOrWhiteSpace(name)) return;
+        TakeInOutsideChanges();
         _killed[name] = at.ToUniversalTime();
         Persist();
         _log?.Info("Bosses", $"timer set for '{name}' at {at.ToUniversalTime():u}");
@@ -119,6 +158,7 @@ public sealed class BossTimerStore
     // Clear a boss's timer (manual reset / mistaken start).
     public void Reset(string name)
     {
+        TakeInOutsideChanges();
         if (_killed.Remove(name))
         {
             Persist();
@@ -364,7 +404,9 @@ public sealed class BossTimerStore
         // timer still stands and the next kill/reset re-attempts the write.
         try
         {
-            JsonStore.Save(AppPaths.RealmBossTimersFile(ActiveRealmFolder), _killed);
+            string path = AppPaths.RealmBossTimersFile(ActiveRealmFolder);
+            JsonStore.Save(path, _killed);
+            _seenWrite = WriteTime(path);
         }
         catch (Exception ex)
         {

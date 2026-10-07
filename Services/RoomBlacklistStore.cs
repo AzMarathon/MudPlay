@@ -55,6 +55,7 @@ public sealed class RoomBlacklistStore
     // no-ops when the existing entry is identical.
     public void Add(RoomKey key, string name)
     {
+        TakeInOutsideChanges();
         if (_entries.TryGetValue(key, out BlacklistedRoom? existing))
         {
             if (string.Equals(existing.Name, name, StringComparison.Ordinal)) return;
@@ -71,6 +72,7 @@ public sealed class RoomBlacklistStore
     // Remove key. No-op when absent. Fires Changed on actual removal.
     public bool Remove(RoomKey key)
     {
+        TakeInOutsideChanges();
         if (!_entries.Remove(key)) return false;
         Persist();
         Changed?.Invoke();
@@ -111,37 +113,51 @@ public sealed class RoomBlacklistStore
 
         _realmFolder = realmFolder;
         _entries.Clear();
-
-        string path = AppPaths.RealmRoomBlacklistFile(realmFolder);
-        if (!File.Exists(path))
+        if (TryRead(out List<BlacklistedRoom> loaded))
         {
+            foreach (BlacklistedRoom e in loaded) _entries[new RoomKey(e.Map, e.Room)] = e;
             _log?.Log(LogSeverity.Info, "RoomBlacklist",
-                $"No blacklist file at '{path}'; starting empty.");
-            Changed?.Invoke();
-            return;
-        }
-
-        try
-        {
-            string raw = File.ReadAllText(path);
-            List<BlacklistedRoom>? loaded = JsonSerializer.Deserialize<List<BlacklistedRoom>>(raw);
-            if (loaded is not null)
-            {
-                foreach (BlacklistedRoom e in loaded)
-                {
-                    if (e.Map <= 0 || e.Room <= 0) continue;
-                    _entries[new RoomKey(e.Map, e.Room)] = e;
-                }
-            }
-            _log?.Log(LogSeverity.Info, "RoomBlacklist",
-                $"Loaded {_entries.Count} entry(ies) from '{path}'.");
-        }
-        catch (JsonException ex)
-        {
-            _log?.Log(LogSeverity.Warn, "RoomBlacklist",
-                $"Failed to parse '{path}': {ex.Message}");
+                $"Loaded {_entries.Count} entry(ies) for '{realmFolder}'.");
         }
         Changed?.Invoke();
+    }
+
+    private readonly SharedFileStamp _stamp = new();
+
+    // Re-read the blacklist when another client on the realm has saved it: every
+    // character on the realm shares it, and it decides what the map draws. Called
+    // on the heartbeat and before a change. A file caught mid-write is left for the
+    // next call, the list kept.
+    public bool TakeInOutsideChanges()
+    {
+        if (_realmFolder is null) return false;
+        if (!_stamp.ChangedOutside(AppPaths.RealmRoomBlacklistFile(_realmFolder))) return false;
+        if (!TryRead(out List<BlacklistedRoom> loaded)) return false;
+        _entries.Clear();
+        foreach (BlacklistedRoom e in loaded) _entries[new RoomKey(e.Map, e.Room)] = e;
+        _log?.Log(LogSeverity.Debug, "RoomBlacklist", "re-read: another client on this realm changed it");
+        Changed?.Invoke();
+        return true;
+    }
+
+    // Read the realm's file. False when it is there but can't be read or parsed.
+    private bool TryRead(out List<BlacklistedRoom> loaded)
+    {
+        loaded = new List<BlacklistedRoom>();
+        string path = AppPaths.RealmRoomBlacklistFile(_realmFolder!);
+        if (!File.Exists(path)) { _stamp.Mark(path); return true; }
+        try
+        {
+            List<BlacklistedRoom>? onFile = JsonSerializer.Deserialize<List<BlacklistedRoom>>(File.ReadAllText(path));
+            if (onFile is not null) loaded = onFile.Where(e => e.Map > 0 && e.Room > 0).ToList();
+            _stamp.Mark(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException)
+        {
+            _log?.Log(LogSeverity.Warn, "RoomBlacklist", $"Failed to read '{path}': {ex.Message}");
+            return false;
+        }
     }
 
     private void Persist()
@@ -150,7 +166,12 @@ public sealed class RoomBlacklistStore
         string path = AppPaths.RealmRoomBlacklistFile(_realmFolder);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var opts = new JsonSerializerOptions { WriteIndented = true };
-        File.WriteAllText(path, JsonSerializer.Serialize(_entries.Values.ToList(), opts));
+        // Written beside the file and moved over it, so another client reading at
+        // this moment sees the old list or the new, never half of one.
+        string temp = $"{path}.{Environment.ProcessId}.tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(_entries.Values.ToList(), opts));
+        File.Move(temp, path, overwrite: true);
+        _stamp.Mark(path);
         _log?.Log(LogSeverity.Info, "RoomBlacklist",
             $"Persisted {_entries.Count} entry(ies) to '{path}'.");
     }

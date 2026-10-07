@@ -384,6 +384,37 @@ public sealed class ConditionTrackerTests
         Assert.False(h.Tracker.IsConfuseFumbleLine("Bob says 'You fumble in confusion!'"));
     }
 
+    // Paradigm answers a held character's move with the hold's own applied line, so
+    // the line counts as a refusal only while that hold is on.
+    [Fact]
+    public void IsActiveHoldLine_OnlyWhileTheHoldIsOn_WholeLineOnly()
+    {
+        using Harness h = new();
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: "roar", Name: "roar",
+            Flags: MessageFlags.MovementPrevented, RawFlagsHex: 16,
+            CasterMessage: "", TargetMessage: "", WitnessMessage: "",
+            AppliedMessage: "You are too scared to flee", AppliedEndsWith: "You feel braver",
+            Links: null));
+        h.Messages.Messages.Add(new MessageRecord(
+            Id: "pois", Name: "poison",
+            Flags: MessageFlags.Poisoned, RawFlagsHex: 4,
+            CasterMessage: "", TargetMessage: "", WitnessMessage: "",
+            AppliedMessage: "You are poisoned!", AppliedEndsWith: "",
+            Links: null));
+
+        Assert.False(h.Tracker.IsActiveHoldLine("You are too scared to flee!"));
+
+        h.Feed("You are too scared to flee!");
+        h.Feed("You are poisoned!");
+        Assert.True(h.Tracker.IsActiveHoldLine("You are too scared to flee!"));
+        Assert.False(h.Tracker.IsActiveHoldLine("Bob says 'You are too scared to flee!'"));
+        Assert.False(h.Tracker.IsActiveHoldLine("You are poisoned!"));
+
+        h.Feed("You feel braver.");
+        Assert.False(h.Tracker.IsActiveHoldLine("You are too scared to flee!"));
+    }
+
     [Fact]
     public void IsConfuseFumbleLine_IgnoresFumbleLineOnNonConfusedRecord()
     {

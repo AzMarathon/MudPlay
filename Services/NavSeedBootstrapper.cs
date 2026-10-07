@@ -28,6 +28,11 @@ namespace MudPlay.Services;
 //    once per revision. A loop the user deleted or moved is left alone.
 //  - Realm-matched (stock vs paradigm via Info.json Legit); best-effort (a failure
 //    logs and leaves the set as-is rather than blocking).
+//
+// Favourites are each character's own now (FavoritesStore), so the set's
+// Favorites.json this keeps up is no longer anyone's live list: it is what a
+// character from before that change copies the first time it loads. A character
+// made since reads the bundle's favourites directly.
 public static class NavSeedBootstrapper
 {
     public static void SeedIfNeeded(string setName, LogService? log = null)

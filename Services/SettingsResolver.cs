@@ -414,6 +414,8 @@ public sealed class SettingsResolver
         SettingsTier tier, string scope, string table, string set)
     {
         string path = AppPaths.OverrideFile(tier, scope, table, set, CharacterBbs(tier));
+        // Read for a write: make sure it is the file as it stands.
+        DropIfChangedOutside(path);
         return GetCachedOverrideFile(path) ?? new();
     }
 
@@ -430,8 +432,60 @@ public sealed class SettingsResolver
         lock (_overrideCacheLock)
         {
             _overrideCache[path] = records.Count == 0 ? null : records;
+            _overrideSeen[path] = WriteTime(path);
         }
     }
+
+    // Forget every override file read so far. For when the files changed under us:
+    // Manage Game Data Sets copying or moving a set's overrides.
+    public void DropOverrideCache()
+    {
+        lock (_overrideCacheLock)
+        {
+            _overrideCache.Clear();
+            _overrideSeen.Clear();
+        }
+    }
+
+    // The write time of each cached override file when it was read or written here.
+    // An edit made "for all characters" or "only for this realm" lands in a file
+    // every client on it shares, so a file another client has written since is
+    // dropped from the cache: this client then reads their edit, and its own next
+    // edit goes on top of theirs instead of over them. Guarded by _overrideCacheLock.
+    private readonly Dictionary<string, DateTime> _overrideSeen = new(StringComparer.Ordinal);
+
+    // Drop cached override files another client has written. Called on the
+    // heartbeat. True when any was dropped.
+    public bool TakeInOutsideOverrideChanges()
+    {
+        lock (_overrideCacheLock)
+        {
+            List<string>? stale = null;
+            foreach ((string path, DateTime seen) in _overrideSeen)
+                if (WriteTime(path) != seen) (stale ??= new List<string>()).Add(path);
+            if (stale is null) return false;
+            foreach (string path in stale)
+            {
+                _overrideCache.Remove(path);
+                _overrideSeen.Remove(path);
+            }
+            Log?.Debug("Settings", $"game-data overrides re-read: {stale.Count} file(s) changed in another client");
+            return true;
+        }
+    }
+
+    private void DropIfChangedOutside(string path)
+    {
+        lock (_overrideCacheLock)
+        {
+            if (!_overrideSeen.TryGetValue(path, out DateTime seen) || WriteTime(path) == seen) return;
+            _overrideCache.Remove(path);
+            _overrideSeen.Remove(path);
+        }
+    }
+
+    private static DateTime WriteTime(string path) =>
+        File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
 
     private Dictionary<string, JsonElement>? GetCachedOverrideFile(string path)
     {
@@ -443,10 +497,12 @@ public sealed class SettingsResolver
         // Load outside the lock so a slow disk read doesn't block other
         // threads checking unrelated paths. A race where two threads load
         // the same file is benign — same bytes either way.
+        DateTime written = WriteTime(path);
         Dictionary<string, JsonElement>? loaded = JsonStore.Load<Dictionary<string, JsonElement>>(path);
         lock (_overrideCacheLock)
         {
             _overrideCache[path] = loaded;
+            _overrideSeen[path] = written;
         }
         return loaded;
     }

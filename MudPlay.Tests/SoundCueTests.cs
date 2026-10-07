@@ -295,7 +295,7 @@ public sealed class SoundCueTests : IDisposable
         GameDataCache cache = new();
         cache.SwitchSet(_set);
         BossStore bosses = new(seedPath: _seedPath);
-        bosses.OnActiveSetChanged(_set);
+        bosses.OnRealmChanged(dir);
         BossTimerStore timers = new(bosses, cache);
         timers.OnRealmChanged(dir);
 

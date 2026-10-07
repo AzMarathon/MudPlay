@@ -1,5 +1,31 @@
 # Version history
 
+## 3.147.0
+
+- Item records show a Room command group: commands that hand the item over in a room, with the chance and the rooms, for game data exported by Nightmare Redux for Linux
+- Those entries also fill in rooms the export's cut room lists dropped; other exports work as before
+- A set imported by an old version that damaged long text is now detected and named, with the fix (import its MDB again)
+- Two clients on the same realm no longer overwrite each other's boss timers or boss list; each sees the other's changes within a second
+- The program log no longer says a profile's keybindings were reset on every upgrade
+- A held character with a step just sent fights back instead of waiting on a move that can't happen
+- A walk no longer sends a step twice after swapping gear for the room ahead
+- The MDB IMPORT COMPLETE line says whether the export has a lairs table and room commands, instead of "old / new format"
+- Manage Game Data copies or moves what you tick between sets: loops, message edits and Game Data Browser edits
+- The boss list is kept per realm; each realm starts with a copy of the list its game data had
+- Triggers are all per character, like macros and aliases; each character takes its own copy of the triggers that were saved to the game data
+- GOTO favourites are per character; each character takes its own copy of the shared list, and a new character starts with none
+- Unrecognized lines are kept per realm; each realm starts with a copy of the list its game data had
+- The player database, Roomba labels and sightings, leaderboard captures and unrecognized lines keep what every character on the realm records; two clients no longer overwrite each other
+- Global settings are shared live: a change saved in one client reaches the others, and two clients no longer undo each other's
+- A BBS's settings save only what changed, so a Settings window left open no longer undoes what another client saved
+- Game Data Browser edits made for all characters or for a realm are picked up by every client on them
+- The room blacklist keeps both clients' entries
+- Quest guides are kept per game-data set (what you've completed stays on the character); each realm's guides are taken into its set
+- Emotes are kept per BBS; each BBS starts with a copy of the shared library
+- An item with a Room command group lists only NPCs under Given by; the rooms are in the group
+- Item records with long room lists open in a moment instead of a couple of seconds
+- bug reports addressed: paradigm-20261006-220135, paradigm-20261006-221209
+
 ## 3.146.0
 
 - New spell type priority category, Priority buffs: tick "Priority buff" on a buff in the Buff Watchdog and it casts at that rank instead of with the rest

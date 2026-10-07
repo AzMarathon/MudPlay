@@ -171,6 +171,24 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         return norm.Length > 0 && MatchConfuseFumble(norm) is not null;
     }
 
+    // True when text is the applied line of a hold we are under. Paradigm answers a
+    // held character's move by printing the hold's own line again ("You are too
+    // scared to flee!"), so a repeat of it is a move refusal as well as a status
+    // (GAME_MECHANICS "Moving while held"). Whole line only, as for a fumble line.
+    public bool IsActiveHoldLine(string text)
+    {
+        if (_active.Count == 0 || string.IsNullOrEmpty(text)) return false;
+        string norm = NormalizeFumbleLine(text);
+        if (norm.Length == 0) return false;
+        foreach ((string pattern, MessageRecord r) in _appliedIndex)
+        {
+            if (!r.Flags.HasFlag(MessageFlags.MovementPrevented) || !_active.Contains(r.Id)) continue;
+            if (string.Equals(norm, NormalizeFumbleLine(pattern), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     // The Confused record whose ConfuseFumbleLine contains normalizedText, or null.
     // Shared by IsConfuseFumbleLine and OnLine's ActionFailed detection so both
     // read the same index the same way.

@@ -2731,7 +2731,7 @@ public sealed class AppServices
         // RemoteCommands is constructed AFTER Chat / Party / Players are
         // ready (they're all dependencies). Handlers register later — the
         // engine is empty here; we just wire the plumbing.
-        Triggers = new TriggerEngine(Profile, Chat, Log);
+        Triggers = new TriggerEngine(Profile, Chat, Log, ProfileGameDataSet);
         Aliases = new AliasEngine(Profile);
         Macros = new MacroStore(Profile);
         MacroDispatcher = new MacroDispatcher(Macros);
@@ -2743,6 +2743,14 @@ public sealed class AppServices
         // through ResolveActiveBbs so Quick Connect and the BBS pin
         // resolution chain stay the single source of truth.
         Players = new PlayerDatabase(Profile, ActiveRealmFolder);
+        Tick.HeartbeatElapsed += () => Players.TakeInOutsideChanges();
+        // The settings files every client shares: global.json, and the game-data
+        // edits made for all characters or for a realm.
+        Tick.HeartbeatElapsed += () =>
+        {
+            Settings.TakeInOutsideChanges();
+            Resolver.TakeInOutsideOverrideChanges();
+        };
         // Board-specific disconnect line: PartyManager reads the active BBS's
         // custom DisconnectPattern live (empty on boards that use the standard
         // lines) and resolves a captured presence name — which on some boards is
@@ -3443,6 +3451,7 @@ public sealed class AppServices
         Messages = new MessageStore(Log);
         Messages.Messages.CollectionChanged += (_, _) => _spellMessages = null;
         GameData.ActiveSetChanged += Messages.Load;
+        GameData.ActiveSetChanged += _ => CheckActiveSetForImportDamage();
         // The apply-cast matcher list + spell-formula cache (PartyAilmentTracker's
         // witness-SET + duration clear) are derived from Messages + the Spells
         // table, so drop them when either changes: a set switch (reseeds both) or a
@@ -3454,10 +3463,14 @@ public sealed class AppServices
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
         GameData.ActiveSetChanged += MonsterMessages.Load;
-        // Staged candidates are pure runtime-observed state (no seed fallback),
-        // but still reload per set like every other game-data-scoped store.
+        // Staged candidates are what the characters on a realm saw there, so they
+        // load per realm and take in what another client on it recorded.
         MessageCandidates = new MessageCandidateStore(Log);
-        GameData.ActiveSetChanged += MessageCandidates.Load;
+        Profile.ProfileLoaded += _ => MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.BbsPinApplied += _ => MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.ProfileClosed += () => MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        Tick.HeartbeatElapsed += () => MessageCandidates.TakeInOutsideChanges();
         // Per-set flavor-adjective vocabulary the room classifier strips ("large
         // giant rat" → "giant rat"). Defaults to the built-in stock list; a
         // custom realm's edits persist per set. Reloads on every set switch.
@@ -3475,15 +3488,6 @@ public sealed class AppServices
         // ItemOverlaySeed.GetOverlay(number).
         ItemOverlaySeed = new ItemOverlaySeedStore(Log);
         GameData.ActiveSetChanged += ItemOverlaySeed.Load;
-        // Triggers split storage: GameData-scoped triggers live in the
-        // active set's per-set triggers.json; Profile-scoped triggers
-        // stay on CharacterProfile.Triggers. The engine reloads its
-        // GameData slice on every set switch — the Profile slice is
-        // owned by ProfileLoaded, wired inside TriggerEngine's ctor.
-        GameData.ActiveSetChanged += Triggers.OnActiveSetChanged;
-        if (GameData.ActiveSet is not null)
-            Triggers.OnActiveSetChanged(GameData.ActiveSet);
-
         // Coverage audit — fires on every set switch + every Messages
         // CollectionChanged; emits a summary LogEntry tagged
         // SpellCoverageAuditor.LogSource that the LogPane's
@@ -3568,15 +3572,27 @@ public sealed class AppServices
         // (the store subscribes to Profile.BbsPinApplied / ProfileClosed via the
         // ResolveActiveBbs provider). The mechanical step + bonus data the Quest
         // Status tab shows is crawled from TBInfo at runtime, not stored here.
-        Quests = new QuestStore(Profile, ActiveRealmFolder, Log);
+        Quests = new QuestStore(Profile, ProfileGameDataSet, ActiveRealmFolder, Log);
+        // A set picked from the Game Data menu changes with no profile event.
+        GameData.ActiveSetChanged += set => Quests.OnActiveSetChanged(set, ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () => Quests.TakeInOutsideChanges();
         Emotes = new EmoteStore(log: Log);
+        Profile.ProfileLoaded += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Profile.BbsPinApplied += _ => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Profile.ProfileClosed += () => Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Emotes.OnBbsChanged(ResolveActiveBbs()?.Name);
+        Tick.HeartbeatElapsed += () => Emotes.TakeInOutsideChanges();
 
-        // Boss catalog — realm-wide list (seed + per-set overlay); timer values are
-        // looked up from game data at runtime. Reloads its overlay on set change.
+        // Boss catalog — the realm's list (seed + the realm's overlay); timer values
+        // are looked up from game data at runtime. Reloads its overlay on a realm
+        // change, ahead of the timers below, which read it.
         Bosses = new BossStore(Log);
-        GameData.ActiveSetChanged += Bosses.OnActiveSetChanged;
-        if (GameData.ActiveSet is not null)
-            Bosses.OnActiveSetChanged(GameData.ActiveSet);
+        Profile.ProfileLoaded += _ => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.BbsPinApplied += _ => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.ProfileClosed += () => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        GameData.ActiveSetChanged += _ => Bosses.NoteGameDataChanged();
+        Tick.HeartbeatElapsed += () => Bosses.TakeInOutsideChanges();
 
         // Persisted boss kill-times, per realm. Kill detection is wired later (needs
         // MonsterDeath + RoomTracker); here we just load the active realm's saved
@@ -3586,6 +3602,9 @@ public sealed class AppServices
         Profile.BbsPinApplied += _ => BossTimers.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileClosed += () => BossTimers.OnRealmChanged(ActiveRealmFolder());
         BossTimers.OnRealmChanged(ActiveRealmFolder());
+        // Several clients share the realm's boss timers, one file; pick up what
+        // another client wrote within a heartbeat.
+        Tick.HeartbeatElapsed += () => BossTimers.TakeInOutsideChanges();
         // Cleanup-boss DEAD/ALIVE state reads the active realm's nightly-cleanup time.
         BossTimers.SetCleanupConfig(ResolveBossCleanupConfig);
 
@@ -3801,6 +3820,11 @@ public sealed class AppServices
         Profile.BbsPinApplied += _ => GhRoomLabels.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileLoaded += _ => GhItemLocations.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => GhItemLocations.OnRealmChanged(ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () =>
+        {
+            GhRoomLabels.TakeInOutsideChanges();
+            GhItemLocations.TakeInOutsideChanges();
+        };
         // Feed the player's level into Form-A exit level-gate evaluation.
         // null until a stat screen parses — IsExitBlocked never gates on
         // an unknown level, so an unparsed character walks unrestricted.
@@ -3837,7 +3861,7 @@ public sealed class AppServices
         Movement.MaxBashableStrengthProvider = () => MaxStrength.MaxAchievableStrength;
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
-        Favorites = new FavoritesStore(GameData, Log);
+        Favorites = new FavoritesStore(Profile, GameData, ProfileGameDataSet, Log);
         GotoHistory = new GotoHistoryStore(Profile);
 
         // Coordinator + walker. Coordinator is the
@@ -5138,7 +5162,11 @@ public sealed class AppServices
         Combat.SetHitAndRunHooks(Health.BackstabLanded, Health.RunInsteadOfFight);
         Combat.SetFleeInFlightProbe(() => Health.IsFleeInFlight);
         Combat.SetKeepRunning(Health.KeepRunning);
-        Combat.SetMoveInFlightProbe(() => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending);
+        // A held character's move can't land, so one still unanswered is no reason
+        // to hold a fight back.
+        Combat.SetMoveInFlightProbe(() =>
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+            && !Conditions.IsMovementPrevented);
         RoomTracker.MoveBlocked += () => Combat.NoteMoveRefused();
 
         // ShadowRest (Paradigm): a race or class carrying ability code 1103 can rest
@@ -7271,16 +7299,23 @@ public sealed class AppServices
         // and reloads both managers, instead of either racing the dir.
         NavFolders = new Game.Map.NavFolderManager(Loops, Lairs, Log);
 
-        // Game Data → "Manage Sets…" backend. The reload callback re-pulls
-        // the active set's loop/lair caches after a copy/move touches it;
-        // the delete callback clears any profile / global reference that
-        // still names a just-deleted set.
+        // Game Data → "Manage Sets…" backend. The reload callback re-pulls what
+        // a copy/move changed in the active set: the loop/lair caches alone when
+        // only the library moved, otherwise the whole set, the way a re-import
+        // does, since every per-set store reloads on that. The delete callback
+        // clears any profile / global reference that still names a deleted set.
         GameDataSetManager = new GameDataSetManager(
             GameData,
-            reloadActiveLibrary: () =>
+            reloadActive: changed =>
             {
-                Loops.LoadAll(GameData.ActiveSet);
-                Lairs.LoadAll(GameData.ActiveSet);
+                if (changed == GameDataSetPart.Loops)
+                {
+                    Loops.LoadAll(GameData.ActiveSet);
+                    Lairs.LoadAll(GameData.ActiveSet);
+                    return;
+                }
+                if (changed.HasFlag(GameDataSetPart.RecordOverrides)) Resolver.DropOverrideCache();
+                GameData.ReloadActiveSet();
             },
             onSetDeleted: ClearGameDataSetReferences,
             Log);
@@ -7309,6 +7344,7 @@ public sealed class AppServices
         RoomBlacklist = new RoomBlacklistStore(Log);
         Profile.ProfileLoaded += _ => RoomBlacklist.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => RoomBlacklist.OnRealmChanged(ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () => RoomBlacklist.TakeInOutsideChanges();
 
         // Per-BBS "top N" leaderboard history + its live capture tracker. The
         // store loads on BBS pin (same shape as the blacklist); the tracker binds
@@ -7317,6 +7353,7 @@ public sealed class AppServices
         Leaderboards = new LeaderboardSnapshotStore(Log);
         Profile.ProfileLoaded += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () => Leaderboards.TakeInOutsideChanges();
         LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, PromptScanner, Log);
         // The top list states each listed player's class outright; put it on the
         // records of the players we know. Off the capture, not the store's load: a
@@ -10981,6 +11018,44 @@ public sealed class AppServices
         return matchers;
     }
 
+    // Long cells of the active set that an old import left damaged (see
+    // GameDataLongTextCheck); 0 for a sound set. For the bug report.
+    public int ActiveSetDamagedCells { get; private set; }
+
+    // A set imported before the Access reader was corrected keeps its damaged cells:
+    // room command scripts, spawn lists and item sources with characters missing.
+    // Nothing can mend them in place, so say so, once per time the set is made
+    // active, and name the cure. The scan reads every long cell of two tables, so it
+    // runs off the UI thread; the result is posted back.
+    private void CheckActiveSetForImportDamage()
+    {
+        ActiveSetDamagedCells = 0;
+        if (GameData.ActiveSet is not { } set) return;
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            int damaged;
+            try { damaged = GameDataLongTextCheck.CountDamagedCells(GameData); }
+            catch (Exception ex)
+            {
+                Log.Warn("GameData", $"could not check set '{set}' for import damage ({ex.GetType().Name}: {ex.Message}).");
+                return;
+            }
+            if (damaged == 0) return;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!string.Equals(GameData.ActiveSet, set, StringComparison.Ordinal)) return;   // another set by now
+                ActiveSetDamagedCells = damaged;
+                Log.Warn("GameData",
+                    $"set '{set}' was imported by an older version that damaged long text: {damaged} cell(s) "
+                    + "have characters missing (monster spawn lists, item sources, room command scripts). "
+                    + "Import its MDB again to repair it.");
+                WriteTerminalNotice(
+                    $"[Game data '{set}' was imported by an older MudPlay that damaged long text. "
+                    + "Import its MDB again (Manage Game Data Sets) to repair it.]");
+            });
+        });
+    }
+
     // The command that lists what the character has learned: `sp` for a mana class,
     // `pow` for a kai one (SpellListParser reads either).
     public string SpellListCommand => PlayerStats.MaxKai > 0 ? "pow" : "sp";
@@ -12860,11 +12935,13 @@ public sealed class AppServices
     // default) and flip GameData if it differs. Idempotent — the cache
     // short-circuits no-op switches so calling this on every profile / BBS /
     // mutate signal is cheap.
-    private void ApplyActiveGameDataSet()
-    {
-        string? resolved = ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
-        GameData.SwitchSet(resolved);
-    }
+    private void ApplyActiveGameDataSet() => GameData.SwitchSet(ProfileGameDataSet());
+
+    // The game-data set the loaded profile runs on: its realm's, else the default.
+    // Read straight from the settings, so it is right inside a profile-load handler
+    // that runs before the set has been switched.
+    private string? ProfileGameDataSet() =>
+        ResolveActiveRealm()?.Realm.ActiveGameDataSet ?? Settings.Current.DefaultGameDataSet;
 
     // Drop any persisted reference to a just-deleted game-data set so a
     // later resolve doesn't point GameData at a folder

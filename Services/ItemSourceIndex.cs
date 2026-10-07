@@ -86,6 +86,7 @@ public sealed class ItemSourceIndex
         public required Dictionary<int, List<ItemGiver>> Givers { get; init; }
         public required Dictionary<int, List<RoomKey>> GiverRooms { get; init; }
         public required Dictionary<int, List<SummonDropSource>> SummonDrops { get; init; }
+        public required int RoomCommandItems { get; init; }
     }
 
     // Serialises builders so two threads racing the same set build once, not twice.
@@ -127,6 +128,10 @@ public sealed class ItemSourceIndex
             ? list
             : Array.Empty<ItemGiver>();
     }
+
+    // How many items in the active set list a "Room(<command>) <rooms>" source in
+    // their Obtained From. Zero for an export that doesn't write them, which is most.
+    public int RoomCommandItemCount => EnsureBuilt().RoomCommandItems;
 
     // Rooms where the giver monster with monsterId spawns (from Monsters.json
     // "Summoned By"), or empty when it names none. Resolves a Monster giver's
@@ -190,6 +195,7 @@ public sealed class ItemSourceIndex
         var givers = new Dictionary<int, List<ItemGiver>>();
         var giverRooms = new Dictionary<int, List<RoomKey>>();
         var summonDrops = new Dictionary<int, List<SummonDropSource>>();
+        int roomCommandItems = 0;
 
         if (string.IsNullOrWhiteSpace(active))
         {
@@ -199,13 +205,17 @@ public sealed class ItemSourceIndex
         {
             BuildContainers(containers);
             BuildGivers(givers);
+            roomCommandItems = CompleteRoomGiversFromItemSources(givers);
             BuildGiverMonsterRooms(givers, giverRooms);
             BuildSummonDrops(summonDrops);
 
             _log?.Info("ItemSourceIndex",
                 $"Indexed {containers.Count} container-sourced item(s), " +
                 $"{givers.Count} textblock-given item(s) and " +
-                $"{summonDrops.Count} summon-dropped item(s) from '{active}'.");
+                $"{summonDrops.Count} summon-dropped item(s) from '{active}'" +
+                (roomCommandItems > 0
+                    ? $"; {roomCommandItems} item(s) list room-command sources."
+                    : "; no room-command sources in this export."));
         }
 
         return new Snapshot
@@ -215,6 +225,7 @@ public sealed class ItemSourceIndex
             Givers = givers,
             GiverRooms = giverRooms,
             SummonDrops = summonDrops,
+            RoomCommandItems = roomCommandItems,
         };
     }
 
@@ -328,6 +339,61 @@ public sealed class ItemSourceIndex
                 }
             }
         }
+    }
+
+    // Fill in the rooms a room-command give works in, from the items' own
+    // "Room(<command>) <rooms>" sources, and count the items that carry any.
+    //
+    // The textblock walk above finds a room giver through the block's Called-From,
+    // which the export cuts at 250 characters: the coffin commands are called from
+    // 94 rooms and the cell names 18. The item's source lists them all. Only a
+    // direct give is completed (a rolled one is no hand-over to route to), and only
+    // where the walk already found that command giving the item in some room: that
+    // row carries what the command asks for, which the source entry doesn't say.
+    private int CompleteRoomGiversFromItemSources(Dictionary<int, List<ItemGiver>> giversByItem)
+    {
+        JsonDocument? items = _cache.GetRawTable("Items");
+        if (items is null) return 0;
+
+        Dictionary<(int Map, int Room), string>? roomNames = null;
+        int withSources = 0;
+        foreach (JsonElement row in items.RootElement.EnumerateArray())
+        {
+            if (row.ValueKind != JsonValueKind.Object || !TryInt(row, "Number", out int itemId)) continue;
+            if (!row.TryGetProperty("Obtained From", out JsonElement cell) || cell.ValueKind != JsonValueKind.String)
+                continue;
+            string? text = cell.GetString();
+            if (text is null || !text.Contains("Room(", StringComparison.Ordinal)) continue;
+
+            List<Game.GameData.RoomCommandSource> sources = Game.GameData.RoomCommandSourceParser.ParseCell(text);
+            if (sources.Count == 0) continue;
+            withSources++;
+            if (!giversByItem.TryGetValue(itemId, out List<ItemGiver>? givers)) continue;
+
+            foreach (Game.GameData.RoomCommandSource source in sources)
+            {
+                if (!source.IsDirect) continue;
+                foreach (string command in source.Commands)
+                {
+                    int known = givers.FindIndex(g => g.Kind == ItemGiverKind.Room
+                        && string.Equals(g.Keyword, command, StringComparison.OrdinalIgnoreCase));
+                    if (known < 0) continue;
+                    ItemGiver template = givers[known];
+                    foreach ((int map, int room) in source.Rooms)
+                    {
+                        if (givers.Exists(g => g.Kind == ItemGiverKind.Room && g.Map == map && g.Room == room
+                                && string.Equals(g.Keyword, command, StringComparison.OrdinalIgnoreCase)))
+                            continue;
+                        roomNames ??= BuildRoomNameMap();
+                        string name = roomNames.TryGetValue((map, room), out string? rn) && rn.Length > 0
+                            ? rn
+                            : $"Room {map}/{room}";
+                        givers.Add(template with { Map = map, Room = room, Name = name });
+                    }
+                }
+            }
+        }
+        return withSources;
     }
 
     // Index the room commands that summon a guaranteed dropper. Driven from the

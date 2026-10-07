@@ -435,6 +435,48 @@
                                 </ItemsControl>
                             </StackPanel>
 
+                            <!-- Room command — commands that hand the item over when
+                                 typed in a room, with the rooms each works in. Not floor
+                                 placements. Hidden when the export lists none. -->
+                            <StackPanel IsVisible="{Binding HasRoomCommands}" Margin="0,10,0,0">
+                                <TextBlock Classes="SectionHeader" Text="Room command"
+                                           ToolTip.Tip="Typing the command in one of these rooms can give this item. The chance is per use, an estimate from the game data; what else the command needs (an item, a level, a price) is in the room's command record."/>
+                                <ItemsControl ItemsSource="{Binding RoomCommands}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="vm:RoomCommandRow">
+                                            <StackPanel Margin="0,1,0,6">
+                                                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                <ItemsControl ItemsSource="{Binding ShownRooms}" Margin="10,0,0,0">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="vm:PlacedInRow">
+                                                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,1,0,1">
+                                                                <Button Classes="MdbLink"
+                                                                        Content="{Binding Location}"
+                                                                        Command="{Binding Open}"
+                                                                        IsEnabled="{Binding CanOpen}"
+                                                                        HorizontalAlignment="Left"
+                                                                        ToolTip.Tip="Open this room in the Game Data browser"/>
+                                                                <Button Classes="MdbLink"
+                                                                        Content="Queue Walking here →"
+                                                                        Command="{Binding QueueWalk}"
+                                                                        IsEnabled="{Binding CanOpen}"
+                                                                        HorizontalAlignment="Left"
+                                                                        ToolTip.Tip="Arm a walk to this room (opens the map; then click Run)"/>
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <Button Classes="MdbLink" Margin="10,2,0,0"
+                                                        Content="{Binding ToggleLabel}"
+                                                        Command="{Binding ToggleCommand}"
+                                                        IsVisible="{Binding CanExpand}"
+                                                        HorizontalAlignment="Left"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+
                             <!-- Chest Contents — containers only. Decoded loot table:
                                  item · at-least-once drop chance for one `open`, plus a
                                  yield summary. Read-only; hidden for non-containers. -->

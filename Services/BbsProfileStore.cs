@@ -1,5 +1,7 @@
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using MudPlay.Models.Settings;
 
 namespace MudPlay.Services;
@@ -56,6 +58,7 @@ public sealed class BbsProfileStore
                 $"'{bbsName}' now has realms: its realm settings and collected data moved into realm '{realm.Name}'.");
         }
 
+        if (profile is not null) Remember(profile, JsonSerializer.SerializeToNode(profile, JsonStore.Options));
         return profile;
     }
 
@@ -69,7 +72,51 @@ public sealed class BbsProfileStore
         if (profile.Realms.Count == 0) profile.Realms.Add(new RealmProfile { Name = profile.Name });
 
         Directory.CreateDirectory(AppPaths.BbsFolder(profile.Name));
-        JsonStore.Save(AppPaths.BbsProfileFile(profile.Name), profile);
+        string path = AppPaths.BbsProfileFile(profile.Name);
+        JsonNode? mine = JsonSerializer.SerializeToNode(profile, JsonStore.Options);
+        _asRead.TryGetValue(profile, out JsonNode? baseline);
+        if (baseline is not null && ReadNode(path) is { } theirs && !JsonNode.DeepEquals(theirs, baseline))
+        {
+            // Another client (or another holder in this one) saved the BBS since
+            // this copy was read. With nothing changed here, theirs stands;
+            // otherwise write theirs with this copy's changes on top.
+            if (JsonNode.DeepEquals(mine, baseline)) return;
+            JsonNode? merged = JsonThreeWayMerge.Merge(baseline, mine, theirs);
+            if (merged?.Deserialize<BbsProfile>(JsonStore.Options) is { } combined)
+            {
+                JsonStore.Save(path, combined);
+                Remember(profile, mine);
+                return;
+            }
+        }
+        JsonStore.Save(path, profile);
+        Remember(profile, mine);
+    }
+
+    // What each profile handed out or saved held at that moment. A caller keeps a
+    // BbsProfile for as long as its window is open (the Settings BBS tab) or the
+    // character is loaded (the resolver), then saves the whole of it; this is what
+    // tells its own changes from what it never touched.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<BbsProfile, JsonNode> _asRead = new();
+
+    private void Remember(BbsProfile profile, JsonNode? state)
+    {
+        _asRead.Remove(profile);
+        if (state is not null) _asRead.Add(profile, state);
+    }
+
+    private static JsonNode? ReadNode(string path)
+    {
+        try
+        {
+            return JsonStore.Load<BbsProfile>(path) is { } onFile
+                ? JsonSerializer.SerializeToNode(onFile, JsonStore.Options)
+                : null;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException)
+        {
+            return null;
+        }
     }
 
     // True when a BBS folder already occupies this name. Tests the folder, not
