@@ -155,7 +155,7 @@ public sealed class ItemEditDialogViewModelTests
             new(ItemGiverKind.Monster, 278, 0, 0, "old hermit", "", "key", true),
         };
 
-        IReadOnlyList<ItemGiverRow> rows = ItemEditDialogViewModel.BuildGivers(givers, new[] { pry });
+        IReadOnlyList<ItemGiverRow> rows = ItemEditDialogViewModel.BuildGivers(givers, new[] { pry }, (_, _) => false);
 
         Assert.Equal(new[] { "old hermit" }, rows.Select(r => r.Name));
     }
@@ -171,8 +171,26 @@ public sealed class ItemEditDialogViewModelTests
         };
 
         IReadOnlyList<ItemGiverRow> rows =
-            ItemEditDialogViewModel.BuildGivers(givers, Array.Empty<RoomCommandRow>());
+            ItemEditDialogViewModel.BuildGivers(givers, Array.Empty<RoomCommandRow>(), (_, _) => false);
 
         Assert.Equal(new[] { "Tomb", "old hermit" }, rows.Select(r => r.Name));
+    }
+
+    // A room the user blacklisted is off the map and out of room search, and is left
+    // out of Given by too.
+    [Fact]
+    public void Givers_LeaveOutABlacklistedRoom()
+    {
+        ItemGiver[] givers =
+        {
+            new(ItemGiverKind.Room, 0, 17, 278, "Tomb", "", "14", false),
+            new(ItemGiverKind.Room, 0, 8, 461, "Statue Room", "", "touch statue", true),
+            new(ItemGiverKind.Monster, 278, 0, 0, "old hermit", "", "key", true),
+        };
+
+        IReadOnlyList<ItemGiverRow> rows = ItemEditDialogViewModel.BuildGivers(
+            givers, Array.Empty<RoomCommandRow>(), (map, room) => map == 17 && room == 278);
+
+        Assert.Equal(new[] { "Statue Room", "old hermit" }, rows.Select(r => r.Name));
     }
 }

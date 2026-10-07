@@ -142,4 +142,34 @@ public sealed class ItemMdbViewBuilderTests : IDisposable
         Assert.Single(view.Summons!);
         Assert.Equal("Zanthus the Lich", view.Summons![0].Label);
     }
+
+    // A room the user blacklisted is off the map and out of room search. An item
+    // record leaves it out too: from a room command's rooms, from Placed in, and an
+    // entry with no room left is not shown at all.
+    [Fact]
+    public void BlacklistedRooms_AreLeftOutOfRoomCommandsAndPlacedIn()
+    {
+        const string items =
+            "[{\"Number\":887,\"Name\":\"bloodstone\",\"ItemType\":3," +
+            "\"Obtained From\":\"Room 17/500, Room 17/501, Room(pry coffin) 17/278|17/287(1.5%), Room(tip coffin) 17/278(2%)\"}]";
+        const string rooms =
+            "[{\"Map Number\":17,\"Room Number\":278,\"Name\":\"Tomb\"}," +
+            "{\"Map Number\":17,\"Room Number\":287,\"Name\":\"Tomb\"}," +
+            "{\"Map Number\":17,\"Room Number\":500,\"Name\":\"Vault\"}," +
+            "{\"Map Number\":17,\"Room Number\":501,\"Name\":\"Vault\"}]";
+        string dir = Path.Combine(_root, "blacklist");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Items.json"), items);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), rooms);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("blacklist");
+
+        ItemMdbView view = new ItemMdbViewBuilder(cache, playerCharm: 50,
+            isRoomBlacklisted: (map, room) => map == 17 && room is 278 or 500).Build("887");
+
+        RoomCommandRow pry = Assert.Single(view.RoomCommands!);       // tip coffin's only room is blacklisted
+        Assert.StartsWith("pry coffin", pry.Header);
+        Assert.Equal("Tomb - 17/287", Assert.Single(pry.ShownRooms).Location);
+        Assert.Equal("Vault - 17/501", Assert.Single(view.PlacedIn!).Location);
+    }
 }

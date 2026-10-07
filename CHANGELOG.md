@@ -1,5 +1,9 @@
 # Version history
 
+## 3.147.1
+
+- A blacklisted room is left out of an item record's Placed in, Room command and Given by lists
+
 ## 3.147.0
 
 - Item records show a Room command group: commands that hand the item over in a room, with the chance and the rooms, for game data exported by Nightmare Redux for Linux
