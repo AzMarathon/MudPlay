@@ -891,65 +891,96 @@ public sealed class BossTimerTests : IDisposable
 
     // The Darken Beast Lord sits in a den too dark to list what is in it, and its
     // death line isn't on record, so nothing named the kill and no timer started.
-    // The damage lines still name it: when it is the only monster they named, the
-    // unnamed death is the boss's.
-    // It has four rooms, and the kill counts in any of them.
-    [Theory]
-    [InlineData(2812)]
-    [InlineData(2813)]
-    [InlineData(2814)]
-    [InlineData(2815)]
-    public void UnnamedDeathInTheDark_NamedOnlyByTheDamageLines_MarksTheBoss(int room)
+    // Its name in the fight's damage lines says it is there. It is worth 4,000,000
+    // exp against 17,750 for the biggest thing that shares its den, so even split six
+    // ways its kill is the only gain that size: the exp line marks it.
+    private (BossTimerStore Timers, Func<int, MonsterDeathEvent> Gain) DarkDen(long bossExp = 4_000_000, long maxOther = 17_750)
     {
         SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
         SeedBosses(Boss("darken beast lord", number: 930,
             rooms: new[] { "17/2812", "17/2813", "17/2814", "17/2815" }));
         var (_, timers, _) = NewStores();
+        timers.SetRoomExpResolver((_, _) => (bossExp, maxOther));
+        return (timers, exp => new MonsterDeathEvent(
+            Array.Empty<MonsterDeathIdentity>(), ExperienceGained: exp, At: DateTimeOffset.UtcNow, IsFallback: true));
+    }
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, room), engagedName: null,
-            recentFoes: new[] { "Darken Beast Lord" });
+    // It has four rooms, and the kill counts in any of them; a full party's share
+    // (a sixth) is still far more than an add gives.
+    [Theory]
+    [InlineData(2812)]
+    [InlineData(2813)]
+    [InlineData(2814)]
+    [InlineData(2815)]
+    public void UnnamedDeathInTheDark_WithABossSizedExpGain_MarksTheBoss(int room)
+    {
+        var (timers, gain) = DarkDen();
+
+        timers.OnMonsterDied(gain(666_666), new RoomKey(17, room), engagedName: null,
+            recentFoes: new[] { "Darken Beast Lord", "darken beast" });
 
         Assert.NotNull(timers.KilledAt("darken beast lord"));
+    }
+
+    // An add dying in the same fight gives an add's exp: not the boss.
+    [Fact]
+    public void UnnamedDeathInTheDark_WithAnAddSizedExpGain_DoesNotMarkTheBoss()
+    {
+        var (timers, gain) = DarkDen();
+
+        timers.OnMonsterDied(gain(17_750), new RoomKey(17, 2812), engagedName: null,
+            recentFoes: new[] { "Darken Beast Lord", "darken beast" });
+
+        Assert.Null(timers.KilledAt("darken beast lord"));
+    }
+
+    // The boss has to have been in the fight's lines: a big gain alone marks nothing.
+    [Fact]
+    public void UnnamedDeath_WithTheBossNeverNamed_MarksNothing()
+    {
+        var (timers, gain) = DarkDen();
+
+        timers.OnMonsterDied(gain(4_000_000), new RoomKey(17, 2812), engagedName: null,
+            recentFoes: new[] { "darken beast" });
+
+        Assert.Null(timers.KilledAt("darken beast lord"));
     }
 
     // Outside its rooms the same lines mark nothing.
     [Fact]
     public void UnnamedDeath_OutsideTheBosssRooms_MarksNothing()
     {
-        SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
-        SeedBosses(Boss("darken beast lord", number: 930,
-            rooms: new[] { "17/2812", "17/2813", "17/2814", "17/2815" }));
-        var (_, timers, _) = NewStores();
+        var (timers, gain) = DarkDen();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2811), engagedName: null,
+        timers.OnMonsterDied(gain(4_000_000), new RoomKey(17, 2811), engagedName: null,
             recentFoes: new[] { "Darken Beast Lord" });
 
         Assert.Null(timers.KilledAt("darken beast lord"));
     }
 
-    // Something else was in the fight: the unnamed death could be that one's.
+    // Where exp can't tell the boss from its adds (a sixth of the boss is no more than
+    // an add gives), it is taken as the kill only when nothing else was named.
     [Fact]
-    public void UnnamedDeath_WithAnotherMonsterInTheDamageLines_DoesNotMarkTheBoss()
+    public void UnnamedDeath_WhereExpCantTell_NeedsTheBossToBeTheOnlyOneNamed()
     {
-        SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
-        SeedBosses(Boss("darken beast lord", number: 930, rooms: "17/2812"));
-        var (_, timers, _) = NewStores();
+        var (timers, gain) = DarkDen(bossExp: 60_000, maxOther: 17_750);
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2812), engagedName: null,
+        timers.OnMonsterDied(gain(60_000), new RoomKey(17, 2812), engagedName: null,
             recentFoes: new[] { "Darken Beast Lord", "darken beast" });
-
         Assert.Null(timers.KilledAt("darken beast lord"));
+
+        timers.OnMonsterDied(gain(60_000), new RoomKey(17, 2812), engagedName: null,
+            recentFoes: new[] { "Darken Beast Lord" });
+        Assert.NotNull(timers.KilledAt("darken beast lord"));
     }
 
     // With the dead monster named some other way, the damage lines decide nothing.
     [Fact]
     public void NamedDeathOfAnAdd_IsNotTakenForTheBoss()
     {
-        SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
-        SeedBosses(Boss("darken beast lord", number: 930, rooms: "17/2812"));
-        var (_, timers, _) = NewStores();
+        var (timers, gain) = DarkDen();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2812), engagedName: "shadow wolf",
+        timers.OnMonsterDied(gain(4_000_000), new RoomKey(17, 2812), engagedName: "shadow wolf",
             recentFoes: new[] { "Darken Beast Lord" });
 
         Assert.Null(timers.KilledAt("darken beast lord"));

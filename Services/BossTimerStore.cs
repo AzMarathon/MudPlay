@@ -252,11 +252,15 @@ public sealed class BossTimerStore
     public event Action<BossDef>? BossKilled;
 
     //
-    // recentFoes are the monsters named by the fight's damage lines. They decide only
-    // when nothing else names the dead monster: no engaged target (the room was too
-    // dark to list anyone) and no death line on record. Then a boss of this room is
-    // taken as the kill when every monster the damage lines named is that boss; a
-    // second name means something else was in the fight and could be what died.
+    // recentFoes are the monsters named by the fight's damage lines. They matter only
+    // when nothing else names the dead monster: no engaged target (a room too dark to
+    // list anyone) and no death line on record. A boss of this room those lines named
+    // is known to be here, and the unnamed death is its own when (user, 2026-10-07):
+    //   - the exp gained is more than any other monster of the room could give, and
+    //     the boss's exp split six ways (a full party) still beats every one of them
+    //     taken whole, so the size of the gain alone tells the boss from its adds; or
+    //   - exp can't tell them apart (no exp on record, or adds worth as much), and the
+    //     boss is the only monster the lines named.
     public void OnMonsterDied(MonsterDeathEvent evt, RoomKey? key, string? engagedName,
         IReadOnlyCollection<string>? recentFoes = null)
     {
@@ -268,12 +272,14 @@ public sealed class BossTimerStore
             if (!RoomsContain(def, here)) continue;
             bool named = NameMatches(def.Name, engagedName)
                          || evt.Candidates.Any(c => NameMatches(def.Name, c.Name));
-            bool onlyFoe = !named && unnamed && recentFoes is { Count: > 0 }
-                           && recentFoes.All(n => NameMatches(def.Name, n));
-            if (!named && !onlyFoe) continue;
-            if (onlyFoe)
-                _log?.Info("Bosses",
-                    $"boss '{def.Name}' named only by the damage lines (no room list, no death line) — taken as the kill");
+            if (!named)
+            {
+                if (!unnamed || recentFoes is not { Count: > 0 }
+                    || !recentFoes.Any(n => NameMatches(def.Name, n)))
+                    continue;
+                if (!UnnamedDeathIsTheBosss(def, here, evt.ExperienceGained, recentFoes, out string why)) continue;
+                _log?.Info("Bosses", $"boss '{def.Name}' was in the fight's damage lines and {why} — taken as the kill");
+            }
 
             // A timed boss starts its respawn countdown; a cleanup boss has none. Both
             // notify BossKilled so Grab-All can fire regardless of respawn type.
@@ -281,6 +287,32 @@ public sealed class BossTimerStore
             BossKilled?.Invoke(def);
             return;
         }
+    }
+
+    // Exp of the boss, and the most any other monster that can be in the room gives
+    // (its lair and placed monsters), for telling an unnamed death apart by its size.
+    // Unset, or zero for the boss, leaves only the "nothing else was named" test.
+    private Func<BossDef, RoomKey, (long BossExp, long MaxOtherExp)>? _roomExp;
+    public void SetRoomExpResolver(Func<BossDef, RoomKey, (long BossExp, long MaxOtherExp)> roomExp)
+    {
+        ArgumentNullException.ThrowIfNull(roomExp);
+        _roomExp = roomExp;
+    }
+
+    // Exp is shared by at most this many (GAME_MECHANICS "Party size bounds").
+    private const int MaxPartySize = 6;
+
+    private bool UnnamedDeathIsTheBosss(BossDef def, RoomKey here, int? expGained,
+        IReadOnlyCollection<string> recentFoes, out string why)
+    {
+        (long bossExp, long maxOther) = _roomExp?.Invoke(def, here) ?? (0, 0);
+        if (bossExp > 0 && bossExp / MaxPartySize > maxOther)
+        {
+            why = $"the {expGained:N0} exp gained is more than anything else here gives ({maxOther:N0})";
+            return expGained is { } gained && gained > maxOther;
+        }
+        why = "nothing else was named";
+        return recentFoes.All(n => NameMatches(def.Name, n));
     }
 
     // Fallback kill signal: a boss-table monster we saw in the room roster is

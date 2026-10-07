@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.148.2**
 > - The map switches to the floor you are on once you stop browsing it, even when the walk ended on the step that changed floors
-> - A boss killed in a room too dark to list it starts its timer when it is the only monster the damage lines named
+> - A boss killed in a room too dark to list it starts its timer: named by the fight's damage lines, then told from its adds by the size of the exp gained
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
