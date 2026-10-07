@@ -4183,12 +4183,20 @@ public sealed class AppServices
         // unnamed death there is told apart by the size of the exp gained.
         BossTimers.SetRoomExpResolver((def, room) =>
         {
-            int? bossNumber = def.MonsterNumber ?? ResolveMonsterNumberByName(def.Name);
-            long bossExp = bossNumber is { } n ? MonsterCatalog.Get(n)?.EffectiveExp ?? 0 : 0;
+            // A boss can have two records under one name: the neutral one standing
+            // in its room, worth nothing, and the hostile one it becomes when
+            // attacked, which is what a kill pays (Lallim Whitemane, Sharh'Kur). The
+            // boss list names the first, so the boss is worth the most any record of
+            // its name gives.
+            long bossExp = def.MonsterNumber is { } n ? MonsterCatalog.Get(n)?.EffectiveExp ?? 0 : 0;
+            foreach (Game.Combat.MonsterCatalogEntry sameName in MonsterCatalog.All)
+                if (string.Equals(sameName.Name, def.Name, StringComparison.OrdinalIgnoreCase))
+                    bossExp = Math.Max(bossExp, sameName.EffectiveExp);
+
             long maxOther = 0;
             foreach (int id in MonsterSpawns.MonsterIdsSummonedAt(room))
             {
-                if (id == bossNumber || MonsterCatalog.Get(id) is not { } other) continue;
+                if (id == def.MonsterNumber || MonsterCatalog.Get(id) is not { } other) continue;
                 if (string.Equals(other.Name, def.Name, StringComparison.OrdinalIgnoreCase)) continue;
                 maxOther = Math.Max(maxOther, other.EffectiveExp);
             }
