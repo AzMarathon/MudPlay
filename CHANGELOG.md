@@ -1,11 +1,12 @@
 # Version history
 
-## 3.148.5
+## 3.148.6
 
 - Bosses the game gives one name are separate rows, each with its own room and timer: nahr (spheres) and nahr (spaceghost), master assassin (cob key) and master assassin (dying assassin)
 - A boss's respawn time is read from its own monster record, not the first monster of its name: the great green dragon is 15 hours and the giant roc 6 on Paradigm
 - Six bosses added to the list: haggard witch, master torturer, giant toad-beast, small stone box, dark-elf queen chests, pastor lander's box
 - Lord Chisholm's row is now lord chisholm (malformation): his death summons the malformation, so they share his 1 hour timer
+- Grab All follows a boss that dies into another monster (Lord Chisholm into the malformation, the mayor of Arlysia into arachnigoth): it grabs the drops of whichever one just died
 
 ## 3.148.2
 

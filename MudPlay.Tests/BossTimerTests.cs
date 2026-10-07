@@ -1104,4 +1104,62 @@ public sealed class BossTimerTests : IDisposable
         timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
         Assert.Equal(before, timers.KilledAt("lord chisholm (malformation)"));
     }
+
+    // ----- What a boss's death summons ---------------------------------------
+
+    private (BossTimerStore timers, List<(string Boss, string? Dead, int? Exp)> loot, List<string> kills) ChisholmsChambers()
+    {
+        SeedGameData(RealmType.ParaMud, ("Lord Chisholm", 1297, 1, 1), ("malformation", 1298, 0, 1));
+        SeedBosses(Named("lord chisholm (malformation)", "lord chisholm", 1297, "14/6216"));
+        var (_, timers, _) = NewStores();
+        timers.SetDeathSummonResolver(def => def.MonsterNumber == 1297 ? new[] { "malformation" } : Array.Empty<string>());
+        List<(string, string?, int?)> loot = new();
+        List<string> kills = new();
+        timers.BossLootDropped += (def, dead, exp) => loot.Add((def.Name, dead, exp));
+        timers.BossKilled += def => kills.Add(def.Name);
+        return (timers, loot, kills);
+    }
+
+    // The malformation is where Lord Chisholm's loot is. Its death is not his: it
+    // starts no timer and is no boss kill, but it is when the drops land.
+    [Fact]
+    public void DeathOfWhatABossSummons_DropsLoot_WithoutBeingAKill()
+    {
+        var (timers, loot, kills) = ChisholmsChambers();
+        RoomKey chambers = new(14, 6216);
+
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        Assert.Equal(new[] { "lord chisholm (malformation)" }, kills);
+        Assert.Equal(("lord chisholm (malformation)", "Lord Chisholm", 100), Assert.Single(loot));
+
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        Assert.Single(kills);
+        Assert.Equal(2, loot.Count);
+        Assert.Equal(("lord chisholm (malformation)", "malformation", 100), loot[1]);
+    }
+
+    [Fact]
+    public void DeathOfWhatABossSummons_OutsideItsRooms_IsNothing()
+    {
+        var (timers, loot, _) = ChisholmsChambers();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(14, 1), engagedName: "malformation");
+
+        Assert.Empty(loot);
+    }
+
+    // The boss gone from its room without a death seen still drops: nothing is
+    // known of the dead monster.
+    [Fact]
+    public void RosterFallback_DropsLoot_WithNothingKnownOfTheDeath()
+    {
+        var (timers, loot, _) = ChisholmsChambers();
+        RoomKey chambers = new(14, 6216);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "Lord Chisholm"), chambers, "Lord's Chambers");
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), chambers, "Lord's Chambers");
+        timers.OnRoomDisplayed("Lord's Chambers");
+
+        Assert.Equal(("lord chisholm (malformation)", (string?)null, (int?)null), Assert.Single(loot));
+    }
 }
