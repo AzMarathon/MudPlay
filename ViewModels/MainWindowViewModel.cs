@@ -5897,7 +5897,7 @@ public partial class MainWindowViewModel : ObservableObject
             party.SetMemberAilment(m.Name, Models.GameData.MessageFlags.Diseased, false);
         }
 
-        AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)");
+        AppServices.Current.CombatTracker.ResetCombatState("Reset States (manual)", forgetSneakBreak: true);
 
         // Force back into the Default gear set — a stuck rest set or a half-finished
         // swap is exactly what a manual reset rescues — and re-poll `health` (the

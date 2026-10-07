@@ -105,6 +105,23 @@ public sealed class CombatStateTracker : IDisposable
     private bool _sneakFailedHere;
     private bool _sneakFailClearLatch;
 
+    // A see-hidden monster broke this stealth runner's sneak, and it hasn't been
+    // sneaking again since. The break belongs to the character, not to the room it
+    // happened in: carried into the next room, by a move already on the wire or with
+    // the monster in tow, the character is still exposed there for the same reason,
+    // so that room is cleared too (user, 2026-10-07). It lasts until a sneak takes
+    // again (NoteSneakRegained) or the option is switched off.
+    private bool _sneakBrokenBySeeHidden;
+    public bool SneakBrokenBySeeHidden => _sneakBrokenBySeeHidden;
+
+    // A fresh `sn` was answered cleanly: the character is sneaking again.
+    public void NoteSneakRegained()
+    {
+        if (!_sneakBrokenBySeeHidden) return;
+        _sneakBrokenBySeeHidden = false;
+        _log?.Info(LogCategory, "sneaking again — rooms are no longer cleared for the see-hidden break");
+    }
+
     private Action<byte[]>? _wireSender;
     private Func<bool>? _breakBeforeRunning;
     private Func<bool>? _attackInFlight;
@@ -600,9 +617,14 @@ public sealed class CombatStateTracker : IDisposable
         // route can re-sneak and go back to avoiding combat. Once latched, hold
         // until every engageable hostile is gone, even after the SeeHidden monster
         // itself dies.
-        bool seeHiddenArm = _clearWhenSeenHidden?.Invoke() == true
-                            && _isAutoSneakEnabled?.Invoke() == true
-                            && roomHasSeeHidden;
+        //
+        // The break outlasts the room it happened in (_sneakBrokenBySeeHidden):
+        // until the character is sneaking again, every room it lands in with
+        // something killable is cleared the same way, see-hidden monster or not.
+        bool stealthRunner = _clearWhenSeenHidden?.Invoke() == true
+                             && _isAutoSneakEnabled?.Invoke() == true;
+        if (!stealthRunner) _sneakBrokenBySeeHidden = false;
+        bool seeHiddenArm = stealthRunner && (roomHasSeeHidden || _sneakBrokenBySeeHidden);
         if (_seeHiddenClearLatch || seeHiddenArm)
         {
             // Hold only while something here is actually killable. If the
@@ -611,9 +633,17 @@ public sealed class CombatStateTracker : IDisposable
             // move past (a fight we can't win is worse than a broken sneak).
             if (actionable > 0)
             {
+                bool carried = stealthRunner && !roomHasSeeHidden && _sneakBrokenBySeeHidden;
+                if (stealthRunner && roomHasSeeHidden && !_sneakBrokenBySeeHidden)
+                {
+                    _sneakBrokenBySeeHidden = true;
+                    _log?.Info(LogCategory, "a see-hidden monster broke the sneak — clearing rooms until sneaking again");
+                }
                 _seeHiddenClearLatch = true;
                 NoteLiveFight("see-hidden clear");
-                AssertGate("seehidden clear (force-clear room)");
+                AssertGate(carried
+                    ? "seehidden clear (sneak still broken by a see-hidden monster — clearing to re-sneak)"
+                    : "seehidden clear (force-clear room)");
                 return;
             }
             _seeHiddenClearLatch = false;   // room cleared / un-actionable — release.
@@ -887,11 +917,14 @@ public sealed class CombatStateTracker : IDisposable
     // never clears. Reset States clearing conditions alone left this stuck, so it
     // routes here too. The next genuine room observation re-derives presence from
     // scratch, so a hostile that really remains re-asserts within a round.
-    public void ResetCombatState(string reason)
+    public void ResetCombatState(string reason, bool forgetSneakBreak = false)
     {
         ClearGate(reason);
         _seeHiddenClearLatch = false;
         _sneakFailClearLatch = false;
+        // The stall watchdog only gives up on this room; the sneak is as broken as
+        // it was. Reset States is the user saying start over.
+        if (forgetSneakBreak) _sneakBrokenBySeeHidden = false;
         if (_state.InCombat) _state.InCombat = false;
         _log?.Info(LogCategory, $"combat state force-cleared — {reason}");
         CombatForceCleared?.Invoke();   // fired last: the gate is now down, so a deferred collect can flush

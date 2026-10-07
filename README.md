@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.148.8**
+> **Version 3.148.9**
 > - Bosses the game gives one name are separate rows, each with its own room and timer: nahr (spheres) and nahr (spaceghost), master assassin (cob key) and master assassin (dying assassin)
 > - A boss's respawn time is read from its own monster record, not the first monster of its name: the great green dragon is 15 hours and the giant roc 6 on Paradigm
 > - Six bosses added to the list: haggard witch, master torturer, giant toad-beast, small stone box, dark-elf queen chests, pastor lander's box
@@ -10,6 +10,7 @@
 > - Out of combat, a between-round cast (a buff, a deck of cards draw) no longer runs into "You have already cast a spell this round!": rounds are projected at the board's measured length and the cast goes just after the round
 > - A see-hidden room met after a quiet walk is held and cleared: the stall watchdog no longer drops the fight a moment after it starts and lets the walker leave
 > - With Auto-Combat off, a see-hidden, failed-sneak or rest-blocker clear moves straight on to the next monster after a kill
+> - A sneak broken by a see-hidden monster stays broken until you sneak again: carried into another room first, that room is cleared too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

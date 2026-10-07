@@ -5372,6 +5372,13 @@ public sealed class AppServices
             Profile.Current, "Combat").ClearHostilesWhenSneakFails);
         Stealth.SneakEntry += CombatTracker.NoteSneakEntry;
         Stealth.SilentSneakLost += CombatTracker.NoteSilentSneakLoss;
+        // A see-hidden break is carried from room to room until a fresh `sn` is
+        // answered cleanly: only then is the character sneaking again.
+        Stealth.StateChanged += (prev, next) =>
+        {
+            if (prev == Game.Stealth.StealthState.AttemptingSneak && next == Game.Stealth.StealthState.Sneaking)
+                CombatTracker.NoteSneakRegained();
+        };
         Combat.SetSeeHiddenClearGate(() => CombatTracker.SeeHiddenClearActive || CombatTracker.SneakFailClearActive);
 
         // Engage-to-clear a rest-blocker with Auto-Combat OFF (report

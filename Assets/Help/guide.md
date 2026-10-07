@@ -2998,6 +2998,8 @@ It doesn't run where a backstab couldn't work anyway: a room with a see-hidden m
 **Default:** Off
 **What it does:** A safety valve for stealth routes: while Auto-Sneak is on (you're trying to sneak through a route untouched) and you stumble into a room with a see-hidden monster, your stealth breaks. With this on, MudPlay fights and clears that one room instead of continuing to walk while exposed and dragging monsters behind you — bypassing the Min/Max room-skip gate for just that room, then re-sneaks and carries on. Because the room is now clear, any buff/cure the sneak-aware timing was holding fires there before you re-sneak.
 
+The break stays with you until you're sneaking again, not with the room it happened in. If you're carried into another room before the sneak is back (a move that was already sent, or the monster following you), that room is cleared too, see-hidden monster or not: you're still exposed there for the same reason. Once a fresh `sn` takes, the route goes back to sneaking past everything.
+
 This works whether **Auto-Combat is on or off**: the whole point is to clear the room and get moving again, so it force-clears regardless of your combat toggle (with Auto-Combat off it engages just for that room; with it on, it overrides the Min/Max gate so the room can't be skipped and left to drag).
 
 ### Clear hostiles when sneak fails
