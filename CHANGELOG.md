@@ -1,5 +1,12 @@
 # Version history
 
+## 3.147.3
+
+- A boss's Grab All checks the floor again and re-asks for drops the game threw away at the kill; the coin pickup does the same
+- Bosses whose death spell had no cast response on record now get the default one
+- Bosses tab: Last Killed is wide enough to show the whole date and time
+- bug reports addressed: paradigm-20261007-111929
+
 ## 3.147.1
 
 - A blacklisted room is left out of an item record's Placed in, Room command and Given by lists

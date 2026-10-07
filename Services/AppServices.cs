@@ -4173,6 +4173,22 @@ public sealed class AppServices
         // for any matched boss; we gate on the flag here, where the catalog + item
         // names + wire sender are all reachable.
         BossTimers.BossKilled += FireBossGrabAll;
+        // The grab goes out blind and the game can throw it away, so the floor is
+        // checked after it and what is still there is asked for again.
+        _bossGrabRetry = new Game.Inventory.BossGrabRetry(
+            send: cmd =>
+            {
+                // An empty command is the bare Enter that re-draws the room.
+                if (cmd.Length == 0) _engineWireSend?.Invoke(new[] { (byte)'\r' });
+                else SendGameCommand(cmd);
+            },
+            scheduleAfter: (delay, action) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); action(); };
+                timer.Start();
+            },
+            log: Log);
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
@@ -6387,6 +6403,7 @@ public sealed class AppServices
         // the deferred queue (CombatStateTracker's handler ran first, so
         // the hostile flag is current).
         RoomClassifier.EntitiesObserved += _ => AutoGetItems.OnRoomObserved();
+        AutoGetItems.NoticeSurveyed += list => _bossGrabRetry?.OnNoticeSurvey(list);
 
         // Force-clear flush: the normal end-of-fight flushes deferred cash/item
         // pickups off the clean room re-look that follows a kill, but a FORCE-clear
@@ -6715,6 +6732,7 @@ public sealed class AppServices
             // deferred in the room we died in (report paradigm-20260820-090736).
             AutoSearch.OnRoomChanged(t.NewRoom?.Key);
             if (t.NewRoom is null) return;   // the other engines have nothing to do on death
+            _bossGrabRetry?.Clear();
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();
             Cash.OnRoomChanged();
@@ -10310,7 +10328,11 @@ public sealed class AppServices
         }
         Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
         foreach (string cmd in cmds) SendGameCommand(cmd);
+        _bossGrabRetry?.Arm(cmds.Select(cmd => cmd["get ".Length..]));
     }
+
+    // Set where the Grab All is wired; null until then.
+    private Game.Inventory.BossGrabRetry? _bossGrabRetry;
 
     // A monster whose DeathSpell is a silent "…temp" spell just died: those spells emit no
     // wire line but stall the game engine, so send the temp spell's MessageRecord.CastResponse
@@ -10370,6 +10392,9 @@ public sealed class AppServices
             if (deathSpell <= 0) continue;
             string? spellName = GameData.FindNameByNumber("Spells", deathSpell);
             if (!Game.Combat.TempDeathResponse.IsTempSpell(spellName)) continue;
+            // What was sent in this moment may have been thrown away: the coin
+            // pickup checks the floor again.
+            Cash.NoteDeathStall();
 
             foreach (Models.GameData.MessageRecord r in Messages.Messages)
             {
@@ -10383,6 +10408,18 @@ public sealed class AppServices
                 Log.Info("TempDeath",
                     $"'{spellName}' (#{deathSpell}) death-cast — sent cast response to unstick the engine");
                 return;   // one response per death
+            }
+
+            // No message record names a response for this one (37 of the Paradigm
+            // bosses' temp spells had none): the same two carriage returns every
+            // listed one is given.
+            if (Game.Combat.TempDeathResponse.ExpandToWireBytes(Game.Combat.TempDeathResponse.DefaultResponse)
+                is { } fallback)
+            {
+                _engineWireSend(fallback);
+                Log.Info("TempDeath",
+                    $"'{spellName}' (#{deathSpell}) death-cast — no cast response on record, sent the default to unstick the engine");
+                return;
             }
         }
     }

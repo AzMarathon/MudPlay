@@ -148,7 +148,7 @@
                      recorded. Sits between Timer and Notes; both are after the
                      early-window columns (4-6) the code-behind relabels, so those
                      indices stay put. -->
-                <DataGridTextColumn Header="Last Killed" Width="120" IsReadOnly="True" SortMemberPath="LastKilledSortKey"
+                <DataGridTextColumn Header="Last Killed" Width="150" IsReadOnly="True" SortMemberPath="LastKilledSortKey"
                                     Binding="{ReflectionBinding LastKilledDisplay}"
                                     FontFamily="{StaticResource FontMono}"
                                     Foreground="{StaticResource ChromeFgSecBrush}"/>

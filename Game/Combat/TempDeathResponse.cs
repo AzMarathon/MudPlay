@@ -11,6 +11,10 @@ namespace MudPlay.Game.Combat;
 // decisions worth pinning in a test.
 public static partial class TempDeathResponse
 {
+    // What a temp death spell with no CastResponse of its own is answered with: the
+    // two carriage returns the seeds give every one they list.
+    public const string DefaultResponse = "^M^M";
+
     // True when a spell name carries the whole word "temp" — the naming convention
     // for these death-cast spells ("lich temp", "necromancer temp"). Whole-word so
     // "acid tempest" (a real "tempest" spell) doesn't match.

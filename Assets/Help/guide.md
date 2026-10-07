@@ -1361,7 +1361,7 @@ The tab **opens sorted by the 100% timer with running timers on top**, so a fres
 
 Tick **Grab All** (default off) to blindly grab a boss's loot the instant it's available — a "throw a get at everything" spray straight from game data, never a corpse scan. What it does depends on what the boss's name resolves to:
 
-- a **monster** — the instant it dies, `get` every item in its drop table (one `get <item>` per item it could drop, percentages ignored); works for cleanup bosses too (no timer needed).
+- a **monster** — the instant it dies, `get` every item in its drop table (one `get <item>` per item it could drop, percentages ignored); works for cleanup bosses too (no timer needed). Some bosses leave the room unable to act for a moment as they die, and the game throws away what is sent in that moment. So the room is looked at again a second or two after the grab, and any drop still on the floor is asked for again (up to three times); coins dropped by the kill get the same second look.
 - an **item** that just sits in the room (a box, e.g. a bogwood box or Pastor Landor's box) — `get` it every time you **walk into** the room.
 - **neither** (an unresolvable name — a touch-to-awaken mechanic like Iceforge) — Grab All doesn't apply, so its cell shows a muted dash reading *"Cannot resolve to a specific monster or item"*.
 

@@ -391,8 +391,14 @@ public sealed class AutoGetItemsManager : IDisposable
     // GhSweepManager.IsActive; defaults to never-suppress.
     public Func<bool> SuppressDuringSweep { get; set; } = static () => false;
 
+    // Every "You notice <list> here." list as the game printed it, whether or not
+    // auto-get is on: the room's floor, for anyone who needs to know what is still
+    // lying there.
+    public event Action<string>? NoticeSurveyed;
+
     private void DispatchList(string list)
     {
+        NoticeSurveyed?.Invoke(list);
         if (!_isEnabled()) return;
         // A Roomba sweep is sorting the house — don't let auto-collect grab extra
         // weight and shrink the headroom Roomba needs for its moves.

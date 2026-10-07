@@ -1596,4 +1596,42 @@ public sealed class CashManagerTests
                 DateTimeOffset.UtcNow, IsPromptLine: false));
         }
     }
+
+    // Report paradigm-20261007-111929: a boss died, the coin get went out, and the
+    // game echoed it without running it (the boss's death leaves the room unable to
+    // act for a moment). The next room display still listed the coins and the
+    // collector skipped them as already handled.
+    [Fact]
+    public void GetThrownAwayByADeathStall_IsAskedAgain_WhenTheCoinsAreStillThere()
+    {
+        using Harness h = new();
+        DateTime now = new(2026, 10, 7, 11, 19, 23, DateTimeKind.Utc);
+        h.Cash.UnansweredClock = () => now;
+
+        h.Feed("5 platinum drop to the ground.");
+        int afterFirst = h.AllSent.Count(c => c.StartsWith("get "));
+        Assert.Equal(1, afterFirst);
+        h.Cash.NoteDeathStall();
+
+        now = now.AddSeconds(2);
+        h.Feed("You notice 5 platinum pieces here.");
+
+        Assert.Equal(2, h.AllSent.Count(c => c.StartsWith("get ")));
+    }
+
+    // With no stall, an unanswered get was refused for a reason of its own; the
+    // re-drawn pile stays handled.
+    [Fact]
+    public void UnansweredGet_WithNoDeathStall_IsNotAskedAgain()
+    {
+        using Harness h = new();
+        DateTime now = new(2026, 10, 7, 11, 19, 23, DateTimeKind.Utc);
+        h.Cash.UnansweredClock = () => now;
+
+        h.Feed("5 platinum drop to the ground.");
+        now = now.AddSeconds(2);
+        h.Feed("You notice 5 platinum pieces here.");
+
+        Assert.Equal(1, h.AllSent.Count(c => c.StartsWith("get ")));
+    }
 }
