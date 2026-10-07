@@ -4638,7 +4638,21 @@ Among protectable hazards, a further split governs whether the navigator may off
     **random** dump into the Caves of Chaos (`9/1292–1327`) for anyone not flagged.
 - **The only observable difference is *where you land*; the quest ability is untrackable by the
   client.** Byte-identical across the stock and Paradigm data sets, so the rule is realm-generic.
+- **The portal back down, room `9/1424` ("Ancient Darkwood Tree, Portal", `CMD 1461`), is a fixed hop
+  to `9/1291`, and its gate differs by realm** *([OBSERVED] 2026-10-07, game data Paradigm 1.9.1 and
+  stock v1.11p; report `paradigm-20261007-164408`)*:
+  - Paradigm: `go portal:cast 619` / `enter portal:cast 619`, with no ability check.
+  - Stock: `go portal:checkability 133 5:cast 619` / `enter portal:checkability 133 5:cast 619`, the
+    PhoenixQuest check with no fallback branch. *([NEEDS CONFIRMATION]: what does a Stock character
+    who fails the check see, and does anything move them?)*
+  - Spell **619** "upper portal" is `TeleportRoom 1291` / `TeleportMap 9` on both realms.
+  - `9/1291` is also the foot of the narrow stair (`9/1413 → D → 9/1291`). From `9/1423` the portal
+    (`E`, then `go portal`: 2 moves) and the stair (`S`, then `D` ten times: 11 moves) reach the same
+    room.
 - **Client use:**
+  - The portal back down has a single fixed branch, so it is a plain `Direction.Teleport` edge, not a
+    gateway. A walk the user starts plans on foot and offers the hop through the walk-vs-teleport
+    fork (`RouteChoicePlanner.EvaluateTeleport`; report `paradigm-20261007-164408`).
   - When a cast-teleport keyword's branches disagree — a fixed branch alongside a random (or a
     different-room fixed) sibling — the landing is non-deterministic, so it is minted as a **gateway**
     `Direction.Teleport` edge (flagged `GatewayTeleport`, nominal target = the fixed branch's landing

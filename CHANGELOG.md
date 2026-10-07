@@ -1,5 +1,10 @@
 # Version history
 
+## 3.148.10
+
+- The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further
+- bug reports addressed: paradigm-20261007-164408
+
 ## 3.148.9
 
 - Bosses the game gives one name are separate rows, each with its own room and timer: nahr (spheres) and nahr (spaceghost), master assassin (cob key) and master assassin (dying assassin)
