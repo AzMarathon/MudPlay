@@ -2159,6 +2159,16 @@ public sealed class AppServices
     // any cached room references.
     public Game.Map.RoomGraphManager RoomGraph { get; private set; } = null!;
 
+    // The teleports in the loaded game data, grouped by where they lead, for the
+    // setting that says which of them automatic walks may use. Worked out from the
+    // room graph on first use and again after the graph reloads.
+    public IReadOnlyList<Game.Map.TeleportChoice> TeleportChoices =>
+        _teleportChoices ??= Game.Map.TeleportCatalog.Build(RoomGraph, (from, to) =>
+            RoomGraph.GetRoom(from) is { Cmd: > 0 } room
+                ? Game.Map.TBInfoTeleportResolver.Resolve(TBInfo, room.Cmd, to)
+                : null);
+    private IReadOnlyList<Game.Map.TeleportChoice>? _teleportChoices;
+
     // TextBlock Info index for the active game-data set. Loaded from
     // TBInfo.json; consumed by the teleport handler (room
     // CMD > 0 + (Item: N) exit promotes to
@@ -6799,9 +6809,10 @@ public sealed class AppServices
         Walker.SetMazeSolver(MazeSolver);
         // Teleports on walks the client starts by itself (a walk the user starts states
         // its own preference and never reads this). Read live from the character, so a
-        // change reaches the next walk and a profile swap brings its own choice.
-        Walker.SetAutomaticWalkTeleports(() => !ReadSection<Models.Profile.OtherSettings>(
-            Profile.Current, "Other").AutomaticWalksTakeTeleports);
+        // change reaches the next walk and a profile swap brings its own list.
+        Walker.SetAutomaticWalkTeleports(() => Game.Map.TeleportCatalog.ParseKeys(
+            ReadSection<Models.Profile.OtherSettings>(Profile.Current, "Other").AutomaticWalkTeleports));
+        RoomGraph.GraphReloaded += () => _teleportChoices = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
         // (canDrive), pre-flighting the floor-1 timer against live encumbrance +

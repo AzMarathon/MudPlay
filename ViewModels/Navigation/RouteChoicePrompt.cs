@@ -8,8 +8,8 @@ namespace MudPlay.ViewModels.Navigation;
 // Shared entry point for user-initiated walks that should offer a route choice.
 // Automated walks (event scripts, death recovery, loops, deposits, party
 // comeback, trainer routing) bypass this and call Walker.WalkTo directly — they
-// take the free-preferring route with no prompt, and whether that may use a
-// teleport is the automatic-walk setting's call (Settings → Other).
+// take the free-preferring route with no prompt, using only the teleports the
+// user allowed automatic walks (Settings → Other).
 //
 // The flow: resolve the current room, then plan (PlanRouteChoice) — the forks in
 // priority order are walk-vs-teleport, trap-avoid, avoid-override, then the

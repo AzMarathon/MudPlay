@@ -29,6 +29,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private readonly RoomTracker _tracker;
     private readonly MovementCoordinator _coordinator;
     private readonly IRoomFilter? _filter;
+
+    // What routes are planned with: the movement filter, and for an automatic walk
+    // the teleports it may use on top (_walkFilter, set while such a walk is planned
+    // and under way).
+    private IRoomFilter? _walkFilter;
+    private IRoomFilter? Filter => _walkFilter ?? _filter;
     private readonly WirePromptScanner? _promptScanner;
     private readonly EngineRecoveryGate? _recovery;
     private Action<byte[]>? _wireSender;
@@ -391,7 +397,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             avoidTraps: _activeAvoidTraps,
             ignoreAvoids: _activeIgnoreAvoids,
             preferTeleportFree: _activePreferTeleportFree,
-            pickedRoute: _activePickedRoute);
+            pickedRoute: _activePickedRoute,
+            automaticTeleports: _activeAutomaticTeleports);
     }
 
     public void AbortFromRecoveryFailure(string detail)
@@ -818,7 +825,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (stopRooms is null || !stopRooms.Contains(destination)) return destination;
         if (source.Equals(destination)) return destination;
 
-        IReadOnlyList<Direction>? path = _bfs.FindPath(source, destination, _filter);
+        IReadOnlyList<Direction>? path = _bfs.FindPath(source, destination, Filter);
         if (path is null || path.Count == 0) return destination;
 
         IReadOnlyList<RoomKey> roomSeq = ReplayRooms(source, path);
@@ -953,21 +960,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool _activeArmAcquisition = true;
     private bool _activePickedRoute;
 
-    // Whether a walk that states no teleport preference plans on foot. A walk the
-    // user starts states one (the route cards pass theirs, and a user's "Teleport"
-    // pick is the consent); a walk the client starts on its own states none, and to
-    // the route search a teleport is one step, so such a walk took whichever vortex
-    // was on the shortest route with nobody asked. Read at the start of each walk, so
-    // a change of the setting reaches the next walk and never a route under way.
-    // Unwired (tests, tooling) it is the shipped setting: plan on foot.
-    private Func<bool> _automaticWalksAvoidTeleports = static () => true;
+    // The teleports a walk the client starts on its own may use, as (room, landing)
+    // pairs. A walk the user starts states its own preference (the route cards pass
+    // theirs, and a user's "Teleport" pick is the consent) and never reads this; a
+    // walk nobody chose a route for states none, and used to take whichever vortex
+    // was on the shortest route with nobody asked. Read as each such walk starts and
+    // kept for the whole walk, so a change of the setting reaches the next walk and
+    // never a route under way. Unwired (tests, tooling) nothing is refused.
+    private Func<IReadOnlySet<(RoomKey From, RoomKey To)>?>? _automaticWalkTeleports;
 
-    // Wired by AppServices from Settings → Other (OtherSettings.AutomaticWalksTakeTeleports).
-    public void SetAutomaticWalkTeleports(Func<bool>? avoid) =>
-        _automaticWalksAvoidTeleports = avoid ?? (static () => true);
+    // Wired by AppServices from Settings → Other (OtherSettings.AutomaticWalkTeleports).
+    public void SetAutomaticWalkTeleports(Func<IReadOnlySet<(RoomKey From, RoomKey To)>?>? allowed) =>
+        _automaticWalkTeleports = allowed;
 
-    // The setting as it stands now, for the bug report.
-    public bool AutomaticWalksAvoidTeleports => _automaticWalksAvoidTeleports();
+    // The setting as it stands now, for the bug report. Null: nothing is refused.
+    public IReadOnlySet<(RoomKey From, RoomKey To)>? AutomaticWalkTeleports => _automaticWalkTeleports?.Invoke();
+
+    private IReadOnlySet<(RoomKey From, RoomKey To)>? _deferredWalkAutomaticTeleports;
+    private IReadOnlySet<(RoomKey From, RoomKey To)>? _activeAutomaticTeleports;
 
     // planThroughAcquirableGates: when true, BFS plans the route as if every
     // acquirable gate item (raft / ticket / door key / hazard counter) were
@@ -1022,14 +1032,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // a room closed: nobody agreed to walk into it.
         bool pickedRoute = false)
     {
-        // Settled once per walk: the deferred fields and the copies a mid-walk re-plan
-        // reads hold the answer, so a change of the setting can't move a route under way.
-        bool automatic = preferTeleportFree is null;
-        bool preferFree = preferTeleportFree ?? _automaticWalksAvoidTeleports();
-        if (automatic)
-            _log?.Info("Walker", preferFree
-                ? $"automatic walk to {destination}: planned on foot, a teleport only if there is no walking route (Settings → Other)"
-                : $"automatic walk to {destination}: teleports allowed (Settings → Other)");
+        // Settled once per walk, before the Reset below clears the walk it replaces:
+        // an in-place re-plan keeps the list its walk began with, a fresh automatic
+        // walk reads the setting, and a walk that states a preference has none.
+        IReadOnlySet<(RoomKey From, RoomKey To)>? automaticTeleports =
+            _replanningInPlace ? _activeAutomaticTeleports
+            : preferTeleportFree is null ? _automaticWalkTeleports?.Invoke()
+            : null;
+        bool preferFree = preferTeleportFree ?? false;
+        if (preferTeleportFree is null && !_replanningInPlace && automaticTeleports is not null)
+            _log?.Info("Walker",
+                $"automatic walk to {destination}: may use {automaticTeleports.Count} allowed teleport(s) (Settings → Other)");
 
         if (State is WalkState.Walking or WalkState.Paused)
         {
@@ -1061,6 +1074,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkAvoidTraps = avoidTraps;
             _deferredWalkIgnoreAvoids = ignoreAvoids;
             _deferredWalkPreferTeleportFree = preferFree;
+            _deferredWalkAutomaticTeleports = automaticTeleports;
             _deferredWalkPickedRoute = pickedRoute;
             _destination = destination;       // populated so status surfaces show the target
             State = WalkState.Walking;
@@ -1075,7 +1089,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps, ignoreAvoids, preferFree, pickedRoute);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps, ignoreAvoids, preferFree, pickedRoute, automaticTeleports);
     }
 
     private bool WalkToImmediate(
@@ -1086,7 +1100,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool avoidTraps = false,
         bool ignoreAvoids = false,
         bool preferTeleportFree = false,
-        bool pickedRoute = false)
+        bool pickedRoute = false,
+        IReadOnlySet<(RoomKey From, RoomKey To)>? automaticTeleports = null)
     {
         // Callers may arrive here from the WalkTo entry (Idle) OR from
         // the deferred dispatch in OnTrackerStateChanged (Walking with
@@ -1094,6 +1109,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // clean slate — Reset takes us to Idle and clears any stale
         // _destination so failures don't leave the walker stuck.
         Reset();
+        _walkFilter = automaticTeleports is null ? null : new AutomaticWalkTeleportFilter(_filter, automaticTeleports);
 
         Room? source = _tracker.State.CurrentRoom;
         if (source is null)
@@ -1134,7 +1150,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         // Route-scoped @wealth warm-up: probes the party only when this walk's
         // tolls-permitted route actually crosses a toll (no-op otherwise).
-        _filter?.WarmForRoute(_bfs, source.Key, destination);
+        Filter?.WarmForRoute(_bfs, source.Key, destination);
 
         // The route picker's "direct" choice plans as if every acquirable gate
         // item were already carried — suspend those gates for the FindPath +
@@ -1143,8 +1159,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // before any stepping so the live filter re-gates for mid-walk replans.
         // A route nobody picked keeps an uncountered hazard room closed.
         IDisposable? gateScope = !planThroughAcquirableGates ? null
-            : pickedRoute ? _filter?.SuspendAcquirableGates()
-            : _filter?.SuspendAcquirableGatesButUncounteredHazards();
+            : pickedRoute ? Filter?.SuspendAcquirableGates()
+            : Filter?.SuspendAcquirableGatesButUncounteredHazards();
         IReadOnlyList<Direction>? path;
         IReadOnlyList<WalkStep> expanded;
         List<UnroutableLeverLeg> unroutable = new();
@@ -1157,10 +1173,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // on a teleport (every user-picked route except an explicit "Teleport" choice)
             // never silently switches to a vortex on a mid-walk re-plan. A hard avoidTeleports
             // still refuses teleports outright with no fallback.
-            path = _bfs.FindPath(source.Key, destination, _filter,
+            path = _bfs.FindPath(source.Key, destination, Filter,
                 refuseTeleports: avoidTeleports || preferTeleportFree, avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
             if (path is null && preferTeleportFree && !avoidTeleports)
-                path = _bfs.FindPath(source.Key, destination, _filter,
+                path = _bfs.FindPath(source.Key, destination, Filter,
                     refuseTeleports: false, avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
 
             // A sea-captain sailing can beat (or replace) the land route. Weigh
@@ -1202,6 +1218,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     && pyramidSolver.CanSolve(destination) && pyramidSolver.TryBegin(destination))
                     return true;
 
+                // An automatic walk stopped by a teleport it may not use says which
+                // one, so the user knows what to tick (or that the trip can't be made).
+                if (_walkFilter is AutomaticWalkTeleportFilter teleports
+                    && DescribeRefusedTeleport(source.Key, destination, teleports) is { } refused)
+                {
+                    Raise(new WalkEvent(WalkEventKind.Failed, refused, destination));
+                    return false;
+                }
+
                 // Name the obstacle on the route the crosser would actually
                 // take, not on the shortest path with every gate wished away.
                 // First re-probe with only the ACQUIRABLE gates suspended
@@ -1216,11 +1241,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // fall back to the all-gates-ignored probe to name the level /
                 // toll / class reason (or "no path" when truly disconnected).
                 IReadOnlyList<Direction>? describePath;
-                using (_filter?.SuspendAcquirableGates())
-                    describePath = _bfs.FindPath(source.Key, destination, _filter);
+                using (Filter?.SuspendAcquirableGates())
+                    describePath = _bfs.FindPath(source.Key, destination, Filter);
                 if (describePath is null || describePath.Count == 0)
                     describePath =
-                        _bfs.FindPath(source.Key, destination, _filter, ignoreExitGates: true);
+                        _bfs.FindPath(source.Key, destination, Filter, ignoreExitGates: true);
 
                 // DescribeBlockedRoute runs with gating restored (the suspension
                 // scope has closed), so DescribeExitBlock reports the real
@@ -1238,7 +1263,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 IReadOnlySet<Direction>? openHere = _tracker.State.CurrentRoom?.Key.Equals(source.Key) == true
                     ? _tracker.ShownOpenExits()
                     : null;
-                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, _filter, _log, openHere, unroutable);
+                expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, Filter, _log, openHere, unroutable);
             }
         }
         finally { gateScope?.Dispose(); }
@@ -1287,6 +1312,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _destination = destination;
         _activeAvoidTeleports = avoidTeleports;
         _activePreferTeleportFree = preferTeleportFree;
+        _activeAutomaticTeleports = automaticTeleports;
         _activeAvoidTraps = avoidTraps;
         _activeIgnoreAvoids = ignoreAvoids;
         _activeThroughGates = planThroughAcquirableGates;
@@ -1372,7 +1398,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // gate suspension by this point, so the filter reads true here.
             if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0
                 && _doorKeySummonable is { } summonable && summonable(exit.KeyItemId)
-                && _filter?.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.LockedDoor) == true
+                && Filter?.DescribeExitBlock(in exit).HasFlag(ExitBlockReason.LockedDoor) == true
                 && !required.Contains(exit.KeyItemId))
                 required.Add(exit.KeyItemId);
             // The hazard sits on the room being entered, so resolve the hop's
@@ -1431,7 +1457,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // user a member may be refused at the dock) beats a bare "no path". With a
         // land route in hand, a gated boat is skipped so we never split the party
         // for a crossing a member can't make.
-        if (_boatPlanner.TryPlan(source, destination, _filter, allowGated: landHops is null)
+        if (_boatPlanner.TryPlan(source, destination, Filter, allowGated: landHops is null)
             is not { } plan)
             return null;
 
@@ -1443,7 +1469,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // / level readings (async), so a re-plan gates on fresh numbers rather
         // than stale ones — the same best-effort warm a toll on a land route gets.
         if (plan.Passage.FareCopper > 0 || plan.Passage.MinLevel > 0)
-            _filter?.WarmForBoat();
+            Filter?.WarmForBoat();
 
         return plan;
     }
@@ -1457,11 +1483,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         List<WalkStep> steps = new();
         if (plan.ToDock.Count > 0)
-            steps.AddRange(RemoteActionPathExpander.Expand(_graph, source, plan.ToDock, _bfs, _filter, _log));
+            steps.AddRange(RemoteActionPathExpander.Expand(_graph, source, plan.ToDock, _bfs, Filter, _log));
         steps.Add(new BoatStep(plan.Passage));
         if (plan.FromArrival.Count > 0)
             steps.AddRange(RemoteActionPathExpander.Expand(
-                _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, _filter, _log));
+                _graph, plan.Passage.ArrivalRoom, plan.FromArrival, _bfs, Filter, _log));
         return steps;
     }
 
@@ -1473,7 +1499,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private SysopGotoRoutePlan? ChooseSysGotoRoute(RoomKey source, RoomKey destination, int? landHops)
     {
         if (_sysGotoPlanner is null || _sysGotoFire is null) return null;
-        if (_sysGotoPlanner.TryPlan(source, destination, _filter) is not { } plan) return null;
+        if (_sysGotoPlanner.TryPlan(source, destination, Filter) is not { } plan) return null;
         if (landHops is { } hops && plan.LandHops + SysGotoHopWeight >= hops) return null;
         return plan;
     }
@@ -1487,7 +1513,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         List<WalkStep> steps = new() { new SysGotoStep(plan.Location) };
         if (plan.FromArrival.Count > 0)
             steps.AddRange(RemoteActionPathExpander.Expand(
-                _graph, plan.LandingRoom, plan.FromArrival, _bfs, _filter, _log));
+                _graph, plan.LandingRoom, plan.FromArrival, _bfs, Filter, _log));
         return steps;
     }
 
@@ -1515,7 +1541,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             Room? room = _graph.GetRoom(cur);
             if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit))
                 break;
-            if (_filter is { } f)
+            if (Filter is { } f)
             {
                 ExitBlockReason hop = f.DescribeExitBlock(in exit);
                 reasons |= hop;
@@ -1531,6 +1557,27 @@ public sealed class AutoWalkManager : IRecoverableEngine
         return FormatBlockReasons(reasons, missingItems, levelGate, doorGate);
     }
 
+    // "no route without the teleport from 3/784 (Darkwood Forest) to 3/740 (Black
+    // Wasteland), which automatic walks aren't allowed to use (Settings → Other)":
+    // the first teleport the route would take with the allow-list lifted that the
+    // list refuses. Null when lifting it finds no route either, so the walk is
+    // blocked by something else and the usual wording names that.
+    private string? DescribeRefusedTeleport(RoomKey source, RoomKey destination, AutomaticWalkTeleportFilter teleports)
+    {
+        IReadOnlyList<Direction>? open = _bfs.FindPath(source, destination, _filter);
+        if (open is null) return null;
+        RoomKey at = source;
+        foreach (Direction dir in open)
+        {
+            if (_graph.GetRoom(at) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if (teleports.IsTeleportRefused(at, in exit))
+                return $"no route without the teleport from {at} ({room.Name}) to {exit.Target} "
+                    + $"({_graph.GetRoom(exit.Target)?.Name ?? "?"}), which automatic walks aren't allowed to use (Settings → Other)";
+            at = exit.Target;
+        }
+        return null;
+    }
+
     // "the exit east of 14/10218 (Small Chamber) is opened from 14/10329 (Central
     // Water Main), which can't be reached from 14/10218: all routes blocked by a
     // room hazard you can't survive — walk there first" — the same gate wording a
@@ -1540,10 +1587,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private string DescribeUnroutableLever(UnroutableLeverLeg leg)
     {
         IReadOnlyList<Direction>? probe;
-        using (_filter?.SuspendAcquirableGates())
-            probe = _bfs.FindPath(leg.From, leg.To, _filter);
+        using (Filter?.SuspendAcquirableGates())
+            probe = _bfs.FindPath(leg.From, leg.To, Filter);
         if (probe is null || probe.Count == 0)
-            probe = _bfs.FindPath(leg.From, leg.To, _filter, ignoreExitGates: true);
+            probe = _bfs.FindPath(leg.From, leg.To, Filter, ignoreExitGates: true);
         string why = probe is { Count: > 0 }
             ? DescribeBlockedRoute(leg.From, probe)
             : DescribeNoPlainRoute(leg.From, leg.To);
@@ -1564,7 +1611,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // room so the user knows their own avoid is the block, not a map dead-end.
     private string DescribeNoPlainRoute(RoomKey source, RoomKey destination)
     {
-        if (_bfs.FirstAvoidBlockingRoute(source, destination, _filter) is { } blocked)
+        if (_bfs.FirstAvoidBlockingRoute(source, destination, Filter) is { } blocked)
             return $"only route is blocked by user set avoid in room ({blocked.Map}/{blocked.Room})";
         return "no path";
     }
@@ -1577,7 +1624,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     public RoomKey? AvoidBlockingRouteTo(RoomKey destination)
     {
         if (_tracker.State.CurrentRoom?.Key is not { } source) return null;
-        return _bfs.FirstAvoidBlockingRoute(source, destination, _filter);
+        return _bfs.FirstAvoidBlockingRoute(source, destination, Filter);
     }
 
     private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems,
@@ -1662,7 +1709,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_graph.GetRoom(from) is null || _graph.GetRoom(to) is null) return null;
         if (from.Equals(to)) return new[] { from };
 
-        IReadOnlyList<Direction>? path = _bfs.FindPath(from, to, _filter);
+        IReadOnlyList<Direction>? path = _bfs.FindPath(from, to, Filter);
         if (path is null || path.Count == 0) return null;
         return ExpandRouteKeys(from, path);
     }
@@ -2365,7 +2412,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // under-level / too-poor members at the dock and leaves them behind. Warn
         // so the user knows a member may not make the crossing, rather than the
         // walk silently splitting the party a head short.
-        ExitBlockReason gate = _filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
+        ExitBlockReason gate = Filter?.DescribeBoatBlock(passage) ?? ExitBlockReason.None;
         if (gate != ExitBlockReason.None)
             _log?.Warn("Walker",
                 $"boat '{passage.Keyword}' is gated ({gate}) — a member may be refused "
@@ -2465,6 +2512,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool ignoreAvoids = _deferredWalkIgnoreAvoids;
         bool preferTeleportFree = _deferredWalkPreferTeleportFree;
         bool pickedRoute = _deferredWalkPickedRoute;
+        IReadOnlySet<(RoomKey From, RoomKey To)>? automaticTeleports = _deferredWalkAutomaticTeleports;
+        _deferredWalkAutomaticTeleports = null;
         _deferredWalkPickedRoute = false;
         _deferredWalkTarget = null;
         _deferredWalkThroughGates = false;
@@ -2475,7 +2524,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkPreferTeleportFree = false;
         _deferredWalkTimer?.Dispose();
         _deferredWalkTimer = null;
-        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps, ignoreAvoids, preferTeleportFree, pickedRoute);
+        WalkToImmediate(deferred, throughGates, armAcquisition, avoidTeleports, avoidTraps, ignoreAvoids, preferTeleportFree, pickedRoute, automaticTeleports);
     }
 
     // Watchdog fire for a deferral whose Confirmed transition never arrived (the
@@ -3302,6 +3351,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _deferredWalkIgnoreAvoids = false;
         _deferredWalkPreferTeleportFree = false;
         _deferredWalkPickedRoute = false;
+        _deferredWalkAutomaticTeleports = null;
+        _activeAutomaticTeleports = null;
+        _walkFilter = null;
         _activePickedRoute = false;
         _activeAvoidTeleports = false;
         _activePreferTeleportFree = false;

@@ -2,8 +2,8 @@
 
 ## 3.149.0
 
-- New option in Settings → Other for walks the client starts on its own (bank and sell trips, training trips, Auto-Lair, events, remote commands): Don't take teleports (the default) or Take teleports
-- Don't take teleports plans those walks on foot and uses a teleport only when there is no walking route
+- New in Settings → Other: Allow automatic walks to use the following teleports, a list built from your game data, biggest areas first; none are ticked by default
+- Automatic walks (bank and sell trips, training trips, Auto-Lair, events, remote commands) use only the teleports you tick; a trip that needs another stops and names it
 - Walks you start yourself are unchanged: a walk-to asks on the route cards, a loop you start and Recover Now take the shortest route
 
 ## 3.148.9

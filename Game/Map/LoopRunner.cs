@@ -838,7 +838,7 @@ public sealed class LoopRunner : IRecoverableEngine
     // userStarted: the user pressed Start on this loop, against an event, a remote
     // command or a sweep starting it. The walk to the loop is then the user's own and
     // keeps the shortest route; started any other way it is an automatic walk and
-    // follows the automatic-walk teleport setting (AutoWalkManager.SetAutomaticWalkTeleports).
+    // uses only the teleports allowed to those (AutoWalkManager.SetAutomaticWalkTeleports).
     public bool Start(Loop loop, bool userStarted = false)
     {
         _userStartedRun = userStarted;
@@ -851,7 +851,7 @@ public sealed class LoopRunner : IRecoverableEngine
     private bool _userStartedRun;
 
     // The teleport preference the walks to the loop state: none for an automatic run
-    // (the walker then asks the setting), "shortest route" for the user's own.
+    // (the walker then applies the allowed list), "shortest route" for the user's own.
     private bool? ApproachTeleportPreference => _userStartedRun ? false : null;
 
     // Resume a loop after an auto-deposit / bank / trainer detour that Stop()ed it

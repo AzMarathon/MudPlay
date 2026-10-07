@@ -104,18 +104,17 @@ public sealed class OtherSettings
     public bool RunStopRestoresCombat { get; set; }
     public bool SprintStopEndsSprint { get; set; }
 
-    // Whether a walk the client starts on its own may use a teleport (a vortex, a
-    // gateway, an item or command that teleports). To the route search a teleport is
-    // one step, so it is nearly always on the shortest route, and it can land the
-    // character somewhere it can't survive: a call the client can't make. A walk the
-    // user starts is asked about on the route cards; a walk nobody is there to ask
-    // (a bank or sell trip, an auto-train or spell-buying trip, Auto-Lair, an event,
-    // another player's remote command) follows this instead.
-    //   false (the default): plan on foot, and use a teleport only when there is no
-    //   walking route at all.
-    //   true: take the shortest route, teleports included.
-    // Char-tier; Settings → Other. Read live by AutoWalkManager (SetAutomaticWalkTeleports).
-    public bool AutomaticWalksTakeTeleports { get; set; }
+    // The teleports a walk the client starts on its own may use, each stored as
+    // "map/room>map/room" (where it is, where it lands; TeleportCatalog.KeyOf). To
+    // the route search a teleport is one step, so it is nearly always on the
+    // shortest route, and it can land the character somewhere it can't survive: a
+    // call the client can't make. A walk the user starts is asked about on the
+    // route cards; a walk nobody is there to ask (a bank or sell trip, an auto-train
+    // or spell-buying trip, Auto-Lair, an event, another player's remote command)
+    // uses only what is listed here. Empty, the default, is none: such a walk fails
+    // and says which teleport it needed. Char-tier; Settings → Other lists them from
+    // the game data. Read as each automatic walk starts (AutoWalkManager).
+    public List<string> AutomaticWalkTeleports { get; set; } = new();
 
     // When true (default) a look at a monster prints its estimated remaining hit
     // points as a yellow line in the terminal scrollback. The status bar's target
