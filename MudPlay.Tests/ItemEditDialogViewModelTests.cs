@@ -139,26 +139,40 @@ public sealed class ItemEditDialogViewModelTests
     }
 
     // A real export's room-command items came up with every coffin room under Given
-    // by and again under Room command. The Room command group says more (command,
-    // chance, walk link), so its rooms are left out of Given by.
+    // by and again under Room command. With a Room command group on the item, Given
+    // by leaves every room out, listed below or not, and keeps the NPCs.
     [Fact]
-    public void Givers_LeaveOutRoomsTheRoomCommandGroupLists()
+    public void Givers_WithARoomCommandGroup_KeepOnlyNpcs()
     {
         RoomCommandRow pry = new(new[] { "pry coffin" }, "1.5%", new[]
         {
             new PlacedInRow("Tomb - 17/278", 17, 278),
-            new PlacedInRow("Tomb - 17/287", 17, 287),
         });
         ItemGiver[] givers =
         {
             new(ItemGiverKind.Room, 0, 17, 278, "Tomb", "", "14", false),
-            new(ItemGiverKind.Room, 0, 17, 287, "Tomb", "", "14", false),
             new(ItemGiverKind.Room, 0, 17, 1792, "Library", "", "search shelves", true),
             new(ItemGiverKind.Monster, 278, 0, 0, "old hermit", "", "key", true),
         };
 
         IReadOnlyList<ItemGiverRow> rows = ItemEditDialogViewModel.BuildGivers(givers, new[] { pry });
 
-        Assert.Equal(new[] { "Library", "old hermit" }, rows.Select(r => r.Name));
+        Assert.Equal(new[] { "old hermit" }, rows.Select(r => r.Name));
+    }
+
+    // An export without room commands has no such group: Given by is whole.
+    [Fact]
+    public void Givers_WithNoRoomCommandGroup_AreAllShown()
+    {
+        ItemGiver[] givers =
+        {
+            new(ItemGiverKind.Room, 0, 17, 278, "Tomb", "", "14", false),
+            new(ItemGiverKind.Monster, 278, 0, 0, "old hermit", "", "key", true),
+        };
+
+        IReadOnlyList<ItemGiverRow> rows =
+            ItemEditDialogViewModel.BuildGivers(givers, Array.Empty<RoomCommandRow>());
+
+        Assert.Equal(new[] { "Tomb", "old hermit" }, rows.Select(r => r.Name));
     }
 }

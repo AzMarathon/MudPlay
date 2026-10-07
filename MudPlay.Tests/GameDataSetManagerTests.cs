@@ -232,15 +232,15 @@ public sealed class GameDataSetManagerTests : IDisposable
         string dst = CreateSet();
         SeedLoop(src, "a.loop");
         File.WriteAllText(AppPaths.MessagesFile(src), "old messages");
-        File.WriteAllText(AppPaths.MessageCandidatesFile(src), "old lines");
+        File.WriteAllText(AppPaths.FlavorPrefixesFile(src), "old prefixes");
         File.WriteAllText(AppPaths.MessagesFile(dst), "the new set's messages");
 
         GameDataSetManager.OpResult result = NewManager(cache)
-            .Copy(src, dst, GameDataSetPart.Messages | GameDataSetPart.UnrecognizedLines);
+            .Copy(src, dst, GameDataSetPart.Messages | GameDataSetPart.RecordOverrides);
 
         Assert.True(result.Ok, result.Message);
         Assert.Equal("old messages", File.ReadAllText(AppPaths.MessagesFile(dst)));
-        Assert.Equal("old lines", File.ReadAllText(AppPaths.MessageCandidatesFile(dst)));
+        Assert.Equal("old prefixes", File.ReadAllText(AppPaths.FlavorPrefixesFile(dst)));
         Assert.False(Directory.Exists(AppPaths.GameDataSetLoopsFolder(dst)));   // loops weren't ticked
         Assert.True(File.Exists(AppPaths.MessagesFile(src)));                   // a copy keeps the source
     }
@@ -322,11 +322,11 @@ public sealed class GameDataSetManagerTests : IDisposable
         GameDataSetPart changed = GameDataSetPart.None;
         GameDataSetManager manager = new(cache, c => changed = c, _ => { });
         GameDataSetManager.OpResult result =
-            manager.Copy(src, dst, GameDataSetPart.Messages | GameDataSetPart.UnrecognizedLines);
+            manager.Copy(src, dst, GameDataSetPart.Messages | GameDataSetPart.RecordOverrides);
 
         Assert.True(result.Ok, result.Message);
         Assert.Equal(GameDataSetPart.Messages, changed);
-        Assert.Contains("Nothing there for: unrecognized lines", result.Message);
+        Assert.Contains("Nothing there for: Game Data Browser edits", result.Message);
     }
 
     // ----- Delete ----------------------------------------------------

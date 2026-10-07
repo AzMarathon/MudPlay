@@ -293,11 +293,9 @@ public static class AppPaths
     public static string MonsterMessagesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "monster-messages.json");
 
-    // Per-set staged message candidates — raw wire lines MessageCandidateWatcher
-    // captured because they matched no MessagesFile record and no registered
-    // MessageRouter pattern. Pure runtime-observed state, not curated data, so
-    // unlike MessagesFile there is no seed-file fallback.
-    public static string MessageCandidatesFile(string setName) =>
+    // Where unrecognized lines used to be kept, per game-data set, before they moved
+    // to the realm (RealmMessageCandidatesFile). A realm with none takes a copy.
+    public static string LegacySetMessageCandidatesFile(string setName) =>
         Path.Combine(GameDataSetDir(setName), "message-candidates.json");
 
     // Per-set editable flavor-prefix vocabulary — the adjectives the game prepends
@@ -661,6 +659,12 @@ public static class AppPaths
     // update far more often than the room labels do.
     public static string RealmRoombaItemsFile(string realmFolder) =>
         Path.Combine(realmFolder, "roomba_items.json");
+
+    // The realm's unrecognized lines — raw wire lines MessageCandidateWatcher
+    // captured because they matched no message record and no registered router
+    // pattern. What the characters on the realm saw, so the realm's.
+    public static string RealmMessageCandidatesFile(string realmFolder) =>
+        Path.Combine(realmFolder, "message-candidates.json");
 
     // The realm's boss list — the user-owned layer (added / removed bosses, edited
     // rooms, stop-before flags), a delta over DefaultBossDefsSeedFile. Two realms on

@@ -32,7 +32,7 @@
     <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="16">
 
         <TextBlock Grid.Row="0"
-                   Text="Loops, message edits and your Game Data Browser changes are kept per game-data set. Copy or move the ones you tick from one set into another (after importing a newer MDB under a new name, say), or delete a set outright (its game-data tables and its loops). Favourites and triggers belong to each character and the boss list to the realm, so they follow those and need no copying."
+                   Text="Loops, message edits and your Game Data Browser changes are kept per game-data set. Copy or move the ones you tick from one set into another (after importing a newer MDB under a new name, say), or delete a set outright (its game-data tables and its loops). Favourites and triggers belong to each character, and the boss list and unrecognized lines to the realm, so they follow those and need no copying."
                    TextWrapping="Wrap"
                    FontSize="11"
                    Foreground="{StaticResource ChromeFgMutedBrush}"

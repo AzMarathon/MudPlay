@@ -2743,6 +2743,7 @@ public sealed class AppServices
         // through ResolveActiveBbs so Quick Connect and the BBS pin
         // resolution chain stay the single source of truth.
         Players = new PlayerDatabase(Profile, ActiveRealmFolder);
+        Tick.HeartbeatElapsed += () => Players.TakeInOutsideChanges();
         // Board-specific disconnect line: PartyManager reads the active BBS's
         // custom DisconnectPattern live (empty on boards that use the standard
         // lines) and resolves a captured presence name — which on some boards is
@@ -3455,10 +3456,14 @@ public sealed class AppServices
         // same per-set storage + universal seed fallback pattern.
         MonsterMessages = new MonsterMessageStore(Log);
         GameData.ActiveSetChanged += MonsterMessages.Load;
-        // Staged candidates are pure runtime-observed state (no seed fallback),
-        // but still reload per set like every other game-data-scoped store.
+        // Staged candidates are what the characters on a realm saw there, so they
+        // load per realm and take in what another client on it recorded.
         MessageCandidates = new MessageCandidateStore(Log);
-        GameData.ActiveSetChanged += MessageCandidates.Load;
+        Profile.ProfileLoaded += _ => MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.BbsPinApplied += _ => MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        Profile.ProfileClosed += () => MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        MessageCandidates.Load(ActiveRealmFolder(), ProfileGameDataSet());
+        Tick.HeartbeatElapsed += () => MessageCandidates.TakeInOutsideChanges();
         // Per-set flavor-adjective vocabulary the room classifier strips ("large
         // giant rat" → "giant rat"). Defaults to the built-in stock list; a
         // custom realm's edits persist per set. Reloads on every set switch.
@@ -3800,6 +3805,11 @@ public sealed class AppServices
         Profile.BbsPinApplied += _ => GhRoomLabels.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileLoaded += _ => GhItemLocations.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => GhItemLocations.OnRealmChanged(ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () =>
+        {
+            GhRoomLabels.TakeInOutsideChanges();
+            GhItemLocations.TakeInOutsideChanges();
+        };
         // Feed the player's level into Form-A exit level-gate evaluation.
         // null until a stat screen parses — IsExitBlocked never gates on
         // an unknown level, so an unparsed character walks unrestricted.
@@ -7327,6 +7337,7 @@ public sealed class AppServices
         Leaderboards = new LeaderboardSnapshotStore(Log);
         Profile.ProfileLoaded += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
         Profile.BbsPinApplied += _ => Leaderboards.OnRealmChanged(ActiveRealmFolder());
+        Tick.HeartbeatElapsed += () => Leaderboards.TakeInOutsideChanges();
         LeaderboardCapture = new Game.Leaderboard.LeaderboardCaptureTracker(Leaderboards, PromptScanner, Log);
         // The top list states each listed player's class outright; put it on the
         // records of the players we know. Off the capture, not the store's load: a

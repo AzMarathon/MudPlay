@@ -24,16 +24,19 @@ public sealed class MessageCandidateStore
     // MessageStore/MonsterMessageStore's rationale.
     public BulkObservableCollection<MessageCandidateRecord> Candidates { get; } = new();
 
-    // Set name currently sourcing Candidates, or null when none is active.
-    public string? ActiveSet { get; private set; }
+    // The realm whose lines are loaded, or null when none. Unrecognized lines are
+    // what the characters on a realm saw there, so they are the realm's: they were
+    // kept with the game-data set, which two realms can share.
+    public string? ActiveRealmFolder { get; private set; }
 
-    // Debounce flag for QueueSave — RecordSighting is a hot path (every
-    // unrecognized line in active play can call it), unlike MessageStore's rare,
-    // interactive edits, so a synchronous atomic-rename JsonStore.Save on every
-    // single occurrence-bump would mean disk I/O per repeated unrecognized
-    // line. Mirrors SpellCoverageAuditor's QueueRun idiom: mutate Candidates
-    // immediately (an open Browser tab reflects it live), coalesce the actual
-    // write onto the dispatcher.
+    // Every client on the realm records into the one file. What this client changed
+    // since it last read or wrote the file is kept here, so that a write is the
+    // file as the last character left it plus these changes, not this client's whole
+    // copy over theirs.
+    private readonly SharedFileStamp _stamp = new();
+    private readonly HashSet<string> _changedHere = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _removedHere = new(StringComparer.Ordinal);
+
     private bool _saveQueued;
 
     public MessageCandidateStore() { }
@@ -44,16 +47,76 @@ public sealed class MessageCandidateStore
         _log = log;
     }
 
-    // Switch the catalogue to setName's on-disk file. Pass null to clear (no
-    // set active).
-    public void Load(string? setName)
+    // Load realmFolder's lines. legacySet names the game-data set the realm runs
+    // on: a realm with no file of its own yet takes a copy of the one that set
+    // carried, from when the lines were kept per set.
+    public void Load(string? realmFolder, string? legacySet = null)
     {
-        ActiveSet = setName;
-        if (string.IsNullOrWhiteSpace(setName)) { Candidates.ReplaceAll([]); return; }
+        ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
+        _changedHere.Clear();
+        _removedHere.Clear();
+        if (ActiveRealmFolder is null) { Candidates.ReplaceAll([]); return; }
 
-        List<MessageCandidateRecord> loaded =
-            TryLoad(AppPaths.MessageCandidatesFile(setName)) ?? [];
-        Candidates.ReplaceAll(loaded);
+        string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
+        AdoptLegacyFile(path, legacySet);
+        _stamp.Mark(path);
+        Candidates.ReplaceAll(TryLoad(path) ?? []);
+    }
+
+    private void AdoptLegacyFile(string realmFile, string? legacySet)
+    {
+        if (string.IsNullOrWhiteSpace(legacySet) || File.Exists(realmFile)) return;
+        string legacy = AppPaths.LegacySetMessageCandidatesFile(legacySet);
+        if (!File.Exists(legacy)) return;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(realmFile)!);
+            File.Copy(legacy, realmFile);
+        }
+        catch (IOException)
+        {
+            // Another client on the realm copied it first — the file is where it belongs.
+        }
+    }
+
+    // Re-read the lines when another client on the realm has written them, keeping
+    // what this client changed since. Called on the heartbeat. True when re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (ActiveRealmFolder is null) return false;
+        string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
+        return _stamp.ChangedOutside(path) && Rebase(path);
+    }
+
+    // Make the list the file's, with this client's unsaved changes on top: a line
+    // both saw keeps the later sighting, the higher count and a dismissal from
+    // either. False when the file is there but can't be read (the list is kept).
+    private bool Rebase(string path)
+    {
+        List<MessageCandidateRecord>? onFile = File.Exists(path) ? TryLoad(path) : [];
+        if (onFile is null) return false;
+
+        Dictionary<string, MessageCandidateRecord> mine = new(StringComparer.Ordinal);
+        foreach (MessageCandidateRecord c in Candidates)
+            if (_changedHere.Contains(c.Id)) mine[c.Id] = c;
+
+        List<MessageCandidateRecord> merged = new(onFile.Count + mine.Count);
+        foreach (MessageCandidateRecord theirs in onFile)
+        {
+            if (_removedHere.Contains(theirs.Id)) continue;
+            if (!mine.Remove(theirs.Id, out MessageCandidateRecord? ours)) { merged.Add(theirs); continue; }
+            MessageCandidateRecord latest = theirs.LastSeenAt > ours.LastSeenAt ? theirs : ours;
+            merged.Add(latest with
+            {
+                Occurrences = Math.Max(theirs.Occurrences, ours.Occurrences),
+                Dismissed = theirs.Dismissed || ours.Dismissed,
+            });
+        }
+        merged.AddRange(mine.Values);   // first seen here
+
+        _stamp.Mark(path);
+        Candidates.ReplaceAll(merged);
+        return true;
     }
 
     // Parsed list (possibly empty) iff the file existed AND parsed cleanly;
@@ -73,12 +136,16 @@ public sealed class MessageCandidateStore
         }
     }
 
-    // Persist Candidates to ActiveSet's file immediately (synchronous) — used by
-    // the debounced QueueSave callback and available directly for tests.
+    // Write the realm's file: what is on file now, plus this client's changes.
     public void Save()
     {
-        if (string.IsNullOrWhiteSpace(ActiveSet)) return;
-        JsonStore.Save(AppPaths.MessageCandidatesFile(ActiveSet), Candidates);
+        if (ActiveRealmFolder is null) return;
+        string path = AppPaths.RealmMessageCandidatesFile(ActiveRealmFolder);
+        if (_stamp.ChangedOutside(path)) Rebase(path);
+        JsonStore.Save(path, Candidates);
+        _stamp.Mark(path);
+        _changedHere.Clear();
+        _removedHere.Clear();
     }
 
     // Insert-or-bump keyed by ComputeId(rawText). A dismissed record still gets
@@ -107,6 +174,7 @@ public sealed class MessageCandidateStore
                 Occurrences = Candidates[i].Occurrences + 1,
             };
             Candidates[i] = bumped;
+            _changedHere.Add(id);
             QueueSave();
             return (bumped, false);
         }
@@ -114,6 +182,8 @@ public sealed class MessageCandidateStore
         MessageCandidateRecord created = new(
             id, rawText, when, when, Occurrences: 1, Dismissed: false, Map: map, Room: room);
         Candidates.Add(created);
+        _changedHere.Add(id);
+        _removedHere.Remove(id);
         QueueSave();
         return (created, true);
     }
@@ -131,6 +201,7 @@ public sealed class MessageCandidateStore
             if (Candidates[i].Id != id) continue;
             if (Candidates[i].Dismissed) return;
             Candidates[i] = Candidates[i] with { Dismissed = true };
+            _changedHere.Add(id);
             QueueSave();
             return;
         }
@@ -169,6 +240,8 @@ public sealed class MessageCandidateStore
         {
             if (Candidates[i].Id != id) continue;
             Candidates.RemoveAt(i);
+            _changedHere.Remove(id);
+            _removedHere.Add(id);
             QueueSave();
             return;
         }

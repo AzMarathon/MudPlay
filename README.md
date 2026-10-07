@@ -10,11 +10,13 @@
 > - A held character with a step just sent fights back instead of waiting on a move that can't happen
 > - A walk no longer sends a step twice after swapping gear for the room ahead
 > - The MDB IMPORT COMPLETE line says whether the export has a lairs table and room commands, instead of "old / new format"
-> - Manage Game Data copies or moves what you tick between sets: loops, message edits, unrecognized lines and Game Data Browser edits
+> - Manage Game Data copies or moves what you tick between sets: loops, message edits and Game Data Browser edits
 > - The boss list is kept per realm; each realm starts with a copy of the list its game data had
 > - Triggers are all per character, like macros and aliases; each character takes its own copy of the triggers that were saved to the game data
 > - GOTO favourites are per character; each character takes its own copy of the shared list, and a new character starts with the bundled starters
-> - An item's Given by no longer repeats the rooms its Room command group lists
+> - Unrecognized lines are kept per realm; each realm starts with a copy of the list its game data had
+> - The player database, Roomba labels and sightings, leaderboard captures and unrecognized lines keep what every character on the realm records; two clients no longer overwrite each other
+> - An item with a Room command group lists only NPCs under Given by; the rooms are in the group
 > - Item records with long room lists open in a moment instead of a couple of seconds
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

@@ -395,22 +395,19 @@ public sealed partial class ItemEditDialogViewModel : ObservableObject, IDialogV
         return rows;
     }
 
-    // A room the Room command group lists is the same hand-over, shown there with
-    // its command, its chance and a walk link, so it is left out of Given by. Matched
-    // on the room alone: a rolled give's keyword is its roll bracket, not the command.
+    // An item with a Room command group has its room hand-overs shown there, with
+    // the command, the chance and a walk link, so Given by leaves every room out and
+    // keeps only the NPCs that hand the item over (user, 2026-10-06). An export
+    // without room commands has no such group and its Given by is whole.
     internal static IReadOnlyList<ItemGiverRow> BuildGivers(
         IReadOnlyList<ItemGiver>? givers, IReadOnlyList<RoomCommandRow> roomCommands)
     {
         if (givers is null || givers.Count == 0) return Array.Empty<ItemGiverRow>();
-        HashSet<(int Map, int Room)> listedBelow = new();
-        foreach (RoomCommandRow row in roomCommands)
-            foreach (PlacedInRow room in row.Rooms)
-                listedBelow.Add((room.Map, room.Room));
-
+        bool roomsShownBelow = roomCommands.Count > 0;
         var rows = new List<ItemGiverRow>(givers.Count);
         foreach (ItemGiver g in givers)
         {
-            if (g.Kind == ItemGiverKind.Room && listedBelow.Contains((g.Map, g.Room))) continue;
+            if (roomsShownBelow && g.Kind == ItemGiverKind.Room) continue;
             rows.Add(new ItemGiverRow(g));
         }
         return rows;

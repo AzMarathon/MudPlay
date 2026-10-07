@@ -53,6 +53,7 @@ public sealed class LeaderboardSnapshotStore
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         Captured?.Invoke(snapshot);
+        TakeInOutsideChanges();
         if (_snapshots.Count > 0 && !DiffersFrom(_snapshots[0], snapshot))
         {
             _log?.Log(LogSeverity.Info, "Leaderboard",
@@ -138,6 +139,7 @@ public sealed class LeaderboardSnapshotStore
     // Wipe the history for the active realm (the tab's "Clear history" button).
     public void Clear()
     {
+        TakeInOutsideChanges();
         if (_snapshots.Count == 0) return;
         _snapshots.Clear();
         Persist();
@@ -162,28 +164,52 @@ public sealed class LeaderboardSnapshotStore
 
         _realmFolder = realmFolder;
         _snapshots.Clear();
-
-        string path = AppPaths.RealmLeaderboardFile(realmFolder);
-        if (File.Exists(path))
+        if (TryRead(out List<LeaderboardSnapshot> loaded))
         {
-            try
-            {
-                string raw = File.ReadAllText(path);
-                List<LeaderboardSnapshot>? loaded =
-                    JsonSerializer.Deserialize<List<LeaderboardSnapshot>>(raw);
-                if (loaded is not null)
-                    _snapshots.AddRange(loaded);
-                _log?.Log(LogSeverity.Info, "Leaderboard",
-                    $"Loaded {_snapshots.Count} snapshot(s) from '{path}'.");
-            }
-            catch (JsonException ex)
-            {
-                _log?.Log(LogSeverity.Warn, "Leaderboard",
-                    $"Failed to parse '{path}': {ex.Message}");
-            }
+            _snapshots.AddRange(loaded);
+            _log?.Log(LogSeverity.Info, "Leaderboard",
+                $"Loaded {_snapshots.Count} snapshot(s) for '{realmFolder}'.");
         }
 
         Changed?.Invoke();
+    }
+
+    private readonly SharedFileStamp _stamp = new();
+
+    // Re-read the history when another client on the realm has written it: every
+    // character on it captures into the one file. Called on the heartbeat and before
+    // a change. A file caught mid-write is left for the next call, the history kept.
+    public bool TakeInOutsideChanges()
+    {
+        if (_realmFolder is null) return false;
+        if (!_stamp.ChangedOutside(AppPaths.RealmLeaderboardFile(_realmFolder))) return false;
+        if (!TryRead(out List<LeaderboardSnapshot> loaded)) return false;
+        _snapshots.Clear();
+        _snapshots.AddRange(loaded);
+        _log?.Log(LogSeverity.Debug, "Leaderboard",
+            "history re-read: another client on this realm changed it");
+        Changed?.Invoke();
+        return true;
+    }
+
+    // Read the realm's file. False when it is there but can't be read or parsed.
+    private bool TryRead(out List<LeaderboardSnapshot> loaded)
+    {
+        loaded = new List<LeaderboardSnapshot>();
+        string path = AppPaths.RealmLeaderboardFile(_realmFolder!);
+        if (!File.Exists(path)) { _stamp.Mark(path); return true; }
+        try
+        {
+            loaded = JsonSerializer.Deserialize<List<LeaderboardSnapshot>>(File.ReadAllText(path))
+                     ?? new List<LeaderboardSnapshot>();
+            _stamp.Mark(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException)
+        {
+            _log?.Log(LogSeverity.Warn, "Leaderboard", $"Failed to read '{path}': {ex.Message}");
+            return false;
+        }
     }
 
     private void Persist()
@@ -192,6 +218,11 @@ public sealed class LeaderboardSnapshotStore
         string path = AppPaths.RealmLeaderboardFile(_realmFolder);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var opts = new JsonSerializerOptions { WriteIndented = true };
-        File.WriteAllText(path, JsonSerializer.Serialize(_snapshots, opts));
+        // Written beside the file and moved over it, so another client reading at
+        // this moment sees the old history or the new, never half of one.
+        string temp = $"{path}.{Environment.ProcessId}.tmp";
+        File.WriteAllText(temp, JsonSerializer.Serialize(_snapshots, opts));
+        File.Move(temp, path, overwrite: true);
+        _stamp.Mark(path);
     }
 }

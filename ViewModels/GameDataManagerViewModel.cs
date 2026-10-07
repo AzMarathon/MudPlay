@@ -32,8 +32,6 @@ public sealed partial class GameDataManagerViewModel
             "Loops, Auto-Lair setups and the nav folders they sit in. Added to the destination's; a loop of the same name is replaced."),
         new(GameDataSetPart.Messages, "Message edits",
             "Your changes to spell and condition messages, monster messages and flavor prefixes. Replaces the destination's."),
-        new(GameDataSetPart.UnrecognizedLines, "Unrecognized lines",
-            "Lines captured for review. Replaces the destination's."),
         new(GameDataSetPart.RecordOverrides, "Game Data Browser edits",
             "Your changes to items, monsters, spells, rooms and the other tables, at every level: all characters, each realm and each character. Replaces the destination's."),
     };

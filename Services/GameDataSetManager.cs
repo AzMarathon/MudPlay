@@ -51,7 +51,6 @@ public sealed class GameDataSetManager
     {
         (GameDataSetPart.Loops,             "loops and lair setups"),
         (GameDataSetPart.Messages,          "message edits"),
-        (GameDataSetPart.UnrecognizedLines, "unrecognized lines"),
         (GameDataSetPart.RecordOverrides,   "Game Data Browser edits"),
     };
 
@@ -171,7 +170,6 @@ public sealed class GameDataSetManager
             AppPaths.MonsterMessagesFile(setName),
             AppPaths.FlavorPrefixesFile(setName),
         },
-        GameDataSetPart.UnrecognizedLines => new[] { AppPaths.MessageCandidatesFile(setName) },
         _ => Array.Empty<string>(),
     };
 
