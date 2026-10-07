@@ -893,17 +893,38 @@ public sealed class BossTimerTests : IDisposable
     // death line isn't on record, so nothing named the kill and no timer started.
     // The damage lines still name it: when it is the only monster they named, the
     // unnamed death is the boss's.
-    [Fact]
-    public void UnnamedDeathInTheDark_NamedOnlyByTheDamageLines_MarksTheBoss()
+    // It has four rooms, and the kill counts in any of them.
+    [Theory]
+    [InlineData(2812)]
+    [InlineData(2813)]
+    [InlineData(2814)]
+    [InlineData(2815)]
+    public void UnnamedDeathInTheDark_NamedOnlyByTheDamageLines_MarksTheBoss(int room)
     {
         SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
-        SeedBosses(Boss("darken beast lord", number: 930, rooms: "17/2812"));
+        SeedBosses(Boss("darken beast lord", number: 930,
+            rooms: new[] { "17/2812", "17/2813", "17/2814", "17/2815" }));
         var (_, timers, _) = NewStores();
 
-        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2812), engagedName: null,
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, room), engagedName: null,
             recentFoes: new[] { "Darken Beast Lord" });
 
         Assert.NotNull(timers.KilledAt("darken beast lord"));
+    }
+
+    // Outside its rooms the same lines mark nothing.
+    [Fact]
+    public void UnnamedDeath_OutsideTheBosssRooms_MarksNothing()
+    {
+        SeedGameData(RealmType.ParaMud, ("darken beast lord", 930, 15, 1));
+        SeedBosses(Boss("darken beast lord", number: 930,
+            rooms: new[] { "17/2812", "17/2813", "17/2814", "17/2815" }));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(17, 2811), engagedName: null,
+            recentFoes: new[] { "Darken Beast Lord" });
+
+        Assert.Null(timers.KilledAt("darken beast lord"));
     }
 
     // Something else was in the fight: the unnamed death could be that one's.
