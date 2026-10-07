@@ -107,12 +107,15 @@ public sealed class CombatStateTracker : IDisposable
 
     // A see-hidden monster broke this stealth runner's sneak, and it hasn't been
     // sneaking again since. The break belongs to the character, not to the room it
-    // happened in: carried into the next room, by a move already on the wire or with
-    // the monster in tow, the character is still exposed there for the same reason,
-    // so that room is cleared too (user, 2026-10-07). It lasts until a sneak takes
-    // again (NoteSneakRegained) or the option is switched off.
+    // happened in: carried into the next room, by a move already on the wire or past
+    // a room outside the Min/Max window, the character is still exposed for the same
+    // reason, so the first room that meets the window is cleared (user, 2026-10-07).
+    // It lasts until a sneak takes again (NoteSneakRegained) or the option is
+    // switched off.
     private bool _sneakBrokenBySeeHidden;
     public bool SneakBrokenBySeeHidden => _sneakBrokenBySeeHidden;
+    // Says once per room that the break is on but the room is outside the window.
+    private bool _outsideWindowLogged;
 
     // A fresh `sn` was answered cleanly: the character is sneaking again.
     public void NoteSneakRegained()
@@ -186,8 +189,9 @@ public sealed class CombatStateTracker : IDisposable
     // route with combat OFF that hits a room holding a SeeHidden monster can't
     // re-sneak there; running onward would drag and stack monsters across rooms,
     // lethal when solo. When CombatSettings.ClearHostilesWhenSeenHidden is on,
-    // this latches on entry to such a room — holding the Combat gate (so the
-    // walker actually stops) until every engageable hostile is gone.
+    // this latches in the first room inside the Min/Max monster window from then
+    // on (that room, or a later one) — holding the Combat gate (so the walker
+    // actually stops) until every engageable hostile is gone.
     // CombatManager reads this to engage despite combat-off.
     public bool SeeHiddenClearActive => _seeHiddenClearLatch;
 
@@ -607,24 +611,32 @@ public sealed class CombatStateTracker : IDisposable
         // threat until we hit it, so it must not read as "a hostile is here."
         _hostilePresent = attacking > 0;
 
-        // See-hidden force-clear override for stealth runners — applies with
-        // auto-attack ON or OFF (hoisted above the split). A stealth character
-        // (AutoSneak on) sprinting a walk-to route enters a room whose SeeHidden
-        // monster breaks sneak; running onward would drag/stack the room's
-        // monsters across rooms (lethal solo). With the toggle on we force-clear
-        // the WHOLE room — holding the walker gate here, and (via CombatManager's
-        // SeeHiddenClearActive read) bypassing the Min/Max monster gate — so the
-        // route can re-sneak and go back to avoiding combat. Once latched, hold
-        // until every engageable hostile is gone, even after the SeeHidden monster
-        // itself dies.
-        //
-        // The break outlasts the room it happened in (_sneakBrokenBySeeHidden):
-        // until the character is sneaking again, every room it lands in with
-        // something killable is cleared the same way, see-hidden monster or not.
+        // See-hidden clear for stealth runners — applies with auto-attack ON or OFF
+        // (hoisted above the split). A stealth character (AutoSneak on) sprinting a
+        // walk-to route enters a room whose SeeHidden monster breaks its sneak;
+        // running onward would drag/stack the room's monsters across rooms (lethal
+        // solo). The rule (user, 2026-10-07):
+        //   - The break is the character's, not the room's (_sneakBrokenBySeeHidden):
+        //     it lasts until the character is sneaking again.
+        //   - While it lasts, the first room that meets the Min/Max monster window is
+        //     where the character stops and clears EVERYTHING, so it can re-sneak. A
+        //     room outside the window is walked through, as the settings say for any
+        //     fight, with the break still on; so is a room it was carried into by a
+        //     move already sent.
+        //   - Once stopped the clear is latched: held until every engageable hostile
+        //     is gone, whatever the count does meanwhile (CombatManager reads
+        //     SeeHiddenClearActive to fight on past the window).
+        //   - The re-sneak after the clear ends the break (NoteSneakRegained) and the
+        //     route goes back to sneaking past everything.
         bool stealthRunner = _clearWhenSeenHidden?.Invoke() == true
                              && _isAutoSneakEnabled?.Invoke() == true;
         if (!stealthRunner) _sneakBrokenBySeeHidden = false;
-        bool seeHiddenArm = stealthRunner && (roomHasSeeHidden || _sneakBrokenBySeeHidden);
+        else if (roomHasSeeHidden && !_sneakBrokenBySeeHidden)
+        {
+            _sneakBrokenBySeeHidden = true;
+            _log?.Info(LogCategory, "a see-hidden monster broke the sneak — the next room inside the Min/Max window is cleared, then re-sneak");
+        }
+        bool seeHiddenArm = _sneakBrokenBySeeHidden && IsWithinMonsterCountWindow(targetable);
         if (_seeHiddenClearLatch || seeHiddenArm)
         {
             // Hold only while something here is actually killable. If the
@@ -633,21 +645,21 @@ public sealed class CombatStateTracker : IDisposable
             // move past (a fight we can't win is worse than a broken sneak).
             if (actionable > 0)
             {
-                bool carried = stealthRunner && !roomHasSeeHidden && _sneakBrokenBySeeHidden;
-                if (stealthRunner && roomHasSeeHidden && !_sneakBrokenBySeeHidden)
-                {
-                    _sneakBrokenBySeeHidden = true;
-                    _log?.Info(LogCategory, "a see-hidden monster broke the sneak — clearing rooms until sneaking again");
-                }
                 _seeHiddenClearLatch = true;
                 NoteLiveFight("see-hidden clear");
-                AssertGate(carried
-                    ? "seehidden clear (sneak still broken by a see-hidden monster — clearing to re-sneak)"
-                    : "seehidden clear (force-clear room)");
+                AssertGate(roomHasSeeHidden
+                    ? "seehidden clear (force-clear room)"
+                    : "seehidden clear (sneak still broken by a see-hidden monster — clearing to re-sneak)");
                 return;
             }
             _seeHiddenClearLatch = false;   // room cleared / un-actionable — release.
         }
+        else if (_sneakBrokenBySeeHidden && actionable > 0 && !_outsideWindowLogged)
+        {
+            _outsideWindowLogged = true;
+            _log?.Info(LogCategory, $"sneak broken by a see-hidden monster, but this room is outside the Min/Max monster window ({targetable} hostile(s)) — moving on, still broken");
+        }
+        if (actionable == 0 || !_sneakBrokenBySeeHidden) _outsideWindowLogged = false;
 
         // Sneak-fail clear for stealth runners (combat off): a sneaked move failed
         // into this room, and the room is inside the Min/Max monster window, so we

@@ -2996,11 +2996,11 @@ It doesn't run where a backstab couldn't work anyway: a room with a see-hidden m
 ### Clear hostiles when sneak broken by see-hidden monster
 
 **Default:** Off
-**What it does:** A safety valve for stealth routes: while Auto-Sneak is on (you're trying to sneak through a route untouched) and you stumble into a room with a see-hidden monster, your stealth breaks. With this on, MudPlay fights and clears that one room instead of continuing to walk while exposed and dragging monsters behind you — bypassing the Min/Max room-skip gate for just that room, then re-sneaks and carries on. Because the room is now clear, any buff/cure the sneak-aware timing was holding fires there before you re-sneak.
+**What it does:** A safety valve for stealth routes. While Auto-Sneak is on (you're trying to sneak through a route untouched), a see-hidden monster in a room breaks your stealth. With this on, MudPlay stops, fights and clears the room instead of walking on exposed and dragging monsters behind you, then re-sneaks and carries on. Because the room is now clear, any buff/cure the sneak-aware timing was holding fires there before you re-sneak.
 
-The break stays with you until you're sneaking again, not with the room it happened in. If you're carried into another room before the sneak is back (a move that was already sent, or the monster following you), that room is cleared too, see-hidden monster or not: you're still exposed there for the same reason. Once a fresh `sn` takes, the route goes back to sneaking past everything.
+**Your room thresholds still apply to where it stops.** A room with fewer monsters than **Min monsters** or more than **Max monsters** isn't stopped in, the same as any other fight: you move on, still exposed. The break stays with you until you're sneaking again, not with the room it happened in, so the **first room that does meet your thresholds** is where you stop, whether or not anything there sees hidden. The same goes if you're carried out of the room by a move that was already sent. Once stopped, the **whole room is cleared**, even if more monsters walk in past your Max while you fight. Then you re-sneak, the break is over, and the route goes back to behaving as your settings say: sneaking past everything.
 
-This works whether **Auto-Combat is on or off**: the whole point is to clear the room and get moving again, so it force-clears regardless of your combat toggle (with Auto-Combat off it engages just for that room; with it on, it overrides the Min/Max gate so the room can't be skipped and left to drag).
+This works whether **Auto-Combat is on or off**: with Auto-Combat off it engages just for that room and fights it to the end, moving to the next monster as each one dies.
 
 ### Clear hostiles when sneak fails
 

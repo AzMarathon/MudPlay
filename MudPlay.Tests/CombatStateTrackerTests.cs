@@ -1047,6 +1047,60 @@ public sealed class CombatStateTrackerTests
         Assert.False(h.Tracker.SneakBrokenBySeeHidden);
     }
 
+    // The user's rule (2026-10-07): a see-hidden room over the room thresholds isn't
+    // stopped in, like any other fight outside them. The break is still on, so the
+    // first room that does meet them is where the character stops and clears.
+    [Fact]
+    public void SeeHiddenBreak_RoomOutsideTheMonsterWindow_IsWalkedThrough_StillBroken()
+    {
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.WireMonsterCountWindow();
+        h.MovementActive = true;
+        h.Settings.MaxMonstersInRoom = 2;
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "gorgon", killable: true);
+        h.AddMonster(2, "brigand", killable: true);
+        h.AddMonster(3, "harpy", killable: true);
+
+        h.Feed("Also here: gorgon, brigand, harpy.");    // three, over the max of two
+        Assert.False(h.CombatGateHeld);
+        Assert.False(h.Tracker.SeeHiddenClearActive);
+        Assert.True(h.Tracker.SneakBrokenBySeeHidden);
+
+        h.Classifier.NoteRoomChanged();
+        h.Feed("Also here: brigand, harpy.");            // two: inside the window
+        Assert.True(h.CombatGateHeld);
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+    }
+
+    // Once stopped, the room is cleared whatever the count does: a third monster
+    // walking in doesn't turn the clear into a room to leave.
+    [Fact]
+    public void SeeHiddenClear_OnceStopped_IsHeldPastTheWindow()
+    {
+        using Harness h = new() { AutoAttackEnabled = false };
+        h.WireSeeHiddenGate();
+        h.WireMonsterCountWindow();
+        h.MovementActive = true;
+        h.Settings.MaxMonstersInRoom = 2;
+        h.ClearWhenSeenHidden = true;
+        h.AutoSneakEnabled = true;
+        h.SeeHidden.Add(1);
+        h.AddMonster(1, "gorgon", killable: true);
+        h.AddMonster(2, "brigand", killable: true);
+        h.AddMonster(3, "harpy", killable: true);
+
+        h.Feed("Also here: gorgon, brigand.");
+        Assert.True(h.CombatGateHeld);
+
+        h.Feed("Also here: gorgon, brigand, harpy.");
+        Assert.True(h.CombatGateHeld);
+        Assert.True(h.Tracker.SeeHiddenClearActive);
+    }
+
     // The stall watchdog gives up on a room, not on the break; Reset States is the
     // user starting over.
     [Fact]
