@@ -32,6 +32,16 @@ internal static class LoopCombatSuppression
         trackerPending && hasExpectedTarget
         && (state == LoopState.Running || (state == LoopState.Paused && stepInFlight));
 
+    // Whether the loop is the thing moving the character, which is the premise of
+    // suppression: skip the fight and walk on. A loop the user stopped (Pause, or a
+    // party member's @stop) isn't walking on, so the character stood in a no-attack
+    // room being hit round after round (report paradigm-20261007-125228). And a
+    // paused loop left behind, with the character now following a party leader
+    // somewhere else entirely, went on switching combat off in every non-lair room
+    // the party fought in (report paradigm-20261007-125915).
+    public static bool LoopIsDriving(LoopState state, bool heldByUser, bool following) =>
+        state != LoopState.Idle && !heldByUser && !following;
+
     public static bool IsSuppressed(Loop loop, RoomKey current, bool currentIsLair)
     {
         if (loop.OnlyAttackInLairRooms && !currentIsLair)

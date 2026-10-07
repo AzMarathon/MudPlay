@@ -123,7 +123,9 @@ public static class StatlinePromptRegexBuilder
         'r' => @"\s?(?:\((?<statea>Resting|Meditating)\))?",
         'c' => @"\d+",
         'x' => @"\d+",
-        'X' => @"\d+",
+        // Exp to level goes negative once the character has more than the level
+        // needs; Paradigm prints the minus sign (Stock prints 0 instead).
+        'X' => @"-?\d+",
         'w' => @"\S*",
         _   => string.Empty,
     };

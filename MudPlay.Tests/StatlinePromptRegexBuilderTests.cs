@@ -221,4 +221,24 @@ public sealed class StatlinePromptRegexBuilderTests
         Assert.Equal(27, seen[0].Hp);
         Assert.Equal(31, seen[0].Mana);
     }
+
+    // A character with more exp than its next level needs has a negative "exp to
+    // level". Paradigm prints the number with its minus sign; the Stock engine
+    // prints 0 (GAME_MECHANICS "Custom statline tokens"). The token took digits
+    // only, so the whole prompt stopped matching and the statline mismatch warning
+    // came up.
+    [Theory]
+    [InlineData("[HP=716/741,MA=512/712,Need=1234567]:")]
+    [InlineData("[HP=716/741,MA=512/712,Need=-1234567]:")]
+    [InlineData("[HP=716/741,MA=512/712,Need=-1234567]: (Resting) ")]
+    [InlineData("[HP=716/741,MA=512/712,Need=0]: (Meditating) ")]
+    public void ExpToLevel_MayBeNegative(string prompt)
+    {
+        Regex regex = StatlinePromptRegexBuilder.Build("full custom [HP=%h/%H,MA=%m/%M,Need=%X]:%r");
+
+        Match m = regex.Match(prompt);
+
+        Assert.True(m.Success, prompt);
+        Assert.Equal("716", m.Groups["hp"].Value);
+    }
 }

@@ -9381,7 +9381,10 @@ public sealed class AppServices
         }
 
         bool suppressed =
-            LoopRunner.State != Game.Map.LoopState.Idle
+            Game.Map.LoopCombatSuppression.LoopIsDriving(
+                LoopRunner.State,
+                heldByUser: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
+                following: MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate))
             && LoopRunner.CurrentLoop is { } loop
             && evalKey is { } key
             && Game.Map.LoopCombatSuppression.IsSuppressed(loop, key, evalIsLair);

@@ -115,4 +115,17 @@ public sealed class LoopCombatSuppressionTests
         Assert.False(LoopCombatSuppression.JudgeEnteringRoom(
             state, stepInFlight: true, trackerPending: true, hasExpectedTarget: true));
     }
+
+    // Suppression means "skip the fight and walk on", so it needs a loop that is
+    // walking: not one the user stopped, and not one left paused while the character
+    // follows a party leader.
+    [Theory]
+    [InlineData(LoopState.Running, false, false, true)]
+    [InlineData(LoopState.Paused, false, false, true)]     // paused by its own fight, say
+    [InlineData(LoopState.Paused, true, false, false)]     // Pause, or an @stop
+    [InlineData(LoopState.Paused, false, true, false)]     // following a leader
+    [InlineData(LoopState.Idle, false, false, false)]
+    public void LoopIsDriving_OnlyWhileTheLoopMovesTheCharacter(
+        LoopState state, bool heldByUser, bool following, bool expected)
+        => Assert.Equal(expected, LoopCombatSuppression.LoopIsDriving(state, heldByUser, following));
 }

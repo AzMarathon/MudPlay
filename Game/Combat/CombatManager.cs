@@ -4074,6 +4074,13 @@ public sealed partial class CombatManager : IDisposable
         // (exp count 1) never trips it.
         if (_expGainsThisRound >= 2)
             ForceAoeMultiKillReparse("AoE multi-kill mid-round");
+        // One kill under a running room spell is the same trap: the spell keeps
+        // firing with no *Combat Off*, the corpse stays on the roster, and the count
+        // never falls below the room spell's minimum, so the survivor is roomed
+        // round after round instead of getting the single-target attack (report
+        // paradigm-20261007-131120: hsto killed one of two, then hsto again).
+        else if (_roomChannelSpell is not null)
+            ForceAoeMultiKillReparse("kill under a room spell");
     }
 
     // AoE room-wipe recovery: drop all combat state and force ONE debounced CR
@@ -4113,7 +4120,7 @@ public sealed partial class CombatManager : IDisposable
 
         if (TrySendRoomRefresh(context))
             _log?.Combat(LogCategory,
-                $"AoE multi-kill ({_expGainsThisRound} exp this round) — re-parsing room with "
+                $"{context} ({_expGainsThisRound} exp this round) — re-parsing room with "
                 + "CR to re-pick from the true roster instead of firing at a survivor");
     }
 

@@ -1294,9 +1294,20 @@ public sealed partial class CombatManager
     // _suppressResumeForBetweenRoundStamp so the debuff's Off can't fire it a second time.
     private void DeferPostDebuffAttack(CombatSettings settings, string target)
     {
+        DateTimeOffset debuffAt = DateTimeOffset.Now;
         void Dispatch()
         {
             if (_disposed || !_isEnabled()) return;
+            // Something else already sent this round's attack in the gap: a monster
+            // walking in re-ran the room dispatch (the interrupt resume) before this
+            // fired. Sending it again re-announced the spell, breaking and restarting
+            // combat for nothing (report paradigm-20261007-122734: isto, hsto, hsto).
+            if (_lastAttackSentAt >= debuffAt)
+            {
+                _log?.Combat(LogCategory,
+                    $"post-debuff attack at '{target}' skipped — the attack already went out behind the debuff");
+                return;
+            }
             if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
                 || _classifier.Current is not { } obs
                 || !TargetPresent(obs, target))
