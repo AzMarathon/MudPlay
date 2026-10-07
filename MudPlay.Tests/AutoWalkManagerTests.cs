@@ -2368,4 +2368,180 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.NotEmpty(h.Sent);
     }
 
+    // ----- teleport-shortcut policy -----------------------------------
+    //
+    // A fork where BOTH routes reach 7/131: three ordinary steps north, or ONE
+    // teleport hop southwest. BFS costs the teleport as a single edge, so it is the
+    // "shortest" route by construction and wins any tie-break that only counts hops —
+    // which is the whole reason the policy exists.
+    //
+    // 1/10 Grove --N-- 1/11 --N-- 1/12 --N-- 7/131 Stone Arch
+    //   \__ SW (CMD 100 teleport) ______________/
+    private const string TeleportVsWalkGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 10, "Name": "Grove",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 100,
+            "N": "1/11", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "7/131 (Item: 474)",
+            "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 11, "Name": "Trail",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/12", "S": "1/10", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 12, "Name": "Ridge",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "7/131", "S": "1/11", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 7, "Room Number": 131, "Name": "Stone Arch",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/12", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static Harness ArmTeleport(Harness h)
+    {
+        h.Walker.SetTeleportResolver((_, _) => "go arch");
+        h.Tracker.SetLocated(new RoomKey(1, 10));
+        return h;
+    }
+
+    // THE REPORTED BUG. An engine walk (a loop, an auto-lair circuit, a corpse run)
+    // states no teleport opinion, so it used to inherit "a teleport is just a short
+    // edge" and took the hop — reported from play as a level-20 character routed
+    // through a portal into the Black Wastelands and killed, never having been asked.
+    // The shipped policy prefers walking, so it walks.
+    [Fact]
+    public void EngineWalk_StatesNoOpinion_PrefersWalkingByDefault()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // ...and the preference is a SETTING, not a hardcode: turned off, the walker is
+    // back to taking the shortest route including the hop.
+    [Fact]
+    public void EngineWalk_PreferenceOff_TakesTheTeleport()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => false);
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // A CALLER THAT STATES ITS OWN INTENT OUTRANKS THE POLICY, both ways. The route
+    // picker's "Teleport" pick passes preferTeleportFree: false and must take the hop
+    // even while the preference is on — naming the hop is the consent.
+    [Fact]
+    public void ExplicitTeleportPick_BeatsThePreference()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: () => true, never: () => false);
+
+        h.Walker.WalkTo(new RoomKey(7, 131), preferTeleportFree: false);
+
+        Assert.Single(h.Sent);
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // ...and "Walk it" passes avoidTeleports: true, which still refuses even with the
+    // preference off.
+    [Fact]
+    public void ExplicitWalkItPick_RefusesEvenWithPreferenceOff()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => false);
+
+        h.Walker.WalkTo(new RoomKey(7, 131), avoidTeleports: true);
+
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // "Never route through teleports" is the hard setting: it refuses the hop with no
+    // fallback. Here a walking route exists, so the walk simply goes on foot.
+    [Fact]
+    public void NeverSetting_WalkingRouteExists_Walks()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => true);
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // THE PRICE OF "NEVER", pinned so nobody is surprised by it: a room whose only
+    // approach is a teleport becomes unroutable and the walk fails rather than quietly
+    // taking the hop. The preference does NOT do this — see the next test.
+    [Fact]
+    public void NeverSetting_TeleportIsTheOnlyRoute_Fails()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => true);
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // The PREFERENCE falls back: with no walking route it still teleports, so turning
+    // it on can never make a destination unreachable. That difference is the whole
+    // reason there are two boxes rather than one.
+    [Fact]
+    public void Preference_TeleportIsTheOnlyRoute_StillTeleports()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: () => true, never: () => false);
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // The policy is read LIVE, never cached at construction, so ticking the box
+    // applies to the next walk without a reconnect.
+    [Fact]
+    public void Policy_ReadLive_AppliesToTheNextWalk()
+    {
+        bool prefer = false;
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: () => prefer, never: () => false);
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        prefer = true;                       // the user ticks the box
+        h.Walker.Stop("test");
+        h.Sent.Clear();
+        h.Tracker.SetLocated(new RoomKey(1, 10));
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // A null policy restores the shipped defaults rather than throwing or going
+    // permissive — an un-wired host (tests, tooling) gets prefer-walking.
+    [Fact]
+    public void NullPolicy_FallsBackToPreferWalking()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetTeleportPolicy(preferWalking: null, never: null);
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
 }

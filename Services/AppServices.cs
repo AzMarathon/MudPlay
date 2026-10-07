@@ -6785,6 +6785,15 @@ public sealed class AppServices
                 dir, statRequirement: 0, canBash: true, keyItemId: 0, sender: "maze",
                 reply: r => done(r is Game.Map.DoorOpenResult.Opened)));
         Walker.SetMazeSolver(MazeSolver);
+        // Teleport-shortcut policy for every walk that states no opinion of its own —
+        // which is all of them except the route picker's explicit "Walk it" / "Teleport"
+        // picks. Read live from the profile so a settings change lands on the next walk
+        // without a reconnect, and so switching character switches the policy with it.
+        Walker.SetTeleportPolicy(
+            preferWalking: () => ReadSection<Models.Profile.GeneralSettings>(
+                Profile.Current, "General").PreferWalkingOverTeleports,
+            never: () => ReadSection<Models.Profile.GeneralSettings>(
+                Profile.Current, "General").NeverRouteThroughTeleports);
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
         // (canDrive), pre-flighting the floor-1 timer against live encumbrance +

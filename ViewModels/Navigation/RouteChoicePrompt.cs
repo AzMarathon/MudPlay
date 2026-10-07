@@ -779,16 +779,19 @@ public static class RouteChoicePrompt
     // (AutoWalkManager.WalkToImmediate honours the coordinator's paused state), so
     // the destination changed but the walker stayed frozen. Engine waits (Combat /
     // rest / party) are left asserted and re-pause on their own if still relevant.
-    // preferTeleportFree defaults TRUE for every user-picker commit: a walk the user
-    // launched from the picker (or a plain walk-to) should take the pure-walking route
-    // and only fall back to a teleport hop when walking is genuinely impossible — so a
-    // mid-walk re-plan (e.g. after a search-en-route counter turns up) never silently
-    // pivots onto a vortex the user didn't ask for. The one exception is the teleport
-    // fork's explicit "Teleport" pick, which passes false to allow the shortcut.
+    // The two teleport flags default NULL — "no opinion, ask the policy" (Settings →
+    // General, which ships prefer-walking ON, so a plain picker commit behaves exactly
+    // as it did when this defaulted to true). Only the teleport fork states an opinion:
+    // "Walk it" passes avoidTeleports: true and "Teleport" passes preferTeleportFree:
+    // false, and both still win outright, because naming the hop IS the consent.
+    //
+    // Defaulting to a literal `true` here would have quietly outranked a user who set
+    // "never route through teleports", which is the one setting that must not be
+    // overridden by a default nobody chose.
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
-        bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false,
-        bool ignoreAvoids = false, bool preferTeleportFree = true)
+        bool armAcquisition = true, bool? avoidTeleports = null, bool avoidTraps = false,
+        bool ignoreAvoids = false, bool? preferTeleportFree = null)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
