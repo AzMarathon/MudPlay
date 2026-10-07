@@ -4620,7 +4620,7 @@ public sealed class AppServices
         // patterns directly; tick-clears its block latch + cooldown via
         // TickEngine.CombatTickElapsed so the next round can cast.
         Cast = new Game.Spells.CastCoordinator(Router, Log);
-        Tick.CombatTickElapsed += Cast.OnCombatTick;
+        Tick.CombatTickElapsed += () => Cast.OnCombatTick(Tick.LastCombatTickWasPlaced);
         Cast.CastSent += _ => RoundDamage.NoteOwnCast();
 
         // ConditionTracker reads MessageStore +
@@ -4898,6 +4898,9 @@ public sealed class AppServices
         // paradigm-20260904-214056, paradigm-20260928-131549). The settled pass runs off
         // a UI-thread one-shot, same shape as the combat settle schedulers.
         CastDirector.SetCombatTickSource(() => Tick.LastCombatTickWasDamageDriven);
+        // A tick the client can't place against the game's rounds (nothing seen for a
+        // long while) frees no cast slot.
+        CastDirector.SetCombatTickPlacement(() => Tick.LastCombatTickWasPlaced);
         CastDirector.SetSettledPassScheduler((delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };

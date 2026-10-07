@@ -10,14 +10,14 @@ namespace MudPlay.Game;
 // the regen-tick events; the status bar binds to the observable last-tick
 // timestamps for the countdown display.
 //
-// Combat tick is fixed at 5 s — invariant across MajorMUD realm flavours.
-// Two sources drive the event:
+// A combat round is nominally 5 s on every realm. Two sources drive the event:
 //   Damage-driven: server damage lines (UserHits + MobHits) are the canonical
 //     "a tick just elapsed" signal. On match, the tick fires immediately and
 //     LastCombatTick is stamped at now.
-//   Timer fallback: a 100 ms DispatcherTimer checks whether 5 s has elapsed
+//   Timer fallback: a 100 ms DispatcherTimer checks whether a round has elapsed
 //     since the last stamped tick and fires otherwise. This keeps the
 //     heartbeat going when the user is idle / out of combat / between hits.
+//     It steps by RoundLength, the round as this board has been running it.
 //
 // HP and MA regen ticks use the same timer-fallback only — server damage
 // lines don't correlate to regen. Intervals are realm-specific, so we don't
@@ -28,6 +28,74 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
 {
     // Combat tick interval — universal across MajorMUD realm flavours.
     public static readonly TimeSpan CombatTickInterval = TimeSpan.FromSeconds(5);
+
+    // How long a round really is here, which the projection steps by while no round
+    // is seen. A board's round is a little over the nominal five seconds and differs
+    // from board to board (5.00 s timed on a Stock board, 5.03 to 5.06 s on Paradigm:
+    // GAME_MECHANICS "The engine clock — one fast tick drives every timer"). Stepping
+    // by the nominal length put each projected round further ahead of the real one,
+    // a third of a second by the sixth, and a between-round cast sent on it reached
+    // the game before the round it was meant for had begun: `You have already cast a
+    // spell this round!` (report paradigm-20261007-141844). Learned from what the
+    // wire shows: two rounds seen back to back, or two regen passes a known number
+    // of rounds apart.
+    public TimeSpan RoundLength => TimeSpan.FromMilliseconds(_roundMs);
+    private double _roundMs = CombatTickInterval.TotalMilliseconds;
+
+    // A measured round outside this isn't one round: the game makes up a second in
+    // one jump every couple of minutes, and a stalled line reads long.
+    private const double ShortestRoundMs = 4970;
+    private const double LongestRoundMs = 5090;
+    // A regen pass is timed to a few milliseconds over several rounds; a round's
+    // first damage line wanders more than the difference being measured.
+    private const double RegenPassWeight = 0.5;
+    private const double SeenRoundWeight = 0.1;
+    private const double ShorterRoundCaution = 0.3;
+    // Beyond this many rounds a gap may hide one of the game's made-up seconds.
+    private const int MostRoundsMeasured = 6;
+
+    // Set once a regen pass has measured the round: until then RoundLength is the
+    // nominal five seconds, which a projection can't be trusted on for long.
+    private bool _roundMeasured;
+    public bool RoundLengthMeasured => _roundMeasured;
+
+    private void LearnRoundLength(double gapMs, int rounds, double weight)
+    {
+        if (rounds < 1 || rounds > MostRoundsMeasured) return;
+        double perRound = gapMs / rounds;
+        if (perRound < ShortestRoundMs || perRound > LongestRoundMs) return;
+        // The first regen pass replaces the nominal length outright: it is the
+        // better figure by far, and the nominal one is what runs ahead.
+        if (weight >= RegenPassWeight && !_roundMeasured)
+        {
+            _roundMs = perRound;
+            _roundMeasured = true;
+            return;
+        }
+        // A round taken a little long only puts a cast slightly after its boundary,
+        // which costs nothing; taken short, the cast goes before it and is refused.
+        // So the figure follows a longer measurement readily and a shorter one slowly.
+        if (perRound < _roundMs) weight *= ShorterRoundCaution;
+        _roundMs += (perRound - _roundMs) * weight;
+    }
+
+    // How long a projection is taken to still be on the game's rounds after the last
+    // thing that placed it (a round seen, or a regen gain): a regen pass and a bit.
+    // Past that the game may have made up a second, or the learned length be a few
+    // milliseconds out for long enough to matter.
+    private static readonly TimeSpan ProjectionHolds = TimeSpan.FromSeconds(40);
+    // On the nominal length a projection is ahead by a twentieth of a second a round
+    // on Paradigm: two rounds is as far as that can be let run.
+    private static readonly TimeSpan NominalProjectionHolds = TimeSpan.FromSeconds(11);
+    private DateTimeOffset? _lastPlaced;
+    private DateTimeOffset? _lastRegenPass;
+    private DateTimeOffset? _seenRoundStart;
+
+    // Whether the CombatTickElapsed in flight is a round boundary the client can
+    // place: seen on the wire, or projected from something seen within
+    // ProjectionHolds. A tick that isn't is only the timer counting: the casting
+    // engines don't take it as the game having handed back the round's cast.
+    public bool LastCombatTickWasPlaced { get; private set; } = true;
 
     // Coarse watchdog heartbeat. Unlike the combat / regen ticks this carries no
     // cycle semantics — it's a plain "another second passed" poll off the same
@@ -73,7 +141,7 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
 
     // Time remaining to the next combat tick, or null if no tick has been
     // observed yet.
-    public TimeSpan? TimeToNextCombatTick => RemainingFor(LastCombatTick, CombatTickInterval);
+    public TimeSpan? TimeToNextCombatTick => RemainingFor(LastCombatTick, RoundLength);
 
     public TimeSpan? TimeToNextHpRegenTick =>
         HpRegenInterval == TimeSpan.Zero ? null : RemainingFor(LastHpRegenTick, HpRegenInterval);
@@ -158,12 +226,22 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
     public void NoteGridTick(DateTimeOffset at, bool authoritative)
     {
         if (_disposed) return;
+        if (authoritative)
+        {
+            // Two regen passes are a whole number of rounds apart.
+            if (_lastRegenPass is { } pass && at > pass)
+            {
+                double gap = (at - pass).TotalMilliseconds;
+                LearnRoundLength(gap, (int)Math.Round(gap / _roundMs), RegenPassWeight);
+            }
+            _lastRegenPass = at;
+        }
         if (LastCombatTick is not { } last)
         {
-            if (authoritative) LastCombatTick = at;
+            if (authoritative) { LastCombatTick = at; _lastPlaced = at; }
             return;
         }
-        double period = CombatTickInterval.TotalMilliseconds;
+        double period = _roundMs;
         if (_lastSeenRound is { } seen)
         {
             // A gain inside the round just seen says nothing its damage line didn't,
@@ -179,7 +257,8 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         if (!authoritative && Math.Abs(error) > GridFineTune.TotalMilliseconds) return;
         // rounds >= 1: the projection is a little late for this round. Anchor one
         // period back so the timer fires it at once and lands on `at`.
-        LastCombatTick = rounds >= 1 ? at - CombatTickInterval : at;
+        LastCombatTick = rounds >= 1 ? at - RoundLength : at;
+        _lastPlaced = at;
     }
 
     // Damage-line callback. Stamps LastCombatTick at now and fires
@@ -193,10 +272,26 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         bool fresh = LastCombatTick is null
             || now - LastCombatTick.Value >= TimeSpan.FromMilliseconds(250);
         LastCombatTick = now;
+        // The first line of a round's burst is the round; the rest of the burst only
+        // refreshes it. Two such starts back to back measure one round.
+        if (_lastSeenRound is not { } lastLine || now - lastLine > CombatTickInterval / 2)
+        {
+            if (_seenRoundStart is { } previous)
+            {
+                double gap = (now - previous).TotalMilliseconds;
+                // One round only: a damage line can also come between rounds (a
+                // spell cast by hand), and over several rounds such a gap is more
+                // likely to pass for a whole number of them.
+                if (Math.Round(gap / _roundMs) == 1) LearnRoundLength(gap, 1, SeenRoundWeight);
+            }
+            _seenRoundStart = now;
+        }
         _lastSeenRound = now;
+        _lastPlaced = now;
         if (fresh)
         {
             LastCombatTickWasDamageDriven = true;
+            LastCombatTickWasPlaced = true;
             CombatTickElapsed?.Invoke();
         }
     }
@@ -206,18 +301,20 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         DateTimeOffset now = _now();
 
         // Combat tick fallback. The server's cycle is "like clockwork"
-        // — every 5 s from the observed anchor — so we project forward
-        // in exact CombatTickInterval steps rather than re-anchoring at
+        // — every round from the observed anchor — so we project forward
+        // in exact RoundLength steps rather than re-anchoring at
         // `now`. Re-anchoring at `now` would drift the predicted ticks
         // ~100 ms later per cycle (the timer's own period), which after
         // an hour would be seconds off the real server-side cycle.
         // The while loop catches multi-cycle gaps (e.g. system sleep).
-        while (LastCombatTick is { } combat && now - combat >= CombatTickInterval)
+        while (LastCombatTick is { } combat && now - combat >= RoundLength)
         {
-            LastCombatTick = combat + CombatTickInterval;
+            LastCombatTick = combat + RoundLength;
             // Timer-fallback tick: no round burst is in flight, so the last prompt's HP
             // is current — mark this tick HP-fresh for the between-round decision.
             LastCombatTickWasDamageDriven = false;
+            LastCombatTickWasPlaced = _lastPlaced is { } placed
+                && now - placed <= (_roundMeasured ? ProjectionHolds : NominalProjectionHolds);
             CombatTickElapsed?.Invoke();
         }
 

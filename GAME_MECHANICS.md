@@ -75,6 +75,21 @@ how many swings or spell fires a player or monster gets inside one round.
     attack a whole round (report `paradigm-20260916-074131`).
   - The slot is tracked time-scoped to the 5s window in `CastingDirector`, freed on the round tick
     or after the window lapses.
+  - **A between-round cast goes out just after the round, never on a boundary the client only
+    worked out** (report `paradigm-20261007-141844`). The game hands the cast back at its own
+    round tick (*The engine clock — one fast tick drives every timer*), so a cast that reaches it
+    a moment before that tick is a second cast in the old round and is refused; a moment after
+    costs nothing. Out of a fight no round is seen on the wire and the client projects them:
+    - `TickEngine.RoundLength` is the round as the board runs it, measured from two regen passes
+      a known number of rounds apart or two rounds seen back to back, and the projection steps
+      by it. It follows a longer measurement readily and a shorter one slowly, since running
+      late is harmless. Stepping by a flat 5.000 s put the projected round up to 0.4 s ahead of
+      the real one between mana passes in that report.
+    - `CastingDirector` waits 200 ms after a round tick that wasn't seen on the wire before
+      picking anything (`ProjectedTickMargin`).
+    - A tick more than 40 s after the last thing that placed the grid (11 s until a regen pass
+      has measured the round) frees no slot (`TickEngine.LastCombatTickWasPlaced`): the cast
+      then waits out `CastCoordinator.CastCommandCooldown` (5.5 s), longer than any round.
 
 ### Spell round (3s) and durations
 *Status: CONFIRMED (user); wall-clock length OBSERVED (report `paradigm-20260816-222917`; observed on Paradigm)*
@@ -151,6 +166,7 @@ how many swings or spell fires a player or monster gets inside one round.
   - **Every regen gain lands on a combat round.** The gain's prompt arrives about 5 ms after the round's own lines, or a whole number of rounds after the last round seen. Nothing landed off that grid.
   - **The passes:** the combat round every 5 ticks; standing HP every 10 (every 2nd round); mana every 30 (every 6th round), standing or resting, fighting or not; resting HP every 5 (every round). A standing HP gain falls on the mana pass and 10 and 20 ticks after it.
   - **A tick is about 1.007 s, and the game makes up a whole second in one jump roughly every 150 s.** Rounds seen back to back are 5.03–5.06 s apart and a mana gap is 30.2 s, then about every fifth one is 29.2 s. Eleven mana gaps averaged 30.03 s, so over minutes a tick averages one second.
+  - **The round's length wanders within a session** *([OBSERVED] 2026-10-07, report `paradigm-20261007-141844`: 35 mana gaps over 30 minutes of one character standing out of combat)*. The single-pass gaps ran from 30.163 s to 30.361 s, a round of 5.027 to 5.060 s, and four were 29.267 to 29.299 s (the made-up second). Gaps of two to four passes (59.3 to 120.0 s) were the same mix.
   - Rest and meditate specifics are in *Health, resting & recovery → Rest and meditate tick timing*.
 - **The combat round** (`_background_energy`):
   - every online character has its just-moved flag cleared and its energy topped up (`_energy_update_character`), then every monster likewise;
@@ -159,7 +175,7 @@ how many swings or spell fires a player or monster gets inside one round.
 
 **Client use:**
 - `TickTimingLog` keeps the last 400 combat rounds, HP / mana gains and posture changes to the millisecond, each gain with its gap, its offset from the last round seen on the wire and from the start of the rest or meditation. The bug report prints it as *Tick timing*, and the Debug `Regen:` line carries the round offset.
-- **One grid.** `TickEngine.NoteGridTick` lets a regen gain keep the projected round true while no fight is printing damage lines: a mana gain may move or start the grid, an HP gain only fine-tunes it (a heal over time pays on the 3-second spell round), and a round seen in the last 6 s outranks both. `RegenTracker.NoteRound` slides every running regen cycle onto a round seen on the wire. Between sightings both coast on nominal seconds, which the game's tick averages.
+- **One grid.** `TickEngine.NoteGridTick` lets a regen gain keep the projected round true while no fight is printing damage lines: a mana gain may move or start the grid, an HP gain only fine-tunes it (a heal over time pays on the 3-second spell round), and a round seen in the last 6 s outranks both. `RegenTracker.NoteRound` slides every running regen cycle onto a round seen on the wire. Between sightings the round grid steps by the measured round (`TickEngine.RoundLength`, *Combat round (5s) and the between-round cast cycle*) and the regen cycles coast on nominal seconds, which the game's tick averages.
 - **The standing HP countdown follows the HP gains, not the mana pass, on Paradigm.** `RegenTracker` re-anchors it on the last rest gain when the character stands up, and a mana gain places it only while no HP gain has been seen for two standing intervals (HP at max). (Until 2026-10-04 every mana gain re-anchored it, which left the countdown 5 s out for the 5 s after each mana pass whenever a rest had moved the HP gains a round; a replay of the two live logs had standing gains up to 5 s from the countdown before and 0.6 s after.)
 - **Stock's rest and meditate countdowns count from the game tick the command landed in.** `RegenTracker.LastGameTick` takes the one-second phase from a round or a pass seen in the last 45 s (half a tick back when there is none), so the first gain is due 21 / 15 s after that tick. A gain within 1.25 s of the rest or meditate tick is that cycle's and re-anchors it (`CreditCommandCountedGain`); it shares the gain with the 30 s pass only when the two fall within 0.3 s. (Until 2026-10-04 the rest cycle counted 21 s from the posture change with a 0.75 s grace, so a first gain 0.9 s early fell through to the 30 s pass and restarted that countdown at 30 with 4 s to go — report `stock-20261004-150847`, replayed: rest gains now land within 0.03 s of their countdown and the pass within 0.01 s.)
 - **Paradigm's meditate countdown, replayed against that stretch:** `RegenTracker` had each of the three gains within 0.35 s of the countdown (median 0.23 s). One stretch is all the raw logs held.

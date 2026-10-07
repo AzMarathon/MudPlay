@@ -3308,7 +3308,7 @@ public sealed class CombatManagerSpellsTests
         // Production subscription order: CastCoordinator clears the spent round,
         // then CombatManager retries the attack. CastingDirector sits between them
         // and observes IsSpellAttackOwed=true, asserted below.
-        tick.CombatTickElapsed += h.Cast.OnCombatTick;
+        tick.CombatTickElapsed += () => h.Cast.OnCombatTick();
         tick.CombatTickElapsed += h.Combat.OnCombatTick;
         h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "turn", MinEnemies = 0 };
         h.AddMonster(1, "shade");

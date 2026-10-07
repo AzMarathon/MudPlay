@@ -72,6 +72,12 @@ public static class BugReportBuilder
             new("Tick timing (last 400 events)", SafeSection(() =>
                 $"HP regen expected per gain: {svc.HpRegenExpected.Current?.ToString() ?? "(no `stat` read yet — gains judged on timing alone)"}"
                 + (svc.HpRegenExpected.Current is { } expected ? $"; a gain above +{expected.Largest} is a heal." : string.Empty)
+                // The length projected rounds step by, and whether the last one could
+                // be placed: a cast refused as "already cast this round" out of a
+                // fight is a projection running ahead of the game's round.
+                + $"\n\nRound length: {svc.Tick.RoundLength.TotalSeconds:F3} s"
+                + (svc.Tick.RoundLengthMeasured ? " (measured)" : " (nominal: no regen pass has measured it yet)")
+                + $"; last round tick {(svc.Tick.LastCombatTickWasDamageDriven ? "seen on the wire" : svc.Tick.LastCombatTickWasPlaced ? "projected from a recent sighting" : "projected with nothing seen lately: it freed no cast slot")}."
                 + "\n\n" + svc.TickTiming.Render())),
             new("Session combat stats", SafeSection(() => BuildSessionCombat(svc))),
             new("Session activity", SafeSection(() => BuildSessionActivity(svc))),
