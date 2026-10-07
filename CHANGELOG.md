@@ -1,5 +1,10 @@
 # Version history
 
+## 3.148.2
+
+- The map switches to the floor you are on once you stop browsing it, even when the walk ended on the step that changed floors
+- A boss killed in a room too dark to list it starts its timer: named by the fight's damage lines, then told from its adds by the size of the exp gained
+
 ## 3.148.0
 
 - New loop option, Wait to enter lairs until I can debuff: the loop stops one step short of a lair until the round's between-round cast is free, so the debuff goes out on entry

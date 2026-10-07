@@ -1201,6 +1201,7 @@ public sealed class AppServices
     // last 50 in a ring buffer. CastingDirector and
     // CombatSessionTracker consume the RoundComplete event.
     public Game.Combat.RoundDamageTracker RoundDamage { get; private set; } = null!;
+    public Game.Combat.RecentFoeNames RecentFoes { get; private set; } = null!;
 
     // Party members' HP between `par` polls, from the damage and heals seen landing on
     // them. Set right after RoundDamage, whose damage lines it reads.
@@ -4165,9 +4166,42 @@ public sealed class AppServices
         // through the engaged name, so they're covered too.
         // DeathAttributionTarget covers an exp-inferred kill, which nulls CurrentTarget
         // before this fires, so "we attacked the boss, then gained exp" still attributes.
+        // The damage lines name the monster when nothing else does (a den too dark
+        // to list anyone): kept for the last couple of rounds.
+        RecentFoes = new Game.Combat.RecentFoeNames(isPlayer: name =>
+            PartyState.Members.Any(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase))
+            || Players.Find(name) is not null);
+        RoundDamage.Attributed += line => RecentFoes.Note(line.Sides);
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom?.Key != t.PreviousRoom?.Key) RecentFoes.Clear();
+        };
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
-                Combat.DeathAttributionTarget);
+                Combat.DeathAttributionTarget, RecentFoes.Within(TimeSpan.FromSeconds(12)));
+        // What the boss is worth, and what everything else in its room is: an unnamed
+        // death there is told apart by the exp it paid.
+        BossTimers.SetRoomExpResolver((def, room) =>
+        {
+            // A boss can have two records under one name: the neutral one standing
+            // in its room, worth nothing, and the hostile one it becomes when
+            // attacked, which is what a kill pays (Lallim Whitemane, Sharh'Kur). The
+            // boss list names the first, so the boss is worth the most any record of
+            // its name gives.
+            long bossExp = def.MonsterNumber is { } n ? MonsterCatalog.Get(n)?.EffectiveExp ?? 0 : 0;
+            foreach (Game.Combat.MonsterCatalogEntry sameName in MonsterCatalog.All)
+                if (string.Equals(sameName.Name, def.Name, StringComparison.OrdinalIgnoreCase))
+                    bossExp = Math.Max(bossExp, sameName.EffectiveExp);
+
+            List<long> others = new();
+            foreach (int id in MonsterSpawns.MonsterIdsSummonedAt(room))
+            {
+                if (id == def.MonsterNumber || MonsterCatalog.Get(id) is not { } other) continue;
+                if (string.Equals(other.Name, def.Name, StringComparison.OrdinalIgnoreCase)) continue;
+                others.Add(other.EffectiveExp);
+            }
+            return (bossExp, others);
+        });
         // Grab-All: the moment a tracked boss with GrabAll set dies, blindly `get`
         // every item in its game-data drop table — no room re-parse. BossKilled fires
         // for any matched boss; we gate on the flag here, where the catalog + item

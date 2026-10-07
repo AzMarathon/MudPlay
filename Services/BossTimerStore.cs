@@ -251,15 +251,33 @@ public sealed class BossTimerStore
     // timer marking so a cleanup boss (no timer) still notifies.
     public event Action<BossDef>? BossKilled;
 
-    public void OnMonsterDied(MonsterDeathEvent evt, RoomKey? key, string? engagedName)
+    //
+    // recentFoes are the monsters named by the fight's damage lines. They matter only
+    // when nothing else names the dead monster: no engaged target (a room too dark to
+    // list anyone) and no death line on record. A boss of this room those lines named
+    // is known to be here, and the unnamed death is its own when (user, 2026-10-07):
+    //   - the exp gained is a share the boss could have paid and no other monster of
+    //     the room could have (UnnamedDeathIsTheBosss); or
+    //   - exp can't tell them apart, and the boss is the only monster the lines named.
+    public void OnMonsterDied(MonsterDeathEvent evt, RoomKey? key, string? engagedName,
+        IReadOnlyCollection<string>? recentFoes = null)
     {
         if (key is not { } here) return;   // can't confirm placement
 
+        bool unnamed = string.IsNullOrWhiteSpace(engagedName) && evt.Candidates.Count == 0;
         foreach (BossDef def in _bosses.Current)
         {
             if (!RoomsContain(def, here)) continue;
-            if (!(NameMatches(def.Name, engagedName)
-                  || evt.Candidates.Any(c => NameMatches(def.Name, c.Name)))) continue;
+            bool named = NameMatches(def.Name, engagedName)
+                         || evt.Candidates.Any(c => NameMatches(def.Name, c.Name));
+            if (!named)
+            {
+                if (!unnamed || recentFoes is not { Count: > 0 }
+                    || !recentFoes.Any(n => NameMatches(def.Name, n)))
+                    continue;
+                if (!UnnamedDeathIsTheBosss(def, here, evt.ExperienceGained, recentFoes, out string why)) continue;
+                _log?.Info("Bosses", $"boss '{def.Name}' was in the fight's damage lines and {why} — taken as the kill");
+            }
 
             // A timed boss starts its respawn countdown; a cleanup boss has none. Both
             // notify BossKilled so Grab-All can fire regardless of respawn type.
@@ -267,6 +285,46 @@ public sealed class BossTimerStore
             BossKilled?.Invoke(def);
             return;
         }
+    }
+
+    // What the boss is worth, and what each other monster that can be in the room is
+    // worth (its lair and placed monsters), for telling an unnamed death apart by the
+    // exp it paid. Unset, or nothing on record for the boss, leaves only the "nothing
+    // else was named" test.
+    private Func<BossDef, RoomKey, (long BossExp, IReadOnlyList<long> OtherExp)>? _roomExp;
+    public void SetRoomExpResolver(Func<BossDef, RoomKey, (long BossExp, IReadOnlyList<long> OtherExp)> roomExp)
+    {
+        ArgumentNullException.ThrowIfNull(roomExp);
+        _roomExp = roomExp;
+    }
+
+    // A kill's exp is shared by the party, six at most (GAME_MECHANICS "Party size
+    // bounds"), so a monster worth E pays each of them somewhere from a sixth of E up
+    // to all of it.
+    private const int MaxPartySize = 6;
+
+    private static bool CouldPay(long worth, long gained) =>
+        worth > 0 && gained <= worth && gained >= worth / MaxPartySize - 1;
+
+    // The unnamed death is the boss's when the exp gained is something the boss could
+    // have paid and nothing else in the room could have (user, 2026-10-07): a gain
+    // inside the boss's range and outside every other monster's. That holds whether
+    // the boss is worth far more than its adds (the Darken Beast Lord, 4,000,000
+    // against 17,750) or far less than its neighbours (the monkey spirit, 40,000
+    // among monsters worth 400,000). Where the ranges overlap and the gain lands in
+    // the overlap, or the boss has no exp on record, exp can't say: then it is the
+    // boss's only when the boss was the only monster the lines named.
+    private bool UnnamedDeathIsTheBosss(BossDef def, RoomKey here, int? expGained,
+        IReadOnlyCollection<string> recentFoes, out string why)
+    {
+        (long bossExp, IReadOnlyList<long> others) = _roomExp?.Invoke(def, here) ?? (0, Array.Empty<long>());
+        if (expGained is { } gained && CouldPay(bossExp, gained) && !others.Any(o => CouldPay(o, gained)))
+        {
+            why = $"the {gained:N0} exp gained is what it pays ({bossExp:N0}, shared) and nothing else here could";
+            return true;
+        }
+        why = "nothing else was named";
+        return recentFoes.All(n => NameMatches(def.Name, n));
     }
 
     // Fallback kill signal: a boss-table monster we saw in the room roster is

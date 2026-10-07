@@ -3152,6 +3152,8 @@ Some monsters spawn **more monsters when they die**, and those can summon in tur
   - So a death-summon room yields far more than its face value, but the extra kill/wave time — and the cap on huge fan-outs — keep it below the naive exp-ratio multiple.
   - Bosses are left on their base exp (their death-summon, if any, is not folded — a rare edge, and boss exp is already a flat amortised approximation).
 
+- **The "mayor of Arlysia" boss is really arachnigoth** *([CONFIRMED] 2026-10-07, user; data [OBSERVED] Paradigm 1.9.1)*. The Mayor of Arlysia (#854, 1,000 exp) is neutral and doesn't attack; it is on the boss list only because killing it casts `summon mayor` (#1140, ability 12), which summons **arachnigoth** (#898, 500,000 exp), the monster players mean when they talk about the mayor.
+- **Lallim Whitemane and Sharh'Kur have a neutral record and a hostile one under the same name** *([CONFIRMED] 2026-10-07, user; data [OBSERVED] Paradigm 1.9.1)*: the neutral one stands in the room and is worth nothing (#607 at 16/2672, #608 at 15/1001); the hostile one a kill pays for is summoned by a spell (#611 by spell #226, #612 by spell #227; 20,000 exp × 10).
 **Client use:**
 - `DeathSummonCascade.RulesFor` holds each realm's cap and landing rule: Paradigm 20, whole casts; Stock 15, summon by summon. `LoopSimulator` (a dying monster's summons, and a room-spell summon) and the estimator's cascade (`RouteExpResolver.RoomCascadeOf`) both read it.
 - `RouteExpResolver.SummonSpells` leaves out Targets 0 / 8 spells, so neither counts a death summon that never fires.
