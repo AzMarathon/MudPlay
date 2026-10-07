@@ -171,6 +171,19 @@
                       Margin="0,8,0,0"
                       ToolTip.Tip="When checked: stopping a walk-to, loop or Auto-Lair you started with Sprint (Go in Sprint Mode) before it began ends Sprint Mode at once, turning back on the autos it turned off. When unchecked (default), Sprint Mode stays on until your next walk arrives. (A Sprint that isn't stopped ends by itself once it reaches its destination, loop or first lair.) Applies only for this character."/>
 
+            <!-- Teleports on walks the client starts by itself. A walk the user starts
+                 is asked about on the route cards and never reads this. Char-tier. -->
+            <TextBlock Text="When the client walks somewhere on its own (bank and sell trips, training and spell-buying trips, Auto-Lair, events, another player's remote commands):"
+                       TextWrapping="Wrap" Margin="0,12,0,2"/>
+            <RadioButton Content="Don't take teleports"
+                         GroupName="AutomaticWalkTeleports"
+                         IsChecked="{Binding AutomaticWalksAvoidTeleports, Mode=TwoWay}"
+                         ToolTip.Tip="The default. The route is planned on foot. A teleport (a vortex, a gateway, an item or command that teleports you) counts as a single step, so it is nearly always the shortest way, and it can drop you somewhere you can't survive. With this picked, a walk nobody is there to approve goes the long way round instead. A teleport is still used when there is no walking route at all, so somewhere you can only reach by teleport still works. Walks you start yourself aren't affected: the route cards ask you."/>
+            <RadioButton Content="Take teleports"
+                         GroupName="AutomaticWalkTeleports"
+                         IsChecked="{Binding AutomaticWalksTakeTeleports, Mode=TwoWay}"
+                         ToolTip.Tip="The client's own walks take the shortest route, teleports included, as they did before this option existed. Much shorter across regions, but nothing checks where a teleport lands you. Walks you start yourself aren't affected: the route cards ask you."/>
+
             <!-- The yellow monster-HP line a look prints in the terminal. The status
                  bar's target readout is its own item on the bar. Char-tier setting. -->
             <CheckBox Content="Print monster HP in the terminal when I look"

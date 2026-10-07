@@ -398,7 +398,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         ArgumentNullException.ThrowIfNull(record);
         if (_walker is null || record.Room is not { } r) return false;
-        return _walker.WalkTo(new RoomKey(r.Map, r.Room));
+        // Only Recover Now reaches here: the user asked for this walk, so it isn't an
+        // automatic one and keeps the shortest route.
+        return _walker.WalkTo(new RoomKey(r.Map, r.Room), preferTeleportFree: false);
     }
 
     // Demand signal to recover a deathpile. If we're already standing in the

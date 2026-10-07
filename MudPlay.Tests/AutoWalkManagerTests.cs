@@ -2368,12 +2368,11 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.NotEmpty(h.Sent);
     }
 
-    // ----- teleport-shortcut policy -----------------------------------
+    // ----- teleports on automatic walks -------------------------------
     //
-    // A fork where BOTH routes reach 7/131: three ordinary steps north, or ONE
-    // teleport hop southwest. BFS costs the teleport as a single edge, so it is the
-    // "shortest" route by construction and wins any tie-break that only counts hops —
-    // which is the whole reason the policy exists.
+    // A fork where both routes reach 7/131: three ordinary steps north, or one
+    // teleport hop southwest. The route search counts the teleport as a single step,
+    // so it is the shortest route, which is why an automatic walk needs telling.
     //
     // 1/10 Grove --N-- 1/11 --N-- 1/12 --N-- 7/131 Stone Arch
     //   \__ SW (CMD 100 teleport) ______________/
@@ -2406,13 +2405,11 @@ public sealed class AutoWalkManagerTests : IDisposable
         return h;
     }
 
-    // THE REPORTED BUG. An engine walk (a loop, an auto-lair circuit, a corpse run)
-    // states no teleport opinion, so it used to inherit "a teleport is just a short
-    // edge" and took the hop — reported from play as a level-20 character routed
-    // through a portal into the Black Wastelands and killed, never having been asked.
-    // The shipped policy prefers walking, so it walks.
+    // A walk the client starts on its own states no teleport preference. It used to
+    // take whichever teleport was on the shortest route with nobody asked; by default
+    // it now goes on foot.
     [Fact]
-    public void EngineWalk_StatesNoOpinion_PrefersWalkingByDefault()
+    public void AutomaticWalk_DoesNotTakeATeleport_ByDefault()
     {
         Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
 
@@ -2422,13 +2419,11 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
-    // ...and the preference is a SETTING, not a hardcode: turned off, the walker is
-    // back to taking the shortest route including the hop.
     [Fact]
-    public void EngineWalk_PreferenceOff_TakesTheTeleport()
+    public void AutomaticWalk_SetToTakeTeleports_TakesTheShortestRoute()
     {
         Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => false);
+        h.Walker.SetAutomaticWalkTeleports(avoid: () => false);
 
         h.Walker.WalkTo(new RoomKey(7, 131));
 
@@ -2436,73 +2431,12 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
-    // A CALLER THAT STATES ITS OWN INTENT OUTRANKS THE POLICY, both ways. The route
-    // picker's "Teleport" pick passes preferTeleportFree: false and must take the hop
-    // even while the preference is on — naming the hop is the consent.
+    // "Don't take teleports" still uses one when there is no walking route at all, so
+    // a bank run out of somewhere only a teleport leaves doesn't just fail.
     [Fact]
-    public void ExplicitTeleportPick_BeatsThePreference()
-    {
-        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: () => true, never: () => false);
-
-        h.Walker.WalkTo(new RoomKey(7, 131), preferTeleportFree: false);
-
-        Assert.Single(h.Sent);
-        Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
-    }
-
-    // ...and "Walk it" passes avoidTeleports: true, which still refuses even with the
-    // preference off.
-    [Fact]
-    public void ExplicitWalkItPick_RefusesEvenWithPreferenceOff()
-    {
-        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => false);
-
-        h.Walker.WalkTo(new RoomKey(7, 131), avoidTeleports: true);
-
-        Assert.Single(h.Sent);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
-    }
-
-    // "Never route through teleports" is the hard setting: it refuses the hop with no
-    // fallback. Here a walking route exists, so the walk simply goes on foot.
-    [Fact]
-    public void NeverSetting_WalkingRouteExists_Walks()
-    {
-        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => true);
-
-        h.Walker.WalkTo(new RoomKey(7, 131));
-
-        Assert.Single(h.Sent);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
-    }
-
-    // THE PRICE OF "NEVER", pinned so nobody is surprised by it: a room whose only
-    // approach is a teleport becomes unroutable and the walk fails rather than quietly
-    // taking the hop. The preference does NOT do this — see the next test.
-    [Fact]
-    public void NeverSetting_TeleportIsTheOnlyRoute_Fails()
+    public void AutomaticWalk_TeleportIsTheOnlyRoute_StillTakesIt()
     {
         Harness h = ArmTeleport(NewHarness(TeleportGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: () => false, never: () => true);
-
-        h.Walker.WalkTo(new RoomKey(7, 131));
-
-        Assert.Empty(h.Sent);
-        Assert.Equal(WalkState.Idle, h.Walker.State);
-        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
-    }
-
-    // The PREFERENCE falls back: with no walking route it still teleports, so turning
-    // it on can never make a destination unreachable. That difference is the whole
-    // reason there are two boxes rather than one.
-    [Fact]
-    public void Preference_TeleportIsTheOnlyRoute_StillTeleports()
-    {
-        Harness h = ArmTeleport(NewHarness(TeleportGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: () => true, never: () => false);
 
         h.Walker.WalkTo(new RoomKey(7, 131));
 
@@ -2510,19 +2444,42 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
-    // The policy is read LIVE, never cached at construction, so ticking the box
-    // applies to the next walk without a reconnect.
-    [Fact]
-    public void Policy_ReadLive_AppliesToTheNextWalk()
+    // A walk the user started says which route it wants (the route cards pass it),
+    // and the setting is never read for it, whichever way it is set.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UserWalk_KeepsItsOwnChoice_WhateverTheSetting(bool settingAvoids)
     {
-        bool prefer = false;
+        Harness teleportPick = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        teleportPick.Walker.SetAutomaticWalkTeleports(avoid: () => settingAvoids);
+        teleportPick.Walker.WalkTo(new RoomKey(7, 131), preferTeleportFree: false);   // "Teleport"
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(teleportPick.Sent[0]));
+
+        Harness plainCommit = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        plainCommit.Walker.SetAutomaticWalkTeleports(avoid: () => settingAvoids);
+        plainCommit.Walker.WalkTo(new RoomKey(7, 131), preferTeleportFree: true);     // any other card
+        Assert.Equal("n\r", Encoding.Latin1.GetString(plainCommit.Sent[0]));
+
+        Harness walkIt = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        walkIt.Walker.SetAutomaticWalkTeleports(avoid: () => settingAvoids);
+        walkIt.Walker.WalkTo(new RoomKey(7, 131), avoidTeleports: true, preferTeleportFree: true);   // "Walk it"
+        Assert.Equal("n\r", Encoding.Latin1.GetString(walkIt.Sent[0]));
+    }
+
+    // The setting is read as each walk starts, so changing it reaches the next walk
+    // without a reconnect.
+    [Fact]
+    public void AutomaticWalkSetting_IsReadAtTheStartOfEachWalk()
+    {
+        bool avoid = false;
         Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: () => prefer, never: () => false);
+        h.Walker.SetAutomaticWalkTeleports(() => avoid);
 
         h.Walker.WalkTo(new RoomKey(7, 131));
         Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
 
-        prefer = true;                       // the user ticks the box
+        avoid = true;
         h.Walker.Stop("test");
         h.Sent.Clear();
         h.Tracker.SetLocated(new RoomKey(1, 10));
@@ -2531,17 +2488,36 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
-    // A null policy restores the shipped defaults rather than throwing or going
-    // permissive — an un-wired host (tests, tooling) gets prefer-walking.
+    // Unwired (tests, tooling) it is the shipped setting, not the permissive one.
     [Fact]
-    public void NullPolicy_FallsBackToPreferWalking()
+    public void AutomaticWalkSetting_Unwired_DoesNotTakeTeleports()
     {
         Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        h.Walker.SetTeleportPolicy(preferWalking: null, never: null);
+        h.Walker.SetAutomaticWalkTeleports(null);
 
         h.Walker.WalkTo(new RoomKey(7, 131));
 
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // A loop walks to its nearest room before it starts lapping. Started by the user
+    // that walk is the user's own and keeps the shortest route; started by an event,
+    // a remote command or a sweep it is an automatic walk and follows the setting.
+    [Theory]
+    [InlineData(true, "go arch\r")]
+    [InlineData(false, "n\r")]
+    public void LoopApproach_FollowsTheSetting_OnlyWhenTheUserDidNotStartIt(bool userStarted, string firstSend)
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
+            walker: h.Walker, postToUi: a => a());
+        runner.SetWireSender(b => h.Sent.Add(b));
+        Loop loop = new("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) });
+
+        Assert.True(runner.Start(loop, userStarted));
+
+        Assert.Equal(LoopState.Approaching, runner.State);
+        Assert.Equal(firstSend, Encoding.Latin1.GetString(h.Sent[0]));
     }
 
 }

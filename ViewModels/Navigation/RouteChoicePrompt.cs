@@ -8,7 +8,8 @@ namespace MudPlay.ViewModels.Navigation;
 // Shared entry point for user-initiated walks that should offer a route choice.
 // Automated walks (event scripts, death recovery, loops, deposits, party
 // comeback, trainer routing) bypass this and call Walker.WalkTo directly — they
-// default to the free-preferring, teleport-allowed route with no prompt.
+// take the free-preferring route with no prompt, and whether that may use a
+// teleport is the automatic-walk setting's call (Settings → Other).
 //
 // The flow: resolve the current room, then plan (PlanRouteChoice) — the forks in
 // priority order are walk-vs-teleport, trap-avoid, avoid-override, then the
@@ -779,19 +780,16 @@ public static class RouteChoicePrompt
     // (AutoWalkManager.WalkToImmediate honours the coordinator's paused state), so
     // the destination changed but the walker stayed frozen. Engine waits (Combat /
     // rest / party) are left asserted and re-pause on their own if still relevant.
-    // The two teleport flags default NULL — "no opinion, ask the policy" (Settings →
-    // General, which ships prefer-walking ON, so a plain picker commit behaves exactly
-    // as it did when this defaulted to true). Only the teleport fork states an opinion:
-    // "Walk it" passes avoidTeleports: true and "Teleport" passes preferTeleportFree:
-    // false, and both still win outright, because naming the hop IS the consent.
-    //
-    // Defaulting to a literal `true` here would have quietly outranked a user who set
-    // "never route through teleports", which is the one setting that must not be
-    // overridden by a default nobody chose.
+    // preferTeleportFree defaults TRUE for every user-picker commit: a walk the user
+    // launched from the picker (or a plain walk-to) should take the pure-walking route
+    // and only fall back to a teleport hop when walking is genuinely impossible — so a
+    // mid-walk re-plan (e.g. after a search-en-route counter turns up) never silently
+    // pivots onto a vortex the user didn't ask for. The one exception is the teleport
+    // fork's explicit "Teleport" pick, which passes false to allow the shortcut.
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
-        bool armAcquisition = true, bool? avoidTeleports = null, bool avoidTraps = false,
-        bool ignoreAvoids = false, bool? preferTeleportFree = null)
+        bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false,
+        bool ignoreAvoids = false, bool preferTeleportFree = true)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged

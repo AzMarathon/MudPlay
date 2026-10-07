@@ -152,6 +152,18 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private bool _runStopRestoresCombat;
     [ObservableProperty] private bool _sprintStopEndsSprint;
 
+    // Whether the client's own walks may use a teleport (OtherSettings
+    // .AutomaticWalksTakeTeleports). An either-or choice, bound to two radio buttons.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AutomaticWalksAvoidTeleports))]
+    private bool _automaticWalksTakeTeleports;
+
+    public bool AutomaticWalksAvoidTeleports
+    {
+        get => !AutomaticWalksTakeTeleports;
+        set { if (value) AutomaticWalksTakeTeleports = false; }
+    }
+
     // Print the yellow monster-HP line in the terminal on a monster look. Default on.
     [ObservableProperty] private bool _printMonsterHpOnLook = true;
 
@@ -284,6 +296,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             AutoInviteOnlyWhileNavigating = AutoInviteOnlyWhileNavigating,
             RunStopRestoresCombat = RunStopRestoresCombat,
             SprintStopEndsSprint = SprintStopEndsSprint,
+            AutomaticWalksTakeTeleports = AutomaticWalksTakeTeleports,
             PrintMonsterHpOnLook  = PrintMonsterHpOnLook,
             // Not edited on this tab (Monster Intel owns them directly) —
             // carry the current Character-tier values through so Apply here
@@ -367,6 +380,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         AutoInviteOnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
         RunStopRestoresCombat = dto.RunStopRestoresCombat;
         SprintStopEndsSprint = dto.SprintStopEndsSprint;
+        AutomaticWalksTakeTeleports = dto.AutomaticWalksTakeTeleports;
         PrintMonsterHpOnLook = dto.PrintMonsterHpOnLook;
         PlayerCleanupDays = _globalSettings?.Current.PlayerCleanupDays ?? 90;
         PyramidSolverEnabled = _globalSettings?.Current.PyramidSolverEnabled ?? true;
@@ -435,6 +449,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnAutoInviteOnlyWhileNavigatingChanged(bool value) => MarkDirty();
     partial void OnRunStopRestoresCombatChanged(bool value) => MarkDirty();
     partial void OnSprintStopEndsSprintChanged(bool value) => MarkDirty();
+    partial void OnAutomaticWalksTakeTeleportsChanged(bool value) => MarkDirty();
     partial void OnPrintMonsterHpOnLookChanged(bool value) => MarkDirty();
     partial void OnPyramidSolverEnabledChanged(bool value) => MarkDirty();
     partial void OnAsylumSolverEnabledChanged(bool value) => MarkDirty();

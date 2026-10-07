@@ -167,38 +167,6 @@ public sealed class GeneralSettings
     // auto-mode toggles.
     public bool SprintMode { get; set; }
 
-    // ----- Teleport shortcut policy ------------------------------------
-
-    // BFS costs a vortex / gateway / CMD-cast teleport as ONE HOP, so a teleport is
-    // almost always on the "shortest" route by construction. The route picker already
-    // weighs that for a walk you start yourself — it offers "Walk it" vs "Teleport"
-    // because, in its own words, "a teleport can drop the crosser somewhere lethal, a
-    // call the client can't make". Nothing asked the same question for a walk nobody is
-    // watching: every engine caller (LoopRunner, AutoLairManager,
-    // DeathRecoveryManager, PartyComebackManager, TrainerWalkManager, the detour
-    // routers) took AutoWalkManager.WalkTo's defaults, which let BFS take the hop. So
-    // the less supervised the walk, the more willing it was to gamble — reported from
-    // play as a level-20 character routed through a portal into the Black Wasteland
-    // and killed, having never been asked.
-    //
-    // ON BY DEFAULT, which is a deliberate behaviour change for engine walks: plan the
-    // pure-walking route and fall back to a teleport only when walking is genuinely
-    // impossible, so a destination reachable only by teleport still routes. A manual
-    // walk is unaffected (the picker already passed this), and an explicit "Teleport"
-    // choice still overrides it.
-    //
-    // Char-tier; surfaced in Settings → General. Read by AppServices into
-    // AutoWalkManager.SetTeleportPolicy.
-    public bool PreferWalkingOverTeleports { get; set; } = true;
-
-    // The hard version: refuse teleport edges outright, with no fallback. A room whose
-    // only approach is a teleport becomes unroutable and the walk reports Failed —
-    // which is the point, and why this is OFF by default while the preference above is
-    // on. Overrides PreferWalkingOverTeleports when both are set (there is nothing to
-    // fall back to). An explicit "Teleport" pick in the route picker still wins, since
-    // that is the user asking for this one hop by name.
-    public bool NeverRouteThroughTeleports { get; set; }
-
     // ----- Re-enable auto-actions on reconnect -----------------------
     // One flag per auto-action (1-to-1 with AutoMode above). When a
     // reconnect happens (a TCP connect following a prior in-session

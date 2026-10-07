@@ -1,5 +1,11 @@
 # Version history
 
+## 3.149.0
+
+- New option in Settings → Other for walks the client starts on its own (bank and sell trips, training trips, Auto-Lair, events, remote commands): Don't take teleports (the default) or Take teleports
+- Don't take teleports plans those walks on foot and uses a teleport only when there is no walking route
+- Walks you start yourself are unchanged: a walk-to asks on the route cards, a loop you start and Recover Now take the shortest route
+
 ## 3.148.9
 
 - Bosses the game gives one name are separate rows, each with its own room and timer: nahr (spheres) and nahr (spaceghost), master assassin (cob key) and master assassin (dying assassin)

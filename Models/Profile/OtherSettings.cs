@@ -104,6 +104,19 @@ public sealed class OtherSettings
     public bool RunStopRestoresCombat { get; set; }
     public bool SprintStopEndsSprint { get; set; }
 
+    // Whether a walk the client starts on its own may use a teleport (a vortex, a
+    // gateway, an item or command that teleports). To the route search a teleport is
+    // one step, so it is nearly always on the shortest route, and it can land the
+    // character somewhere it can't survive: a call the client can't make. A walk the
+    // user starts is asked about on the route cards; a walk nobody is there to ask
+    // (a bank or sell trip, an auto-train or spell-buying trip, Auto-Lair, an event,
+    // another player's remote command) follows this instead.
+    //   false (the default): plan on foot, and use a teleport only when there is no
+    //   walking route at all.
+    //   true: take the shortest route, teleports included.
+    // Char-tier; Settings → Other. Read live by AutoWalkManager (SetAutomaticWalkTeleports).
+    public bool AutomaticWalksTakeTeleports { get; set; }
+
     // When true (default) a look at a monster prints its estimated remaining hit
     // points as a yellow line in the terminal scrollback. The status bar's target
     // item is separate: it follows the bar's layout. Saved under the name of the

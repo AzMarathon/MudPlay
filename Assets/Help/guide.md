@@ -4139,6 +4139,15 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 **What it does:** The same for a **Sprint** start (Go in Sprint Mode). On, stopping it before it began ends Sprint Mode at once, turning back on the autos Sprint turned off. Off, Sprint Mode stays on until your next walk arrives.
 **Important notes:** Saved for this character.
 
+### When the client walks somewhere on its own: Don't take teleports / Take teleports
+
+**Default:** Don't take teleports
+**What it does:** Decides whether a walk the client starts by itself may use a teleport: a vortex, a gateway, or an item or command that teleports you. To the route planner a teleport is a single step, so it is nearly always on the shortest route, and nothing checks where it lands you. With **Don't take teleports** the route is planned on foot; a teleport is used only when there is no walking route at all, so a place you can only reach by teleport still works. With **Take teleports** these walks take the shortest route, teleports included, as they did before this option existed.
+
+The walks it covers are the ones nobody is there to approve: bank and sell trips, training and spell-buying trips, Auto-Lair's walks between lairs, events, and a walk-to or loop another player starts for you with a remote command.
+
+**Important notes:** Walks **you** start aren't affected. A walk-to asks you on the route cards (**Walk it** or **Teleport**), and a loop you start or a **Recover Now** on a death takes the shortest route to get there, as before. On foot can be a great deal longer: across regions it is often a hundred or more extra rooms. Saved for this character, and a change applies from the next walk on.
+
 ### Print monster HP in the terminal when I look
 
 **Default:** On
@@ -4710,6 +4719,7 @@ This section is a compact, technical lookup table for every setting documented a
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max bash / pick / Pick over bash | 10/10/false | 1–100 / 1–100 / bool | `MaxBashAttempts`, `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
+| When the client walks on its own: Don't take / Take teleports | Don't take (`false`) | bool | `AutomaticWalksTakeTeleports` | Models/Profile/OtherSettings.cs |
 | Auto-request @comeback when left behind | true | bool | `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
 | Token routes: offer / min rooms saved | true / 50 | bool + 1–300 (Global, Paradigm) | `GlobalSettings.EnableTokenRoutes` / `TokenRouteMinRoomsShorter` | Models/Settings/GlobalSettings.cs |

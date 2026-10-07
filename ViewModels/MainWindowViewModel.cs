@@ -4974,7 +4974,7 @@ public partial class MainWindowViewModel : ObservableObject
         s.MovementControl.StartUserRun(() =>
         {
             if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
-            s.LoopRunner.Start(loop);
+            s.LoopRunner.Start(loop, userStarted: true);
         });
     }
 
@@ -5289,7 +5289,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         if (ctl.IsIdle && s.LoopRunner.StagedLoop is { } staged)
         {
-            s.LoopRunner.Start(staged);
+            s.LoopRunner.Start(staged, userStarted: true);
             return;
         }
         OpenNavManager(startOnGotoTab: true);

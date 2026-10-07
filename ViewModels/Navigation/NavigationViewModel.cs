@@ -1453,7 +1453,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 new RelayCommand(() => _services.MovementControl.StartUserRun(() =>
                 {
                     if (_services.AutoLair.IsActive) _services.AutoLair.Stop("loop favorite started");
-                    _services.LoopRunner.Start(target);
+                    _services.LoopRunner.Start(target, userStarted: true);
                 }))));
         }
 
@@ -2242,7 +2242,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.MovementControl.StartUserRun(() =>
         {
             ApplyStartMode(mode);
-            _services.LoopRunner.Start(row.Source);
+            _services.LoopRunner.Start(row.Source, userStarted: true);
         });
     }
 
@@ -4892,7 +4892,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                         _services.Walker.Stop("loop run supersedes walk-to");
                     _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
                     ApplyStartMode(mode);
-                    _services.LoopRunner.Start(transient);
+                    _services.LoopRunner.Start(transient, userStarted: true);
                     if (CurrentMode == NavigationMode.LoopBuild) ToggleLoopMode();
                 });
             return;

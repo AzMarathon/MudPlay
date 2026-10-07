@@ -953,25 +953,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool _activeArmAcquisition = true;
     private bool _activePickedRoute;
 
-    // The teleport-shortcut policy, read LIVE (never cached) so a settings change
-    // applies to the next walk without a reconnect — the same Func<bool> shape
-    // TeleportMazeSolver takes for its own master switch. Defaults stand in for an
-    // un-wired host (tests, tooling): prefer walking, never refuse outright, which is
-    // the shipped setting pair.
-    //
-    // _activePreferTeleportFree above exists because a re-plan pivoted onto the Black
-    // Wastelands vortex mid-walk. That fixed it for walks the USER picked, which are
-    // the only ones that passed the flag; an engine walk still planned straight through
-    // the same vortex because nothing passed anything. This policy is the other half.
-    private Func<bool> _teleportPreferWalking = static () => true;
-    private Func<bool> _teleportNever = static () => false;
+    // Whether a walk that states no teleport preference plans on foot. A walk the
+    // user starts states one (the route cards pass theirs, and a user's "Teleport"
+    // pick is the consent); a walk the client starts on its own states none, and to
+    // the route search a teleport is one step, so such a walk took whichever vortex
+    // was on the shortest route with nobody asked. Read at the start of each walk, so
+    // a change of the setting reaches the next walk and never a route under way.
+    // Unwired (tests, tooling) it is the shipped setting: plan on foot.
+    private Func<bool> _automaticWalksAvoidTeleports = static () => true;
 
-    // Wired once by AppServices from Settings → General. Null restores the default.
-    public void SetTeleportPolicy(Func<bool>? preferWalking, Func<bool>? never)
-    {
-        _teleportPreferWalking = preferWalking ?? (static () => true);
-        _teleportNever = never ?? (static () => false);
-    }
+    // Wired by AppServices from Settings → Other (OtherSettings.AutomaticWalksTakeTeleports).
+    public void SetAutomaticWalkTeleports(Func<bool>? avoid) =>
+        _automaticWalksAvoidTeleports = avoid ?? (static () => true);
+
+    // The setting as it stands now, for the bug report.
+    public bool AutomaticWalksAvoidTeleports => _automaticWalksAvoidTeleports();
 
     // planThroughAcquirableGates: when true, BFS plans the route as if every
     // acquirable gate item (raft / ticket / door key / hazard counter) were
@@ -1005,12 +1001,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         RoomKey destination,
         bool planThroughAcquirableGates = false,
         bool armItemAcquisition = true,
-        // NULL MEANS "NO OPINION — ASK THE POLICY", which is what every engine caller
-        // wants and what they all get by taking the default. A non-null value is a
-        // caller stating its own intent and always wins: the route picker's "Walk it"
-        // passes avoidTeleports: true and its "Teleport" passes preferTeleportFree:
-        // false, and neither should be second-guessed by a setting.
-        bool? avoidTeleports = null,
+        bool avoidTeleports = false,
         bool avoidTraps = false,
         bool supersedeSilently = false,
         // ignoreAvoids: when true, plan through (and into) rooms the user marked
@@ -1020,7 +1011,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         bool ignoreAvoids = false,
         // preferTeleportFree: plan the pure-walking route when one exists, falling back to a
         // teleport hop only when walking is impossible, so a walk never silently teleports
-        // on a re-plan. Null defers to the policy (Settings → General), which ships ON.
+        // on a re-plan. A walk the user started says which it is: every route-card commit
+        // passes true but an explicit "Teleport" pick, which passes false. Null is a walk
+        // nobody chose a route for, which follows the automatic-walk setting.
         bool? preferTeleportFree = null,
         // pickedRoute: the user was shown this route and chose it (the route picker's
         // commit), so a through-gates plan may cross a hazard room whose counter is
@@ -1029,13 +1022,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // a room closed: nobody agreed to walk into it.
         bool pickedRoute = false)
     {
-        // RESOLVED ONCE, HERE, so everything downstream — the deferred fields, the
-        // _active* copies the mid-walk re-plan reads, WalkToImmediate — keeps working
-        // in plain bools and needs no knowledge of the policy. Resolving per-walk
-        // rather than per-plan also means flipping the setting mid-walk cannot change
-        // the rules under a route already committed.
-        bool avoidTp = avoidTeleports ?? _teleportNever();
-        bool preferFree = preferTeleportFree ?? _teleportPreferWalking();
+        // Settled once per walk: the deferred fields and the copies a mid-walk re-plan
+        // reads hold the answer, so a change of the setting can't move a route under way.
+        bool automatic = preferTeleportFree is null;
+        bool preferFree = preferTeleportFree ?? _automaticWalksAvoidTeleports();
+        if (automatic)
+            _log?.Info("Walker", preferFree
+                ? $"automatic walk to {destination}: planned on foot, a teleport only if there is no walking route (Settings → Other)"
+                : $"automatic walk to {destination}: teleports allowed (Settings → Other)");
 
         if (State is WalkState.Walking or WalkState.Paused)
         {
@@ -1063,7 +1057,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _deferredWalkTarget = destination;
             _deferredWalkThroughGates = planThroughAcquirableGates;
             _deferredWalkArmAcquisition = armItemAcquisition;
-            _deferredWalkAvoidTeleports = avoidTp;
+            _deferredWalkAvoidTeleports = avoidTeleports;
             _deferredWalkAvoidTraps = avoidTraps;
             _deferredWalkIgnoreAvoids = ignoreAvoids;
             _deferredWalkPreferTeleportFree = preferFree;
@@ -1081,7 +1075,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return true;
         }
 
-        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTp, avoidTraps, ignoreAvoids, preferFree, pickedRoute);
+        return WalkToImmediate(destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps, ignoreAvoids, preferFree, pickedRoute);
     }
 
     private bool WalkToImmediate(

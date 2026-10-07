@@ -97,11 +97,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // Char-tier (GeneralSettings.AutoSyncQuestFlagsOnLogin). Read live by
     // QuestFlagSyncManager at login. Off by default — it sends commands on connect.
     [ObservableProperty] private bool _autoSyncQuestFlagsOnLogin;
-    // Char-tier (GeneralSettings.PreferWalkingOverTeleports / NeverRouteThroughTeleports).
-    // Read live by AutoWalkManager via AppServices.SetTeleportPolicy. The preference
-    // ships ON; the hard refusal ships OFF and outranks it when both are set.
-    [ObservableProperty] private bool _preferWalkingOverTeleports = true;
-    [ObservableProperty] private bool _neverRouteThroughTeleports;
     [ObservableProperty] private bool _backupOnSave;
     [ObservableProperty] private bool _scaleTerminalToWindow;
     [ObservableProperty] private bool _typeToTerminalFromOtherWindows = true;
@@ -395,8 +390,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
             AutoConnect = AutoConnect,
             LoadLastRanLoop = LoadLastRanLoop,
             AutoSyncQuestFlagsOnLogin = AutoSyncQuestFlagsOnLogin,
-            PreferWalkingOverTeleports = PreferWalkingOverTeleports,
-            NeverRouteThroughTeleports = NeverRouteThroughTeleports,
             BackupOnSave = BackupOnSave,
             ScaleTerminalToWindow = ScaleTerminalToWindow,
             TypeToTerminalFromOtherWindows = TypeToTerminalFromOtherWindows,
@@ -557,8 +550,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         AutoConnect          = dto.AutoConnect;
         LoadLastRanLoop      = dto.LoadLastRanLoop;
         AutoSyncQuestFlagsOnLogin = dto.AutoSyncQuestFlagsOnLogin;
-        PreferWalkingOverTeleports = dto.PreferWalkingOverTeleports;
-        NeverRouteThroughTeleports = dto.NeverRouteThroughTeleports;
         BackupOnSave         = dto.BackupOnSave;
         ScaleTerminalToWindow = dto.ScaleTerminalToWindow;
         TypeToTerminalFromOtherWindows = dto.TypeToTerminalFromOtherWindows;
@@ -723,8 +714,6 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     partial void OnAutoConnectChanged(bool value)            => Dirty();
     partial void OnLoadLastRanLoopChanged(bool value)        => Dirty();
     partial void OnAutoSyncQuestFlagsOnLoginChanged(bool value) => Dirty();
-    partial void OnPreferWalkingOverTeleportsChanged(bool value) => Dirty();
-    partial void OnNeverRouteThroughTeleportsChanged(bool value) => Dirty();
     partial void OnBackupOnSaveChanged(bool value)           => Dirty();
     partial void OnScaleTerminalToWindowChanged(bool value)  => Dirty();
     partial void OnTypeToTerminalFromOtherWindowsChanged(bool value) => Dirty();
