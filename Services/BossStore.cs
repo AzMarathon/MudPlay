@@ -7,7 +7,7 @@ using MudPlay.Models.Profile;
 namespace MudPlay.Services;
 
 // Loads and resolves the boss catalog for the active realm. Two layers, keyed by
-// boss Name (game-data spelling):
+// boss Name (one boss per Name; usually the game-data spelling, see BossDef.GameName):
 //   1. the realm's overlay {realm}/bosses.json — added / removed bosses, edited
 //      rooms, StopBefore + ExactSpawn overrides;
 //   2. the universal read-only seed BossDefs.seed.json (curated from the boss-timer
@@ -146,14 +146,20 @@ public sealed class BossStore
         return byName.Values.Select(WithSeedResetDefaults).ToList();
     }
 
-    // An overlay entry written before the reset defaults existed doesn't state them;
-    // it takes the seed boss's, so a boss the user only re-roomed still resets the
-    // way it ships.
+    // An overlay entry is a whole copy of the boss as it stood when the user edited
+    // it, and some of that copy was never theirs to set:
+    //   - which monster record the boss is and what the game calls it. Nothing in the
+    //     client edits these, so the seed's are the current ones; a copy made before
+    //     the seed was corrected would keep reading the wrong record's timer.
+    //   - the reset defaults, when the copy predates them: a boss the user only
+    //     re-roomed still resets the way it ships.
     private BossDef WithSeedResetDefaults(BossDef def)
     {
         BossDef clone = def.Clone();
         if (_seedByName.TryGetValue(def.Name, out BossDef? seed))
         {
+            clone.MonsterNumber = seed.MonsterNumber ?? clone.MonsterNumber;
+            if (!string.IsNullOrWhiteSpace(seed.GameName)) clone.GameName = seed.GameName;
             clone.DefaultStopBefore ??= seed.DefaultStopBefore;
             clone.DefaultGrabAll ??= seed.DefaultGrabAll;
         }

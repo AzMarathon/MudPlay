@@ -4190,14 +4190,14 @@ public sealed class AppServices
             // its name gives.
             long bossExp = def.MonsterNumber is { } n ? MonsterCatalog.Get(n)?.EffectiveExp ?? 0 : 0;
             foreach (Game.Combat.MonsterCatalogEntry sameName in MonsterCatalog.All)
-                if (string.Equals(sameName.Name, def.Name, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(sameName.Name, def.MatchName, StringComparison.OrdinalIgnoreCase))
                     bossExp = Math.Max(bossExp, sameName.EffectiveExp);
 
             List<long> others = new();
             foreach (int id in MonsterSpawns.MonsterIdsSummonedAt(room))
             {
                 if (id == def.MonsterNumber || MonsterCatalog.Get(id) is not { } other) continue;
-                if (string.Equals(other.Name, def.Name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (string.Equals(other.Name, def.MatchName, StringComparison.OrdinalIgnoreCase)) continue;
                 others.Add(other.EffectiveExp);
             }
             return (bossExp, others);
@@ -4206,7 +4206,9 @@ public sealed class AppServices
         // every item in its game-data drop table — no room re-parse. BossKilled fires
         // for any matched boss; we gate on the flag here, where the catalog + item
         // names + wire sender are all reachable.
-        BossTimers.BossKilled += FireBossGrabAll;
+        BossTimers.BossLootDropped += FireBossGrabAll;
+        BossTimers.SetDeathSummonResolver(def =>
+            BossDeathChain(def).Skip(1).Select(m => m.Name).ToList());
         // Surface recognized deaths in the Wire Inspector's Classified view (a passive
         // display side-effect) — the exp gained marks the kill.
         MonsterDeath.MonsterDied += evt =>
@@ -4618,7 +4620,7 @@ public sealed class AppServices
         // patterns directly; tick-clears its block latch + cooldown via
         // TickEngine.CombatTickElapsed so the next round can cast.
         Cast = new Game.Spells.CastCoordinator(Router, Log);
-        Tick.CombatTickElapsed += Cast.OnCombatTick;
+        Tick.CombatTickElapsed += () => Cast.OnCombatTick(Tick.LastCombatTickWasPlaced);
         Cast.CastSent += _ => RoundDamage.NoteOwnCast();
 
         // ConditionTracker reads MessageStore +
@@ -4896,6 +4898,9 @@ public sealed class AppServices
         // paradigm-20260904-214056, paradigm-20260928-131549). The settled pass runs off
         // a UI-thread one-shot, same shape as the combat settle schedulers.
         CastDirector.SetCombatTickSource(() => Tick.LastCombatTickWasDamageDriven);
+        // A tick the client can't place against the game's rounds (nothing seen for a
+        // long while) frees no cast slot.
+        CastDirector.SetCombatTickPlacement(() => Tick.LastCombatTickWasPlaced);
         CastDirector.SetSettledPassScheduler((delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -5367,6 +5372,13 @@ public sealed class AppServices
             Profile.Current, "Combat").ClearHostilesWhenSneakFails);
         Stealth.SneakEntry += CombatTracker.NoteSneakEntry;
         Stealth.SilentSneakLost += CombatTracker.NoteSilentSneakLoss;
+        // A see-hidden break is carried from room to room until a fresh `sn` is
+        // answered cleanly: only then is the character sneaking again.
+        Stealth.StateChanged += (prev, next) =>
+        {
+            if (prev == Game.Stealth.StealthState.AttemptingSneak && next == Game.Stealth.StealthState.Sneaking)
+                CombatTracker.NoteSneakRegained();
+        };
         Combat.SetSeeHiddenClearGate(() => CombatTracker.SeeHiddenClearActive || CombatTracker.SneakFailClearActive);
 
         // Engage-to-clear a rest-blocker with Auto-Combat OFF (report
@@ -10366,39 +10378,72 @@ public sealed class AppServices
         return true;
     }
 
-    // A Grab-All boss just died: fire a blind `get <item>` for every item in its
-    // game-data drop table (no room re-parse). Gated here on the per-boss flag; the
-    // event fires for every matched boss regardless.
-    private void FireBossGrabAll(Models.Profile.BossDef def)
+    // A Grab-All boss's loot just hit the floor: fire a blind `get <item>` for every
+    // item in the dead monster's game-data drop table (no room re-parse). Gated here
+    // on the per-boss flag; the event fires for every matched boss regardless. The
+    // dead monster is the boss's own record or one its death summoned, and the loot
+    // is usually on the last of them (BossDeathLoot).
+    private void FireBossGrabAll(Models.Profile.BossDef def, string? deadName, int? expGained)
     {
         if (!def.GrabAll) return;
-        int? number = def.MonsterNumber ?? ResolveMonsterNumberByName(def.Name);
-        if (number is not { } num)
+        IReadOnlyList<Game.Inventory.BossDeathLoot.ChainMonster> chain = BossDeathChain(def);
+        if (chain.Count == 0)
         {
             Log.Info("GrabAll", $"'{def.Name}' died but has no monster number — can't read its drop table");
             return;
         }
-        IReadOnlyList<string> cmds = Game.Inventory.BossGrabAllCommands.Build(MonsterCatalog.Get(num)?.Drops, ItemNames.GetName);
+        IReadOnlyList<int> died = Game.Inventory.BossDeathLoot.RecordsThatDied(chain, deadName, expGained);
+        List<string> cmds = new();
+        TimeSpan stall = TimeSpan.Zero;
+        foreach (int num in died)
+        {
+            foreach (string cmd in Game.Inventory.BossGrabAllCommands.Build(MonsterCatalog.Get(num)?.Drops, ItemNames.GetName))
+                if (!cmds.Contains(cmd)) cmds.Add(cmd);
+            // A boss whose death casts a "... temp" spell leaves the room unable to
+            // act until that spell runs out, and the game throws away what is sent
+            // before then (GAME_MECHANICS "Silent death spells that stall the room").
+            // The grab waits it out and goes once.
+            TimeSpan own = DeathStallOf(num);
+            if (own > stall) stall = own;
+        }
+        string who = $"'{def.Name}' ({string.Join(", ", died.Select(n => $"#{n} {MonsterCatalog.Get(n)?.Name}"))})";
         if (cmds.Count == 0)
         {
-            Log.Info("GrabAll", $"'{def.Name}' died — no known droppable items to grab");
+            Log.Info("GrabAll", $"{who} died — no known droppable items to grab");
             return;
         }
-        // A boss whose death casts a "... temp" spell leaves the room unable to act
-        // until that spell runs out, and the game throws away what is sent before
-        // then (GAME_MECHANICS "Silent death spells that stall the room"). The grab
-        // waits it out and goes once.
-        TimeSpan stall = DeathStallOf(num);
         if (stall > TimeSpan.Zero)
         {
             Log.Info("GrabAll",
-                $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")} in {stall.TotalMilliseconds:F0} ms, once its death spell has run out");
+                $"{who} died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")} in {stall.TotalMilliseconds:F0} ms, once its death spell has run out");
             HoldThroughDeathStall(stall, $"Grab All for '{def.Name}'",
                 () => { foreach (string cmd in cmds) SendGameCommand(cmd); });
             return;
         }
-        Log.Info("GrabAll", $"'{def.Name}' died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
+        Log.Info("GrabAll", $"{who} died — grabbing {cmds.Count} drop{(cmds.Count == 1 ? "" : "s")}");
         foreach (string cmd in cmds) SendGameCommand(cmd);
+    }
+
+    // A boss as the monsters it is, in order: its own record, then everything its
+    // death summons, and theirs. Empty when the boss names no monster in this game
+    // data. Bounded, since a summon chain in edited data could loop.
+    private IReadOnlyList<Game.Inventory.BossDeathLoot.ChainMonster> BossDeathChain(Models.Profile.BossDef def)
+    {
+        const int MaxChain = 12;
+        List<Game.Inventory.BossDeathLoot.ChainMonster> chain = new();
+        if ((def.MonsterNumber ?? ResolveMonsterNumberByName(def.MatchName)) is not { } root) return chain;
+        Queue<int> next = new();
+        HashSet<int> seen = new() { root };
+        next.Enqueue(root);
+        while (next.Count > 0 && chain.Count < MaxChain)
+        {
+            int num = next.Dequeue();
+            if (MonsterCatalog.Get(num) is not { } m) continue;
+            chain.Add(new Game.Inventory.BossDeathLoot.ChainMonster(num, m.Name, m.EffectiveExp));
+            foreach (int summoned in ExpResolver?.DeathSummonsOf(num) ?? Array.Empty<int>())
+                if (seen.Add(summoned)) next.Enqueue(summoned);
+        }
+        return chain;
     }
 
     // How long a monster's death leaves the room unable to act: the length of its
@@ -10551,7 +10596,7 @@ public sealed class AppServices
             if (!def.GrabAll) continue;
             if (BossGrabClassifier.Classify(GameData, def) != Game.Inventory.BossGrabKind.Item) continue;
             if (!BossDefRoomsContain(def, room)) continue;
-            string getName = BossGrabClassifier.ItemGetName(GameData, def.Name) ?? def.Name.Trim();
+            string getName = BossGrabClassifier.ItemGetName(GameData, def.MatchName) ?? def.MatchName.Trim();
             SendGameCommand($"get {getName}");
             Log.Info("GrabAll", $"entered {room} — grabbing item boss '{def.Name}'");
         }

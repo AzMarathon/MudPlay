@@ -204,11 +204,11 @@ public sealed class BossStoreTests : IDisposable
                 "justicar halford",
                 "kai master",
                 "lallim whitemane",
-                "lord chisholm",
+                "lord chisholm (malformation)",
                 "lord of the hunt",
                 "massive cocoon",
                 "mayor godfrey",
-                "mayor of arlysia",
+                "mayor of arlysia (arachnigoth)",
                 "remik of the ebon blade",
                 "sharh'kur",
                 "sheriff lionheart",
@@ -299,5 +299,54 @@ public sealed class BossStoreTests : IDisposable
         Assert.Equal("shadow lord", s.FindInCatalog(412, null)?.Name);
         Assert.Equal("shadow lord", s.FindInCatalog(null, "shadow lord")?.Name);
         Assert.Null(s.FindInCatalog(999, "nobody"));
+    }
+
+    // A saved copy of a boss holds the monster number it had when the user edited it.
+    // Nothing in the client edits that number, so when the seed's is corrected the
+    // copy must follow, or it goes on reading the wrong record's timer.
+    [Fact]
+    public void Resolve_SavedCopyTakesTheSeedsMonsterNumberAndGameName()
+    {
+        WriteSeed(new BossDef { Name = "great green dragon", MonsterNumber = 1038, Rooms = new() { "1/3111" },
+            InStock = true, InParadigm = true });
+        BossStore s = new(seedPath: _seedPath); s.OnRealmChanged(RealmFolder);
+        BossDef edited = s.Resolve().Single();
+        edited.GrabAll = true;
+        s.Save([edited]);
+
+        WriteSeed(new BossDef { Name = "great green dragon", MonsterNumber = 1058, Rooms = new() { "1/3111" },
+            InStock = true, InParadigm = true });
+        BossStore reloaded = new(seedPath: _seedPath); reloaded.OnRealmChanged(RealmFolder);
+
+        BossDef b = Assert.Single(reloaded.Resolve());
+        Assert.Equal(1058, b.MonsterNumber);
+        Assert.True(b.GrabAll);   // the user's edit is kept
+    }
+
+    // The shipped list: bosses the game gives one name each have their own entry, so
+    // neither replaces the other (the list holds one boss per Name).
+    [Fact]
+    public void ShippedSeed_KeepsSameNamedBossesApart()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "mudplay-boss-" + Path.GetRandomFileName());
+        try
+        {
+            AppPaths.ExtractEmbeddedSeeds(dir);
+            BossStore s = new(seedPath: Path.Combine(dir, "BossDefs.seed.json"));
+            IReadOnlyList<BossDef> all = s.Resolve();
+
+            foreach (string gameName in new[] { "nahr", "master assassin" })
+            {
+                List<BossDef> pair = all.Where(b => b.GameName == gameName).ToList();
+                Assert.Equal(2, pair.Count);
+                Assert.Equal(2, pair.Select(b => b.MonsterNumber).Distinct().Count());
+                Assert.Empty(pair[0].Rooms.Intersect(pair[1].Rooms));
+                Assert.DoesNotContain(all, b => b.Name == gameName);
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* temp cleanup */ }
+        }
     }
 }

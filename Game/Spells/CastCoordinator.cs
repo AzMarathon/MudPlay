@@ -277,7 +277,14 @@ public sealed class CastCoordinator : IDisposable
     // recent-cast clocks so the next round can cast immediately on either slot.
     // Subscribe by wiring TickEngine.CombatTickElapsed to this method in
     // AppServices.
-    public void OnCombatTick()
+    //
+    // roundPlaced false is a tick the client couldn't place against the game's
+    // rounds (TickEngine.LastCombatTickWasPlaced): only its own timer counting, long
+    // after anything was seen. The game gives the between-round cast back at its own
+    // round, wherever that is, so such a tick leaves that clock running and the cast
+    // waits out CastCommandCooldown, which is longer than any round and so can't put
+    // two casts in one (report paradigm-20261007-141844).
+    public void OnCombatTick(bool roundPlaced = true)
     {
         if (_castBlocked)
         {
@@ -285,7 +292,7 @@ public sealed class CastCoordinator : IDisposable
             _log?.Debug(LogCategory, "cast-block latch cleared on combat tick");
         }
         _lastAttackSentAt = DateTimeOffset.MinValue;
-        _lastBetweenRoundSentAt = DateTimeOffset.MinValue;
+        if (roundPlaced) _lastBetweenRoundSentAt = DateTimeOffset.MinValue;
     }
 
     // ----- failure handlers ------------------------------------------

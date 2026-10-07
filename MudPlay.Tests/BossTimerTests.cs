@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Combat;
+using MudPlay.Game.GameData;
 using MudPlay.Game.Map;
 using MudPlay.Game.Remote;
 using MudPlay.Models.GameData;
@@ -1003,5 +1004,162 @@ public sealed class BossTimerTests : IDisposable
             recentFoes: new[] { "Darken Beast Lord" });
 
         Assert.Null(timers.KilledAt("darken beast lord"));
+    }
+
+    // ----- Bosses the game gives one name ------------------------------------
+
+    private static BossDef Named(string name, string gameName, int number, string room) => new()
+    {
+        Name = name, GameName = gameName, MonsterNumber = number, Rooms = new() { room },
+        InStock = true, InParadigm = true, RespawnType = BossRespawnType.Timed,
+    };
+
+    // The Nahr in the throne room and the one in the pit are two bosses with one name
+    // and two timers. Read by name, both took the first Nahr record's hours.
+    [Fact]
+    public void TwoBossesOfOneGameName_EachReadTheirOwnRecordsTimer()
+    {
+        SeedGameData(RealmType.ParaMud, ("Nahr", 1004, 3, 1), ("Nahr", 1010, 10, 1), ("Nahr", 1011, 4, 1));
+        SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
+        var (bosses, _, cache) = NewStores();
+
+        Assert.Equal(2, bosses.Resolve().Count);
+        Assert.Equal(10, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().First(b => b.Name == "nahr (spheres)")));
+        Assert.Equal(4, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().First(b => b.Name == "nahr (spaceghost)")));
+    }
+
+    [Fact]
+    public void TwoBossesOfOneGameName_AreToldApartByTheRoomOfTheKill()
+    {
+        SeedGameData(RealmType.ParaMud, ("Nahr", 1010, 10, 1), ("Nahr", 1011, 4, 1));
+        SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
+        var (_, timers, _) = NewStores();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(12, 2378), engagedName: "Nahr");
+
+        Assert.NotNull(timers.KilledAt("nahr (spaceghost)"));
+        Assert.Null(timers.KilledAt("nahr (spheres)"));
+    }
+
+    [Fact]
+    public void RosterFallback_MarksTheBossOfThatRoom_WhenTwoShareAGameName()
+    {
+        SeedGameData(RealmType.ParaMud, ("Nahr", 1010, 10, 1), ("Nahr", 1011, 4, 1));
+        SeedBosses(Named("nahr (spheres)", "nahr", 1010, "17/3087"), Named("nahr (spaceghost)", "nahr", 1011, "12/2378"));
+        var (_, timers, _) = NewStores();
+        RoomKey throne = new(17, 3087);
+        List<string> killed = new();
+        timers.BossKilled += def => killed.Add(def.Name);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "Nahr"), throne, "Vaulted Throne Room");
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), throne, "Vaulted Throne Room");
+        timers.OnRoomDisplayed("Vaulted Throne Room");
+
+        Assert.NotNull(timers.KilledAt("nahr (spheres)"));
+        Assert.Null(timers.KilledAt("nahr (spaceghost)"));
+        Assert.Equal(new[] { "nahr (spheres)" }, killed);
+    }
+
+    // A boss with one name can still have several records: the great green dragon of
+    // the cavern is 15 hours, and an earlier record of the same name is 1.
+    [Fact]
+    public void RegenHours_AreReadFromTheBosssOwnRecord_NotTheFirstOfItsName()
+    {
+        SeedGameData(RealmType.ParaMud, ("great green dragon", 1038, 1, 1), ("great green dragon", 1058, 15, 1));
+        var (_, _, cache) = NewStores();
+
+        Assert.Equal(15, BossCatalog.ResolveRegenHours(cache, Boss("great green dragon", number: 1058, rooms: "1/3111")));
+        Assert.Equal(1, BossCatalog.ResolveRegenHours(cache, Boss("great green dragon", number: null, rooms: "1/3111")));
+    }
+
+    // In other game data the number may be some other monster, or one that isn't a
+    // boss: the name is what's left to go on.
+    [Fact]
+    public void RegenHours_FallBackToTheName_WhenTheNumberIsAnotherMonster()
+    {
+        SeedGameData(RealmType.ParaMud, ("giant rat", 792, 0, 0), ("giant roc", 571, 8, 1));
+        var (_, _, cache) = NewStores();
+
+        Assert.Equal(8, BossCatalog.ResolveRegenHours(cache, Boss("giant roc", number: 792, rooms: "10/159")));
+    }
+
+    // Malformation comes only from Lord Chisholm's death, so the two are one entry on
+    // his record: the hour runs from his death, and the malformation dying afterwards
+    // leaves it where it was (user, 2026-10-07).
+    [Fact]
+    public void BossThatDiesIntoAnother_IsTimedFromItsOwnDeath()
+    {
+        SeedGameData(RealmType.ParaMud, ("Lord Chisholm", 1297, 1, 1), ("malformation", 1298, 0, 1));
+        SeedBosses(Named("lord chisholm (malformation)", "lord chisholm", 1297, "14/6216"));
+        var (bosses, timers, cache) = NewStores();
+        RoomKey chambers = new(14, 6216);
+
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        DateTimeOffset? atHisDeath = timers.KilledAt("lord chisholm (malformation)");
+        Assert.NotNull(atHisDeath);
+        Assert.Equal(1, BossCatalog.EffectiveRegenHours(cache, bosses.Resolve().Single()));
+
+        timers.MarkKilled("lord chisholm (malformation)", DateTimeOffset.UtcNow.AddMinutes(-10));
+        DateTimeOffset? before = timers.KilledAt("lord chisholm (malformation)");
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        Assert.Equal(before, timers.KilledAt("lord chisholm (malformation)"));
+    }
+
+    // ----- What a boss's death summons ---------------------------------------
+
+    private (BossTimerStore timers, List<(string Boss, string? Dead, int? Exp)> loot, List<string> kills) ChisholmsChambers()
+    {
+        SeedGameData(RealmType.ParaMud, ("Lord Chisholm", 1297, 1, 1), ("malformation", 1298, 0, 1));
+        SeedBosses(Named("lord chisholm (malformation)", "lord chisholm", 1297, "14/6216"));
+        var (_, timers, _) = NewStores();
+        timers.SetDeathSummonResolver(def => def.MonsterNumber == 1297 ? new[] { "malformation" } : Array.Empty<string>());
+        List<(string, string?, int?)> loot = new();
+        List<string> kills = new();
+        timers.BossLootDropped += (def, dead, exp) => loot.Add((def.Name, dead, exp));
+        timers.BossKilled += def => kills.Add(def.Name);
+        return (timers, loot, kills);
+    }
+
+    // The malformation is where Lord Chisholm's loot is. Its death is not his: it
+    // starts no timer and is no boss kill, but it is when the drops land.
+    [Fact]
+    public void DeathOfWhatABossSummons_DropsLoot_WithoutBeingAKill()
+    {
+        var (timers, loot, kills) = ChisholmsChambers();
+        RoomKey chambers = new(14, 6216);
+
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "Lord Chisholm");
+        Assert.Equal(new[] { "lord chisholm (malformation)" }, kills);
+        Assert.Equal(("lord chisholm (malformation)", "Lord Chisholm", 100), Assert.Single(loot));
+
+        timers.OnMonsterDied(Death(fallback: true), chambers, engagedName: "malformation");
+        Assert.Single(kills);
+        Assert.Equal(2, loot.Count);
+        Assert.Equal(("lord chisholm (malformation)", "malformation", 100), loot[1]);
+    }
+
+    [Fact]
+    public void DeathOfWhatABossSummons_OutsideItsRooms_IsNothing()
+    {
+        var (timers, loot, _) = ChisholmsChambers();
+
+        timers.OnMonsterDied(Death(fallback: true), new RoomKey(14, 1), engagedName: "malformation");
+
+        Assert.Empty(loot);
+    }
+
+    // The boss gone from its room without a death seen still drops: nothing is
+    // known of the dead monster.
+    [Fact]
+    public void RosterFallback_DropsLoot_WithNothingKnownOfTheDeath()
+    {
+        var (timers, loot, _) = ChisholmsChambers();
+        RoomKey chambers = new(14, 6216);
+
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere, "Lord Chisholm"), chambers, "Lord's Chambers");
+        timers.OnRoomEntitiesObserved(Roster(RoomObservationSource.AlsoHere), chambers, "Lord's Chambers");
+        timers.OnRoomDisplayed("Lord's Chambers");
+
+        Assert.Equal(("lord chisholm (malformation)", (string?)null, (int?)null), Assert.Single(loot));
     }
 }

@@ -644,7 +644,7 @@ public sealed partial class CombatManager
         // null — if a target got set meanwhile (announce landed, manual attack) the
         // hold already resolved.
         if (_awaitingFollowAnnounce
-            && _isEnabled()
+            && Fighting()
             && _currentTarget is null
             && _classifier.Current is { } followFallback)
         {
@@ -661,7 +661,7 @@ public sealed partial class CombatManager
         // announce, but a full round elapsed without one — engage our own pick so we
         // never freeze (same shape as the follow fallback above).
         if (_awaitingNotLast
-            && _isEnabled()
+            && Fighting()
             && _currentTarget is null
             && _classifier.Current is { } notLastFallback)
         {
@@ -687,7 +687,7 @@ public sealed partial class CombatManager
         // (_currentTarget cleared by the death watcher) so we never swing at
         // a corpse. TryResumeEngage's pacing prevents a double-fire with the
         // OnCombatLine resume in the same round.
-        if (_isEnabled()
+        if (Fighting()
             && _combatOff
             && _castingSpellTarget is null
             && _currentTarget is not null
@@ -699,7 +699,7 @@ public sealed partial class CombatManager
         }
 
         if (!CombatSpellsWired) return;
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
         if (_combatOff)
         {
             // Round interrupted; the resume path owns the re-engage — all but the one
@@ -936,7 +936,7 @@ public sealed partial class CombatManager
     // different round source retain the heartbeat-owned tally path unchanged.
     private void ApplyConfirmedAttackCastToCap()
     {
-        if (!CombatSpellsWired || !_isEnabled()) return;
+        if (!CombatSpellsWired || !Fighting()) return;
         if (_castingSpellTarget is not { } target
             || !string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase))
             return;
@@ -1028,7 +1028,7 @@ public sealed partial class CombatManager
         void Dispatch()
         {
             _pendingSwitch = null;   // consumed — the next round may re-arm if needed
-            if (_disposed || !_isEnabled() || _combatOff) return;
+            if (_disposed || !Fighting() || _combatOff) return;
             // The announce already IS the switch target — e.g. a between-round-cast
             // resume re-announced it while this deferral sat pending. Firing again
             // double-casts the alternate (report paradigm-20260819-121003). No-op.
@@ -1111,7 +1111,7 @@ public sealed partial class CombatManager
     {
         void Dispatch()
         {
-            if (_disposed || !_isEnabled() || _combatOff) return;
+            if (_disposed || !Fighting() || _combatOff) return;
             if (!string.Equals(_currentTarget, target, StringComparison.OrdinalIgnoreCase)
                 || _classifier.Current is not { } obs
                 || !TargetPresent(obs, target))
@@ -1177,12 +1177,12 @@ public sealed partial class CombatManager
     private bool TryPreAttackInBetween(
         CombatSettings settings, EngageableCandidate picked, RoomEntitiesObservation obs)
     {
-        // Auto-Combat gate — mirrors PickInBetweenDebuff's own !_isEnabled() check.
+        // Auto-Combat gate — mirrors PickInBetweenDebuff's own !Fighting() check.
         // The single-target debuff is gated by Auto-Combat (see CombatSpellChooser
         // .TryDebuffing); without this, the see-hidden force-clear override — which
         // engages hostiles with Auto-Combat OFF and reaches here — would leak the
         // debuff now that the Auto-Nuke gate no longer blocks the single rung.
-        if (!CombatSpellsWired || _cast is null || !_isEnabled()) return false;
+        if (!CombatSpellsWired || _cast is null || !Fighting()) return false;
 
         CombatSpellContext ctx = BuildContext(
             settings, obs, picked.RawName, CountEngageable(obs), picked.MonsterNumber);
@@ -1297,7 +1297,7 @@ public sealed partial class CombatManager
         DateTimeOffset debuffAt = DateTimeOffset.Now;
         void Dispatch()
         {
-            if (_disposed || !_isEnabled()) return;
+            if (_disposed || !Fighting()) return;
             // Something else already sent this round's attack in the gap: a monster
             // walking in re-ran the room dispatch (the interrupt resume) before this
             // fired. Sending it again re-announced the spell, breaking and restarting
@@ -1347,7 +1347,7 @@ public sealed partial class CombatManager
     public (string Spell, string? Target)? PickInBetweenDebuff()
     {
         if (_disposed) return null;
-        if (!CombatSpellsWired || !_isEnabled()) return null;
+        if (!CombatSpellsWired || !Fighting()) return null;
         if (_currentTarget is not { } target) return null;
         if (_classifier.Current is not { } obs) return null;
         if (!TargetPresent(obs, target)) return null;
@@ -2077,7 +2077,7 @@ public sealed partial class CombatManager
     // spells, so a no-effect line that follows one of those is ignored here.
     private void OnSpellNoEffect(MatchResult match)
     {
-        if (!_isEnabled()) return;
+        if (!Fighting()) return;
 
         // Act on the first "no effect" of this round's burst only (see the field
         // comment on _immunityHandledThisRound); the rest of the burst is a leftover
