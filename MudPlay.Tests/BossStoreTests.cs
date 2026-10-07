@@ -208,7 +208,7 @@ public sealed class BossStoreTests : IDisposable
                 "lord of the hunt",
                 "massive cocoon",
                 "mayor godfrey",
-                "mayor of arlysia",
+                "mayor of arlysia (arachnigoth)",
                 "remik of the ebon blade",
                 "sharh'kur",
                 "sheriff lionheart",

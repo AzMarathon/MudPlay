@@ -862,7 +862,8 @@
     "RespawnType": "Timed"
   },
   {
-    "Name": "mayor of arlysia",
+    "Name": "mayor of arlysia (arachnigoth)",
+    "GameName": "mayor of arlysia",
     "MonsterNumber": 854,
     "Rooms": [
       "17/2269",
