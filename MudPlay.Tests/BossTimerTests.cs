@@ -164,6 +164,52 @@ public sealed class BossTimerTests : IDisposable
         Assert.NotNull(reloaded.KilledAt("ogre king"));
     }
 
+    // Two characters on one realm, a client each, share the realm's timers file. Each
+    // used to write the file from its own copy alone, so a kill on one client erased
+    // the other's from the file, and after a restart a character had the other's
+    // timers and none of its own.
+    [Fact]
+    public void TwoClientsOnOneRealm_KeepEachOthersTimers()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("guardian golem", 51, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"), Boss("guardian golem", number: 51, rooms: "3/301"));
+        var (_, first, _) = NewStores();
+        var (_, second, _) = NewStores();
+
+        first.MarkKilled("ogre king");
+        second.MarkKilled("guardian golem");     // written on top of the first client's kill
+
+        var (_, restarted, _) = NewStores();
+        Assert.NotNull(restarted.KilledAt("ogre king"));
+        Assert.NotNull(restarted.KilledAt("guardian golem"));
+
+        // The first client picks the other's kill up on its next poll, and says so.
+        int changed = 0;
+        first.Changed += () => changed++;
+        Assert.Null(first.KilledAt("guardian golem"));
+        Assert.True(first.TakeInOutsideChanges());
+        Assert.NotNull(first.KilledAt("guardian golem"));
+        Assert.Equal(1, changed);
+        Assert.False(first.TakeInOutsideChanges());   // nothing new since
+    }
+
+    [Fact]
+    public void ResetOnOneClient_LeavesTheOtherClientsNewerKillInPlace()
+    {
+        SeedGameData(RealmType.ParaMud, ("ogre king", 50, 24, 1), ("guardian golem", 51, 24, 1));
+        SeedBosses(Boss("ogre king", number: 50, rooms: "3/300"), Boss("guardian golem", number: 51, rooms: "3/301"));
+        var (_, first, _) = NewStores();
+        var (_, second, _) = NewStores();
+        first.MarkKilled("ogre king");
+        second.MarkKilled("guardian golem");
+
+        first.Reset("ogre king");
+
+        var (_, restarted, _) = NewStores();
+        Assert.Null(restarted.KilledAt("ogre king"));
+        Assert.NotNull(restarted.KilledAt("guardian golem"));
+    }
+
     [Fact]
     public void BossRow_LastKilled_ReflectsTimerStore()
     {

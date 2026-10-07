@@ -40,6 +40,47 @@ public sealed class FavoritesStoreTests : IDisposable
         return new FavoritesStore(cache);
     }
 
+    // Two clients on one game-data set share Favorites.json. Each used to save its own
+    // copy over the file, so one client's additions vanished when the other saved
+    // (report paradigm-20261006-220135: a character's favourites became another's).
+    [Fact]
+    public void TwoClientsOnOneSet_KeepEachOthersFavourites()
+    {
+        FavoritesStore first = NewStore();
+        FavoritesStore second = NewStore();
+
+        first.Add(new RoomKey(1, 45), "Bank");
+        second.Add(new RoomKey(2, 10), "Trainer");     // written on top of the first client's
+
+        FavoritesStore restarted = NewStore();
+        Assert.True(restarted.IsFavorite(new RoomKey(1, 45)));
+        Assert.True(restarted.IsFavorite(new RoomKey(2, 10)));
+
+        // The first client picks the other's up on its next poll.
+        int changed = 0;
+        first.Changed += () => changed++;
+        Assert.False(first.IsFavorite(new RoomKey(2, 10)));
+        Assert.True(first.TakeInOutsideChanges());
+        Assert.True(first.IsFavorite(new RoomKey(2, 10)));
+        Assert.Equal(1, changed);
+        Assert.False(first.TakeInOutsideChanges());
+    }
+
+    [Fact]
+    public void RemoveOnOneClient_DoesNotBringBackOrDropTheOthers()
+    {
+        FavoritesStore first = NewStore();
+        first.Add(new RoomKey(1, 45), "Bank");
+        FavoritesStore second = NewStore();
+        second.Add(new RoomKey(2, 10), "Trainer");
+
+        first.Remove(new RoomKey(1, 45));
+
+        FavoritesStore restarted = NewStore();
+        Assert.False(restarted.IsFavorite(new RoomKey(1, 45)));
+        Assert.True(restarted.IsFavorite(new RoomKey(2, 10)));
+    }
+
     [Fact]
     public void SetStarred_TogglesFlagAndCount()
     {

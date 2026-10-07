@@ -3587,6 +3587,9 @@ public sealed class AppServices
         Profile.BbsPinApplied += _ => BossTimers.OnRealmChanged(ActiveRealmFolder());
         Profile.ProfileClosed += () => BossTimers.OnRealmChanged(ActiveRealmFolder());
         BossTimers.OnRealmChanged(ActiveRealmFolder());
+        // Several clients share the realm's boss timers and the set's favourites, one
+        // file each; pick up what another client wrote within a heartbeat.
+        Tick.HeartbeatElapsed += () => BossTimers.TakeInOutsideChanges();
         // Cleanup-boss DEAD/ALIVE state reads the active realm's nightly-cleanup time.
         BossTimers.SetCleanupConfig(ResolveBossCleanupConfig);
 
@@ -3839,6 +3842,7 @@ public sealed class AppServices
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
         Favorites = new FavoritesStore(GameData, Log);
+        Tick.HeartbeatElapsed += () => Favorites.TakeInOutsideChanges();
         GotoHistory = new GotoHistoryStore(Profile);
 
         // Coordinator + walker. Coordinator is the

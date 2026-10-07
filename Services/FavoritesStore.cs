@@ -12,6 +12,13 @@ namespace MudPlay.Services;
 // in-memory cache from Data/game data/{set}/Favorites.json on
 // GameDataCache.ActiveSetChanged and rewrites the whole file on every mutation.
 //
+// Every client on that set shares the file, and they are often open together, each
+// with its own copy of the list. So the file is re-read whenever another client
+// wrote it, on a poll and before every change, and a change is then written on top
+// of what that client last saved. Written from its own copy alone, each client's
+// save threw away what the other had added, and after a restart one character's
+// favourites had become the other's.
+//
 // Singleton in AppServices. Consumers (Navigation view-model) subscribe to
 // Changed for refresh; the store doesn't push a sorted view itself — sort order
 // is a UI concern.
@@ -72,6 +79,7 @@ public sealed class FavoritesStore
     // return true.
     public bool SetStarred(RoomKey key, bool starred)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return false;
         if (!_favorites.TryGetValue(key, out FavoriteRoom? entry)) return false;
         if (entry.Starred == starred) return true;
@@ -109,6 +117,7 @@ public sealed class FavoritesStore
     // no set is active. Persists immediately.
     public void Add(RoomKey key, string? label = null, string? folder = null)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return;
         if (_favorites.ContainsKey(key)) return;
 
@@ -125,6 +134,7 @@ public sealed class FavoritesStore
     // Update an existing favourite's label. No-op when not bookmarked or no set active.
     public void Rename(RoomKey key, string? newLabel)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return;
         if (!_favorites.TryGetValue(key, out FavoriteRoom? entry)) return;
 
@@ -139,6 +149,7 @@ public sealed class FavoritesStore
     // the new key carrying the folder over; a same-coordinate edit is a relabel.
     public void Edit(RoomKey oldKey, RoomKey newKey, string? newLabel)
     {
+        TakeInOutsideChanges();
         if (oldKey.Equals(newKey))
         {
             Rename(oldKey, newLabel);
@@ -152,6 +163,7 @@ public sealed class FavoritesStore
     // Remove the favourite. No-op when not bookmarked or no set active.
     public void Remove(RoomKey key)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return;
         if (!_favorites.Remove(key)) return;
 
@@ -164,6 +176,7 @@ public sealed class FavoritesStore
     // bookmarked, no set active, or already there. Persists immediately.
     public void MoveFavorite(RoomKey key, string? folder)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return;
         if (!_favorites.TryGetValue(key, out FavoriteRoom? entry)) return;
 
@@ -183,6 +196,7 @@ public sealed class FavoritesStore
     // (as an empty record or via a favourite).
     public void AddFolder(string path)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return;
         string norm = NavFolders.Normalize(path);
         if (norm.Length == 0) return;
@@ -197,6 +211,7 @@ public sealed class FavoritesStore
     // newPath. No-op when no set active or the path is the root.
     public void RenameFolder(string oldPath, string newPath)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return;
         string from = NavFolders.Normalize(oldPath);
         string to = NavFolders.Normalize(newPath);
@@ -221,6 +236,7 @@ public sealed class FavoritesStore
     // keep favourites from being orphaned). No-op at the root or with no set active.
     public void RemoveFolder(string path, bool moveContentsToParent = true)
     {
+        TakeInOutsideChanges();
         if (_setName is null) return;
         string from = NavFolders.Normalize(path);
         if (from.Length == 0) return;
@@ -264,8 +280,27 @@ public sealed class FavoritesStore
             Favorites = _favorites.Values.ToList(),
             FavoriteFolders = _emptyFolders.ToList(),
         };
-        JsonStore.Save(AppPaths.GameDataSetFavoritesFile(_setName), file);
+        string path = AppPaths.GameDataSetFavoritesFile(_setName);
+        JsonStore.Save(path, file);
+        _seenWrite = WriteTime(path);
     }
+
+    // Write time of the file as this client last read or wrote it.
+    private DateTime _seenWrite = DateTime.MinValue;
+
+    // Re-read the favourites when another client on this set has written them.
+    // Called on the heartbeat and before every change. True when anything was re-read.
+    public bool TakeInOutsideChanges()
+    {
+        if (_setName is null) return false;
+        if (WriteTime(AppPaths.GameDataSetFavoritesFile(_setName)) == _seenWrite) return false;
+        LoadForSet(_setName);
+        _log?.Debug("Favorites", "favourites re-read: another client on this game-data set changed them");
+        return true;
+    }
+
+    private static DateTime WriteTime(string path) =>
+        File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
 
     private void OnActiveSetChanged(string? setName) => LoadForSet(setName);
 
@@ -274,6 +309,7 @@ public sealed class FavoritesStore
         _favorites.Clear();
         _emptyFolders.Clear();
         _setName = string.IsNullOrWhiteSpace(setName) ? null : setName;
+        _seenWrite = _setName is null ? DateTime.MinValue : WriteTime(AppPaths.GameDataSetFavoritesFile(_setName));
 
         if (_setName is not null)
         {
