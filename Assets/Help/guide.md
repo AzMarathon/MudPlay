@@ -1501,7 +1501,7 @@ An engine only acts while it's on, and each has a matching Settings tab for its 
 
 **Sneak cooldown.** Right after a fight the game won't let you sneak for a few seconds (`You may not sneak right now!`). With **Auto-Sneak on**, your loop or walk waits instead of stepping on unsneaked: it retries the sneak every two seconds and moves once it takes, or after 15 seconds goes on unsneaked. **Being followed is different:** when a monster comes into the room right behind you, a sneak can't take while it's with you, so MudPlay stops sending `sn` and walks on unsneaked — no waiting, no stopping to cast — until you leave a room that nothing followed you into, or you kill what followed you. Then it sneaks again. The status bar reads *Waiting — sneak on cooldown* meanwhile. The route also waits for the game's answer before taking a step while you're not sneaking — each time you arrive in a room, and before the first step of a loop or walk — retrying a refused sneak until it takes (up to 15 seconds), so you don't walk into the next room seen (*Waiting — sneaking*). Entering a room without the game's `Sneaking...` line means the sneak silently broke: MudPlay treats that like `You make a sound as you enter the room!` and won't open with a backstab.
 
-**Something in your pack that kills your Stealth.** A few items cut your Stealth just by being carried: a **log raft** (-125), a wooden skiff, a silverbark canoe, a river punt, a wooden ladder, the large black gem. With one of them in your pack a sneak can be refused every time. When your Stealth less that penalty (and less the penalty for a heavy load) leaves under a 10% chance, **Auto-Sneak stands down**: it says so once on the terminal, naming the item, sends no `sn`, and your walk or loop carries on unsneaked. It checks again whenever your inventory changes and starts sneaking again, with another line on the terminal, once the item is gone. A smaller penalty that still leaves a real chance changes nothing. A character with Perfect Stealth is never stood down.
+**Something in your pack that kills your Stealth.** A few items cut your Stealth just by being carried: a **log raft** (-125), a wooden skiff, a silverbark canoe, a river punt, a wooden ladder, the large black gem. With one of them in your pack a sneak can be refused every time. When your Stealth less that penalty (and less the penalty for a heavy load) leaves under a **15%** chance to sneak, **Auto-Sneak stands down**: it says so once on the terminal, naming the item, sends no `sn`, and your walk or loop carries on unsneaked. It checks again whenever your inventory changes and starts sneaking again, with another line on the terminal, once the item is gone. A smaller penalty that still leaves a real chance changes nothing, and a character with Perfect Stealth is never stood down. The 15% is yours to set: **Settings → Other → Stop auto-sneaking while a carried item leaves under … % chance to sneak**.
 
 **Keeping the sneak.** A lot of what MudPlay does on its own ends a sneak in the game:
 - casting any spell;
@@ -4140,6 +4140,15 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 - **Recently disarmed:** a trap you disarmed stays down until the game re-arms it — 5 minutes on Stock, 2 on Paradigm. Coming back to that exit sooner, MudPlay crosses without disarming again, which saves the command and keeps your sneak. Once the time is up it disarms again. Only your own disarms count: a trap that was already down when you got there is disarmed again next time.
 - **No searching:** MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
 
+### Stop auto-sneaking while a carried item leaves under … % chance to sneak
+
+**Default:** `15`
+**Available options:** 0–95
+**What it does:** A few items cut your Stealth just by being in your pack (a log raft is -125; see *Something in your pack that kills your Stealth* under Auto-Sneak). MudPlay estimates your chance to sneak from your Stealth with that penalty applied, less the penalty for a heavy load. While the estimate is **under this figure**, Auto-Sneak sends no `sn`, says so once on the terminal, and your walk goes on unsneaked until the item is gone.
+- **Why not just try anyway:** every sneaked move re-rolls against the same chance, so at a few percent a sneak that does take is lost a room later, after a long run of resent `sn`.
+- **`0`** never stands down (the old behaviour: keep resending `sn`). **`1`** stands down only when a sneak can't take at all.
+- It only applies while one of those items is carried. A character whose Stealth is simply low is never stood down.
+
 ### Door max pick
 
 **Default:** 10
@@ -4753,6 +4762,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Utilize disarm traps | `true` | bool | `OtherSettings.UtilizeDisarmTrapsIfAble` | Models/Profile/OtherSettings.cs |
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max bash / pick / Pick over bash | 10/10/false | 1–100 / 1–100 / bool | `MaxBashAttempts`, `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
+| Stop auto-sneaking while a carried item leaves under … % | `15` | 0–95 | `OtherSettings.SneakStandDownChance` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |
 | Auto-request @comeback when left behind | true | bool | `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |

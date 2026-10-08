@@ -633,7 +633,7 @@ public static class BugReportBuilder
         Kv(sb, "Auto-Sneak stood down for a carried item", svc.Stealth.StoodDownFor ?? "no");
         Kv(sb, "Carried Stealth penalty", carried.Modifier >= 0
             ? "none"
-            : $"{carried.Items}: estimated sn chance {carried.Chance}% (stands down under {Game.Stealth.CarriedStealthPenalty.HopelessChance}%)");
+            : $"{carried.Items}: estimated sn chance {carried.Chance}% (stands down under {svc.CarriedStealth.HopelessChance}%, Settings → Other)");
         // Sneak keeping: what automation is waiting so as not to end a sneak.
         Game.Stealth.SneakHold hold = svc.SneakGuard.Current;
         Kv(sb, "Sneak keeping", hold == Game.Stealth.SneakHold.None

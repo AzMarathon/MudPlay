@@ -49,6 +49,14 @@ public sealed class OtherSettings
     // Settings → Other. Read live by Game.Inventory.AutoDiscardManager.HideMode.
     public bool HideWhenDiscarding { get; set; }
 
+    // ----- Sneaking ---------------------------------------------------
+
+    // Auto-Sneak stands down while a carried item (a log raft, Stealth -125) leaves
+    // the estimated `sn` chance under this many percent, instead of resending `sn`
+    // into a refusal in every room. 0 never stands down; 1 stands down only when a
+    // sneak can't take at all. Default 15 per user direction (2026-10-07).
+    public int SneakStandDownChance { get; set; } = 15;
+
     // ----- Door / lock handling --------------------------------------
 
     // Walker's max pick <dir> retries before giving up on a single door. Picking

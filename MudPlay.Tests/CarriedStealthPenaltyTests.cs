@@ -15,12 +15,13 @@ public sealed class CarriedStealthPenaltyTests
         public int Stealth { get; set; } = 131;
         public int EncumbrancePercent { get; set; }
         public bool PerfectStealth { get; set; }
+        public int StandDownUnder { get; set; } = 15;
         public CarriedStealthPenalty Penalty { get; }
 
         public Harness() => Penalty = new CarriedStealthPenalty(
             () => Carried,
             name => name switch { "log raft" => -125, "river punt" => -50, "lucky charm" => 10, _ => 0 },
-            () => Stealth, () => EncumbrancePercent, () => PerfectStealth);
+            () => Stealth, () => EncumbrancePercent, () => PerfectStealth, () => StandDownUnder);
     }
 
     [Fact]
@@ -75,6 +76,28 @@ public sealed class CarriedStealthPenaltyTests
 
         Assert.False(v.Hopeless);
         Assert.Equal(81, v.Chance);
+    }
+
+    // The line is the user's (Settings → Other): 12% is under the default 15, not
+    // under 10, and a setting of 0 never stands down.
+    [Fact]
+    public void TheThresholdIsTheUsersSetting()
+    {
+        Harness h = new() { Stealth = 137 };
+        h.Penalty.NoteStealthRead();
+        h.Carried.Add("log raft");
+        Assert.Equal(12, h.Penalty.Current().Chance);
+
+        Assert.True(h.Penalty.Current().Hopeless);
+
+        h.StandDownUnder = 10;
+        Assert.False(h.Penalty.Current().Hopeless);
+
+        h.Stealth = 100;                 // 100 - 125: no chance at all
+        h.StandDownUnder = 0;
+        Assert.False(h.Penalty.Current().Hopeless);
+        h.StandDownUnder = 1;
+        Assert.True(h.Penalty.Current().Hopeless);
     }
 
     [Fact]

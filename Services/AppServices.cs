@@ -5514,7 +5514,8 @@ public sealed class AppServices
             encumbrancePercent: () => Inventory.Snapshot.Encumbrance is { MaxWeight: > 0 } load
                 ? load.CurrentWeight * 100 / load.MaxWeight : 0,
             perfectStealth: () => Profile.Current?.QuestLog?.Any(q =>
-                q.Complete && q.Flag == Game.Stealth.SneakChance.PerfectStealthAbility) == true);
+                q.Complete && q.Flag == Game.Stealth.SneakChance.PerfectStealthAbility) == true,
+            hopelessChance: () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").SneakStandDownChance);
         Stealth.SetCarriedPenaltyCheck(
             () => CarriedStealth.Current() is { Hopeless: true } verdict ? verdict.Items : null,
             msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));

@@ -15,14 +15,16 @@ namespace MudPlay.Game.Stealth;
 public sealed class CarriedStealthPenalty
 {
     // A sneak under this chance isn't worth sending: every sneaked move re-rolls
-    // under the same chance, so one that does take is lost a room later.
-    public const int HopelessChance = 10;
+    // under the same chance, so one that does take is lost a room later. The user
+    // sets it (Settings → Other); 0 never stands down.
+    public int HopelessChance => Math.Clamp(_hopelessChance(), 0, 95);
 
     private readonly Func<IReadOnlyList<string>> _carried;
     private readonly Func<string, int> _packStealthOf;
     private readonly Func<int> _stealthReading;
     private readonly Func<int> _encumbrancePercent;
     private readonly Func<bool> _perfectStealth;
+    private readonly Func<int> _hopelessChance;
     private int _carriedAtRead;
 
     // Items names the carried things that lower Stealth; Modifier is their sum.
@@ -30,18 +32,21 @@ public sealed class CarriedStealthPenalty
 
     public CarriedStealthPenalty(
         Func<IReadOnlyList<string>> carried, Func<string, int> packStealthOf,
-        Func<int> stealthReading, Func<int> encumbrancePercent, Func<bool> perfectStealth)
+        Func<int> stealthReading, Func<int> encumbrancePercent, Func<bool> perfectStealth,
+        Func<int> hopelessChance)
     {
         ArgumentNullException.ThrowIfNull(carried);
         ArgumentNullException.ThrowIfNull(packStealthOf);
         ArgumentNullException.ThrowIfNull(stealthReading);
         ArgumentNullException.ThrowIfNull(encumbrancePercent);
         ArgumentNullException.ThrowIfNull(perfectStealth);
+        ArgumentNullException.ThrowIfNull(hopelessChance);
         _carried = carried;
         _packStealthOf = packStealthOf;
         _stealthReading = stealthReading;
         _encumbrancePercent = encumbrancePercent;
         _perfectStealth = perfectStealth;
+        _hopelessChance = hopelessChance;
     }
 
     // A `stat` screen just gave a fresh Stealth figure: remember what the pack was
