@@ -7,6 +7,12 @@
         x:Class="MudPlay.Views.CharacterWorkshop.ItemFinderSectionView"
         x:DataType="vm:ItemFinderViewModel">
 
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TrialWornWash" Color="{StaticResource AccentGreenColor}" Opacity="0.22"/>
+        <SolidColorBrush x:Key="TrialNotWornWash" Color="{StaticResource AccentRedColor}" Opacity="0.22"/>
+        <SolidColorBrush x:Key="TrialUnfilledWash" Color="{StaticResource AccentYellowColor}" Opacity="0.22"/>
+    </UserControl.Resources>
+
     <UserControl.Styles>
         <Style Selector="TextBlock.Group">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
@@ -35,6 +41,26 @@
             <Setter Property="Increment" Value="1"/>
             <Setter Property="FormatString" Value="0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <!-- The "Missing?" check's tint on a trial slot: a wash of the colour with a
+             full-strength edge, so the verdict reads without hiding the row. -->
+        <Style Selector="Border.trialSlot">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="0,1"/>
+        </Style>
+        <Style Selector="Border.trialSlot.worn">
+            <Setter Property="Background" Value="{StaticResource TrialWornWash}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+        </Style>
+        <Style Selector="Border.trialSlot.notWorn">
+            <Setter Property="Background" Value="{StaticResource TrialNotWornWash}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+        <Style Selector="Border.trialSlot.unfilled">
+            <Setter Property="Background" Value="{StaticResource TrialUnfilledWash}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentYellowBrush}"/>
         </Style>
     </UserControl.Styles>
 
@@ -397,18 +423,32 @@
                             </StackPanel>
                             <TextBlock Classes="Group" Text="Trial set" VerticalAlignment="Center" Margin="0"/>
                         </DockPanel>
-                        <Grid ColumnDefinitions="44,72,*" ColumnSpacing="4">
+                        <Grid ColumnDefinitions="44,72,*,Auto" ColumnSpacing="4">
                             <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Hold"/>
                             <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Slot"/>
                             <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Item"/>
+                            <!-- Stays on until pressed again; the tints follow the trial
+                                 set and what's worn while it is. -->
+                            <ToggleButton Grid.Column="3" Content="Missing?" Margin="0,0,16,0"
+                                          IsChecked="{Binding ShowMissing, Mode=TwoWay}"
+                                          ToolTip.Tip="Mark each slot by what you're wearing right now. Green: you're wearing that item. Red: you aren't. Yellow: nothing is picked for the slot. Stays on until you press it again."/>
                         </Grid>
+                        <TextBlock Text="{Binding MissingNote}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource AccentAmberBrush}"
+                                   FontSize="{StaticResource FontSizeSm}"
+                                   IsVisible="{Binding HasMissingNote}"/>
                     </StackPanel>
 
                     <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding TrialSlots}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:TrialSlotRow">
-                                    <Grid ColumnDefinitions="44,72,*" Margin="0,1,16,1" ColumnSpacing="4">
+                                    <Border Classes="trialSlot" Margin="0,1,16,1"
+                                            Classes.worn="{Binding IsWorn}"
+                                            Classes.notWorn="{Binding IsNotWorn}"
+                                            Classes.unfilled="{Binding IsUnfilled}"
+                                            ToolTip.Tip="{Binding WornCheckTip}">
+                                    <Grid ColumnDefinitions="44,72,*" ColumnSpacing="4">
                                         <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
                                                   VerticalAlignment="Center" Margin="8,0,0,0"
                                                   ToolTip.Tip="Lock this slot so Find Best won't change it."/>
@@ -425,6 +465,7 @@
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
                                     </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

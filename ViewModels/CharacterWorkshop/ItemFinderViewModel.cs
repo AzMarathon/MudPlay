@@ -347,6 +347,13 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
     // Manager's Bonuses), and the encumbrance overlay vs the live character.
     public ObservableCollection<EquipBonusRow> TrialBonusRows { get; } = new();
     [ObservableProperty] private bool _hasTrialBonuses;
+    // "Missing?": while on, each trial slot is tinted by whether its item is being
+    // worn right now. It stays on, following the trial set and the worn gear, until
+    // the button is pressed again.
+    [ObservableProperty] private bool _showMissing;
+    [ObservableProperty] private string _missingNote = string.Empty;
+    public bool HasMissingNote => MissingNote.Length > 0;
+
     [ObservableProperty] private string _currentEncumbranceText = "—";
     [ObservableProperty] private string _trialEncumbranceText = "—";
 
@@ -375,6 +382,7 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         Estimates = new ItemFinderEstimatesViewModel(
             StatsWithNothingWorn(gameData, stats, inventory), gameData.ActiveRealm, monsters);
         Estimates.Changed += RecomputeTrialDamage;
+        _inventory.Changed += OnInventoryChanged;
         _liveAlignment = alignment;
         _liveEvilPoints = evilPoints;
         _mdbBuilder = new ItemMdbViewBuilder(gameData, stats.Charm);
@@ -593,6 +601,8 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
             case nameof(CurrentEncumbranceText):
             case nameof(TrialEncumbranceText):
             case nameof(HasTrialBonuses):
+            case nameof(ShowMissing):
+            case nameof(MissingNote):
             case nameof(TrialDamageTitle):
             case nameof(TrialDamageTarget):
             case nameof(TrialDamageNote):
@@ -822,6 +832,7 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
     public override void Dispose()
     {
         Estimates.Changed -= RecomputeTrialDamage;
+        _inventory.Changed -= OnInventoryChanged;
         Estimates.CloseCommand.Execute(null);
     }
 
@@ -1092,7 +1103,39 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
                 ? string.Create(CultureInfo.InvariantCulture, $"Trial set weight: {trialWeight:N0}")
                 : "—";
         }
+        RefreshMissing();
         RecomputeTrialDamage();
+    }
+
+    partial void OnShowMissingChanged(bool value) => RefreshMissing();
+    partial void OnMissingNoteChanged(string value) => OnPropertyChanged(nameof(HasMissingNote));
+
+    // Gear put on or taken off while the check is showing moves its colours.
+    private void OnInventoryChanged() => Avalonia.Threading.Dispatcher.UIThread.Post(RefreshMissing);
+
+    // Tint each trial slot by whether its item is on the character now. Worn copies
+    // are matched one for one, so two of the same ring in the set with one on the
+    // hand reads one worn, one not.
+    private void RefreshMissing()
+    {
+        bool check = ShowMissing && _inventory.IsLoaded;
+        MissingNote = ShowMissing && !_inventory.IsLoaded
+            ? "Your worn gear hasn't been read yet: type i in the game."
+            : string.Empty;
+
+        var worn = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (check)
+            foreach (EquippedItem e in _inventory.Snapshot.EquippedItems)
+                worn[e.Name] = worn.GetValueOrDefault(e.Name) + 1;
+
+        foreach (TrialSlotRow row in TrialSlots)
+        {
+            if (!check) { row.WornCheck = TrialWornCheck.NotChecked; continue; }
+            if (row.ItemName is not { } name) { row.WornCheck = TrialWornCheck.Unfilled; continue; }
+            int left = worn.GetValueOrDefault(name);
+            if (left > 0) worn[name] = left - 1;
+            row.WornCheck = left > 0 ? TrialWornCheck.Worn : TrialWornCheck.NotWorn;
+        }
     }
 
     // Price the trial set's attack: the selected attack type, swung by the

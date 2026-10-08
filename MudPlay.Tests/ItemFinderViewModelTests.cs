@@ -1,9 +1,12 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using MudPlay.Game;
 using MudPlay.Game.Inventory;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.Terminal;
 using MudPlay.ViewModels.CharacterWorkshop;
 using Xunit;
 
@@ -102,6 +105,62 @@ public sealed class ItemFinderViewModelTests : IDisposable
         finder.FilterByUsableLevel = true;
         Assert.False(finder.FilterByLevelRange);
         Assert.Equal(new[] { "keen dagger", "ring of might" }, Shown(finder));
+    }
+
+    // Read an inventory dump into the manager the way the terminal would.
+    private static void FeedInventory(InventoryManager inventory, params string[] dump)
+    {
+        var lines = new LineExtractor(new TerminalEmulator(80, 24));
+        inventory.AttachLineExtractor(lines);
+        var emit = (Action<LineExtractor.EmittedLine>)typeof(LineExtractor)
+            .GetField("LineEmitted", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(lines)!;
+        foreach (string text in dump)
+            emit(new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+    }
+
+    private static TrialWornCheck Check(ItemFinderViewModel finder, EquipmentSlot slot) =>
+        finder.TrialSlots.First(r => r.Slot == slot).WornCheck;
+
+    [Fact]
+    public void Missing_TintsEachSlotByWhatIsWorn_UntilSwitchedOff()
+    {
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        FeedInventory(inventory,
+            "You are carrying 5 copper farthings, keen dagger (Weapon Hand).",
+            "You have no keys.",
+            "Wealth:    5 copper farthings",
+            "Encumbrance:    36/2880  -  Light  [1%]");
+        ItemFinderViewModel finder = NewFinder(inventory);
+        finder.TrialEquipCommand.Execute(Entry(finder, "keen dagger"));
+        finder.TrialEquipCommand.Execute(Entry(finder, "ring of might"));
+
+        Assert.All(finder.TrialSlots, r => Assert.Equal(TrialWornCheck.NotChecked, r.WornCheck));
+
+        finder.ShowMissing = true;
+        Assert.Equal(TrialWornCheck.Worn, Check(finder, EquipmentSlot.Weapon));
+        Assert.Equal(TrialWornCheck.NotWorn, Check(finder, EquipmentSlot.Finger1));
+        Assert.Equal(TrialWornCheck.Unfilled, Check(finder, EquipmentSlot.Head));
+
+        // It keeps following the trial set while it's on.
+        finder.TrialEquipCommand.Execute(Entry(finder, "great maul"));
+        Assert.Equal(TrialWornCheck.NotWorn, Check(finder, EquipmentSlot.Weapon));
+
+        finder.ShowMissing = false;
+        Assert.All(finder.TrialSlots, r => Assert.Equal(TrialWornCheck.NotChecked, r.WornCheck));
+    }
+
+    // Before the worn gear has been read there's nothing to compare against.
+    [Fact]
+    public void Missing_WithNoInventoryRead_SaysSoAndTintsNothing()
+    {
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        ItemFinderViewModel finder = NewFinder(inventory);
+        finder.TrialEquipCommand.Execute(Entry(finder, "keen dagger"));
+
+        finder.ShowMissing = true;
+
+        Assert.True(finder.HasMissingNote);
+        Assert.All(finder.TrialSlots, r => Assert.Equal(TrialWornCheck.NotChecked, r.WornCheck));
     }
 
     [Fact]
