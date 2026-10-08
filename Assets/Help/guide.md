@@ -1117,7 +1117,7 @@ Gear is organized into named equipment sets in the **Player Workshop** — a Def
 
 ## Importing a MegaMUD profile
 
-**Profile Management → Import MegaMUD profile…** (under the Characters list) makes a new MudPlay character from a MegaMUD character file, the `.ini` MegaMUD keeps for each character. Pick the BBS and realm it belongs to first, then the file.
+**Profile Management → Import MegaMUD profile…** (on the top line, left of **New…**) makes a new MudPlay character from a MegaMUD character file, the `.ini` MegaMUD keeps for each character. Pick the BBS and realm it belongs to first, then the file.
 
 Before anything is created you get a **review**:
 
