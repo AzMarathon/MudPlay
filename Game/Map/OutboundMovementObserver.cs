@@ -58,6 +58,11 @@ public sealed partial class OutboundMovementObserver
     // room (Confirmed → Pending → Suspect ×3 → Lost).
     public void SuppressNextMove() => _suppressNextCommand = true;
 
+    // True while the character is out of the game on the board's menu: what is
+    // typed there is a menu selection. `e` enters the realm; read as a step east it
+    // left the tracker waiting on a room that never came, and the walk resyncing.
+    public Func<bool>? AtBoardMenu { get; set; }
+
     public void ObserveOutbound(ReadOnlySpan<byte> bytes)
     {
         if (bytes.IsEmpty || bytes.Length > MaxBytes) return;
@@ -66,6 +71,7 @@ public sealed partial class OutboundMovementObserver
             .Trim()
             .ToLowerInvariant();
         if (cmd.Length == 0) return;
+        if (AtBoardMenu?.Invoke() == true) return;
 
         if (_suppressNextCommand)
         {

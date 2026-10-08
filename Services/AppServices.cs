@@ -285,6 +285,8 @@ public sealed class AppServices
     // connection. Feeds the Wire Inspector window and any future
     // "what did the server just say" diagnostic.
     public WireBuffer Wire { get; }
+    public Game.InGameCapture InGameCapture { get; private set; } = null!;
+    private const string BoardMenuHold = "at the board's menu";
 
     // Which Wire Inspector panes are currently visible — read by BugReportBuilder to
     // decide whether to attach the raw / classified wire. Updated by the inspector VM.
@@ -5673,6 +5675,22 @@ public sealed class AppServices
         // types), so without this the keyboard stays captured and the next
         // command is sent byte-by-byte (report paradigm-20260906-090057).
         PromptScanner.PromptObserved += _ => TrainerMenu.NotifyLivePromptObserved();
+        // A bug report copies the terminal only from the time spent in the game, so a
+        // login screen never rides along in one.
+        InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
+        // Out to the board's menu with the link still up: nothing automatic may be
+        // sent (it would be a menu selection), a typed selection isn't a move, the
+        // menu's lines aren't unknown game lines, and its prompt isn't a broken
+        // statline to repair. Re-arming the statline check makes it wait for the
+        // next room display, as it does at login.
+        OutboundMovement.AtBoardMenu = () => InGameCapture.AtBoardMenu;
+        InGameCapture.AtBoardMenuChanged += atMenu =>
+        {
+            if (!atMenu) { EngineGate.Release(BoardMenuHold); return; }
+            EngineGate.Hold(BoardMenuHold);
+            MessageCandidateWatcher.NotifyLeftForMenu();
+            StatlineReconcile.Arm();
+        };
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
         PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();
@@ -10590,6 +10608,23 @@ public sealed class AppServices
                 if (seen.Add(summoned)) next.Enqueue(summoned);
         }
         return chain;
+    }
+
+    // What it takes to hurt a boss: the hit-magic level a weapon needs (the monster's
+    // Magical) and the level a spell needs (its spell immunity). A boss that turns
+    // into something else as it dies isn't dead until that is, so it's the highest
+    // any monster in the chain asks for. Both 0 for a box, or a boss this game data
+    // has no monster for.
+    public (int HitMagic, int SpellLevel) BossReach(Models.Profile.BossDef def)
+    {
+        int hitMagic = 0, spellLevel = 0;
+        foreach (Game.Inventory.BossDeathLoot.ChainMonster link in BossDeathChain(def))
+        {
+            if (MonsterCatalog.Get(link.Number) is not { } m) continue;
+            hitMagic = Math.Max(hitMagic, m.Magical);
+            spellLevel = Math.Max(spellLevel, m.SpellImmunity);
+        }
+        return (hitMagic, spellLevel);
     }
 
     // How long a monster's death leaves the room unable to act: the length of its

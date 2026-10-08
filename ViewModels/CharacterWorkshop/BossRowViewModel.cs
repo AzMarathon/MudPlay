@@ -43,6 +43,16 @@ public sealed partial class BossRowViewModel : ObservableObject
     // Malformed entries are dropped by TryParseWire, so this is only the walkable ones.
     public IReadOnlyList<RoomKey> RoomKeys { get; }
 
+    // What it takes to hurt this boss: the hit-magic level a weapon needs and the
+    // level a spell needs, the highest any monster it turns into asks for. Both 0
+    // for a box, or a boss the game data has no monster for.
+    public int HitMagicNeeded { get; init; }
+    public int SpellLevelNeeded { get; init; }
+    public string ReachTip =>
+        (HitMagicNeeded > 0 ? $"Weapons need hit magic {HitMagicNeeded}." : "Any weapon hits it.")
+        + "\n"
+        + (SpellLevelNeeded > 0 ? $"Immune to spells below level {SpellLevelNeeded}." : "No spell immunity.");
+
     [ObservableProperty] private bool _stopBefore;
 
     // Blind-grab-on-kill flag (inline-editable, like StopBefore): when set, the moment

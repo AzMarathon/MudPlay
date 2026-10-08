@@ -130,7 +130,8 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
 
         Sections.Add(new WorkshopGroupSectionViewModel(RecordsGroupId, "Record Keeping",
             new LazyWorkshopSection(BossesSectionViewModel.SectionId, BossesSectionViewModel.SectionTitle,
-                () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick, AppServices.Current.Profile)),
+                () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick, AppServices.Current.Profile,
+                    AppServices.Current.BossReach)),
             // One Workshop, so one of these: two would both read the inventory and
             // diff the same chest opens.
             new LazyWorkshopSection(ChestOffloadViewModel.SectionId, ChestOffloadViewModel.SectionTitle,

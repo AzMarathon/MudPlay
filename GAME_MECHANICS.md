@@ -499,16 +499,36 @@ What the game prints on the wire, including the prompt/statline, the command rat
   <lowercase verb>…` minus enter/exit/follow/logon/chat lines (see `ActionEmoteClassifier`).
 
 ### Realm exit / logoff sequence
-*Status: CONFIRMED 2026-09-05 (user + report `stock-20260904-230111`)*
+*Status: CONFIRMED 2026-09-05 (user + report `stock-20260904-230111`); Paradigm sequence CONFIRMED 2026-10-08 (user) · Realm: differs*
 
 - **You exit the realm from inside the game with the exit command** (on the user's board, a bare `x`).
-- **`x` → "You will exit after a period of silent meditation." → a few seconds later "Your character has been saved."** At that point the character is safely out of the game. The trailing "leave comments in E-mail to Sysop" text is board-customised.
+- **Stock: `quit` starts the logout; `exit` doesn't work there** *([CONFIRMED] 2026-10-08, user)*. In the user's capture `exit` only printed the room's `Obvious exits:` line again. The sequence, in order:
+  - `quit`
+  - `You will exit after a period of silent meditation.`
+  - a row of dots, built up one at a time as the wait counts out (`...............`);
+  - `Your character has been saved. If you have any comments or suggestions, please leave them in E-mail to Sysop. Thanks.` (the tail is board-customised);
+  - a `[MAJORMUD]:` prompt.
+- **Stock (2026-09-05 note): `x` → "You will exit after a period of silent meditation." → a few seconds later "Your character has been saved."** At that point the character is safely out of the game. The trailing "leave comments in E-mail to Sysop" text is board-customised.
 - **No Y/N confirm prompt fires on the exit path.**
 - **Where you land after that depends on the board.** Some boards drop straight to MajorMUD's own entry menu (`[E] . Enter the Realm`). Others nest the realm under extra door/games menus, so a second `x` is needed to walk back out. Example: the door post-game screen with a `[MAJORMUD]:` prompt, then the BBS games menu `[M]...MajorMUD! …` with a `Fujin, your selection or ? for help:` prompt. The entry-menu row does NOT appear on the nested boards.
-- **"Your character has been saved." is the board-agnostic "we're out of the realm" signal**, not the entry menu.
+- **On Stock, "Your character has been saved." is the board-agnostic "we're out of the realm" signal**, not the entry menu. Paradigm doesn't print it, so there the entry-menu row is the signal.
+- **Paradigm: `exit` starts the logout sequence; `quit` doesn't work there** *([CONFIRMED] 2026-10-08, user)*.
+- **Paradigm prints no "Your character has been saved." on exit: the wait ends straight in the entry menu** *([CONFIRMED] 2026-10-08, user: "this is the entire exit sequence on paradigm"; first seen in report `paradigm-20261008-125639`)*. In order:
+  - `exit`
+  - `You will exit after a period of silent meditation.`
+  - about seven seconds with no prompt printed, a row of dots building up as it counts out;
+  - the party lines when in one: `<Name> is no longer following you.` for each follower, then `Your party has been disbanded.`
+  - the board's banner and the entry menu (`[E] . Enter the Realm` … `[X] . Exit Game`), under a `[PARADIGM]:` prompt.
+- **The wait builds a row of dots on both realms** *([CONFIRMED] 2026-10-08, user)*. A command typed during it lands after the dots so far (`...par` in the Paradigm capture).
+- **A command sent during the wait is refused: `You may not perform any commands while waiting to exit!`** *([CONFIRMED] 2026-10-08, user capture: an `sn` and a `par` each got it)*.
+- **Once the exit / quit wait has started the player can't stop it, but an attack can** *([CONFIRMED] 2026-10-08, user)*: if a monster or NPC attacks you during the wait, the logout is called off. `[NEEDS CONFIRMATION]` What does the game print when an attack calls it off, and do statline prompts come back straight away?
+- **The entry menu takes whatever is sent next as a selection and redraws itself**, under a `[PARADIGM]:` prompt on that board *([OBSERVED] same report)*. `e` enters the realm, in either case: `e` and `E` work the same *([CONFIRMED] 2026-10-08, user)*.
 
 **Client use:**
 - The cleanup-logoff orchestrator keys its carrier-drop on that line (`KnownPatterns.RealmExitSaved`). The entry-menu row and a wait-timeout remain secondary fallbacks.
+- `InGameCapture.AtBoardMenu` is set when the saved line or the entry-menu row is seen after the character has been in the game, and cleared by the next statline prompt or the link ending. While it is set `EngineSendGate` holds every automatic command, `OutboundMovementObserver` doesn't read a typed selection as a move, `MessageCandidateWatcher` stages nothing, and `StatlineReconciler` is re-armed so it waits for a room display. Before this the party poll, a buff, `sn` and `set statline full` were each sent into the menu, and the `e` typed to re-enter was tracked as a step east (report `paradigm-20261008-125639`).
+- The client does not hold its engines during the wait itself, only once the menu or the saved line arrives: an attack can call the logout off, and combat and healing have to be free to answer it. So an automatic command sent in that window is refused with the line above, which costs nothing.
+- The wait's lines are router patterns (`KnownPatterns.RealmExitMeditation`, `RealmExitWaiting`, and `RealmExitDots` for the row of dots) only so they aren't staged as unrecognized lines.
 
 ### MegaMUD `messages.md` format
 *Status: CONFIRMED 2026-08-17 (user + decode of both stock/paramud files)*

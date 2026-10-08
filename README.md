@@ -1,9 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.151.6**
-> - Favourite loops and auto-lair setups are each character's own: favouriting one no longer adds it to every character's Favorites menus. The loops and setups themselves stay shared with the game data
-> - Each existing character keeps the loop and auto-lair favourites it could already see; a new character starts with none
+> **Version 3.151.9**
+> - Bosses tab: filter the table by what it takes to hurt a boss. **Hit magic** takes a lowest and a highest (one level alone, or several together); **Spell immune** shows the bosses immune at that level or lower, the ones a spell of that level lands on
+> - Hovering a boss's name shows the hit magic and spell level it takes to hurt it
+> - A bug report no longer copies the board's login screen: its Scrollback and raw-wire sections take only what was written while in the game, from the first game prompt until a disconnect or an exit to the menus, the menu itself left out. The terminal, Backscroll and Wire Inspector still show everything
+> - Exiting to the board's menu without disconnecting no longer leaves the client sending into it: the party poll, buffs, `sn`, statline repair and loop steps are held until you're back in the game
+> - A selection typed at the board's menu (`e` to enter the realm) is no longer tracked as a move
+> - The board's menu and the exit wait lines are no longer listed as unrecognized lines
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

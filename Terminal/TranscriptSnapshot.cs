@@ -21,18 +21,25 @@ public static class TranscriptSnapshot
     // padding rows trimmed. A non-positive maxLines returns the whole transcript.
     // withCells also copies each row's cells, for a capture that keeps its colours
     // (the death log); the text-only callers skip the copy.
-    public static IReadOnlyList<Line> Tail(TerminalEmulator emulator, int maxLines, bool withCells = false)
+    // only, when given, leaves out every row written outside its stretches: the
+    // bug report passes the time spent in the game, so a login screen that is in
+    // the backscroll, or still on the terminal, isn't copied into a report. A blank
+    // on-screen row has no time to judge by and goes the way of the row above it.
+    public static IReadOnlyList<Line> Tail(TerminalEmulator emulator, int maxLines, bool withCells = false,
+        CaptureWindow? only = null)
     {
         ArgumentNullException.ThrowIfNull(emulator);
 
         List<Line> lines = new();
         foreach (ScrollbackBuffer.Row row in emulator.Screen.Scrollback.Enumerate())
         {
+            if (only is not null && !only.Covers(row.Timestamp)) continue;
             string text = RowText(row.Cells);
             lines.Add(new Line(row.Timestamp, text, withCells ? row.Cells[..text.Length] : null));
         }
 
         TerminalScreen screen = emulator.Screen;
+        bool kept = only is null || lines.Count > 0;
         for (int y = 0; y < screen.Rows; y++)
         {
             ReadOnlySpan<Cell> cells = screen.Row(y);
@@ -40,8 +47,10 @@ public static class TranscriptSnapshot
             // A blank live row has no meaningful write time — keep it null so the
             // snapshot doesn't stamp empty spacing rows. Content rows carry their
             // per-row write stamp.
-            lines.Add(new Line(text.Length == 0 ? null : screen.RowTimestamp(y), text,
-                withCells ? cells[..text.Length].ToArray() : null));
+            DateTimeOffset? written = text.Length == 0 ? null : screen.RowTimestamp(y);
+            if (only is not null && written is { } at) kept = only.Covers(at);
+            if (!kept) continue;
+            lines.Add(new Line(written, text, withCells ? cells[..text.Length].ToArray() : null));
         }
 
         // Trim only trailing blank padding from the live screen; interior blanks

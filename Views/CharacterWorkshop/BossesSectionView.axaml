@@ -9,7 +9,7 @@
 
     <Grid Margin="22" RowDefinitions="Auto,*">
 
-        <!-- Toolbar, left to right: filter, the active-timer summary,
+        <!-- Toolbar, left to right: filter, the hit-magic and spell-immunity dropdowns, the active-timer summary,
              the two bulk toggles, timer sync, import / export, then Manage Bosses;
              Reset to default sits alone at the right edge.
              Editing the boss list lives in the Manage Bosses dialog; the table itself
@@ -19,6 +19,33 @@
         <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
             <TextBox Classes="clearable" Width="200" Margin="0,0,10,6" PlaceholderText="Filter by boss or room…"
                      Text="{Binding FilterText, Mode=TwoWay}"/>
+            <!-- What it takes to hurt a boss. Hit magic is a lowest and a highest, so
+                 one level alone or a run of them; spell immunity is a highest. Each
+                 dropdown lists the levels the bosses in the table have. -->
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,6" VerticalAlignment="Center">
+                <TextBlock Text="Hit magic" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <ComboBox ItemsSource="{Binding HitMagicOptions}"
+                          SelectedItem="{Binding SelectedHitMagicMin, Mode=TwoWay}"
+                          MinWidth="76"
+                          ToolTip.Tip="The lowest hit magic to show: bosses whose weapon requirement is this or higher. Set the lowest and the highest to the same level for that level alone (1 and 1), or apart for a run of them (1 and 2). Hover a boss's name for what it needs."/>
+                <TextBlock Text="to" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <ComboBox ItemsSource="{Binding HitMagicOptions}"
+                          SelectedItem="{Binding SelectedHitMagicMax, Mode=TwoWay}"
+                          MinWidth="76"
+                          ToolTip.Tip="The highest hit magic to show: bosses whose weapon requirement is this or lower. With only this set, it is every boss a weapon of that level can hit."/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,6" VerticalAlignment="Center">
+                <TextBlock Text="Spell immune" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <ComboBox ItemsSource="{Binding SpellImmunityOptions}"
+                          SelectedItem="{Binding SelectedSpellImmunity, Mode=TwoWay}"
+                          MinWidth="76"
+                          ToolTip.Tip="Show the bosses whose spell immunity is this level or lower: the ones a spell learned at that level lands on. The level is the spell's own, not yours. 0 shows the bosses with no spell immunity. Hover a boss's name for what it needs."/>
+                <TextBlock Text="or lower" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+            </StackPanel>
             <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,18,6"
                        Foreground="{StaticResource AccentAmberBrush}"/>
             <Button Content="Stop Before Toggle" Margin="0,0,6,6" Command="{Binding ToggleAllStopBeforeCommand}"
@@ -89,8 +116,17 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Boss" Width="190" IsReadOnly="True" SortMemberPath="Name"
-                                    Binding="{ReflectionBinding Name}"/>
+                <!-- A template column for the hover text: what a weapon and a spell
+                     need to hurt this boss, which the two reach dropdowns filter on. -->
+                <DataGridTemplateColumn Header="Boss" Width="190" IsReadOnly="True" SortMemberPath="Name">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:BossRowViewModel">
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="12,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding ReachTip}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Respawn" Width="90" IsReadOnly="True" SortMemberPath="RespawnSortKey"
                                     Binding="{ReflectionBinding RespawnDisplay}"
                                     FontFamily="{StaticResource FontMono}"

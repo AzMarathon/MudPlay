@@ -127,6 +127,28 @@ public sealed class MessageCandidateWatcherTests
         Assert.Empty(h.Candidates.Candidates);
     }
 
+    // Report paradigm-20261008-125639: after `exit` the board's menu was staged as
+    // unknown game lines. Its banner is drawn above the row that gives the menu
+    // away, so those rows are taken back when that row arrives; an older candidate
+    // is left alone, and nothing more is staged until the game is entered again.
+    [Fact]
+    public void LeavingForTheMenu_TakesBackTheBannerStagedJustBefore_AndStagesNothingMore()
+    {
+        Harness h = new(seedDefaultPatterns: true);
+        h.Candidates.RecordSighting("A strange humming fills the air.", DateTimeOffset.UtcNow.AddMinutes(-5), null, null);
+        h.Feed("You will exit after a period of silent meditation.");
+        h.Feed("...............");   // the wait, counted out in dots
+        h.Feed("P A R A D I G M v26.8.30.1 (Aug 30 2026 10:23:10)");
+        h.Feed("{ A New Era of MUD }");
+        Assert.Equal(3, h.Candidates.Candidates.Count);   // the wait lines are known patterns
+
+        h.Watcher.NotifyLeftForMenu();
+        h.Feed("[H] . Help");
+        h.Feed("[X] . Exit Game");
+
+        Assert.Equal(new[] { "A strange humming fills the air." }, h.Candidates.Candidates.Select(c => c.RawText).ToArray());
+    }
+
     [Fact]
     public void GenuinelyNewLine_CreatesCandidate_AndWarnsOnce()
     {
