@@ -1123,7 +1123,7 @@ Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a
 
 - **Character Info**
 - **Death Recovery**
-- **Auto-Train**: **Level Projection** and **CP Allocation**
+- **Auto-Train**: **CP Allocation** and **Level Projection**
 - **Quest Status**
 - **My Equipment**: **Equipment Manager** and **Item Finder**
 - **Calculators**

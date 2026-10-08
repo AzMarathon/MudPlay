@@ -9,8 +9,8 @@ using MudPlay.Services;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // Shell view-model for the Player Workshop window: a tab strip of sections, three
-// of them groups of sub-tabs — Character Info / Death Recovery / Auto-Train (Level
-// Projection, CP Allocation) / Quest Status / My Equipment (Equipment Manager, Item
+// of them groups of sub-tabs — Character Info / Death Recovery / Auto-Train (CP
+// Allocation, Level Projection) / Quest Status / My Equipment (Equipment Manager, Item
 // Finder) / Calculators / Record Keeping (Bosses, Roomba, Realm Rankings).
 public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisposable
 {
@@ -107,9 +107,9 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         // one plan state so the projection's HP / regen reflect planned training.
         var planState = new CpPlanState();
         Sections.Add(new WorkshopGroupSectionViewModel(AutoTrainGroupId, "Auto-Train",
+            new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk, AppServices.Current.AutoTrain),
             new LazyWorkshopSection(LevelProjectionSectionViewModel.SectionId, LevelProjectionSectionViewModel.SectionTitle,
-                () => new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses)),
-            new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk, AppServices.Current.AutoTrain)));
+                () => new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses))));
 
         Sections.Add(new QuestSectionViewModel(playerStats, gameData, profile, quests, questBonuses));
 

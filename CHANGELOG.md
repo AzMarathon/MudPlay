@@ -2,7 +2,7 @@
 
 ## 3.151.0
 
-- Player Workshop tabs regrouped: **Auto-Train** holds Level Projection and CP Allocation, **My Equipment** holds Equipment Manager and Item Finder, **Record Keeping** holds Bosses, Roomba and Realm Rankings
+- Player Workshop tabs regrouped: **Auto-Train** holds CP Allocation and Level Projection, **My Equipment** holds Equipment Manager and Item Finder, **Record Keeping** holds Bosses, Roomba and Realm Rankings
 - Item Finder is a sub-tab of My Equipment instead of a window opened from a button on Equipment Manager
 - Realm Rankings moved out of Calculators to its own sub-tab, with the table filling the tab
 - Menu entries and shortcuts that open a Workshop tab still land on it, now as a sub-tab; a new *Workshop: Item Finder* entry is available
