@@ -2,16 +2,12 @@
 
 ## 3.150.7
 
-- A walk you start that passes through a boss room marked Stop before, on its way somewhere else, respects the mark: with another way there the route card offers walk around, walk up to it and wait, or walk through; with no other way it pauses in the room before
-- Paused beside the boss room, Play walks on through; so does stepping in yourself, or a new walk started from that room
-- bug reports addressed: paradigm-20261007-224918
-
-## 3.150.6
-
 - Auto-Sneak stands down, with a line on the terminal, while you carry something that takes your Stealth to nothing (a log raft), instead of resending `sn` in every room; it sneaks again once the item is gone
 - The route card names the avoided rooms a route crosses, not just how many; bug reports list the character's own avoid rooms
 - A spoken password a route needs (`say gazmuldduhaz`) is sent even while sneaking past NPCs, instead of being held back as chatter
-- bug reports addressed: paradigm-20261007-213809, paradigm-20261007-215302, paradigm-20261007-225617
+- A walk you start that passes through a boss room marked Stop before, on its way somewhere else, respects the mark: with another way there the route card offers walk around, walk up to it and wait, or walk through; with no other way it pauses in the room before
+- Paused beside the boss room, Play walks on through; so does stepping in yourself, or a new walk started from that room
+- bug reports addressed: paradigm-20261007-213809, paradigm-20261007-215302, paradigm-20261007-224918, paradigm-20261007-225617
 
 ## 3.150.3
 
