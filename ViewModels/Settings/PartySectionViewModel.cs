@@ -47,7 +47,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         "Use AOE", "Request healing",
         "Help leader open doors",
         "Auto-invite", "Auto-Exp-Reset", "par frequency", "par poll", "Send par",
-        "after each combat round", "unknown damage",
+        "after each combat round", "combat I only witness", "unknown damage",
         "Wait for members", "Max monsters",
         "@panic", "panic", "Use @panic while leading", "Ignore @panics",
     };
@@ -59,6 +59,8 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     // The timed par's cadence in seconds; range 1..60. Default 5.
     [ObservableProperty] private int _parPollFrequencySec = 5;
     [ObservableProperty] private bool _parPollAfterCombatRound;
+    // Sub-option of the box above: rounds we only witnessed count too.
+    [ObservableProperty] private bool _parPollIncludeWitnessedRounds;
     [ObservableProperty] private bool _parPollOnUnknownDamage;
 
     [ObservableProperty] private bool _autoInviteReconnecting = true;
@@ -273,6 +275,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         ParPollOnTimer           = ParPollOnTimer,
         ParPollFrequencySec      = Math.Clamp(ParPollFrequencySec, 1, 60),
         ParPollAfterCombatRound  = ParPollAfterCombatRound,
+        ParPollIncludeWitnessedRounds = ParPollIncludeWitnessedRounds,
         ParPollOnUnknownDamage   = ParPollOnUnknownDamage,
         AutoInviteReconnecting   = AutoInviteReconnecting,
         ResetStatisticsOnLoopStart = ResetStatisticsOnLoopStart,
@@ -346,6 +349,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         ParPollOnTimer             = dto.ParPollOnTimer;
         ParPollFrequencySec        = dto.ParPollFrequencySec;
         ParPollAfterCombatRound    = dto.ParPollAfterCombatRound;
+        ParPollIncludeWitnessedRounds = dto.ParPollIncludeWitnessedRounds;
         ParPollOnUnknownDamage     = dto.ParPollOnUnknownDamage;
         AutoInviteReconnecting     = dto.AutoInviteReconnecting;
         ResetStatisticsOnLoopStart = dto.ResetStatisticsOnLoopStart;
@@ -440,6 +444,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     partial void OnParPollOnTimerChanged(bool value)            => MarkDirty();
     partial void OnParPollFrequencySecChanged(int value)        => MarkDirty();
     partial void OnParPollAfterCombatRoundChanged(bool value)   => MarkDirty();
+    partial void OnParPollIncludeWitnessedRoundsChanged(bool value) => MarkDirty();
     partial void OnParPollOnUnknownDamageChanged(bool value)    => MarkDirty();
     partial void OnAutoInviteReconnectingChanged(bool value)    => MarkDirty();
     partial void OnResetStatisticsOnLoopStartChanged(bool value)=> MarkDirty();

@@ -239,6 +239,24 @@ public sealed class PartyPollerTests
         Assert.Equal(1, Pars(wire));
     }
 
+    // With Auto Combat off we're never "in combat", so every round is a witnessed one.
+    [Fact]
+    public void IncludeWitnessedRounds_SendsParForARoundWeStoodByFor_OnlyWithItsParentTicked()
+    {
+        var (poller, wire) = InParty(new PartySettings
+        {
+            ParPollAfterCombatRound       = true,
+            ParPollIncludeWitnessedRounds = true,
+        });
+        poller.NoteRoundComplete(Round(engaged: false));
+        poller.NoteRoundComplete(Round(engaged: true));
+        Assert.Equal(2, Pars(wire));
+
+        (poller, wire) = InParty(new PartySettings { ParPollIncludeWitnessedRounds = true });
+        poller.NoteRoundComplete(Round(engaged: false));
+        Assert.Empty(wire);
+    }
+
     [Fact]
     public void OnUnknownDamage_SendsParOnlyForARoundWithAnUnknownRow()
     {

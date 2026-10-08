@@ -4113,8 +4113,8 @@ public sealed class AppServices
                 combat.ShowCombatRoundTotalsEachMonster);
             if (table.Count > 0) WriteTerminalNotice(string.Join("\r\n", table));
         };
-        // Settings → Party "Send par": after a round we fought in, and on a round
-        // with unknown damage. After the totals above, so they print first.
+        // Settings → Party "Send par": after a combat round, and on a round with
+        // unknown damage. After the totals above, so they print first.
         RoundDamage.RoundComplete += PartyPoller.NoteRoundComplete;
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the

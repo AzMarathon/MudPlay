@@ -18,6 +18,10 @@ public sealed class PartySettings
     // When a combat round we fought in closes.
     public bool ParPollAfterCombatRound { get; set; }
 
+    // Widens ParPollAfterCombatRound to rounds we only witnessed: a fight in the
+    // room we took no part in, as with Auto Combat off. No effect without it.
+    public bool ParPollIncludeWitnessedRounds { get; set; }
+
     // When a round's totals carry damage no line named a dealer or a victim for —
     // the "unknown" row — so the ledger's read of members' HP can't be trusted.
     public bool ParPollOnUnknownDamage { get; set; }

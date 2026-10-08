@@ -19,7 +19,8 @@ namespace MudPlay.Game;
 //      the multi-line table PartyManager already parses to update HP%/MA%/position
 //      for every member. Settings → Party picks what sends it, any mix or none: a
 //      DispatcherTimer ticking at ParCadence (5 s default), a combat round we
-//      fought in closing, and a round whose totals carry unknown damage.
+//      fought in closing (or, ticked in, one we only witnessed), and a round
+//      whose totals carry unknown damage.
 //
 // Reply-format match: the on-join replies come back as
 // "X telepaths: HP 690/720, MA 200/300 (Resting)" — i.e. the other party
@@ -64,6 +65,8 @@ public sealed partial class PartyPoller : IDisposable
     // `par`s is whatever PartyHpEstimator reads off the round ledger.
     public bool ParOnTimer { get; private set; } = true;
     public bool ParAfterCombatRound { get; private set; }
+    // ParAfterCombatRound also takes rounds we only witnessed.
+    public bool ParIncludeWitnessedRounds { get; private set; }
     public bool ParOnUnknownRoundDamage { get; private set; }
 
     // Live gate for every automatic `par`. `par`'s sole purpose is reading party
@@ -197,6 +200,7 @@ public sealed partial class PartyPoller : IDisposable
         }
         ParOnTimer              = settings.ParPollOnTimer;
         ParAfterCombatRound     = settings.ParPollAfterCombatRound;
+        ParIncludeWitnessedRounds = settings.ParPollIncludeWitnessedRounds;
         ParOnUnknownRoundDamage = settings.ParPollOnUnknownDamage;
         SyncTimer();
         if (ParTriggerSummary != before) _log?.Info(LogSource, $"par is sent: {ParTriggerSummary}.");
@@ -209,7 +213,10 @@ public sealed partial class PartyPoller : IDisposable
         {
             List<string> on = new(3);
             if (ParOnTimer) on.Add($"every {ParCadence.TotalSeconds:0} s");
-            if (ParAfterCombatRound) on.Add("after each combat round");
+            if (ParAfterCombatRound)
+                on.Add(ParIncludeWitnessedRounds
+                    ? "after each combat round (ours or only witnessed)"
+                    : "after each combat round");
             if (ParOnUnknownRoundDamage) on.Add("when a round has unknown damage");
             return on.Count == 0 ? "never (no trigger ticked)" : string.Join(", ", on);
         }
@@ -485,13 +492,16 @@ public sealed partial class PartyPoller : IDisposable
 
     // A round's ledger closed (RoundDamageTracker.RoundComplete). One `par` per
     // round at most, however many of the round boxes ask for it. A round we only
-    // stood by for (a member's fight in the room) isn't ours, so "after each combat
-    // round" skips it; unknown damage in it still counts.
+    // stood by for (a member's fight in the room, or ours with Auto Combat off)
+    // isn't ours, so "after each combat round" skips it unless the user ticked
+    // witnessed rounds in; unknown damage in it counts either way.
     public void NoteRoundComplete(RoundSummary round)
     {
         string why;
-        if (ParAfterCombatRound && round.Engaged)
-            why = $"combat round {round.FightRound} ended";
+        if (ParAfterCombatRound && (round.Engaged || ParIncludeWitnessedRounds))
+            why = round.Engaged
+                ? $"combat round {round.FightRound} ended"
+                : $"witnessed combat round {round.FightRound} ended";
         else if (ParOnUnknownRoundDamage && round.HasUnknown)
             why = $"round {round.FightRound} had unknown damage (dealt {round.UnknownDealt}, taken {round.UnknownTaken})";
         else

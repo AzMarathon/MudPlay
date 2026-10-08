@@ -50,6 +50,7 @@ public sealed class PartySectionViewModelTests
         // existed keeps polling exactly as it did.
         Assert.True(dto.ParPollOnTimer);
         Assert.False(dto.ParPollAfterCombatRound);
+        Assert.False(dto.ParPollIncludeWitnessedRounds);
         Assert.False(dto.ParPollOnUnknownDamage);
         Assert.True(dto.AutoInviteReconnecting);
         Assert.True(dto.ResetStatisticsOnLoopStart);

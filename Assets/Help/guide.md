@@ -3630,6 +3630,7 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 
 - **every N seconds** — **Default:** on, `5` seconds (1–60). `par` on a timer, as MegaMUD does.
 - **after each combat round** — **Default:** off. `par` as soon as a combat round you fought in ends, when its round totals are worked out. A round you only stood by for (a member's fight in the room) doesn't count.
+  - **including combat I only witness** — **Default:** off. Widens the box above to every combat round seen in the room, whether or not you took part: a member's fight while you stand by, or any fight while **Auto Combat** is off. It does nothing unless *after each combat round* is ticked.
 - **when a combat round has unknown damage** — **Default:** off. `par` when a round's totals have an **unknown** row: damage no line named a dealer or a victim for, so it may have landed on a member without MudPlay seeing whom. This one doesn't need you in the fight.
 
 A round sends one `par` at most, whichever of the two round boxes asked for it, and a round's `par` starts the timer's count over, so the timer and the rounds together don't send two in a row. In a fight whose rounds come as fast as the timer, the timer stays quiet and takes over again between fights.
@@ -4807,7 +4808,7 @@ This section is a compact, technical lookup table for every setting documented a
 | If leading, wait only (s) / Return distance (rooms) | 90 / 30 | 0–3600 / 1–500 | `IfLeadingWaitTotalSec` / `ReturnDistanceRooms` | Models/Profile/PartySettings.cs |
 | If leading, accept @comeback for (min) | 2 | 0–60 | `AcceptComebackMinutes` | Models/Profile/PartySettings.cs |
 | Send par: every N seconds | `true`, `5` | bool, 1–60 | `ParPollOnTimer`, `ParPollFrequencySec` | Models/Profile/PartySettings.cs |
-| Send par: after each combat round / when a round has unknown damage | `false` / `false` | bool | `ParPollAfterCombatRound` / `ParPollOnUnknownDamage` | Models/Profile/PartySettings.cs |
+| Send par: after each combat round / including combat I only witness / when a round has unknown damage | `false` (all) | bool | `ParPollAfterCombatRound` / `ParPollIncludeWitnessedRounds` / `ParPollOnUnknownDamage` | Models/Profile/PartySettings.cs |
 | PvP action | `HangUp` | HangUp / FleeThenHangUp / Flee / Attack / ChaseAttack | `Action` | Models/Profile/PvpSettings.cs |
 | PvP flee to / rooms to flee | none / `10` | a favourite room / 1–99 | `FleeTo` / `RoomsToFlee` | Models/Profile/PvpSettings.cs |
 | PvP flee hangup delay / come back after (s) | `30` / `60` | 0–600 / 0–3600 | `FleeHangupDelaySeconds` / `ComeBackAfterSeconds` | Models/Profile/PvpSettings.cs |

@@ -283,7 +283,12 @@
                 </StackPanel>
                 <CheckBox Content="after each combat round"
                           IsChecked="{Binding ParPollAfterCombatRound, Mode=TwoWay}"
-                          ToolTip.Tip="Send `par` when a combat round you fought in ends — as its round totals are worked out. A round you only stood by for (a member's fight in the room) doesn't count."/>
+                          ToolTip.Tip="Send `par` when a combat round you fought in ends — as its round totals are worked out. A round you only stood by for (a member's fight in the room) doesn't count unless the box below is ticked."/>
+                <CheckBox Content="including combat I only witness"
+                          Margin="24,0,0,0"
+                          IsChecked="{Binding ParPollIncludeWitnessedRounds, Mode=TwoWay}"
+                          IsEnabled="{Binding ParPollAfterCombatRound}"
+                          ToolTip.Tip="Also send `par` after a combat round seen in the room that you took no part in: a member's fight while you stand by, or any fight with Auto Combat off."/>
                 <CheckBox Content="when a combat round has unknown damage"
                           IsChecked="{Binding ParPollOnUnknownDamage, Mode=TwoWay}"
                           ToolTip.Tip="Send `par` when a round's totals have an &quot;unknown&quot; row: damage no line named a dealer or a victim for, so it may have landed on a member unseen."/>
