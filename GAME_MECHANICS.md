@@ -5458,12 +5458,13 @@ There is no room to drop amethyst pendant here.
   | `give 2 darkwood ring to fuj` | `You give 2 darkwood ring to Fujin.` | `Fujin gives you 2 darkwood ring.` |
   | `give 2 black star to fuj` | `You give 2 black star key to Fujin.` | `Fujin gives you 2 black star key.` |
   | `give 1 black star to fuj` | `You give black star key to Fujin.` | (not captured) |
+  | `give black star key to raij` (sent by the client, `/fuj @do give black star key to raij`) | (not captured) | `Fujin gives you black star key.` |
 
   - **A count of 1 prints no number**: `give 1 <item>` and a `give` with no count print the same line. A count above 1 prints the number, then the item's name in the singular.
   - The item is its record name as the Items table spells it, with no article, even when the giver typed part of it (`black star` → `black star key`). `magical quartz rod` is item 996, `titanium fork` item 983.
   - Each player is named by first name only, in full even when typed in part (`fuj` → `Fujin`; a two-word name showed its first word).
   - Item lines end in a full stop.
-  - The receiver's lines in the table come from the other character's gives in the same session, not from the giver's rows beside them; that character also gave `Fujin gives you loop of infinite shadow.` The receiver's line for a `give 1` was not captured.
+  - The receiver's lines in the table come from the other character's gives in the same session, not from the giver's rows beside them; that character also gave `Fujin gives you loop of infinite shadow.` The receiver's line for a typed `give 1` was not captured; the last row is a give with no count, from a screenshot the user took on 2026-10-07.
 - **[OBSERVED] Paradigm's `give`, both sides, coins** (same two reports): `give 2 runic to fuj` → `You give 2 runic coins to Fujin`; `give 35 plat to fuj` → `You give 35 platinum pieces to Fujin`; the receiver sees `Fujin gives you 2 runic coins` and `Fujin gives you 30 platinum pieces`.
   - The coin is printed as its full noun, whatever short form was typed.
   - **Coin lines carry no full stop**, on either side (checked on the raw wire), where item lines do.
@@ -5488,7 +5489,7 @@ There is no room to drop amethyst pendant here.
 - It reads the Stock coin lines on both sides, `You gave <player> <N> <coin>` and `<Player> gave you <N> <coin>`, into the purse and not the pack (`TryApplyCoinHandOver`). The coin is a bare metal (`give`), a full coin noun (`share`), or any other single word, taken as the fifth coin under a board's own name (`HandOverCoinNoun`).
 - It reads the Paradigm coin lines on both sides, `<Player> gives you <N> <coin noun>` and `You give <N> <coin noun> to <player>`, the same way. Those need the full coin noun and no full stop, which is what keeps a counted item line out of the purse.
 - None of the parsing is gated on the realm.
-- The client's own party hand-over of a path item sends the uncounted form, `give <item> to <recipient>` (`PartyPathItemGate`).
+- The client's own party hand-over of a path item sends the uncounted form, `give <item> to <recipient>` (`PartyPathItemGate`). That form prints `<Player> gives you <item>.` on Paradigm (user's screenshot, 2026-10-07: a relayed `@do give black star key to <recipient>`).
 - `InventoryManager.IsReceivedHandOverLine` tells the unrecognized-line watcher that the receiving lines, item or coins, are read. The giver's Stock coin line is already skipped as an engine reply (`EngineReplyLines`, `You gave %s`).
 
 ### NPC keyword hand-over detection
