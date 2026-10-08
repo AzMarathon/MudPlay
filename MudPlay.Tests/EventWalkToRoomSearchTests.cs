@@ -58,8 +58,18 @@ public sealed class EventWalkToRoomSearchTests : IDisposable
         return new RoomSearchService(graph, cache, new BfsMapper(graph), new RoomBlacklistStore());
     }
 
+    // 1/1810 is Thrag's room and marked "stop before entering"; no other room is.
     private EventEditDialogViewModel Editor(ScheduledEvent? existing = null) =>
-        new(existing ?? new ScheduledEvent(), isNew: existing is null, search: NewSearch());
+        new(existing ?? new ScheduledEvent(), isNew: existing is null, search: NewSearch(),
+            stopBeforeBoss: room => room.Equals(new RoomKey(1, 1810)) ? "Thrag" : null);
+
+    private static ScheduledEvent Saved(EventEditDialogViewModel vm)
+    {
+        ScheduledEvent? saved = null;
+        vm.CloseRequested += e => saved = e;
+        vm.SaveCommand.Execute(null);
+        return saved!;
+    }
 
     [Fact]
     public void TypingARoomName_SuggestsTheRoomsItCouldMean()
@@ -104,11 +114,9 @@ public sealed class EventWalkToRoomSearchTests : IDisposable
         vm.ThenWalkToText = "1/297 - Bank of Godfrey";
 
         Assert.Null(vm.TryGetMissingTargetMessage());
-        ScheduledEvent? saved = null;
-        vm.CloseRequested += e => saved = e;
-        vm.SaveCommand.Execute(null);
+        ScheduledEvent saved = Saved(vm);
 
-        Assert.Equal((1, 1810), (saved!.WalkToTarget!.Map, saved.WalkToTarget.Room));
+        Assert.Equal((1, 1810), (saved.WalkToTarget!.Map, saved.WalkToTarget.Room));
         Assert.Equal((1, 297), (saved.ThenWalkTo!.Map, saved.ThenWalkTo.Room));
     }
 
@@ -137,6 +145,70 @@ public sealed class EventWalkToRoomSearchTests : IDisposable
             WalkToTarget = new RoomRef(9, 9999),
         });
         Assert.Equal("9/9999", vm.WalkToText);
+    }
+
+    // A Walk to box holding a stop-before boss room says so and offers the choice;
+    // any other room doesn't.
+    [Fact]
+    public void AStopBeforeBossRoom_IsPointedOut_AsTheBoxIsFilled()
+    {
+        EventEditDialogViewModel vm = Editor();
+        Assert.False(vm.HasWalkToBossNotice);
+
+        vm.WalkToText = "1/1810 - Gigantic Cave";
+        Assert.True(vm.HasWalkToBossNotice);
+        Assert.Contains("Thrag's room is marked Stop before entering", vm.WalkToBossNotice);
+
+        vm.WalkToText = "1/1810";
+        Assert.True(vm.HasWalkToBossNotice);
+
+        vm.WalkToText = "1/297 - Bank of Godfrey";
+        Assert.False(vm.HasWalkToBossNotice);
+
+        vm.ThenWalkToText = "1/1810";
+        Assert.True(vm.HasThenWalkToBossNotice);
+    }
+
+    [Fact]
+    public void TheChoice_IsSavedWithTheEvent_AndComesBackWhenReopened()
+    {
+        EventEditDialogViewModel vm = Editor();
+        vm.IsTriggerLogon = true;
+        vm.IsActionWalkTo = true;
+        vm.WalkToText = "1/1810";
+        Assert.False(vm.WalkToEntersBossRoom);              // respects the stop unless told otherwise
+        Assert.Null(Saved(vm).WalkToEntersBossRoom);
+
+        vm = Editor();
+        vm.IsTriggerLogon = true;
+        vm.IsActionWalkTo = true;
+        vm.WalkToText = "1/1810";
+        vm.WalkToEntersBossRoom = true;
+        vm.IsThenWalkTo = true;
+        vm.ThenWalkToText = "1/1810";
+        vm.ThenWalkToEntersBossRoom = true;
+        ScheduledEvent saved = Saved(vm);
+        Assert.True(saved.WalkToEntersBossRoom);
+        Assert.True(saved.ThenWalkToEntersBossRoom);
+
+        EventEditDialogViewModel reopened = Editor(saved);
+        Assert.True(reopened.WalkToEntersBossRoom);
+        Assert.True(reopened.ThenWalkToEntersBossRoom);
+    }
+
+    // The tick only means something for a stop-before boss room, so it isn't kept
+    // for any other.
+    [Fact]
+    public void TheChoice_IsNotSaved_ForARoomWithNoStop()
+    {
+        EventEditDialogViewModel vm = Editor();
+        vm.IsTriggerLogon = true;
+        vm.IsActionWalkTo = true;
+        vm.WalkToText = "1/1810";
+        vm.WalkToEntersBossRoom = true;
+        vm.WalkToText = "1/297";
+
+        Assert.Null(Saved(vm).WalkToEntersBossRoom);
     }
 
     [Fact]

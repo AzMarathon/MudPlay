@@ -38,6 +38,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     private readonly LoopManager? _loops;
     private readonly LairManager? _lairs;
     private readonly RoomSearchService? _search;
+    private readonly Func<RoomKey, string?>? _stopBeforeBoss;
 
     // Set once the user picks a Then on a new event; until then the default Then
     // follows the action (a command does nothing after, anything else goes back
@@ -57,8 +58,12 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         // The character's stash rooms and the active set's banks, labelled, for the
         // stash-transfer action.
         IReadOnlyList<(string Label, RoomRef Room)>? stashRooms = null,
-        IReadOnlyList<(string Label, RoomRef Room)>? banks = null)
+        IReadOnlyList<(string Label, RoomRef Room)>? banks = null,
+        // The boss whose room this is, when that boss is marked "stop before
+        // entering" on the Bosses tab; null for any other room.
+        Func<RoomKey, string?>? stopBeforeBoss = null)
     {
+        _stopBeforeBoss = stopBeforeBoss;
         ArgumentNullException.ThrowIfNull(existing);
         _isNew = isNew;
         _loops = loops;
@@ -138,6 +143,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             ? RoombaModeOptions[1]
             : RoombaModeOptions[0];
         WalkToText = RoomText(existing.WalkToTarget);
+        WalkToEntersBossRoom = existing.WalkToEntersBossRoom == true;
         LoopName = existing.LoopName;
         AutoLairSetupName = existing.AutoLairSetupName;
         CommandText = existing.CommandText ?? string.Empty;
@@ -160,6 +166,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         ThenLoopName = existing.ThenLoopName;
         ThenAutoLairSetupName = existing.ThenAutoLairSetupName;
         ThenWalkToText = RoomText(existing.ThenWalkTo);
+        ThenWalkToEntersBossRoom = existing.ThenWalkToEntersBossRoom == true;
         ThenEventName = existing.ThenEventName;
     }
 
@@ -277,7 +284,20 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     // ----- DO (action) ------------------------------------------------
 
     [ObservableProperty] private bool _isActionWalkTo;
-    [ObservableProperty] private string _walkToText = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WalkToBossNotice), nameof(HasWalkToBossNotice))]
+    private string _walkToText = string.Empty;
+
+    // The event's choice for a walk-to room that is a boss room marked "stop before
+    // entering": ticked walks in, unticked ends the walk one room short. Only
+    // offered (and only saved) while the room in the box is such a room.
+    [ObservableProperty] private bool _walkToEntersBossRoom;
+    [ObservableProperty] private bool _thenWalkToEntersBossRoom;
+
+    public string WalkToBossNotice => BossNotice(WalkToText);
+    public bool HasWalkToBossNotice => WalkToBossNotice.Length > 0;
+    public string ThenWalkToBossNotice => BossNotice(ThenWalkToText);
+    public bool HasThenWalkToBossNotice => ThenWalkToBossNotice.Length > 0;
 
     [ObservableProperty] private bool _isActionLoop;
     [ObservableProperty] private string? _loopName;
@@ -372,7 +392,9 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     [ObservableProperty] private bool _isThenEvent;
     [ObservableProperty] private string? _thenLoopName;
     [ObservableProperty] private string? _thenAutoLairSetupName;
-    [ObservableProperty] private string _thenWalkToText = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThenWalkToBossNotice), nameof(HasThenWalkToBossNotice))]
+    private string _thenWalkToText = string.Empty;
     [ObservableProperty] private string? _thenEventName;
 
     // The character's other events, for a Then that fires one.
@@ -451,7 +473,10 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         {
             case EventActionType.WalkTo:
                 if (ResolveRoom(WalkToText) is { Ok: true } wt)
+                {
                     result.WalkToTarget = new RoomRef(wt.Map!.Value, wt.Room!.Value);
+                    if (WalkToEntersBossRoom && StopBeforeBossIn(wt) is not null) result.WalkToEntersBossRoom = true;
+                }
                 break;
             case EventActionType.Loop:
                 result.LoopName = LoopName;
@@ -502,7 +527,10 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
                 break;
             case EventThenType.WalkTo:
                 if (ResolveRoom(ThenWalkToText) is { Ok: true } tw)
+                {
                     result.ThenWalkTo = new RoomRef(tw.Map!.Value, tw.Room!.Value);
+                    if (ThenWalkToEntersBossRoom && StopBeforeBossIn(tw) is not null) result.ThenWalkToEntersBossRoom = true;
+                }
                 break;
             case EventThenType.Event:
                 result.ThenEventName = ThenEventName;
@@ -760,6 +788,24 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         RoomSearchResult? known = _search?.Search(coord, source: null, cap: 1, includeMonsters: false)
             .FirstOrDefault(m => m.MonsterTag is null && m.Key.Map == room.Map && m.Key.Room == room.Room);
         return known?.DisplayName ?? coord;
+    }
+
+    // ----- Walk-to into a stop-before boss room -------------------------
+
+    private string? StopBeforeBossIn(WalkToResolution room) =>
+        room.Ok ? _stopBeforeBoss?.Invoke(new RoomKey(room.Map!.Value, room.Room!.Value)) : null;
+
+    // Shown under a Walk to box whose room is a boss room marked "stop before
+    // entering". Read from the box's coordinate alone (typed, or left by a picked
+    // suggestion): it is asked on every keystroke, and a name search isn't.
+    private string BossNotice(string text)
+    {
+        if (_stopBeforeBoss is null || string.IsNullOrWhiteSpace(text)) return string.Empty;
+        int nameAt = text.IndexOf(" - ", StringComparison.Ordinal);
+        (int? map, int? room) = RoomSearchService.TryParseCoordinate(nameAt > 0 ? text[..nameAt] : text);
+        if (map is not int m || room is not int r || _stopBeforeBoss(new RoomKey(m, r)) is not { } boss)
+            return string.Empty;
+        return $"{boss}'s room is marked Stop before entering on the Bosses tab. Unless you tick the box below, this walk ends one room short of it.";
     }
 
     // Resolve a room box via RoomSearchService. Accepts coord (1/297, 1 297,

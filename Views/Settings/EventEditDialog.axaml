@@ -54,6 +54,11 @@
             <Setter Property="FontStyle" Value="Italic"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
+        <Style Selector="TextBlock.BossNotice">
+            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
         <Style Selector="TextBlock.Error">
             <Setter Property="Foreground" Value="#E55353"/>
             <Setter Property="FontSize" Value="10"/>
@@ -210,14 +215,25 @@
                               RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="DO"/>
 
-                            <RadioButton Grid.Row="1" GroupName="What" Content="Walk to"
+                            <RadioButton Grid.Row="1" GroupName="What" Content="Walk to" VerticalAlignment="Top"
                                          IsChecked="{Binding IsActionWalkTo, Mode=TwoWay}"/>
-                            <AutoCompleteBox Grid.Row="1" Grid.Column="1" Classes="RoomPick"
-                                             Text="{Binding WalkToText, Mode=TwoWay}"
-                                             IsEnabled="{Binding IsActionWalkTo}"
-                                             AsyncPopulator="{Binding RoomSuggestions}"
-                                             ValueMemberBinding="{ReflectionBinding DisplayName}"
-                                             ItemTemplate="{StaticResource RoomPickItem}"/>
+                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
+                                <AutoCompleteBox Classes="RoomPick"
+                                                 Text="{Binding WalkToText, Mode=TwoWay}"
+                                                 IsEnabled="{Binding IsActionWalkTo}"
+                                                 AsyncPopulator="{Binding RoomSuggestions}"
+                                                 ValueMemberBinding="{ReflectionBinding DisplayName}"
+                                                 ItemTemplate="{StaticResource RoomPickItem}"/>
+                                <!-- Only for a room that is a boss room marked Stop
+                                     before entering: the event says whether its walk
+                                     keeps that stop or goes in. -->
+                                <StackPanel Spacing="2" IsVisible="{Binding HasWalkToBossNotice}" IsEnabled="{Binding IsActionWalkTo}">
+                                    <TextBlock Classes="BossNotice" Text="{Binding WalkToBossNotice}"/>
+                                    <CheckBox Content="Ignore the stop and walk into the room"
+                                              IsChecked="{Binding WalkToEntersBossRoom, Mode=TwoWay}"
+                                              ToolTip.Tip="Unticked, the walk respects Stop before entering: it ends in the room next to the boss room, and the event counts that as arriving. Ticked, this event's walk goes into the boss room. The Bosses tab setting itself isn't changed, so your own walks there still stop short."/>
+                                </StackPanel>
+                            </StackPanel>
 
                             <RadioButton Grid.Row="2" GroupName="What" Content="Start loop"
                                          IsChecked="{Binding IsActionLoop, Mode=TwoWay}"/>
@@ -364,14 +380,25 @@
                                       IsEnabled="{Binding IsThenAutoLair}"
                                       PlaceholderText="(select a saved auto-lair setup)"/>
 
-                            <RadioButton Grid.Row="4" GroupName="Then" Content="Walk to"
+                            <RadioButton Grid.Row="4" GroupName="Then" Content="Walk to" VerticalAlignment="Top"
                                          IsChecked="{Binding IsThenWalkTo, Mode=TwoWay}"/>
-                            <AutoCompleteBox Grid.Row="4" Grid.Column="1" Classes="RoomPick"
-                                             Text="{Binding ThenWalkToText, Mode=TwoWay}"
-                                             IsEnabled="{Binding IsThenWalkTo}"
-                                             AsyncPopulator="{Binding RoomSuggestions}"
-                                             ValueMemberBinding="{ReflectionBinding DisplayName}"
-                                             ItemTemplate="{StaticResource RoomPickItem}"/>
+                            <StackPanel Grid.Row="4" Grid.Column="1" Spacing="3">
+                                <AutoCompleteBox Classes="RoomPick"
+                                                 Text="{Binding ThenWalkToText, Mode=TwoWay}"
+                                                 IsEnabled="{Binding IsThenWalkTo}"
+                                                 AsyncPopulator="{Binding RoomSuggestions}"
+                                                 ValueMemberBinding="{ReflectionBinding DisplayName}"
+                                                 ItemTemplate="{StaticResource RoomPickItem}"/>
+                                <!-- Only for a room that is a boss room marked Stop
+                                     before entering: the event says whether its walk
+                                     keeps that stop or goes in. -->
+                                <StackPanel Spacing="2" IsVisible="{Binding HasThenWalkToBossNotice}" IsEnabled="{Binding IsThenWalkTo}">
+                                    <TextBlock Classes="BossNotice" Text="{Binding ThenWalkToBossNotice}"/>
+                                    <CheckBox Content="Ignore the stop and walk into the room"
+                                              IsChecked="{Binding ThenWalkToEntersBossRoom, Mode=TwoWay}"
+                                              ToolTip.Tip="Unticked, the walk respects Stop before entering: it ends in the room next to the boss room, and the event counts that as arriving. Ticked, this event's walk goes into the boss room. The Bosses tab setting itself isn't changed, so your own walks there still stop short."/>
+                                </StackPanel>
+                            </StackPanel>
 
                             <RadioButton Grid.Row="5" GroupName="Then" Content="Fire event"
                                          IsChecked="{Binding IsThenEvent, Mode=TwoWay}"/>

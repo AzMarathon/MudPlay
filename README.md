@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.152.1**
+> **Version 3.152.3**
 > - Events: the Walk to boxes list matching rooms as you type, like the Navigation room search (room names, coordinates, boss names, GOTO favourites); picking one fills in the room
 > - A Walk to box shows the room's name beside its number, including when an event is reopened
+> - Events: a Walk to whose room is a boss room marked Stop before entering says so, with a tick box to ignore the stop and walk in; unticked, the stop is kept
+> - Fixed: an event walking to a Stop before boss room stopped one room short and then never finished, so its Then step never ran
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
