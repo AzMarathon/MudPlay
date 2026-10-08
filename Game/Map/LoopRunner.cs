@@ -597,8 +597,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachTarget = target;
         State = LoopState.Approaching;
         Raise(new LoopEvent(LoopEventKind.Resumed, $"walking back to {target} after a flee"));
-        if (_walker.WalkTo(target, avoidTeleports: _userApproach && _userApproachWalksIt,
-                preferTeleportFree: ApproachTeleportPreference)) return true;
+        if (_walker.WalkTo(target, preferTeleportFree: ApproachTeleportPreference)) return true;
         _fleeReturnTarget = null;
         _approachTarget = null;
         State = LoopState.Paused;
@@ -837,16 +836,14 @@ public sealed class LoopRunner : IRecoverableEngine
     // false when the loop is empty.
     //
     // userStarted: the user pressed Start on this loop, against an event, a remote
-    // command or a sweep starting it. The first walk to the loop is then the user's
-    // own, asked about on the route cards like a walk-to. Started any other way it
-    // is an automatic walk and uses only the teleports allowed to those
-    // (AutoWalkManager.SetAutomaticWalkTeleports).
+    // command or a sweep starting it. A user's start from off the loop normally
+    // arrives here already standing on it (LoopWalkHandoff walks there first, as a
+    // walk-to); when the runner still has to walk, that walk is the user's and
+    // keeps the shortest route. Started any other way the walk is automatic and
+    // uses only the teleports allowed to those (AutoWalkManager.SetAutomaticWalkTeleports).
     public bool Start(Loop loop, bool userStarted = false)
     {
         _userApproach = userStarted;
-        _userApproachAnswered = false;
-        _userApproachWalksIt = false;
-        _approachQuestion++;
         return StartInternal(loop, isRecovery: false, gateFallback: true);
     }
 
@@ -856,65 +853,37 @@ public sealed class LoopRunner : IRecoverableEngine
     // an automatic walk like any other (user, 2026-10-07).
     private bool _userApproach;
 
-    // How that walk treats a teleport on its shortest route: asked on the route cards
-    // as it begins (SetUserApproachAsker), and kept until the loop is reached so a
-    // re-plan of the same walk isn't asked twice. True is "Walk it".
-    private bool _userApproachWalksIt;
-    private bool _userApproachAnswered;
-
     // The teleport preference a walk to the loop states: none for an automatic one
-    // (the walker then applies the allowed list); for the user's, the pick made on
-    // the route cards, the shortest route when there was nothing to ask.
-    private bool? ApproachTeleportPreference => _userApproach ? _userApproachWalksIt : null;
+    // (the walker then applies the allowed list), the shortest route for the user's.
+    private bool? ApproachTeleportPreference => _userApproach ? false : null;
 
-    // Asks the user how to get to the loop, for a run the user started: called with
-    // where the character is and the loop room it is walking to, it answers true
-    // ("Walk it"), false (take the teleport, or there was nothing to ask), or null
-    // (cancelled: the run stops). Wired to the route cards by the UI; unset, the
-    // walk takes the shortest route without asking.
-    private Action<RoomKey, RoomKey, Action<bool?>>? _userApproachAsker;
-    public void SetUserApproachAsker(Action<RoomKey, RoomKey, Action<bool?>> asker)
+    // The room of the loop's cycle nearest to `from`, where a start from there would
+    // join it: the destination of the walk-to a user's start makes first
+    // (LoopWalkHandoff). Null when `from` is already on the cycle, or nothing of it
+    // can be reached. Works nothing out about the run in progress.
+    public RoomKey? NearestRoomOf(Loop loop, RoomKey from)
     {
-        ArgumentNullException.ThrowIfNull(asker);
-        _userApproachAsker = asker;
-    }
+        ArgumentNullException.ThrowIfNull(loop);
+        if (_bfs is null || _graph is null || loop.Waypoints.Count < 2) return null;
+        List<RoomKey> rooms = LoopExpander.ResolveCycleRoomKeys(loop.Waypoints, _bfs, _graph, _filter)
+            .Concat(loop.Waypoints.Select(w => w.Key)).Distinct().ToList();
+        if (rooms.Contains(from)) return null;
 
-    // Counts the questions put, so an answer to one the run has moved on from
-    // (stopped, restarted) is dropped.
-    private int _approachQuestion;
-
-    // Start the walk to the loop. The user's own asks first, the way a walk-to does
-    // when its shortest route teleports; the run sits in Approaching with nothing
-    // sent until the answer comes.
-    private void BeginApproachWalk(RoomKey from, RoomKey entry, bool throughGates)
-    {
-        if (!_userApproach || _userApproachAnswered || _userApproachAsker is null)
+        RoomKey? Nearest()
         {
-            WalkApproach(entry, throughGates);
-            return;
+            IReadOnlyDictionary<RoomKey, int> steps = _bfs.ComputeDistancesTo(from, rooms, _filter);
+            RoomKey? best = null;
+            foreach (RoomKey room in rooms)
+                if (steps.TryGetValue(room, out int n) && (best is not { } b || n < steps[b])) best = room;
+            return best;
         }
-        int question = ++_approachQuestion;
-        _userApproachAsker(from, entry, walkIt =>
-        {
-            if (question != _approachQuestion || State != LoopState.Approaching
-                || _approachTarget is not { } target || !target.Equals(entry))
-                return;
-            if (walkIt is not { } pick)
-            {
-                _log?.Info("LoopRunner", "approach cancelled at the route cards; stopping the loop");
-                Stop("approach cancelled at the route cards");
-                return;
-            }
-            _userApproachWalksIt = pick;
-            _userApproachAnswered = true;
-            WalkApproach(entry, throughGates);
-        });
-    }
 
-    private void WalkApproach(RoomKey entry, bool throughGates) =>
-        _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates,
-            avoidTeleports: _userApproach && _userApproachWalksIt,
-            preferTeleportFree: ApproachTeleportPreference);
+        // The free way in first; failing that, through a gate the walk can open on
+        // the way, as the runner's own start falls back.
+        if (Nearest() is { } free) return free;
+        using (_filter?.SuspendAcquirableGates())
+            return Nearest();
+    }
 
     // Resume a loop after an auto-deposit / bank / trainer detour that Stop()ed it
     // for its own walk. Re-plans from the current room exactly like a fresh Start, but
@@ -1099,7 +1068,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner",
             $"approach: walking from {currentKey} → {closest} (closest of {loop.Waypoints.Count} waypoints)");
         if (throughGates) _armGatedApproach?.Invoke(currentKey.Value, closest.Value);
-        BeginApproachWalk(currentKey.Value, closest.Value, throughGates);
+        _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference);
         return true;
     }
 
@@ -1157,7 +1126,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner",
             $"approach: walking from {from} → {entry} (nearest loop room, {steps[entry]} step(s); joins at step {_index + 1} of {_expandedSteps.Count})");
         if (throughGates) _armGatedApproach?.Invoke(from, entry);
-        BeginApproachWalk(from, entry, throughGates);
+        _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference);
         return true;
     }
 

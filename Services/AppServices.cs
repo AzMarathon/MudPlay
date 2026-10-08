@@ -2538,6 +2538,9 @@ public sealed class AppServices
     // right engine. Backs the toolbar movement-flow buttons.
     public Game.Map.MovementController MovementControl { get; private set; } = null!;
 
+    // The loop the user started from off it, waiting on its walk-to to arrive.
+    public Game.Map.LoopWalkHandoff LoopHandoff { get; private set; } = null!;
+
     // Roomba Mode: sorts labeled gang-house rooms by building a Loop from
     // GhRoomLabels and driving it through LoopRunner — see GhSweepManager.
     public Game.Map.GhSweepManager GhSweep { get; private set; } = null!;
@@ -7697,6 +7700,16 @@ public sealed class AppServices
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
+        // A loop the user starts from off it is a walk-to to the loop first; the loop
+        // runner takes over when that walk arrives. Stop, a profile change or another
+        // loop starting drops the one waiting.
+        LoopHandoff = new Game.Map.LoopWalkHandoff(
+            LoopRunner, action => Avalonia.Threading.Dispatcher.UIThread.Post(action), Log);
+        Walker.Event += LoopHandoff.OnWalkerEvent;
+        LoopRunner.Event += LoopHandoff.OnLoopEvent;
+        MovementControl.Stopping += () => LoopHandoff.Cancel("stopped");
+        Profile.ProfileLoaded += _ => LoopHandoff.Cancel("another character was loaded");
+        Profile.ProfileClosed += () => LoopHandoff.Cancel("the character was closed");
         // A pyramid climb or an asylum maze solve counts as navigation running: the
         // toolbar's Pause holds it on the user gate and Stop ends it.
         MovementControl.AddSolver(

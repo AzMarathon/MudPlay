@@ -1346,6 +1346,9 @@ public static class BugReportBuilder
         var gates = svc.MovementCoordinator.AssertedGates;
         Kv(sb, "Paused by", gates.Count > 0 ? string.Join(", ", gates) : "(nothing)");
         Kv(sb, "Paused by a typed move", svc.MovementControl.PausedByTypedMove ?? "(no)");
+        Kv(sb, "Loop waiting on its walk-to", svc.LoopHandoff.Pending is { } waiting
+            ? $"'{waiting.Name}', starts at {svc.LoopHandoff.Entry}"
+            : "(none)");
         // Why an automatic walk stopped short of a teleport, or went through one.
         Kv(sb, "Automatic walks may use", svc.Walker.AutomaticWalkTeleports is { } teleports
             ? (teleports.Count == 0 ? "no teleports" : $"{teleports.Count} teleport(s): "

@@ -2539,62 +2539,6 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(firstSend, Encoding.Latin1.GetString(h.Sent[0]));
     }
 
-    // A loop the user starts asks, on the route cards, how to get there, the way a
-    // walk-to does: nothing is sent until the pick comes back.
-    private (LoopRunner Runner, Harness H, List<(RoomKey From, RoomKey Entry)> Asked, Action<bool?> Answer) UserLoopAtTheArch()
-    {
-        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
-            walker: h.Walker, postToUi: a => a());
-        runner.SetWireSender(b => h.Sent.Add(b));
-        List<(RoomKey, RoomKey)> asked = new();
-        Action<bool?> answer = _ => { };
-        runner.SetUserApproachAsker((from, entry, reply) => { asked.Add((from, entry)); answer = reply; });
-        Assert.True(runner.Start(new Loop("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) }), userStarted: true));
-        return (runner, h, asked, pick => answer(pick));
-    }
-
-    [Theory]
-    [InlineData(true, "n\r")]          // "Walk it"
-    [InlineData(false, "go arch\r")]   // "Teleport"
-    public void UserStartedLoop_AsksOnTheRouteCards_ThenWalksAsPicked(bool walkIt, string firstSend)
-    {
-        var (runner, h, asked, answer) = UserLoopAtTheArch();
-
-        Assert.Equal((new RoomKey(1, 10), new RoomKey(7, 131)), Assert.Single(asked));
-        Assert.Equal(LoopState.Approaching, runner.State);
-        Assert.Empty(h.Sent);
-
-        answer(walkIt);
-
-        Assert.Equal(firstSend, Encoding.Latin1.GetString(h.Sent[0]));
-        Assert.Equal(LoopState.Approaching, runner.State);
-    }
-
-    [Fact]
-    public void UserStartedLoop_CardsCancelled_StopsTheLoop()
-    {
-        var (runner, h, _, answer) = UserLoopAtTheArch();
-
-        answer(null);
-
-        Assert.Equal(LoopState.Idle, runner.State);
-        Assert.Empty(h.Sent);
-    }
-
-    // The loop was stopped while the cards were up: a late pick starts nothing.
-    [Fact]
-    public void UserStartedLoop_AnswerAfterAStop_IsDropped()
-    {
-        var (runner, h, _, answer) = UserLoopAtTheArch();
-        runner.Stop("test");
-
-        answer(false);
-
-        Assert.Equal(LoopState.Idle, runner.State);
-        Assert.Empty(h.Sent);
-    }
-
     // The user asked to go to the loop, not for what the run does once there: after
     // the loop is reached, the walk back to it from a detour is an automatic walk. It
     // is not asked about, and uses only the teleports allowed to automatic walks.
@@ -2606,8 +2550,6 @@ public sealed class AutoWalkManagerTests : IDisposable
         LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
             walker: h.Walker, postToUi: a => a());
         runner.SetWireSender(b => h.Sent.Add(b));
-        int asked = 0;
-        runner.SetUserApproachAsker((_, _, _) => asked++);
         Loop loop = new("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) });
         h.Tracker.SetLocated(new RoomKey(1, 12));           // standing on the loop
         Assert.True(runner.Start(loop, userStarted: true));
@@ -2618,27 +2560,102 @@ public sealed class AutoWalkManagerTests : IDisposable
         h.Sent.Clear();
         Assert.True(runner.ResumeAfterDetour(loop));
 
-        Assert.Equal(0, asked);
         Assert.Equal(LoopState.Approaching, runner.State);
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
     }
 
-    // A loop nobody at the keyboard started is never asked: it is an automatic walk.
-    [Fact]
-    public void AutomaticLoopStart_IsNotAsked()
+    // ----- a loop started from off it: a walk-to first, then the loop --------
+
+    private (LoopRunner Runner, LoopWalkHandoff Handoff, Harness H, Loop Loop) LoopHandoffAtTheGrove()
     {
         Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
-        h.Walker.SetAutomaticWalkTeleports(() => Allow());
         LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
             walker: h.Walker, postToUi: a => a());
         runner.SetWireSender(b => h.Sent.Add(b));
-        int asked = 0;
-        runner.SetUserApproachAsker((_, _, _) => asked++);
+        LoopWalkHandoff handoff = new(runner, post: a => a());
+        h.Walker.Event += handoff.OnWalkerEvent;
+        runner.Event += handoff.OnLoopEvent;
+        return (runner, handoff, h, new Loop("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) }));
+    }
 
-        Assert.True(runner.Start(new Loop("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) })));
+    // Where a start from off the loop joins it is the destination of the walk-to.
+    [Fact]
+    public void NearestRoomOf_IsTheLoopRoomAStartWouldWalkTo_AndNothingWhenStandingOnIt()
+    {
+        var (runner, _, _, loop) = LoopHandoffAtTheGrove();
 
-        Assert.Equal(0, asked);
-        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+        Assert.Equal(new RoomKey(7, 131), runner.NearestRoomOf(loop, new RoomKey(1, 10)));   // one teleport hop
+        Assert.Equal(new RoomKey(1, 12), runner.NearestRoomOf(loop, new RoomKey(1, 11)));
+        Assert.Null(runner.NearestRoomOf(loop, new RoomKey(1, 12)));
+        Assert.Equal(LoopState.Idle, runner.State);
+    }
+
+    // The loop runner is not involved until the walk-to arrives; then it has the run.
+    [Fact]
+    public void LoopHandoff_TheLoopStartsWhenTheWalkArrives()
+    {
+        var (runner, handoff, h, loop) = LoopHandoffAtTheGrove();
+        RoomKey entry = new(7, 131);
+
+        handoff.Begin(loop, entry);
+        handoff.NoteWalkCommitted(entry);
+        Assert.Equal(LoopState.Idle, runner.State);
+        Assert.Same(loop, handoff.Pending);
+
+        h.Tracker.SetLocated(entry);                          // the walk-to got there
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "reached", entry));
+
+        Assert.Null(handoff.Pending);
+        Assert.Equal(LoopState.Running, runner.State);
+    }
+
+    // A walk finishing somewhere else on the way (a stage of a longer trip) isn't the arrival.
+    [Fact]
+    public void LoopHandoff_AWalkFinishingElsewhere_IsNotTheArrival()
+    {
+        var (runner, handoff, _, loop) = LoopHandoffAtTheGrove();
+        handoff.Begin(loop, new RoomKey(7, 131));
+
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "reached", new RoomKey(1, 11)));
+
+        Assert.Same(loop, handoff.Pending);
+        Assert.Equal(LoopState.Idle, runner.State);
+    }
+
+    [Fact]
+    public void LoopHandoff_IsDropped_WhenTheWalkFails_OrGoesSomewhereElse_OrIsCancelled()
+    {
+        var (runner, handoff, _, loop) = LoopHandoffAtTheGrove();
+        RoomKey entry = new(7, 131);
+
+        handoff.Begin(loop, entry);
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Failed, "no path", entry));
+        Assert.Null(handoff.Pending);
+
+        handoff.Begin(loop, entry);
+        handoff.NoteWalkCommitted(new RoomKey(1, 11));        // the user picked a walk that stops short
+        Assert.Null(handoff.Pending);
+
+        handoff.Begin(loop, entry);
+        handoff.Cancel("cancelled at the route cards");
+        Assert.Null(handoff.Pending);
+
+        // Nothing is waiting, so a later arrival there starts nothing.
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "reached", entry));
+        Assert.Equal(LoopState.Idle, runner.State);
+    }
+
+    // Another loop starting first supersedes the one that was waiting.
+    [Fact]
+    public void LoopHandoff_IsDropped_WhenAnotherLoopStarts()
+    {
+        var (runner, handoff, h, loop) = LoopHandoffAtTheGrove();
+        handoff.Begin(loop, new RoomKey(7, 131));
+
+        h.Tracker.SetLocated(new RoomKey(1, 12));
+        Assert.True(runner.Start(new Loop("other", new[] { new RoomKey(1, 12), new RoomKey(1, 11) })));
+
+        Assert.Null(handoff.Pending);
     }
 
     // ----- the list of teleports, built from the game data ----------------

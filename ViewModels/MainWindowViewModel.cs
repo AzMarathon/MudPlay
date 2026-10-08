@@ -1559,11 +1559,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Walker.SetPartyLeaderCheck(isLeaderWithFollowers);
         AppServices.Current.LoopRunner.SetTeleportResolver(teleportResolver);
         AppServices.Current.LoopRunner.SetPartyLeaderCheck(isLeaderWithFollowers);
-        // Walks the user asked for that an engine makes go through the route cards
-        // like a walk-to: the walk to a loop just started asks walk-or-teleport when
-        // its shortest route teleports, and Recover Now is a walk-to to the death room.
-        AppServices.Current.LoopRunner.SetUserApproachAsker(
-            (from, entry, answer) => _ = AskLoopApproachAsync(from, entry, answer));
+        // Recover Now is a walk the user asked for: a walk-to to the death room, on
+        // the route cards like any other.
         AppServices.Current.DeathRecovery.SetDemandedWalk(room =>
         {
             _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
@@ -4978,32 +4975,13 @@ public partial class MainWindowViewModel : ObservableObject
     // Start a favourited loop from the flyout — stop any conflicting engine
     // first, then hand the loop to the runner (which approaches the start
     // waypoint and begins the cycle).
-    private static async Task AskLoopApproachAsync(
-        Game.Map.RoomKey from, Game.Map.RoomKey entry, Action<bool?> answer)
-    {
-        bool? pick;
-        try
-        {
-            pick = await MudPlay.ViewModels.Navigation.RouteChoicePrompt.AskWalkOrTeleportAsync(
-                AppServices.Current, from, entry);
-        }
-        catch (Exception ex)
-        {
-            // The cards couldn't be shown: start the loop as it always has, by the
-            // shortest route, rather than leave it waiting on an answer.
-            AppServices.Current.Log.Warn("RoutePick", $"loop approach cards failed ({ex.Message}); taking the shortest route");
-            pick = false;
-        }
-        answer(pick);
-    }
-
     private void StartLoopFavorite(Game.Map.Loop loop)
     {
         var s = AppServices.Current;
         s.MovementControl.StartUserRun(() =>
         {
             if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
-            s.LoopRunner.Start(loop, userStarted: true);
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, loop);
         });
     }
 
@@ -5318,7 +5296,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         if (ctl.IsIdle && s.LoopRunner.StagedLoop is { } staged)
         {
-            s.LoopRunner.Start(staged, userStarted: true);
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, staged);
             return;
         }
         OpenNavManager(startOnGotoTab: true);
