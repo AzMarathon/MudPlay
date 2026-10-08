@@ -230,6 +230,31 @@ public static class TBInfoActionResolver
         return false;
     }
 
+    // True when a room command only works in an empty room: a line it keys in the
+    // room's CMD chain carries a `nomonsters` condition. The engine refuses that
+    // line while any monster record stands in the room, an NPC as much as a
+    // hostile, and prints nothing at all when the condition names no message. So
+    // the rule is read from the data rather than recognised from the reply
+    // (GAME_MECHANICS "Room-command refusals").
+    public static bool NeedsEmptyRoom(TBInfoStore store, int roomCmd, string command)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+        if (roomCmd <= 0 || string.IsNullOrWhiteSpace(command)) return false;
+
+        TBInfoEntry? entry = store.GetEntry(roomCmd);
+        if (entry is null || string.IsNullOrWhiteSpace(entry.Action)) return false;
+
+        string typed = command.Trim();
+        foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] parts = raw.Trim().Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length < 2 || !parts[0].Equals(typed, StringComparison.OrdinalIgnoreCase)) continue;
+            for (int i = 1; i < parts.Length; i++)
+                if (StartsWithWord(parts[i], "nomonsters")) return true;
+        }
+        return false;
+    }
+
     // What a room command does when none of the resolvers above explains it. The
     // four they cover (teleport, price, remoteaction, giveitem/random) are not the
     // whole directive vocabulary, so a room whose only command was one of these

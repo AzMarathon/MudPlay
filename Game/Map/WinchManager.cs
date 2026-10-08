@@ -21,6 +21,9 @@ namespace MudPlay.Game.Map;
 //     _isGateOpen probe reads), THEN report Turned. Moving before then just bonks
 //     "The gate is closed!" — which MovementRefusalDetector already reverts, but
 //     that would thrash pull↔move, so we wait for the gate instead.
+//   - With a monster in the room the pull is refused outright ("You cannot do
+//     that while there are enemies present!"). That is neither result line, so the
+//     request is handed back as RoomNotEmpty for the engine to hold.
 //   - A drawbridge-type winch breaks that poll: its exit is phrased "lowered
 //     drawbridge <dir>" in the exits list (report paradigm-20260906-202008), which
 //     never matches the door/gate open|closed wording _isGateOpen looks for, so the
@@ -46,6 +49,7 @@ public sealed class WinchManager : IDisposable
     private readonly IDisposable _turnedSub;
     private readonly IDisposable _budgeSub;
     private readonly IDisposable _drawbridgeSub;
+    private readonly IDisposable _enemiesSub;
     private readonly WireSender _wire = new();
     private bool _disposed;
 
@@ -91,6 +95,7 @@ public sealed class WinchManager : IDisposable
         _turnedSub = _router.Subscribe(KnownPatterns.WinchTurned, OnWinchTurned);
         _budgeSub = _router.Subscribe(KnownPatterns.WinchWontBudge, OnWinchWontBudge);
         _drawbridgeSub = _router.Subscribe(KnownPatterns.WinchDrawbridgeLowered, OnDrawbridgeLowered);
+        _enemiesSub = _router.Subscribe(KnownPatterns.WinchEnemiesPresent, OnEnemiesPresent);
     }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
@@ -216,6 +221,19 @@ public sealed class WinchManager : IDisposable
         // re-pulls immediately so the retry chain stays drivable.
         _log?.Info(LogCategory, "winch would not budge — re-pulling.");
         Schedule(PullRetryDelay, SendPull);
+    }
+
+    // The pull was refused for a monster in the room. Pulling again is refused
+    // again, so the request goes back to the engine, which holds the step until the
+    // room is clear. The line isn't the winch's own, so it only counts while a pull
+    // is the thing awaiting an answer.
+    private void OnEnemiesPresent(MatchResult _)
+    {
+        if (_state != WinchState.WaitingPull || _current is not { } cur) return;
+        CancelTimer();
+        _log?.Info(LogCategory, $"'{cur.PullCommand}' refused — a monster is in the room; handing the step back.");
+        cur.Reply(WinchResult.RoomNotEmpty.Instance);
+        Reset();
     }
 
     private void OnWinchTurned(MatchResult _)
@@ -353,6 +371,7 @@ public sealed class WinchManager : IDisposable
         _turnedSub.Dispose();
         _budgeSub.Dispose();
         _drawbridgeSub.Dispose();
+        _enemiesSub.Dispose();
     }
 
     internal static string DirectionShort(Direction d) => d switch

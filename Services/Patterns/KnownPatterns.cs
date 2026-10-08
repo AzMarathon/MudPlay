@@ -581,6 +581,9 @@ public static class KnownPatterns
     public const string WinchTurned           = "winch.turned";            // "You heave mightily on the winch, and it begins to turn!"
     public const string WinchWontBudge        = "winch.wontbudge";         // "You heave mightily on the winch, but it does not budge."
     public const string WinchDrawbridgeLowered = "winch.drawbridge-lowered"; // "The wooden drawbridge lowers with a heavy thud!"
+    // A winch's command line is `nomonsters 1981`: with any monster in the room the
+    // pull is refused with this line and nothing turns (GAME_MECHANICS "Winch gates").
+    public const string WinchEnemiesPresent   = "winch.enemies-present";   // "You cannot do that while there are enemies present!"
 
     // ----- Another player forcing a door (LeaderDoorAssistManager) -------
     // Observer-side line emitted when another in-room player fails to bash

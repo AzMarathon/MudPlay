@@ -185,4 +185,27 @@ public sealed class TBInfoActionResolverTests : IDisposable
         Assert.False(pc.Tiered);
         Assert.Equal(20, pc.MinLevel);
     }
+
+    // `nomonsters` anywhere on the command's line means it needs an empty room,
+    // with or without a refusal message number. The two neighbouring conditions
+    // need a monster present, the opposite.
+    [Fact]
+    public void NeedsEmptyRoom_ReadsTheNoMonstersCondition()
+    {
+        const string json = """
+            [ { "Number": 7, "LinkTo": 0,
+                "Action": "go hole:nomonsters 289:message 9455:teleport 12034 2\ngo willow:nomonsters:roomitem 718 962:teleport 214 3\npull crate:failitem 3730 9577:nomonsters 9575:giveitem 3730\ngo portal:needmonster 596 2073:minlevel 20:teleport 2251 12\nbuy healing:monsters:price 200 318:cast 221\ngo door:minlevel 10 3246:teleport 5 1\n",
+                "Called From": "Room 2/2547" } ]
+            """;
+        TBInfoStore store = NewStore(json);
+
+        Assert.True(TBInfoActionResolver.NeedsEmptyRoom(store, 7, "go hole"));
+        Assert.True(TBInfoActionResolver.NeedsEmptyRoom(store, 7, "GO WILLOW"));   // silent refusal
+        Assert.True(TBInfoActionResolver.NeedsEmptyRoom(store, 7, "pull crate"));  // not the first condition
+        Assert.False(TBInfoActionResolver.NeedsEmptyRoom(store, 7, "go portal"));
+        Assert.False(TBInfoActionResolver.NeedsEmptyRoom(store, 7, "buy healing"));
+        Assert.False(TBInfoActionResolver.NeedsEmptyRoom(store, 7, "go door"));
+        Assert.False(TBInfoActionResolver.NeedsEmptyRoom(store, 7, "go nowhere"));
+        Assert.False(TBInfoActionResolver.NeedsEmptyRoom(store, 0, "go hole"));
+    }
 }

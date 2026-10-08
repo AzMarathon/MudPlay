@@ -58,6 +58,7 @@ public sealed class WinchManagerTests
 
     private const string TurnLine = "You heave mightily on the winch, and it begins to turn!";
     private const string BudgeLine = "You heave mightily on the winch, but it does not budge.";
+    private const string EnemiesLine = "You cannot do that while there are enemies present!";
     private const string DrawbridgeLine = "The wooden drawbridge lowers with a heavy thud!";
 
     [Fact]
@@ -106,6 +107,35 @@ public sealed class WinchManagerTests
 
         h.Line(TurnLine);                  // second pull turned it; gate already open
         Assert.IsType<WinchResult.Turned>(result);
+    }
+
+    // The winch's command line is `nomonsters 1981`: with a monster in the room the
+    // pull is refused, and the request goes back to the engine instead of pulling
+    // into the same refusal until the cap.
+    [Fact]
+    public void Pull_RefusedForAMonster_HandsTheStepBack()
+    {
+        using Harness h = new() { GateOpen = true };
+        WinchResult? result = null;
+        h.Mgr.Enqueue(Direction.W, "pull winch", waitForGate: true, "walker", r => result = r);
+
+        h.Line(EnemiesLine);
+
+        Assert.IsType<WinchResult.RoomNotEmpty>(result);
+        Assert.Equal(WinchManager.WinchState.Idle, h.Mgr.CurrentState);
+        Assert.False(h.HasPending);
+        Assert.Equal(1, h.Count("pull winch"));
+    }
+
+    [Fact]
+    public void EnemiesLine_WithNoPullWaiting_IsIgnored()
+    {
+        using Harness h = new();
+
+        h.Line(EnemiesLine);
+
+        Assert.Equal(WinchManager.WinchState.Idle, h.Mgr.CurrentState);
+        Assert.Empty(h.Sent);
     }
 
     [Fact]

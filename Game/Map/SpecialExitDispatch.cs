@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 
 namespace MudPlay.Game.Map;
@@ -159,11 +160,7 @@ internal static class SpecialExitDispatch
         // leader teleports.
         if (exit.Hint == RoomExitHint.Teleport)
         {
-            string? keyword = exit.TextCommands is { Count: > 0 } teleCmds
-                ? teleCmds[0]
-                : (sourceRoom is not null && teleportResolver is not null)
-                    ? teleportResolver(sourceRoom.Key, exit.Target)
-                    : null;
+            string? keyword = TeleportKeyword(exit, sourceRoom, teleportResolver);
             if (keyword is null)
             {
                 failReason = "no teleport keyword resolved (TBInfo entry missing or not for this destination)";
@@ -189,5 +186,36 @@ internal static class SpecialExitDispatch
         }
 
         return SpecialExitSend.NotHandled;
+    }
+
+    private static string? TeleportKeyword(
+        RoomExit exit, Room? sourceRoom, Func<RoomKey, RoomKey, string?>? teleportResolver)
+        => exit.TextCommands is { Count: > 0 } teleCmds
+            ? teleCmds[0]
+            : (sourceRoom is not null && teleportResolver is not null)
+                ? teleportResolver(sourceRoom.Key, exit.Target)
+                : null;
+
+    // The room commands crossing this exit puts on the wire, for a caller that has
+    // to judge them before anything is sent: a teleport's keyword, and the
+    // prerequisite commands of a same-room multi-action exit (a winch pull among
+    // them) unless the exit already stands open. A text exit is an exit of the
+    // room, not a command from its command block, so it yields nothing.
+    public static IEnumerable<string> RoomCommandsFor(
+        RoomExit exit, Direction direction, Room? sourceRoom, RoomTracker tracker,
+        Func<RoomKey, RoomKey, string?>? teleportResolver)
+    {
+        if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is { } maData)
+        {
+            if (maData.HasRemoteActions) yield break;
+            if (tracker.ShownOpenExits() is { } shown && shown.Contains(direction)) yield break;
+            if (tracker.State.OpenDoorDirections is { } open && open.Contains(direction)) yield break;
+            foreach (ExitAction action in maData.Actions)
+                if (action.Commands.Count > 0) yield return action.Commands[0];
+            yield break;
+        }
+        if (exit.Hint == RoomExitHint.Teleport
+            && TeleportKeyword(exit, sourceRoom, teleportResolver) is { } keyword)
+            yield return keyword;
     }
 }

@@ -1395,6 +1395,7 @@ public static class BugReportBuilder
                     : "(unknown room)");
             Kv(sb, "Loop step in flight", svc.LoopRunner.IsStepInFlight.ToString());
             Kv(sb, "Loop waiting on a trap disarm", svc.LoopRunner.IsAwaitingTrapDisarm.ToString());
+            Kv(sb, "Loop command held for an empty room", svc.LoopRunner.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         }
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");

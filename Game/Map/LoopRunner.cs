@@ -1538,6 +1538,9 @@ public sealed class LoopRunner : IRecoverableEngine
         }
 
         LoopStep step = _expandedSteps[_index];
+        // A room command that only works in an empty room waits for the room to
+        // clear instead of going out to be refused.
+        if (HeldForEmptyRoom(step, alreadySent: false)) return;
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
         // meanwhile and the resume re-drives this step.
         if (step is MoveLoopStep && _moveReadyCheck?.Invoke() == false) return;
@@ -1898,10 +1901,103 @@ public sealed class LoopRunner : IRecoverableEngine
                 EmitCardinal(step.Direction, exit.Target, "post-winch");
                 return;
 
+            case WinchResult.RoomNotEmpty:
+                // Back to an unsent step: the hold clears the room and the step is
+                // driven again, winch and all.
+                _stepInFlight = false;
+                _expectedMoveTarget = null;
+                _expectedMoveSource = null;
+                if (_loop is not null && _index < _expandedSteps.Count
+                    && HeldForEmptyRoom(_expandedSteps[_index], alreadySent: false))
+                    return;
+                FailStep("winch failed: it can't be pulled with a monster in the room, and none is listed here");
+                return;
+
             case WinchResult.Failed failed:
                 FailStep($"winch failed: {failed.Reason}");
                 return;
         }
+    }
+
+    // ----- A room command that only works in an empty room -------------------
+    //
+    // The same wait the walker keeps (AutoWalkManager.HeldForEmptyRoom): a step
+    // whose room command carries the game data's `nomonsters` condition is held
+    // while a monster is in the room, the room is cleared, and the step goes out
+    // once the roster shows none. A loop used to send it, take the refusal as a
+    // blocked move, and spend its three recoveries on the same refusal.
+    private readonly EmptyRoomCommandHold _emptyRoom = new();
+    private Func<TimeSpan, Action, IDisposable>? _emptyRoomSchedule;
+
+    // True while a room command waits for the room to be cleared. Combat reads it
+    // as a force-clear, so the room is fought with Auto-Combat off.
+    public bool AwaitingEmptyRoom => _emptyRoom.Active;
+
+    // See EmptyRoomCommandHold.SetHooks. schedule runs the wait limit.
+    public void SetRoomClearHooks(Func<bool> roomHasMonster, Action requestRoomClear, Action abortPartyReform,
+        Func<Room, string, bool> commandNeedsEmptyRoom, Func<TimeSpan, Action, IDisposable> schedule)
+    {
+        ArgumentNullException.ThrowIfNull(schedule);
+        _emptyRoom.SetHooks(roomHasMonster, requestRoomClear, abortPartyReform, commandNeedsEmptyRoom);
+        _emptyRoomSchedule = schedule;
+    }
+
+    // The room commands a step sends from the room we stand in.
+    private IEnumerable<string> RoomCommandsOf(LoopStep step)
+    {
+        switch (step)
+        {
+            case MoveLoopStep move
+                when _tracker.State.CurrentRoom is { } room
+                     && room.Exits.TryGetValue(move.Direction, out RoomExit exit):
+                return SpecialExitDispatch.RoomCommandsFor(exit, move.Direction, room, _tracker, _teleportResolver);
+            case CommandLoopStep command:
+                return MacroStore.SplitCommandStepsKeepingEnters(command.Command).Where(static p => p.Length > 0);
+            default:
+                return [];
+        }
+    }
+
+    // True when the step must wait: one of its commands needs an empty room and a
+    // monster is here. Puts the hold up the first time. alreadySent marks a command
+    // that went out and came back refused.
+    private bool HeldForEmptyRoom(LoopStep step, bool alreadySent)
+    {
+        if (_emptyRoom.BlockedCommand(_tracker.State.CurrentRoom, RoomCommandsOf(step)) is not { } command)
+        {
+            _emptyRoom.End();
+            return false;
+        }
+        if (_emptyRoom.Active && !alreadySent) return true;
+        _log?.Info("LoopRunner", alreadySent
+            ? $"step {_index + 1}: '{command}' was refused with a monster here — clearing the room, then trying it again"
+            : $"step {_index + 1}: '{command}' only works in an empty room and a monster is here — clearing the room first");
+        _emptyRoom.Begin(_emptyRoomSchedule, OnEmptyRoomWaitElapsed, alreadySent);
+        return true;
+    }
+
+    // The room roster changed. Once no monster is left, the held command goes out.
+    public void NoteRoomObserved()
+    {
+        if (!_emptyRoom.Active || _emptyRoom.RoomHasMonster) return;
+        _emptyRoom.End();
+        _log?.Info("LoopRunner", $"step {_index + 1}: the room is clear — sending the room command");
+        SendNextStep();
+    }
+
+    private void OnEmptyRoomWaitElapsed()
+    {
+        if (!_emptyRoom.Active) return;
+        // A fight or a rest is holding the loop and will re-drive the step when it
+        // ends; the limit is for a monster nothing is doing anything about.
+        if (_coordinator.IsPaused)
+        {
+            _emptyRoom.Begin(_emptyRoomSchedule, OnEmptyRoomWaitElapsed, alreadySent: false);
+            return;
+        }
+        _emptyRoom.End();
+        RaiseAfterReset(new LoopEvent(LoopEventKind.Failed,
+            "a room command on the loop only works in an empty room, and a monster is still here"));
     }
 
     // Terminal callback from HiddenExitRevealManager for a searchable-hidden
@@ -2267,6 +2363,16 @@ public sealed class LoopRunner : IRecoverableEngine
             // loop from there. Since we're confirmed back at the source (which is on
             // the loop), the reroute re-sends this step; a persistent block trips
             // the MaxRecoverAttempts cap and finally surfaces as Failed.
+            // A monster came in after the step's empty-room command was judged clear
+            // to send, and the command came back refused. That is a wait, not a
+            // position to recover.
+            if (_index < _expandedSteps.Count && HeldForEmptyRoom(_expandedSteps[_index], alreadySent: true))
+            {
+                _stepInFlight = false;
+                _expectedMoveTarget = null;
+                _expectedMoveSource = null;
+                return;
+            }
             _log?.Warn("LoopRunner",
                 $"step {_index + 1} blocked at source {key}; expected {_expectedMoveTarget}; entering recovery");
             EnterRecovery($"step {_index + 1} blocked at {key}");
@@ -2792,6 +2898,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _recovery?.Detach();
         StopDelayTimer();
         DisarmStallWatchdog();
+        _emptyRoom.End();
         // Drain a door FSM that was opening on our behalf — otherwise its
         // internal state sticks and the next run's enqueue sits in the queue
         // forever (DoorOpenManager.TryStartNext bails on non-Idle state).

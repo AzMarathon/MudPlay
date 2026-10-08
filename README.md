@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.150.0**
-> - Gear Finder under a Target weight: the weapon is picked first, then the other slots get the combination with the best total that fits, instead of each slot taking the first item that fits from the top down
-> - With a search order, the weapon goes to the first criterion that finds one before any other slot is filled
-> - New Find Best criterion **Backstabbing**: picks the backstab weapon first, then the gear that takes your backstab minimum as high as it will go (on Paradigm, +min until it flips with the max side, then enough max to keep climbing; on Stock, min wherever a slot has it and max where it doesn't)
+> **Version 3.150.3**
+> - Room commands that only work in an empty room are read from the game data: a walk holds the step and clears the room before sending, which also covers the ones that refuse without a word
+> - Loops keep the same wait instead of spending their recoveries on the refusal
+> - A winch pull refused for a monster in the room is recognised; the pull waits for the room to clear instead of repeating until it gives up
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

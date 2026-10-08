@@ -5412,9 +5412,10 @@ public sealed class AppServices
             // and fights to clear it — the do-not-attack rest exception.
             isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             requestEngage: Combat.RequestRestClearEngage);
-        // The walker asks for the same clear while a room command that only works in
-        // an empty room waits on a monster (AutoWalkManager.AwaitingEmptyRoom).
-        Combat.SetRestClearGate(() => Health.ForceClearForRest || Walker is { AwaitingEmptyRoom: true });
+        // The walker and the loop ask for the same clear while a room command that
+        // only works in an empty room waits on a monster (AwaitingEmptyRoom on each).
+        Combat.SetRestClearGate(() => Health.ForceClearForRest
+            || Walker is { AwaitingEmptyRoom: true } || LoopRunner is { AwaitingEmptyRoom: true });
 
         // Break-before-run: turning auto-attack OFF mid-fight releases the Combat
         // gate so the walker resumes — send `break` first when the user has
@@ -7064,11 +7065,17 @@ public sealed class AppServices
         // A key an NPC hands over for the asking is as fetchable as one a summoned
         // monster always drops (the old hermit's jagged bone key for the Library).
         Walker.SetDoorKeySourceProbe(DoorKeyIsFetchable);
+        // The game counts every monster record in the room, an NPC as much as a
+        // hostile, so the roster is read the same way.
+        bool RoomHasMonster() => RoomClassifier.Current is { } obs
+            && obs.Entities.Any(e => e.Kind == Game.Combat.EntityKind.Monster);
+        bool CommandNeedsEmptyRoom(Game.Map.Room room, string command)
+            => Game.Map.TBInfoActionResolver.NeedsEmptyRoom(TBInfo, room.Cmd, command);
         Walker.SetRoomClearHooks(
-            roomHasMonster: () => RoomClassifier.Current is { } obs
-                && obs.Entities.Any(e => e.Kind == Game.Combat.EntityKind.Monster),
+            roomHasMonster: RoomHasMonster,
             requestRoomClear: () => Combat.RequestRestClearEngage(),
-            abortPartyReform: () => AutoParty.AbortReformWaits("the teleport was refused"));
+            abortPartyReform: () => AutoParty.AbortReformWaits("the teleport was refused"),
+            commandNeedsEmptyRoom: CommandNeedsEmptyRoom);
         RoomClassifier.EntitiesObserved += _ => Walker.NoteRoomObserved();
 
         // Hold a crossing whose gate item is missing but already being fetched,
@@ -7491,6 +7498,13 @@ public sealed class AppServices
         // A waypoint's command block: the loop moves on once the game has answered it,
         // and stays while a fight it started runs.
         LoopRunner.SetInCombatProbe(() => PlayerState.InCombat);
+        LoopRunner.SetRoomClearHooks(
+            roomHasMonster: RoomHasMonster,
+            requestRoomClear: () => Combat.RequestRestClearEngage(),
+            abortPartyReform: () => AutoParty.AbortReformWaits("the teleport was refused"),
+            commandNeedsEmptyRoom: CommandNeedsEmptyRoom,
+            schedule: ScheduleOnce);
+        RoomClassifier.EntitiesObserved += _ => LoopRunner.NoteRoomObserved();
         LoopRunner.SetConfusedCheck(() => Conditions.IsConfused);
         // Trapped exits mid-circuit: the walker's disarm / delegate / walk-through
         // decision, through the same managers.

@@ -2,7 +2,8 @@ namespace MudPlay.Game.Map;
 
 // Terminal outcome of a WinchManager request. Turned means the gate the winch
 // controls is now open and the caller can safely send the cardinal move; Failed
-// carries a single-line reason the engine surfaces in its Failed event + log.
+// carries a single-line reason the engine surfaces in its Failed event + log;
+// RoomNotEmpty hands the step back to be tried again in an empty room.
 public abstract record WinchResult
 {
     // The winch turned and the gate it controls now reads open — ready for the move.
@@ -10,6 +11,14 @@ public abstract record WinchResult
     {
         public static readonly Turned Instance = new();
         private Turned() { }
+    }
+
+    // The pull was refused because a monster is in the room. Not a failed pull: the
+    // engine that asked clears the room and asks again.
+    public sealed record RoomNotEmpty : WinchResult
+    {
+        public static readonly RoomNotEmpty Instance = new();
+        private RoomNotEmpty() { }
     }
 
     // The winch couldn't be turned (retries exhausted with no success), or the gate

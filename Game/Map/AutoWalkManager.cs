@@ -1829,15 +1829,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // fails the normal way rather than parking the walk forever.
         if (HeldForGateItem(_path[_index])) return;
 
-        // A room command refused for a monster in the room waits for the room to
-        // clear; a resume or a stray re-drive must not send it into the same refusal.
-        if (_awaitingEmptyRoom)
-        {
-            if (_roomHasMonster?.Invoke() != false) return;
-            ClearEmptyRoomWait();
-        }
-        // A refusal is about the step it answered; none carries over to this one.
-        _commandRefused = false;
+        // A room command that only works in an empty room waits for the room to
+        // clear instead of going out to be refused.
+        if (HeldForEmptyRoom(_path[_index], alreadySent: false)) return;
 
         WalkStep step = _path[_index];
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
@@ -2290,6 +2284,18 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 EmitMoveBytes(EncodeMove(step.Direction), $"move {step.Direction} (post-winch)");
                 return;
 
+            case WinchResult.RoomNotEmpty:
+                // Back to an unsent step: the hold clears the room and the step is
+                // driven again, winch and all.
+                _stepInFlight = false;
+                if (_path is not null && _index < _path.Count
+                    && HeldForEmptyRoom(_path[_index], alreadySent: false))
+                    return;
+                Raise(new WalkEvent(WalkEventKind.Failed,
+                    "winch failed: it can't be pulled with a monster in the room, and none is listed here", _destination));
+                Reset();
+                return;
+
             case WinchResult.Failed failed:
                 Raise(new WalkEvent(WalkEventKind.Failed,
                     $"winch failed: {failed.Reason}", _destination));
@@ -2653,11 +2659,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (sourceForCurrentStep is not null
             && newKey.Value.Equals(sourceForCurrentStep.Key))
         {
-            bool commandRefused = _commandRefused;
-            _commandRefused = false;
-            if (commandRefused && _roomHasMonster?.Invoke() == true)
+            // A monster came in after the step's empty-room command was judged
+            // clear to send, and the command came back refused.
+            if (_path is not null && _index < _path.Count
+                && HeldForEmptyRoom(_path[_index], alreadySent: true))
             {
-                HoldForEmptyRoom();
+                _stepInFlight = false;
                 return;
             }
 
@@ -3004,84 +3011,92 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // tracker's revert lands; the generic blocked path then retries once and replans.
     private void OnCommandMoveRefused()
     {
-        // The blocked path that follows reads this to tell a refused room command
-        // from a refused cardinal move.
-        _commandRefused = _stepInFlight;
         if (!_awaitingGreetTeleport) return;
         _log?.Info("Walker",
             $"greet teleport '{_greetTeleportCommand}' refused by the NPC; not re-asking.");
         ClearGreetTeleportWait();
     }
 
-    // ----- A room command refused with a monster in the room -----------------
+    // ----- A room command that only works in an empty room -------------------
     //
-    // Some room commands only work in an empty room (`go hole:nomonsters …`); with a
-    // monster there the game answers "You cannot do that right now!" and nothing
-    // moves. Retrying at once is refused again, and replanning finds the same step,
+    // Some room commands carry a `nomonsters` condition (`go hole:nomonsters …`):
+    // with any monster in the room the game refuses them, a few without printing a
+    // word. Retrying at once is refused again, and replanning finds the same step,
     // so the walk used to burn its retries and stall (report
     // paradigm-20261007-194430: a murderer followed the party into the Dark Alley and
-    // `go hole` was refused). The step is held until the room is clear, with the
-    // room being cleared meanwhile even when Auto-Combat is off, then sent again.
-    private static readonly TimeSpan EmptyRoomWaitLimit = TimeSpan.FromSeconds(60);
-    private bool _commandRefused;
-    private bool _awaitingEmptyRoom;
-    private IDisposable? _emptyRoomTimer;
-    private Func<bool>? _roomHasMonster;
-    private Action? _requestRoomClear;
-    private Action? _abortPartyReform;
+    // `go hole` was refused). The condition is in the game data, so the step is held
+    // before it is sent: the room is cleared meanwhile, even with Auto-Combat off,
+    // and the command goes out once the room roster shows no monster.
+    private readonly EmptyRoomCommandHold _emptyRoom = new();
 
-    // True while a refused room command waits for the room to be cleared. Combat
-    // reads it as a force-clear, so the room is fought with Auto-Combat off.
-    public bool AwaitingEmptyRoom => _awaitingEmptyRoom;
+    // True while a room command waits for the room to be cleared. Combat reads it
+    // as a force-clear, so the room is fought with Auto-Combat off.
+    public bool AwaitingEmptyRoom => _emptyRoom.Active;
 
-    // roomHasMonster: any monster on the current room roster. requestRoomClear:
-    // start the fight (CombatManager.RequestRestClearEngage). abortPartyReform: drop
-    // the regroup hold a leader's relayed teleport put up, since nobody went anywhere.
-    public void SetRoomClearHooks(Func<bool> roomHasMonster, Action requestRoomClear, Action abortPartyReform)
+    // See EmptyRoomCommandHold.SetHooks.
+    public void SetRoomClearHooks(Func<bool> roomHasMonster, Action requestRoomClear, Action abortPartyReform,
+        Func<Room, string, bool> commandNeedsEmptyRoom)
+        => _emptyRoom.SetHooks(roomHasMonster, requestRoomClear, abortPartyReform, commandNeedsEmptyRoom);
+
+    // The room commands a step sends from the room we stand in.
+    private IEnumerable<string> RoomCommandsOf(WalkStep step)
     {
-        ArgumentNullException.ThrowIfNull(roomHasMonster);
-        ArgumentNullException.ThrowIfNull(requestRoomClear);
-        ArgumentNullException.ThrowIfNull(abortPartyReform);
-        _roomHasMonster = roomHasMonster;
-        _requestRoomClear = requestRoomClear;
-        _abortPartyReform = abortPartyReform;
+        switch (step)
+        {
+            case MoveStep { SkipSpecialDispatch: false } move
+                when _tracker.State.CurrentRoom is { } room
+                     && room.Exits.TryGetValue(move.Direction, out RoomExit exit):
+                return SpecialExitDispatch.RoomCommandsFor(exit, move.Direction, room, _tracker, _teleportResolver);
+            case CommandStep command:
+                return [command.Command];
+            case BoatStep boat:
+                return [boat.Passage.Keyword];
+            default:
+                return [];
+        }
     }
 
-    private void HoldForEmptyRoom()
+    // True when the step must wait: one of its commands needs an empty room and a
+    // monster is here. Puts the hold up the first time. alreadySent marks a command
+    // that went out and came back refused.
+    private bool HeldForEmptyRoom(WalkStep step, bool alreadySent)
     {
-        _awaitingEmptyRoom = true;
-        _stepInFlight = false;
-        _log?.Info("Walker",
-            $"step {_index + 1}: the room command was refused with a monster here — clearing the room, then trying it again");
-        _abortPartyReform?.Invoke();
-        _emptyRoomTimer?.Dispose();
-        _emptyRoomTimer = _scheduleDelay?.Invoke(EmptyRoomWaitLimit, OnEmptyRoomWaitElapsed);
-        _requestRoomClear?.Invoke();
+        if (_emptyRoom.BlockedCommand(_tracker.State.CurrentRoom, RoomCommandsOf(step)) is not { } command)
+        {
+            _emptyRoom.End();
+            return false;
+        }
+        if (_emptyRoom.Active && !alreadySent) return true;
+        _log?.Info("Walker", alreadySent
+            ? $"step {_index + 1}: '{command}' was refused with a monster here — clearing the room, then trying it again"
+            : $"step {_index + 1}: '{command}' only works in an empty room and a monster is here — clearing the room first");
+        _emptyRoom.Begin(_scheduleDelay, OnEmptyRoomWaitElapsed, alreadySent);
+        return true;
     }
 
-    // The room roster changed. Once no monster is left, the held command goes again.
+    // The room roster changed. Once no monster is left, the held command goes out.
     public void NoteRoomObserved()
     {
-        if (!_awaitingEmptyRoom || _roomHasMonster?.Invoke() != false) return;
-        ClearEmptyRoomWait();
-        _log?.Info("Walker", $"step {_index + 1}: the room is clear — sending the room command again");
+        if (!_emptyRoom.Active || _emptyRoom.RoomHasMonster) return;
+        _emptyRoom.End();
+        _log?.Info("Walker", $"step {_index + 1}: the room is clear — sending the room command");
         SendNextStep();
     }
 
     private void OnEmptyRoomWaitElapsed()
     {
-        if (!_awaitingEmptyRoom) return;
-        ClearEmptyRoomWait();
+        if (!_emptyRoom.Active) return;
+        // A fight or a rest is holding the walk and will re-drive the step when it
+        // ends; the limit is for a monster nothing is doing anything about.
+        if (_coordinator.IsPaused)
+        {
+            _emptyRoom.Begin(_scheduleDelay, OnEmptyRoomWaitElapsed, alreadySent: false);
+            return;
+        }
+        _emptyRoom.End();
         Raise(new WalkEvent(WalkEventKind.Failed,
             "a room command on the way only works in an empty room, and a monster is still here", _destination));
         Reset();
-    }
-
-    private void ClearEmptyRoomWait()
-    {
-        _awaitingEmptyRoom = false;
-        _emptyRoomTimer?.Dispose();
-        _emptyRoomTimer = null;
     }
 
     // The re-ask watchdog fired. Catches the case a failed transport emits NO fresh
@@ -3441,8 +3456,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _destination = null;
         _origin = null;
         _stepInFlight = false;
-        _commandRefused = false;
-        ClearEmptyRoomWait();
+        _emptyRoom.End();
         _awaitingPromptForCommand = false;
         _awaitingTrapDisarm = false;
         _awaitingDoorOpen = false;
