@@ -366,7 +366,8 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
         var finder = new ItemFinderViewModel(
             _gameData, _stats, _inventory,
             ItemEquipFilter.GearBucketForWord(LocalAlignmentWord(), _gameData.ActiveRealm),
-            _alignment?.SelfEvilPoints(_gameData.ActiveRealm));
+            _alignment?.SelfEvilPoints(_gameData.ActiveRealm),
+            _questBonuses.Bonuses, AppServices.CurrentOrNull?.MonsterCatalog);
         await AppServices.Current.Dialogs
             .OpenWindowAsync<ItemFinderViewModel, bool>(finder);
     }

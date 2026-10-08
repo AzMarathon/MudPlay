@@ -1164,7 +1164,24 @@ The **Item Finder** button (in Equipment Manager) opens a searchable catalog of 
 
 A weapon's own +Strength / +Agility / +Stealth replaces your current weapon's in these numbers rather than adding to it.
 
+**Level req (min / max)** narrows the list by the level an item asks for: the left box is the lowest requirement to show, the right the highest, and 0 switches either off. It's separate from **Usable at level**, which hides what a character of that level can't wear yet.
+
 It's a **reference tool**: double-click a row to see the item's full data record, and use the **Gear Finder** panel (with **Find Best**) to plan a loadout and read its projected stats. To actually equip something you found, note its name and type it into that slot's **Item** box back in Equipment Manager.
+
+**Trial damage.** Under the encumbrance lines, the Gear Finder panel works out what the trial set would do with the selected **Attack type**:
+- **Accuracy** and **Hit chance** (the target's dodge counted).
+- **Damage / hit**: the low and high end of one hit, after the target's damage resist. Hover it for the range before the resist.
+- **Swings / round**. A backstab is one strike, so it shows **Backstab damage** and **Expected / stab** instead.
+- **Crit chance** and **Quick & Deadly** (the crit a fast swing adds, already inside the crit chance), for a plain Attack only: bash, smash and backstab never crit.
+- **Damage / round**: what the round is worth on average, with misses, dodges and crits counted.
+
+It needs a weapon in the trial set for Attack, Bash and Smash, and a backstab-capable one for Backstab; Punch, Kick and Jumpkick are bare-handed. These are the same formulas Monster Intel and the Calculators tab use, with your completed quests' bonuses counted.
+
+**Configure Estimates** (top right of the Gear Finder panel) sets who is swinging and at what. It applies as you type, and stays open beside the finder if you want it to:
+- **Your character**: your level and the stats the selected attack reads, **with nothing worn**. They start from your stat screen less the bonuses of the gear you had on when the Item Finder opened, and the trial set's own bonuses are added on top, so a set you aren't wearing is priced correctly. Edit them to plan for a later level or more training. **Reset to my character** puts them back. Class and race are your character's.
+- **Target**: armour class, damage resist, dodge and BS defence. Type them, or pick a monster in the lookup box to fill all four from its record. **Clear target** goes back to no target (no armour, dodge or resist to get past). A backstab rolls against a quarter of the armour class plus the BS defence; a monster that sees hidden is flagged, since no backstab can open on it.
+
+Stealth is taken as your stat screen shows it. In the game it also moves with how much you carry, which a lighter or heavier trial set doesn't change here. The settings last until the Item Finder closes.
 
 **Find Best searches whatever the results grid currently shows** — not the whole catalog. Leave every filter at its default and it searches everything; narrow the grid first and it searches only that. This is deliberate: a plate-capable class's "best AC" is plate almost by construction (nothing else comes close on raw AC), so without a way to narrow the search there'd be no way to ask for anything more specific.
 

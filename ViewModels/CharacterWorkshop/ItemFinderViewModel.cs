@@ -10,7 +10,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
+using MudPlay.Game.Combat;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Quests;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
@@ -31,9 +33,9 @@ public enum ItemFinderLayout { Mixed, Weapon, Armour }
 // ItemEquipFilter.CanEquip), a Slot & type group (slot, weapon type, armour type,
 // backstab-capable), and a Filter by stats group — bonus thresholds (HP / mana /
 // regens / damage / accuracy / crits / backstab / AC / DR) kept at-or-above the
-// ticker, a hit-magic-level min/max range, and the strength / level requirement
-// gates kept at-or-below the ticker. Read-only — the finder informs slot choices;
-// it doesn't write the set.
+// ticker, hit-magic-level and required-level min/max ranges, and the strength
+// requirement gate kept at-or-below the ticker. Read-only — the finder informs slot
+// choices; it doesn't write the set.
 public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewModel<bool>
 {
     private const string AnyClass = "(Any class)";
@@ -143,6 +145,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     private readonly GameDataCache _gameData;
     private readonly InventoryManager _inventory;
+    // The live character: its class and race are whose attack the trial damage
+    // readout prices (the stats themselves come from Estimates).
+    private readonly PlayerStats _stats;
+    private readonly IReadOnlyList<QuestBonus> _questBonuses;
     // Renders a weapon's base damage / speed / proc-cast rows for the slot tooltip —
     // the same record view the item edit dialog shows. Charm only affects shop pricing
     // (unused here), so a snapshot at open is fine.
@@ -267,7 +273,8 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     [ObservableProperty] private int _minAc;
     [ObservableProperty] private int _minDr;
     [ObservableProperty] private int _maxStrReq;     // required-strength gate (≤)
-    [ObservableProperty] private int _maxLevelReq;   // required-level gate (≤)
+    [ObservableProperty] private int _minLevelReq;   // required-level floor (≥)
+    [ObservableProperty] private int _maxLevelReq;   // required-level ceiling (≤)
     // Negate dropdown: NoNegate = off; a spell name keeps only items negating it.
     [ObservableProperty] private string? _selectedNegate = NoNegate;
 
@@ -313,15 +320,31 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     [ObservableProperty] private string _currentEncumbranceText = "—";
     [ObservableProperty] private string _trialEncumbranceText = "—";
 
+    // The trial set's damage with the selected attack type, against the character
+    // and target set in Configure Estimates. Rows is empty (and Note says why) when
+    // the set can't make that attack.
+    public ItemFinderEstimatesViewModel Estimates { get; }
+    public ObservableCollection<TrialDamageRow> TrialDamageRows { get; } = new();
+    [ObservableProperty] private string _trialDamageTitle = string.Empty;
+    [ObservableProperty] private string _trialDamageTarget = string.Empty;
+    [ObservableProperty] private string _trialDamageNote = string.Empty;
+    [ObservableProperty] private bool _hasTrialDamageNote;
+
     public ItemFinderViewModel(
         GameDataCache gameData, PlayerStats stats, InventoryManager inventory,
-        AlignmentBucket? alignment, EvilPointRange? evilPoints = null)
+        AlignmentBucket? alignment, EvilPointRange? evilPoints = null,
+        IReadOnlyList<QuestBonus>? questBonuses = null, MonsterCatalog? monsters = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(inventory);
         _gameData = gameData;
         _inventory = inventory;
+        _stats = stats;
+        _questBonuses = questBonuses ?? Array.Empty<QuestBonus>();
+        Estimates = new ItemFinderEstimatesViewModel(
+            StatsWithNothingWorn(gameData, stats, inventory), gameData.ActiveRealm, monsters);
+        Estimates.Changed += RecomputeTrialDamage;
         _liveAlignment = alignment;
         _liveEvilPoints = evilPoints;
         _mdbBuilder = new ItemMdbViewBuilder(gameData, stats.Charm);
@@ -364,6 +387,20 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         PropertyChanged += OnFilterPropertyChanged;
         ApplyFilter();
         RecomputeTrial();
+    }
+
+    // The stat screen's numbers carry whatever is worn; take that gear's bonuses
+    // back off so a trial set can put its own on.
+    private static ItemFinderEstimatesViewModel.CharacterDefaults StatsWithNothingWorn(
+        GameDataCache gameData, PlayerStats stats, InventoryManager inventory)
+    {
+        EquipmentStatSummary worn = CharacterCalculator.AggregateEquipmentStats(
+            inventory.Snapshot.EquippedItems, gameData).Totals;
+        return new ItemFinderEstimatesViewModel.CharacterDefaults(
+            stats.Level,
+            stats.Strength - worn.PlusStrength, stats.Agility - worn.PlusAgility,
+            stats.Intellect - worn.PlusIntellect, stats.Charm - worn.PlusCharm,
+            stats.Stealth - worn.PlusStealth);
     }
 
     private void IndexCatalog()
@@ -524,6 +561,10 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             case nameof(CurrentEncumbranceText):
             case nameof(TrialEncumbranceText):
             case nameof(HasTrialBonuses):
+            case nameof(TrialDamageTitle):
+            case nameof(TrialDamageTarget):
+            case nameof(TrialDamageNote):
+            case nameof(HasTrialDamageNote):
                 return;
             // The Swings column is recomputed per attack type, so a change there
             // rebuilds the catalog rather than just re-running the row predicate.
@@ -548,6 +589,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         RowsView = new DataGridCollectionView(_all) { Filter = PassesFilter };
         _filterSuspended = false;
         ApplyFilter();
+        RecomputeTrialDamage();
     }
 
     private static MudAttackType AttackTypeFor(string? label) => label switch
@@ -685,6 +727,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         if (MinDr > 0 && e.Dr < MinDr) return false;
 
         if (MaxStrReq > 0 && e.StrReq > MaxStrReq) return false;
+        if (MinLevelReq > 0 && e.LevelReq < MinLevelReq) return false;
         if (MaxLevelReq > 0 && e.LevelReq > MaxLevelReq) return false;
 
         // Negate dropdown: keep only items that negate the selected spell (by id).
@@ -714,7 +757,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         MinMinDmg = MinMaxDmg = MinAccuracy = MinCrits = 0;
         MinHitMagic = MaxHitMagic = 0;
         MinBsAccuracy = MinBsMin = MinBsMax = MinAc = MinDr = 0;
-        MaxStrReq = MaxLevelReq = 0;
+        MaxStrReq = MinLevelReq = MaxLevelReq = 0;
         SelectedNegate = NoNegate;
         _filterSuspended = false;
         // Attack type is reset too, so rebuild the catalog (Swings back to base)
@@ -726,6 +769,19 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
 
     [RelayCommand]
     private void ToggleTrialPanel() => ShowTrialPanel = !ShowTrialPanel;
+
+    // The same three-state toggle every window command is: open, raise, or close
+    // when it's already in front.
+    [RelayCommand]
+    private void ConfigureEstimates()
+    {
+        DialogService dialogs = AppServices.Current.Dialogs;
+        if (dialogs.RaiseOrCloseIfOpen(Estimates)) return;
+        _ = dialogs.OpenWindowAsync<ItemFinderEstimatesViewModel, bool>(Estimates);
+    }
+
+    // The estimates window belongs to this finder; it goes when the finder does.
+    public void CloseEstimates() => Estimates.CloseCommand.Execute(null);
 
     // One trial row per real equip slot — the two virtual Alt slots (combat-swap
     // weapons, never worn) are excluded from the loadout being modelled.
@@ -994,6 +1050,70 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
                 ? string.Create(CultureInfo.InvariantCulture, $"Trial set weight: {trialWeight:N0}")
                 : "—";
         }
+        RecomputeTrialDamage();
+    }
+
+    // Price the trial set's attack: the selected attack type, swung by the
+    // character in Configure Estimates wearing the trial set, at the target set
+    // there. The profile is the one Monster Intel and Character Info build
+    // (CharacterCalculator.BuildMeleeAttackProfile), so the same inputs read the same.
+    private void RecomputeTrialDamage()
+    {
+        MudAttackType type = AttackTypeFor(SelectedAttackType);
+        Estimates.SetAttack(type, SelectedAttackType);
+        TrialDamageTitle = $"Trial damage: {SelectedAttackType}";
+        TrialDamageTarget = Estimates.TargetText;
+        TrialDamageRows.Clear();
+
+        var items = new List<EquippedItem>();
+        int trialWeight = 0;
+        ItemFinderEntry? weapon = null;
+        foreach (TrialSlotRow row in TrialSlots)
+        {
+            if (row.ItemName is not { } name) continue;
+            items.Add(new EquippedItem(name, SlotTag(row.Slot)));
+            if (!_entryByName.TryGetValue(name, out ItemFinderEntry? e)) continue;
+            trialWeight += e.Encum;
+            if (row.Slot == EquipmentSlot.Weapon) weapon = e;
+        }
+
+        bool needsWeapon = type is MudAttackType.Normal or MudAttackType.Bash or MudAttackType.Smash;
+        string? blocked =
+            ReadInt(_gameData.FindRowByName("Classes", _stats.Class), "CombatLVL") <= 0
+                ? "Needs your character's class: connect and type stat."
+            : needsWeapon && weapon is null ? "Put a weapon in the trial set to price this attack."
+            : type == MudAttackType.Backstab && weapon is { CanBackstab: false } ? $"{weapon.Name} can't backstab."
+            : null;
+        TrialDamageNote = blocked ?? string.Empty;
+        HasTrialDamageNote = blocked is not null;
+        if (blocked is not null) return;
+
+        EquipmentStatSummary gear = CharacterCalculator.AggregateEquipmentStats(items, _gameData).Totals;
+        var who = new AttackerStats(
+            _stats.Class, _stats.Race, Estimates.Level,
+            Estimates.Strength + gear.PlusStrength, Estimates.Agility + gear.PlusAgility,
+            Estimates.Intellect + gear.PlusIntellect, Estimates.Charm + gear.PlusCharm,
+            Estimates.Stealth + gear.PlusStealth, ArmourClass: 0);
+        PlayerMatchupProfile profile = CharacterCalculator.BuildMeleeAttackProfile(
+            type, who, items, TrialLoad(trialWeight, who.Strength), _gameData, questBonuses: _questBonuses);
+        AttackEstimate est = AttackEstimator.Estimate(type, profile, Estimates.Target);
+
+        foreach (TrialDamageRow row in TrialDamageText.Rows(type, est)) TrialDamageRows.Add(row);
+    }
+
+    // What the character would carry in the trial set: the pack as it is now with
+    // the worn gear swapped for the trial set's. Before the inventory has been read
+    // there is no pack or capacity to go on, so it's the set alone against what the
+    // strength carries.
+    private EncumbranceReading TrialLoad(int trialWeight, int strength)
+    {
+        EncumbranceReading enc = _inventory.Snapshot.Encumbrance;
+        int max = enc.MaxWeight > 0 ? enc.MaxWeight : CharacterCalculator.CalcMaxEncumbrance(strength);
+        int carried = enc.MaxWeight > 0
+            ? Math.Max(0, enc.CurrentWeight - CurrentWornWeight()) + trialWeight
+            : trialWeight;
+        int pct = max > 0 ? (int)((long)carried * 100 / max) : 0;
+        return new EncumbranceReading(carried, max, pct, EncumbranceCategory.ForPercent(pct));
     }
 
     // Weight of the real character's currently-equipped gear (live inventory, not

@@ -861,16 +861,19 @@ public static class CombatCalculator
         // Crit folds into DPS only for the plain Normal attack (Bash / Smash crit
         // interaction isn't a verified mechanic); a crit averages 3x the max, and
         // the Quick-and-Deadly bonus only applies when STR meets the weapon's req.
-        int critChance = 0, avgCritDamage = 0;
+        int critChance = 0, avgCritDamage = 0, qnd = 0;
         if (type == MudAttackType.Normal && hasWeapon)
         {
-            int qnd = (weaponStrReq <= 0 || strength >= weaponStrReq) ? swings.QnDCritBonus : 0;
+            qnd = (weaponStrReq <= 0 || strength >= weaponStrReq) ? swings.QnDCritBonus : 0;
             int critRating = CharacterCalculator.CalcBaseCritRating(
                 level, intellect, agility, charm, realmType, combatLevel) + plusCrits;
             critChance = CalcCritChance(critRating, qnd, realmType);
             avgCritDamage = dmg.MaxDamage * 3;
         }
 
-        return new MeleeOffense(avgDamage, swingsPerRound, critChance, avgCritDamage, hasWeapon);
+        return new MeleeOffense(
+            avgDamage, swingsPerRound, critChance, avgCritDamage, hasWeapon,
+            MinDamage: hasWeapon ? dmg.MinDamage : 0, MaxDamage: hasWeapon ? dmg.MaxDamage : 0,
+            QuickAndDeadlyBonus: qnd);
     }
 }

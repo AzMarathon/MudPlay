@@ -6,6 +6,7 @@ using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MudPlay.Game.Inventory;
 using MudPlay.Services;
@@ -68,6 +69,11 @@ public partial class ItemFinderWindow : Window
     // its width instead of the panel eating into it.
     private const double TrialPanelWidth = 352;
 
+    // Whether the window is currently carrying that extra width. A maximized window
+    // has nowhere to grow: asking it to anyway laid the panel out past the screen
+    // edge. So the growth waits until the window is back to its own size.
+    private bool _grownForTrialPanel;
+
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
         if (_vm is not null)
@@ -84,8 +90,30 @@ public partial class ItemFinderWindow : Window
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ItemFinderViewModel.ShowTrialPanel) && _vm is not null)
-            Width += _vm.ShowTrialPanel ? TrialPanelWidth : -TrialPanelWidth;
+        if (e.PropertyName == nameof(ItemFinderViewModel.ShowTrialPanel)) SyncTrialPanelWidth();
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        // Posted: the window manager is still putting the restored size back when
+        // the state flips, and a width set before it lands is overwritten.
+        if (change.Property == WindowStateProperty)
+            Dispatcher.UIThread.Post(SyncTrialPanelWidth, DispatcherPriority.Background);
+    }
+
+    private void SyncTrialPanelWidth()
+    {
+        if (_vm is null || WindowState != WindowState.Normal) return;
+        if (_vm.ShowTrialPanel == _grownForTrialPanel) return;
+        _grownForTrialPanel = _vm.ShowTrialPanel;
+        Width += _grownForTrialPanel ? TrialPanelWidth : -TrialPanelWidth;
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        _vm?.CloseEstimates();
     }
 
     // Map each column to its layout key once — the Tag for the stat columns, and the

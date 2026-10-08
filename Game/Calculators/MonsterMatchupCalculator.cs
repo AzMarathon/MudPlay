@@ -125,6 +125,9 @@ public static class MonsterMatchupCalculator
 //                       before it (Stock bash ×3 / smash ×5), else 1.
 //   BackstabMin/Max   — the backstab range before the monster's DR (0 for any
 //                       other attack) — the one-stab verdict reads the min.
+//   MinDamage/MaxDamage — one hit's range before the monster's DR, for whichever
+//                       attack this profile is (a backstab's is BackstabMin/Max).
+//   QuickAndDeadlyBonus — the crit a fast swing added to CritChancePercent.
 public readonly record struct PlayerMatchupProfile(
     RealmType Realm,
     int NormalAccuracy,
@@ -140,7 +143,10 @@ public readonly record struct PlayerMatchupProfile(
     int AvgCritDamage = 0,
     int MonsterDrMultiplier = 1,
     int BackstabMin = 0,
-    int BackstabMax = 0);
+    int BackstabMax = 0,
+    int MinDamage = 0,
+    int MaxDamage = 0,
+    int QuickAndDeadlyBonus = 0);
 
 // Monster-side inputs to MonsterMatchupCalculator.Compute — defense
 // (AC / DR / HP) and the primary physical attack slot (accuracy + average

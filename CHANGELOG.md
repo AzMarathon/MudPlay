@@ -1,5 +1,13 @@
 # Version history
 
+## 3.151.0
+
+- Item Finder: the Gear Finder panel shows the trial set's damage with the selected attack type: accuracy, hit chance, damage range, swings, crit and Quick & Deadly, and damage per round
+- New **Configure Estimates** window sets what that is worked out against: your level and stats with nothing worn (the trial set's bonuses go on top), and a target's armour class, damage resist, dodge and BS defence, typed or filled from a monster lookup
+- Item Finder's Level req filter is a min / max range
+- The Gear Finder panel opens in view when the Item Finder is maximized, instead of off the edge of the screen
+- Gear Finder panel regrouped: the Find Best controls sit together, and Import from live / Clear sit on the trial set's slot list
+
 ## 3.150.13
 
 - Stop before and Grab All on the Bosses tab are each character's own; the boss list itself stays the realm's. A character starts from the ticks the realm's list held

@@ -243,6 +243,9 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.CharacterWorkshop.ItemFinderViewModel,
                 MudPlay.Views.CharacterWorkshop.ItemFinderWindow>();
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.CharacterWorkshop.ItemFinderEstimatesViewModel,
+                MudPlay.Views.CharacterWorkshop.ItemFinderEstimatesWindow>();
 
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.CharacterWorkshop.ChestOffloadViewModel,
