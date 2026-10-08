@@ -311,6 +311,8 @@ A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and
 2. **Left-click the rooms on the map, in order** — each becomes a waypoint. **Alt+click** a room to take it back out (a room you've added more than once loses its most recent click). To **move** a waypoint, press on its numbered chip and **drag it onto another room**. It keeps its number, command and flags, and the line re-plans through the new room. A drop on empty map, or on a room the loop can't reach, puts it back. Room tooltips stay hidden while you're holding a chip. Reorder or remove them in the **CURRENT NAV** rail too.
 3. Click **Go** to start it, or **Save** to keep it without running.
 
+**Starting a loop from somewhere else.** If you aren't standing on the loop when you start it, MudPlay first walks you to the nearest room on it. That walk is an ordinary walk-to: you get the same route cards a walk-to shows (walk or teleport, traps, avoided rooms, a gate that needs an item), and the Navigation window shows a walk until you arrive. The moment you reach the loop, the loop takes over and starts lapping. If you close the cards without picking, press Stop, or pick a route that ends somewhere else (running up to a blocked room, a stop at a shop), the loop doesn't start.
+
 You can start building a loop **while a walk-to is running** — building only collects rooms, it never moves you, so your walk continues uninterrupted. Clicking **Go** in the Navigation menu then hands movement over: it stops the walk and starts the loop. The **toolbar** Start / Stop / Pause buttons still control the *walk* itself, so reach for those to stop (or pause) the walk without starting the loop.
 
 To put yourself (or a party member) back on the **last loop run this session** without reopening the builder, use the **`@loop last`** remote command — it re-runs it even if it was an ad-hoc loop that was never saved. This works regardless of the "Load last ran loop" setting above.
@@ -4069,6 +4071,23 @@ MudPlay reads your HP and mana from the prompt. If the game's prompt doesn't mat
 
 ---
 
+## Teleports
+
+Settings → Teleports. One list, saved for the loaded character: which of the game's teleports a walk the client starts by itself may use.
+
+### Allow automatic walks to use the following teleports
+
+**Default:** none ticked
+**What it does:** Decides which teleports a walk the client starts by itself may use. A teleport here is anything the game moves you with by command: a vortex or portal, but also a hatch onto a roof, a book you read, a panel you push. To the route planner each is a single step, so it is nearly always on the shortest route, and nothing checks where it lands you. An automatic walk uses only the ones you tick. If the trip needs one that isn't ticked, the walk stops and tells you which, so you can tick it or make the trip yourself.
+
+The walks it covers are the ones nobody is there to approve: bank and sell trips, training and spell-buying trips, Auto-Lair's walks between lairs, events, and a walk-to or loop another player starts for you with a remote command.
+
+**The list comes from your game data.** Each line is one teleport spot: the room it's in and the room it lands in, each with its **map/room number** so you can find a spot you don't know by name on the map. **→** is a one-way teleport; **⇄** is one that also runs straight back, and both directions are ticked together. Under it is what is typed there and what the spot leads to: the area at its far end and **how many rooms there can be reached no other way**. The spots with the most rooms behind them come first, so the ways into the big regions and the hubs (the Black Wasteland, the Negative Power Plane) are at the top. A line marked *a shortcut* joins two places you could also walk between.
+
+The **filter** box narrows the list to lines holding what you type: a room name, a map/room number, or a command such as `go hatch`. **Allow all** and **Allow none** tick or clear the lines the filter is showing.
+
+**Important notes:** Walks **you** start aren't affected: they ask you on the route cards (**Walk it** or **Teleport**) whenever the shortest way there teleports and it could also be walked. That covers a walk-to, a **loop you start** from off the loop (getting to it is a walk-to like any other, with every route card a walk-to shows; the loop begins when you arrive), and **Recover Now** on a death. Only that first walk to the loop is yours: once the loop is reached, a walk back to it after a bank or sell trip or a flee is automatic and uses this list. So is a loop started by an event or by another player's remote command. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
+
 ## Other
 
 Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathing) behavior. Most fields here are character-tier; the two solver toggles and the player-database cleanup setting are Global-tier (install-wide).
@@ -4710,6 +4729,7 @@ This section is a compact, technical lookup table for every setting documented a
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max bash / pick / Pick over bash | 10/10/false | 1–100 / 1–100 / bool | `MaxBashAttempts`, `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
+| Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |
 | Auto-request @comeback when left behind | true | bool | `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
 | Token routes: offer / min rooms saved | true / 50 | bool + 1–300 (Global, Paradigm) | `GlobalSettings.EnableTokenRoutes` / `TokenRouteMinRoomsShorter` | Models/Settings/GlobalSettings.cs |

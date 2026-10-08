@@ -8,7 +8,8 @@ namespace MudPlay.ViewModels.Navigation;
 // Shared entry point for user-initiated walks that should offer a route choice.
 // Automated walks (event scripts, death recovery, loops, deposits, party
 // comeback, trainer routing) bypass this and call Walker.WalkTo directly — they
-// default to the free-preferring, teleport-allowed route with no prompt.
+// take the free-preferring route with no prompt, using only the teleports the
+// user allowed automatic walks (Settings → Teleports).
 //
 // The flow: resolve the current room, then plan (PlanRouteChoice) — the forks in
 // priority order are walk-vs-teleport, trap-avoid, avoid-override, then the
@@ -39,12 +40,17 @@ public static class RouteChoicePrompt
     // shows its cards whenever a room the player marked Avoid is on the shortest route
     // (or there's no default route to take). Such a walk stays out of the goto history and never flashes the
     // "Calculating…" window.
-    public static async Task WalkAsync(
+    // remember: false keeps the destination out of Recent Destinations — the walk to
+    // a loop room is on the way to the loop, not somewhere the user asked to go.
+    // The result is false only when the user closed the cards without picking; a walk
+    // that went out (and may yet fail) is true.
+    public static async Task<bool> WalkAsync(
         AppServices services,
         RoomKey destination,
         Action<IReadOnlyList<RoomKey>?>? previewSink = null,
         RunStartMode startMode = RunStartMode.Normal,
-        bool askOnlyOverAvoids = false)
+        bool askOnlyOverAvoids = false,
+        bool remember = true)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -53,8 +59,8 @@ public static class RouteChoicePrompt
         if (services.MovementControl.SuspendedErrand is not null)
         {
             services.MovementControl.StartUserRun(
-                () => _ = WalkAsync(services, destination, previewSink, startMode, askOnlyOverAvoids));
-            return;
+                () => _ = WalkAsync(services, destination, previewSink, startMode, askOnlyOverAvoids, remember));
+            return true;
         }
 
         // Remember it for the bug report even if the walk is declined at the picker
@@ -78,7 +84,7 @@ public static class RouteChoicePrompt
         // The automation engines (LoopRunner, AutoLair, DeathRecovery,
         // TrainerWalk, the remote handlers) call Walker.WalkTo directly and never
         // reach here, so they stay out of the history exactly as before.
-        if (!askOnlyOverAvoids) services.GotoHistory.Record(destination);
+        if (!askOnlyOverAvoids && remember) services.GotoHistory.Record(destination);
 
         // Let the nav-map right-click menu that launched this walk close before we do
         // anything heavy.
@@ -92,7 +98,7 @@ public static class RouteChoicePrompt
             services.Log.Debug(LogCat, $"route pick to {destination}: no confident source room — plain walk");
             ApplyStartMode(services, startMode);
             CommitWalk(services, destination, gated: false);
-            return;
+            return true;
         }
 
         RoomKey src = source.Key;
@@ -162,8 +168,7 @@ public static class RouteChoicePrompt
             {
                 services.Log.Info(LogCat,
                     $"route pick {src} -> {destination}: the shortest route crosses {avoid.AvoidedRoomCount} room(s) you marked Avoid; showing picker");
-                await RunPickerAsync(services, destination, src, avoid, previewSink, calcVm, calcDialogTask, startMode);
-                return;
+                return await RunPickerAsync(services, destination, src, avoid, previewSink, calcVm, calcDialogTask, startMode);
             }
             if (TakesDefaultRouteUnasked(plan))
             {
@@ -172,7 +177,7 @@ public static class RouteChoicePrompt
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
                 CommitWalk(services, destination, gated: false);
-                return;
+                return true;
             }
         }
 
@@ -182,7 +187,7 @@ public static class RouteChoicePrompt
                 calcVm?.Close();   // no picker to show — dismiss any "Calculating…" window
                 ApplyStartMode(services, startMode);
                 CommitWalk(services, destination, gated: false);
-                return;
+                return true;
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
@@ -195,10 +200,9 @@ public static class RouteChoicePrompt
                     && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
                     services.ForcePathObtain(soleItems);
                 CommitWalk(services, destination, gated: true);
-                return;
+                return true;
             default:
-                await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
-                return;
+                return await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
         }
     }
 
@@ -372,7 +376,7 @@ public static class RouteChoicePrompt
     // block" offer); the commit switch at the end branches on the choice kind, and
     // an item-gate choice further splits into free / acquire / send-it / search /
     // route-through-avoided.
-    private static async Task RunPickerAsync(
+    private static async Task<bool> RunPickerAsync(
         AppServices services,
         RoomKey destination,
         RoomKey source,
@@ -601,7 +605,7 @@ public static class RouteChoicePrompt
             // any other result walks nothing.
             if (result == RouteChoiceResult.Gated && choice.StopRoom is { } stop)
                 CommitWalk(services, stop, gated: false);
-            return;
+            return result is not null;
         }
 
         if (choice.Kind == RouteChoiceKind.Token)
@@ -626,7 +630,7 @@ public static class RouteChoicePrompt
                     break;
                 // null → cancelled: walk nothing.
             }
-            return;
+            return result is not null;
         }
 
         if (choice.Kind == RouteChoiceKind.Teleport)
@@ -644,7 +648,7 @@ public static class RouteChoicePrompt
                     break;
                 // null → cancelled: walk nothing.
             }
-            return;
+            return result is not null;
         }
 
         if (choice.Kind == RouteChoiceKind.TrapAvoid)
@@ -661,7 +665,7 @@ public static class RouteChoicePrompt
                     break;
                 // null → cancelled: walk nothing.
             }
-            return;
+            return result is not null;
         }
 
         if (choice.Kind == RouteChoiceKind.AvoidOverride)
@@ -680,7 +684,7 @@ public static class RouteChoicePrompt
                     break;
                 // null → cancelled: walk nothing.
             }
-            return;
+            return result is not null;
         }
 
         switch (result)
@@ -771,6 +775,35 @@ public static class RouteChoicePrompt
             // null → cancelled: walk nothing (and leave any manual pause intact —
             // the user backed out, so nothing changed).
         }
+        return result is not null;
+    }
+
+    // The user started a loop. Getting to a loop is the same as getting anywhere
+    // else, so from off the loop this is a walk-to to the nearest loop room, with
+    // every route card a walk-to is offered, and the loop begins when that walk
+    // arrives (LoopWalkHandoff). Standing on the loop already, or with no room of it
+    // to plan a walk to, the loop runner starts it directly as it always has.
+    public static async Task StartLoopAsync(
+        AppServices services, Loop loop,
+        Action<IReadOnlyList<RoomKey>?>? previewSink = null,
+        RunStartMode startMode = RunStartMode.Normal)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(loop);
+        RoomKey? entry = services.RoomTracker.State.CurrentRoom is { } here
+            ? services.LoopRunner.NearestRoomOf(loop, here.Key)
+            : null;
+        if (entry is not { } loopRoom)
+        {
+            ApplyStartMode(services, startMode);
+            services.LoopRunner.Start(loop, userStarted: true);
+            return;
+        }
+
+        services.Log.Info(LogCat, $"loop '{loop.Name}' started from off the loop: walking to {loopRoom} first, as a walk-to");
+        services.LoopHandoff.Begin(loop, loopRoom);
+        bool went = await WalkAsync(services, loopRoom, previewSink, startMode, remember: false);
+        if (!went) services.LoopHandoff.Cancel("cancelled at the route cards");
     }
 
     // Start the walk, first lifting any lingering manual pause. A user picking a
@@ -800,6 +833,7 @@ public static class RouteChoicePrompt
             services.Walker.Stop("superseded by new user walk-to");
         services.MovementCoordinator.ClearGate(
             MovementCoordinator.UserGate, nameof(RouteChoicePrompt));
+        services.LoopHandoff.NoteWalkCommitted(destination);
         services.Walker.WalkTo(
             destination,
             planThroughAcquirableGates: gated,

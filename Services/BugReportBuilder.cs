@@ -1346,6 +1346,14 @@ public static class BugReportBuilder
         var gates = svc.MovementCoordinator.AssertedGates;
         Kv(sb, "Paused by", gates.Count > 0 ? string.Join(", ", gates) : "(nothing)");
         Kv(sb, "Paused by a typed move", svc.MovementControl.PausedByTypedMove ?? "(no)");
+        Kv(sb, "Loop waiting on its walk-to", svc.LoopHandoff.Pending is { } waiting
+            ? $"'{waiting.Name}', starts at {svc.LoopHandoff.Entry}"
+            : "(none)");
+        // Why an automatic walk stopped short of a teleport, or went through one.
+        Kv(sb, "Automatic walks may use", svc.Walker.AutomaticWalkTeleports is { } teleports
+            ? (teleports.Count == 0 ? "no teleports" : $"{teleports.Count} teleport(s): "
+                + string.Join(", ", teleports.Take(12).Select(t => $"{t.From}>{t.To}")) + (teleports.Count > 12 ? ", …" : string.Empty))
+            : "any teleport (not wired)");
         // Whether the Auto-All kill switch is the one holding navigation — it
         // suspends an in-flight nav on engage and resumes it on restore.
         Kv(sb, "Auto-All suspended nav", svc.MovementControl.IsAutoAllSuspended.ToString());

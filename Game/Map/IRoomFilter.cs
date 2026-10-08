@@ -43,6 +43,13 @@ public interface IRoomFilter
     // "graph-disconnected".
     bool IsExitBlocked(in RoomExit exit) => false;
 
+    // A teleport out of `from` this route may not use. Unlike an exit gate it isn't
+    // something the crosser could satisfy, so the search skips it even when exit
+    // gates are being ignored. Only the filter of an automatic walk refuses any
+    // (AutomaticWalkTeleportFilter); the exit alone doesn't say where it leaves from,
+    // which is why this takes the room.
+    bool IsTeleportRefused(RoomKey from, in RoomExit exit) => false;
+
     // Classifies WHY an exit is non-traversable — the union of gate kinds
     // blocking it — so a failed walk can name the real obstacle instead of a
     // generic "level, toll, or class" guess that may not fit (e.g. a

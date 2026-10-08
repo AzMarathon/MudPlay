@@ -248,6 +248,7 @@ public sealed class BfsMapper
                 // the teleport.
                 if (refuseTeleports && (exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport))
                     continue;
+                if (filter is not null && filter.IsTeleportRefused(here, in exit)) continue;
 
                 // Avoid filter applies to intermediates AND to the
                 // destination itself — walking *into* an avoided room
@@ -347,6 +348,7 @@ public sealed class BfsMapper
                 // not routable (see FindPathCore).
                 if (exit.Hint == RoomExitHint.MultiActionHidden
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
+                if (filter is not null && filter.IsTeleportRefused(here, in exit)) continue;
                 if (filter is not null && filter.IsAvoided(next)) continue;
                 if (filter is not null && filter.IsExitBlocked(exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;
@@ -583,6 +585,7 @@ public sealed class BfsMapper
                 if (exit.Hint == RoomExitHint.MultiActionHidden
                     && exit.MultiAction is not { IsSatisfiable: true }) continue;
                 if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
+                if (filter is not null && filter.IsTeleportRefused(here, in exit)) continue;
                 if (!ignoreAvoids && filter is not null && filter.IsAvoided(next)) continue;
                 if (!ignoreExitGates && filter is not null && filter.IsExitBlocked(exit)) continue;
                 if (_graph.GetRoom(next) is null) continue;

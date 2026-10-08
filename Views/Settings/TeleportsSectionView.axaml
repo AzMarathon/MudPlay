@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.Settings"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="860" d:DesignHeight="620"
+             x:Class="MudPlay.Views.Settings.TeleportsSectionView"
+             x:DataType="vm:TeleportsSectionViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.FieldLabel">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="TextBlock.Readout">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid>
+        <Border IsVisible="{Binding !HasProfile}" Padding="22" VerticalAlignment="Top">
+            <TextBlock Text="Load or create a character profile to choose its teleports."
+                       Foreground="{StaticResource ChromeFgSecBrush}"
+                       FontSize="{StaticResource FontSizeMd}" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- The list takes the height the tab has, under a fixed header: it is a
+             couple of hundred lines on a full game-data set. -->
+        <Grid IsVisible="{Binding HasProfile}" Margin="22" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto"
+              MaxWidth="900" HorizontalAlignment="Left">
+            <TextBlock Grid.Row="0" Classes="SettingsSectionBanner first" Text="Character profile settings"/>
+            <TextBlock Grid.Row="1" Classes="SettingsSectionSub"
+                       Text="Saved to the loaded character — each character on a BBS keeps its own."/>
+
+            <StackPanel Grid.Row="2" Spacing="4" Margin="0,8,0,0">
+                <TextBlock Classes="FieldLabel" Text="Allow automatic walks to use the following teleports:"/>
+                <TextBlock Classes="Readout"
+                           Text="Automatic walks are the ones the client starts by itself: bank and sell trips, training and spell-buying trips, Auto-Lair, events, another player's remote commands. They use only the teleports ticked here; if a trip needs one that isn't ticked, it stops and names it. Walks you start yourself are asked on the route cards and aren't affected."/>
+                <TextBlock Classes="Readout"
+                           Text="Each line is one teleport spot, with the map/room number of both ends; ⇄ is one that runs both ways. The ones with the most rooms behind them come first. The list comes from the loaded game data."/>
+            </StackPanel>
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="6" Margin="0,8,0,6">
+                <TextBox Width="260" PlaceholderText="Filter (a name, a map/room, a command)"
+                         Text="{Binding Filter, Mode=TwoWay}"/>
+                <Button Content="Allow all" Command="{Binding AllowAllCommand}"
+                        ToolTip.Tip="Ticks every teleport the filter is showing."/>
+                <Button Content="Allow none" Command="{Binding AllowNoneCommand}"
+                        ToolTip.Tip="Clears every teleport the filter is showing."/>
+            </StackPanel>
+
+            <Border Grid.Row="4" BorderBrush="{StaticResource ChromeFgMutedBrush}" BorderThickness="1" Padding="6">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Teleports}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:TeleportChoiceViewModel">
+                                <CheckBox IsChecked="{Binding IsAllowed, Mode=TwoWay}" Margin="0,0,0,2"
+                                          IsVisible="{Binding IsShown}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}"/>
+                                        <TextBlock Text="{Binding Detail}" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                    </StackPanel>
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <TextBlock Grid.Row="5" Classes="Readout" Text="{Binding Summary}" Margin="0,6,0,0"/>
+        </Grid>
+    </Grid>
+</UserControl>

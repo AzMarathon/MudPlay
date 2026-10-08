@@ -4652,7 +4652,8 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **Client use:**
   - The portal back down has a single fixed branch, so it is a plain `Direction.Teleport` edge, not a
     gateway. A walk the user starts plans on foot and offers the hop through the walk-vs-teleport
-    fork (`RouteChoicePlanner.EvaluateTeleport`; report `paradigm-20261007-164408`).
+    fork (`RouteChoicePlanner.EvaluateTeleport`; report `paradigm-20261007-164408`). An automatic
+    walk takes it only when it is ticked under Settings → Teleports (`AutomaticWalkTeleportFilter`).
   - When a cast-teleport keyword's branches disagree — a fixed branch alongside a random (or a
     different-room fixed) sibling — the landing is non-deterministic, so it is minted as a **gateway**
     `Direction.Teleport` edge (flagged `GatewayTeleport`, nominal target = the fixed branch's landing

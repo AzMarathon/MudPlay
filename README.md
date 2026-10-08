@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.148.10**
+> **Version 3.149.1**
 > - The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

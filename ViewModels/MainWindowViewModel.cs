@@ -1559,6 +1559,13 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Walker.SetPartyLeaderCheck(isLeaderWithFollowers);
         AppServices.Current.LoopRunner.SetTeleportResolver(teleportResolver);
         AppServices.Current.LoopRunner.SetPartyLeaderCheck(isLeaderWithFollowers);
+        // Recover Now is a walk the user asked for: a walk-to to the death room, on
+        // the route cards like any other.
+        AppServices.Current.DeathRecovery.SetDemandedWalk(room =>
+        {
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
+            return true;
+        });
         // A party-splitting CMD teleport (chime-style, Darkwood's `go vortex`)
         // dissolves the follow chain even though the `.@party <kw>` relay sent
         // everyone through, so the party must be re-invited on landing. Both
@@ -4974,7 +4981,7 @@ public partial class MainWindowViewModel : ObservableObject
         s.MovementControl.StartUserRun(() =>
         {
             if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
-            s.LoopRunner.Start(loop);
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, loop);
         });
     }
 
@@ -5289,7 +5296,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         if (ctl.IsIdle && s.LoopRunner.StagedLoop is { } staged)
         {
-            s.LoopRunner.Start(staged);
+            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.StartLoopAsync(s, staged);
             return;
         }
         OpenNavManager(startOnGotoTab: true);

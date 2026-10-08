@@ -392,13 +392,27 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Records));
     }
 
+    // Starts a walk the user asked for, on the route cards (the UI wires it to the
+    // route picker). True when a walk, or its cards, went out.
+    private Func<RoomKey, bool>? _demandedWalk;
+    public void SetDemandedWalk(Func<RoomKey, bool> walk)
+    {
+        ArgumentNullException.ThrowIfNull(walk);
+        _demandedWalk = walk;
+    }
+
     // Walk to the room a death occurred in. Returns false when no walker is
     // attached or the record has no recorded room.
     public bool WalkToDeathRoom(DeathRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        if (_walker is null || record.Room is not { } r) return false;
-        return _walker.WalkTo(new RoomKey(r.Map, r.Room));
+        if (record.Room is not { } r) return false;
+        RoomKey room = new(r.Map, r.Room);
+        // Only Recover Now reaches here: the user asked for this walk, so it goes
+        // through the route cards like any walk-to. Without them (tests) it takes
+        // the shortest route.
+        if (_demandedWalk is { } ask) return ask(room);
+        return _walker is not null && _walker.WalkTo(room, preferTeleportFree: false);
     }
 
     // Demand signal to recover a deathpile. If we're already standing in the
