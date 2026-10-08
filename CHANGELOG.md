@@ -1,5 +1,12 @@
 # Version history
 
+## 3.150.0
+
+- Gear Finder under a Target weight: the weapon is picked first, then the other slots get the combination with the best total that fits, instead of each slot taking the first item that fits from the top down
+- With a search order, the weapon goes to the first criterion that finds one before any other slot is filled
+- New Find Best criterion **Backstabbing**: picks the backstab weapon first, then the gear that takes your backstab minimum as high as it will go (on Paradigm, +min until it flips with the max side, then enough max to keep climbing; on Stock, min wherever a slot has it and max where it doesn't)
+- bug reports addressed: paradigm-20261007-181401
+
 ## 3.149.13
 
 - Leading a party past an exit that needs an item (a darkwood ring, a rope and grapple): the party is asked how many each holds before the route is planned, and if there isn't one each the route card names the item and the count instead of the leader crossing alone
