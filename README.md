@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.150.8**
+> **Version 3.150.11**
 > - *Clear hostiles when sneak broken by see-hidden monster* has two ticks under it, While solo and While in a party, so it can clear when you're alone and keep running when you're grouped; both on by default
+> - A Great Pyramid climb is drawn on the map and named in the Navigation status and Current Nav list, with a countdown of the time left on floor 1
+> - The climb no longer sends a second `get golden lion key` when a trigger or auto-get already has
+> - Room Info names the command that opens an action-gated exit, including one you ask an NPC (`ask stone sphinx e`), and puts a long requirement on its own line
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -51,6 +51,7 @@ public sealed class PyramidSolverTests : IDisposable
         public int KeyRoomVisits;
         public int KeyDropsOnVisit = 1;              // the floating key drops on this visit to its room
         public bool MemberGrabsKey;                  // …into a member's pack, not ours
+        public bool KeyAnswerComesLate;              // a trigger's `get` is out; "You took" lands after the solver looks
         public HashSet<string> EnginesOn { get; } = new();   // gates whose engine the player switched back on
         public List<bool> RunThrough { get; } = new();       // the run-through signal, as raised
         public int IgnorePushes;                     // the next N push blocks do nothing
@@ -233,6 +234,7 @@ public sealed class PyramidSolverTests : IDisposable
             {
                 // The floating key dies and its key is picked up as we walk in.
                 if (h.MemberGrabsKey) h.Solver.FeedLineForTests("Jroc picks up golden lion key");
+                else if (h.KeyAnswerComesLate) { /* the test feeds the line once the solver has looked */ }
                 else
                 {
                     h.LeaderHasKey = true;
@@ -471,6 +473,63 @@ public sealed class PyramidSolverTests : IDisposable
 
         RunToEnd(h);
         AssertFinished(h);
+    }
+
+    // ----- what the Navigation window shows of a climb (report paradigm-20261007-234656)
+
+    // Floor 1 is the timed one: five minutes from the firepit `up`. The clock shows
+    // while the climb is on it and is gone on floor 2.
+    [Fact]
+    public void Floor1Clock_RunsFromTheFirepitUp_AndIsGoneOnFloorTwo()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 7, 23, 0, 0, TimeSpan.Zero);
+        h.Solver.NowProvider = () => now;
+        Begin(h);
+        Assert.Null(h.Solver.Floor1TimeLeft);            // still at the firepit
+
+        DriveUntilFloor(h, "F1");
+        Assert.Equal(TimeSpan.FromMinutes(5), h.Solver.Floor1TimeLeft);
+
+        now = now.AddSeconds(79);
+        Assert.Equal(new TimeSpan(0, 3, 41), h.Solver.Floor1TimeLeft);
+
+        DriveUntilFloor(h, "F2");
+        Assert.Null(h.Solver.Floor1TimeLeft);
+    }
+
+    // A climb picked up part-way along floor 1: its clock started before we were
+    // watching, so none is shown rather than a wrong one.
+    [Fact]
+    public void Floor1Clock_IsNotShown_ForAClimbPickedUpOnFloorOne()
+    {
+        using Harness h = Begin(NewHarness(), room: 1853);
+
+        Assert.Equal("F1", h.Solver.FloorName);
+        Assert.Null(h.Solver.Floor1TimeLeft);
+    }
+
+    [Fact]
+    public void RemainingRooms_RunFromWhereWeStandToTheGoal()
+    {
+        using Harness h = Begin(NewHarness());
+        DriveUntilFloor(h, "F1");
+
+        IReadOnlyList<RoomKey> ahead = h.Solver.RemainingRoomKeys;
+
+        Assert.Equal(h.Tracker.State.CurrentRoom!.Key, ahead[0]);
+        Assert.Equal(new RoomKey(12, 2085), ahead[^1]);
+        Assert.Contains(new RoomKey(12, PyramidScript.FloatingKeyRoom), ahead);
+        for (int i = 1; i < ahead.Count; i++)
+            Assert.NotEqual(ahead[i - 1], ahead[i]);       // a push or an ask doesn't repeat its room
+
+        int before = ahead.Count;
+        DriveUntilFloor(h, "F3");
+        Assert.True(h.Solver.RemainingRoomKeys.Count < before);
+        Assert.NotEmpty(h.Solver.FloorStepLabels);
+
+        RunToEnd(h);
+        Assert.Empty(h.Solver.RemainingRoomKeys);
     }
 
     // ----- refusals --------------------------------------------------
@@ -1093,6 +1152,25 @@ public sealed class PyramidSolverTests : IDisposable
         AssertFinished(h);
         Assert.Equal(1, h.SentText.Count(t => t == "@party give golden lion key to MudPlay"));
         Assert.Equal(0, h.Solver.KeyRespawns);
+    }
+
+    // Report paradigm-20261007-235038: a trigger on the floating key's death had
+    // already sent `get golden lion key`, and the solver sent its own before the
+    // "You took" came back, drawing "You don't see golden lion key here."
+    [Fact]
+    public void Key_AlreadyBeingPickedUp_TheSolverDoesNotSendItsOwnGet()
+    {
+        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
+        h.KeyAnswerComesLate = true;
+        RunUntil(h, () => h.Room == PyramidScript.FloatingKeyRoom && h.Solver.IsAwaitingKeyForTests);
+        Assert.DoesNotContain("get golden lion key", h.SentText);
+
+        h.LeaderHasKey = true;
+        h.Solver.FeedLineForTests("You took golden lion key.");
+        RunToEnd(h);
+
+        AssertFinished(h);
+        Assert.DoesNotContain("get golden lion key", h.SentText);
     }
 
     [Fact]

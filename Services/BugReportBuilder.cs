@@ -1841,6 +1841,8 @@ public static class BugReportBuilder
         Kv(sb, "Floor", pyr.FloorName);
         Kv(sb, "Phase", pyr.PhaseName);
         Kv(sb, "Goal", pyr.Goal is { } pg ? $"{pg.Map}/{pg.Room}" : "(none)");
+        Kv(sb, "Floor 1 time left", pyr.Floor1TimeLeft is { } f1 ? $"{f1:m\\:ss}" : "(not on floor 1, or the clock wasn't seen starting)");
+        Kv(sb, "Rooms left on the route line", pyr.RemainingRoomKeys.Count.ToString());
         Kv(sb, "Commands sent", pyr.StepsDriven.ToString());
         Kv(sb, "Script step", $"{pyr.ScriptStep} of {pyr.ScriptSteps}"
             + (pyr.ExpectedRoom is { } er ? $" (scripted from {er.Map}/{er.Room})" : ""));

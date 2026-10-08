@@ -5042,7 +5042,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     overlay (stock was already `Enemy`); set to **`Enemy`** so party auto-combat clears it for the key
     (the solver needs no kill logic). `PyramidSolver` won't leave the floating key's room `2005` until
     the golden lion key is in the leader's pack (inventory, or our own `You took golden lion key.`): it
-    sends `get golden lion key` itself, and when a member's client got there first
+    sends `get golden lion key` itself, one second into the wait and again four seconds later, and when a member's client got there first
     (`<name> picks up golden lion key`) it asks for it with a bare
     `@party give golden lion key to <leader>` (no leading `.` — see *Item-use teleports*). After eight
     idle seconds with no key it walks on, and one room later turns back in — the **No-drop bug**
@@ -5061,6 +5061,9 @@ Among protectable hazards, a further split governs whether the navigator may off
     waits on the shared `MovementCoordinator` `Held` gate (an earlier note said F1/F2 never gate;
     superseded 2026-10-03). Combat rides the `Combat` gate on the paced floors only; the full list is
     under **Client policy — what the climb waits for** in this topic.
+- **The first `get` waits a second** (report `paradigm-20261007-235038`): a trigger on the floating key's death, or an auto-get, has usually sent the same `get` already, and its `You took golden lion key.` hasn't come back when the climb first looks. Sending at once drew `You don't see golden lion key here.`
+- **The top room's way up is the stone sphinx's `e`** *([OBSERVED] 2026-10-07, imported Monsters and TBInfo, both sets)*: monster 552 `stone sphinx`, `GreetTXT` 2650, keywords `e` / `letter e` / `the letter e` → textblock 2651 → 2652 `remoteaction 2085 0 0 8` (direction 8 = up, into `12/2250`). `RoomTooltipBuilder.ResolveExitOpeners` lists it under the exit (`ask stone sphinx e`), as it does a room-command opener; the climb itself still stops at `12/2085`.
+- **What the Navigation window shows of a climb** (report `paradigm-20261007-234656`): the walker is idle while `PyramidSolver` runs, so the window reads the climb directly: `RemainingRoomKeys` for the route line, `Goal` for the destination mark, `FloorStepLabels` for the Current Nav list, and `Floor1TimeLeft` for the floor-1 countdown, which runs from the firepit `up` (`PyramidScript.Floor1Budget`, five minutes) and is not shown for a climb picked up part-way along floor 1.
 
 ---
 

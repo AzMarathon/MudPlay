@@ -182,8 +182,14 @@ public sealed partial class RoomInfoViewModel : ObservableObject
             string destName = dest is not null ? dest.DisplayName : target.ToString();
             string hint = RoomTooltipBuilder.FormatExitHint(exit, _services.GameData, _services.TrapDisarm.DisarmOdds,
                 _services.PlayerStats.Picklocks);
-            string label = $"{RoomTooltipBuilder.DirectionLabel(dir)} → {destName} ({target})";
-            if (hint.Length > 0) label += $" · {hint}";
+            // An action-gated exit with no action cells of its own: say what opens it
+            // (a room command, or a placed NPC's `ask`), as the map tooltip does.
+            if (exit.Hint == RoomExitHint.MultiActionHidden && exit.MultiAction is not { Actions.Count: > 0 }
+                && RoomTooltipBuilder.ResolveExitOpeners(room, dir, _services.GameData, _services.MonsterSpawns, _services.TBInfo)
+                    is { Count: > 0 } openers)
+                hint += ": " + string.Join(" / ", openers);
+            string label = RoomTooltipBuilder.ExitRowLabel(
+                $"{RoomTooltipBuilder.DirectionLabel(dir)} → {destName} ({target})", hint);
             Exits.Add(new RoomDetailLink(label, null, new RelayCommand(() => _services.NavigateToRoom(target))));
         }
 
