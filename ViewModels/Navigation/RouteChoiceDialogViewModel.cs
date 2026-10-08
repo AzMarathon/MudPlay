@@ -617,9 +617,9 @@ public sealed partial class RouteChoiceDialogViewModel
     // item the walk will auto-source gets a tail naming where: "(ask <giver>)"
     // when a deterministic textblock give hands it over free, else "(buy at
     // <shop>)" when a shop sells it, else "(dropped by <monster>)" when a flagged
-    // dropper is reachable. Keys and any-of hazard counters never get a tail — a
-    // key isn't sourced and an any-of hazard group posts no single auto-obtain
-    // path-item need. The order mirrors the routers' precedence (free give >
+    // dropper is reachable. A door key gets the same tail (the name helpers return
+    // nothing for a key with no such source). Any-of hazard counters never get one:
+    // an any-of hazard group posts no single auto-obtain path-item need. The order mirrors the routers' precedence (free give >
     // shop buy > drop hunt) so the tail names exactly what the run will do —
     // the name helpers return null when a higher-priority router preempts.
     private static string DescribeRequirements(
@@ -657,6 +657,7 @@ public sealed partial class RouteChoiceDialogViewModel
 
             string items = string.Join(" or ", r.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
             bool autoSourced = r.Kind is RouteRequirementKind.CarryItem or RouteRequirementKind.Ticket
+                or RouteRequirementKind.DoorKey
                 || (r.Kind is RouteRequirementKind.HazardProtection && r.ItemIds.Count == 1);
             if (!autoSourced || r.ItemIds.Count != 1)
                 return items;

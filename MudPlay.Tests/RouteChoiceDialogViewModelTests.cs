@@ -52,16 +52,32 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Equal("Requires a ferry ticket (buy at Ticket Booth)", vm.RequirementSummary);
     }
 
+    // A door the crosser can neither pick nor bash needs its key, and a key with a
+    // reliable source is fetched like any other gate item (report
+    // paradigm-20261007-192215: a shop-sold skeleton key was never bought). The
+    // clause names where it comes from, a free hand-over ahead of a purchase.
     [Fact]
-    public void DoorKeyGate_NeverGetsBuyTail_EvenIfShopResolves()
+    public void DoorKeyGate_GetsTheSourceTail_WhenOneResolves()
     {
         var choice = Choice(new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 9 }));
 
-        // A key is never sourced on a path detour, so a resolver that names a
-        // giver or shop must be ignored for the DoorKey kind.
-        var vm = new RouteChoiceDialogViewModel(
+        var bought = new RouteChoiceDialogViewModel(
+            choice, "Vault (1/9)", id => "the skeleton key",
+            shopBuyPhraseForItem: id => "buy at Thieves' Guild");
+        Assert.Equal("Requires the skeleton key (buy at Thieves' Guild)", bought.RequirementSummary);
+
+        var given = new RouteChoiceDialogViewModel(
             choice, "Vault (1/9)", id => "the iron key",
             giveNameForItem: id => "a gatekeeper", shopBuyPhraseForItem: id => "buy at Locksmith");
+        Assert.Equal("Requires the iron key (ask a gatekeeper)", given.RequirementSummary);
+    }
+
+    [Fact]
+    public void DoorKeyGate_WithNoSource_NamesTheKeyAlone()
+    {
+        var choice = Choice(new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 9 }));
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Vault (1/9)", id => "the iron key");
 
         Assert.Equal("Requires the iron key", vm.RequirementSummary);
     }

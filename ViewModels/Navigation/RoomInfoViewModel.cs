@@ -280,7 +280,8 @@ public sealed partial class RoomInfoViewModel : ObservableObject
         {
             TBInfoActionResolver.RoomEffectKind.Summon =>
                 new AsyncRelayCommand(() => _services.OpenMonsterRecordAsync(id)),
-            TBInfoActionResolver.RoomEffectKind.LearnSpell =>
+            TBInfoActionResolver.RoomEffectKind.LearnSpell or
+            TBInfoActionResolver.RoomEffectKind.CastSpell =>
                 new AsyncRelayCommand(() => _services.OpenSpellRecordAsync(id)),
             TBInfoActionResolver.RoomEffectKind.PlaceRoomItem or
             TBInfoActionResolver.RoomEffectKind.TakeItem =>

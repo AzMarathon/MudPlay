@@ -1,9 +1,29 @@
 # Version history
 
-## 3.149.2
+## 3.149.13
 
 - Leading a party past an exit that needs an item (a darkwood ring, a rope and grapple): the party is asked how many each holds before the route is planned, and if there isn't one each the route card names the item and the count instead of the leader crossing alone
 - bug reports addressed: paradigm-20261007-183903
+
+## 3.149.12
+
+- A monster that needs a magical weapon is judged by the weapon in your hand when the combat profile names one you no longer carry, instead of being skipped as unhittable
+- After killing a monster that turns into or summons another as it dies (the Champion of Blood's greater hellion), the next target is picked once the room shows the newcomer
+- A follower who walks off by themselves (sent on with `@do`, say) is no longer gone back for as if your move had left them behind
+- A locked door you can't pick or bash whose key a shop sells (the skeleton key): the route card names the shop, and picking that route buys the key on the way
+- A room command that only works in an empty room (the Dark Alley's `go hole`), refused because a monster followed you in: the room is cleared and the command sent again, instead of the walk stalling
+- Room commands that cast a spell now show on the map tooltip and in room info (the Tarl quest's `lift latch`, `pray — casts …`); a command that both summons and casts was hidden altogether
+- A walk paused on its way to pull a lever or turn a statue no longer resumes past it: it carries on from where it stood, even when the route comes back through that room
+- bug reports addressed: paradigm-20261007-182916, paradigm-20261007-185740, paradigm-20261007-183903, paradigm-20261007-192215, paradigm-20261007-194430, paradigm-20261007-194642, paradigm-20261007-202509
+
+## 3.149.5
+
+- An item another player hands you (`<Player> gives you <item>.`), one or several at once, is added to your carried items straight away, so route gates and other "do you carry it" checks no longer wait for the next `i`
+- Items you hand over in that wording (`You give 2 darkwood ring to <player>.`) leave your carried items straight away
+- Coins given, shared or received (`<Player> gave you 30 gold`, `<Player> gives you 30 platinum pieces`) reach or leave your purse straight away, on every realm
+- A key you give, are handed, pick up, drop, hide, buy or sell joins or leaves your key list straight away
+- The receiving lines are no longer flagged as unrecognized
+- bug reports addressed: paradigm-20261007-164408, paradigm-20261007-182345, paradigm-20261007-182434
 
 ## 3.149.1
 

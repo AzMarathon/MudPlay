@@ -398,6 +398,10 @@ public sealed class PartyComebackManager : IDisposable
     public void NoteOwnTeleport() => _ownTeleportAt = NowProvider();
     private DateTimeOffset? _ownTeleportAt;
     private static readonly TimeSpan OwnTeleportWindow = TimeSpan.FromSeconds(15);
+    // How long after a move of ours a "no longer following you" still counts as
+    // that move leaving the member behind. The game prints it with the move's own
+    // room display, so this only has to cover lag.
+    private static readonly TimeSpan OwnMoveWindow = TimeSpan.FromSeconds(5);
 
     private void OnMemberLeftBehind(string given)
     {
@@ -405,6 +409,17 @@ public sealed class PartyComebackManager : IDisposable
         if (_ownTeleportAt is { } at && NowProvider() - at <= OwnTeleportWindow)
         {
             _log?.Info(LogCategory, $"{given} was dropped by our own teleport — not going back for them.");
+            return;
+        }
+        // The game prints the same line for a follower who walks off by themselves
+        // (sent on with a relayed command, or moved by hand): they left us, we
+        // didn't leave them, and there is nobody back down our path to fetch. Only a
+        // member dropped right behind a move of ours was left behind (report
+        // paradigm-20261007-183903: a follower sent through a gate with `@do se`
+        // while the leader rested was gone back for).
+        if (_tracker.LastMoveSentAt is not { } moved || NowProvider() - moved > OwnMoveWindow)
+        {
+            _log?.Info(LogCategory, $"{given} stopped following, but not behind a move of ours — not going back for them.");
             return;
         }
         if (SnapshotRunningEngine().Kind == ResumeKind.None)

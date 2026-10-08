@@ -285,6 +285,18 @@ public sealed partial class CombatManager : IDisposable
     private bool _arrivalSettleBypass;
     private Action<TimeSpan, Action>? _scheduleArrivalSettle;
 
+    // Summon-on-death re-scan hold. The monster just killed summons another as it
+    // dies, and that one isn't on the roster until the room is displayed again.
+    // While armed, a fresh target pick waits for the re-display (ArmSummonRescan /
+    // OnEntitiesObserved); SummonRescanWindow bounds the wait when none arrives.
+    // Rides the arrival-settle scheduler, so it stays inert until that is wired.
+    private static readonly TimeSpan SummonRescanWindow = TimeSpan.FromMilliseconds(1500);
+    private bool _summonRescanArmed;
+    private Func<int, bool>? _summonsOnDeath;
+
+    // True while a fresh pick is waiting on the re-display after such a kill.
+    internal bool AwaitingSummonRescan => _summonRescanArmed;
+
     // The caster's per-round cascade SWITCH (cap-switch / decision-change) is decided
     // on the round's damage line — for a MaxCasts-1 nuke that's the spell's OWN killing
     // blow. The kill's death/exp/*Combat Off* often arrive in a LATER server packet
@@ -1413,6 +1425,39 @@ public sealed partial class CombatManager : IDisposable
     public void SetArrivalSettleScheduler(Action<TimeSpan, Action> schedule)
         => _scheduleArrivalSettle = schedule;
 
+    // Whether a monster's death spell summons another (MonsterDeathSummonIndex).
+    public void SetDeathSummonProbe(Func<int, bool> summonsOnDeath)
+    {
+        ArgumentNullException.ThrowIfNull(summonsOnDeath);
+        _summonsOnDeath = summonsOnDeath;
+    }
+
+    // Called with the corpse still on the roster. When the monster summons as it
+    // dies, hold the next pick for the room re-display that will show the summon,
+    // and ask for that display.
+    private void ArmSummonRescan(string deadRawName)
+    {
+        if (_scheduleArrivalSettle is null || _summonsOnDeath is null) return;
+        if (_classifier.Current is not { } obs) return;
+        int number = ResolveMonsterNumber(obs, deadRawName);
+        if (number < 0 || !_summonsOnDeath(number)) return;
+
+        _summonRescanArmed = true;
+        _log?.Combat(LogCategory,
+            $"killed {deadRawName}, which summons as it dies — holding the next pick for the room re-display");
+        TrySendRoomRefresh("summon-on-death kill");
+        _scheduleArrivalSettle(SummonRescanWindow, OnSummonRescanElapsed);
+    }
+
+    private void OnSummonRescanElapsed()
+    {
+        if (_disposed || !_summonRescanArmed) return;
+        _summonRescanArmed = false;
+        _log?.Combat(LogCategory,
+            "summon re-scan: no room re-display arrived — picking from the roster as it stands");
+        if (_classifier.Current is { } cur) OnEntitiesObserved(cur);
+    }
+
     // The one-shot delay scheduler for the cascade switch dispatch (see
     // SwitchDispatchDelay). Wired in AppServices to a DispatcherTimer; tests inject a
     // controllable seam.
@@ -1476,7 +1521,11 @@ public sealed partial class CombatManager : IDisposable
         // A room display (or the room-change wipe) supersedes an arrival held for our
         // move: we've landed, and what's here is on the new roster.
         if (obs.Source is RoomObservationSource.AlsoHere or RoomObservationSource.RoomChange)
+        {
             _arrivalHeldForMove = false;
+            // The re-display a summon-on-death kill was waiting for (or a new room).
+            _summonRescanArmed = false;
+        }
 
         CombatSettings settings = _readSettings();
 
@@ -1761,6 +1810,15 @@ public sealed partial class CombatManager : IDisposable
             return;
         }
 
+        // The monster just killed summons another as it dies, and the room hasn't
+        // been displayed since. Picking now commits to whatever else stands here,
+        // and the summoned monster (the same fight's next form, often the higher
+        // priority) is left to the rest of the party (report
+        // paradigm-20261007-185740: a dark priest attacked while the greater hellion
+        // the Champion of Blood turned into went untouched). The re-display carries
+        // the full roster and decides; it and a room change disarm this above.
+        if (_summonRescanArmed && _currentTarget is null) return;
+
         // Sort by Priority asc (First=0 highest, Last=4 lowest), then
         // by appearance order for stable tiebreak.
         engageable.Sort((a, b) =>
@@ -1956,7 +2014,8 @@ public sealed partial class CombatManager : IDisposable
             if (assess != EngageAssessment.CanAct)
             {
                 _log?.Combat(LogCategory,
-                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {assess}");
+                    $"skip un-actionable {cand.RawName} (#{cand.MonsterNumber}) — {assess}" +
+                    WeaponGateNote(settings, cand.MonsterNumber, cand.ResolvedName));
                 // Only a permanent give-up surfaces the "cannot attack" line; a
                 // transient mana stall stays quiet (it's retryable once MA regens).
                 if (assess == EngageAssessment.Unkillable)
@@ -3589,6 +3648,7 @@ public sealed partial class CombatManager : IDisposable
         _currentTarget = null;
         _castingSpellTarget = null;   // end spell mode on the kill too — no corpse re-cast
         ClearBackstabResolution();
+        ArmSummonRescan(presumedDead);
         if (_classifier.RemoveDeadEntity(presumedDead))
         {
             _log?.Combat(LogCategory,

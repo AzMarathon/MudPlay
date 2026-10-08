@@ -4399,6 +4399,7 @@ public sealed class AppServices
         // in" arrivals + the room re-display resolve to one engage decision on the
         // full group (rooms nuke-first instead of pecking single-target). Same shape
         // as the walker's voyage scheduler — keeps the Game/Combat layer UI-free.
+        Combat.SetDeathSummonProbe(MonsterDeathSummon.SummonsOnDeath);
         Combat.SetArrivalSettleScheduler((delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -4679,6 +4680,9 @@ public sealed class AppServices
                 // live capture flag cover the rest.
                 || text.StartsWith("You are carrying ", StringComparison.Ordinal)
                 || Inventory.IsCapturing
+                // Another character handing us an item or coins: InventoryManager
+                // reads the line itself and files it.
+                || Inventory.IsReceivedHandOverLine(text)
                 // "Uses remaining: N" off an item look — ItemChargeTracker reads it via
                 // TokenCatalog with no router pattern, so reuse that same recognizer.
                 || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0
@@ -5408,7 +5412,9 @@ public sealed class AppServices
             // and fights to clear it — the do-not-attack rest exception.
             isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             requestEngage: Combat.RequestRestClearEngage);
-        Combat.SetRestClearGate(() => Health.ForceClearForRest);
+        // The walker asks for the same clear while a room command that only works in
+        // an empty room waits on a monster (AutoWalkManager.AwaitingEmptyRoom).
+        Combat.SetRestClearGate(() => Health.ForceClearForRest || Walker is { AwaitingEmptyRoom: true });
 
         // Break-before-run: turning auto-attack OFF mid-fight releases the Combat
         // gate so the walker resumes — send `break` first when the user has
@@ -5457,14 +5463,19 @@ public sealed class AppServices
         // lets item transactions move the encumbrance estimate between dumps;
         // the slot resolver labels a freshly-worn piece with its real slot (the
         // wear line names none) so "Snapshot Current" files it correctly (both
-        // read ItemNames, already loaded above). MarkStale on profile swap so the
-        // new character's first gate evaluation waits for a fresh `i`.
+        // read ItemNames, already loaded above); the record-name check tells a
+        // player's "gives you" hand-over from an NPC's flavour line, and the key
+        // check sends a handed-over key to the key ring. MarkStale on profile swap
+        // so the new character's first gate evaluation waits for a fresh `i`.
         Inventory = new Game.Inventory.InventoryManager(
             Log,
             ItemNames.WeightOf,
             name => ItemNames.WornCodeOf(name) is int worn
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
-                : null);
+                : null,
+            ItemNames.IsRecordName,
+            name => ItemNames.FindByName(name) is int number
+                && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData,
             () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
@@ -7053,6 +7064,12 @@ public sealed class AppServices
         // A key an NPC hands over for the asking is as fetchable as one a summoned
         // monster always drops (the old hermit's jagged bone key for the Library).
         Walker.SetDoorKeySourceProbe(DoorKeyIsFetchable);
+        Walker.SetRoomClearHooks(
+            roomHasMonster: () => RoomClassifier.Current is { } obs
+                && obs.Entities.Any(e => e.Kind == Game.Combat.EntityKind.Monster),
+            requestRoomClear: () => Combat.RequestRestClearEngage(),
+            abortPartyReform: () => AutoParty.AbortReformWaits("the teleport was refused"));
+        RoomClassifier.EntitiesObserved += _ => Walker.NoteRoomObserved();
 
         // Hold a crossing whose gate item is missing but already being fetched,
         // rather than sending an opener and a move that can only fail. Requires a
@@ -12715,17 +12732,21 @@ public sealed class AppServices
     // walk crossed unprovisioned — it would `rub bloodstone orb` while carrying no
     // orb and bonk on the hidden exit (report paradigm-20260911-095404).
     //
-    // A door key is admitted only when a room command can summon a guaranteed
-    // dropper for it; any other key has no source to arm, so forcing it would only
-    // switch on a per-room `sea` that can never succeed.
+    // A door key is admitted only when it has a reliable source (DoorKeyIsFetchable);
+    // any other key has none to arm, so forcing it would only switch on a per-room
+    // `sea` that can never succeed.
     public IReadOnlyList<int> SourceableGateItems(IReadOnlyList<RouteRequirement> requirements)
         => RouteChoicePlanner.SourceableGateItems(requirements, DoorKeyIsFetchable);
 
     // A door key the walk can reliably go and get: a room command summons a
-    // monster that always drops it, or an NPC hands it over for the asking (the
-    // old hermit's jagged bone key for the Library).
+    // monster that always drops it, an NPC hands it over for the asking (the old
+    // hermit's jagged bone key for the Library), or a shop sells it (the Thieves'
+    // Guild's skeleton key). A shop was left out, so a route through a door the
+    // character could neither pick nor bash walked up to it keyless and failed
+    // there (report paradigm-20261007-192215).
     private bool DoorKeyIsFetchable(int itemId)
-        => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId);
+        => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId)
+           || ShopStock.ShopsSelling(itemId).Count > 0;
 
     // A loop is about to approach through gates because nothing on it can be
     // reached as things stand. Arm the fetch for what the way in needs, exactly as

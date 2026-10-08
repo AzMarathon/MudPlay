@@ -926,18 +926,19 @@ public static class RouteChoicePlanner
     // detour) and forces them on its own path.
     //
     // Flag-independent by design — an explicit "obtain then cross" pick IS the
-    // consent, the same rule the hazard counters already follow. hasSummonSource
-    // gates door keys: a key is worth arming for only when a room command can summon
-    // a guaranteed dropper, since any other key has no source and forcing it would
-    // just switch on a per-room search that can never succeed.
+    // consent, the same rule the hazard counters already follow. keyHasSource gates
+    // door keys: a key is worth arming for only when something reliably yields it
+    // (a summoned guaranteed dropper, an NPC's hand-over, a shop), since any other
+    // key has no source and forcing it would just switch on a per-room search that
+    // can never succeed.
     //
     // Static so the rule can be pinned without standing up AppServices, which owns
-    // the summon-source lookup this defers to.
+    // the key-source lookup this defers to.
     public static IReadOnlyList<int> SourceableGateItems(
-        IReadOnlyList<RouteRequirement> requirements, Func<int, bool> hasSummonSource)
+        IReadOnlyList<RouteRequirement> requirements, Func<int, bool> keyHasSource)
     {
         ArgumentNullException.ThrowIfNull(requirements);
-        ArgumentNullException.ThrowIfNull(hasSummonSource);
+        ArgumentNullException.ThrowIfNull(keyHasSource);
 
         var ids = new List<int>();
         foreach (RouteRequirement req in requirements)
@@ -949,7 +950,7 @@ public static class RouteChoicePlanner
             foreach (int id in req.ItemIds)
             {
                 if (id <= 0 || ids.Contains(id)) continue;
-                if (req.Kind == RouteRequirementKind.DoorKey && !hasSummonSource(id)) continue;
+                if (req.Kind == RouteRequirementKind.DoorKey && !keyHasSource(id)) continue;
                 ids.Add(id);
             }
         }

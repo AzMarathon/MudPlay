@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.2**
+> **Version 3.149.13**
 > - Leading a party past an exit that needs an item (a darkwood ring, a rope and grapple): the party is asked how many each holds before the route is planned, and if there isn't one each the route card names the item and the count instead of the leader crossing alone
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

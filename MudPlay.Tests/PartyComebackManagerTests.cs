@@ -602,6 +602,28 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.Null(h.Comeback.RecoveringMember);
     }
 
+    // Report paradigm-20261007-183903: the leader sat resting with a walk held and
+    // sent a follower on with `@do se`. The game prints the same "no longer
+    // following you" for a follower who walks off, and the leader went back for
+    // someone who had left of their own accord. Only a drop right behind a move of
+    // ours is a member left behind.
+    [Fact]
+    public void StopsFollowing_LongAfterOurLastMove_IsNotLeftBehind()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        h.Comeback.NowProvider = () => DateTimeOffset.UtcNow.AddSeconds(30);
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+        Assert.False(Sent(h, "/Tank {backtracking"));
+    }
+
     [Fact]
     public void Cancel_DropsTheRecoveryAndParkedResume()
     {
