@@ -8,17 +8,59 @@ using MudPlay.Services;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// Shell view-model for the Character Workshop window: a flat tab strip of
-// sections — Character Info / Death Recovery / Level Projection / CP Allocation /
-// Quest Status / Equipment Manager / Calculators / Bosses.
+// Shell view-model for the Player Workshop window: a tab strip of sections, three
+// of them groups of sub-tabs — Character Info / Death Recovery / Auto-Train (Level
+// Projection, CP Allocation) / Quest Status / My Equipment (Equipment Manager, Item
+// Finder) / Calculators / Record Keeping (Bosses, Roomba, Realm Rankings).
 public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisposable
 {
     private readonly ProfileService _profile;
     private readonly GameDataCache _gameData;
 
+    public const string AutoTrainGroupId = "autotrain";
+    public const string EquipmentGroupId = "myequipment";
+    public const string RecordsGroupId = "recordkeeping";
+
     public ObservableCollection<WorkshopSectionViewModel> Sections { get; } = new();
 
     [ObservableProperty] private WorkshopSectionViewModel? _selectedSection;
+
+    // The section on screen: the selected tab, or its selected sub-tab.
+    public WorkshopSectionViewModel? ActiveSection => SelectedSection?.Leaf;
+
+    // The tab on screen changed what it shows (a sub-tab switch) or the window
+    // size it asks for. A switch of the main tab isn't reported here; the window
+    // sees that from the tab strip itself.
+    public event Action? ActiveLayoutChanged;
+
+    // Show the section with this id: a main tab, or a sub-tab along with the tab
+    // that holds it. False when nothing has that id.
+    public bool Select(string sectionId)
+    {
+        foreach (WorkshopSectionViewModel section in Sections)
+        {
+            if (Matches(section, sectionId)) { SelectedSection = section; return true; }
+            if (section is not WorkshopGroupSectionViewModel group) continue;
+            if (group.Children.FirstOrDefault(c => Matches(c, sectionId)) is not { } child) continue;
+            group.SelectedChild = child;
+            SelectedSection = group;
+            return true;
+        }
+        return false;
+    }
+
+    // Whether that section is the one on screen (a group's id counts while any of
+    // its sub-tabs is showing).
+    public bool IsShowing(string sectionId) =>
+        SelectedSection is { } tab && (Matches(tab, sectionId) || Matches(tab.Leaf, sectionId));
+
+    private static bool Matches(WorkshopSectionViewModel section, string id) =>
+        string.Equals(section.Id, id, StringComparison.OrdinalIgnoreCase);
+
+    private void OnSectionLayoutChanged(WorkshopSectionViewModel section)
+    {
+        if (ReferenceEquals(section, SelectedSection)) ActiveLayoutChanged?.Invoke();
+    }
 
     // Window title — "Player Workshop - {character} - {bbs} - {realm}". Recomputed
     // live as the profile / pinned BBS / active game-data set (realm) change while
@@ -64,28 +106,39 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         // The CP Allocation tab (writer) and Level Projection tab (reader) share
         // one plan state so the projection's HP / regen reflect planned training.
         var planState = new CpPlanState();
-        Sections.Add(new LazyWorkshopSection(LevelProjectionSectionViewModel.SectionId, LevelProjectionSectionViewModel.SectionTitle,
-            () => new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses)));
-
-        Sections.Add(new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk, AppServices.Current.AutoTrain));
+        Sections.Add(new WorkshopGroupSectionViewModel(AutoTrainGroupId, "Auto-Train",
+            new LazyWorkshopSection(LevelProjectionSectionViewModel.SectionId, LevelProjectionSectionViewModel.SectionTitle,
+                () => new LevelProjectionSectionViewModel(playerStats, gameData, planState, inventory, questBonuses)),
+            new CpAllocationSectionViewModel(playerStats, gameData, inventory, profile, planState, trainerWalk, AppServices.Current.AutoTrain)));
 
         Sections.Add(new QuestSectionViewModel(playerStats, gameData, profile, quests, questBonuses));
 
-        Sections.Add(new LazyWorkshopSection(EquipmentSectionViewModel.SectionId, EquipmentSectionViewModel.SectionTitle,
-            () => new EquipmentSectionViewModel(profile, inventory, gameData, equipment, playerStats, players, questBonuses)));
+        Sections.Add(new WorkshopGroupSectionViewModel(EquipmentGroupId, "My Equipment",
+            new LazyWorkshopSection(EquipmentSectionViewModel.SectionId, EquipmentSectionViewModel.SectionTitle,
+                () => new EquipmentSectionViewModel(profile, inventory, gameData, equipment, playerStats, players, questBonuses)),
+            // Built on first visit: its catalog is every equippable item in the set.
+            new LazyWorkshopSection(ItemFinderViewModel.SectionId, ItemFinderViewModel.SectionTitle,
+                () => new ItemFinderViewModel(
+                    gameData, playerStats, inventory,
+                    ItemEquipFilter.GearBucketForWord(alignment.SelfAlignment, gameData.ActiveRealm),
+                    alignment.SelfEvilPoints(gameData.ActiveRealm),
+                    () => questBonuses.Bonuses, AppServices.Current.MonsterCatalog))));
 
         Sections.Add(new LazyWorkshopSection(CalculatorsSectionViewModel.SectionId, CalculatorsSectionViewModel.SectionTitle,
-            () => new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile, leaderboards)));
+            () => new CalculatorsSectionViewModel(playerStats, gameData, inventory, questBonuses, profile)));
 
-        Sections.Add(new LazyWorkshopSection(BossesSectionViewModel.SectionId, BossesSectionViewModel.SectionTitle,
-            () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick, AppServices.Current.Profile)));
+        Sections.Add(new WorkshopGroupSectionViewModel(RecordsGroupId, "Record Keeping",
+            new LazyWorkshopSection(BossesSectionViewModel.SectionId, BossesSectionViewModel.SectionTitle,
+                () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick, AppServices.Current.Profile)),
+            new GhManagementSectionViewModel(AppServices.Current.GhRoomLabels, AppServices.Current.GhSweep, AppServices.Current.RoomGraph, AppServices.Current.GhItemLocations, AppServices.Current.GhManagedRooms),
+            new LazyWorkshopSection(RealmRankingsSectionViewModel.SectionId, RealmRankingsSectionViewModel.SectionTitle,
+                () => new RealmRankingsSectionViewModel(gameData, leaderboards))));
 
-        Sections.Add(new GhManagementSectionViewModel(AppServices.Current.GhRoomLabels, AppServices.Current.GhSweep, AppServices.Current.RoomGraph, AppServices.Current.GhItemLocations, AppServices.Current.GhManagedRooms));
+        foreach (WorkshopSectionViewModel section in Sections)
+            section.LayoutChanged += OnSectionLayoutChanged;
 
-        SelectedSection = initialSectionId is not null
-            ? Sections.FirstOrDefault(s => string.Equals(s.Id, initialSectionId, StringComparison.OrdinalIgnoreCase))
-              ?? Sections.FirstOrDefault()
-            : Sections.FirstOrDefault();
+        if (initialSectionId is null || !Select(initialSectionId))
+            SelectedSection = Sections.FirstOrDefault();
 
         UpdateTitle();
         _profile.ProfileLoaded += OnProfileTitleChanged;
@@ -113,6 +166,9 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         _profile.BbsPinApplied -= OnProfileTitleChanged;
         _gameData.ActiveSetChanged -= OnSetTitleChanged;
         foreach (WorkshopSectionViewModel section in Sections)
+        {
+            section.LayoutChanged -= OnSectionLayoutChanged;
             section.Dispose();
+        }
     }
 }

@@ -144,8 +144,8 @@ The bottom of **Settings → Toolbar + Shortcuts** also lets you build the **ter
 - **Favorites / Recent destinations** — the GOTO walk fly-outs (your starred locations and the last places you walked, click one to walk there). They're at the top by default but you can move, rename, or remove them like anything else. Once placed they always show; on a new profile with an empty list the submenu just reads "(none yet)".
 - **Commands** — any individual command from the File / View / Action / Tools menus (window opens, one-shots like Get All / Reset States, utilities like Bug report / Program Log / Wire Inspector). Auto-engine toggles are deliberately left out — those belong on the toolbar / Action menu.
 - **Drop ▸ / Hide ▸ / Equip ▸** — ready-made submenus of the drop, hide and gear-set actions. Add the whole submenu, or just the single action you use (e.g. only **Drop Coins**, or **Equip Backstab set**) — both are in the pool.
-- **Workshop tabs** — a direct link that opens the Player Workshop straight to a chosen tab (Character Info, Equipment Manager, Calculators, Bosses, Roomba, …).
-- **Calculators** — a direct link that opens the Workshop on the **Calculators** tab with a chosen calculator (Hit / Movement / Swing / Backstab / Mana Regen / Realm Rankings / Monster Aggro) **expanded and centered** on screen.
+- **Workshop tabs** — a direct link that opens the Player Workshop straight to a chosen tab or sub-tab (Character Info, Equipment Manager, Item Finder, Calculators, Bosses, Roomba, Realm Rankings, …).
+- **Calculators** — a direct link that opens the Workshop on the **Calculators** tab with a chosen calculator (Hit / Movement / Swing / Backstab / Mana Regen / Monster Aggro) **expanded and centered** on screen. (Realm Rankings used to be listed here; it is a Workshop tab now, and a menu that already had it keeps the entry.)
 - **Settings tabs** — a direct link that opens the Settings window straight to a chosen tab (General, Combat, Health, Party, Statline, Auto-Lair, …) instead of wherever it was last. (The plain **Settings…** command opens the window on its last tab.)
 - **Game Data** — a direct link that opens the Game Data Browser on a chosen table (Monsters, Items, Spells, Rooms, Shops, Classes, Races, Messages, Players, Macros, Triggers, Aliases, and the rest). (The plain **Game Data Browser…** entry opens the window on its last tab.)
 - **Folders** — click **Add folder** to add your own named submenu that flies out to the side. To fill it: select the folder and add items from the pool (the **Add** button reads **Add into folder** while a folder is selected). To move an item that's *already* in the menu into or out of a folder, just use **Move up / down** — an item stepping toward a folder moves *into* it, and the first/last item in a folder steps *out* of it when you move it up/down past the edge. Reordering a folder moves its contents with it.
@@ -1117,7 +1117,19 @@ Gear is organized into named equipment sets in the **Player Workshop** — a Def
 
 # Player Workshop
 
-Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a tabbed window for managing your character: gear, leveling, quests, bosses, deaths, your character sheet and calculators, and gang-house item sorting (**Roomba**). There are no Save buttons anywhere in it; every edit auto-saves to your profile. Its tabs, most-used first:
+Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a tabbed window for managing your character: gear, leveling, quests, bosses, deaths, your character sheet and calculators, and gang-house item sorting (**Roomba**). There are no Save buttons anywhere in it; every edit auto-saves to your profile.
+
+**The tabs.** Related tabs share one entry on the top strip and open as sub-tabs under it:
+
+- **Character Info**
+- **Death Recovery**
+- **Auto-Train**: **Level Projection** and **CP Allocation**
+- **Quest Status**
+- **My Equipment**: **Equipment Manager** and **Item Finder**
+- **Calculators**
+- **Record Keeping**: **Bosses**, **Roomba** and **Realm Rankings**
+
+Each group remembers the sub-tab you left it on while the window is open. Menu entries and shortcuts that open the Workshop on a tab (*Workshop: Bosses*, say) go straight to the sub-tab. The sections below take them most-used first:
 
 ## Equipment Manager — gear sets
 
@@ -1141,7 +1153,7 @@ You don't create sets, you fill them. Pick a set on the left, then either click 
 - **Checked** (the default) — keeps the fight in your pre-rest loadout, reverting to Default only once recovered.
 - **Unchecked** — fights in your combat gear: the moment a hostile enters while you're resting, MudPlay swaps to your **Default** set for the fight; once the room is clear, if you still haven't reached your rest-max HP and mana/kai, it swaps back to the pre-rest set and resumes the rest. (It only kicks in while you're actually mid-rest in a pre-rest set; a plain fight out on the loop is unaffected, since you're already in Default.)
 
-The **Currently Equipped:** readout next to the Item Finder button names the last set the client put on this session — whether from Equip Now or an auto-fire trigger (loop start, pre-rest, recovery) — so you can see which loadout you're in at a glance.
+The **Currently Equipped:** readout beside the set buttons names the last set the client put on this session — whether from Equip Now or an auto-fire trigger (loop start, pre-rest, recovery) — so you can see which loadout you're in at a glance.
 
 The **Equipment Bonuses** panel shows the set's projected AC and stat totals. The projected AC assumes your **configured self-buffs are up** — it folds in the AC (and the Prot-Evil / Shadow / vile-ward effects) your buffs grant on top of the gear, and its tooltip breaks the total down by source (items, race/class/quests, buffs). "Configured buffs" here means everything that lands on you: self-only spells, whole-party buffs you keep on, and single-target buffs you cast on yourself.
 
@@ -1155,7 +1167,7 @@ This matters most for **alignment**: MajorMUD force-removes an alignment-restric
 
 ## Item Finder
 
-The **Item Finder** button (in Equipment Manager) opens a searchable catalog of every equippable item, with columns for damage, AC, resists, stat bonuses, and more. Filter it by class, slot, level, or any stat, and sort by any column. A **Negates** column lists the spells an item cancels while worn, and the **Negates** dropdown in the stats filters lets you narrow to items that negate a particular spell (it's populated with every spell any item in the set negates; the default `(none)` doesn't filter).
+The **Item Finder** sub-tab (My Equipment → Item Finder, beside Equipment Manager) is a searchable catalog of every equippable item, with columns for damage, AC, resists, stat bonuses, and more. Filter it by class, slot, level, or any stat, and sort by any column. A **Negates** column lists the spells an item cancels while worn, and the **Negates** dropdown in the stats filters lets you narrow to items that negate a particular spell (it's populated with every spell any item in the set negates; the default `(none)` doesn't filter).
 
 **Attack type and damage columns.** The **Attack type** dropdown (Attack, Backstab, Bash, Smash, Punch, Kick, Jumpkick) sets which attack the weapon columns model, using your current stats and the rest of the gear you're wearing:
 - **Swings (W. Spd)**: swings per round with that weapon. Under **Backstab** it reads 1 on backstab-capable weapons, since a backstab is one strike, and blank on the rest.
@@ -1166,7 +1178,7 @@ A weapon's own +Strength / +Agility / +Stealth replaces your current weapon's in
 
 **Level req (min / max)** narrows the list by the level an item asks for: the left box is the lowest requirement to show, the right the highest, and 0 switches either off. It's separate from **Usable at level**, which hides what a character of that level can't wear yet.
 
-It's a **reference tool**: double-click a row to see the item's full data record, and use the **Gear Finder** panel (with **Find Best**) to plan a loadout and read its projected stats. To actually equip something you found, note its name and type it into that slot's **Item** box back in Equipment Manager.
+It's a **reference tool**: double-click a row to see the item's full data record, and use the **Gear Finder** panel (the **Gear Finder ▸** button, with **Find Best**) to plan a loadout and read its projected stats. Showing the panel widens the Workshop window by the panel's width so the table keeps its room; on a maximized window it takes the room from the table instead. To actually equip something you found, note its name and type it into that slot's **Item** box on the **Equipment Manager** sub-tab next door.
 
 **Trial damage.** Under the encumbrance lines, the Gear Finder panel works out what the trial set would do with the selected **Attack type**:
 - **Accuracy** and **Hit chance** (the target's dodge counted).
@@ -1177,11 +1189,11 @@ It's a **reference tool**: double-click a row to see the item's full data record
 
 It needs a weapon in the trial set for Attack, Bash and Smash, and a backstab-capable one for Backstab; Punch, Kick and Jumpkick are bare-handed. These are the same formulas Monster Intel and the Calculators tab use, with your completed quests' bonuses counted.
 
-**Configure Estimates** (top right of the Gear Finder panel) sets who is swinging and at what. It applies as you type, and stays open beside the finder if you want it to:
-- **Your character**: your level and the stats the selected attack reads, **with nothing worn**. They start from your stat screen less the bonuses of the gear you had on when the Item Finder opened, and the trial set's own bonuses are added on top, so a set you aren't wearing is priced correctly. Edit them to plan for a later level or more training. **Reset to my character** puts them back. Class and race are your character's.
+**Configure Estimates** (top right of the Gear Finder panel) opens a small window that sets who is swinging and at what. It applies as you type, and stays open beside the Workshop if you want it to:
+- **Your character**: your level and the stats the selected attack reads, **with nothing worn**. They start from your stat screen less the bonuses of the gear you had on when you first opened the Item Finder tab, and the trial set's own bonuses are added on top, so a set you aren't wearing is priced correctly. Edit them to plan for a later level or more training. **Reset to my character** puts them back. Class and race are your character's.
 - **Target**: armour class, damage resist, dodge and BS defence. Type them, or pick a monster in the lookup box to fill all four from its record. **Clear target** goes back to no target (no armour, dodge or resist to get past). A backstab rolls against a quarter of the armour class plus the BS defence; a monster that sees hidden is flagged, since no backstab can open on it.
 
-Stealth is taken as your stat screen shows it. In the game it also moves with how much you carry, which a lighter or heavier trial set doesn't change here. The settings last until the Item Finder closes.
+Stealth is taken as your stat screen shows it. In the game it also moves with how much you carry, which a lighter or heavier trial set doesn't change here. The settings last until the Workshop closes.
 
 **Find Best searches whatever the results grid currently shows** — not the whole catalog. Leave every filter at its default and it searches everything; narrow the grid first and it searches only that. This is deliberate: a plate-capable class's "best AC" is plate almost by construction (nothing else comes close on raw AC), so without a way to narrow the search there'd be no way to ask for anything more specific.
 
@@ -1478,7 +1490,7 @@ On both realms these counts are **saved per character**, so they survive a resta
 
 Below the wealth block it shows an **AC / DR breakdown** in two lines: one for what your worn gear grants, and one for what your **configured self-buffs** add on top (assuming they're up) — the same buff figure the Equipment Manager and Monster Intel use.
 
-**Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, Realm Rankings, and Monster Aggro. The **Hit Calculator** projects your hit% and damage against a monster with your current weapon; for the reverse — how often a monster hits *you*, and whether it's safe to fight — see **Monster Intel**.
+**Calculators** holds what-if tools: the Hit Calculator, Swing and Backstab calculators, Movement Speed, Mana Regen, and Monster Aggro. The **Hit Calculator** projects your hit% and damage against a monster with your current weapon; for the reverse — how often a monster hits *you*, and whether it's safe to fight — see **Monster Intel**.
 
 ### Monster Aggro
 
@@ -1500,9 +1512,13 @@ The monster rolls a **weighted lottery** over the scores, so each member's **Odd
 
 Reach it from the Calculators tab, or wire it to the terminal right-click menu / a toolbar deep-link like any calculator.
 
+## Realm Rankings
+
+**Record Keeping → Realm Rankings** shows the realm's top list as last captured, with an **XP/HR** column worked out between captures, each player's rank movement, and any reroll suspects since the capture before. **Parse Toplist** sends `top N` at the depth of the deepest list you've captured (100 before the first) and reads the reply in on its own; running `top <N>` yourself does the same. **Class Filter** narrows the table to one class, and **Clear history** wipes this BBS's stored captures. Click a column header to sort, largest first.
+
 ## Roomba
 
-The Workshop's last tab, **Roomba**, automates sorting gang-house loot into labelled rooms and backs a shared item-location log you can query in-game with `@roomba`. It's involved enough to have its own writeup — see the **Roomba (Player Workshop)** section further down for the full walkthrough.
+**Record Keeping → Roomba** automates sorting gang-house loot into labelled rooms and backs a shared item-location log you can query in-game with `@roomba`. It's involved enough to have its own writeup — see the **Roomba (Player Workshop)** section further down for the full walkthrough.
 
 ---
 

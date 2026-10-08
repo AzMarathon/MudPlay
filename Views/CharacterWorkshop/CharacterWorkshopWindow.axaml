@@ -12,8 +12,9 @@
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource ChromeBgBrush}">
 
-    <!-- Flat tab strip across the character-workshop sections. Each tab's
-         content is the section's own view. Tabs vary widely in how much room
+    <!-- Tab strip across the Workshop's sections. Each tab's content is the
+         section's own view; a grouped tab's is a second strip of sub-tabs
+         (WorkshopGroupView). Tabs vary widely in how much room
          they need (the Bosses grid is far wider than Character Info), so the
          code-behind snaps the window to the active tab's content on each switch
          (see CharacterWorkshopWindow.axaml.cs) — hence the x:Name here. -->

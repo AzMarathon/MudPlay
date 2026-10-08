@@ -6,7 +6,6 @@ using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MudPlay.Game.Inventory;
 using MudPlay.Services;
@@ -14,7 +13,7 @@ using MudPlay.ViewModels.CharacterWorkshop;
 
 namespace MudPlay.Views.CharacterWorkshop;
 
-public partial class ItemFinderWindow : Window
+public partial class ItemFinderSectionView : UserControl
 {
     private ItemFinderViewModel? _vm;
 
@@ -42,7 +41,7 @@ public partial class ItemFinderWindow : Window
     // Stable key for the trial panel's slots-vs-stats split ratio (per-profile).
     private const string TrialSplitterId = "ItemFinderTrialSplit";
 
-    public ItemFinderWindow()
+    public ItemFinderSectionView()
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
@@ -54,7 +53,7 @@ public partial class ItemFinderWindow : Window
         // Trial panel's slots pane (row 3) vs. stats pane (row 5) split — remembered
         // per profile so a hand-sized layout survives reopening the finder.
         AppServices.Current.SplitterLayouts.AttachGridRows(
-            owner: this, grid: TrialGrid, topRowIndex: 3, bottomRowIndex: 5, id: TrialSplitterId);
+            host: this, grid: TrialGrid, topRowIndex: 3, bottomRowIndex: 5, id: TrialSplitterId);
     }
 
     private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -64,56 +63,13 @@ public partial class ItemFinderWindow : Window
             ItemsGrid.SelectedItem = entry;
     }
 
-    // Width the window grows/shrinks by when the trial flyout shows/hides — the
-    // panel (340) plus the grid's column spacing (12) — so the results table keeps
-    // its width instead of the panel eating into it.
-    private const double TrialPanelWidth = 352;
-
-    // Whether the window is currently carrying that extra width. A maximized window
-    // has nowhere to grow: asking it to anyway laid the panel out past the screen
-    // edge. So the growth waits until the window is back to its own size.
-    private bool _grownForTrialPanel;
-
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_vm is not null)
-        {
-            _vm.ColumnLayoutChanged -= ApplyColumnLayout;
-            _vm.PropertyChanged -= OnVmPropertyChanged;
-        }
+        if (_vm is not null) _vm.ColumnLayoutChanged -= ApplyColumnLayout;
         _vm = DataContext as ItemFinderViewModel;
         if (_vm is null) return;
         _vm.ColumnLayoutChanged += ApplyColumnLayout;
-        _vm.PropertyChanged += OnVmPropertyChanged;
         ApplyColumnLayout();
-    }
-
-    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ItemFinderViewModel.ShowTrialPanel)) SyncTrialPanelWidth();
-    }
-
-    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
-    {
-        base.OnPropertyChanged(change);
-        // Posted: the window manager is still putting the restored size back when
-        // the state flips, and a width set before it lands is overwritten.
-        if (change.Property == WindowStateProperty)
-            Dispatcher.UIThread.Post(SyncTrialPanelWidth, DispatcherPriority.Background);
-    }
-
-    private void SyncTrialPanelWidth()
-    {
-        if (_vm is null || WindowState != WindowState.Normal) return;
-        if (_vm.ShowTrialPanel == _grownForTrialPanel) return;
-        _grownForTrialPanel = _vm.ShowTrialPanel;
-        Width += _grownForTrialPanel ? TrialPanelWidth : -TrialPanelWidth;
-    }
-
-    protected override void OnClosed(EventArgs e)
-    {
-        base.OnClosed(e);
-        _vm?.CloseEstimates();
     }
 
     // Map each column to its layout key once — the Tag for the stat columns, and the

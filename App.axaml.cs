@@ -237,12 +237,8 @@ public partial class App : Application
                 MudPlay.ViewModels.CharacterWorkshop.DeathLogViewModel,
                 MudPlay.Views.CharacterWorkshop.DeathLogWindow>();
 
-            // Item Finder (Character Workshop → Equipment Manager →
-            // "Item Finder"). Read-only catalog of every equippable item in the
-            // active set, grouped filters by class / level / alignment / stats.
-            AppServices.Current.Dialogs.RegisterWindow<
-                MudPlay.ViewModels.CharacterWorkshop.ItemFinderViewModel,
-                MudPlay.Views.CharacterWorkshop.ItemFinderWindow>();
+            // The Item Finder's Configure Estimates window (Player Workshop → My
+            // Equipment → Item Finder → Gear Finder panel).
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.CharacterWorkshop.ItemFinderEstimatesViewModel,
                 MudPlay.Views.CharacterWorkshop.ItemFinderEstimatesWindow>();

@@ -5,7 +5,9 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Text.Json;
+using Avalonia;
 using Avalonia.Collections;
+using Avalonia.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MudPlay.Game;
@@ -16,6 +18,7 @@ using MudPlay.Game.Quests;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.ViewModels.GameData.Edit;
+using MudPlay.Views.CharacterWorkshop;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
@@ -25,8 +28,8 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // mixed view keeps the columns in their declared order.
 public enum ItemFinderLayout { Mixed, Weapon, Armour }
 
-// Modeless catalog browser opened from the Equipment Manager's "Item Finder"
-// button. Lists every equippable item in the active game-data set — one combined
+// My Equipment → Item Finder: a catalog browser beside the Equipment Manager.
+// Lists every equippable item in the active game-data set — one combined
 // list sorted by slot then name (weapons and armour folded into one) — and
 // narrows it with selectively-applied filters grouped for ease of use: a
 // Character group (class / usable-at level / alignment, which defer to
@@ -36,8 +39,23 @@ public enum ItemFinderLayout { Mixed, Weapon, Armour }
 // ticker, hit-magic-level and required-level min/max ranges, and the strength
 // requirement gate kept at-or-below the ticker. Read-only — the finder informs slot
 // choices; it doesn't write the set.
-public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewModel<bool>
+public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
 {
+    public const string SectionId = "itemfinder";
+    public const string SectionTitle = "Item Finder";
+    public override string Id => SectionId;
+    public override string Title => SectionTitle;
+
+    private Control? _view;
+    public override Control View => _view ??= new ItemFinderSectionView { DataContext = this };
+
+    // A grid this wide can't size the window by its content (that is every column
+    // it has), so the tab asks for a size: room for the filters and a readable
+    // table, and the Gear Finder panel's width on top while it's showing, so
+    // opening the panel doesn't take the table's.
+    private const double TabWidth = 1180, TabHeight = 780, TrialPanelWidth = 352;
+    public override Size? PreferredSize => new Size(ShowTrialPanel ? TabWidth + TrialPanelWidth : TabWidth, TabHeight);
+
     private const string AnyClass = "(Any class)";
     private const string AnyAlign = "(Any)";
     private const string AnySlot = "(Any slot)";
@@ -128,8 +146,6 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         ("NegatesText",         static e => e.NegatesText),
     };
 
-    public event Action<bool>? CloseRequested;
-
     // Raised after each filter pass recomputes the column presentation — which
     // optional columns hold a value, and the weapon / armour / mixed layout — so the
     // view can re-read IsColumnVisible / LayoutMode and reorder + toggle its columns.
@@ -148,7 +164,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     // The live character: its class and race are whose attack the trial damage
     // readout prices (the stats themselves come from Estimates).
     private readonly PlayerStats _stats;
-    private readonly IReadOnlyList<QuestBonus> _questBonuses;
+    private readonly Func<IReadOnlyList<QuestBonus>>? _questBonuses;
     // Renders a weapon's base damage / speed / proc-cast rows for the slot tooltip —
     // the same record view the item edit dialog shows. Charm only affects shop pricing
     // (unused here), so a snapshot at open is fine.
@@ -333,7 +349,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     public ItemFinderViewModel(
         GameDataCache gameData, PlayerStats stats, InventoryManager inventory,
         AlignmentBucket? alignment, EvilPointRange? evilPoints = null,
-        IReadOnlyList<QuestBonus>? questBonuses = null, MonsterCatalog? monsters = null)
+        Func<IReadOnlyList<QuestBonus>>? questBonuses = null, MonsterCatalog? monsters = null)
     {
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(stats);
@@ -341,7 +357,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         _gameData = gameData;
         _inventory = inventory;
         _stats = stats;
-        _questBonuses = questBonuses ?? Array.Empty<QuestBonus>();
+        _questBonuses = questBonuses;
         Estimates = new ItemFinderEstimatesViewModel(
             StatsWithNothingWorn(gameData, stats, inventory), gameData.ActiveRealm, monsters);
         Estimates.Changed += RecomputeTrialDamage;
@@ -770,6 +786,8 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     [RelayCommand]
     private void ToggleTrialPanel() => ShowTrialPanel = !ShowTrialPanel;
 
+    partial void OnShowTrialPanelChanged(bool value) => RaiseLayoutChanged();
+
     // The same three-state toggle every window command is: open, raise, or close
     // when it's already in front.
     [RelayCommand]
@@ -780,8 +798,12 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         _ = dialogs.OpenWindowAsync<ItemFinderEstimatesViewModel, bool>(Estimates);
     }
 
-    // The estimates window belongs to this finder; it goes when the finder does.
-    public void CloseEstimates() => Estimates.CloseCommand.Execute(null);
+    // The estimates window belongs to this finder; it goes when the Workshop does.
+    public override void Dispose()
+    {
+        Estimates.Changed -= RecomputeTrialDamage;
+        Estimates.CloseCommand.Execute(null);
+    }
 
     // One trial row per real equip slot — the two virtual Alt slots (combat-swap
     // weapons, never worn) are excluded from the loadout being modelled.
@@ -1095,7 +1117,7 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
             Estimates.Intellect + gear.PlusIntellect, Estimates.Charm + gear.PlusCharm,
             Estimates.Stealth + gear.PlusStealth, ArmourClass: 0);
         PlayerMatchupProfile profile = CharacterCalculator.BuildMeleeAttackProfile(
-            type, who, items, TrialLoad(trialWeight, who.Strength), _gameData, questBonuses: _questBonuses);
+            type, who, items, TrialLoad(trialWeight, who.Strength), _gameData, questBonuses: _questBonuses?.Invoke());
         AttackEstimate est = AttackEstimator.Estimate(type, profile, Estimates.Target);
 
         foreach (TrialDamageRow row in TrialDamageText.Rows(type, est)) TrialDamageRows.Add(row);
@@ -1175,10 +1197,6 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     private static bool IsWeaponCastLine(string key)
         => key.StartsWith("Casts", StringComparison.Ordinal)
         || key.Trim().Equals("Effect", StringComparison.Ordinal);
-
-    // Close the finder (read-only — no result to commit).
-    [RelayCommand]
-    private void Close() => CloseRequested?.Invoke(false);
 
     private static IEnumerable<string> ClassNames(GameDataCache cache)
     {

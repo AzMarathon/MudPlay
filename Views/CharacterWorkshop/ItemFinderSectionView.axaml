@@ -1,17 +1,13 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"
-        x:Class="MudPlay.Views.CharacterWorkshop.ItemFinderWindow"
-        x:DataType="vm:ItemFinderViewModel"
-        Title="Item Finder"
-        Width="1180" Height="720"
-        MinWidth="900" MinHeight="560"
-        WindowStartupLocation="CenterOwner">
+        x:Class="MudPlay.Views.CharacterWorkshop.ItemFinderSectionView"
+        x:DataType="vm:ItemFinderViewModel">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.Group">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
@@ -40,7 +36,7 @@
             <Setter Property="FormatString" Value="0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
         <Grid ColumnDefinitions="280,*,Auto" ColumnSpacing="12">
@@ -219,10 +215,8 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-                    <Button Content="Reset filters" Command="{Binding ResetCommand}" MinWidth="100"/>
-                    <Button Content="Close" Command="{Binding CloseCommand}" MinWidth="80"/>
-                </StackPanel>
+                <Button Grid.Row="1" Content="Reset filters" Command="{Binding ResetCommand}"
+                        MinWidth="100" Margin="0,8,0,0" HorizontalAlignment="Left"/>
             </Grid>
 
             <!-- ===== Right: the combined item list ===== -->
@@ -487,4 +481,4 @@
             </Border>
         </Grid>
     </Border>
-</Window>
+</UserControl>

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
@@ -24,9 +25,28 @@ public sealed class LazyWorkshopSection : WorkshopSectionViewModel
     public override string Title { get; }
 
     // The real section, built on first use.
-    public WorkshopSectionViewModel Section => _section ??= _create();
+    public WorkshopSectionViewModel Section
+    {
+        get
+        {
+            if (_section is not null) return _section;
+            _section = _create();
+            _section.LayoutChanged += OnSectionLayoutChanged;
+            return _section;
+        }
+    }
 
     public override Control View => Section.View;
 
-    public override void Dispose() => _section?.Dispose();
+    // Asked only of the tab on screen, whose section its View has already built.
+    public override Size? PreferredSize => Section.PreferredSize;
+
+    private void OnSectionLayoutChanged(WorkshopSectionViewModel _) => RaiseLayoutChanged();
+
+    public override void Dispose()
+    {
+        if (_section is null) return;
+        _section.LayoutChanged -= OnSectionLayoutChanged;
+        _section.Dispose();
+    }
 }

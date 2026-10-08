@@ -14,6 +14,12 @@ public partial class CharacterWorkshopWindow : Window
     private const double FallbackReferenceHeight = 640;
     private double _referenceHeight = FallbackReferenceHeight;
 
+    private CharacterWorkshopViewModel? _vm;
+
+    // The tab the window was last sized for by its own PreferredSize, and that size.
+    private WorkshopSectionViewModel? _sizedFor;
+    private Avalonia.Size _sizedTo;
+
     public CharacterWorkshopWindow()
     {
         InitializeComponent();
@@ -26,9 +32,19 @@ public partial class CharacterWorkshopWindow : Window
         // Manual so the user can still drag-resize until the next switch.
         if (this.FindControl<TabControl>("SectionTabs") is { } tabs)
             tabs.SelectionChanged += OnSectionChanged;
+        DataContextChanged += OnDataContextChanged;
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    // A sub-tab switch, or a tab changing the size it asks for (the Item Finder
+    // showing its Gear Finder panel), re-fits the same way a main-tab switch does.
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (_vm is not null) _vm.ActiveLayoutChanged -= FitToActiveTab;
+        _vm = DataContext as CharacterWorkshopViewModel;
+        if (_vm is not null) _vm.ActiveLayoutChanged += FitToActiveTab;
+    }
 
     private void OnSectionChanged(object? sender, SelectionChangedEventArgs e)
     {
@@ -45,10 +61,35 @@ public partial class CharacterWorkshopWindow : Window
     // content; height is the Equipment tab's height — the Equipment tab sizes
     // both dimensions to itself and its rendered height becomes the reference
     // every other tab uses, so long lists (Quest, Bosses) scroll instead of
-    // growing the window taller than Equipment.
+    // growing the window taller than Equipment. A tab that names its own size
+    // (WorkshopSectionViewModel.PreferredSize) gets that instead.
     private void FitToActiveTab()
     {
-        bool isEquipment = (DataContext as CharacterWorkshopViewModel)?.SelectedSection?.Id == "equipment";
+        // A maximized window has its size from the screen. Asking it to fit a tab
+        // laid the content out past the screen's edge.
+        if (WindowState != WindowState.Normal) return;
+
+        WorkshopSectionViewModel? active = _vm?.ActiveSection;
+        if (active?.PreferredSize is { } wanted)
+        {
+            SizeToContent = SizeToContent.Manual;
+            // The tab already on screen asking for a different size (its side panel
+            // opened or closed) moves the window by the difference, so a size the
+            // user dragged it to isn't thrown away. Arriving on the tab takes the
+            // size as asked.
+            Avalonia.Size target = ReferenceEquals(active, _sizedFor)
+                ? new Avalonia.Size(
+                    Bounds.Width + wanted.Width - _sizedTo.Width,
+                    Bounds.Height + wanted.Height - _sizedTo.Height)
+                : wanted;
+            (Width, Height) = FitToScreen(target);
+            _sizedFor = active;
+            _sizedTo = wanted;
+            return;
+        }
+        _sizedFor = null;
+
+        bool isEquipment = active?.Id == EquipmentSectionViewModel.SectionId;
         if (isEquipment)
         {
             SizeToContent = SizeToContent.WidthAndHeight;
@@ -65,5 +106,29 @@ public partial class CharacterWorkshopWindow : Window
             if (isEquipment && Bounds.Height > 0) _referenceHeight = Bounds.Height;
             SizeToContent = SizeToContent.Manual;
         }, DispatcherPriority.Loaded);
+    }
+
+    // A tab that changed the size it asks for while the window was maximized is
+    // owed the difference once the window is back at its own size. Posted: the
+    // window manager is still putting the restored size back when the state flips.
+    protected override void OnPropertyChanged(Avalonia.AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property != WindowStateProperty || WindowState != WindowState.Normal) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_vm?.ActiveSection is { } active && ReferenceEquals(active, _sizedFor)
+                && active.PreferredSize is { } wanted && wanted != _sizedTo)
+                FitToActiveTab();
+        }, DispatcherPriority.Background);
+    }
+
+    // A size a tab asked for, held to what the screen the window is on can show.
+    private (double Width, double Height) FitToScreen(Avalonia.Size wanted)
+    {
+        if (Screens.ScreenFromWindow(this) is not { } screen) return (wanted.Width, wanted.Height);
+        double scale = screen.Scaling > 0 ? screen.Scaling : 1;
+        return (Math.Min(wanted.Width, screen.WorkingArea.Width / scale),
+                Math.Min(wanted.Height, screen.WorkingArea.Height / scale));
     }
 }

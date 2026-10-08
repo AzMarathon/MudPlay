@@ -4425,7 +4425,8 @@ public partial class MainWindowViewModel : ObservableObject
     private void OpenWorkshopDeath() => OpenWorkshopAt("death");
 
     // Terminal right-click "Workshop: <tab>" deep-link — opens the Workshop on a
-    // section (string param = the WorkshopSectionViewModel.Id).
+    // section (string param = the WorkshopSectionViewModel.Id; a sub-tab's id opens
+    // the tab that holds it).
     [RelayCommand]
     private void OpenWorkshopTab(string? sectionId) => OpenWorkshopAt(sectionId);
 
@@ -4457,17 +4458,14 @@ public partial class MainWindowViewModel : ObservableObject
             // holds no window-level pending state (each editable section owns its own
             // Save / Apply / Cancel), so closing needs no save.
             if (existing.DataContext is not ViewModels.CharacterWorkshop.CharacterWorkshopViewModel vm
-                || calculatorId is null && (sectionId is null
-                    || string.Equals(vm.SelectedSection?.Id, sectionId, StringComparison.OrdinalIgnoreCase)))
+                || calculatorId is null && (sectionId is null || vm.IsShowing(sectionId)))
             {
                 RaiseOrClose(existing);
                 return;
             }
-            ViewModels.CharacterWorkshop.WorkshopSectionViewModel? section = vm.Sections
-                .FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase));
-            if (section is not null) vm.SelectedSection = section;
+            if (sectionId is not null) vm.Select(sectionId);
             if (calculatorId is not null
-                && section is ViewModels.CharacterWorkshop.LazyWorkshopSection { Section: ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc })
+                && vm.SelectedSection is ViewModels.CharacterWorkshop.LazyWorkshopSection { Section: ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calc })
                 calc.NavigateToCalculator(calculatorId);
             RaiseExisting(existing);
             return;
@@ -4503,7 +4501,7 @@ public partial class MainWindowViewModel : ObservableObject
         // builds lazily, so NavigateToCalculator arms a pending-scroll the view
         // honors on first layout).
         if (calculatorId is not null
-            && workshopVm.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase))
+            && workshopVm.SelectedSection
                 is ViewModels.CharacterWorkshop.LazyWorkshopSection { Section: ViewModels.CharacterWorkshop.CalculatorsSectionViewModel calcSection })
         {
             calcSection.NavigateToCalculator(calculatorId);

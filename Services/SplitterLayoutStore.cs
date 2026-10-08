@@ -63,6 +63,32 @@ public sealed class SplitterLayoutStore
         owner.Closing += (_, _) => CaptureFromRows(grid, topRowIndex, bottomRowIndex, id);
     }
 
+    // The same for a grid that lives in a tab rather than a window of its own. A tab
+    // has no Opened / Closing to follow: it is restored each time it comes on screen
+    // and captured when it leaves, and also as the window around it closes, since a
+    // closing window doesn't take its content off screen first.
+    public void AttachGridRows(Control host, Grid grid, int topRowIndex, int bottomRowIndex, string id)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(grid);
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        Window? window = null;
+        void Capture(object? sender, EventArgs e) => CaptureFromRows(grid, topRowIndex, bottomRowIndex, id);
+        host.AttachedToVisualTree += (_, _) =>
+        {
+            RestoreRowsOnto(grid, topRowIndex, bottomRowIndex, id);
+            window = TopLevel.GetTopLevel(host) as Window;
+            if (window is not null) window.Closing += Capture;
+        };
+        host.DetachedFromVisualTree += (_, _) =>
+        {
+            Capture(null, EventArgs.Empty);
+            if (window is not null) window.Closing -= Capture;
+            window = null;
+        };
+    }
+
     // Snapshot every known ratio — used by ProfileSaving.
     public Dictionary<string, double> Snapshot()
         => new(_ratios, StringComparer.OrdinalIgnoreCase);
