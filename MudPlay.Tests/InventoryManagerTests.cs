@@ -1140,7 +1140,8 @@ public sealed class InventoryManagerTests
     // Paradigm also words a player's hand-over "<Player> gives you <item>.", naming
     // the item as its record does (report paradigm-20261007-164408: a handed-over
     // gate item was unknown to the route picker until the next `i`).
-    private static bool IsTestRecordName(string name) => name is "magical quartz rod" or "torch";
+    private static bool IsTestRecordName(string name)
+        => name is "magical quartz rod" or "torch" or "darkwood ring" or "lantern";
 
     [Fact]
     public void HandedItem_AddsItemToCarried_AndRaisesItemReceived()
@@ -1167,6 +1168,80 @@ public sealed class InventoryManagerTests
         h.Feed("Bob gives you torch.");
 
         Assert.Equal(90, Weight(h));   // 50 + 40
+    }
+
+    // More than one copy arrives under a count, the name still singular (report
+    // paradigm-20261007-182345: "Fujin gives you 2 darkwood ring.").
+    [Fact]
+    public void HandedItem_UnderACount_AddsEveryCopy()
+    {
+        using Harness h = new(itemWeight: TestWeight, isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);   // 50/2880
+        List<string> got = new();
+        h.Inv.ItemReceived += (item, _) => got.Add(item);
+
+        h.Feed("Fujin gives you 2 torch.");
+
+        Assert.Contains("2 torch", Carried(h));
+        Assert.Equal(130, Weight(h));   // 50 + 2 x 40
+        Assert.Equal(new[] { "torch", "torch" }, got);
+        Assert.True(h.Inv.IsReceivedHandOverLine("Fujin gives you 2 torch."));
+    }
+
+    // The giver's side of the same wording (report paradigm-20261007-182434:
+    // "You give 2 darkwood ring to Fujin.", "You give mine pass to Fujin.").
+    [Fact]
+    public void HandedAway_RemovesTheCopiesGiven()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        h.Feed("You are carrying lantern, 3 darkwood ring.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed("You give 2 darkwood ring to Fujin.");
+        Assert.Contains("darkwood ring", Carried(h));
+        Assert.DoesNotContain("3 darkwood ring", Carried(h));
+
+        h.Feed("You give darkwood ring to Fujin.");
+        Assert.DoesNotContain(Carried(h), c => c.Contains("darkwood ring"));
+
+        h.Feed("You give lantern to Fujin.");
+        Assert.DoesNotContain("lantern", Carried(h));
+    }
+
+    // Flavour in the giver's shape names no record, so nothing leaves the pack.
+    [Fact]
+    public void HandedAway_IgnoresFlavourThatNamesNoRecord()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+        IReadOnlyList<string> before = Carried(h);
+
+        h.Feed("You give the lantern to the old man.");
+        h.Feed("You give her the news of Commander Markus, and hand her the darkwood box.");
+
+        Assert.Equal(before, Carried(h));
+    }
+
+    // Coins in this wording print the coin's full noun and no full stop (reports
+    // paradigm-20261007-182345 and -182434).
+    [Fact]
+    public void HandedCoins_MoveThePurseBothWays()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+
+        h.Feed("Fujin gives you 2 runic coins");
+        h.Feed("Fujin gives you 30 platinum pieces");
+        Assert.Equal(2, h.Inv.Snapshot.Currency.Runic);
+        Assert.Equal(30, h.Inv.Snapshot.Currency.Platinum);
+        Assert.True(h.Inv.IsReceivedHandOverLine("Fujin gives you 30 platinum pieces"));
+
+        h.Feed("You give 2 runic coins to Fujin");
+        h.Feed("You give 25 platinum pieces to Fujin");
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Runic);
+        Assert.Equal(5, h.Inv.Snapshot.Currency.Platinum);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("platinum") || c.Contains("runic"));
     }
 
     // An NPC's keyword give and a spell line share the shape. Their wording isn't a

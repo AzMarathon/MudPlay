@@ -183,9 +183,11 @@ public sealed partial class InventoryManager : IDisposable
     // unrecognized-line watcher asks here rather than restate the shapes.
     public bool IsReceivedHandOverLine(string line)
         => ReceivedItemRegex().IsMatch(line)
-           || TryMatchHandedItem(line, out _, out _)
+           || TryMatchHandedItem(line, out _, out _, out _)
            || (ReceivedCoinsRegex().Match(line) is { Success: true } coins
-               && HandOverCoinNoun(coins.Groups[2].Value) is not null);
+               && HandOverCoinNoun(coins.Groups[2].Value) is not null)
+           || (HandedCoinsRegex().Match(line) is { Success: true } handed
+               && CoinNounSuffixRegex().IsMatch(handed.Groups[2].Value));
 
     // True after at least one successful full 'i' parse.
     public bool IsLoaded
@@ -684,14 +686,26 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
-        // Receive, second wording: "Bob gives you magical quartz rod." — one item,
-        // named as its record names it.
-        if (TryMatchHandedItem(line, out string handedItem, out string handedBy))
+        // Receive, second wording: "Bob gives you magical quartz rod." / "Bob gives
+        // you 2 black star key." — the item as its record names it, under a count
+        // when there is more than one.
+        if (TryMatchHandedItem(line, out string handedItem, out int handedCount, out string handedBy))
         {
-            _log?.Debug(LogCategory, $"handed '{handedItem}' by {handedBy}");
-            AddCarried(handedItem);
-            AdjustItemWeight(handedItem, +1);
-            ItemReceived?.Invoke(handedItem, handedBy);
+            _log?.Debug(LogCategory, $"handed {handedCount} '{handedItem}' by {handedBy}");
+            AddCarried(handedItem, handedCount);
+            AdjustItemWeight(handedItem, +handedCount);
+            for (int i = 0; i < handedCount; i++)
+                ItemReceived?.Invoke(handedItem, handedBy);
+            return;
+        }
+
+        // Give away, same wording: "You give 2 darkwood ring to Bob."
+        Match handedAway = HandedAwayRegex().Match(line);
+        if (handedAway.Success
+            && TryReadHandedName(handedAway.Groups[1].Value, out string awayItem, out int awayCount))
+        {
+            RemoveCarried(awayItem, awayCount);
+            AdjustItemWeight(awayItem, -awayCount);
             return;
         }
 
@@ -706,6 +720,18 @@ public sealed partial class InventoryManager : IDisposable
         Match coinsIn = ReceivedCoinsRegex().Match(line);
         if (coinsIn.Success
             && TryApplyCoinHandOver(coinsIn.Groups[1].Value, coinsIn.Groups[2].Value, +1))
+            return;
+
+        // The same in the second wording, which always prints the coin's full noun:
+        // "Bob gives you 30 platinum pieces" / "You give 2 runic coins to Bob".
+        Match handedCoins = HandedCoinsRegex().Match(line);
+        if (handedCoins.Success && CoinNounSuffixRegex().IsMatch(handedCoins.Groups[2].Value)
+            && TryApplyCoinHandOver(handedCoins.Groups[1].Value, handedCoins.Groups[2].Value, +1))
+            return;
+
+        Match handedCoinsAway = HandedCoinsAwayRegex().Match(line);
+        if (handedCoinsAway.Success && CoinNounSuffixRegex().IsMatch(handedCoinsAway.Groups[2].Value)
+            && TryApplyCoinHandOver(handedCoinsAway.Groups[1].Value, handedCoinsAway.Groups[2].Value, -1))
             return;
 
         // Failed give: "You don't have a torch to give." — no state change (we
@@ -1031,14 +1057,28 @@ public sealed partial class InventoryManager : IDisposable
     // record name word for word. An NPC's keyword give prints the same shape as
     // flavour text ("Dhelvanen gives you a green potion."), which names the item
     // its own way and is no proof the give landed, so it must not add a row.
-    private bool TryMatchHandedItem(string line, out string item, out string giver)
+    private bool TryMatchHandedItem(string line, out string item, out int count, out string giver)
     {
         item = giver = string.Empty;
-        if (_isItemRecordName is null) return false;
+        count = 0;
         Match m = HandedItemRegex().Match(line);
-        if (!m.Success || !_isItemRecordName(m.Groups[2].Value)) return false;
+        if (!m.Success || !TryReadHandedName(m.Groups[2].Value, out item, out count)) return false;
         giver = m.Groups[1].Value;
-        item = m.Groups[2].Value;
+        return true;
+    }
+
+    // The item a hand-over in the second wording names: a record name, alone or
+    // under a leading count ("2 black star key"). A record name that itself opens
+    // with a number is taken whole.
+    private bool TryReadHandedName(string text, out string name, out int count)
+    {
+        name = string.Empty;
+        count = 0;
+        if (_isItemRecordName is null) return false;
+        (count, name) = CountedCommand.SplitLeadingCount(text);
+        if (_isItemRecordName(name)) return true;
+        if (!_isItemRecordName(text)) return false;
+        (count, name) = (1, text);
         return true;
     }
 
@@ -1459,11 +1499,20 @@ public sealed partial class InventoryManager : IDisposable
     [GeneratedRegex(@"^(.+?) just gave you (.+)\.$")]
     private static partial Regex ReceivedItemRegex();
 
-    // The other receive wording seen on Paradigm. Only the one-item form is on
-    // record (first name, record name, no article), so the giver is a single word
-    // and TryMatchHandedItem checks the item; counts in this wording are not read.
+    // The second hand-over wording, Paradigm's: first name, the item's record name
+    // (under a count above one), a full stop. TryReadHandedName checks the item.
     [GeneratedRegex(@"^(\S+) gives you (.+)\.$")]
     private static partial Regex HandedItemRegex();
+
+    [GeneratedRegex(@"^You give (.+) to \S+\.$")]
+    private static partial Regex HandedAwayRegex();
+
+    // Coins in that wording carry no full stop, which keeps them apart from items.
+    [GeneratedRegex(@"^\S+ gives you (\d+) ([^.]+)$")]
+    private static partial Regex HandedCoinsRegex();
+
+    [GeneratedRegex(@"^You give (\d+) ([^.]+) to [^\s.]+$")]
+    private static partial Regex HandedCoinsAwayRegex();
 
     // A coin hand-over: count, then the coin. Giver and recipient are one word.
     [GeneratedRegex(@"^You gave \S+ (\d+) (.+?)\.?$")]
