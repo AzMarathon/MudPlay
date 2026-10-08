@@ -43,15 +43,18 @@
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="0,0,0,1"
                 Padding="10,8">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
                 <TextBlock Grid.Column="0" Text="Loaded:" VerticalAlignment="Center"
                            Foreground="{StaticResource ChromeFgSecBrush}" Margin="0,0,6,0"/>
                 <TextBlock Grid.Column="1" Text="{Binding CurrentProfileLabel}" VerticalAlignment="Center"
                            FontFamily="{StaticResource FontMono}"
                            Foreground="{StaticResource ChromeFgBrush}" TextTrimming="CharacterEllipsis"/>
-                <Button Grid.Column="2" Content="New…" Command="{Binding NewCurrentCommand}" Margin="6,0,0,0"/>
-                <Button Grid.Column="3" Content="Save" Command="{Binding SaveCurrentCommand}" Margin="6,0,0,0"/>
-                <Button Grid.Column="4" Content="Save As…" Command="{Binding SaveCurrentAsCommand}" Margin="6,0,0,0"/>
+                <Button Grid.Column="2" Content="Import MegaMUD profile…" Margin="6,0,0,0"
+                        Command="{Binding ImportMegaMudProfileCommand}" IsEnabled="{Binding HasBbsSelection}"
+                        ToolTip.Tip="Make a new character from a MegaMUD character file (.ini), on the BBS and realm selected below. You get a review of every setting that comes across, and every one that doesn't, before anything is created."/>
+                <Button Grid.Column="3" Content="New…" Command="{Binding NewCurrentCommand}" Margin="6,0,0,0"/>
+                <Button Grid.Column="4" Content="Save" Command="{Binding SaveCurrentCommand}" Margin="6,0,0,0"/>
+                <Button Grid.Column="5" Content="Save As…" Command="{Binding SaveCurrentAsCommand}" Margin="6,0,0,0"/>
             </Grid>
         </Border>
 

@@ -643,7 +643,9 @@ public sealed class ProfileService
     // Management window), distinct from SaveAs which renames the loaded profile.
     // Throws on a blank name or when a profile of that name already exists under
     // the BBS. Fires nothing: Current is untouched.
-    public void CreateProfile(string bbsName, string profileName)
+    // configure, when given, shapes the new character before its first save (an
+    // import writing a whole set of settings onto it).
+    public void CreateProfile(string bbsName, string profileName, Action<CharacterProfile>? configure = null)
     {
         if (string.IsNullOrWhiteSpace(bbsName))
             throw new ArgumentException("BBS name is required.", nameof(bbsName));
@@ -663,6 +665,7 @@ public sealed class ProfileService
         // start: with these left unset it would take the shared files' flags.
         fresh.FavoriteLoops ??= new List<string>();
         fresh.FavoriteLairSetups ??= new List<string>();
+        configure?.Invoke(fresh);
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), fresh);
         Log?.Info(LogCategory, $"Created profile '{profileName}' on '{bbsName}'.");
