@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.151.9**
-> - Bosses tab: **Hit magic** and **Spell level** dropdowns filter the table to the bosses a weapon of that hit-magic level can hit and a spell of that level lands on
+> - Bosses tab: filter the table by what it takes to hurt a boss. **Hit magic** takes a lowest and a highest (one level alone, or several together); **Spell immune** shows the bosses immune at that level or lower, the ones a spell of that level lands on
 > - Hovering a boss's name shows the hit magic and spell level it takes to hurt it
 > - A bug report no longer copies the board's login screen: its Scrollback and raw-wire sections take only what was written while in the game, from the first game prompt until a disconnect or an exit to the menus, the menu itself left out. The terminal, Backscroll and Wire Inspector still show everything
 > - Exiting to the board's menu without disconnecting no longer leaves the client sending into it: the party poll, buffs, `sn`, statline repair and loop steps are held until you're back in the game

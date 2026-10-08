@@ -55,13 +55,14 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     [ObservableProperty] private string _activeSummary = string.Empty;
     [ObservableProperty] private string _filterText = string.Empty;
 
-    // "What can I hurt": keep the bosses a weapon of this hit-magic level can hit,
-    // and the ones a spell of this level lands on. Each lists the levels the bosses
-    // in the table ask for (BossReachFilter).
+    // What it takes to hurt a boss: the hit magic a weapon needs, between a lowest
+    // and a highest, and the spell immunity, at a level or lower. Each lists the
+    // levels the bosses in the table have (BossReachFilter).
     public ObservableCollection<string> HitMagicOptions { get; } = new() { BossReachFilter.Any };
-    public ObservableCollection<string> SpellLevelOptions { get; } = new() { BossReachFilter.Any };
-    [ObservableProperty] private string? _selectedHitMagic = BossReachFilter.Any;
-    [ObservableProperty] private string? _selectedSpellLevel = BossReachFilter.Any;
+    public ObservableCollection<string> SpellImmunityOptions { get; } = new() { BossReachFilter.Any };
+    [ObservableProperty] private string? _selectedHitMagicMin = BossReachFilter.Any;
+    [ObservableProperty] private string? _selectedHitMagicMax = BossReachFilter.Any;
+    [ObservableProperty] private string? _selectedSpellImmunity = BossReachFilter.Any;
 
     // What it takes to hurt a boss (hit magic, spell level). Unbound: nothing is
     // known, so every boss reads as hurt by anything.
@@ -165,16 +166,18 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
     }
 
     partial void OnFilterTextChanged(string value) => ApplyFilter();
-    partial void OnSelectedHitMagicChanged(string? value) => ApplyFilter();
-    partial void OnSelectedSpellLevelChanged(string? value) => ApplyFilter();
+    partial void OnSelectedHitMagicMinChanged(string? value) => ApplyFilter();
+    partial void OnSelectedHitMagicMaxChanged(string? value) => ApplyFilter();
+    partial void OnSelectedSpellImmunityChanged(string? value) => ApplyFilter();
 
     // Filter the grid by boss name OR room substring (case-insensitive), and by the
     // two reach dropdowns; with none of them set the filter is off.
     private void ApplyFilter()
     {
         string q = FilterText.Trim();
-        string? hitMagic = SelectedHitMagic, spellLevel = SelectedSpellLevel;
-        bool reach = IsReachChoice(hitMagic) || IsReachChoice(spellLevel);
+        string? magicMin = SelectedHitMagicMin, magicMax = SelectedHitMagicMax, immunity = SelectedSpellImmunity;
+        bool reach = BossReachFilter.IsChoice(magicMin) || BossReachFilter.IsChoice(magicMax)
+            || BossReachFilter.IsChoice(immunity);
         Rows.Filter = q.Length == 0 && !reach
             ? null
             : o => o is BossRowViewModel r
@@ -182,25 +185,24 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
                        || r.Name.Contains(q, StringComparison.OrdinalIgnoreCase)
                        || r.Rooms.Contains(q, StringComparison.OrdinalIgnoreCase)
                        || r.RespawnDisplay.Contains(q, StringComparison.OrdinalIgnoreCase))
-                   && BossReachFilter.Passes(hitMagic, r.HitMagicNeeded)
-                   && BossReachFilter.Passes(spellLevel, r.SpellLevelNeeded);
+                   && BossReachFilter.AtLeast(magicMin, r.HitMagicNeeded)
+                   && BossReachFilter.AtMost(magicMax, r.HitMagicNeeded)
+                   && BossReachFilter.AtMost(immunity, r.SpellLevelNeeded);
     }
-
-    private static bool IsReachChoice(string? choice) =>
-        !string.IsNullOrEmpty(choice) && choice != BossReachFilter.Any;
 
     // Re-list a dropdown's levels for the bosses now in the table, keeping the
     // choice when that level is still asked for. In place, entry by entry: clearing
     // a list a ComboBox is bound to blanks its selection.
-    private static string RelistReach(ObservableCollection<string> options, IEnumerable<int> required, string? chosen)
+    private static void RelistReach(ObservableCollection<string> options, IReadOnlyList<string> wanted)
     {
-        IReadOnlyList<string> wanted = BossReachFilter.Options(required);
         for (int i = options.Count - 1; i >= 0; i--)
             if (!wanted.Contains(options[i])) options.RemoveAt(i);
         for (int i = 0; i < wanted.Count; i++)
             if (i >= options.Count || options[i] != wanted[i]) options.Insert(i, wanted[i]);
-        return chosen is not null && wanted.Contains(chosen) ? chosen : BossReachFilter.Any;
     }
+
+    private static string StillListed(ObservableCollection<string> options, string? chosen) =>
+        chosen is not null && options.Contains(chosen) ? chosen : BossReachFilter.Any;
 
     private void Rebuild()
     {
@@ -226,8 +228,14 @@ public sealed partial class BossesSectionViewModel : WorkshopSectionViewModel
             });
         }
         HasBosses = _allRows.Count > 0;
-        SelectedHitMagic = RelistReach(HitMagicOptions, _allRows.Select(r => r.HitMagicNeeded), SelectedHitMagic);
-        SelectedSpellLevel = RelistReach(SpellLevelOptions, _allRows.Select(r => r.SpellLevelNeeded), SelectedSpellLevel);
+        // The lists read off the bosses now in the table; a choice whose level is
+        // gone falls back to (Any).
+        string? magicMin = SelectedHitMagicMin, magicMax = SelectedHitMagicMax, immunity = SelectedSpellImmunity;
+        RelistReach(HitMagicOptions, BossReachFilter.Options(_allRows.Select(r => r.HitMagicNeeded)));
+        RelistReach(SpellImmunityOptions, BossReachFilter.Options(_allRows.Select(r => r.SpellLevelNeeded)));
+        SelectedHitMagicMin = StillListed(HitMagicOptions, magicMin);
+        SelectedHitMagicMax = StillListed(HitMagicOptions, magicMax);
+        SelectedSpellImmunity = StillListed(SpellImmunityOptions, immunity);
         _suppress = false;
         UpdateSummary();
     }
