@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using MudPlay.Game;
 using MudPlay.Game.Calculators;
@@ -635,5 +636,234 @@ public sealed class TrialGearFinderTests
         Assert.Equal(50, MaxOf(passes));
         Assert.Equal("min cap", passes[EquipmentSlot.Head]);
         Assert.Equal("min robe", passes[EquipmentSlot.Torso]);
+    }
+    // ----- "Backstabbing": the best whole set --------------------------------
+
+    private static ItemDamageModel Stabber(RealmType realm) =>
+        new(realm, Level: 10, CombatLevel: 3, Strength: 50, Agility: 50, Intellect: 50, Charm: 50,
+            Stealth: 0, HasClassStealth: true, CurrentEncum: 0, MaxEncum: 1000, Rest: default,
+            CurrentWeapon: new ItemDamageModel.WeaponInputs(5, 10, 1000, 0, 0, 0, 0, 0, 0, CanBackstab: true));
+
+    private static ItemFinderEntry StabGear(ItemDamageModel model, string name, EquipmentSlot slot,
+        int bsMin, int bsMax, int encum = 0)
+    {
+        var delta = new ItemDamageModel.GearDelta(0, 0, 0, 0, 0, 0, bsMin, bsMax, 0, 0, 0);
+        (double min, double max, double avg) = model.BackstabGain(delta);
+        (double sideMin, double sideMax) = model.BackstabSidesGain(delta);
+        return new ItemFinderEntry
+        {
+            Name = name, Slot = slot, SlotLabel = slot.ToString(), Row = EmptyRow, Encum = encum, DamageGear = delta,
+            BsScoreMin = min, BsScoreMax = max, BsScoreAvg = avg, BsSideMinScore = sideMin, BsSideMaxScore = sideMax,
+        };
+    }
+
+    private static ItemFinderEntry StabWeapon(ItemDamageModel model, string name, int min, int max, int encum = 0)
+    {
+        var weapon = new ItemDamageModel.WeaponInputs(min, max, 1000, 0, 0, 0, 0, 0, 0, CanBackstab: true);
+        BSDamageResult? bs = model.Backstab(weapon);
+        (double sideMin, double sideMax) = model.BackstabSides(weapon);
+        return new ItemFinderEntry
+        {
+            Name = name, Slot = EquipmentSlot.Weapon, SlotLabel = "Weapon", Row = EmptyRow, Encum = encum, DamageWeapon = weapon,
+            BsScoreMin = bs?.MinDamage ?? 0, BsScoreMax = bs?.MaxDamage ?? 0, BsScoreAvg = bs?.AvgDamage ?? 0,
+            BsSideMinScore = sideMin, BsSideMaxScore = sideMax,
+        };
+    }
+
+    private static (int MinSide, int MaxSide)? SidesOf(
+        ItemDamageModel model, ItemFinderEntry[] catalog, IReadOnlyDictionary<EquipmentSlot, string> picks)
+    {
+        var entries = new List<KeyValuePair<EquipmentSlot, ItemFinderEntry>>();
+        foreach ((EquipmentSlot slot, string name) in picks)
+            entries.Add(new(slot, Array.Find(catalog, e => e.Name == name)!));
+        return model.BackstabSidesOfPicks(entries, heldWeapon: null);
+    }
+
+    private static BSDamageResult RangeOf(
+        ItemDamageModel model, RealmType realm, ItemFinderEntry[] catalog, IReadOnlyDictionary<EquipmentSlot, string> picks)
+    {
+        (int min, int max) = SidesOf(model, catalog, picks)!.Value;
+        return CombatCalculator.ResolveBSRange(min, max, realm);
+    }
+
+    // Every way of filling the slots (each empty or one item of its own), priced
+    // exactly: the highest minimum, then the highest average, within the budget.
+    private static BSDamageResult ExhaustiveBestBackstab(
+        ItemDamageModel model, RealmType realm, ItemFinderEntry[] catalog, IReadOnlyList<EquipmentSlot> slots, int? budget)
+    {
+        BSDamageResult best = default;
+        bool any = false;
+        void Fill(int at, Dictionary<EquipmentSlot, string> picks, int weight)
+        {
+            if (at == slots.Count)
+            {
+                if (SidesOf(model, catalog, picks) is not { } sides) return;
+                BSDamageResult r = CombatCalculator.ResolveBSRange(sides.MinSide, sides.MaxSide, realm);
+                if (!any || r.MinDamage > best.MinDamage
+                    || (r.MinDamage == best.MinDamage && r.AvgDamage > best.AvgDamage))
+                    (best, any) = (r, true);
+                return;
+            }
+            // A loadout has a weapon when one fits: the slot stays empty only when none does.
+            bool mustFill = slots[at] == EquipmentSlot.Weapon
+                && catalog.Any(e => e.Slot == EquipmentSlot.Weapon && (budget is not int cap || weight + e.Encum <= cap));
+            if (!mustFill) Fill(at + 1, picks, weight);
+            foreach (ItemFinderEntry e in catalog)
+            {
+                if (e.Slot != slots[at] || (budget is int b && weight + e.Encum > b)) continue;
+                picks[slots[at]] = e.Name;
+                Fill(at + 1, picks, weight + e.Encum);
+                picks.Remove(slots[at]);
+            }
+        }
+        Fill(0, new Dictionary<EquipmentSlot, string>(), 0);
+        return best;
+    }
+
+    // Weapon first, as the search settles it: the exhaustive check then knows what
+    // weight is left when it decides whether a weapon fits.
+    private static readonly IReadOnlyList<EquipmentSlot> StabSlots = new[]
+    {
+        EquipmentSlot.Weapon, EquipmentSlot.Head, EquipmentSlot.Torso, EquipmentSlot.Neck,
+    };
+
+    private static Dictionary<EquipmentSlot, string?> NoStabCurrent() => new()
+    {
+        [EquipmentSlot.Head] = null, [EquipmentSlot.Torso] = null, [EquipmentSlot.Neck] = null, [EquipmentSlot.Weapon] = null,
+    };
+
+    // Paradigm: the lower side is the minimum, so +min gear lifts it only until the
+    // min side passes the max side; the third slot then has to lift the max side.
+    // Level 10, a 5-10 weapon: sides 33 / 44. Both +8 BS min pieces make it 50 / 44
+    // (minimum 44); the neck's +6 BS max then makes it 50 / 50, where another +min
+    // piece there would have left the minimum at 44.
+    [Fact]
+    public void FindBestBackstab_Paradigm_PushesMinThenTheMaxSideOnceTheyFlip()
+    {
+        ItemDamageModel model = Stabber(RealmType.ParaMud);
+        var catalog = new[]
+        {
+            StabGear(model, "min cap", EquipmentSlot.Head, bsMin: 8, bsMax: 0),
+            StabGear(model, "max cap", EquipmentSlot.Head, bsMin: 0, bsMax: 2),
+            StabGear(model, "min robe", EquipmentSlot.Torso, bsMin: 8, bsMax: 0),
+            StabGear(model, "max robe", EquipmentSlot.Torso, bsMin: 0, bsMax: 2),
+            StabGear(model, "min chain", EquipmentSlot.Neck, bsMin: 8, bsMax: 0),
+            StabGear(model, "max chain", EquipmentSlot.Neck, bsMin: 0, bsMax: 6),
+        };
+        var held = new HashSet<EquipmentSlot> { EquipmentSlot.Weapon };
+
+        var best = TrialGearFinder.FindBestBackstab(catalog, StabSlots, held, NoStabCurrent(),
+            picks => SidesOf(model, catalog, picks), 0, ClassEquipProfile.Unknown, null);
+
+        Assert.Equal("min cap", best[EquipmentSlot.Head]);
+        Assert.Equal("min robe", best[EquipmentSlot.Torso]);
+        Assert.Equal("max chain", best[EquipmentSlot.Neck]);
+        BSDamageResult got = RangeOf(model, RealmType.ParaMud, catalog, best);
+        Assert.Equal(ExhaustiveBestBackstab(model, RealmType.ParaMud, catalog,
+            new[] { EquipmentSlot.Head, EquipmentSlot.Torso, EquipmentSlot.Neck }, null), got);
+        Assert.Equal(50, got.MinDamage);
+    }
+
+    // Stock: the min side is always the minimum and nothing swaps. Slots take what
+    // lifts it, and a slot with nothing for it takes what lifts the maximum.
+    [Fact]
+    public void FindBestBackstab_Stock_TakesMinWhereItCan_AndMaxWhereItCant()
+    {
+        ItemDamageModel model = Stabber(RealmType.Stock);
+        var catalog = new[]
+        {
+            StabGear(model, "min cap", EquipmentSlot.Head, bsMin: 8, bsMax: 0),
+            StabGear(model, "max cap", EquipmentSlot.Head, bsMin: 0, bsMax: 9),
+            StabGear(model, "max robe", EquipmentSlot.Torso, bsMin: 0, bsMax: 2),
+        };
+        var held = new HashSet<EquipmentSlot> { EquipmentSlot.Weapon };
+
+        var best = TrialGearFinder.FindBestBackstab(catalog, StabSlots, held, NoStabCurrent(),
+            picks => SidesOf(model, catalog, picks), 0, ClassEquipProfile.Unknown, null, realm: RealmType.Stock);
+
+        Assert.Equal("min cap", best[EquipmentSlot.Head]);
+        Assert.Equal("max robe", best[EquipmentSlot.Torso]);
+        Assert.False(best.ContainsKey(EquipmentSlot.Neck));
+    }
+
+    // The weapon is judged with the gear it would wear. The stiletto has the higher
+    // minimum bare, but its max side is low and caps what +min gear can do; the
+    // sabre's set ends higher.
+    [Fact]
+    public void FindBestBackstab_PicksTheWeaponWhoseWholeSetIsBest()
+    {
+        ItemDamageModel model = Stabber(RealmType.ParaMud);
+        var catalog = new[]
+        {
+            StabWeapon(model, "stiletto", min: 9, max: 10),
+            StabWeapon(model, "sabre", min: 4, max: 22),
+            StabGear(model, "min cap", EquipmentSlot.Head, bsMin: 10, bsMax: 0),
+            StabGear(model, "min robe", EquipmentSlot.Torso, bsMin: 10, bsMax: 0),
+            StabGear(model, "min chain", EquipmentSlot.Neck, bsMin: 10, bsMax: 0),
+        };
+
+        var best = TrialGearFinder.FindBestBackstab(catalog, StabSlots, new HashSet<EquipmentSlot>(), NoStabCurrent(),
+            picks => SidesOf(model, catalog, picks), 0, ClassEquipProfile.Unknown, null);
+
+        BSDamageResult bare = RangeOf(model, RealmType.ParaMud, catalog, new Dictionary<EquipmentSlot, string> { [EquipmentSlot.Weapon] = "stiletto" });
+        BSDamageResult bareSabre = RangeOf(model, RealmType.ParaMud, catalog, new Dictionary<EquipmentSlot, string> { [EquipmentSlot.Weapon] = "sabre" });
+        Assert.True(bare.MinDamage > bareSabre.MinDamage);   // the premise
+        Assert.Equal("sabre", best[EquipmentSlot.Weapon]);
+        Assert.Equal(ExhaustiveBestBackstab(model, RealmType.ParaMud, catalog, StabSlots, null),
+            RangeOf(model, RealmType.ParaMud, catalog, best));
+    }
+
+    // The weapon-first pass of a search order asks for the weapon alone; the gear
+    // slots it names as still to come are searched but not returned.
+    [Fact]
+    public void FindBestBackstab_AlsoFreeSlots_AreSearchedButNotReturned()
+    {
+        ItemDamageModel model = Stabber(RealmType.ParaMud);
+        var catalog = new[]
+        {
+            StabWeapon(model, "stiletto", min: 9, max: 10),
+            StabWeapon(model, "sabre", min: 4, max: 22),
+            StabGear(model, "min cap", EquipmentSlot.Head, bsMin: 10, bsMax: 0),
+            StabGear(model, "min robe", EquipmentSlot.Torso, bsMin: 10, bsMax: 0),
+            StabGear(model, "min chain", EquipmentSlot.Neck, bsMin: 10, bsMax: 0),
+        };
+
+        var best = TrialGearFinder.FindBestBackstab(catalog, new[] { EquipmentSlot.Weapon },
+            new HashSet<EquipmentSlot>(), NoStabCurrent(), picks => SidesOf(model, catalog, picks),
+            0, ClassEquipProfile.Unknown, null,
+            alsoFree: new[] { EquipmentSlot.Head, EquipmentSlot.Torso, EquipmentSlot.Neck });
+
+        Assert.Equal("sabre", Assert.Single(best).Value);
+    }
+
+    // Under a target weight the set still has the best minimum that fits.
+    [Fact]
+    public void FindBestBackstab_WeightBudget_MatchesExhaustiveSearch()
+    {
+        ItemDamageModel model = Stabber(RealmType.ParaMud);
+        var rng = new Random(7);
+        for (int trial = 0; trial < 120; trial++)
+        {
+            var items = new List<ItemFinderEntry>
+            {
+                StabWeapon(model, "w1", rng.Next(2, 10), rng.Next(10, 25), rng.Next(0, 6)),
+                StabWeapon(model, "w2", rng.Next(2, 10), rng.Next(10, 25), rng.Next(0, 6)),
+            };
+            foreach (EquipmentSlot slot in new[] { EquipmentSlot.Head, EquipmentSlot.Torso, EquipmentSlot.Neck })
+                for (int n = 0; n < 4; n++)
+                    items.Add(StabGear(model, $"{slot}{n}", slot, rng.Next(0, 9), rng.Next(0, 9), rng.Next(0, 6)));
+            ItemFinderEntry[] catalog = items.ToArray();
+            int budget = rng.Next(0, 16);
+
+            var best = TrialGearFinder.FindBestBackstab(catalog, StabSlots, new HashSet<EquipmentSlot>(), NoStabCurrent(),
+                picks => SidesOf(model, catalog, picks), 0, ClassEquipProfile.Unknown, null, weightBudget: budget);
+
+            int weight = 0;
+            foreach (string name in best.Values) weight += Array.Find(catalog, e => e.Name == name)!.Encum;
+            Assert.True(weight <= budget, $"trial {trial}: {weight} over {budget}");
+            BSDamageResult want = ExhaustiveBestBackstab(model, RealmType.ParaMud, catalog, StabSlots, budget);
+            BSDamageResult got = RangeOf(model, RealmType.ParaMud, catalog, best);
+            Assert.True(want == got, $"trial {trial}: want {want}, got {got}");
+        }
     }
 }

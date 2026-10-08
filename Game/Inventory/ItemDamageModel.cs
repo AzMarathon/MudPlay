@@ -121,6 +121,25 @@ public sealed record ItemDamageModel(
     public BSDamageResult? BackstabOfPicks(
         IEnumerable<KeyValuePair<EquipmentSlot, ItemFinderEntry>> picks, ItemFinderEntry? heldWeapon)
     {
+        (WeaponInputs? weapon, GearDelta gear) = LoadoutOfPicks(picks, heldWeapon);
+        return BackstabLoadout(weapon, gear);
+    }
+
+    // The same set as its two sides, before the realm decides which is the min. A
+    // search that pushes the minimum needs them apart: the resolved range doesn't
+    // say which side a swap put on top. Null when the set can't backstab.
+    public (int MinSide, int MaxSide)? BackstabSidesOfPicks(
+        IEnumerable<KeyValuePair<EquipmentSlot, ItemFinderEntry>> picks, ItemFinderEntry? heldWeapon)
+    {
+        if (!IsUsable) return null;
+        (WeaponInputs? weapon, GearDelta gear) = LoadoutOfPicks(picks, heldWeapon);
+        if (weapon is { CanBackstab: false }) return null;
+        return BackstabSidesWith(weapon ?? CurrentWeapon ?? default, gear);
+    }
+
+    private static (WeaponInputs? Weapon, GearDelta Gear) LoadoutOfPicks(
+        IEnumerable<KeyValuePair<EquipmentSlot, ItemFinderEntry>> picks, ItemFinderEntry? heldWeapon)
+    {
         WeaponInputs? weapon = heldWeapon?.DamageWeapon;
         GearDelta gear = default;
         foreach ((EquipmentSlot slot, ItemFinderEntry e) in picks)
@@ -128,7 +147,7 @@ public sealed record ItemDamageModel(
             if (e.DamageWeapon is { } w) { if (slot == EquipmentSlot.Weapon) weapon = w; }
             else gear = gear.Plus(e.DamageGear);
         }
-        return BackstabLoadout(weapon, gear);
+        return (weapon, gear);
     }
 
     // How much a non-weapon item raises damage per round for this attack type,

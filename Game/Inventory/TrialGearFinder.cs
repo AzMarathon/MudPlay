@@ -11,7 +11,13 @@ namespace MudPlay.Game.Inventory;
 // BackstabRange marks the computed-backstab min / max criteria: which end of the
 // resolved range they maximize (see TrialGearFinder.FindBestOfPasses).
 public sealed record TrialFindFilter(
-    string Label, Func<ItemFinderEntry, double> Score, Func<BSDamageResult, double>? BackstabRange = null);
+    string Label, Func<ItemFinderEntry, double> Score, Func<BSDamageResult, double>? BackstabRange = null)
+{
+    // The "Backstabbing" criterion: not a per-item score but a search for the whole
+    // set with the best backstab (TrialGearFinder.FindBestBackstab). Score is what
+    // it falls back to when no character is loaded to price a set against.
+    public bool WholeSetBackstab { get; init; }
+}
 
 // Picks the best equippable item per slot for a chosen filter — the engine behind
 // the trial-gearset "Find Best" button. Generalizes the single-stat per-slot argmax
@@ -66,6 +72,9 @@ public static class TrialGearFinder
         // Computed backstab damage for the live character (ItemDamageModel): a
         // weapon's own backstab range, other gear by what it adds to it, so stealth,
         // strength and +max damage count as well as the +BS min / max bonuses above.
+        // The whole loadout for backstabbing in one go: the best backstab weapon, then
+        // the gear that takes the minimum as high as it will go, then the average.
+        new TrialFindFilter("Backstabbing",       e => e.BsScoreMin) { WholeSetBackstab = true },
         new TrialFindFilter("Backstab Dmg (min)", e => e.BsScoreMin, r => r.MinDamage),
         new TrialFindFilter("Backstab Dmg (max)", e => e.BsScoreMax, r => r.MaxDamage),
         new TrialFindFilter("Backstab Dmg (avg)", e => e.BsScoreAvg),
@@ -401,6 +410,385 @@ public static class TrialGearFinder
             else if (!SameName(o, k)) return true;
         }
         return false;
+    }
+
+    // ----- "Backstabbing": the best whole set ----------------------------------
+    //
+    // The set with the highest backstab minimum; among those, the highest average.
+    //
+    // A backstab has two sides, one fed by the weapon's minimum (+min damage, BS
+    // min), one by its maximum (+max damage, BS max). On Paradigm the lower side is
+    // the minimum whichever it is, so +min gear raises the minimum only until its
+    // side passes the other, and from there the max side has to rise with it. On
+    // Stock the min side is always the minimum, and a slot with nothing for it takes
+    // what raises the maximum. Both come out of one rule (best minimum, then best
+    // average) once sets are priced whole by the realm's own resolution, which is
+    // why this isn't a per-item score.
+    //
+    // The weapon is settled first: each backstab weapon worth considering is tried
+    // with the best gear for it, and the one whose set comes out highest wins.
+    // alsoFree are slots the caller will fill in a later call with this weapon
+    // settled (the search order's weapon-first pass); they are searched here so the
+    // weapon is judged with its gear, but only targetSlots are returned.
+    //
+    // sidesOf prices a set of picks exactly. The search itself adds up each item's
+    // side gains, which is exact but for rounding (Stealth / 10, the strength
+    // steps), so its best few sets are priced exactly and the best of those kept.
+    public static Dictionary<EquipmentSlot, string> FindBestBackstab(
+        IReadOnlyList<ItemFinderEntry> catalog,
+        IReadOnlyList<EquipmentSlot> targetSlots,
+        ISet<EquipmentSlot> heldSlots,
+        IReadOnlyDictionary<EquipmentSlot, string?> current,
+        Func<IReadOnlyDictionary<EquipmentSlot, string>, (int MinSide, int MaxSide)?> sidesOf,
+        int level, ClassEquipProfile cls, AlignmentBucket? alignment,
+        Func<ItemFinderEntry, bool>? extraFilter = null,
+        int? weightBudget = null,
+        RealmType realm = RealmType.ParaMud,
+        EvilPointRange? evilPoints = null,
+        IReadOnlyList<EquipmentSlot>? alsoFree = null)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(targetSlots);
+        ArgumentNullException.ThrowIfNull(heldSlots);
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(sidesOf);
+
+        var searchSlots = new List<EquipmentSlot>(targetSlots);
+        if (alsoFree is not null)
+            foreach (EquipmentSlot t in alsoFree)
+                if (!searchSlots.Contains(t)) searchSlots.Add(t);
+
+        // Backstab weapons, and gear that moves either side, that the character can equip.
+        var weapons = new List<SideCandidate>();
+        var gearByFamily = new Dictionary<EquipmentSlot, List<SideCandidate>>();
+        for (int i = 0; i < catalog.Count; i++)
+        {
+            ItemFinderEntry e = catalog[i];
+            if (e.IsSynthetic) continue;
+            bool weapon = e.DamageWeapon is not null;
+            if (weapon ? e.BsScoreMin <= 0 && e.BsScoreMax <= 0 : e.BsSideMinScore <= 0 && e.BsSideMaxScore <= 0)
+                continue;
+            if (extraFilter is not null && !extraFilter(e)) continue;
+            if (!ItemEquipFilter.CanEquip(e.Row, level, cls, alignment, realm, evilPoints)) continue;
+            var c = new SideCandidate(e, e.BsSideMinScore, e.BsSideMaxScore, i);
+            if (weapon) { weapons.Add(c); continue; }
+            if (!gearByFamily.TryGetValue(e.Slot, out var list)) gearByFamily[e.Slot] = list = new();
+            list.Add(c);
+        }
+
+        var takenByFamily = new Dictionary<EquipmentSlot, HashSet<string>>();
+        foreach (EquipmentSlot t in searchSlots)
+            if (heldSlots.Contains(t) && current.TryGetValue(t, out string? held) && !string.IsNullOrWhiteSpace(held))
+                Taken(takenByFamily, EquipmentSlotMap.PrimarySlot(t)).Add(held!.Trim());
+
+        // The free gear slots by family, in target order.
+        var gearSlots = new List<(EquipmentSlot Family, List<EquipmentSlot> Slots)>();
+        foreach (EquipmentSlot t in searchSlots)
+        {
+            if (IsWeaponSlot(t) || heldSlots.Contains(t)) continue;
+            EquipmentSlot family = EquipmentSlotMap.PrimarySlot(t);
+            int at = gearSlots.FindIndex(g => g.Family == family);
+            if (at < 0) gearSlots.Add((family, new List<EquipmentSlot> { t }));
+            else if (!gearSlots[at].Slots.Contains(t)) gearSlots[at].Slots.Add(t);
+        }
+
+        bool weaponFree = searchSlots.Contains(EquipmentSlot.Weapon) && !heldSlots.Contains(EquipmentSlot.Weapon);
+        var weaponChoices = new List<SideCandidate?>();
+        if (weaponFree)
+            foreach (SideCandidate w in WorthConsidering(weapons, weightBudget))
+                weaponChoices.Add(w);
+        if (weaponChoices.Count == 0) weaponChoices.Add(null);   // the held weapon, or the one in hand
+
+        Dictionary<EquipmentSlot, string>? bestSet = null;
+        BSDamageResult bestRange = default;
+        int bestWeight = 0;
+        foreach (SideCandidate? weapon in weaponChoices)
+        {
+            var withWeapon = new Dictionary<EquipmentSlot, string>();
+            if (weapon is { } w) withWeapon[EquipmentSlot.Weapon] = w.Item.Name;
+            if (sidesOf(withWeapon) is not { } baseSides) continue;
+            int? left = weightBudget is int b ? b - (weapon?.Weight ?? 0) : null;
+
+            foreach ((Dictionary<EquipmentSlot, string> gear, int gearWeight) in
+                     BestGearSets(gearSlots, gearByFamily, takenByFamily, baseSides, left, realm))
+            {
+                foreach ((EquipmentSlot slot, string name) in withWeapon) gear[slot] = name;
+                if (sidesOf(gear) is not { } sides) continue;
+                BSDamageResult range = CombatCalculator.ResolveBSRange(sides.MinSide, sides.MaxSide, realm);
+                int weight = gearWeight + (weapon?.Weight ?? 0);
+                if (bestSet is null || BetterBackstab(range, weight, bestRange, bestWeight))
+                    (bestSet, bestRange, bestWeight) = (gear, range, weight);
+            }
+        }
+
+        var result = new Dictionary<EquipmentSlot, string>();
+        if (bestSet is null) return result;
+
+        // The search added up per-item gains, each rounded on its own; a set a point
+        // or two better can hide behind that. Finish by exact pricing: change one
+        // slot at a time (another item, or nothing) while that makes the set better.
+        var weightOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var choices = new Dictionary<EquipmentSlot, List<SideCandidate>>();
+        foreach ((EquipmentSlot family, List<EquipmentSlot> slots) in gearSlots)
+            if (gearByFamily.TryGetValue(family, out var list))
+                foreach (EquipmentSlot slot in slots) choices[slot] = list;
+        if (weaponFree && weapons.Count > 0) choices[EquipmentSlot.Weapon] = weapons;
+        foreach (List<SideCandidate> list in choices.Values)
+            foreach (SideCandidate c in list) weightOf[c.Item.Name] = c.Weight;
+
+        for (int round = 0; round < BackstabPolishRounds; round++)
+        {
+            bool improved = false;
+            foreach ((EquipmentSlot slot, List<SideCandidate> list) in choices)
+            {
+                bestSet.TryGetValue(slot, out string? had);
+                int without = bestWeight - (had is null ? 0 : weightOf[had]);
+                EquipmentSlot family = EquipmentSlotMap.PrimarySlot(slot);
+                for (int i = -1; i < list.Count; i++)
+                {
+                    string? name = i < 0 ? null : list[i].Item.Name;
+                    // An empty weapon slot isn't a loadout; every other slot may be.
+                    if (name is null && slot == EquipmentSlot.Weapon) continue;
+                    if (string.Equals(name, had, StringComparison.OrdinalIgnoreCase)) continue;
+                    int weight = without + (i < 0 ? 0 : list[i].Weight);
+                    if (weightBudget is int limit && weight > limit) continue;
+                    if (name is not null && NameUsedElsewhere(bestSet, takenByFamily, family, slot, name)) continue;
+
+                    var trial = new Dictionary<EquipmentSlot, string>(bestSet);
+                    if (name is null) trial.Remove(slot); else trial[slot] = name;
+                    if (sidesOf(trial) is not { } sides) continue;
+                    BSDamageResult range = CombatCalculator.ResolveBSRange(sides.MinSide, sides.MaxSide, realm);
+                    if (!BetterBackstab(range, weight, bestRange, bestWeight)) continue;
+                    (bestSet, bestRange, bestWeight) = (trial, range, weight);
+                    had = name;
+                    without = weight - (name is null ? 0 : weightOf[name]);
+                    improved = true;
+                }
+            }
+            if (!improved) break;
+        }
+
+        foreach (EquipmentSlot t in targetSlots)
+            if (bestSet.TryGetValue(t, out string? name)) result[t] = name;
+        return result;
+    }
+
+    private const int BackstabPolishRounds = 8;
+
+    // A paired family can't wear one name twice, nor a name its held partner has.
+    private static bool NameUsedElsewhere(
+        Dictionary<EquipmentSlot, string> picks, Dictionary<EquipmentSlot, HashSet<string>> takenByFamily,
+        EquipmentSlot family, EquipmentSlot slot, string name)
+    {
+        if (takenByFamily.TryGetValue(family, out HashSet<string>? held) && held.Contains(name)) return true;
+        foreach ((EquipmentSlot other, string otherName) in picks)
+            if (other != slot && EquipmentSlotMap.PrimarySlot(other) == family
+                && string.Equals(otherName, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    // An item's gain on each backstab side (for a weapon, its sides outright).
+    private readonly record struct SideCandidate(ItemFinderEntry Item, double MinSide, double MaxSide, int Order)
+    {
+        public int Weight => Math.Max(0, Item.Encum);
+    }
+
+    // One way a family can be filled: an item, or two for a pair.
+    private readonly record struct SideOption(double MinSide, double MaxSide, int Weight, SideCandidate First, SideCandidate? Second);
+
+    // A partial set in the search: its two sides and weight so far, and how to walk
+    // back to the picks (the state it grew from and the option the family took).
+    private readonly record struct SideState(double MinSide, double MaxSide, int Weight, int Parent, int Option);
+
+    // Higher minimum, then higher average, then the lighter set.
+    private static bool BetterBackstab(BSDamageResult a, int aWeight, BSDamageResult b, int bWeight)
+    {
+        if (a.MinDamage != b.MinDamage) return a.MinDamage > b.MinDamage;
+        if (a.AvgDamage != b.AvgDamage) return a.AvgDamage > b.AvgDamage;
+        return aWeight < bWeight;
+    }
+
+    // Another item beats this one when it is at least as good on both sides and (under
+    // a budget) no heavier: any set is no worse with it swapped in.
+    private static bool Beats(SideCandidate k, SideCandidate c, bool weigh) =>
+        k.MinSide >= c.MinSide && k.MaxSide >= c.MaxSide && (!weigh || k.Weight <= c.Weight)
+        && (k.MinSide > c.MinSide || k.MaxSide > c.MaxSide || (weigh && k.Weight < c.Weight) || k.Order < c.Order);
+
+    // The weapons no other weapon beats outright, that fit the budget.
+    private static List<SideCandidate> WorthConsidering(List<SideCandidate> weapons, int? budget)
+    {
+        var kept = new List<SideCandidate>();
+        foreach (SideCandidate c in weapons)
+        {
+            if (budget is int b && c.Weight > b) continue;
+            bool beaten = false;
+            foreach (SideCandidate k in weapons)
+                if (k.Order != c.Order && (budget is not int kb || k.Weight <= kb) && Beats(k, c, budget.HasValue))
+                {
+                    beaten = true;
+                    break;
+                }
+            if (!beaten) kept.Add(c);
+        }
+        return kept;
+    }
+
+    // How many of the search's best sets are priced exactly, and how many partial
+    // sets it carries between families. The carry limit only bites on contrived
+    // data; real gear leaves a few dozen undominated combinations.
+    private const int BackstabFinalists = 24;
+    private const int BackstabFrontierLimit = 2000;
+
+    // The best gear sets for one weapon: every family takes nothing, an item, or a
+    // pair, and partial sets that another beats on both sides (and weight) are
+    // dropped as the families are added. Returns the finalists, best first.
+    private static List<(Dictionary<EquipmentSlot, string> Picks, int Weight)> BestGearSets(
+        List<(EquipmentSlot Family, List<EquipmentSlot> Slots)> gearSlots,
+        Dictionary<EquipmentSlot, List<SideCandidate>> gearByFamily,
+        Dictionary<EquipmentSlot, HashSet<string>> takenByFamily,
+        (int MinSide, int MaxSide) baseSides, int? budget, RealmType realm)
+    {
+        bool weigh = budget.HasValue;
+        var groups = new List<(List<EquipmentSlot> Slots, List<SideOption> Options)>();
+        foreach ((EquipmentSlot family, List<EquipmentSlot> slots) in gearSlots)
+        {
+            if (!gearByFamily.TryGetValue(family, out var list)) continue;
+            List<SideOption> options = SideOptions(list, Taken(takenByFamily, family), slots.Count > 1, budget);
+            if (options.Count > 0) groups.Add((slots, options));
+        }
+
+        var levels = new List<List<SideState>> { new() { new SideState(baseSides.MinSide, baseSides.MaxSide, 0, -1, -1) } };
+        foreach ((List<EquipmentSlot> _, List<SideOption> options) in groups)
+        {
+            List<SideState> from = levels[^1];
+            var next = new List<SideState>(from.Count * (options.Count + 1));
+            for (int i = 0; i < from.Count; i++)
+            {
+                SideState s = from[i];
+                next.Add(s with { Parent = i, Option = -1 });
+                for (int o = 0; o < options.Count; o++)
+                {
+                    SideOption option = options[o];
+                    if (budget is int b && s.Weight + option.Weight > b) continue;
+                    next.Add(new SideState(s.MinSide + option.MinSide, s.MaxSide + option.MaxSide,
+                        s.Weight + option.Weight, i, o));
+                }
+            }
+            levels.Add(Undominated(next, weigh, realm));
+        }
+
+        List<SideState> last = levels[^1];
+        var order = new List<int>(last.Count);
+        for (int i = 0; i < last.Count; i++) order.Add(i);
+        order.Sort((x, y) => RankStates(last[y], last[x], realm));
+
+        var sets = new List<(Dictionary<EquipmentSlot, string>, int)>();
+        for (int n = 0; n < order.Count && n < BackstabFinalists; n++)
+        {
+            var picks = new Dictionary<EquipmentSlot, string>();
+            int at = order[n];
+            int weight = last[at].Weight;
+            for (int g = groups.Count - 1; g >= 0; g--)
+            {
+                SideState s = levels[g + 1][at];
+                if (s.Option >= 0)
+                {
+                    (List<EquipmentSlot> slots, List<SideOption> options) = groups[g];
+                    SideOption option = options[s.Option];
+                    picks[slots[0]] = option.First.Item.Name;
+                    if (option.Second is { } second) picks[slots[1]] = second.Item.Name;
+                }
+                at = s.Parent;
+            }
+            sets.Add((picks, weight));
+        }
+        return sets;
+    }
+
+    // Positive when a ranks above b: resolved minimum, then average, then lighter.
+    private static int RankStates(SideState a, SideState b, RealmType realm)
+    {
+        BSDamageResult ra = CombatCalculator.ResolveBSRange((int)Math.Round(a.MinSide), (int)Math.Round(a.MaxSide), realm);
+        BSDamageResult rb = CombatCalculator.ResolveBSRange((int)Math.Round(b.MinSide), (int)Math.Round(b.MaxSide), realm);
+        if (ra.MinDamage != rb.MinDamage) return ra.MinDamage.CompareTo(rb.MinDamage);
+        if (ra.AvgDamage != rb.AvgDamage) return ra.AvgDamage.CompareTo(rb.AvgDamage);
+        return b.Weight.CompareTo(a.Weight);
+    }
+
+    // Drops every partial set another beats on both sides and weight: whatever the
+    // remaining families add, the other stays at least as good.
+    private static List<SideState> Undominated(List<SideState> states, bool weigh, RealmType realm)
+    {
+        states.Sort(static (a, b) =>
+        {
+            int byMin = b.MinSide.CompareTo(a.MinSide);
+            if (byMin != 0) return byMin;
+            int byMax = b.MaxSide.CompareTo(a.MaxSide);
+            return byMax != 0 ? byMax : a.Weight.CompareTo(b.Weight);
+        });
+        var kept = new List<SideState>();
+        foreach (SideState s in states)
+        {
+            // Sorted as above, anything kept already has at least this min side.
+            bool beaten = false;
+            foreach (SideState k in kept)
+                if (k.MaxSide >= s.MaxSide && (!weigh || k.Weight <= s.Weight))
+                {
+                    beaten = true;
+                    break;
+                }
+            if (!beaten) kept.Add(s);
+        }
+        if (kept.Count <= BackstabFrontierLimit) return kept;
+        kept.Sort((a, b) => RankStates(b, a, realm));
+        kept.RemoveRange(BackstabFrontierLimit, kept.Count - BackstabFrontierLimit);
+        return kept;
+    }
+
+    private static List<SideOption> SideOptions(List<SideCandidate> candidates, HashSet<string> taken, bool pair, int? budget)
+    {
+        bool weigh = budget.HasValue;
+        var fits = new List<SideCandidate>();
+        foreach (SideCandidate c in candidates)
+            if ((budget is not int b || c.Weight <= b) && !taken.Contains(c.Item.Name))
+                fits.Add(c);
+
+        // A single slot drops an item one other beats. A pair fills two slots, so the
+        // one that beats it may be in the other slot already: it takes two, of
+        // different names, or one of the same name (which can never be the partner).
+        var kept = new List<SideCandidate>();
+        foreach (SideCandidate c in fits)
+        {
+            SideCandidate? first = null;
+            bool beaten = false;
+            foreach (SideCandidate k in fits)
+            {
+                if (k.Order == c.Order || !Beats(k, c, weigh)) continue;
+                bool sameName = string.Equals(k.Item.Name, c.Item.Name, StringComparison.OrdinalIgnoreCase);
+                if (!pair || sameName) { beaten = true; break; }
+                if (first is not { } f) first = k;
+                else if (!string.Equals(f.Item.Name, k.Item.Name, StringComparison.OrdinalIgnoreCase)) { beaten = true; break; }
+            }
+            if (!beaten) kept.Add(c);
+        }
+
+        var options = new List<SideOption>();
+        foreach (SideCandidate c in kept)
+            options.Add(new SideOption(c.MinSide, c.MaxSide, c.Weight, c, null));
+        if (pair)
+            for (int i = 0; i < kept.Count; i++)
+                for (int j = i + 1; j < kept.Count; j++)
+                {
+                    SideCandidate a = kept[i], b = kept[j];
+                    if (string.Equals(a.Item.Name, b.Item.Name, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (budget is int limit && a.Weight + b.Weight > limit) continue;
+                    // The stronger item goes to the first slot, as in the other searches.
+                    (SideCandidate first, SideCandidate second) =
+                        b.MinSide + b.MaxSide > a.MinSide + a.MaxSide ? (b, a) : (a, b);
+                    options.Add(new SideOption(a.MinSide + b.MinSide, a.MaxSide + b.MaxSide, a.Weight + b.Weight, first, second));
+                }
+        return options;
     }
 
     // One entry of a search order: fill what it can of the given free slots within the

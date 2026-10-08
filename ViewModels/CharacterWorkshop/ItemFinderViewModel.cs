@@ -876,10 +876,20 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         foreach (TrialSlotRow row in TrialSlots)
             if (!row.Hold) row.SetItemQuiet(null);
 
-        // One search-order entry as the engine runs it: the computed backstab min /
-        // max price whole sets (FindBestOfPasses), everything else scores per item.
+        // One search-order entry as the engine runs it: "Backstabbing" searches whole
+        // sets (FindBestBackstab; the slots it will get to fill later are searched
+        // too, so the weapon is judged with its gear), the computed backstab min /
+        // max price whole sets pass by pass (FindBestOfPasses), and everything else
+        // scores per item.
         TrialGearFinder.OrderedCriterion Criterion(TrialFindFilter filter) => (free, settled, now, budget) =>
-            filter.BackstabRange is { } end && _damage is { IsUsable: true } model
+            filter.WholeSetBackstab && _damage is { IsUsable: true } stabber
+                ? TrialGearFinder.FindBestBackstab(
+                    candidates, free, settled, now,
+                    picks => stabber.BackstabSidesOfPicks(PickedEntries(picks), HeldWeapon(settled, now)),
+                    UsableLevel, _activeClass, _activeAlignment,
+                    weightBudget: budget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints,
+                    alsoFree: targets.Where(t => !settled.Contains(t) && !free.Contains(t)).ToList())
+            : filter.BackstabRange is { } end && _damage is { IsUsable: true } model
                 ? TrialGearFinder.FindBestOfPasses(
                     [filter.Score, e => e.BsSideMinScore, e => e.BsSideMaxScore, e => e.BsScoreAvg],
                     picks => model.BackstabOfPicks(PickedEntries(picks), HeldWeapon(settled, now)) is { } r ? end(r) : 0,
