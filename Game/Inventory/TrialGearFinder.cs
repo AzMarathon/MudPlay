@@ -17,10 +17,24 @@ public sealed record TrialFindFilter(
 // the trial-gearset "Find Best" button. Generalizes the single-stat per-slot argmax
 // in MaxStrengthIndex to any scoring function, adds slot-Hold locks, and handles the
 // paired Finger/Wrist slots (which the catalog collapses to their slot-1 variant) by
-// dealing out the top-N DISTINCT items across the pair — the game refuses two
-// identically-named worn items.
+// dealing out DISTINCT items across the pair — the game refuses two identically-named
+// worn items. Under a weight budget the slots are chosen together, as the best set
+// that fits, rather than one slot at a time.
 public static class TrialGearFinder
 {
+    // A positive-scoring, equippable catalog item. Order is its catalog position, the
+    // last tie-break, so equal candidates always resolve the same way.
+    private readonly record struct Candidate(ItemFinderEntry Item, double Score, int Order)
+    {
+        // The budget table is indexed by weight, so a weight below zero can't be
+        // represented; no game-data item has one.
+        public int Weight => Math.Max(0, Item.Encum);
+    }
+
+    // One way to fill a slot family under a budget: a single item, or for the paired
+    // Finger / Wrist slots two items with different names.
+    private readonly record struct Option(int Weight, double Score, Candidate First, Candidate? Second);
+
     // Every worn-stat ItemFinderEntry field a criterion could reasonably score on —
     // full parity with (and beyond) the MegaMUD reference client's own "Find Best"
     // nested-menu criterion list. A non-positive score means "doesn't contribute",
@@ -95,14 +109,23 @@ public static class TrialGearFinder
 
     // Best item name per NON-held target slot for the given filter, gated to what the
     // character can equip. Held slots are left out of the result (the caller keeps
-    // their current item); a slot whose best candidate scores ≤ 0 is also left out.
+    // their current item); a slot with no positive-scoring candidate is also left out.
     // `current` supplies the present per-slot picks so a held ring/bracelet isn't
-    // handed out again to its paired partner. `weightBudget`, when given, caps the
-    // total Encum this pass may spend across every slot it fills — slots are visited
-    // in `targetSlots` order and each pick deducts its weight from what's left, so a
-    // candidate that would blow the remaining budget is skipped in favor of the next-
-    // best one that fits (a slot with nothing left that fits is skipped, same as a
-    // slot with no positive-scoring candidate at all).
+    // handed out again to its paired partner.
+    //
+    // Without a `weightBudget` every slot takes its own best item, the paired slots the
+    // top two distinct ones. With one, the total Encum of the picks may not exceed it,
+    // and the slots compete for it:
+    //   - The weapon is settled first: the highest-scoring one that fits, its weight
+    //     taken off the budget before anything else is weighed. A weapon's score isn't
+    //     on the scale other gear's is (for the computed backstab criteria a weapon
+    //     scores its whole resolved range, other gear only what it adds), and it is the
+    //     single biggest lever, so it is never traded off against armour.
+    //   - The other slots then get the set with the highest total score that fits in
+    //     what is left, at most one item per slot, chosen together rather than slot by
+    //     slot — so a heavy piece in one slot can't starve several better pieces
+    //     elsewhere. Equal totals go to the lighter set. A slot that set leaves empty
+    //     is left out of the result.
     public static Dictionary<EquipmentSlot, string> FindBest(
         IReadOnlyList<ItemFinderEntry> catalog,
         IReadOnlyList<EquipmentSlot> targetSlots,
@@ -119,55 +142,265 @@ public static class TrialGearFinder
         ArgumentNullException.ThrowIfNull(targetSlots);
         ArgumentNullException.ThrowIfNull(score);
 
-        // Positive-scoring, equippable candidates grouped by catalog slot, best first.
+        // Positive-scoring, equippable candidates grouped by catalog slot.
         // extraFilter carries the finder's own requirement gates (level / strength req)
         // so Find Best obeys the same left-panel restrictions the results list does.
-        var bySlot = new Dictionary<EquipmentSlot, List<(ItemFinderEntry E, double S)>>();
-        foreach (ItemFinderEntry e in catalog)
+        var bySlot = new Dictionary<EquipmentSlot, List<Candidate>>();
+        for (int i = 0; i < catalog.Count; i++)
         {
+            ItemFinderEntry e = catalog[i];
             if (e.IsSynthetic) continue;
             double s = score(e);
             if (s <= 0) continue;
             if (extraFilter is not null && !extraFilter(e)) continue;
             if (!ItemEquipFilter.CanEquip(e.Row, level, cls, alignment, realm, evilPoints)) continue;
             if (!bySlot.TryGetValue(e.Slot, out var list)) bySlot[e.Slot] = list = new();
-            list.Add((e, s));
+            list.Add(new Candidate(e, s, i));
         }
-        foreach (var list in bySlot.Values)
-            list.Sort((a, b) => b.S.CompareTo(a.S));
 
         // Names already committed within each paired family (seeded with held picks),
         // so Finger1/Finger2 (and Wrist1/Wrist2) never resolve to the same item.
         var takenByFamily = new Dictionary<EquipmentSlot, HashSet<string>>();
-        HashSet<string> Taken(EquipmentSlot family)
-        {
-            if (!takenByFamily.TryGetValue(family, out var set))
-                takenByFamily[family] = set = new(StringComparer.OrdinalIgnoreCase);
-            return set;
-        }
         foreach (EquipmentSlot t in targetSlots)
             if (heldSlots.Contains(t) && current.TryGetValue(t, out string? held) && !string.IsNullOrWhiteSpace(held))
-                Taken(EquipmentSlotMap.PrimarySlot(t)).Add(held!.Trim());
+                Taken(takenByFamily, EquipmentSlotMap.PrimarySlot(t)).Add(held!.Trim());
+
+        return weightBudget is int budget
+            ? BestSetWithinBudget(bySlot, targetSlots, heldSlots, takenByFamily, budget)
+            : BestPerSlot(bySlot, targetSlots, heldSlots, takenByFamily);
+    }
+
+    private static HashSet<string> Taken(Dictionary<EquipmentSlot, HashSet<string>> takenByFamily, EquipmentSlot family)
+    {
+        if (!takenByFamily.TryGetValue(family, out var set))
+            takenByFamily[family] = set = new(StringComparer.OrdinalIgnoreCase);
+        return set;
+    }
+
+    // No budget: nothing ties the slots together, so each takes its own best item.
+    private static Dictionary<EquipmentSlot, string> BestPerSlot(
+        Dictionary<EquipmentSlot, List<Candidate>> bySlot,
+        IReadOnlyList<EquipmentSlot> targetSlots, ISet<EquipmentSlot> heldSlots,
+        Dictionary<EquipmentSlot, HashSet<string>> takenByFamily)
+    {
+        foreach (var list in bySlot.Values)
+            list.Sort((a, b) => b.Score.CompareTo(a.Score));
 
         var result = new Dictionary<EquipmentSlot, string>();
-        int? remaining = weightBudget;
         foreach (EquipmentSlot t in targetSlots)
         {
             if (heldSlots.Contains(t)) continue;
             EquipmentSlot family = EquipmentSlotMap.PrimarySlot(t);
             if (!bySlot.TryGetValue(family, out var list)) continue;
-            HashSet<string> taken = Taken(family);
-            foreach ((ItemFinderEntry e, double _) in list)
+            HashSet<string> taken = Taken(takenByFamily, family);
+            foreach (Candidate c in list)
             {
-                if (taken.Contains(e.Name)) continue;
-                if (remaining is int budget && e.Encum > budget) continue;
-                taken.Add(e.Name);
-                result[t] = e.Name;
-                if (remaining.HasValue) remaining -= e.Encum;
+                if (!taken.Add(c.Item.Name)) continue;
+                result[t] = c.Item.Name;
                 break;
             }
         }
         return result;
+    }
+
+    private static Dictionary<EquipmentSlot, string> BestSetWithinBudget(
+        Dictionary<EquipmentSlot, List<Candidate>> bySlot,
+        IReadOnlyList<EquipmentSlot> targetSlots, ISet<EquipmentSlot> heldSlots,
+        Dictionary<EquipmentSlot, HashSet<string>> takenByFamily, int budget)
+    {
+        var result = new Dictionary<EquipmentSlot, string>();
+        int remaining = budget;
+
+        // Weapon first — FindBest's header says why it isn't weighed against the rest.
+        foreach (EquipmentSlot t in targetSlots)
+        {
+            if (!IsWeaponSlot(t) || heldSlots.Contains(t)) continue;
+            EquipmentSlot family = EquipmentSlotMap.PrimarySlot(t);
+            if (!bySlot.TryGetValue(family, out var list)) continue;
+            HashSet<string> taken = Taken(takenByFamily, family);
+            Candidate? pick = null;
+            foreach (Candidate c in list)
+                if (c.Weight <= remaining && !taken.Contains(c.Item.Name) && (pick is not { } p || Outranks(c, p)))
+                    pick = c;
+            if (pick is not { } weapon) continue;
+            taken.Add(weapon.Item.Name);
+            result[t] = weapon.Item.Name;
+            remaining -= weapon.Weight;
+        }
+
+        // The free slots of every other family, in target order: one slot, or both
+        // halves of a Finger / Wrist pair.
+        var freeSlots = new Dictionary<EquipmentSlot, List<EquipmentSlot>>();
+        var families = new List<EquipmentSlot>();
+        foreach (EquipmentSlot t in targetSlots)
+        {
+            if (IsWeaponSlot(t) || heldSlots.Contains(t)) continue;
+            EquipmentSlot family = EquipmentSlotMap.PrimarySlot(t);
+            if (!freeSlots.TryGetValue(family, out var slots))
+            {
+                freeSlots[family] = slots = new();
+                families.Add(family);
+            }
+            if (!slots.Contains(t)) slots.Add(t);
+        }
+
+        var groups = new List<(List<EquipmentSlot> Slots, List<Option> Options)>();
+        long heaviestSet = 0;
+        foreach (EquipmentSlot family in families)
+        {
+            if (!bySlot.TryGetValue(family, out var list)) continue;
+            List<Option> options = BuildOptions(list, Taken(takenByFamily, family), freeSlots[family].Count > 1, remaining);
+            if (options.Count == 0) continue;
+            groups.Add((freeSlots[family], options));
+            heaviestSet += options[^1].Weight;
+        }
+        if (groups.Count == 0) return result;
+
+        // best[w] is the highest total score the families handled so far reach within
+        // weight w; choice[g][w] is the option family g contributes to it (-1 for none).
+        // No set can weigh more than every family's heaviest option together, so the
+        // table stops there even under a far larger budget.
+        int capacity = (int)Math.Min(remaining, heaviestSet);
+        var best = new double[capacity + 1];
+        var choice = new int[groups.Count][];
+        for (int g = 0; g < groups.Count; g++)
+        {
+            List<Option> options = groups[g].Options;
+            var next = (double[])best.Clone();
+            var chosen = new int[capacity + 1];
+            Array.Fill(chosen, -1);
+            for (int o = 0; o < options.Count; o++)
+            {
+                Option option = options[o];
+                for (int w = option.Weight; w <= capacity; w++)
+                {
+                    // Strictly better only, so a tie stays with the lighter option, and
+                    // with an earlier slot over a later one.
+                    double total = best[w - option.Weight] + option.Score;
+                    if (total > next[w])
+                    {
+                        next[w] = total;
+                        chosen[w] = o;
+                    }
+                }
+            }
+            best = next;
+            choice[g] = chosen;
+        }
+
+        // best[] never falls as the weight grows, so the lightest set reaching the top
+        // score sits at the first weight where that score appears.
+        int weight = capacity;
+        while (weight > 0 && best[weight - 1] >= best[capacity]) weight--;
+
+        for (int g = groups.Count - 1; g >= 0; g--)
+        {
+            int o = choice[g][weight];
+            if (o < 0) continue;
+            (List<EquipmentSlot> slots, List<Option> options) = groups[g];
+            Option option = options[o];
+            result[slots[0]] = option.First.Item.Name;
+            if (option.Second is { } second) result[slots[1]] = second.Item.Name;
+            weight -= option.Weight;
+        }
+        return result;
+    }
+
+    // Weapons are held rather than worn, and under a budget are settled ahead of the
+    // worn slots.
+    private static bool IsWeaponSlot(EquipmentSlot slot) =>
+        slot is EquipmentSlot.Weapon or EquipmentSlot.AlternateWeapon;
+
+    private static bool Outranks(Candidate a, Candidate b)
+    {
+        if (a.Score != b.Score) return a.Score > b.Score;
+        if (a.Weight != b.Weight) return a.Weight < b.Weight;
+        return a.Order < b.Order;
+    }
+
+    private static bool SameName(Candidate a, Candidate b) =>
+        string.Equals(a.Item.Name, b.Item.Name, StringComparison.OrdinalIgnoreCase);
+
+    // The ways one family can spend weight, lightest first, each scoring more than the
+    // one before it. Everything else is dropped up front: the budget table costs
+    // (weight × options) per family, and a slot can have hundreds of candidates of
+    // which only a handful are ever worth their weight.
+    private static List<Option> BuildOptions(List<Candidate> candidates, HashSet<string> taken, bool pair, int limit)
+    {
+        var fits = new List<Candidate>();
+        foreach (Candidate c in candidates)
+            if (c.Weight <= limit && !taken.Contains(c.Item.Name))
+                fits.Add(c);
+        fits.Sort(static (a, b) =>
+        {
+            int byWeight = a.Weight.CompareTo(b.Weight);
+            if (byWeight != 0) return byWeight;
+            int byScore = b.Score.CompareTo(a.Score);
+            return byScore != 0 ? byScore : a.Order.CompareTo(b.Order);
+        });
+
+        // An item is beaten by one that weighs no more and scores at least as much:
+        // any set using it is no worse with the other in its place. Sorted as above,
+        // anything that can beat an item comes before it.
+        var kept = new List<Candidate>();
+        foreach (Candidate c in fits)
+            if (!IsBeaten(c, kept, pair))
+                kept.Add(c);
+
+        var options = new List<Option>();
+        foreach (Candidate c in kept)
+            options.Add(new Option(c.Weight, c.Score, c, null));
+        if (pair)
+        {
+            for (int i = 0; i < kept.Count; i++)
+            {
+                for (int j = i + 1; j < kept.Count; j++)
+                {
+                    Candidate a = kept[i], b = kept[j];
+                    if (SameName(a, b) || a.Weight + b.Weight > limit) continue;
+                    // The stronger item goes to the first slot, as it does with no budget.
+                    (Candidate first, Candidate second) = Outranks(b, a) ? (b, a) : (a, b);
+                    options.Add(new Option(a.Weight + b.Weight, a.Score + b.Score, first, second));
+                }
+            }
+        }
+
+        options.Sort(static (a, b) =>
+        {
+            int byWeight = a.Weight.CompareTo(b.Weight);
+            if (byWeight != 0) return byWeight;
+            int byScore = b.Score.CompareTo(a.Score);
+            if (byScore != 0) return byScore;
+            int byFirst = a.First.Order.CompareTo(b.First.Order);
+            return byFirst != 0 ? byFirst : (a.Second?.Order ?? -1).CompareTo(b.Second?.Order ?? -1);
+        });
+        var worthTheirWeight = new List<Option>();
+        double topScore = double.NegativeInfinity;
+        foreach (Option option in options)
+        {
+            if (option.Score <= topScore) continue;
+            worthTheirWeight.Add(option);
+            topScore = option.Score;
+        }
+        return worthTheirWeight;
+    }
+
+    // A single slot drops an item as soon as one other beats it. A pair fills two
+    // slots, so the item that beats this one may already be in the other slot: it takes
+    // two beating items to drop one — two with different names, since the pair can't
+    // wear the same name twice. One beating item of the SAME name is enough on its own,
+    // because it can never be the partner.
+    private static bool IsBeaten(Candidate c, List<Candidate> kept, bool pair)
+    {
+        Candidate? other = null;
+        foreach (Candidate k in kept)
+        {
+            if (k.Score < c.Score) continue;
+            if (!pair || SameName(k, c)) return true;
+            if (other is not { } o) other = k;
+            else if (!SameName(o, k)) return true;
+        }
+        return false;
     }
 
     // Find Best for a criterion whose per-item scores don't add up across slots — the
