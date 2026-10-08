@@ -112,6 +112,87 @@ public sealed class AutoWalkManagerBossRoomTests : IDisposable
         Assert.Single(h.Halts);                               // it doesn't stop for the same room twice
     }
 
+    // ----- The boss room is the destination itself -------------------------
+
+    private static List<WalkEvent> Watch(Harness h)
+    {
+        var seen = new List<WalkEvent>();
+        h.Walker.Event += seen.Add;
+        return seen;
+    }
+
+    // A walk to a stop-before boss room ends one room short, and its arrival names
+    // the room that was asked for, so whoever started it knows it is done.
+    [Fact]
+    public void WalkToTheBossRoom_EndsOneRoomShort_AndSaysWhichRoomWasAskedFor()
+    {
+        Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => BossRooms);
+        List<WalkEvent> seen = Watch(h);
+
+        Assert.True(h.Walker.WalkTo(Lair));
+        Assert.Equal(Hall, h.Walker.Destination);
+        h.Land("Hall", Direction.E, Direction.W);
+
+        Assert.Equal(new[] { "e" }, h.Sent);
+        WalkEvent done = Assert.Single(seen, e => e.Kind == WalkEventKind.Finished);
+        Assert.Equal(Hall, done.Destination);
+        Assert.Equal(Lair, done.Requested);
+    }
+
+    // Standing in the room one short already: done at once, and it still says so.
+    [Fact]
+    public void WalkToTheBossRoom_FromTheRoomBeside_FinishesAtOnce_NamingTheRoomAskedFor()
+    {
+        Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => BossRooms);
+        h.Tracker.SetLocated(Hall);
+        List<WalkEvent> seen = Watch(h);
+
+        h.Walker.WalkTo(Lair);
+
+        Assert.Empty(h.Sent);
+        WalkEvent done = Assert.Single(seen, e => e.Kind == WalkEventKind.Finished);
+        Assert.Equal(Lair, done.Requested);
+    }
+
+    // A walk told to enter its destination goes in, and reports a plain arrival.
+    [Fact]
+    public void WalkToTheBossRoom_ToldToEnter_GoesIn()
+    {
+        Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => BossRooms);
+        List<WalkEvent> seen = Watch(h);
+
+        h.Walker.SetBossRoomRule(Lair, walkAround: null, haltBefore: null, enterDestination: true);
+        Assert.True(h.Walker.WalkTo(Lair));
+        Assert.Equal(Lair, h.Walker.Destination);
+        h.Land("Hall", Direction.E, Direction.W);
+        h.Land("Lair", Direction.E, Direction.W);
+
+        Assert.Equal(new[] { "e", "e" }, h.Sent);
+        Assert.Empty(h.Halts);
+        WalkEvent done = Assert.Single(seen, e => e.Kind == WalkEventKind.Finished);
+        Assert.Equal(Lair, done.Destination);
+        Assert.Null(done.Requested);
+    }
+
+    // The go-ahead belongs to the walk it was given for: the next one stops short.
+    [Fact]
+    public void TheGoAheadToEnter_DoesNotCarryToTheNextWalk()
+    {
+        Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => BossRooms);
+        h.Walker.SetBossRoomRule(Lair, walkAround: null, haltBefore: null, enterDestination: true);
+        h.Walker.WalkTo(Lair);
+        h.Walker.Stop("test");
+        h.Tracker.SetLocated(Start);
+
+        h.Walker.WalkTo(Lair);
+
+        Assert.Equal(Hall, h.Walker.Destination);
+    }
+
     [Fact]
     public void WalkAround_KeepsTheBossRoomOutOfTheRoute()
     {

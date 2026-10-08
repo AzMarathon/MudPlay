@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.152.1**
+> **Version 3.152.4**
 > - Settings → Party: **Send `par`** is now a tick list — every N seconds (as before), after each combat round, and when a combat round has unknown damage. Any mix, or none
 > - *After each combat round* can include combat you only witness, so it still sends `par` with Auto Combat off
 > - With none ticked MudPlay never sends `par` itself; members' HP then moves only from the round totals

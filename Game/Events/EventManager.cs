@@ -358,7 +358,7 @@ public sealed class EventManager : IDisposable
                 }
                 RoomKey key = new(target.Map, target.Room);
                 run.WalkTarget = key;
-                if (!StartWalk(key, "event walk-to")) return ActionStart.Failed;
+                if (!StartWalk(key, "event walk-to", e.WalkToEntersBossRoom == true)) return ActionStart.Failed;
                 // Already standing there: the walker finished inside WalkTo, while
                 // _driving hid its Finished from us.
                 return _walker!.State == WalkState.Idle ? ActionStart.Done : ActionStart.Running;
@@ -484,7 +484,7 @@ public sealed class EventManager : IDisposable
                 break;
             case EventThenType.WalkTo:
                 if (e.ThenWalkTo is not { } to
-                    || !StartWalk(new RoomKey(to.Map, to.Room), "event then"))
+                    || !StartWalk(new RoomKey(to.Map, to.Room), "event then", e.ThenWalkToEntersBossRoom == true))
                     _log?.Warn("Events", $"Event '{Label(e)}': Then walk-to didn't start.");
                 break;
             case EventThenType.Event:
@@ -504,13 +504,17 @@ public sealed class EventManager : IDisposable
 
     // ----- Engine starts ----------------------------------------------
 
-    private bool StartWalk(RoomKey key, string reason)
+    // enterBossRoom: the event's own choice for a room marked "stop before
+    // entering" on the Bosses tab. False leaves the walker's usual stop one room
+    // short in place.
+    private bool StartWalk(RoomKey key, string reason, bool enterBossRoom)
     {
         if (_walker is null) return false;
         _driving = true;
         try
         {
             EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Walker, reason);
+            if (enterBossRoom) _walker.SetBossRoomRule(key, walkAround: null, haltBefore: null, enterDestination: true);
             if (_walker.WalkTo(key)) return true;
         }
         finally { _driving = false; }
@@ -577,7 +581,12 @@ public sealed class EventManager : IDisposable
         switch (run.Event.ActionType)
         {
             case EventActionType.WalkTo:
-                if (w.Kind == WalkEventKind.Finished && Equals(w.Destination, run.WalkTarget)) Complete(run, finished: true);
+                // A boss room marked stop-before ends the walk one room short, and
+                // the walker says so (Requested). Matching the boss room alone left
+                // the event running for good, its Then never reached.
+                if (w.Kind == WalkEventKind.Finished
+                    && (Equals(w.Destination, run.WalkTarget) || Equals(w.Requested, run.WalkTarget)))
+                    Complete(run, finished: true);
                 else if (w.Kind == WalkEventKind.Failed) Complete(run, finished: false);
                 else if (w.Kind == WalkEventKind.Stopped) Abort(run, "its walk was stopped");
                 break;

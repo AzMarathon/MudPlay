@@ -58,6 +58,11 @@ public sealed class ScheduledEvent
     // reference. Null for other action types.
     public RoomRef? WalkToTarget { get; set; }
 
+    // What a walk-to does when its room is a boss room marked "stop before
+    // entering" on the Bosses tab: true walks in, null / false ends the walk one
+    // room short, as any other walk to that room does.
+    public bool? WalkToEntersBossRoom { get; set; }
+
     // Saved loop name (case-insensitive lookup against LoopManager.Loops)
     // for EventActionType.Loop. Null for other action types.
     public string? LoopName { get; set; }
@@ -122,6 +127,8 @@ public sealed class ScheduledEvent
     public string? ThenLoopName { get; set; }
     public string? ThenAutoLairSetupName { get; set; }
     public RoomRef? ThenWalkTo { get; set; }
+    // As WalkToEntersBossRoom, for Then's walk.
+    public bool? ThenWalkToEntersBossRoom { get; set; }
     // Another event, by Name.
     public string? ThenEventName { get; set; }
 

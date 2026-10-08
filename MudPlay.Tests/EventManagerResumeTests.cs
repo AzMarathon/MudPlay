@@ -254,6 +254,57 @@ public sealed class EventManagerResumeTests : IDisposable
         Assert.Equal("(none)", h.Events.RunSummary);
     }
 
+    // A boss room marked "stop before entering" ends the walk one room short, and
+    // the walker says which room was asked for. The event has to take that as
+    // arrival: waiting for the boss room itself left it running for good, Then
+    // never reached.
+    [Fact]
+    public void WalkTo_AStopBeforeBossRoom_CountsTheRoomOneShortAsArrived()
+    {
+        using Harness h = NewHarness();
+        Loop loop = RunLoop(h);
+
+        h.Events.Fire(WalkToEvent(1, 3));
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "destination reached",
+            new RoomKey(1, 2), Requested: new RoomKey(1, 3)));
+
+        Assert.Equal("(none)", h.Events.RunSummary);
+        Assert.Same(loop, h.Runner.CurrentLoop);          // Then ran
+    }
+
+    // The walker's own report, end to end: asked for the boss room, it plans to
+    // the room before it.
+    [Fact]
+    public void WalkTo_AStopBeforeBossRoom_IsPlannedOneRoomShort()
+    {
+        using Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 3) });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        h.Events.Fire(WalkToEvent(1, 3));
+
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+        Assert.Contains("WalkTo", h.Events.RunSummary);    // still running until it arrives
+    }
+
+    // The event can say its walk goes in anyway.
+    [Fact]
+    public void WalkTo_AStopBeforeBossRoom_ToldToEnter_WalksIn()
+    {
+        using Harness h = NewHarness();
+        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 3) });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        ScheduledEvent e = WalkToEvent(1, 3);
+        e.WalkToEntersBossRoom = true;
+
+        h.Events.Fire(e);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.Contains("told to enter", h.Walker.BossRoomRuleSummary);
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "destination reached", new RoomKey(1, 3)));
+        Assert.Equal("(none)", h.Events.RunSummary);
+    }
+
     // Standing in the room already: the walk is done at once and Then runs.
     [Fact]
     public void WalkTo_AlreadyThere_IsDoneAtOnce()

@@ -64,7 +64,7 @@ public sealed partial class EventRowViewModel : ObservableObject
     private string ActionText => Source.ActionType switch
     {
         EventActionType.WalkTo  => Source.WalkToTarget is { } t
-                                       ? $"Walk to {t.Map}/{t.Room}"
+                                       ? $"Walk to {t.Map}/{t.Room}" + (Source.WalkToEntersBossRoom == true ? " (enters the boss room)" : "")
                                        : "Walk to —",
         EventActionType.Loop    => string.IsNullOrEmpty(Source.LoopName)
                                        ? "Loop —"
@@ -110,7 +110,9 @@ public sealed partial class EventRowViewModel : ObservableObject
         EventThenType.Resume   => "go back",
         EventThenType.Loop     => $"loop \"{Source.ThenLoopName}\"",
         EventThenType.AutoLair => $"auto-lair \"{Source.ThenAutoLairSetupName}\"",
-        EventThenType.WalkTo   => Source.ThenWalkTo is { } t ? $"walk to {t.Map}/{t.Room}" : "walk to —",
+        EventThenType.WalkTo   => Source.ThenWalkTo is { } t
+                                      ? $"walk to {t.Map}/{t.Room}" + (Source.ThenWalkToEntersBossRoom == true ? " (enters the boss room)" : "")
+                                      : "walk to —",
         EventThenType.Event    => $"event \"{Source.ThenEventName}\"",
         _ => "stop",
     };
