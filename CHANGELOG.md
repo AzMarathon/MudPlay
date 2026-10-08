@@ -1,5 +1,10 @@
 # Version history
 
+## 3.152.1
+
+- Events: the Walk to boxes list matching rooms as you type, like the Navigation room search (room names, coordinates, boss names, GOTO favourites); picking one fills in the room
+- A Walk to box shows the room's name beside its number, including when an event is reopened
+
 ## 3.152.0
 
 - New **Import MegaMUD profile…** in Profile Management: makes a new character from a MegaMUD character file (.ini)

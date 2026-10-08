@@ -64,6 +64,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         _loops = loops;
         _lairs = lairs;
         _search = search;
+        RoomSuggestions = (text, _) => Task.FromResult<IEnumerable<object>>(SuggestRooms(text));
 
         // Dropdown contents — snapshot on open. Edits to the underlying
         // managers while the dialog is open don't ripple through; user closes
@@ -136,7 +137,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         SelectedRoombaMode = existing.RoombaMode == EventRoombaMode.InventoryOnly
             ? RoombaModeOptions[1]
             : RoombaModeOptions[0];
-        WalkToText = existing.WalkToTarget is { } t ? $"{t.Map}/{t.Room}" : string.Empty;
+        WalkToText = RoomText(existing.WalkToTarget);
         LoopName = existing.LoopName;
         AutoLairSetupName = existing.AutoLairSetupName;
         CommandText = existing.CommandText ?? string.Empty;
@@ -158,7 +159,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         SetThen(isNew ? DefaultThen() : existing.ResolvedThen);
         ThenLoopName = existing.ThenLoopName;
         ThenAutoLairSetupName = existing.ThenAutoLairSetupName;
-        ThenWalkToText = existing.ThenWalkTo is { } tw ? $"{tw.Map}/{tw.Room}" : string.Empty;
+        ThenWalkToText = RoomText(existing.ThenWalkTo);
         ThenEventName = existing.ThenEventName;
     }
 
@@ -724,18 +725,56 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
 
     internal WalkToResolution ResolveWalkTo() => ResolveRoom(WalkToText);
 
+    // ----- Walk-to room suggestions -----------------------------------
+
+    private const int MaxRoomSuggestions = 50;
+
+    // Feeds the dropdown under both Walk to boxes as the user types. The shape is
+    // the one AutoCompleteBox's AsyncPopulator takes; the search itself is quick
+    // and runs where it is called, on the UI thread, which is where the room
+    // graph lives.
+    public Func<string?, CancellationToken, Task<IEnumerable<object>>> RoomSuggestions { get; }
+
+    // The places a typed name, coordinate, boss or GOTO favourite could mean: the
+    // Navigation window's own room search, so the same text finds the same rooms
+    // in both. Rows with nowhere to walk to are left out, since picking one would
+    // put no room in the box.
+    internal IReadOnlyList<RoomSearchResult> SuggestRooms(string? text)
+    {
+        string needle = text?.Trim() ?? string.Empty;
+        if (_search is null || needle.Length == 0) return Array.Empty<RoomSearchResult>();
+        return _search.Search(needle, source: null, cap: 200,
+                includeMonsters: false, includeFavorites: true, includeBosses: true)
+            .Where(static m => !m.IsInformational)
+            .Take(MaxRoomSuggestions)
+            .ToList();
+    }
+
+    // A saved room as the box shows it: "1/297 - Bank of Godfrey", the same text a
+    // picked suggestion leaves there, so a reopened event names its room instead
+    // of showing a bare number. Just the coordinate when the room isn't on the map.
+    private string RoomText(RoomRef? room)
+    {
+        if (room is null) return string.Empty;
+        string coord = $"{room.Map}/{room.Room}";
+        RoomSearchResult? known = _search?.Search(coord, source: null, cap: 1, includeMonsters: false)
+            .FirstOrDefault(m => m.MonsterTag is null && m.Key.Map == room.Map && m.Key.Room == room.Room);
+        return known?.DisplayName ?? coord;
+    }
+
     // Resolve a room box via RoomSearchService. Accepts coord (1/297, 1 297,
-    // 1,297) directly; for names, requires exactly one room-name match (room-tier
-    // only — monster matches don't qualify here since walk-to means a destination,
-    // not a mob). Distinguishes no-match vs ambiguous-match in the error so the
-    // user-facing popup can say the right thing instead of blanket "no target
-    // selected".
+    // 1,297) directly, alone or leading a picked suggestion's "1/297 - Name"; for
+    // names, requires exactly one room-name match (room-tier only — monster
+    // matches don't qualify here since walk-to means a destination, not a mob).
+    // Distinguishes no-match vs ambiguous-match in the error so the user-facing
+    // popup can say the right thing instead of blanket "no target selected".
     private WalkToResolution ResolveRoom(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return new(null, null, null);
 
         // Coord short-circuit — works without a RoomSearchService.
-        (int? coordMap, int? coordRoom) = RoomSearchService.TryParseCoordinate(text);
+        int nameAt = text.IndexOf(" - ", StringComparison.Ordinal);
+        (int? coordMap, int? coordRoom) = RoomSearchService.TryParseCoordinate(nameAt > 0 ? text[..nameAt] : text);
         if (coordMap is int cm && coordRoom is int cr)
             return new(cm, cr, null);
 
@@ -755,10 +794,10 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
             .ToList();
         if (rooms.Count == 0)
             return new(null, null,
-                $"No room matches '{text}'. Try a coordinate (e.g. 1/297) or a more specific name.");
+                $"No room matches '{text}'. Pick one from the list that opens as you type, or enter a coordinate (e.g. 1/297).");
         if (rooms.Count > 1)
             return new(null, null,
-                $"'{text}' matches {rooms.Count} rooms — be more specific or use a coordinate (e.g. 1/297).");
+                $"'{text}' matches {rooms.Count} rooms — pick the one you mean from the list that opens as you type, or use a coordinate (e.g. 1/297).");
         return new(rooms[0].Key.Map, rooms[0].Key.Room, null);
     }
 

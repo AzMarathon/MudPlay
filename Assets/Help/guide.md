@@ -4365,7 +4365,10 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 
 ### Event editor — action types (Do)
 
-- **Walk to** — navigate to a coordinate or room name. Done when you arrive.
+- **Walk to** — navigate to a room. Done when you arrive.
+  - **Start typing and a list of matching places opens under the box**, the same search the Navigation window's room box runs: room names, a coordinate (`1/297`), a boss's name (which lists that boss's room) and your saved GOTO favourites. Pick a row (click it, or arrow down and press Enter) and the box fills in as `map/room - room name`, so you can see which room the event will walk to.
+  - Typing a coordinate by hand still works. The list shows the room that number is, so you can check it before saving.
+  - A saved event reopens showing the room's name beside its number.
 - **Start loop** — starts a saved Loop by name. Done only by a **Stop after** rule (below).
 - **Auto-lair** — starts a saved Auto-Lair setup by name. Done only by a **Stop after** rule.
 - **Command** — sends free-form text to the game; an empty command is valid (useful for paging through a prompt). Done as soon as it's sent. A command with **Nothing** after it doesn't interrupt anything — handy for a periodic `stat`.
@@ -4393,7 +4396,7 @@ What happens once the action is done:
 
 - **Go back** — to the loop, Auto-Lair or walk that was running when the event fired. A new event defaults to this (a command defaults to Nothing).
 - **Start loop** / **Auto-lair** — start a saved one.
-- **Walk to** — a coordinate or room name.
+- **Walk to** — a room, picked from the same type-to-search list as the action's Walk to box.
 - **Fire event** — run another event by name; its own Then carries on from there, and its **Go back** still returns to what the first event interrupted. A chain of more than 10 events in a row is stopped as a loop.
 - **Nothing** — stop there.
 

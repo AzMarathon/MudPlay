@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.Settings"
+        xmlns:nav="using:MudPlay.ViewModels.Navigation"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="620"
@@ -12,7 +13,35 @@
         CanResize="False"
         WindowStartupLocation="CenterOwner">
 
+    <Window.Resources>
+        <!-- A row of the Walk to boxes' dropdown, laid out as the Navigation
+             window's room search lays its rows out. Picking one puts the room's
+             "map/room - name" in the box (ValueMemberBinding). -->
+        <DataTemplate x:Key="RoomPickItem" x:DataType="nav:RoomSearchResult">
+            <StackPanel Margin="0,1">
+                <TextBlock Text="{Binding PrimaryLine}" FontSize="11"
+                           Foreground="{StaticResource ChromeFgBrush}"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding SecondaryLine}" FontSize="10"
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding SecondaryLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
     <Window.Styles>
+        <!-- The list is the view model's own search result for the typed text,
+             already ranked, so the box shows all of it and filters nothing. The
+             short delay keeps a search from running on every keystroke. -->
+        <Style Selector="AutoCompleteBox.RoomPick">
+            <Setter Property="FilterMode" Value="None"/>
+            <Setter Property="MinimumPrefixLength" Value="1"/>
+            <Setter Property="MinimumPopulateDelay" Value="0:0:0.12"/>
+            <Setter Property="MaxDropDownHeight" Value="260"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="PlaceholderText" Value="type a room, boss or favourite, or a coord (1/297)"/>
+        </Style>
         <Style Selector="TextBlock.SectionHeader">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
             <Setter Property="FontSize" Value="11"/>
@@ -183,10 +212,12 @@
 
                             <RadioButton Grid.Row="1" GroupName="What" Content="Walk to"
                                          IsChecked="{Binding IsActionWalkTo, Mode=TwoWay}"/>
-                            <TextBox Grid.Row="1" Grid.Column="1"
-                                     Text="{Binding WalkToText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     IsEnabled="{Binding IsActionWalkTo}"
-                                     PlaceholderText="coord (1/297) or room name"/>
+                            <AutoCompleteBox Grid.Row="1" Grid.Column="1" Classes="RoomPick"
+                                             Text="{Binding WalkToText, Mode=TwoWay}"
+                                             IsEnabled="{Binding IsActionWalkTo}"
+                                             AsyncPopulator="{Binding RoomSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding DisplayName}"
+                                             ItemTemplate="{StaticResource RoomPickItem}"/>
 
                             <RadioButton Grid.Row="2" GroupName="What" Content="Start loop"
                                          IsChecked="{Binding IsActionLoop, Mode=TwoWay}"/>
@@ -335,10 +366,12 @@
 
                             <RadioButton Grid.Row="4" GroupName="Then" Content="Walk to"
                                          IsChecked="{Binding IsThenWalkTo, Mode=TwoWay}"/>
-                            <TextBox Grid.Row="4" Grid.Column="1"
-                                     Text="{Binding ThenWalkToText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     IsEnabled="{Binding IsThenWalkTo}"
-                                     PlaceholderText="coord (1/297) or room name"/>
+                            <AutoCompleteBox Grid.Row="4" Grid.Column="1" Classes="RoomPick"
+                                             Text="{Binding ThenWalkToText, Mode=TwoWay}"
+                                             IsEnabled="{Binding IsThenWalkTo}"
+                                             AsyncPopulator="{Binding RoomSuggestions}"
+                                             ValueMemberBinding="{ReflectionBinding DisplayName}"
+                                             ItemTemplate="{StaticResource RoomPickItem}"/>
 
                             <RadioButton Grid.Row="5" GroupName="Then" Content="Fire event"
                                          IsChecked="{Binding IsThenEvent, Mode=TwoWay}"/>
