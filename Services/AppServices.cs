@@ -2893,7 +2893,7 @@ public sealed class AppServices
         // Drives the on-join @health exchange + the
         // periodic par poll. Wire-sender + cadence-from-settings hookup
         // happens in MainWindowViewModel.
-        PartyPoller = new Game.PartyPoller(Chat, PartyState, Party)
+        PartyPoller = new Game.PartyPoller(Chat, PartyState, Party, Log)
         {
             // par reads party health for the party heals, so it lives under the
             // auto-heal toggle like every other automatic action.
@@ -4113,6 +4113,9 @@ public sealed class AppServices
                 combat.ShowCombatRoundTotalsEachMonster);
             if (table.Count > 0) WriteTerminalNotice(string.Join("\r\n", table));
         };
+        // Settings → Party "Send par": after a combat round, and on a round with
+        // unknown damage. After the totals above, so they print first.
+        RoundDamage.RoundComplete += PartyPoller.NoteRoundComplete;
         // Reset round counter + ring on BBS connect to match
         // CombatSessionTracker's session-boundary convention — the
         // reset hook lives here on the data producer.
@@ -13025,7 +13028,7 @@ public sealed class AppServices
     public void ApplyPartyFromActiveProfile()
     {
         Models.Profile.PartySettings dto = ReadSection<Models.Profile.PartySettings>(Profile.Current, "Party");
-        PartyPoller.SetParCadence(TimeSpan.FromSeconds(Math.Clamp(dto.ParPollFrequencySec, 1, 60)));
+        PartyPoller.ApplyParSettings(dto);
         Party.AutoInviteEnabled = dto.AutoInviteReconnecting;
         Party.DisconnectGraceWindow = TimeSpan.FromSeconds(Math.Clamp(dto.IfLeadingWaitTotalSec, 0, 3600));
         // Same "If leading, wait only" window also caps the invite-as-wait-signal
@@ -13065,7 +13068,7 @@ public sealed class AppServices
     private void ResetPartyToDefaults()
     {
         Models.Profile.PartySettings defaults = new();
-        PartyPoller.SetParCadence(TimeSpan.FromSeconds(defaults.ParPollFrequencySec));
+        PartyPoller.ApplyParSettings(defaults);
         Party.AutoInviteEnabled = defaults.AutoInviteReconnecting;
         Party.DisconnectGraceWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);
         AutoParty.InviteWaitWindow = TimeSpan.FromSeconds(defaults.IfLeadingWaitTotalSec);

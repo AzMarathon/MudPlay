@@ -8,8 +8,8 @@ using MudPlay.Views.Settings;
 
 namespace MudPlay.ViewModels.Settings;
 
-// "Party" tab — bespoke layout. Knobs that map onto live services (par poll
-// cadence, auto-invite reconnecting member, reset statistics on loop start); the
+// "Party" tab — bespoke layout. Knobs that map onto live services (what sends
+// par, auto-invite reconnecting member, reset statistics on loop start); the
 // party-heal pickers + thresholds + AOE-member count feed CastingDirector's
 // party-cast path. Party buffs, and when each may cast, live in the Buff Watchdog
 // (CharacterProfile.PartyBuffs), not here. Persists per character as the "Party"
@@ -46,15 +46,22 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         "Party heal", "Minor heal", "Major heal", "Single-target", "Party AOE",
         "Use AOE", "Request healing",
         "Help leader open doors",
-        "Auto-invite", "Auto-Exp-Reset", "par frequency",
+        "Auto-invite", "Auto-Exp-Reset", "par frequency", "par poll", "Send par",
+        "after each combat round", "combat I only witness", "unknown damage",
         "Wait for members", "Max monsters",
         "@panic", "panic", "Use @panic while leading", "Ignore @panics",
     };
 
     // ----- Wired knobs -----
 
-    // par poll cadence in seconds; range 1..60. Default 5.
+    // What sends par — any mix of the three boxes, or none.
+    [ObservableProperty] private bool _parPollOnTimer = true;
+    // The timed par's cadence in seconds; range 1..60. Default 5.
     [ObservableProperty] private int _parPollFrequencySec = 5;
+    [ObservableProperty] private bool _parPollAfterCombatRound;
+    // Sub-option of the box above: rounds we only witnessed count too.
+    [ObservableProperty] private bool _parPollIncludeWitnessedRounds;
+    [ObservableProperty] private bool _parPollOnUnknownDamage;
 
     [ObservableProperty] private bool _autoInviteReconnecting = true;
 
@@ -265,7 +272,11 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     // The Party section from the current boxes.
     private PartySettings BuildDto() => new()
     {
+        ParPollOnTimer           = ParPollOnTimer,
         ParPollFrequencySec      = Math.Clamp(ParPollFrequencySec, 1, 60),
+        ParPollAfterCombatRound  = ParPollAfterCombatRound,
+        ParPollIncludeWitnessedRounds = ParPollIncludeWitnessedRounds,
+        ParPollOnUnknownDamage   = ParPollOnUnknownDamage,
         AutoInviteReconnecting   = AutoInviteReconnecting,
         ResetStatisticsOnLoopStart = ResetStatisticsOnLoopStart,
         Rank = RankFront ? PartyRank.Front
@@ -335,7 +346,11 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     private void LoadFromProfile()
     {
         PartySettings dto = ReadOrDefault();
+        ParPollOnTimer             = dto.ParPollOnTimer;
         ParPollFrequencySec        = dto.ParPollFrequencySec;
+        ParPollAfterCombatRound    = dto.ParPollAfterCombatRound;
+        ParPollIncludeWitnessedRounds = dto.ParPollIncludeWitnessedRounds;
+        ParPollOnUnknownDamage     = dto.ParPollOnUnknownDamage;
         AutoInviteReconnecting     = dto.AutoInviteReconnecting;
         ResetStatisticsOnLoopStart = dto.ResetStatisticsOnLoopStart;
         RankFront = dto.Rank == PartyRank.Front;
@@ -393,7 +408,7 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
     private static void ApplyToServices(PartySettings dto)
     {
         AppServices svcs = AppServices.Current;
-        svcs.PartyPoller.SetParCadence(TimeSpan.FromSeconds(Math.Clamp(dto.ParPollFrequencySec, 1, 60)));
+        svcs.PartyPoller.ApplyParSettings(dto);
         svcs.Party.AutoInviteEnabled = dto.AutoInviteReconnecting;
         svcs.Party.LocalRankPreference = dto.Rank;
         svcs.PartyBroadcaster.AutoExpResetEnabled = dto.ResetStatisticsOnLoopStart;
@@ -426,7 +441,11 @@ public sealed partial class PartySectionViewModel : SettingsSectionViewModel
         OnPropertyChanged(nameof(IsDirty));
     }
 
+    partial void OnParPollOnTimerChanged(bool value)            => MarkDirty();
     partial void OnParPollFrequencySecChanged(int value)        => MarkDirty();
+    partial void OnParPollAfterCombatRoundChanged(bool value)   => MarkDirty();
+    partial void OnParPollIncludeWitnessedRoundsChanged(bool value) => MarkDirty();
+    partial void OnParPollOnUnknownDamageChanged(bool value)    => MarkDirty();
     partial void OnAutoInviteReconnectingChanged(bool value)    => MarkDirty();
     partial void OnResetStatisticsOnLoopStartChanged(bool value)=> MarkDirty();
     partial void OnRankFrontChanged(bool value)                 => MarkDirty();

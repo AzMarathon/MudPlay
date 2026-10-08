@@ -229,7 +229,7 @@
 
             <!-- ============ Capacity + cadence ============ -->
             <TextBlock Classes="SectionHeader" Text="Capacity + cadence"/>
-            <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2,0,0">
+            <Grid ColumnDefinitions="240,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,2,0,0">
                 <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Max. monsters when partying"/>
                 <NumericUpDown Grid.Row="0" Grid.Column="1"
                                Value="{Binding MaxMonstersWhenPartying, Mode=TwoWay}"
@@ -263,13 +263,38 @@
                                Value="{Binding AcceptComebackMinutes, Mode=TwoWay}"
                                Minimum="0" Maximum="60" Width="120" MinWidth="120" HorizontalAlignment="Left"
                                ToolTip.Tip="How many minutes after a member drops (or is left behind) you'll still honour their @comeback and go back for them. As a follower, the same limit: after a longer drop you don't send @comeback when you re-enter. 0 turns @comeback rejoin off. Default 2."/>
-
-                <TextBlock Grid.Row="5" Grid.Column="0" Classes="FieldLabel" Text="`par` poll frequency (s)"/>
-                <NumericUpDown Grid.Row="5" Grid.Column="1"
-                               Value="{Binding ParPollFrequencySec, Mode=TwoWay}"
-                               Minimum="1" Maximum="60" Width="120" HorizontalAlignment="Left"
-                               ToolTip.Tip="Cadence for the par poll — MegaMUD default is 5."/>
             </Grid>
+
+            <!-- ============ Send `par` ============ -->
+            <!-- What makes PartyPoller send `par`: any mix of the three, or none. -->
+            <TextBlock Classes="SectionHeader" Text="Send `par` (party status)"/>
+            <StackPanel Spacing="2">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <CheckBox Content="every"
+                              IsChecked="{Binding ParPollOnTimer, Mode=TwoWay}"
+                              ToolTip.Tip="On (default): send `par` on a timer. MegaMUD's default is every 5 seconds."/>
+                    <NumericUpDown Value="{Binding ParPollFrequencySec, Mode=TwoWay}"
+                                   Minimum="1" Maximum="60" Increment="1"
+                                   FormatString="0" ShowButtonSpinner="True"
+                                   Width="100" MinWidth="100"
+                                   IsEnabled="{Binding ParPollOnTimer}"
+                                   ToolTip.Tip="Whole seconds between timed `par`s. A `par` sent for a combat round starts the count over. Default 5."/>
+                    <TextBlock Classes="FieldLabel" Text="seconds"/>
+                </StackPanel>
+                <CheckBox Content="after each combat round"
+                          IsChecked="{Binding ParPollAfterCombatRound, Mode=TwoWay}"
+                          ToolTip.Tip="Send `par` when a combat round you fought in ends — as its round totals are worked out. A round you only stood by for (a member's fight in the room) doesn't count unless the box below is ticked."/>
+                <CheckBox Content="including combat I only witness"
+                          Margin="24,0,0,0"
+                          IsChecked="{Binding ParPollIncludeWitnessedRounds, Mode=TwoWay}"
+                          IsEnabled="{Binding ParPollAfterCombatRound}"
+                          ToolTip.Tip="Also send `par` after a combat round seen in the room that you took no part in: a member's fight while you stand by, or any fight with Auto Combat off."/>
+                <CheckBox Content="when a combat round has unknown damage"
+                          IsChecked="{Binding ParPollOnUnknownDamage, Mode=TwoWay}"
+                          ToolTip.Tip="Send `par` when a round's totals have an &quot;unknown&quot; row: damage no line named a dealer or a victim for, so it may have landed on a member unseen."/>
+            </StackPanel>
+            <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="0,2,0,4" TextWrapping="Wrap"
+                       Text="Tick any mix, or none. With none ticked MudPlay never sends `par` itself: members' HP then moves only from the round totals (members whose max HP is known), and their mana, resting state and whether they're still in the party aren't re-read until you type `par`."/>
 
             <!-- ============ @join/@health nag settings ============ -->
             <!-- Shared cadence for two nag flows: (1) AutoPartyManager's

@@ -1,11 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.152.3**
-> - Events: the Walk to boxes list matching rooms as you type, like the Navigation room search (room names, coordinates, boss names, GOTO favourites); picking one fills in the room
-> - A Walk to box shows the room's name beside its number, including when an event is reopened
-> - Events: a Walk to whose room is a boss room marked Stop before entering says so, with a tick box to ignore the stop and walk in; unticked, the stop is kept and the Then block spells out that the event stays outside the room and what Then does from there
-> - Fixed: an event walking to a Stop before boss room stopped one room short and then never finished, so its Then step never ran
+> **Version 3.152.4**
+> - Settings → Party: **Send `par`** is now a tick list — every N seconds (as before), after each combat round, and when a combat round has unknown damage. Any mix, or none
+> - *After each combat round* can include combat you only witness, so it still sends `par` with Auto Combat off
+> - With none ticked MudPlay never sends `par` itself; members' HP then moves only from the round totals
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

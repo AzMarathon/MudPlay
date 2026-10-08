@@ -46,6 +46,12 @@ public sealed class PartySectionViewModelTests
         // service the VM pushes to).
         PartySettings dto = new();
         Assert.Equal(5,            dto.ParPollFrequencySec);
+        // par on the timer alone: a profile saved before the round triggers
+        // existed keeps polling exactly as it did.
+        Assert.True(dto.ParPollOnTimer);
+        Assert.False(dto.ParPollAfterCombatRound);
+        Assert.False(dto.ParPollIncludeWitnessedRounds);
+        Assert.False(dto.ParPollOnUnknownDamage);
         Assert.True(dto.AutoInviteReconnecting);
         Assert.True(dto.ResetStatisticsOnLoopStart);
         Assert.Equal(PartyRank.Mid, dto.Rank);

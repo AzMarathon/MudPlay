@@ -739,6 +739,21 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(new[] { 1, 2, 1 }, h.Completed.Select(r => r.FightRound));
     }
 
+    // The kill that clears the room drops InCombat before the round closes; the round
+    // was still one we fought in. A member's fight we only stood by for isn't.
+    [Fact]
+    public void Engaged_StaysSetWhenTheKillEndsCombat_AndIsOffForAFightWeStoodByFor()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("You hit goblin for 8 damage!");
+        h.State.InCombat = false;   // the goblin died; the round closes on that
+        h.Feed("Bob hits large giant rat for 4 damage!");
+        h.CloseRound();
+
+        Assert.Equal(new[] { true, false }, h.Completed.Select(r => r.Engaged));
+    }
+
     // ----- Reset path -------------------------------------------------
 
     [Fact]

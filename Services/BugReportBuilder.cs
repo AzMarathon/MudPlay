@@ -310,6 +310,9 @@ public static class BugReportBuilder
         Kv(sb, "In party", party.IsInParty.ToString());
         Kv(sb, "Self is leader", party.SelfIsLeader.ToString());
         Kv(sb, "Leader", party.LeaderName ?? "(none)");
+        // What puts `par` on the wire. A "member's HP was stale / the heal came
+        // late" report turns on whether anything was polling at all.
+        Kv(sb, "par is sent", svc.PartyPoller.ParTriggerSummary);
         // Board-specific disconnect line, if the active BBS defines one — the
         // config a "party sprinted off after a member dropped" report needs to
         // confirm the custom logoff line was actually taught to the client.
