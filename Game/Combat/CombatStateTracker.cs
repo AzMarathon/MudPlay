@@ -195,6 +195,11 @@ public sealed class CombatStateTracker : IDisposable
     // CombatManager reads this to engage despite combat-off.
     public bool SeeHiddenClearActive => _seeHiddenClearLatch;
 
+    // Whether the see-hidden clear is on for the company the character is keeping:
+    // the option itself, and its "while solo" or "while in a party" tick.
+    public static bool SeeHiddenClearApplies(bool enabled, bool whileSolo, bool whileInParty, bool inParty)
+        => enabled && (inParty ? whileInParty : whileSolo);
+
     // True while a combat-off "clear hostiles when sneak fails" clear is latched for
     // the current room: a stealth runner's sneaked move failed into a room inside
     // the Min/Max monster window, so the walker holds and CombatManager engages

@@ -5404,8 +5404,13 @@ public sealed class AppServices
         // holds the walker gate; CombatManager reads the latch to engage
         // despite combat-off.
         CombatTracker.SetSeeHiddenClearGate(
-            clearWhenSeenHidden: () => ReadSection<Models.Profile.CombatSettings>(
-                Profile.Current, "Combat").ClearHostilesWhenSeenHidden,
+            clearWhenSeenHidden: () =>
+            {
+                Models.Profile.CombatSettings combat = ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat");
+                return Game.Combat.CombatStateTracker.SeeHiddenClearApplies(
+                    combat.ClearHostilesWhenSeenHidden, combat.SeenHiddenClearWhileSolo,
+                    combat.SeenHiddenClearWhileInParty, PartyState.IsInParty);
+            },
             isAutoSneakEnabled:  () => ReadAutoModeFlag(d => d.AutoSneak),
             hasSeeHidden:        n => SeeHidden.Has(n));
         // Clear hostiles when sneak fails: a failed sneaked entry into a room inside the

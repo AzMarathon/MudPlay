@@ -473,6 +473,63 @@ public sealed class PyramidSolverTests : IDisposable
         AssertFinished(h);
     }
 
+    // ----- what the Navigation window shows of a climb (report paradigm-20261007-234656)
+
+    // Floor 1 is the timed one: five minutes from the firepit `up`. The clock shows
+    // while the climb is on it and is gone on floor 2.
+    [Fact]
+    public void Floor1Clock_RunsFromTheFirepitUp_AndIsGoneOnFloorTwo()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 7, 23, 0, 0, TimeSpan.Zero);
+        h.Solver.NowProvider = () => now;
+        Begin(h);
+        Assert.Null(h.Solver.Floor1TimeLeft);            // still at the firepit
+
+        DriveUntilFloor(h, "F1");
+        Assert.Equal(TimeSpan.FromMinutes(5), h.Solver.Floor1TimeLeft);
+
+        now = now.AddSeconds(79);
+        Assert.Equal(new TimeSpan(0, 3, 41), h.Solver.Floor1TimeLeft);
+
+        DriveUntilFloor(h, "F2");
+        Assert.Null(h.Solver.Floor1TimeLeft);
+    }
+
+    // A climb picked up part-way along floor 1: its clock started before we were
+    // watching, so none is shown rather than a wrong one.
+    [Fact]
+    public void Floor1Clock_IsNotShown_ForAClimbPickedUpOnFloorOne()
+    {
+        using Harness h = Begin(NewHarness(), room: 1853);
+
+        Assert.Equal("F1", h.Solver.FloorName);
+        Assert.Null(h.Solver.Floor1TimeLeft);
+    }
+
+    [Fact]
+    public void RemainingRooms_RunFromWhereWeStandToTheGoal()
+    {
+        using Harness h = Begin(NewHarness());
+        DriveUntilFloor(h, "F1");
+
+        IReadOnlyList<RoomKey> ahead = h.Solver.RemainingRoomKeys;
+
+        Assert.Equal(h.Tracker.State.CurrentRoom!.Key, ahead[0]);
+        Assert.Equal(new RoomKey(12, 2085), ahead[^1]);
+        Assert.Contains(new RoomKey(12, PyramidScript.FloatingKeyRoom), ahead);
+        for (int i = 1; i < ahead.Count; i++)
+            Assert.NotEqual(ahead[i - 1], ahead[i]);       // a push or an ask doesn't repeat its room
+
+        int before = ahead.Count;
+        DriveUntilFloor(h, "F3");
+        Assert.True(h.Solver.RemainingRoomKeys.Count < before);
+        Assert.NotEmpty(h.Solver.FloorStepLabels);
+
+        RunToEnd(h);
+        Assert.Empty(h.Solver.RemainingRoomKeys);
+    }
+
     // ----- refusals --------------------------------------------------
 
     [Fact]

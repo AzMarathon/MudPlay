@@ -245,6 +245,80 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     // toolbar's run-state follows it.
     public event Action? StateChanged;
 
+    // ----- Navigation surface ----------------------------------------
+    // The walker is idle while the climb runs, so the Navigation window had nothing
+    // to draw and read "Idle" (report paradigm-20261007-234656). These give it the
+    // same two things a walk does: the rooms still ahead, and where it is headed.
+
+    public Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
+    private DateTimeOffset? _floor1Since;
+
+    // Time left on floor 1 before the party is scattered: five minutes from the
+    // firepit `up` (PyramidScript.Floor1Budget). Null off floor 1, and for a climb
+    // picked up part-way along it, whose clock started before we were watching.
+    public TimeSpan? Floor1TimeLeft
+    {
+        get
+        {
+            if (!Active || _floor != PyramidFloor.F1 || _floor1Since is not { } since) return null;
+            TimeSpan left = PyramidScript.Floor1Budget - (NowProvider() - since);
+            return left > TimeSpan.Zero ? left : TimeSpan.Zero;
+        }
+    }
+
+    // The current floor's script as the Current Nav list words a walk's steps:
+    // "west", "push block", "ask sphinx fire, then up", "open door north".
+    public IReadOnlyList<string> FloorStepLabels
+    {
+        get
+        {
+            if (!Active) return Array.Empty<string>();
+            List<string> labels = new();
+            foreach (PyramidStep step in PyramidScript.Steps(_floor))
+                labels.Add(step.Kind switch
+                {
+                    PyramidStepKind.PushBlock => "push block",
+                    PyramidStepKind.AskSphinx => $"ask sphinx {step.Word}, then {step.Dir.ToLongName()}",
+                    PyramidStepKind.Door      => $"door {step.Dir.ToLongName()}",
+                    PyramidStepKind.KeyDoor   => $"golden lion key door {step.Dir.ToLongName()}",
+                    _                         => step.Dir.ToLongName(),
+                });
+            return labels;
+        }
+    }
+
+    // The rooms the script still has to pass, from the step at hand to the goal (or
+    // the top), for the map's route line. A step that doesn't move (a block pushed,
+    // a sphinx asked) repeats its room and is listed once.
+    public IReadOnlyList<RoomKey> RemainingRoomKeys
+    {
+        get
+        {
+            List<RoomKey> keys = new();
+            if (!Active) return keys;
+            bool done = false;
+            void Add(int room)
+            {
+                if (done || room <= 0) return;
+                RoomKey key = new(PyramidScript.PyramidMap, room);
+                if (keys.Count == 0 || !keys[^1].Equals(key)) keys.Add(key);
+                if (key.Equals(_goal)) done = true;
+            }
+
+            if (_tracker.State.CurrentRoom is { } here) keys.Add(here.Key);
+            PyramidFloor floor = _floor == PyramidFloor.Firepit ? PyramidFloor.F1 : _floor;
+            int from = _floor == PyramidFloor.Firepit ? 0 : _stepIndex;
+            for (; floor is >= PyramidFloor.F1 and <= PyramidFloor.F5 && !done; floor++, from = 0)
+            {
+                IReadOnlyList<int>? rooms = PyramidScript.FromRooms(floor);
+                if (rooms is null) break;
+                for (int i = from; i < rooms.Count; i++) Add(rooms[i]);
+                Add(PyramidScript.EndRoom(floor));
+            }
+            return keys;
+        }
+    }
+
     // On F1 or F2, the floors that are run through. Raised true as the climb comes
     // onto them and false as it leaves them or ends: the auto-engines it would
     // otherwise walk away from are switched off for exactly that stretch.
@@ -365,6 +439,7 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
         _goal = destination;
         _phase = Phase.Idle;
         _floor = PyramidFloor.None;
+        _floor1Since = null;
         _stepIndex = 0;
         _sphinxRetries = 0;
         _totalSends = 0;
@@ -587,6 +662,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
             return false;
         }
 
+        // Floor 1's clock starts with the firepit `up`, which is the move that
+        // brought us onto it.
+        if (floor == PyramidFloor.F1 && _floor == PyramidFloor.Firepit) _floor1Since = NowProvider();
         if (floor != _floor)
             _log?.Log(LogSeverity.Info, LogSource,
                 best == 0 ? $"driving {floor}" : $"driving {floor} from step {best + 1} (12/{key.Room})");

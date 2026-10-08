@@ -1,5 +1,12 @@
 # Version history
 
+## 3.150.10
+
+- *Clear hostiles when sneak broken by see-hidden monster* has two ticks under it, While solo and While in a party, so it can clear when you're alone and keep running when you're grouped; both on by default
+- A Great Pyramid climb is drawn on the map and named in the Navigation status and Current Nav list, with a countdown of the time left on floor 1
+- Room Info names the command that opens an action-gated exit, including one you ask an NPC (`ask stone sphinx e`), and puts a long requirement on its own line
+- bug reports addressed: paradigm-20261007-234656
+
 ## 3.150.7
 
 - Auto-Sneak stands down, with a line on the terminal, while you carry something that takes your Stealth to nothing (a log raft), instead of resending `sn` in every room; it sneaks again once the item is gone (Settings → Other sets the sneak chance it stands down under, 15% by default)

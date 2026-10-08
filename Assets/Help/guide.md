@@ -522,7 +522,7 @@ The panel lists clickable links to everything attached to the room:
 - **Room name** — click to open the room's record (or, for a shop room, its shop stock popup), with the map/room number and illumination beneath it.
 - **Illumination** — **`Room Illu:`** shows the room's own light. If you carry any light — worn +illu gear, a readied light, or a light spell in the Buff Watchdog — a **`Your Illu:`** line appears with your effective value, and the visibility phrase moves onto it. The phrase reads the room's state — *pitch black*, *very dark*, *barely visible*, *dimly lit* — or **"You can see."** once fully lit.
 - **Monsters** — grouped (like the map tooltip) into **Placed** (a boss / NPC fixture), **Assigned** (roams there / rarely spawns), and **Lair** (consistent lair spawners, with the lair's **Max Regen** beneath — how many it spawns and how long it takes to come back — for a `Delay` of 5, `5-6m` on Stock, counted from the room's last kill, or `4m 30s` on Paradigm). A monster can appear in more than one group.
-- **Obvious exits** — click one to re-root the map on that neighbour.
+- **Obvious exits** — click one to re-root the map on that neighbour. An exit that needs something shows what: a door's skill, a key, a toll, or the command that opens it. That command can be one you type in the room (`clear rubble`) or one you ask an NPC standing there (`ask stone sphinx e` for the way up out of the Great Pyramid's top room). A long requirement goes on its own line under the exit.
 - **Floor items** — everything the room drops on the ground (static placements plus anything its `roomitem` command scatters).
 - **Shop and room spell** — when the room hosts a shop, and its cast-on-enter room spell.
 - **NPC transports** — teleports a monster standing in the room offers when you ask it a keyword, e.g. `ask Seher'Sahham activate → Damp Cavern, Wellspring (16/637) — 1 runic`. These live on the monster, not the room, so they're listed apart from Room commands. Click one to re-root the map on the destination. The walker routes through a paid transport only when **everyone** can pay: each person who asks is charged the fare, so in a party it checks the poorest member's cash (the same `@wealth` check a toll uses) and walks around it otherwise.
@@ -3029,6 +3029,8 @@ It doesn't run where a backstab couldn't work anyway: a room with a see-hidden m
 
 This works whether **Auto-Combat is on or off**: with Auto-Combat off it engages just for that room and fights it to the end, moving to the next monster as each one dies.
 
+**While solo / While in a party.** Two ticks under the option say when it applies. **While solo** covers you on your own; **While in a party** covers you leading or following. Both are on by default, which is how the option behaved before. Untick **While in a party** to clear see-hidden rooms when you're alone but keep running with the party when you're grouped (or the other way round). With both unticked the option does nothing. Like the option itself, the two ticks are saved with a combat profile's Backstab group.
+
 ### Clear hostiles when sneak fails
 
 **Default:** Off
@@ -4208,6 +4210,8 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 While it climbs, the toolbar shows navigation as running: **Pause** holds the climb where it stands and **Stop** ends it, on any floor. The asylum maze solver is the same: while it works out where a teleport dropped you and walks on, the toolbar shows navigation running, **Pause** holds its next move, and **Stop** ends the solve. The timed first floor and the second floor are run through, because stopping there is what kills the run. As the climb comes onto floor 1 it switches **Auto Combat, Auto Nuke, Auto Rest, Auto Get Items, Auto Get Cash, Auto Search, Auto Hide and Auto Light** off — whichever of them were on — and the toolbar shows them off; Auto Heal, Auto Bless and Auto Sneak stay as you have them. When the climb reaches floor 3, or ends for any reason, it switches back on the ones it switched off. To override it, switch one back on yourself during those floors: it is yours from then on (the climb won't touch it again), it runs, and where it holds movement — a fight, a rest, a pickup, a search — the climb waits for it. The door-maze, footpath and top floors wait for fights, rests, pickups and party holds the way an ordinary walk does. The climb waits at the firepit for a fight or rest to finish before it starts the timer.
 
+**What the Navigation window shows of a climb.** The climb is drawn like any walk: the map's route line runs through the rooms its script has left, shrinking as you go, with your destination marked. The status reads *Climbing the Great Pyramid to …*, with the floor and the step you're on, and **Current Nav** lists that floor's steps (*west*, *push block*, *ask sphinx fire, then up*). **On floor 1** the status also counts down the time left before the floor throws the party out, five minutes from the firepit `up`; the countdown is gone once you reach floor 2. A climb picked up part-way along floor 1 shows no countdown, since its clock started before MudPlay was watching.
+
 On the door-maze floor, a door shown open is simply walked through. A plain door that is shut is opened the way any door on a walk is (bash or pick, per your door settings, resting when HP runs low). The four doors nobody can force are waited for until their timer swings them open. For the key door the climb will not leave the floating key's room until the golden lion key is in your pack: it picks the key up itself, asks a party member for it if their client got there first, and steps out and back in — up to three times — when the kill dropped nothing.
 **Important notes:** These apply to every character on the install, not just the current one.
 
@@ -4654,6 +4658,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Run if BS fails | `false` | bool | `RunIfBackstabFails` | Models/Profile/CombatSettings.cs |
 | Hit and Run tactics / Give up and fight after N runs | `false` / 3 | bool / 1–20 | `HitAndRunTactics` / `HitAndRunMaxRuns` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when seen hidden | `false` | bool | `ClearHostilesWhenSeenHidden` | Models/Profile/CombatSettings.cs |
+| Clear hostiles when seen hidden: While solo / While in a party | `true` / `true` | bool / bool | `SeenHiddenClearWhileSolo`, `SeenHiddenClearWhileInParty` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when sneak fails | `false` | bool | `ClearHostilesWhenSneakFails` | Models/Profile/CombatSettings.cs |
 | Target order | `Normal` | Normal / Reverse | `TargetOrder` | Models/Profile/CombatSettings.cs |
 | Target Priority (+ member name) | `Default` / `null` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |

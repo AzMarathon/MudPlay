@@ -1774,4 +1774,39 @@ public sealed class CombatStateTrackerTests
         h.Feed("Also here: roc hatchling.");
         Assert.True(h.CombatGateHeld);
     }
+
+    // The see-hidden clear has a tick for each kind of company: a lone runner clears
+    // what a see-hidden monster woke, a party may rather keep running.
+    [Theory]
+    [InlineData(true,  true,  true,  false, true)]    // solo, both ticked
+    [InlineData(true,  true,  true,  true,  true)]    // partied, both ticked
+    [InlineData(true,  true,  false, true,  false)]   // partied, "in a party" unticked: run on
+    [InlineData(true,  true,  false, false, true)]    // solo is still cleared
+    [InlineData(true,  false, true,  false, false)]   // solo unticked
+    [InlineData(true,  false, true,  true,  true)]
+    [InlineData(false, true,  true,  false, false)]   // the option itself is off
+    [InlineData(false, true,  true,  true,  false)]
+    public void SeeHiddenClearApplies_ByCompany(bool enabled, bool whileSolo, bool whileInParty, bool inParty, bool expected)
+        => Assert.Equal(expected, CombatStateTracker.SeeHiddenClearApplies(enabled, whileSolo, whileInParty, inParty));
+
+    // A saved profile from before the split has neither tick: both read as on, which
+    // is how the option behaved then.
+    [Fact]
+    public void SeeHiddenClearTicks_DefaultOn_AndTravelWithACombatProfile()
+    {
+        CombatSettings fresh = new();
+        Assert.True(fresh.SeenHiddenClearWhileSolo);
+        Assert.True(fresh.SeenHiddenClearWhileInParty);
+
+        CombatSettings old = System.Text.Json.JsonSerializer
+            .Deserialize<CombatSettings>("""{ "ClearHostilesWhenSeenHidden": true }""")!;
+        Assert.True(old.SeenHiddenClearWhileSolo);
+        Assert.True(old.SeenHiddenClearWhileInParty);
+
+        CombatSpellProfile from = new() { SeenHiddenClearWhileInParty = false };
+        CombatSpellProfile to = new();
+        CombatProfileGroupCopy.Copy(CombatProfileGroup.Backstab, from, to);
+        Assert.False(to.SeenHiddenClearWhileInParty);
+        Assert.True(to.SeenHiddenClearWhileSolo);
+    }
 }

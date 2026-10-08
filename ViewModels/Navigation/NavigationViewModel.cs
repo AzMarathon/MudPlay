@@ -74,9 +74,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _lairTick.Stop();
 
         // 1 s tick that refreshes the "Sailing the high seas…" countdown while a
-        // boat voyage is in flight. Started on the walker's Sailing event, it
-        // self-stops the moment the walker lands and clears IsSailing — so an idle
-        // (or land-walking) Navigation window pays nothing.
+        // boat voyage is in flight, and the floor-1 clock of a Great Pyramid climb.
+        // Started on the walker's Sailing event or the climb's, it self-stops the
+        // moment neither is running — so an idle (or land-walking) Navigation
+        // window pays nothing.
         _sailingTick = new DispatcherTimer(TimeSpan.FromSeconds(1),
             DispatcherPriority.Normal, (_, _) => OnSailingTick());
         _sailingTick.Stop();
@@ -84,6 +85,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.RoomTracker.StateChanged += OnTrackerStateChanged;
         _services.Recovery.TierChanged    += OnRecoveryTierChanged;
         _services.Walker.Event += OnWalkerEvent;
+        _services.PyramidSolver.StateChanged += OnPyramidClimbChanged;
+        // Opened part-way up a climb: its floor-1 clock still needs the tick.
+        if (_services.PyramidSolver.Active) _sailingTick.Start();
         _services.TokenRoute.RegroupFailed += OnTokenRegroupFailed;
         _services.TokenRoute.Changed += OnTokenRouteChanged;
         _services.MapComparison.Changed += OnMapComparisonChanged;
@@ -262,6 +266,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.RoomTracker.StateChanged -= OnTrackerStateChanged;
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
         _services.Walker.Event -= OnWalkerEvent;
+        _services.PyramidSolver.StateChanged -= OnPyramidClimbChanged;
         _services.TokenRoute.RegroupFailed -= OnTokenRegroupFailed;
         _services.TokenRoute.Changed -= OnTokenRouteChanged;
         _services.MapComparison.Changed -= OnMapComparisonChanged;
@@ -3700,9 +3705,18 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // Refresh the boat countdown label each second while a sail is in flight;
     // stop the pump the moment the walker lands and clears IsSailing.
+    // The climb started, ended, or went into or out of a hold: redraw its route
+    // and run the one-second tick while floor 1's clock is showing.
+    private void OnPyramidClimbChanged()
+    {
+        RefreshFromWalker();
+        if (_services.PyramidSolver.Active) _sailingTick.Start();
+        RaiseTopBarStatus();
+    }
+
     private void OnSailingTick()
     {
-        if (!_services.Walker.IsSailing)
+        if (!_services.Walker.IsSailing && !_services.PyramidSolver.Active)
         {
             _sailingTick.Stop();
             RaiseTopBarStatus();
@@ -4100,8 +4114,21 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     private void RefreshFromWalker()
     {
-        IsWalking = _services.Walker.State == WalkState.Walking
-                 || _services.Walker.State == WalkState.Paused;
+        bool walkerBusy = _services.Walker.State == WalkState.Walking
+                       || _services.Walker.State == WalkState.Paused;
+        // The Great Pyramid climb takes a walk-to over from the walker, which goes
+        // idle for it. The climb is still that walk: draw the rooms its script has
+        // left and mark where it is headed.
+        bool climbing = !walkerBusy && _services.PyramidSolver.Active;
+        IsWalking = walkerBusy || climbing;
+
+        if (climbing)
+        {
+            WalkPath = _services.PyramidSolver.RemainingRoomKeys;
+            DestinationRoomKey = _services.PyramidSolver.Goal;
+            RefreshEngineActionKind();
+            return;
+        }
 
         if (!IsWalking)
         {
@@ -4197,7 +4224,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         {
             EngineActionKind = NavigationEngineKind.Looping;
         }
-        else if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
+        else if (_services.Walker.State is WalkState.Walking or WalkState.Paused
+            || _services.PyramidSolver.Active)
         {
             EngineActionKind = NavigationEngineKind.Walking;
         }
@@ -4291,6 +4319,23 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         int remaining = Math.Max(0, total - w.CurrentStepIndex);
         return $"Walking to {dest} on step {step} of {total}, remaining {remaining}, "
              + $"~{FormatEta(CurrentWalkEta())} to arrive{suffix}";
+    }
+
+    // "Climbing the Great Pyramid to X — floor F1, step 12 of 132 · 3:41 left on this
+    // floor". Floor 1 is the timed one: five minutes from the firepit `up`, and the
+    // clock is gone once the climb is on floor 2. Null when no climb is running.
+    private string? PyramidClimbStatus()
+    {
+        Game.Map.PyramidSolver climb = _services.PyramidSolver;
+        if (!climb.Active || _services.Walker.State is WalkState.Walking or WalkState.Paused) return null;
+
+        string dest = climb.Goal is { } goal ? FormatRoomRef(goal) : "the top";
+        string status = $"{(_services.MovementControl.IsUserPaused ? "Paused climbing" : "Climbing")} the Great Pyramid to {dest}";
+        if (climb.ScriptSteps > 0)
+            status += $" — floor {climb.FloorName}, step {Math.Min(climb.ScriptStep, climb.ScriptSteps)} of {climb.ScriptSteps}";
+        if (climb.Floor1TimeLeft is { } left)
+            status += $" · {left:m\\:ss} left on this floor";
+        return status;
     }
 
     // ----- Run / Stop + mode-button state ---------------------------
@@ -4433,6 +4478,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             {
                 case NavigationEngineKind.Walking:
                 {
+                    if (PyramidClimbStatus() is { } climb) return climb;
                     string dest = _services.Walker.Destination is { } k
                         ? FormatRoomRef(k)
                         : "?";
@@ -5188,6 +5234,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             if (EngineActionKind == NavigationEngineKind.Walking)
             {
                 int total = _services.Walker.StepCount;
+                if (total <= 0 && _services.PyramidSolver is { Active: true, ScriptSteps: > 0 } climb)
+                    return Math.Clamp((double)(climb.ScriptStep - 1) / climb.ScriptSteps, 0, 1);
                 if (total <= 0) return null;
                 return Math.Clamp((double)_services.Walker.CurrentStepIndex / total, 0, 1);
             }
@@ -5230,6 +5278,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
         switch (EngineActionKind)
         {
+            case NavigationEngineKind.Walking when _services.PyramidSolver.Active
+                && _services.Walker.State is not (WalkState.Walking or WalkState.Paused):
+            {
+                // A Great Pyramid climb: the walker's own step list is empty, so
+                // list the script of the floor the climb is on.
+                int at = _services.PyramidSolver.ScriptStep - 1;
+                IReadOnlyList<string> labels = _services.PyramidSolver.FloorStepLabels;
+                for (int i = 0; i < labels.Count; i++)
+                    CurrentNavRows.Add(new CurrentNavRowViewModel(
+                        index: i + 1, label: labels[i],
+                        status: i < at ? CurrentNavRowStatus.Completed
+                            : i == at ? CurrentNavRowStatus.Current : CurrentNavRowStatus.Upcoming));
+                break;
+            }
             case NavigationEngineKind.Walking:
             {
                 int idx = _services.Walker.CurrentStepIndex;

@@ -652,6 +652,69 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.Contains("Try: clear rubble / move rubble / push rubble", text);
     }
 
+    // 12/2085: the way up opens when the stone sphinx standing there is asked "e".
+    // The unlock is on the sphinx's greet chain, not the room's CMD chain, and the
+    // room info said only "Needs 1 action".
+    [Fact]
+    public void ExitOpenedByAskingAPlacedNpc_NamesTheAskCommand()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 12, "Room Number": 2085, "Name": "Great Pyramid", "NPC": 552, "CMD": 0,
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0",
+                "U": "12/2250 (Hidden/Needs 1 Actions, any order)", "D": "0" },
+              { "Map Number": 12, "Room Number": 2250, "Name": "Tomb of the Pharaoh", "NPC": 0, "CMD": 0,
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string monsters = """
+            [ { "Number": 552, "Name": "stone sphinx", "GreetTXT": 2650 } ]
+            """;
+        const string tbInfoRows = """
+            [
+              { "Number": 2650, "LinkTo": 2509, "Action": "riddle:2509\ne:2651\nletter e:2651\n", "Called From": "Monster #552" },
+              { "Number": 2509, "LinkTo": 0, "Action": "message 1\n", "Called From": "Textblock #2650" },
+              { "Number": 2651, "LinkTo": 2652, "Action": "", "Called From": "Textblock #2650" },
+              { "Number": 2652, "LinkTo": 0, "Action": "remoteaction 2085 0 0 8\n", "Called From": "Textblock #2651" }
+            ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    rooms);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsters);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"),   tbInfoRows);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+        Room room = graph.GetRoom(new RoomKey(12, 2085))!;
+
+        IReadOnlyList<string> openers = RoomTooltipBuilder.ResolveExitOpeners(room, Direction.U, cache, null, tbinfo);
+
+        Assert.Equal(new[] { "ask stone sphinx e", "ask stone sphinx letter e" }, openers);
+        Assert.Empty(RoomTooltipBuilder.ResolveExitOpeners(room, Direction.N, cache, null, tbinfo));
+        Assert.Contains("Try: ask stone sphinx e / ask stone sphinx letter e",
+            RoomTooltipBuilder.Build(room, graph, cache, tbinfo: tbinfo));
+    }
+
+    // The Room Info panel is narrow: a short requirement stays beside its exit, a
+    // long one goes on its own line instead of wrapping wherever it runs out.
+    [Fact]
+    public void ExitRowLabel_PutsALongRequirementOnItsOwnLine()
+    {
+        Assert.Equal("west → Hall (1/2)", RoomTooltipBuilder.ExitRowLabel("west → Hall (1/2)", ""));
+        Assert.Equal("west → Hall (1/2) · Door: any", RoomTooltipBuilder.ExitRowLabel("west → Hall (1/2)", "Door: any"));
+        Assert.Equal(
+            "up → Tomb of the Pharaoh (12/2250)\n    Needs 1 action: ask stone sphinx e",
+            RoomTooltipBuilder.ExitRowLabel("up → Tomb of the Pharaoh (12/2250)", "Needs 1 action: ask stone sphinx e"));
+    }
+
     [Fact]
     public void Build_RoomCmdTeleport_SurfacesKeywordsGroupedByDestination()
     {

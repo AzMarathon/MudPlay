@@ -72,7 +72,7 @@ public static class RoomTooltipBuilder
         }
 
         // 8. Exits — blank line above, per-direction with destination.
-        string exitsBlock = BuildExitsBlock(room, graph, data, tbinfo, disarmOdds, picklocks);
+        string exitsBlock = BuildExitsBlock(room, graph, data, tbinfo, spawnIndex, disarmOdds, picklocks);
         if (exitsBlock.Length > 0)
         {
             sb.Append('\n').Append('\n').Append(exitsBlock);
@@ -471,7 +471,7 @@ public static class RoomTooltipBuilder
     };
 
     private static string BuildExitsBlock(Room room, RoomGraphManager graph, GameDataCache? data, TBInfoStore? tbinfo,
-        TrapDisarmOdds? disarmOdds, int picklocks)
+        MonsterSpawnIndex? spawnIndex, TrapDisarmOdds? disarmOdds, int picklocks)
     {
         if (room.Exits.Count == 0) return string.Empty;
 
@@ -502,17 +502,14 @@ public static class RoomTooltipBuilder
                 {
                     AppendMultiActionDetail(sb, room.Key, maDetail, graph, data);
                 }
-                else if (room.Cmd > 0 && tbinfo is not null)
+                else if (ResolveExitOpeners(room, dir, data, spawnIndex, tbinfo) is { Count: > 0 } openers)
                 {
-                    // No Action#N exit cells were attached, but the
-                    // room runs a TBInfo CMD chain. v1.11p encodes
-                    // many lever-style unlocks this way (e.g. map
-                    // 9 / room 1012 CMD 1422 — "clear rubble" /
-                    // "push mound" / etc., all firing the same
-                    // remoteaction). Surface those keywords as a
-                    // fallback so the tooltip still tells the user
-                    // what to type.
-                    AppendTbInfoActionFallback(sb, room.Cmd, tbinfo);
+                    // No Action#N exit cells were attached: the unlock lives in
+                    // the room's CMD chain (9/1012 CMD 1422, "clear rubble" /
+                    // "push mound") or with an NPC standing here (the stone
+                    // sphinx in 12/2085, "ask sphinx e"). Either way the tooltip
+                    // still says what to type.
+                    sb.Append('\n').Append("    Try: ").Append(string.Join(" / ", openers));
                 }
             }
         }
@@ -564,27 +561,58 @@ public static class RoomTooltipBuilder
         }
     }
 
-    // TBInfo fallback for MultiActionHidden exits whose unlock lives in a CMD
-    // chain rather than Action#N exit cells. Walks the chain via
-    // TBInfoActionResolver and renders the gathered keywords as a single
-    // indented "Try: kw1 / kw2 / …" line. The keywords all run in the room being
-    // hovered (TBInfo CMDs are local to their owning room), so no "here:" /
-    // "at X:" prefix is needed.
-    private static void AppendTbInfoActionFallback(
-        StringBuilder sb, int roomCmd, TBInfoStore tbinfo)
-    {
-        List<string> keywords = new();
-        foreach (string kw in TBInfoActionResolver.EnumerateRemoteActionKeywords(tbinfo, roomCmd))
-        {
-            // Preserve order but dedup — the same keyword appearing
-            // twice in a CMD chain (rare but possible) shouldn't
-            // bloat the tooltip.
-            if (!keywords.Contains(kw, StringComparer.OrdinalIgnoreCase))
-                keywords.Add(kw);
-        }
-        if (keywords.Count == 0) return;
+    // One exit row of the Room Info panel: the exit, and what it takes to cross.
+    // The panel is narrow, and a long row used to wrap wherever it ran out of room
+    // ("… (12/2250) · Needs" / "1 action"). Past this many characters the
+    // requirement goes on its own indented line instead.
+    private const int ExitRowInlineLimit = 40;
 
-        sb.Append('\n').Append("    Try: ").Append(string.Join(" / ", keywords));
+    public static string ExitRowLabel(string exit, string hint)
+    {
+        if (hint.Length == 0) return exit;
+        return exit.Length + 3 + hint.Length <= ExitRowInlineLimit
+            ? $"{exit} · {hint}"
+            : $"{exit}\n    {hint}";
+    }
+
+    // What to type to open an action-gated exit whose game data carries no Action#N
+    // cells, in the order to try them. Two places hold such an unlock:
+    //   • the room's own CMD chain (a `remoteaction` keyword: "clear rubble");
+    //   • an NPC placed in the room, whose greet keyword operates this exit when
+    //     asked ("ask sphinx e" lifts the ceiling out of 12/2085). The room info
+    //     used to say only "Needs 1 action" there.
+    // The CMD keywords all run in this room, so they need no "here:" prefix; they
+    // aren't tied to one direction in the data the tooltip reads, so every exit of
+    // the room that lacks its own cells lists them.
+    public static IReadOnlyList<string> ResolveExitOpeners(
+        Room room, Direction dir, GameDataCache? data, MonsterSpawnIndex? spawnIndex, TBInfoStore? tbinfo)
+    {
+        ArgumentNullException.ThrowIfNull(room);
+        if (tbinfo is null) return Array.Empty<string>();
+
+        List<string> openers = new();
+        void Add(string command)
+        {
+            if (!openers.Contains(command, StringComparer.OrdinalIgnoreCase)) openers.Add(command);
+        }
+
+        if (data is not null)
+            foreach (RoomMonsterRef m in ResolveRoomMonsters(room, data, spawnIndex).Placed)
+            {
+                if (data.FindRowByNumber("Monsters", m.Id) is not { } row) continue;
+                int greet = row.TryGetProperty("GreetTXT", out System.Text.Json.JsonElement g)
+                            && g.ValueKind == System.Text.Json.JsonValueKind.Number && g.TryGetInt32(out int n) ? n : 0;
+                if (greet <= 0) continue;
+                foreach (GuardDoorCommandResolver.GuardDoorCommand ask in
+                         GuardDoorCommandResolver.Resolve(tbinfo, greet, m.Name, room.Key.Room))
+                    if (ask.Direction == dir) Add(ask.Command);
+            }
+
+        if (room.Cmd > 0)
+            foreach (string kw in TBInfoActionResolver.EnumerateRemoteActionKeywords(tbinfo, room.Cmd))
+                Add(kw);
+
+        return openers;
     }
 
     // Render the parenthetical exit qualifier, looking up the underlying record
