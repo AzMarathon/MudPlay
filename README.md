@@ -9,6 +9,7 @@
 > - Item Finder: the Gear Finder panel shows the trial set's damage with the selected attack type: accuracy, hit chance, damage range, swings, crit and Quick & Deadly, and damage per round
 > - New **Configure Estimates** window sets what that is worked out against: your level and stats with nothing worn (the trial set's bonuses go on top), and a target's armour class, damage resist, dodge and BS defence, typed or filled from a monster lookup
 > - Item Finder's Level req filter is a min / max range
+> - The Workshop opens at the size its opening tab fits, the same as switching to that tab, instead of the size it last closed at
 > - Showing the Gear Finder panel on a maximized window no longer lays it out off the edge of the screen; switching Workshop tabs while maximized no longer resizes the window either
 > - Gear Finder panel regrouped: the Find Best controls sit together, and Import from live / Clear sit on the trial set's slot list
 >

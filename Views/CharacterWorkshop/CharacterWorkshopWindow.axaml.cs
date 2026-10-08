@@ -46,6 +46,16 @@ public partial class CharacterWorkshopWindow : Window
         if (_vm is not null) _vm.ActiveLayoutChanged += FitToActiveTab;
     }
 
+    // The remembered layout puts the window back where it was, at the size it had
+    // when it last closed, which was whatever tab was showing then. The tab it
+    // opens on now gets its own fit, as it would on a switch to it; the position
+    // stays as remembered. base raises Opened, which is where the layout is restored.
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        FitToActiveTab();
+    }
+
     private void OnSectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         // SelectionChanged bubbles: an inner ComboBox / ListBox (e.g. the Monster
