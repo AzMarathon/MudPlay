@@ -178,11 +178,14 @@ public sealed partial class InventoryManager : IDisposable
     // for us and gave back as our deathpile coming home.
     public event Action<string, string>? ItemReceived;
 
-    // True for another character's hand-over line this parser reads. It reads the
-    // wire directly and registers no router pattern, so the unrecognized-line
-    // watcher asks here rather than restate the shapes.
-    public bool IsReceivedItemLine(string line)
-        => ReceivedItemRegex().IsMatch(line) || TryMatchHandedItem(line, out _, out _);
+    // True for another character's hand-over line this parser reads, item or
+    // coins. It reads the wire directly and registers no router pattern, so the
+    // unrecognized-line watcher asks here rather than restate the shapes.
+    public bool IsReceivedHandOverLine(string line)
+        => ReceivedItemRegex().IsMatch(line)
+           || TryMatchHandedItem(line, out _, out _)
+           || (ReceivedCoinsRegex().Match(line) is { Success: true } coins
+               && HandOverCoinNoun(coins.Groups[2].Value) is not null);
 
     // True after at least one successful full 'i' parse.
     public bool IsLoaded
@@ -692,6 +695,19 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
+        // Coins handed over. The engine words these apart from an item, with no
+        // "just" and no full stop: "You gave Bob 30 gold" / "Bob gave you 30 gold"
+        // for `give`, and the full coin noun ("30 gold crowns") for `share`.
+        Match coinsAway = GaveCoinsAwayRegex().Match(line);
+        if (coinsAway.Success
+            && TryApplyCoinHandOver(coinsAway.Groups[1].Value, coinsAway.Groups[2].Value, -1))
+            return;
+
+        Match coinsIn = ReceivedCoinsRegex().Match(line);
+        if (coinsIn.Success
+            && TryApplyCoinHandOver(coinsIn.Groups[1].Value, coinsIn.Groups[2].Value, +1))
+            return;
+
         // Failed give: "You don't have a torch to give." — no state change (we
         // never held it), logged so a give-driven flow can see the attempt bounced.
         if (GiveFailedRegex().IsMatch(line))
@@ -1024,6 +1040,32 @@ public sealed partial class InventoryManager : IDisposable
         giver = m.Groups[1].Value;
         item = m.Groups[2].Value;
         return true;
+    }
+
+    private bool TryApplyCoinHandOver(string countText, string coin, int sign)
+    {
+        if (HandOverCoinNoun(coin) is not { } noun || !int.TryParse(countText, out int count))
+            return false;
+        lock (_lock) AdjustCurrency(noun, sign * count);
+        Changed?.Invoke();
+        return true;
+    }
+
+    // The coin a coin hand-over names, as the noun AdjustCurrency keys on. `share`
+    // prints the full noun; `give` prints the bare metal, and for the fifth coin a
+    // name each board sets itself, so any other single word is that coin.
+    private static string? HandOverCoinNoun(string coin)
+    {
+        if (CoinNounSuffixRegex().IsMatch(coin)) return coin;
+        if (coin.Contains(' ')) return null;
+        return coin.ToLowerInvariant() switch
+        {
+            "copper" => "copper farthing",
+            "silver" => "silver noble",
+            "gold" => "gold crown",
+            "platinum" => "platinum piece",
+            _ => "runic coin",
+        };
     }
 
     // Index of the carried entry whose SINGULAR name equals `name`, ignoring any
@@ -1419,9 +1461,16 @@ public sealed partial class InventoryManager : IDisposable
 
     // The other receive wording seen on Paradigm. Only the one-item form is on
     // record (first name, record name, no article), so the giver is a single word
-    // and TryMatchHandedItem checks the item; coins and counts are not read.
+    // and TryMatchHandedItem checks the item; counts in this wording are not read.
     [GeneratedRegex(@"^(\S+) gives you (.+)\.$")]
     private static partial Regex HandedItemRegex();
+
+    // A coin hand-over: count, then the coin. Giver and recipient are one word.
+    [GeneratedRegex(@"^You gave \S+ (\d+) (.+?)\.?$")]
+    private static partial Regex GaveCoinsAwayRegex();
+
+    [GeneratedRegex(@"^\S+ gave you (\d+) (.+?)\.?$")]
+    private static partial Regex ReceivedCoinsRegex();
 
     [GeneratedRegex(@"^You don't have (.+) to give\.$")]
     private static partial Regex GiveFailedRegex();

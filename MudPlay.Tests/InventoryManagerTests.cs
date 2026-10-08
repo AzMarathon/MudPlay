@@ -1155,7 +1155,7 @@ public sealed class InventoryManagerTests
         Assert.Contains("magical quartz rod", Carried(h));
         Assert.Contains("lantern", Carried(h));   // baseline item untouched
         Assert.Equal(new[] { ("magical quartz rod", "Bob") }, got);
-        Assert.True(h.Inv.IsReceivedItemLine("Bob gives you magical quartz rod."));
+        Assert.True(h.Inv.IsReceivedHandOverLine("Bob gives you magical quartz rod."));
     }
 
     [Fact]
@@ -1190,7 +1190,7 @@ public sealed class InventoryManagerTests
         Assert.Equal(before, Carried(h));
         Assert.Equal(0, h.Inv.Snapshot.Currency.Gold);
         Assert.False(raised);
-        Assert.False(h.Inv.IsReceivedItemLine(line));
+        Assert.False(h.Inv.IsReceivedHandOverLine(line));
     }
 
     // Giving coins adjusts the purse, not the pack — no phantom carried item.
@@ -1218,6 +1218,60 @@ public sealed class InventoryManagerTests
 
         Assert.Equal(30, h.Inv.Snapshot.Currency.Gold);
         Assert.DoesNotContain(Carried(h), c => c.Contains("gold"));
+    }
+
+    // The engine words a coin hand-over apart from an item's: no "just", no full
+    // stop, and `give` names the bare metal where `share` prints the coin's noun.
+    [Theory]
+    [InlineData("Bob gave you 30 gold", 30, 0, 0)]
+    [InlineData("Bob gave you 30 gold crowns", 30, 0, 0)]
+    [InlineData("Bob gave you 1 gold crown", 1, 0, 0)]
+    [InlineData("Bob gave you 7 platinum", 0, 7, 0)]
+    [InlineData("Bob gave you 2 runic", 0, 0, 2)]
+    [InlineData("Bob gave you 2 quatloos", 0, 0, 2)]   // a board's own name for the fifth coin
+    public void Receive_Coins_EngineCoinWording_AdjustsCurrency(string line, int gold, int platinum, int runic)
+    {
+        using Harness h = new();
+        FeedCarriedBaseline(h);
+        bool raised = false;
+        h.Inv.ItemReceived += (_, _) => raised = true;
+
+        h.Feed(line);
+
+        Assert.Equal(gold, h.Inv.Snapshot.Currency.Gold);
+        Assert.Equal(platinum, h.Inv.Snapshot.Currency.Platinum);
+        Assert.Equal(runic, h.Inv.Snapshot.Currency.Runic);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("gold") || c.Contains("Bob"));
+        Assert.False(raised);
+        Assert.True(h.Inv.IsReceivedHandOverLine(line));
+    }
+
+    [Theory]
+    [InlineData("You gave Bob 10 gold")]
+    [InlineData("You gave Bob 10 gold crowns")]
+    public void GiveAway_Coins_EngineCoinWording_AdjustsCurrency(string line)
+    {
+        using Harness h = new();
+        h.Feed("You are carrying lantern, 30 gold crowns.");
+        h.Feed("Wealth:    3000 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed(line);
+
+        Assert.Equal(20, h.Inv.Snapshot.Currency.Gold);
+    }
+
+    // The count-then-words shape with more than one unknown word names no coin.
+    [Fact]
+    public void Receive_Coins_IgnoresALineThatNamesNoCoin()
+    {
+        using Harness h = new();
+        FeedCarriedBaseline(h);
+
+        h.Feed("Bob gave you 5 dirty looks");
+
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Runic);
+        Assert.False(h.Inv.IsReceivedHandOverLine("Bob gave you 5 dirty looks"));
     }
 
     // "You don't have X to give." is a bounced give — nothing changes.

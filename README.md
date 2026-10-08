@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.2**
+> **Version 3.149.3**
 > - An item another player hands you (`<Player> gives you <item>.`) is added to your carried items at once, so route gates and other "do you carry it" checks no longer wait for the next `i`
 > - That line is no longer flagged as unrecognized
+> - Coins another player gives or shares with you (`<Player> gave you 30 gold`) are added to your purse at once, and coins you give leave it, on every realm
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

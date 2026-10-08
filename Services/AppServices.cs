@@ -4678,9 +4678,9 @@ public sealed class AppServices
                 // live capture flag cover the rest.
                 || text.StartsWith("You are carrying ", StringComparison.Ordinal)
                 || Inventory.IsCapturing
-                // Another character handing us an item: InventoryManager reads the
-                // line itself and files the item.
-                || Inventory.IsReceivedItemLine(text)
+                // Another character handing us an item or coins: InventoryManager
+                // reads the line itself and files it.
+                || Inventory.IsReceivedHandOverLine(text)
                 // "Uses remaining: N" off an item look — ItemChargeTracker reads it via
                 // TokenCatalog with no router pattern, so reuse that same recognizer.
                 || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0
