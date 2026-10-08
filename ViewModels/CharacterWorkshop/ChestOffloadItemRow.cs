@@ -8,7 +8,7 @@ using MudPlay.Game.Calculators;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// One looted item in the Chest Offload window: how many the chest gave, an
+// One looted item in the Chest Offload tab: how many the chest gave, an
 // editable sell quantity (keep some, sell the rest), and what the selected
 // quantity fetches at the current charm. Vendor sell-back is shop-independent
 // (charm-only), so the per-item value is the same wherever it's sold — which is

@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// A container listed in the Chest Offload window. Clicking it sends "open <name>"
+// A container listed in the Chest Offload tab. Clicking it sends "open <name>"
 // to the game. Real rows come from the player's inventory (the window then diffs
 // to see the loot); "simulated" rows are seeded by the test button and roll the
 // chest's loot table instead of waiting on a real drop.

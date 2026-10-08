@@ -170,7 +170,7 @@ public sealed partial class InventoryManager : IDisposable
     // Fired (singular name + count) each time the player's own `You sold …` /
     // `You dropped …` confirmation is parsed — the counted Paradigm form and the
     // one-at-a-time Stock form both resolve to (name, N). Lets a consumer react to
-    // exactly what left the pack (e.g. the Chest Offload window reconciling its list
+    // exactly what left the pack (e.g. the Chest Offload tab reconciling its list
     // against confirmed sales/drops rather than optimistically or by re-diffing).
     // ItemSold also carries the sale's copper value off the same line.
     public event Action<string, int, long>? ItemSold;

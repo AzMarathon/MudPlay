@@ -503,7 +503,7 @@ public sealed class AppServices
     // restock at the BBS cleanup time. Persisted on the character profile.
     public Game.Inventory.ItemUseCountTracker ItemUseCounts { get; private set; } = null!;
 
-    // Typed `open <target>` watcher — lets the Chest Offload window track a chest
+    // Typed `open <target>` watcher — lets the Chest Offload tab track a chest
     // opened from the terminal.
     public Game.Inventory.OutboundOpenObserver OutboundOpen { get; } = new();
 

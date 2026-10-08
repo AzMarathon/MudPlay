@@ -8,7 +8,7 @@ using MudPlay.Game.Map;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// One shop's worth of looted items in the Chest Offload window. The header walks
+// One shop's worth of looted items in the Chest Offload tab. The header walks
 // to the shop and shows the running total for what's selected here; the Sell
 // button fires the sell commands for every selected item (the caller batches per
 // realm). Items destined for the same shop are grouped so the trip is shortest.

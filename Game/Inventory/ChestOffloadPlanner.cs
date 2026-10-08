@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace MudPlay.Game.Inventory;
 
-// Pure helpers behind the Chest Offload window: diff a before/after carried
+// Pure helpers behind the Chest Offload tab: diff a before/after carried
 // inventory to find what a chest gave, and pack the sellable loot into as few
 // shops as possible. Everything here is deterministic and service-free so it can
 // be unit-tested; the view-model supplies the item→shop and pricing lookups.

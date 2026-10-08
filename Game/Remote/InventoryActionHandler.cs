@@ -190,7 +190,7 @@ public sealed class InventoryActionHandler : IDisposable
     // The game ignored a command for coming too fast.
     public void NoteRateLimited() => _pacer?.NoteRateLimited();
 
-    // Item commands from elsewhere (the Chest Offload window's drops) that should
+    // Item commands from elsewhere (the Chest Offload tab's drops) that should
     // share the sweeps' pacing.
     public void SendPaced(IReadOnlyList<string> commands)
     {
