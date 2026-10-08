@@ -1689,6 +1689,7 @@ public static class BugReportBuilder
             walker.JourneyOrigin is { } origin ? $"{origin.Map}/{origin.Room}" : "(none)");
         Kv(sb, "Next planned direction",
             walker.PeekNextPlannedDirection() is { } dir ? dir.ToString() : "(none / command step)");
+        Kv(sb, "Room command held for an empty room", walker.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",

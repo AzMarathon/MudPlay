@@ -5408,7 +5408,9 @@ public sealed class AppServices
             // and fights to clear it — the do-not-attack rest exception.
             isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             requestEngage: Combat.RequestRestClearEngage);
-        Combat.SetRestClearGate(() => Health.ForceClearForRest);
+        // The walker asks for the same clear while a room command that only works in
+        // an empty room waits on a monster (AutoWalkManager.AwaitingEmptyRoom).
+        Combat.SetRestClearGate(() => Health.ForceClearForRest || Walker is { AwaitingEmptyRoom: true });
 
         // Break-before-run: turning auto-attack OFF mid-fight releases the Combat
         // gate so the walker resumes — send `break` first when the user has
@@ -7046,6 +7048,12 @@ public sealed class AppServices
         // A key an NPC hands over for the asking is as fetchable as one a summoned
         // monster always drops (the old hermit's jagged bone key for the Library).
         Walker.SetDoorKeySourceProbe(DoorKeyIsFetchable);
+        Walker.SetRoomClearHooks(
+            roomHasMonster: () => RoomClassifier.Current is { } obs
+                && obs.Entities.Any(e => e.Kind == Game.Combat.EntityKind.Monster),
+            requestRoomClear: () => Combat.RequestRestClearEngage(),
+            abortPartyReform: () => AutoParty.AbortReformWaits("the teleport was refused"));
+        RoomClassifier.EntitiesObserved += _ => Walker.NoteRoomObserved();
 
         // Hold a crossing whose gate item is missing but already being fetched,
         // rather than sending an opener and a move that can only fail. Requires a

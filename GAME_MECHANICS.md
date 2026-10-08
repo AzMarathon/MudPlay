@@ -4573,10 +4573,12 @@ Among protectable hazards, a further split governs whether the navigator may off
   | `price` | `He says, "I may be old, but I count quite well and you are short!"` |
 
 - Several of these (`You do not have that.`, `You do not see that here.`) are also the engine's everyday replies to ordinary commands.
+- **Paradigm prints the same `nomonsters` line** *([OBSERVED] report `paradigm-20261007-194430`)*: Dark Alley `2/2547`, `CMD 5365` = `go hole:nomonsters 289:message 9455:teleport 12034 2`. With a depraved murderer that had followed the party into the room, `go hole` answered `You cannot do that right now!` to the leader and nobody moved; the followers sent the same command on the relay and stayed too.
 
 **Client use:**
 - `MovementRefusalDetector.RoomCommandRefused` matches the table; `RoomTracker.NoteCommandMoveRefused` reverts the pending move only when it is a typed command (a text exit, teleport keyword or `ask`) sent within the last 3 seconds, so an everyday reply can't revert a cardinal move.
 - `AutoWalkManager` stops re-asking a greet teleport the NPC refused (`RoomTracker.CommandMoveRefused`), since a refusal isn't a failed skill roll; the step then retries once and replans like any refused move.
+- A room command refused while a monster is in the room is held, not retried: the walker drops the regroup hold its relayed teleport put up, has the room cleared (a force-clear, so it is fought with Auto-Combat off too), and sends the command again once the room roster shows no monster, giving up after 60 s (`AutoWalkManager.HoldForEmptyRoom`, `AwaitingEmptyRoom`). With no monster in the room the refusal has another cause and the step retries and replans as before.
 
 ### Cast-on-walk exits and random teleports
 *Status: CONFIRMED (game data v1.11p map 9)*

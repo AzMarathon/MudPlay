@@ -1,12 +1,14 @@
 # Version history
 
-## 3.149.5
+## 3.149.7
 
 - A monster that needs a magical weapon is judged by the weapon in your hand when the combat profile names one you no longer carry, instead of being skipped as unhittable
 - After killing a monster that turns into or summons another as it dies (the Champion of Blood's greater hellion), the next target is picked once the room shows the newcomer
 - A follower who walks off by themselves (sent on with `@do`, say) is no longer gone back for as if your move had left them behind
 - A locked door you can't pick or bash whose key a shop sells (the skeleton key): the route card names the shop, and picking that route buys the key on the way
-- bug reports addressed: paradigm-20261007-182916, paradigm-20261007-185740, paradigm-20261007-183903, paradigm-20261007-192215
+- A room command that only works in an empty room (the Dark Alley's `go hole`), refused because a monster followed you in: the room is cleared and the command sent again, instead of the walk stalling
+- Room commands that cast a spell now show on the map tooltip and in room info (the Tarl quest's `lift latch`, `pray — casts …`); a command that both summons and casts was hidden altogether
+- bug reports addressed: paradigm-20261007-182916, paradigm-20261007-185740, paradigm-20261007-183903, paradigm-20261007-192215, paradigm-20261007-194430, paradigm-20261007-194642
 
 ## 3.149.1
 

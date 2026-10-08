@@ -38,6 +38,18 @@ public static class TBInfoCastTeleportResolver
     // the tooltip into hundreds of lines.
     private const int MaxRandomRange = 64;
 
+    // True when the spell moves its caster to another room (it carries a
+    // TeleportRoom ability). A room command that casts one is shown by where it
+    // lands; a command that casts anything else is shown by the spell it casts.
+    public static bool IsTeleportSpell(KnownSpellCatalog catalog, int spellNumber)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (catalog.GetFormulaByNumber(spellNumber) is not { } spell) return false;
+        foreach (SpellAbility ab in spell.Abilities)
+            if (ab.Code == TeleportRoomCode) return true;
+        return false;
+    }
+
     // True when casting this spell lands the caster in an unpredictable room —
     // a TeleportRoom (Abil 140) ability whose value is 0, meaning "a random room
     // in the spell's MinBase..MaxBase range" spanning more than one room. A
