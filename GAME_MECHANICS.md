@@ -506,8 +506,13 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **No Y/N confirm prompt fires on the exit path.**
 - **Where you land after that depends on the board.** Some boards drop straight to MajorMUD's own entry menu (`[E] . Enter the Realm`). Others nest the realm under extra door/games menus, so a second `x` is needed to walk back out. Example: the door post-game screen with a `[MAJORMUD]:` prompt, then the BBS games menu `[M]...MajorMUD! …` with a `Fujin, your selection or ? for help:` prompt. The entry-menu row does NOT appear on the nested boards.
 - **"Your character has been saved." is the board-agnostic "we're out of the realm" signal**, not the entry menu.
-- **Paradigm: `exit` went from the meditation line straight to the entry menu, with no "Your character has been saved." in between** *([OBSERVED] 2026-10-08, report `paradigm-20261008-125639`)*. The capture, in order: `exit` → `You will exit after a period of silent meditation.` → about seven seconds → the party lines (`<Name> is no longer following you.`, `Your party has been disbanded.`) → the banner and `[E] . Enter the Realm`. `[NEEDS CONFIRMATION]` Does Paradigm ever print the saved line on exit, or was it only missing here?
-- **A command sent during the wait is refused: `You may not perform any commands while waiting to exit!`** *([OBSERVED] same report, a `par` sent three seconds in)*. `[NEEDS CONFIRMATION]` Does anything cancel the exit once the wait has started?
+- **Paradigm prints no "Your character has been saved." on exit: the wait ends straight in the entry menu** *([CONFIRMED] 2026-10-08, user: "this is the entire exit sequence on paradigm"; first seen in report `paradigm-20261008-125639`)*. In order:
+  - `exit`
+  - `You will exit after a period of silent meditation.`
+  - about seven seconds, with no prompt printed;
+  - the party lines when in one: `<Name> is no longer following you.` for each follower, then `Your party has been disbanded.`
+  - the board's banner and the entry menu (`[E] . Enter the Realm` … `[X] . Exit Game`), under a `[PARADIGM]:` prompt.
+- **A command sent during the wait is refused: `You may not perform any commands while waiting to exit!`** *([CONFIRMED] 2026-10-08, user capture: an `sn` and a `par` each got it)*. `[NEEDS CONFIRMATION]` Does anything cancel the exit once the wait has started?
 - **The entry menu takes whatever is sent next as a selection and redraws itself**, under a `[PARADIGM]:` prompt on that board *([OBSERVED] same report)*. `e` enters the realm, in either case: `e` and `E` work the same *([CONFIRMED] 2026-10-08, user)*.
 
 **Client use:**
