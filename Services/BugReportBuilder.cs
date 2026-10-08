@@ -1663,7 +1663,7 @@ public static class BugReportBuilder
             Game.Map.RoomExit e = b.BlockExit;
             Kv(sb, "Block exit fields",
                 $"hint={e.Hint} level={e.MinLevel}-{e.MaxLevel} stat={e.StatRequirement} "
-                + $"toll={e.TollGold} fare={e.FareCopper} class={e.ClassGate} keyItem={e.KeyItemId} "
+                + $"toll={e.TollGold} fare={e.FareCopper} class={e.ClassGate} race={e.RaceGate} keyItem={e.KeyItemId} "
                 + $"align={e.HasAlignmentGate} filterReasons={filter.DescribeExitBlock(in e)}");
         }
         else

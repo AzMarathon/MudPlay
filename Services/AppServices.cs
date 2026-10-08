@@ -3887,6 +3887,16 @@ public sealed class AppServices
                 .ResolveClassProfile(GameData, PlayerStats.Class).ClassNumber;
             return n > 0 ? n : (int?)null;
         };
+        // Race number for the "(Race: N OK)" exit gate, off the stat screen's race
+        // name. null until stats parse or when the name isn't in the Races table.
+        Movement.RaceNumberProvider = () =>
+        {
+            if (!Stats.HasParsed || string.IsNullOrWhiteSpace(PlayerStats.Race)) return null;
+            return GameData.FindRowByName("Races", PlayerStats.Race) is { } raceRow
+                && raceRow.TryGetProperty("Number", out System.Text.Json.JsonElement raceNumber)
+                && raceNumber.ValueKind == System.Text.Json.JsonValueKind.Number
+                && raceNumber.TryGetInt32(out int n) && n > 0 ? n : (int?)null;
+        };
         Movement.PartyAlignmentsProvider = PartyAlignmentValues;
         // Acquirable-gate providers — feed inventory / stats / hazard data into
         // item, ticket, locked-door, and hazard-room routing. Inventory readiness

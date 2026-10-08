@@ -34,6 +34,7 @@ public static class BlockedExitDescriber
             _ when exit.FareCopper > 0
                 => $"a paid transport from {where} ({CurrencyFormat.Full(exit.FareCopper)} per person)",
             _ when exit.HasClassGate => $"a class-restricted exit {way} from {where}",
+            _ when exit.HasRaceGate => $"a race-restricted exit {way} from {where}",
             _ => $"a blocked exit {way} from {where}",
         };
     }

@@ -728,6 +728,14 @@ public static class RoomTooltipBuilder
                         ? $"{className} only"
                         : $"Class #{exit.ClassGate} only";
                 }
+                if (exit.HasRaceGate)
+                {
+                    // "(Race: 13 OK, 0 NO)" → "Gaunt One only", the class gate's twin.
+                    string? raceName = LookupName(data, "Races", exit.RaceGate);
+                    return raceName is { Length: > 0 }
+                        ? $"{raceName} only"
+                        : $"Race #{exit.RaceGate} only";
+                }
                 return string.IsNullOrEmpty(exit.RawHint) ? string.Empty : exit.RawHint!;
 
             default:

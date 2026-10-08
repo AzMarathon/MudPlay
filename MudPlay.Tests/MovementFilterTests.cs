@@ -371,6 +371,25 @@ public sealed class MovementFilterTests
         Assert.False(filter.IsExitBlocked(ClassGatedExit(13)));
     }
 
+    // ----- IsExitBlocked: (Race: N OK) race-gate evaluation ----------
+
+    [Fact]
+    public void IsExitBlocked_RaceGate_ClosesToAnotherRace_AndNamesTheReason()
+    {
+        (_, MovementFilter filter) = NewPair();
+        RoomExit gauntOnly = new(new RoomKey(7, 1362), RoomExitHint.None, RawHint: null, RaceGate: 13);
+
+        filter.RaceNumberProvider = () => 1;        // a Human at the Gaunt One exit
+        Assert.True(filter.IsExitBlocked(gauntOnly));
+        Assert.Equal(ExitBlockReason.Race, filter.DescribeExitBlock(gauntOnly));
+
+        filter.RaceNumberProvider = () => 13;       // a Gaunt One
+        Assert.False(filter.IsExitBlocked(gauntOnly));
+
+        filter.RaceNumberProvider = () => null;     // race not read yet: walk up and see
+        Assert.False(filter.IsExitBlocked(gauntOnly));
+    }
+
     [Fact]
     public void IsExitBlocked_ClassGatedTeleport_UnknownClass_Blocks()
     {

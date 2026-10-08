@@ -248,6 +248,23 @@ public sealed class RoomExitParseTests
         Assert.False(exit.HasLevelGate);              // class gate is not a level window
     }
 
+    // ----- Race gate ("(Race: N OK, M NO)") --------------------------
+    // The class gate's twin: the Giant Mushroom's way down to the Gloomy Temple
+    // (7/1361 ↔ 7/1362) admits only race 13, the Gaunt One.
+
+    [Theory]
+    [InlineData("7/1362 (Race: 13 OK, 0 NO)", 13)]   // live data, both sets
+    [InlineData("7/1361 (race: 2 ok, 0 no)",   2)]
+    public void RaceGate_ParsesAllowedRace_StaysNoneHint(string wire, int race)
+    {
+        Assert.True(RoomExit.TryParseWire(wire, out RoomExit exit));
+        Assert.Equal(RoomExitHint.None, exit.Hint);
+        Assert.True(exit.HasRaceGate);
+        Assert.Equal(race, exit.RaceGate);
+        Assert.False(exit.HasClassGate);
+        Assert.False(exit.HasLevelGate);
+    }
+
     // ----- Level gate (Form A — "(Level: MIN to MAX)") ---------------
 
     [Theory]

@@ -4025,6 +4025,22 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `WinchManager` treats the drawbridge line as authoritative and skips the poll for it (whichever order it arrives relative to "begins to turn").
 - The pull is one of the room commands held for an empty room before it is sent. If a monster comes in between pulls, `WinchManager` reads the `enemies present` line (`KnownPatterns.WinchEnemiesPresent`) and hands the step back as `WinchResult.RoomNotEmpty`; the walker or loop holds it and starts the winch again once the room is clear.
 
+### Class and race gated exits
+*Status: [OBSERVED] 2026-10-08 (Stock 1.11p `wccmmud.dll` `_move_user` exit types 13 and 14; imported Rooms on both sets) · Realm: Stock for the engine rule; Paradigm carries the same exits in its data, its engine isn't recorded*
+
+- **`(Class: a OK, b NO)` and `(Race: a OK, b NO)` are exit types of their own.** The first number is the one class, or race, that may pass; everyone else is refused. The second is read only when the first is 0, and then names the one class or race that is refused. In every exit of both imported sets the second number is 0.
+  - `_move_user` handles class at `0x4188f2` and race at `0x4189de`.
+  - The exit also stores a message number, which 1.11p never reads: the refusal is a line built into the engine.
+- **Where they are** *(imported Rooms)*:
+  - Class: the Crypt's Shadowed Hall exits, each open to exactly one of the 15 class Numbers (`1/1436 (Class: 13 OK, 0 NO)` is the Druid's).
+  - Race: two exits, one passage: `7/1361` Giant Mushroom `D` ↔ `7/1362` Gloomy Temple `U`, both `(Race: 13 OK, 0 NO)`. Race 13 is the **Gaunt One**.
+- `[NEEDS CONFIRMATION]` Which line does the game print when a race gate refuses a move, on either realm?
+
+**Client use:**
+- `RoomExit.ClassGate` / `RaceGate` hold the allowed Number; the exit stays a plain cardinal.
+- `MovementFilter.IsClassGateBlocked` / `IsRaceGateBlocked` keep a route off an exit the character can't pass, from `ClassNumberProvider` / `RaceNumberProvider` (the stat screen's class and race). While either is unknown a gated cardinal isn't blocked: the walk goes up to it and halts on the game's refusal.
+- `RoomTooltipBuilder.FormatExitHint` names the class or race (`Druid only`, `Gaunt One only`) in the map tooltip and Room Info.
+
 ### Exit alignment gates
 *Status: CONFIRMED 2026-08-27 (user — mechanic for report `paradigm-20260827-144553`) · Realm: Paradigm*
 

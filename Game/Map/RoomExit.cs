@@ -33,6 +33,9 @@ namespace MudPlay.Game.Map;
 //     exit stays a plain cardinal (Hint None); 0 means no class gate. The
 //     trailing "N NO" count is always 0 in observed data and its non-zero
 //     meaning is unconfirmed, so we don't act on it.
+//   - RaceGate — the single race Number allowed through a race-gated exit
+//     ("(Race: 13 OK, 0 NO)" → 13 = only Gaunt Ones pass). The class gate's twin:
+//     the exit stays a plain cardinal and 0 means no race gate.
 //   - PreCastSpell / PostCastSpell — the spell Numbers fired by a
 //     "(Cast: pre-N, post-M)" exit. pre-N casts before the move is attempted,
 //     post-M casts after stepping through; 0 in either slot means "no cast on
@@ -106,7 +109,8 @@ public readonly partial record struct RoomExit(
     bool MovesWholeParty = false,
     IReadOnlyList<RoomKey>? CastTeleportTargets = null,
     (int Lo, int Hi)? AlignmentGate = null,
-    long FareCopper = 0)
+    long FareCopper = 0,
+    int RaceGate = 0)
 {
     // True when this exit carries a character-level window (either a floor, a
     // cap, or both).
@@ -114,6 +118,9 @@ public readonly partial record struct RoomExit(
 
     // True when this exit only admits a single character class.
     public bool HasClassGate => ClassGate > 0;
+
+    // True when this exit only admits a single race.
+    public bool HasRaceGate => RaceGate > 0;
 
     // True when this exit only admits a numeric alignment window (an evil / good
     // entrance). The window's ends can be negative or zero, so this is an explicit
@@ -177,14 +184,15 @@ public readonly partial record struct RoomExit(
             out int classGate,
             out int preCast,
             out int postCast,
-            out (int Lo, int Hi)? alignmentGate);
+            out (int Lo, int Hi)? alignmentGate,
+            out int raceGate);
 
         exit = new RoomExit(key, hint, rawHint,
             statReq, canBash, keyItemId, toll, textCommands,
             MultiAction: null, TrapDamage: trapDamage,
             MinLevel: minLevel, MaxLevel: maxLevel, ClassGate: classGate,
             PreCastSpell: preCast, PostCastSpell: postCast,
-            AlignmentGate: alignmentGate);
+            AlignmentGate: alignmentGate, RaceGate: raceGate);
         return true;
     }
 
@@ -202,7 +210,8 @@ public readonly partial record struct RoomExit(
         out int classGate,
         out int preCast,
         out int postCast,
-        out (int Lo, int Hi)? alignmentGate)
+        out (int Lo, int Hi)? alignmentGate,
+        out int raceGate)
     {
         hint = RoomExitHint.None;
         statReq = 0;
@@ -217,6 +226,7 @@ public readonly partial record struct RoomExit(
         preCast = 0;
         postCast = 0;
         alignmentGate = null;
+        raceGate = 0;
 
         if (string.IsNullOrEmpty(raw)) return;
 
@@ -364,6 +374,15 @@ public readonly partial record struct RoomExit(
             return;  // hint stays None — movement is still a plain cardinal step
         }
 
+        // "(Race: N OK, M NO)" — the class gate's twin: only race Number N may
+        // traverse, and the movement stays a plain cardinal.
+        if (raw.StartsWith("Race", StringComparison.OrdinalIgnoreCase))
+        {
+            Match m = RaceGateRegex().Match(raw);
+            if (m.Success) int.TryParse(m.Groups[1].ValueSpan, out raceGate);
+            return;
+        }
+
         // "(Cast: pre-N, post-M)" — stepping this exit fires spell N before the
         // move and spell M after it (0 = no cast that side). The movement stays
         // a plain cardinal (hint None); the cast is captured on
@@ -431,6 +450,10 @@ public readonly partial record struct RoomExit(
     // Matches the allowed class Number in a "Class: N OK, M NO" modifier.
     [GeneratedRegex(@"Class:\s*(\d+)\s*OK", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ClassGateRegex();
+
+    // Matches the allowed race Number in a "Race: N OK, M NO" modifier.
+    [GeneratedRegex(@"Race:\s*(\d+)\s*OK", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex RaceGateRegex();
 
     // Matches the pre-move spell Number in a "Cast: pre-N, post-M" modifier.
     [GeneratedRegex(@"pre-(\d+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
