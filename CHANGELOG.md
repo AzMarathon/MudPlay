@@ -11,6 +11,7 @@
 - New **Configure Estimates** window sets what that is worked out against: your level and stats with nothing worn (the trial set's bonuses go on top), and a target's armour class, damage resist, dodge and BS defence, typed or filled from a monster lookup
 - Item Finder filters level one of two ways, picked by radio buttons: usable at a level, or a required-level range (min / max)
 - The Workshop opens at the size its opening tab fits, the same as switching to that tab, instead of the size it last closed at
+- Character Info sizes the Workshop to its own height, instead of taking the Equipment tab's and scrolling
 - Showing the Gear Finder panel on a maximized window no longer lays it out off the edge of the screen; switching Workshop tabs while maximized no longer resizes the window either
 - Gear Finder panel regrouped: the Find Best controls sit together, and Import from live / Clear sit on the trial set's slot list
 

@@ -63,7 +63,8 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     private Control? _view;
     private StatBreakpointsWindow? _breakpointsWindow;
 
-    public override string Id => "characterinfo";
+    public const string SectionId = "characterinfo";
+    public override string Id => SectionId;
     public override string Title => "Character Info";
     public override Control View => _view ??= new CharacterInfoSectionView { DataContext = this };
 

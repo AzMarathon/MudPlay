@@ -7,9 +7,10 @@ namespace MudPlay.Views.CharacterWorkshop;
 
 public partial class CharacterWorkshopWindow : Window
 {
-    // Every tab auto-sizes its WIDTH to its own content, but takes its HEIGHT
-    // from the Equipment tab — the Quest and Bosses lists would otherwise balloon
-    // the window far taller than the form-style tabs. Seeded with a comfortable
+    // Every tab auto-sizes its WIDTH to its own content. The form-style tabs
+    // (Equipment, Character Info) size their height to it too; the rest take their
+    // HEIGHT from the Equipment tab — the Quest and Bosses lists would otherwise
+    // balloon the window far taller than the forms. Seeded with a comfortable
     // fallback until the Equipment tab is shown once and we learn its real height.
     private const double FallbackReferenceHeight = 640;
     private double _referenceHeight = FallbackReferenceHeight;
@@ -68,10 +69,12 @@ public partial class CharacterWorkshopWindow : Window
 
     // Fit the window to the active tab, then revert to Manual (after the layout
     // pass) so manual resize works without snapping back. Width fits the tab's
-    // content; height is the Equipment tab's height — the Equipment tab sizes
-    // both dimensions to itself and its rendered height becomes the reference
-    // every other tab uses, so long lists (Quest, Bosses) scroll instead of
-    // growing the window taller than Equipment. A tab that names its own size
+    // content. The Equipment tab sizes both dimensions to itself and its rendered
+    // height becomes the reference the list tabs use, so long lists (Quest, Bosses)
+    // scroll instead of growing the window taller than Equipment. Character Info
+    // is a form of its own length: given Equipment's height it was cut short and
+    // scrolled, so it takes its own too (the window stops at the screen's edge,
+    // and a sheet longer than that scrolls). A tab that names its own size
     // (WorkshopSectionViewModel.PreferredSize) gets that instead.
     private void FitToActiveTab()
     {
@@ -100,7 +103,7 @@ public partial class CharacterWorkshopWindow : Window
         _sizedFor = null;
 
         bool isEquipment = active?.Id == EquipmentSectionViewModel.SectionId;
-        if (isEquipment)
+        if (isEquipment || active?.Id == CharacterInfoSectionViewModel.SectionId)
         {
             SizeToContent = SizeToContent.WidthAndHeight;
         }
