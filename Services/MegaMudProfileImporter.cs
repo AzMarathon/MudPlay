@@ -269,10 +269,12 @@ public static class MegaMudProfileImporter
         p.Int(s, "PartyHeal1%", g, "Minor party heal if a member is below", v => pt.MinorHealMemberThresholdPercent = v, Percent);
         p.Text(s, "PartyHeal2", g, "Major party heal spell", v => pt.MajorPartyHealSpell = v);
         p.Int(s, "PartyHeal2%", g, "Major party heal if a member is below", v => pt.MajorHealMemberThresholdPercent = v, Percent);
-        if (p.Text(s, "PartyHealArea", g, "Party area heal spell (as the major area heal)", v => pt.MajorPartyHealAoeSpell = v))
+        // MegaMUD has one area heal; it goes in MudPlay's minor area-heal slot
+        // (user, 2026-10-08), which fires on the minor party heal's threshold.
+        if (p.Text(s, "PartyHealArea", g, "Minor party area heal spell", v => pt.MinorPartyHealAoeSpell = v))
         {
             p.Int(s, "PartyHealAreaAt", g, "Area heal: fewest hurt members", v => pt.AoeMinMembers = Math.Max(1, v));
-            p.Skip(s, "PartyHealArea%", g, "Area heal threshold", "MudPlay's area heals use the major heal's threshold");
+            p.Skip(s, "PartyHealArea%", g, "Area heal threshold", "MudPlay's minor area heal fires on the minor party heal's threshold, above");
         }
         p.Int(s, "PartyMaxMstrs", g, "Most monsters in a room when partying", v => pt.MaxMonstersWhenPartying = Math.Clamp(v, 0, 20),
             v => Math.Clamp(v, 0, 20).ToString(CultureInfo.InvariantCulture));

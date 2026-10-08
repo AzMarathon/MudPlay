@@ -220,7 +220,9 @@ public sealed class MegaMudProfileImporterTests
         PartySettings party = Section<PartySettings>(made, "Party");
         Assert.Equal("mahe", party.MinorPartyHealSpell);
         Assert.Equal(80, party.MinorHealMemberThresholdPercent);
-        Assert.Equal("mrai", party.MajorPartyHealAoeSpell);
+        Assert.Equal("mrai", party.MinorPartyHealAoeSpell);   // MegaMUD's one area heal is our minor
+        Assert.Null(party.MajorPartyHealAoeSpell);
+        Assert.Equal(2, party.AoeMinMembers);
 
         Assert.Equal(3, Section<OtherSettings>(made, "Other").MaxPickAttempts);
     }
