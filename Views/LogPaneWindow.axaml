@@ -72,8 +72,9 @@
                  Auto-collect gates whether the program / memory / combat-trace
                  files are written to Data/Logs at all; Hop timing gates the
                  navigation calibration trace. Both off by default so a normal
-                 session leaves nothing extra behind. Saved globally. -->
-            <StackPanel Orientation="Horizontal" Spacing="14">
+                 session leaves nothing extra behind. Saved globally. The row
+                 wraps: it is wider than the window's starting width. -->
+            <WrapPanel Orientation="Horizontal" ItemSpacing="14" LineSpacing="4">
                 <CheckBox IsChecked="{Binding AutoCollectLogs}"
                           Content="Auto-collect logs"
                           Foreground="{StaticResource ChromeFgSecBrush}"
@@ -89,6 +90,21 @@
                           Foreground="{StaticResource ChromeFgSecBrush}"
                           FontSize="11"
                           ToolTip.Tip="Stage wire lines the Messages catalogue doesn't recognize as review candidates (Game Data → Unrecognized Lines), and log a Warn row on first sighting. On by default. Saved for all characters."/>
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                            ToolTip.Tip="Write everything the Session Statistics window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder, once every so many minutes while the character is in the game, and once more on leaving it. The window doesn't need to be open. The file is named …-session-stats.log (Tools → Open Logs folder…); the program log gives its name when it starts. Off by default. Saved for all characters.">
+                    <CheckBox IsChecked="{Binding LogSessionStatistics}"
+                              Content="Log session statistics every"
+                              Foreground="{StaticResource ChromeFgSecBrush}"
+                              FontSize="11"/>
+                    <NumericUpDown Value="{Binding SessionStatisticsMinutes, Mode=TwoWay}"
+                                   Minimum="{Binding MinSessionStatisticsMinutes}"
+                                   Maximum="{Binding MaxSessionStatisticsMinutes}"
+                                   Increment="1" FormatString="0" FontSize="11"
+                                   Width="96" MinWidth="96" VerticalAlignment="Center"
+                                   IsEnabled="{Binding LogSessionStatistics}"/>
+                    <TextBlock Text="min" FontSize="11" VerticalAlignment="Center"
+                               Foreground="{StaticResource ChromeFgSecBrush}"/>
+                </StackPanel>
 
                 <!-- The test-only "Simulate …" buttons all share one dropdown of
                      checkboxes rather than a checkbox each: each reveals a hidden
@@ -124,7 +140,7 @@
                         Foreground="{StaticResource ChromeFgSecBrush}"
                         Command="{Binding RunFirstRunTutorialCommand}"
                         ToolTip.Tip="Force-show the first-run setup tour on the main window, for testing — bypasses the 'already set up' and 'don't show again' gates without touching your install."/>
-            </StackPanel>
+            </WrapPanel>
             </StackPanel>
         </Border>
 

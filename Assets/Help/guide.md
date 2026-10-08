@@ -2098,6 +2098,7 @@ Press **F4** (or **Tools → Program Log…**) to open the **Program Log** — a
 - **Debug** and **Combat** are *generation* toggles (not just filters): they turn the verbose cross-engine trace and the combat-decision channel on or off across the whole app, and show those rows here. Both are **on by default** and persist per character — leave them on for the richest diagnostics; turn one off to quiet the noise. (These are the same two channels you'll see in a bug report.)
 - **Tick timing.** With Debug on, every HP or mana gain is logged with its size, the gap since the last one, your posture, and how long after a combat round it came. A bug report also carries a **Tick timing** section: the last 400 combat rounds, HP / mana gains and posture changes, to the millisecond. To capture a realm's tick cycle, stand still for a couple of minutes, then rest, then meditate, with a fight or two in between, and take a bug report.
 - **Auto-collect logs** writes the program, memory, combat-trace and performance files to the Logs folder for the session (off by default, so a normal run leaves nothing behind). The Exp/Hr Estimator's **Check against my play** reads its loop history from these program logs, so leave it on if you want that check. **Hop timing** logs one line per confirmed room hop with its measured wall-clock time — used to tune the Auto-Lair travel-cost table.
+- **Log session statistics every N min** writes everything the **Session Stats** window shows to its own file in the Logs folder, on that interval, without the window having to be open (off by default). See *Log session statistics* under Diagnostics / Log Pane.
 - **Simulate buttons** is a dropdown of test-only toggles, each revealing a hidden **Simulate …** button on its feature window (all off by default and reset off every launch, so a normal session never shows them): **Simulate Death button** (Player Workshop → Death Recovery tab), **Simulate Chest button** (Record Keeping → Chest Offload — seeds a few random containers so you can exercise the window without real chests), and **Simulate entry button** (Game Data → Unrecognized Lines — feeds a synthetic unknown line through the capture flow so a candidate appears, letting you see the feature work without waiting for the game to emit one).
 
 ## Backscroll (Alt+L)
@@ -2114,6 +2115,8 @@ Backscroll is a **snapshot taken when you open it**, not a live tail — to pick
 ## Session Stats
 
 Open **Session Stats** from the **View** menu or its toolbar button (it has no default hotkey — you can assign one on Settings → Shortcuts). It tracks this session's performance in a stack of panels: **Kills/hour** and **Exp/hour** graphs, an **HP/MA per loop step** chart, and **Player Statistics**, **Time Analysis**, and **Session Statistics** tables (kills, experience, currency, and time spent moving, resting, and fighting). While a loop is running, the **Time Analysis** panel also shows a **Loop laps** readout — one lap is a full completion of the circuit — with the laps completed, last and average lap time, the live current-lap timer, and the room each lap starts at.
+
+To keep a record of these figures over a long run, tick **Log session statistics** in the **Program Log** window (F4): it writes all three stat panels to a file every few minutes, whether or not this window is open.
 
 The **Player Statistics** panel is your own combat, read off the same round ledger that prints *Show combat round totals*, so the two always agree on whose damage a line was. **Offense** shows your regular attacks (attack, martial arts, bash, smash) as **Hit / Miss / Crit** with their rates and damage. **Backstab** and **BS miss** keep their own rate over the stabs you attempted: a stab fails when it misses, or when the sneak broke and the round swung as a normal attack (that whiff is the stab's, so it isn't a regular miss). Then come your per-round damage, your **procs** (every proc the ledger credits to you — a weapon's "Your weapon sears…" or a proc that names only its victim right after your hit), and **one row per spell** you've landed, showing its damage range, cast count and accuracy. Any spell your class can learn gets its row, not just the ones in your Combat-tab attack slots, so hand-cast spells no longer count as swings. Spells and procs never count as swings: a cast's flavor line ("You scatter some ashes…!") isn't a swing miss, so a caster's miss rate reflects real resists rather than one phantom miss per cast. A spell that chains to a second one counts both lines as one cast: necromantic bolt's drain adds to the bolt it followed. **Per-round damage** is only what *you* dealt. **Defense** shows **Hit by** — every blow that landed on you, whatever its wording, with its damage range, average, and the share of incoming attacks that hit — and **Dodge/Miss**, the share you avoided. Damage nobody dealt (poison ticks, falls) isn't a blow.
 
@@ -4490,7 +4493,7 @@ MudPlay uses the player your system already has, so there's nothing to install o
 
 ## Diagnostics / Log Pane
 
-Not a Settings tab — these five toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine saved preferences. They're saved **for all characters** (not per character), and take effect from the moment MudPlay starts, so **Auto-collect logs** captures the whole session, including before you load a character. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
+Not a Settings tab — these six toggles live in the **Program Log** window (default shortcut F4), and are documented here for completeness since they're genuine saved preferences. They're saved **for all characters** (not per character), and take effect from the moment MudPlay starts, so **Auto-collect logs** captures the whole session, including before you load a character. They control how much detail MudPlay records about its own decisions, mainly useful for troubleshooting or preparing a bug report.
 
 ### Debug channel
 
@@ -4542,6 +4545,25 @@ A few line shapes are deliberately still captured:
 
 Double-click the row to open the same editor the Messages tab uses, pre-filled with the raw text, so you can turn it into a real catalogue entry on the spot. Repeated candidates are also listed in Game Data → **Unrecognized Lines** (with a **Seen In** map:room column) for batch review later; dismissing one there is sticky, so it won't quietly resurface as "new" if it recurs.
 **Important notes:** On by default — the point of this toggle is catching the game's devs changing or adding message wording before it silently breaks something else (navigation, combat, condition tracking) that depends on recognizing that line.
+
+### Log session statistics
+
+**Default:** Off, every `5` minutes (1–120)
+**What it does:** Writes everything the **Session Stats** window shows to a text file, so a long unattended run leaves a record of how its rates and totals moved instead of only what the window shows at the end. Each entry is one block, headed by the date and time, the character and board, and why it was written, followed by the window's three sections under the same row names:
+
+- **Player Statistics**: every Offense and Defense row with its count, min–max, average and rate, including a row per spell.
+- **Time Analysis**: the time breakdown, Sneak, Disarm Trap, Walk Latency and the loop laps.
+- **Session Statistics**: kills, experience, their per-hour rates, Exp needed, Will level in, coin and items.
+
+**When it writes:** once every N minutes **while your character is in the game**, and once more when you leave it (a disconnect, or an exit to the board's menus), so the stretch since the last entry isn't lost. Nothing is written at a login screen or a board menu. Ticking the box mid-session writes a first entry straight away.
+
+**Where:** the Logs folder (**Tools → Open Logs folder…**), in a file ending `-session-stats.log`. A new file starts each time MudPlay is started or the box is ticked. The Program Log notes the file's name when it starts. Like the other files there, it is cleared out after 30 days.
+
+**Important notes:**
+- The Session Stats window doesn't need to be open, and the entries are the same figures it would show.
+- The graphs (kills/hour, exp/hour, HP/MA per loop step) aren't written; the per-hour rates are.
+- Resetting a panel in the Session Stats window resets what the next entry shows, since it is the same data. The one exception is **Laps completed**, which is the running loop's own count and isn't set back by Time Analysis's Reset.
+- A file that can't be written (disk full, folder removed) stops the logging until the box is ticked again, with a warning in the Program Log.
 
 ---
 
@@ -4891,6 +4913,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Combat channel | `true` | bool (Global) | `GlobalSettings.LogDiagnostics.Combat` | Models/Settings/LogDiagnosticsSettings.cs |
 | Auto-collect logs | `false` | bool (Global) | `GlobalSettings.LogDiagnostics.AutoCollect` | Models/Settings/LogDiagnosticsSettings.cs |
 | Hop timing | `false` | bool (Global) | `GlobalSettings.LogDiagnostics.HopTiming` | Models/Settings/LogDiagnosticsSettings.cs |
+| Log session statistics / every N min | `false`, `5` | bool, 1–120 (Global) | `GlobalSettings.LogDiagnostics.SessionStatistics` / `SessionStatisticsMinutes` | Models/Settings/LogDiagnosticsSettings.cs |
 | Equipment sets (gear loadouts, edited in Character Workshop) | empty list, seeded per trigger type | list of `EquipmentSet` | `EquipmentSettings.Sets` | Models/Profile/EquipmentSettings.cs |
 
 ### Not user-configurable (confirmed, for completeness)

@@ -85,6 +85,16 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // channel), so no Rebuild. Saved globally. On by default.
     [ObservableProperty] private bool _captureUnrecognizedMessages;
 
+    // Toggle for the session-statistics file, and how often it is written.
+    // Mirrors LogDiagnosticState.LogSessionStatistics / SessionStatisticsMinutes,
+    // which gate Services.SessionStatsLog. Doesn't touch displayed rows, so no
+    // Rebuild. Saved globally. Off by default, every 5 minutes.
+    [ObservableProperty] private bool _logSessionStatistics;
+    [ObservableProperty] private int _sessionStatisticsMinutes = LogDiagnosticState.DefaultSessionStatisticsMinutes;
+
+    public int MinSessionStatisticsMinutes => LogDiagnosticState.MinSessionStatisticsMinutes;
+    public int MaxSessionStatisticsMinutes => LogDiagnosticState.MaxSessionStatisticsMinutes;
+
     // Reveals the Death Recovery tab's "Simulate Death" test button. Mirrors
     // LogDiagnosticState.ShowSimulateDeath — session-only (off every launch) so a
     // normal user never sees the button; a tester flips it on here. Doesn't touch
@@ -141,6 +151,8 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             _autoCollectLogs   = _diagnostics.AutoCollectLogs;
             _hopTiming         = _diagnostics.HopTiming;
             _captureUnrecognizedMessages = _diagnostics.CaptureUnrecognizedMessages;
+            _logSessionStatistics = _diagnostics.LogSessionStatistics;
+            _sessionStatisticsMinutes = _diagnostics.SessionStatisticsMinutes;
             _showSimulateDeath = _diagnostics.ShowSimulateDeath;
             _showSimulateChest = _diagnostics.ShowSimulateChest;
             _showSimulateUnrecognized = _diagnostics.ShowSimulateUnrecognized;
@@ -187,6 +199,14 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
             {
                 _suppressDiagnosticEcho = true;
                 CaptureUnrecognizedMessages = _diagnostics.CaptureUnrecognizedMessages;
+                _suppressDiagnosticEcho = false;
+            }
+            if (LogSessionStatistics != _diagnostics.LogSessionStatistics
+                || SessionStatisticsMinutes != _diagnostics.SessionStatisticsMinutes)
+            {
+                _suppressDiagnosticEcho = true;
+                LogSessionStatistics = _diagnostics.LogSessionStatistics;
+                SessionStatisticsMinutes = _diagnostics.SessionStatisticsMinutes;
                 _suppressDiagnosticEcho = false;
             }
             if (ShowSimulateDeath != _diagnostics.ShowSimulateDeath)
@@ -253,6 +273,21 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
         if (_suppressDiagnosticEcho) return;
         if (_diagnostics is null) return;
         _diagnostics.CaptureUnrecognizedMessages = value;
+    }
+
+    partial void OnLogSessionStatisticsChanged(bool value)
+    {
+        // Only gates the session-statistics file — no displayed rows change — so no Rebuild.
+        if (_suppressDiagnosticEcho) return;
+        if (_diagnostics is null) return;
+        _diagnostics.LogSessionStatistics = value;
+    }
+
+    partial void OnSessionStatisticsMinutesChanged(int value)
+    {
+        if (_suppressDiagnosticEcho) return;
+        if (_diagnostics is null) return;
+        _diagnostics.SessionStatisticsMinutes = value;
     }
 
     partial void OnShowSimulateDeathChanged(bool value)

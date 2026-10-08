@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.152.4**
-> - Settings → Party: **Send `par`** is now a tick list — every N seconds (as before), after each combat round, and when a combat round has unknown damage. Any mix, or none
-> - *After each combat round* can include combat you only witness, so it still sends `par` with Auto Combat off
-> - With none ticked MudPlay never sends `par` itself; members' HP then moves only from the round totals
+> **Version 3.153.0**
+> - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder
+> - Written every N minutes (1 to 120, 5 by default) while the character is in the game, and once more on leaving it; the Session Stats window doesn't need to be open
+> - Off by default; saved for all characters
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

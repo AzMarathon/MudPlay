@@ -57,6 +57,9 @@ public sealed class InGameCapture : IDisposable
 
     public bool InGame => Window.IsOn;
 
+    // InGame flipped.
+    public event Action<bool>? InGameChanged;
+
     // The character left the game for the board's menus and the link is still up:
     // whatever is sent now is a menu selection. False at a fresh login, where the
     // login and entry automation have the menus to themselves.
@@ -84,6 +87,7 @@ public sealed class InGameCapture : IDisposable
         Window.Set(true, DateTimeOffset.Now);
         WireMark = _wire.TotalBytes;
         _log?.Info(LogCategory, "in the game: a bug report copies the terminal from here");
+        InGameChanged?.Invoke(true);
     }
 
     private void LeaveForMenus(string why)
@@ -106,6 +110,7 @@ public sealed class InGameCapture : IDisposable
         Window.Set(false, at);
         WireMark = null;
         _log?.Info(LogCategory, $"out of the game ({why}): a bug report copies nothing from here until the next game prompt");
+        InGameChanged?.Invoke(false);
     }
 
     private void SetAtBoardMenu(bool at)
