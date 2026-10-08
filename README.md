@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.150.3**
-> - Room commands that only work in an empty room are read from the game data: a walk holds the step and clears the room before sending, which also covers the ones that refuse without a word
-> - Loops keep the same wait instead of spending their recoveries on the refusal
-> - A winch pull refused for a monster in the room is recognised; the pull waits for the room to clear instead of repeating until it gives up
+> **Version 3.150.6**
+> - Auto-Sneak stands down, with a line on the terminal, while you carry something that takes your Stealth to nothing (a log raft), instead of resending `sn` in every room; it sneaks again once the item is gone
+> - The route card names the avoided rooms a route crosses, not just how many; bug reports list the character's own avoid rooms
+> - A spoken password a route needs (`say gazmuldduhaz`) is sent even while sneaking past NPCs, instead of being held back as chatter
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

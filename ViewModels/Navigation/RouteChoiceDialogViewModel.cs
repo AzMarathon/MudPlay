@@ -213,7 +213,7 @@ public sealed partial class RouteChoiceDialogViewModel
     private IReadOnlyList<RoomKey>? _avoidAltPath;
     public bool ShowAvoidAltCard => _avoidAltPath is { Count: > 0 };
     public string AvoidAltSummary { get; private set; } = "";
-    public string AvoidAltDetail =>
+    public string AvoidAltDetail { get; private set; } =
         "Skips the counter and plows through rooms you marked Avoid. Your avoid list stays "
         + "set — only this one walk crosses them.";
     public bool IsAvoidAltSelected => SelectedRoute == RouteChoiceResult.AvoidOverrideAlt;
@@ -359,6 +359,9 @@ public sealed partial class RouteChoiceDialogViewModel
             ? $"Route through {(avoidAltCount == 1 ? "1 room" : $"{avoidAltCount} rooms")} you marked Avoid — "
                 + $"{StepsEta(Math.Max(0, _avoidAltPath.Count - 1), default)}, no counter needed"
             : string.Empty;
+        if (RouteChoicePlanner.ListAvoided(choice.AvoidAlternativeNames) is { Length: > 0 } altRooms)
+            AvoidAltDetail = $"Skips the counter and plows through rooms you marked Avoid: {altRooms}. "
+                + "Your avoid list stays set — only this one walk crosses them.";
 
         // A fully-blocked route: no way through at all, but the destination is
         // physically reachable up to an obstacle. Offer to walk as far as possible
@@ -471,7 +474,11 @@ public sealed partial class RouteChoiceDialogViewModel
                 FreeSummary = $"No route that respects your avoids — every path there crosses {avoidedWord}";
                 GatedSummary = $"Route through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
             }
-            AvoidCaveat = $"Routes through {avoidedWord}. Your avoid list stays set — only this "
+            // Named, so the player can find them: an avoided room on another map or
+            // floor doesn't show anywhere near the route on the map in front of them.
+            string whichRooms = RouteChoicePlanner.ListAvoided(choice.AvoidedRoomNames) is { Length: > 0 } listed
+                ? $": {listed}" : "";
+            AvoidCaveat = $"Routes through {avoidedWord}{whichRooms}. Your avoid list stays set — only this "
                 + "walk crosses them; unmark the room(s) if you want it gone for good.";
             RequirementSummary = string.Empty;
             TeleportCaveat = string.Empty;

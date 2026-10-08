@@ -629,6 +629,11 @@ public static class BugReportBuilder
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
         Kv(sb, "Sneak-cooldown hold", svc.Stealth.IsHoldingForSneakCooldown.ToString());
+        Game.Stealth.CarriedStealthPenalty.Verdict carried = svc.CarriedStealth.Current();
+        Kv(sb, "Auto-Sneak stood down for a carried item", svc.Stealth.StoodDownFor ?? "no");
+        Kv(sb, "Carried Stealth penalty", carried.Modifier >= 0
+            ? "none"
+            : $"{carried.Items}: estimated sn chance {carried.Chance}% (stands down under {Game.Stealth.CarriedStealthPenalty.HopelessChance}%)");
         // Sneak keeping: what automation is waiting so as not to end a sneak.
         Game.Stealth.SneakHold hold = svc.SneakGuard.Current;
         Kv(sb, "Sneak keeping", hold == Game.Stealth.SneakHold.None
@@ -1938,10 +1943,19 @@ public static class BugReportBuilder
     {
         StringBuilder sb = new();
 
-        var avoided = svc.RoomBlacklist.Entries;
-        sb.Append("**Avoid rooms** (").Append(avoided.Count).Append(")\n\n");
+        // The character's own avoid list, which routes go around and the route
+        // picker asks about. It used to be missing here, with the realm's blacklist
+        // printed under its name (report paradigm-20261007-215302).
+        var avoided = svc.Movement.Avoided;
+        sb.Append("**Avoid rooms (this character)** (").Append(avoided.Count).Append(")\n\n");
         if (avoided.Count == 0) sb.Append("_(none)_\n");
-        else foreach (var r in avoided) sb.Append("- ").Append(r.Map).Append('/').Append(r.Room)
+        else foreach (var k in avoided) sb.Append("- ").Append(k.Map).Append('/').Append(k.Room)
+            .Append(" — ").Append(svc.RoomGraph.GetRoom(k)?.Name ?? "(not in the active map)").Append('\n');
+
+        var blacklisted = svc.RoomBlacklist.Entries;
+        sb.Append("\n**Blacklisted rooms (realm)** (").Append(blacklisted.Count).Append(")\n\n");
+        if (blacklisted.Count == 0) sb.Append("_(none)_\n");
+        else foreach (var r in blacklisted) sb.Append("- ").Append(r.Map).Append('/').Append(r.Room)
             .Append(" — ").Append(r.Name).Append('\n');
 
         var profile = svc.Profile.Current;

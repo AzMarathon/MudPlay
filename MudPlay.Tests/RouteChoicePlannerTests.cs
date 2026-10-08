@@ -1638,10 +1638,20 @@ public sealed class RouteChoicePlannerTests
             Assert.Empty(choice.FreePath);
             Assert.Equal(2, choice.GatedStepCount);
             Assert.Equal(1, choice.AvoidedRoomCount);   // routes through 1 avoided room
+            // Named, so the card can say which room it means.
+            Assert.Equal(new[] { "Avoided (1/5)" }, choice.AvoidedRoomNames);
             Assert.Equal(
                 new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) },
                 choice.GatedPath);
         });
+    }
+
+    [Fact]
+    public void ListAvoided_NamesTheFirstFew_AndCountsTheRest()
+    {
+        Assert.Equal("", RouteChoicePlanner.ListAvoided(null));
+        Assert.Equal("A (1/1), B (1/2)", RouteChoicePlanner.ListAvoided(new[] { "A (1/1)", "B (1/2)" }));
+        Assert.Equal("A, B and 2 more", RouteChoicePlanner.ListAvoided(new[] { "A", "B", "C", "D" }, show: 2));
     }
 
     [Fact]
@@ -1767,6 +1777,8 @@ public sealed class RouteChoicePlannerTests
                 bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
             Assert.NotNull(alt);
             Assert.Equal(1, alt!.Value.AvoidedCount);
+            Assert.Single(alt.Value.AvoidedNames);
+            Assert.EndsWith("(1/5)", alt.Value.AvoidedNames[0]);
             Assert.Equal(
                 new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 9) },
                 alt.Value.Path);

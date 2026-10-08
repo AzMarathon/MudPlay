@@ -108,9 +108,59 @@ public sealed class StealthManager : IDisposable
             "followed — a monster came in right behind us; no sn until we leave a room nobody follows us into");
     }
 
-    // A sneak can't take here: an NPC in the room, or one following us that's about
-    // to walk in behind us.
-    private bool SneakBlockedHere() => _followed || _isSneakBlockedByRoom?.Invoke() == true;
+    // A sneak can't take here: an NPC in the room, one following us that's about to
+    // walk in behind us, or something in the pack that takes Stealth to nothing.
+    private bool SneakBlockedHere() =>
+        _followed || _isSneakBlockedByRoom?.Invoke() == true || _cantSneakCarrying?.Invoke() is not null;
+
+    // ----- stood down for a carried item --------------------------------------
+    // A few items cut Stealth just by being in the pack (a log raft, -125). With
+    // one, every `sn` is refused, and Auto-Sneak used to resend it for the whole
+    // settle window in each room (report paradigm-20261007-213809). Instead it
+    // says so once on the terminal, sends nothing, and the walk goes on unsneaked
+    // until the item is gone.
+    private Func<string?>? _cantSneakCarrying;
+    private Action<string>? _notice;
+    private string? _stoodDownFor;
+
+    // What Auto-Sneak has stood down for ("log raft (Stealth -125)"), or null.
+    public string? StoodDownFor => _stoodDownFor;
+
+    // cantSneakCarrying names the carried item(s) that make a sneak hopeless, or
+    // returns null. notice writes a line to the terminal.
+    public void SetCarriedPenaltyCheck(Func<string?> cantSneakCarrying, Action<string> notice)
+    {
+        ArgumentNullException.ThrowIfNull(cantSneakCarrying);
+        ArgumentNullException.ThrowIfNull(notice);
+        _cantSneakCarrying = cantSneakCarrying;
+        _notice = notice;
+    }
+
+    // The pack or the Stealth figure changed: once nothing holds Stealth down any
+    // more, say so. Standing down is announced when a sneak is next wanted.
+    public void NoteCarriedChanged()
+    {
+        if (_stoodDownFor is not { } was || _cantSneakCarrying?.Invoke() is not null) return;
+        _stoodDownFor = null;
+        _log?.Info(LogCategory, $"auto-sneak back on — no longer carrying {was}");
+        _notice?.Invoke("[Auto-Sneak: nothing in your pack holds your Stealth down any more - sneaking again]");
+    }
+
+    private bool StoodDownForCarried(string reason)
+    {
+        if (_cantSneakCarrying?.Invoke() is not { } what)
+        {
+            NoteCarriedChanged();
+            return false;
+        }
+        if (_stoodDownFor != what)
+        {
+            _stoodDownFor = what;
+            _notice?.Invoke($"[Auto-Sneak: you can't sneak while carrying {what} - going on unsneaked until it's gone]");
+        }
+        _log?.Info(LogCategory, $"auto-sneak suppressed ({reason}): carrying {what}");
+        return true;
+    }
 
     // ----- sneak-cooldown hold ---------------------------------------------
     private static readonly TimeSpan SneakCooldownRetry = TimeSpan.FromSeconds(2);
@@ -720,6 +770,8 @@ public sealed class StealthManager : IDisposable
             _log?.Info(LogCategory, $"auto-sneak waits ({reason}): a held buff goes out first");
             return false;
         }
+
+        if (StoodDownForCarried(reason)) return false;
 
         // Any NPC in the room prevents sneak from taking — don't burn an
         // `sn` the server will reject. The move (if engine-driven)

@@ -201,4 +201,31 @@ public sealed class ItemNameStoreTests : IDisposable
 
         Assert.True(s.IsGettable(999999));
     }
+
+    // The game totals a carried item's abilities when it isn't a weapon and has no
+    // wear slot, so only those count from the pack.
+    [Fact]
+    public void PackStealthOf_CountsOnlyCarriedOnlyItems()
+    {
+        const string json = """
+            [
+              { "Number": 690,  "Name": "log raft",            "ItemType": 10, "Worn": 0,  "Abil-0": 27, "AbilVal-0": -125 },
+              { "Number": 1835, "Name": "stormmetal corselet", "ItemType": 0,  "Worn": 11, "Abil-2": 27, "AbilVal-2": -40 },
+              { "Number": 2223, "Name": "lunarblade",          "ItemType": 1,  "Worn": 1,  "Abil-0": 27, "AbilVal-0": -50 },
+              { "Number": 77,   "Name": "healing potion",      "ItemType": 6,  "Worn": 0 }
+            ]
+            """;
+        Directory.CreateDirectory(Path.Combine(_root, "pack"));
+        File.WriteAllText(Path.Combine(_root, "pack", "Items.json"), json);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("pack");
+        ItemNameStore store = new(cache);
+        store.OnActiveSetChanged("pack");
+
+        Assert.Equal(-125, store.PackStealthOf("log raft"));
+        Assert.Equal(0, store.PackStealthOf("stormmetal corselet"));
+        Assert.Equal(0, store.PackStealthOf("lunarblade"));
+        Assert.Equal(0, store.PackStealthOf("healing potion"));
+        Assert.Equal(0, store.PackStealthOf("no such thing"));
+    }
 }

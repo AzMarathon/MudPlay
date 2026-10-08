@@ -168,7 +168,8 @@ public static class RouteChoicePrompt
                 is { } avoid)
             {
                 services.Log.Info(LogCat,
-                    $"route pick {src} -> {destination}: the shortest route crosses {avoid.AvoidedRoomCount} room(s) you marked Avoid; showing picker");
+                    $"route pick {src} -> {destination}: the shortest route crosses {avoid.AvoidedRoomCount} room(s) you marked Avoid "
+                    + $"({RouteChoicePlanner.ListAvoided(avoid.AvoidedRoomNames)}); showing picker");
                 return await RunPickerAsync(services, destination, src, avoid, previewSink, calcVm, calcDialogTask, startMode);
             }
             if (TakesDefaultRouteUnasked(plan))
@@ -314,7 +315,8 @@ public static class RouteChoicePrompt
             return new(RoutePlanKind.AvoidOverride, avoidOverride,
                 $"route pick {src} -> {destination}: avoid-override fork — "
                 + $"{(avoidOverride.HasFreeRoute ? $"a shorter route saves {avoidOverride.FreeStepCount - avoidOverride.GatedStepCount} step(s)" : "the only route")} "
-                + $"crosses {avoidOverride.AvoidedRoomCount} room(s) you marked Avoid; showing picker");
+                + $"crosses {avoidOverride.AvoidedRoomCount} room(s) you marked Avoid "
+                + $"({RouteChoicePlanner.ListAvoided(avoidOverride.AvoidedRoomNames)}); showing picker");
 
         RouteChoice? choice = RouteChoicePlanner.Evaluate(
             services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute);
@@ -346,8 +348,13 @@ public static class RouteChoicePrompt
         if (RouteChoicePlanner.AvoidAlternative(
                 services.Bfs, services.Movement, services.RoomGraph, src, destination, AvoidLiftedRoute) is { } alt)
         {
-            choice = choice with { AvoidAlternativePath = alt.Path, AvoidAlternativeCount = alt.AvoidedCount };
-            avoidAltNote = $" (+avoid-crossing alt: {alt.AvoidedCount} room(s), no counter)";
+            choice = choice with
+            {
+                AvoidAlternativePath = alt.Path, AvoidAlternativeCount = alt.AvoidedCount,
+                AvoidAlternativeNames = alt.AvoidedNames,
+            };
+            avoidAltNote = $" (+avoid-crossing alt: {alt.AvoidedCount} room(s): "
+                + $"{RouteChoicePlanner.ListAvoided(alt.AvoidedNames)}, no counter)";
         }
 
         string reqSummary = string.Join(", ", choice.Requirements.Select(r =>

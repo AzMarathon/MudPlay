@@ -3751,6 +3751,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 **Client use:**
 - The backstab loadout is applied in the walker's pre-move step, ahead of the `sn`, rather than raced at room-clear (because of the equip-before-sneak rule).
 - `StealthManager.TakeSneakBrokeOnEntry` → `CombatManager`: with *Run if backstab fails* on, a loud entry runs instead of opening with a plain swing.
+- Auto-Sneak stands down while the pack holds an item that takes Stealth to nothing (a log raft): see *Items, inventory & equipment → Abilities of carried items*.
 - `StealthManager` holds movement (`SneakCooldownGate`) on `You may not sneak right now!` while Auto-Sneak is on. It retries `sn` every 2 s and releases once sneaking, or after 15 s. Not when a monster is in the room or following us: then no hold, the walk goes on unsneaked.
 - **A follower's arrival lands a few milliseconds after the new room's display** *([OBSERVED] backscroll 2026-10-04 14:50, Paradigm: room shown at .305, `spirit assassin moves into the room from the southwest.` at .311)*, so a room that "looks empty" when the arrival `sn` is decided isn't. **Client policy** (2026-10-04): a monster arriving within 1.5 s of our room change marks us **followed** (`StealthManager.NoteMonsterArrival`, from `RoomEntryWatcher.ArrivalObserved`); while followed no `sn` goes out (arrival, pre-step or cooldown retry) and no step stops to cast. It lifts when we leave a room nothing followed us into, when a kill empties the room (even inside the window: a backstab dropped the follower 0.5 s after arrival and the kept flag sent the next step out unsneaked, report `paradigm-20261004-180252`), or when a fight ends any other way after we've stood in the room longer than the window. Before this, every step of a chase sent `sn` twice and each refusal stood the walk still under attack.
 - `StealthManager.SneakEntry` → `SessionActivityTracker.NoteSneakEntry`: Session Stats' **Sneak %** counts a room entry as held on `Sneaking...` and as lost on `You make a sound as you enter the room!` or a silent loss.
@@ -3768,6 +3769,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
     - optional rests (a rest the gates call for goes out anyway);
     - invites and say-channel chatter, queued at the engine send gate.
   - **Not held:** walk steps the route can't skip (doors, traps, room commands, winches, hidden-exit search) and their `.@party` / `.@trap` relays, plus `.@panic` (the leader's hang-up call; followers just hang up).
+    - Everything the walker and the loop send goes out as a route step (`EngineSendGate.WrapEngineSender(…, routeSteps: true)`), whatever its wording. Some room commands are spoken passwords, which read like say-channel chatter: `say gazmuldduhaz:checkability 134 9:remoteaction 1188 2008 0 0` opens the hidden exit north of `12/1188`, and `say courage` / `say bravery` / `say love` / `say time` teleport in map 17 (7 `say`-keyed room commands on Paradigm 1.9.1, 8 on Stock 1.11p; `speak` is an alias on `12/1188`). Until 2026-10-07 the send gate took the walker's `say gazmuldduhaz` for later while it sneaked past the stronghold guards, and the move behind it met `There is no exit in that direction!` (report `paradigm-20261007-225617`).
   - **Health-gate flee:** while fleeing on the run-if-below HP / MA gates (`HealthManager.IsGateFleeing`; not a hit-and-run or failed-backstab run), the emergency heal isn't held, and the re-sneak waits until it has gone out (`StealthManager.SetSneakHoldForHeal`).
   - **Marking the sneak broken:** any command on the "What ends a sneak" list sets the sneak broken (`StealthManager.NoteSneakBroken`), so the next move re-sneaks. That covers the client's own sends (the send gate, the walker's room-command hook) and lines the player types (`AppServices.NoteSentForSneak` from `SendUserInput`; report `paradigm-20260928-163051`: a typed `sea` left the client believing it still sneaked, so every buff stayed held). A hand-typed cast re-sneaks like an engine one (`StealthManager.ReSneakAfterCast`).
   - **Re-sneaking in place when nothing drives the moves** (report `paradigm-20261002-004148`): an engine
@@ -5351,6 +5353,29 @@ There is no room to drop amethyst pendant here.
   - A refused wear or wield of an evil-only `N` item narrows the range when we're known Outlaw or worse and nothing else bars the item (`AppServices.LearnFromEvilOnlyRefusal`). A dark cloud or a new `pro` reading clears it.
 - The Equipment Manager blocks a slot whose item fails the check, and also blocks it on the EP-zap refusal.
 - `Your <item> has been removed.` makes `AlignmentGearCheck` send a `who` to learn the new alignment.
+
+### Abilities of carried items
+*Status: mixed (per-bullet tags) · Realm: differs in what is recorded*
+
+- **Stock totals a carried item's abilities when it is not a weapon and has no wear slot** *([OBSERVED] 2026-10-07, `wccmmud.dll` 1.11p `_get_user_ability_value` @ `0x43d038`)*. The routine adds an ability up over the class and race, the active spells, the 20 worn slots (`0x62c`), one further item slot (`0x624`, not identified), and the 100 pack slots (`0xd8`). A pack item is skipped when its `ItemType` is 1 (weapon; item field `0x2f4`) or it has a wear slot (`Worn`, item field `0x398`, not 0). Keys aren't in the pack slots: `_add_item_to_inventory` files an `ItemType` 7 item on the key ring (`0x334`, 50 at most).
+- **So the Stealth stat itself drops while such an item is carried** *([OBSERVED] 2026-10-07, `_calculate_secondary_stats` @ `0x41a424`, Stock)*: Stealth (`0x5fa`) is the base (see *Character stats & progression → Stealth base*) plus the ability 27 total, floored at 0.
+- **The items with a Stealth penalty that applies from the pack** *([OBSERVED] 2026-10-07, imported Items on both sets: `ItemType` 10, `Worn` 0, ability 27)*:
+
+  | Item | Stealth |
+  |---|---|
+  | `large black gem` (1810) | −200 |
+  | `log raft` (690) | −125 |
+  | `wooden skiff` (691) | −100 |
+  | `silverbark canoe` (1181) | −75 |
+  | `river punt` (3609, Paradigm only) | −50 |
+  | `wooden ladder` (2040, 2047) | −50 |
+
+- **Paradigm: carrying a log raft stops a sneak from taking** *([CONFIRMED] 2026-10-07, user; report `paradigm-20261007-213809`)*. In the capture the raft was bought at Stealth 131 and 76% encumbrance, and the next 14 `sn` in a row answered `Attempting to sneak...You don't think you're sneaking.` That is the Stock arithmetic: 131 − 125 = 6, less 10 for the load (see *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*).
+- `[NEEDS CONFIRMATION]` On Paradigm, does `stat` show Stealth already lowered while the raft is in the pack, as the Stock engine's stored figure would? The client assumes it does.
+
+**Client use:**
+- `ItemNameStore.PackStealthOf` reads the modifier with the engine's rule (not a weapon, no wear slot).
+- `CarriedStealthPenalty` estimates the Stealth in force: the last `stat` reading (`StatParser.LastCaptureReadStealth` marks a screen that carried one), less what the pack was doing to it then, plus what it is doing now. With a penalty item held and the estimated `sn` chance under 10% after the encumbrance penalty, `StealthManager` stands Auto-Sneak down: one terminal notice naming the item, no `sn`, and the walk goes on unsneaked until the item is gone (`StoodDownFor`, `NoteCarriedChanged`). **Client policy** (2026-10-07): 10%, because every sneaked move re-rolls under the same chance, so a sneak that does take at that figure is lost a room later. A character with Perfect Stealth (quest flag 186 complete) is never stood down.
 
 ### Item charges (`Uses` / `UseCount`)
 *Status: CONFIRMED 2026-09-28 (user) · Realm: both*

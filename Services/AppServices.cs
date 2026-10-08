@@ -1778,6 +1778,7 @@ public sealed class AppServices
 
     // Holds automation that would end a sneak while keeping it matters (see its wiring).
     public Game.Stealth.SneakGuard SneakGuard { get; private set; } = null!;
+    public Game.Stealth.CarriedStealthPenalty CarriedStealth { get; private set; } = null!;
 
     // Auto-light need poster. On a "can't see"
     // room-light line it posts a NeedKind.LightSource
@@ -5478,6 +5479,26 @@ public sealed class AppServices
             name => ItemNames.FindByName(name) is int number
                 && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
+        // Something in the pack that takes Stealth to nothing (a log raft) stands
+        // Auto-Sneak down until it is gone, instead of `sn` being resent into a
+        // refusal in every room.
+        CarriedStealth = new Game.Stealth.CarriedStealthPenalty(
+            carried: () => Inventory.Snapshot.CarriedItems,
+            packStealthOf: ItemNames.PackStealthOf,
+            stealthReading: () => PlayerStats.Stealth,
+            encumbrancePercent: () => Inventory.Snapshot.Encumbrance is { MaxWeight: > 0 } load
+                ? load.CurrentWeight * 100 / load.MaxWeight : 0,
+            perfectStealth: () => Profile.Current?.QuestLog?.Any(q =>
+                q.Complete && q.Flag == Game.Stealth.SneakChance.PerfectStealthAbility) == true);
+        Stealth.SetCarriedPenaltyCheck(
+            () => CarriedStealth.Current() is { Hopeless: true } verdict ? verdict.Items : null,
+            msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        Stats.ScreenParsed += _ =>
+        {
+            if (Stats.LastCaptureReadStealth) CarriedStealth.NoteStealthRead();
+            Stealth.NoteCarriedChanged();
+        };
+        Inventory.Changed += () => Stealth.NoteCarriedChanged();
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData,
             () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
                 Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), Profile.Current?.QuestLog));

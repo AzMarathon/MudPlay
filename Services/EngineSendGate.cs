@@ -83,7 +83,14 @@ public sealed class EngineSendGate
 
     // Wrap an engine's raw Action<byte[]> wire-sender so it short-circuits while any
     // hold is active.
-    public Action<byte[]> WrapEngineSender(Action<byte[]> rawSender)
+    //
+    // routeSteps marks the walker's and the loop's sender. What they send is a step
+    // of the route, and a step can't wait for sneak keeping: a spoken password that
+    // opens an exit (`say gazmuldduhaz`) reads like say-channel chatter, was taken
+    // for later, and the move behind it met "There is no exit in that direction!"
+    // (report paradigm-20261007-225617). Such a send still goes out and is still
+    // reported, so the sneak it ends is taken again before the next move.
+    public Action<byte[]> WrapEngineSender(Action<byte[]> rawSender, bool routeSteps = false)
     {
         ArgumentNullException.ThrowIfNull(rawSender);
         return bytes =>
@@ -92,7 +99,7 @@ public sealed class EngineSendGate
             string? command = _takeForLater is null && _sent is null
                 ? null
                 : System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r', '\n');
-            if (command is not null && _takeForLater?.Invoke(command) == true) return;
+            if (!routeSteps && command is not null && _takeForLater?.Invoke(command) == true) return;
             rawSender(bytes);
             if (command is not null) _sent?.Invoke(command);
             // Remember the just-sent client command so a confusion fumble can re-fire

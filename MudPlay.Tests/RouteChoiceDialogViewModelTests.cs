@@ -537,6 +537,39 @@ public sealed class RouteChoiceDialogViewModelTests
             previews);
     }
 
+    // ----- Avoid-override fork: the card names the rooms ------------------
+
+    // Report paradigm-20261007-215302: the card said "3 rooms you marked Avoid" and
+    // nothing else, and the rooms were on another map than the one being looked at.
+    [Fact]
+    public void AvoidOverride_NamesTheAvoidedRoomsItCrosses()
+    {
+        RouteChoice choice = new(FreeStepCount: 180, GatedStepCount: 142,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.AvoidOverride,
+            AvoidedRoomCount: 3,
+            AvoidedRoomNames: new[] { "Black Wasteland (3/740)", "Black Wasteland (3/669)", "Black Wasteland (3/756)" });
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Lake of Fire (9/1427)", id => "");
+
+        Assert.Contains("3 rooms you marked Avoid", vm.GatedSummary);
+        Assert.Contains("Black Wasteland (3/740), Black Wasteland (3/669), Black Wasteland (3/756)", vm.AvoidCaveat);
+    }
+
+    [Fact]
+    public void AvoidAlternativeCard_NamesTheAvoidedRoomsItCrosses()
+    {
+        RouteChoice choice = new(FreeStepCount: 0, GatedStepCount: 4,
+            System.Array.Empty<RouteRequirement>(), System.Array.Empty<RoomKey>(), GatedLine,
+            AvoidAlternativePath: FreeLine, AvoidAlternativeCount: 1,
+            AvoidAlternativeNames: new[] { "Fungus Forest (7/246)" });
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Lake of Fire (9/1427)", id => "");
+
+        Assert.True(vm.ShowAvoidAltCard);
+        Assert.Contains("Fungus Forest (7/246)", vm.AvoidAltDetail);
+    }
+
     // ----- Trap-avoid fork -----------------------------------------------
 
     private static RouteChoice TrapAvoidChoice(int freeTraps = 0, int gatedTraps = 2) =>
