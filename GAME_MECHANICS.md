@@ -5146,6 +5146,7 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 - **Inventory tracking must apply the count.** A counted confirmation removes or adds N copies, not one. The carried-list and running-weight adjustments must strip the leading count and apply it N times, or the encumbrance estimate drifts.
 - Report `paradigm-20260812-201631`: 35 stashed orc-heads left the estimate ~1050 too heavy. The cash "skip if Heavy" gate then wrongly skipped a collect while the character was actually Medium.
 - **Paradigm's `i` lists a stack as one entry with its count in front** (`9 green dragon hide`) *([OBSERVED] 2026-10-08, report `paradigm-20261008-063323`)*, while the live `You took N` path adds N single entries, so the carried list can hold both forms at once. Anything counting carried copies has to split the leading count (`CountedCommand.SplitLeadingCount`). `StashRoomManager.ExecuteStash` counted one per entry, so a stack of nine was stashed one a visit (`hide green dragon hide`); it now sends `hide 9 green dragon hide`.
+- **Client policy** (user, 2026-10-08): auto-stash leaves **Min. to keep** copies in hand when *Must have minimum* is set and hides only the rest, the floor Auto-sell and Auto-discard already leave. A flagged key is read off the key ring (`InventorySnapshot.Keys`), which the stash never looked at before.
 
 ### Pickup / drop confirmation lines and item vs coin disambiguation
 *Status: CONFIRMED*

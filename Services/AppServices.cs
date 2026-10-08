@@ -12923,7 +12923,7 @@ public sealed class AppServices
     private static int SellFloor(Models.GameData.ItemOverlay overlay) =>
         ParseCount(overlay.MinToKeep, 0);
 
-    // Keep floor for the discard engine: MinToKeep when the user set
+    // Keep floor for the discard and stash engines: MinToKeep when the user set
     // MustHaveMinimum, else zero (unbanded → drain to nothing). "None", blank, and
     // non-numeric strings resolve to zero.
     private static int KeepFloor(Models.GameData.ItemOverlay overlay) =>
@@ -12943,22 +12943,21 @@ public sealed class AppServices
             System.Globalization.CultureInfo.InvariantCulture, out int v) && v >= 0
             ? v : fallback;
 
-    // Resolve a single carried-inventory entry for Stash:
-    // map the loose carry wording to an item Number, read its verbatim
-    // Name, and resolve the per-character
-    // Models.GameData.ItemOverlay.AutoStash override
-    // (Defaults seed → Global → BBS → Char). Returns the canonical name
-    // to hide when the item is flagged for auto-stash, else
-    // null so the stash engine leaves it in the pack. AutoStash
-    // defaults to false — stashing is opt-in per item.
-    private string? ResolveAutoStashItem(string entry)
+    // Resolve a single carried-inventory entry for Stash: map the loose carry
+    // wording to an item Number, read its verbatim Name, and resolve the
+    // per-character ItemOverlay.AutoStash override (Defaults seed → Global → BBS →
+    // Char) plus the keep floor. Null when the item isn't flagged, so the stash
+    // engine leaves it in the pack: stashing is opt-in per item.
+    private Game.Cash.StashRoomManager.ResolvedStash? ResolveAutoStashItem(string entry)
     {
         if (ItemNames.FindByName(entry) is not int number) return null;
         string? name = ItemNames.GetName(number);
         if (string.IsNullOrWhiteSpace(name)) return null;
 
         Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
-        return overlay.AutoStash ?? false ? name : null;
+        return overlay.AutoStash ?? false
+            ? new Game.Cash.StashRoomManager.ResolvedStash(name, KeepFloor(overlay))
+            : null;
     }
 
     // Push the loaded character's Models.Profile.PartySettings

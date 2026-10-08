@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.151.1**
+> **Version 3.151.3**
 > - Player Workshop tabs regrouped: **Auto-Train** holds CP Allocation and Level Projection, **My Equipment** holds Equipment Manager and Item Finder, **Record Keeping** holds Bosses, Chest Offload, Roomba and Realm Rankings
 > - Item Finder is a sub-tab of My Equipment instead of a window opened from a button on Equipment Manager
 > - Chest Offload is a sub-tab of Record Keeping instead of a window opened from a button on Bosses; the chest icon on Character Info jumps to it
@@ -15,6 +15,8 @@
 > - Showing the Gear Finder panel on a maximized window no longer lays it out off the edge of the screen; switching Workshop tabs while maximized no longer resizes the window either
 > - Gear Finder panel regrouped: the Find Best controls sit together, and Import from live / Clear sit on the trial set's slot list
 > - Auto-stash hides the whole stack of a flagged item in a stash room, instead of one copy a visit, when the pack lists it as one counted line (`9 green dragon hide`)
+> - Auto-stash also hides flagged keys, which sit on the key ring and were never stashed
+> - Auto-stash keeps Min. to keep in hand when Must have minimum is ticked, and hides only the copies above it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -171,7 +171,7 @@
                                                 </StackPanel>
                                             </StackPanel>
                                             <CheckBox Content="Auto-stash" IsChecked="{Binding AutoStash, Mode=TwoWay}"
-                                                      ToolTip.Tip="Stash it at your stash room."/>
+                                                      ToolTip.Tip="Hide it in a stash room as you pass through. With Must have minimum ticked, Min. to keep stays with you and only the copies above it are stashed; otherwise every copy goes. Works for keys on your key ring too."/>
                                             <CheckBox Content="Auto-discard" IsChecked="{Binding AutoDiscard, Mode=TwoWay}"
                                                       ToolTip.Tip="Drop it as soon as it's picked up."/>
                                         </StackPanel>
