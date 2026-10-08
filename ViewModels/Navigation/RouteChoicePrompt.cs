@@ -116,7 +116,7 @@ public static class RouteChoicePrompt
         RoutePlan plan;
         if (services.Walker.State == WalkState.Idle)
         {
-            Task<RoutePlan> planTask = Task.Run(() => PlanRouteChoice(services, src, destination));
+            Task<RoutePlan> planTask = CountThenPlanAsync(services, src, destination);
             // Only pop the "Calculating…" window if planning takes long enough to
             // notice — a fast plan (most walk-tos) wins the race and never flashes a
             // window; the picker, if any, is then built fully-populated below.
@@ -147,6 +147,7 @@ public static class RouteChoicePrompt
         }
         else
         {
+            await services.CountPartyGateItemsAsync(src, destination);
             plan = PlanRouteChoice(services, src, destination);
         }
 
@@ -210,6 +211,17 @@ public static class RouteChoicePrompt
     // walker takes on its own (overland past a token or teleport, disarming a trap,
     // around an item gate). An avoid-override always asks, and so do a sole gated route
     // and a blocked one — there's no default route there to fall back to.
+    // Leading a party, count its copies of the per-member gate items on the way
+    // before planning, so the plan can tell a gate the whole party clears from one
+    // only the leader does. The count asks the party and can take a few seconds;
+    // it's part of the awaited plan so the "Calculating…" window covers it. It
+    // returns at once for a solo walk or a route with no such gate.
+    private static async Task<RoutePlan> CountThenPlanAsync(AppServices services, RoomKey src, RoomKey destination)
+    {
+        await services.CountPartyGateItemsAsync(src, destination);
+        return await Task.Run(() => PlanRouteChoice(services, src, destination));
+    }
+
     private static bool TakesDefaultRouteUnasked(RoutePlan plan) => plan.Kind switch
     {
         RoutePlanKind.Token or RoutePlanKind.Teleport or RoutePlanKind.TrapAvoid => true,
@@ -528,7 +540,7 @@ public static class RouteChoicePrompt
             vm = calcVm;
             dialogTask = calcDialogTask;
             vm.Populate(
-                choice, services.ItemNames.GetName, giveName, shopName, dropName,
+                choice, services.RouteItemLabel, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote);
         }
         else
@@ -536,7 +548,7 @@ public static class RouteChoicePrompt
             // Fast plan / walk-in-progress: no calc window was opened — build the
             // fully-populated VM and show it (nothing to morph, no flicker).
             vm = new RouteChoiceDialogViewModel(
-                choice, destLabel, services.ItemNames.GetName, giveName, shopName, dropName,
+                choice, destLabel, services.RouteItemLabel, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
                 economyNote, sourceLabel: DestinationLabel(services, source));
             dialogTask = services.Dialogs

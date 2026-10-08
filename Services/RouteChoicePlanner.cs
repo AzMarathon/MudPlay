@@ -845,7 +845,6 @@ public static class RouteChoicePlanner
     private static IEnumerable<(RouteRequirement Req, bool Held)> ItemGatesOnPath(
         RoomGraphManager graph, MovementFilter filter, RoomKey source, IReadOnlyList<Direction> path)
     {
-        Func<int, bool>? carries = filter.ItemCarriedProbe;
         RoomKey cur = source;
         foreach (Direction dir in path)
         {
@@ -853,7 +852,10 @@ public static class RouteChoicePlanner
             if (room is null || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
             if (ClassifyItemGate(in exit) is { } req)
             {
-                bool held = req.ItemIds.Count > 0 && req.ItemIds.All(id => carries?.Invoke(id) == true);
+                // Same reading of "held" the filter's gate uses, so a gate the party
+                // is short for lists as needed and not as "you have it".
+                bool perMember = exit.Hint is RoomExitHint.Item or RoomExitHint.Ticket;
+                bool held = req.ItemIds.Count > 0 && req.ItemIds.All(id => filter.HoldsGateItem(id, perMember));
                 yield return (req, held);
             }
             cur = exit.Target;

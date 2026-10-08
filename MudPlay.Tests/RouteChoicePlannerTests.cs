@@ -455,6 +455,57 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // Report paradigm-20261007-183903: an Item exit carries across only the member
+    // holding the item. A leader with a copy, leading followers without one, was
+    // planned straight through the gate with no route card and crossed alone. With
+    // the party short, the gate is closed to the plan and lists as needed.
+    [Fact]
+    public void OffersChoice_WhenTheLeaderHoldsTheItem_ButThePartyIsShort()
+    {
+        WithGraph(ItemShortcutJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = id => id == 5;
+            filter.PartyShortOfItemProbe = id => id == 5;
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(3, choice!.FreeStepCount);      // the plan goes round the gate
+            Assert.Equal(1, choice.GatedStepCount);
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(new[] { 5 }, req.ItemIds);
+            Assert.False(req.Carried);                   // not "you have it"
+            // Picking the gated route arms the copies still to come.
+            Assert.Equal(new[] { 5 }, RouteChoicePlanner.SourceableGateItems(choice.Requirements, NoSummons));
+        });
+    }
+
+    // A key opens the door for everyone behind the leader, so a locked door is
+    // never closed by the party count.
+    [Fact]
+    public void PartyShort_DoesNotCloseAKeyedDoor()
+    {
+        MovementFilter filter = new(BlankProfile());
+        filter.InventoryReadyProbe = () => true;
+        filter.ItemCarriedProbe = _ => true;
+        filter.PartyShortOfItemProbe = _ => true;
+
+        RoomExit door = new(new RoomKey(1, 2), RoomExitHint.KeyLocked, RawHint: null, KeyItemId: 7);
+        RoomExit arch = new(new RoomKey(1, 2), RoomExitHint.Item, RawHint: null, KeyItemId: 7);
+
+        Assert.False(filter.IsExitBlocked(in door));
+        Assert.True(filter.IsExitBlocked(in arch));
+    }
+
+    private static ProfileService BlankProfile()
+    {
+        ProfileService profile = new();
+        profile.LoadBlank();
+        return profile;
+    }
+
     [Fact]
     public void OffersSoleItemRoute_WhenNoFreeAlternative()
     {

@@ -1,5 +1,10 @@
 # Version history
 
+## 3.149.2
+
+- Leading a party past an exit that needs an item (a darkwood ring, a rope and grapple): the party is asked how many each holds before the route is planned, and if there isn't one each the route card names the item and the count instead of the leader crossing alone
+- bug reports addressed: paradigm-20261007-183903
+
 ## 3.149.1
 
 - The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further

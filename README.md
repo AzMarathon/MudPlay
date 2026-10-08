@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.1**
-> - The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further
+> **Version 3.149.2**
+> - Leading a party past an exit that needs an item (a darkwood ring, a rope and grapple): the party is asked how many each holds before the route is planned, and if there isn't one each the route card names the item and the count instead of the leader crossing alone
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
