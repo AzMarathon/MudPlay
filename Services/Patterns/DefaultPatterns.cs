@@ -1026,6 +1026,9 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.WinchDrawbridgeLowered,
             @"\bdrawbridge lowers\b",
             options: RegexOptions.IgnoreCase);
+        yield return new RegexPattern(KnownPatterns.WinchEnemiesPresent,
+            @"^\s*You cannot do that while there are enemies present!\s*$",
+            options: RegexOptions.IgnoreCase);
 
         // "You see <name> attempt to bash the door to the <dir>." — another
         // player (possibly our party leader) failing to force a door. Name

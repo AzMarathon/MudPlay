@@ -9,9 +9,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// A room command that only works in an empty room (`go hole:nomonsters …`), refused
-// because a monster followed the party in (report paradigm-20261007-194430). The
-// walker holds the step, has the room cleared, and sends the command again.
+// A room command that only works in an empty room (`go hole:nomonsters …`), with a
+// monster in the room (report paradigm-20261007-194430: one followed the party in
+// and the command was refused). The walker reads the condition from the game data,
+// holds the step, has the room cleared, and sends the command once it is.
 public sealed class AutoWalkManagerRoomCommandRefusalTests : IDisposable
 {
     private readonly string _root;
@@ -46,9 +47,15 @@ public sealed class AutoWalkManagerRoomCommandRefusalTests : IDisposable
         [ { "Number": 5, "LinkTo": 0, "Action": "go hole:nomonsters 289:message 9455:teleport 9 1\n", "Called From": "Room 1/1" } ]
         """;
 
+    // The same command with no empty-room condition on it.
+    private const string TbInfoUngated = """
+        [ { "Number": 5, "LinkTo": 0, "Action": "go hole:minlevel 10 3246:message 9455:teleport 9 1\n", "Called From": "Room 1/1" } ]
+        """;
+
     private sealed class Harness
     {
         public required RoomTracker Tracker { get; init; }
+        public required MovementCoordinator Coordinator { get; init; }
         public required AutoWalkManager Walker { get; init; }
         public List<string> Sent { get; } = new();
         public List<WalkEvent> Events { get; } = new();
@@ -64,11 +71,11 @@ public sealed class AutoWalkManagerRoomCommandRefusalTests : IDisposable
         public void Dispose() => onDispose();
     }
 
-    private Harness NewHarness()
+    private Harness NewHarness(string tbInfo = TbInfo)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), Rooms);
-        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), TbInfo);
+        File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), tbInfo);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         TBInfoStore store = new(cache);
@@ -76,9 +83,10 @@ public sealed class AutoWalkManagerRoomCommandRefusalTests : IDisposable
         RoomGraphManager graph = new(cache, log: null, tbinfo: store);
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
-        AutoWalkManager walker = new(graph, new BfsMapper(graph), tracker, new MovementCoordinator());
+        MovementCoordinator coordinator = new();
+        AutoWalkManager walker = new(graph, new BfsMapper(graph), tracker, coordinator);
 
-        Harness h = new() { Tracker = tracker, Walker = walker };
+        Harness h = new() { Tracker = tracker, Walker = walker, Coordinator = coordinator };
         walker.SetWireSender(b => h.Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         walker.Event += evt => h.Events.Add(evt);
         walker.SetVoyageScheduler((_, cb) =>
@@ -92,7 +100,8 @@ public sealed class AutoWalkManagerRoomCommandRefusalTests : IDisposable
         walker.SetRoomClearHooks(
             roomHasMonster: () => h.MonsterHere,
             requestRoomClear: () => h.ClearRequests++,
-            abortPartyReform: () => h.ReformAborts++);
+            abortPartyReform: () => h.ReformAborts++,
+            commandNeedsEmptyRoom: (room, command) => TBInfoActionResolver.NeedsEmptyRoom(store, room.Cmd, command));
         tracker.StateChanged += _ => { };
         return h;
     }
@@ -158,5 +167,64 @@ public sealed class AutoWalkManagerRoomCommandRefusalTests : IDisposable
         Assert.False(h.Walker.AwaitingEmptyRoom);
         Assert.Equal(0, h.ClearRequests);
         Assert.Equal(2, h.HoleCount);          // the one retry
+    }
+
+    // The condition is in the game data, so with a monster already here the command
+    // isn't sent at all. That also covers the lines that refuse without a word.
+    [Fact]
+    public void MonsterHereBeforeSending_HoldsTheCommandUnsent_ThenSendsItOnce()
+    {
+        Harness h = NewHarness();
+        h.MonsterHere = true;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 9)));
+
+        Assert.True(h.Walker.AwaitingEmptyRoom);
+        Assert.Equal(0, h.HoleCount);
+        Assert.Equal(1, h.ClearRequests);
+        Assert.Equal(0, h.ReformAborts);       // nothing was relayed, so no regroup hold to drop
+
+        h.MonsterHere = false;
+        h.Walker.NoteRoomObserved();
+
+        Assert.False(h.Walker.AwaitingEmptyRoom);
+        Assert.Equal(1, h.HoleCount);
+    }
+
+    // A command with no empty-room condition is refused for some other reason, and
+    // the monster in the room (an NPC the command needs, say) is left alone.
+    [Fact]
+    public void CommandWithoutTheCondition_IsNotHeld_AndTheRoomIsNotCleared()
+    {
+        Harness h = NewHarness(TbInfoUngated);
+        h.MonsterHere = true;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 9)));
+        Assert.Equal(1, h.HoleCount);
+
+        Assert.True(h.Tracker.NoteCommandMoveRefused());
+
+        Assert.False(h.Walker.AwaitingEmptyRoom);
+        Assert.Equal(0, h.ClearRequests);
+        Assert.Equal(2, h.HoleCount);          // the ordinary retry
+    }
+
+    // The limit is for a monster nothing is dealing with. While a fight (or a rest
+    // after it) holds the walk, running out of time doesn't end the walk.
+    [Fact]
+    public void LimitReachedWhileTheWalkIsPaused_KeepsWaiting()
+    {
+        Harness h = NewHarness();
+        h.MonsterHere = true;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 9)));
+        h.Coordinator.AssertGate("Combat");
+
+        h.PendingDeadline!();
+
+        Assert.True(h.Walker.AwaitingEmptyRoom);
+        Assert.NotNull(h.PendingDeadline);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
     }
 }

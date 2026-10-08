@@ -4009,6 +4009,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **The winch is operated by any of `pull` / `turn` / `move` / `push` winch** (aliases for the same TBInfo action), yielding exactly one of two lines:
   - **success:** `You heave mightily on the winch, and it begins to turn!`
   - **failure:** `You heave mightily on the winch, but it does not budge.`
+- **With a monster in the room the pull is refused outright, with the same line on both realms** *([OBSERVED] 2026-10-07, imported TBInfo on both sets and the Stock 1.11p `wccmsg2` table; same wording on Paradigm [CONFIRMED] 2026-10-07, user: Paradigm added no winches of its own that the user knows of, and both sets carry the same 12 winch lines. No Paradigm capture yet)*. Every winch line leads with `nomonsters 1981`, e.g. `pull winch:nomonsters 1981:adddelay 3:testskill strength 20 2550:remoteaction 2099 1982 0 3` (room `12/2099`), and message `1981` is `You cannot do that while there are enemies present!`. Neither result line is printed and nothing turns. See *Room-command refusals* for what counts as a monster.
 - **"Does not budge" is a strength roll, not randomness.** The TBInfo action is `testskill strength 20 …` — a strength check on each pull. **Higher strength = more likely to pass**; a roll can still miss. So failure is a **retry** (keep pulling), not a give-up. (All races start ≥20 strength, so no character is hard-blocked — it just takes more pulls at low strength.)
 - **After it turns, the gate opens on a short delay with no "the gate opens" line.** The action carries `adddelay 3` ≈ 3s; the gate only reads `open gate <dir>` in a room re-display (a bare `l` / look refreshes it). Moving before the gate is actually open bonks `The gate is closed!` (which the movement-refusal detector reverts).
 - **Same-room vs cross-room.** Most winches sit in the same room as the gate they open. But a winch can `remoteaction` a gate in a **different** room (in Paradigm 1.9.1, the winch in `12/2118` opens the gate off `12/2122`). Then the gate exit is a cross-room remote-action detour, not a same-room exit.
@@ -4019,6 +4020,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **Same-room** → `WinchManager` (walker + loop) sends the pull, retries on "does not budge", and on "begins to turn" polls a look until the gate reads open, THEN moves — never fires the move blindly.
 - **Cross-room** → the `RemoteActionPathExpander` detour's `pull winch` step is flagged `IsWinchPull` and routed through `WinchManager` pull-only (retry until it turns, no gate poll — the walk back to the gate room covers the open delay).
 - `WinchManager` treats the drawbridge line as authoritative and skips the poll for it (whichever order it arrives relative to "begins to turn").
+- The pull is one of the room commands held for an empty room before it is sent. If a monster comes in between pulls, `WinchManager` reads the `enemies present` line (`KnownPatterns.WinchEnemiesPresent`) and hands the step back as `WinchResult.RoomNotEmpty`; the walker or loop holds it and starts the winch again once the room is clear.
 
 ### Exit alignment gates
 *Status: CONFIRMED 2026-08-27 (user — mechanic for report `paradigm-20260827-144553`) · Realm: Paradigm*
@@ -4559,12 +4561,31 @@ Among protectable hazards, a further split governs whether the navigator may off
     picker's human-readable "(ask …)" promise keeps the full name.
 
 ### Room-command refusals
-*Status: [OBSERVED] 2026-09-28 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo) · Realm: Stock — Paradigm not recorded; the client matches these lines on both realms by the user's call 2026-09-28*
+*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
 
 - **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
-  - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`.
+  - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
   - On failure the engine prints the message's line 1 to you and line 2 to the room (@0x46f360), and the rest of that line doesn't run. With no message number the refusal is silent.
 - **A refused command never redisplays the room**, the same as a refused move (see *Refused ("bonked") moves*).
+- **Three conditions look at the monsters in the room** *([OBSERVED] 2026-10-07, `_perform_matched_action` in the Stock 1.11p `wccmmud.dll`)*. Each reads the room's 15 monster slots:
+  - **`nomonsters [msg]` passes only when every slot is empty.** Any monster record in the room refuses the line: an NPC or a non-hostile monster counts the same as a hostile. Players never count.
+  - **`monsters [msg]` passes only when at least one slot is filled.** The healer lines use it: `buy minor healing:monsters:price 50 318:cast 219:adddelay 5`.
+  - **`needmonster <monster#> [msg]` passes only when that monster is in the room.** The "monster" is often the thing the command acts on: the `grey portal` (`596`, room `12/2250`), the `mirror portal` (`945`, `17/1753`), the `shredded tapestry` (`1003`, `17/1772`), the four `cloaked figure`s you steal from (`1054`–`1057`), and on Paradigm the `dwarven miner` (`422`, `6/3034`) and a `messenger` (`2782`, `14/1290`, `go courtyard`).
+  - Conditions run left to right, so a directive before the check has already happened when it fails: `go mirror portal:cast 310:needmonster 945 2073:…` casts first.
+  - **Paradigm counts an NPC as a monster for `nomonsters` too** *([CONFIRMED] 2026-10-07, user)*. The slot check itself is read from the Stock engine only.
+- **Where `nomonsters` sits in the imported data** *([OBSERVED] 2026-10-07, TBInfo of `data-Paradigm-1.9.1` and `data-v1.11p`)*:
+
+  | | Paradigm 1.9.1 | Stock 1.11p |
+  |---|---|---|
+  | `nomonsters` lines | 510 | 269 |
+  | on room commands that teleport | 267 lines in 104 rooms | 100 lines in 28 rooms |
+  | of those, with no message number (silent) | 16 | 23 |
+  | `monsters` lines | 140 | 152 |
+  | `needmonster` lines | 42 | 36 |
+
+  - The other `nomonsters` room commands: winches and buttons that `remoteaction` a gate, the fang and altar item puzzles, `mine ore`, `summon healer`, and `go hole` lines that `cast` a spell. It also gates room spells (see *Monsters, lairs & spawns → Room-spell monster summons*).
+  - A silent one: `go willow:nomonsters:roomitem 718 962:message 961:teleport 214 3:message 963` (room `3/213`).
+  - Message numbers used by `nomonsters`: `289`, `503`, `793`, `1380`, `1382`, `1596` (`You cannot do that right now!`), `1093` (`You can't do that right now!`), `1692` (`You can't get to that right now!`), `1981` (`You cannot do that while there are enemies present!`, the winch lines), and on Paradigm only `3509` and `9575`, whose text is not in the Stock table and is not recorded.
 - **The 1.11p refusals on command lines that teleport** (the TBInfo line holds a `teleport`, directly or through `text N`):
 
   | Condition | Refusal |
@@ -4582,7 +4603,9 @@ Among protectable hazards, a further split governs whether the navigator may off
 **Client use:**
 - `MovementRefusalDetector.RoomCommandRefused` matches the table; `RoomTracker.NoteCommandMoveRefused` reverts the pending move only when it is a typed command (a text exit, teleport keyword or `ask`) sent within the last 3 seconds, so an everyday reply can't revert a cardinal move.
 - `AutoWalkManager` stops re-asking a greet teleport the NPC refused (`RoomTracker.CommandMoveRefused`), since a refusal isn't a failed skill roll; the step then retries once and replans like any refused move.
-- A room command refused while a monster is in the room is held, not retried: the walker drops the regroup hold its relayed teleport put up, has the room cleared (a force-clear, so it is fought with Auto-Combat off too), and sends the command again once the room roster shows no monster, giving up after 60 s (`AutoWalkManager.HoldForEmptyRoom`, `AwaitingEmptyRoom`). With no monster in the room the refusal has another cause and the step retries and replans as before.
+- `TBInfoActionResolver.NeedsEmptyRoom` reads `nomonsters` off the line a command keys, so the rule is known before the command is sent and a silent refusal is covered.
+- A step whose room command needs an empty room is held while a monster is on the room roster (`EmptyRoomCommandHold`, shared by `AutoWalkManager.HeldForEmptyRoom` and `LoopRunner.HeldForEmptyRoom`; `AwaitingEmptyRoom` on each). The roster counts every monster record, as the engine does. The room is cleared meanwhile (a force-clear, so it is fought with Auto-Combat off too) and the command goes out once the roster shows no monster. **Client policy:** with nothing else holding the engine, the wait ends the walk or loop after 60 s, since a monster nothing will fight never leaves; while a fight or a rest holds it, the limit starts over.
+- A monster that comes in after the command went out gets the refusal: the same hold then also drops the regroup hold the relayed teleport put up (report `paradigm-20261007-194430`). A command with no `nomonsters` on its line is never held, so a `needmonster` target such as the grey portal isn't attacked; its refusal retries and replans as before.
 
 ### Cast-on-walk exits and random teleports
 *Status: CONFIRMED (game data v1.11p map 9)*
