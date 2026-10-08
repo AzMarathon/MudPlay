@@ -4561,7 +4561,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     picker's human-readable "(ask …)" promise keeps the full name.
 
 ### Room-command refusals
-*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
+*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
 
 - **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
   - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
@@ -4572,7 +4572,7 @@ Among protectable hazards, a further split governs whether the navigator may off
   - **`monsters [msg]` passes only when at least one slot is filled.** The healer lines use it: `buy minor healing:monsters:price 50 318:cast 219:adddelay 5`.
   - **`needmonster <monster#> [msg]` passes only when that monster is in the room.** The "monster" is often the thing the command acts on: the `grey portal` (`596`, room `12/2250`), the `mirror portal` (`945`, `17/1753`), the `shredded tapestry` (`1003`, `17/1772`), the four `cloaked figure`s you steal from (`1054`–`1057`), and on Paradigm the `dwarven miner` (`422`, `6/3034`) and a `messenger` (`2782`, `14/1290`, `go courtyard`).
   - Conditions run left to right, so a directive before the check has already happened when it fails: `go mirror portal:cast 310:needmonster 945 2073:…` casts first.
-  - `[NEEDS CONFIRMATION]` The slot check is read from the Stock engine only. Does Paradigm count an NPC as a monster for `nomonsters` too?
+  - **Paradigm counts an NPC as a monster for `nomonsters` too** *([CONFIRMED] 2026-10-07, user)*. The slot check itself is read from the Stock engine only.
 - **Where `nomonsters` sits in the imported data** *([OBSERVED] 2026-10-07, TBInfo of `data-Paradigm-1.9.1` and `data-v1.11p`)*:
 
   | | Paradigm 1.9.1 | Stock 1.11p |
