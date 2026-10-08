@@ -1268,21 +1268,47 @@ public sealed class InventoryManagerTests
         Assert.DoesNotContain(Carried(h), c => c.Contains("key"));
     }
 
-    // A key picked up since the last inventory read is still in the pack: the pack
-    // gives up its copy before the ring does.
+    // Picking a key up, dropping it, hiding it, buying and selling it move the ring
+    // the same way a hand-over does.
     [Fact]
-    public void HandedAway_Key_TakesThePackCopyFirst()
+    public void Key_GotDroppedHiddenBoughtSold_MovesOnTheKeyRing()
     {
         using Harness h = new(isItemRecordName: IsTestRecordName, isKey: IsTestKey);
-        FeedWithKeyRing(h);
+        FeedWithKeyRing(h);   // 2 black star key, gate key
+
+        h.Feed("You took black star key.");
+        Assert.Contains("3 black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You dropped 2 black star key.");
+        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain("3 black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You hid black star key.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+
+        h.Feed("You just bought black star key for 10 copper farthings.");
+        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You sold black star key for 5 copper farthings.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+
+        Assert.Contains("gate key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("black star key"));
+    }
+
+    // With nothing to say an item is a key it is filed in the pack, and leaves from
+    // there: the pack gives up its copy before the ring is asked.
+    [Fact]
+    public void Key_NotKnownToBeOne_IsHandledInThePack()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+
         h.Feed("You took black star key.");
         Assert.Contains("black star key", Carried(h));
 
-        h.Feed("You give 2 black star key to Fujin.");
-
+        h.Feed("You give black star key to Fujin.");
         Assert.DoesNotContain(Carried(h), c => c.Contains("black star key"));
-        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
-        Assert.DoesNotContain("2 black star key", h.Inv.Snapshot.Keys!);
     }
 
     // Flavour in the giver's shape names no record, so nothing leaves the pack.

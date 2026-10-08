@@ -541,7 +541,7 @@ public sealed partial class InventoryManager : IDisposable
             if (hiddenItem.Length > 0 && !CoinNounSuffixRegex().IsMatch(hiddenItem))
             {
                 (int count, string name) = CountedCommand.SplitLeadingCount(hiddenItem);
-                RemoveCarried(name, count);
+                RemoveHeld(name, count);
                 AdjustItemWeight(name, -count);
                 _log?.Debug(LogCategory, $"hid item={name} count={count} — carried/weight decremented");
                 ItemHidden?.Invoke(hiddenItem);
@@ -626,7 +626,7 @@ public sealed partial class InventoryManager : IDisposable
             // and "Equip all" sees an empty pack (the reported bug). Treat the
             // first purchase as the baseline.
             EnsureLoadedBaseline();
-            AddCarried(boughtName, boughtCount);
+            AddHeld(boughtName, boughtCount);
             AdjustItemWeight(boughtName, +boughtCount);
 
             string priceTail = bought.Groups[2].Value;
@@ -660,7 +660,7 @@ public sealed partial class InventoryManager : IDisposable
             // counted line ("You sold 5 orc-head for …"); strip the count.
             (int soldCount, string soldName) =
                 CountedCommand.SplitLeadingCount(sold.Groups[1].Value.TrimEnd());
-            RemoveCarried(soldName, soldCount);
+            RemoveHeld(soldName, soldCount);
             AdjustItemWeight(soldName, -soldCount);
             long price = ParsePriceToCopper(sold.Groups[2].Value);
             ItemSold?.Invoke(soldName, soldCount, price);
@@ -763,7 +763,7 @@ public sealed partial class InventoryManager : IDisposable
             // Paradigm batches a get into one counted line ("You took 5 orc-head.")
             // with the singular name; strip the count and apply it N times.
             (int count, string name) = CountedCommand.SplitLeadingCount(gotItem.Groups[1].Value.TrimEnd());
-            AddCarried(name, count);
+            AddHeld(name, count);
             AdjustItemWeight(name, +count);
             ItemTaken?.Invoke(name, count);
             return;
@@ -776,7 +776,7 @@ public sealed partial class InventoryManager : IDisposable
         if (droppedItem.Success)
         {
             (int count, string name) = CountedCommand.SplitLeadingCount(droppedItem.Groups[1].Value.TrimEnd());
-            RemoveCarried(name, count);
+            RemoveHeld(name, count);
             AdjustItemWeight(name, -count);
             ItemDropped?.Invoke(name, count);
         }
@@ -1064,17 +1064,18 @@ public sealed partial class InventoryManager : IDisposable
         AdjustItemWeight(name, sign);
     }
 
-    // An item handed to us: a key goes on the key ring, anything else in the pack.
+    // An item that comes to us (handed over, picked up, bought): a key goes on the
+    // key ring, anything else in the pack.
     private void AddHeld(string name, int count)
     {
         if (IsKey(name)) PatchKeyRing(name, +count);
         else AddCarried(name, count);
     }
 
-    // An item we handed over. A key picked up since the last 'i' is still in the
-    // pack, so the pack gives up its copies first and the ring the rest. Without
-    // the ring a given-away key stayed "held", and a door it opens stayed passable
-    // to the route planner.
+    // An item that leaves us (handed over, dropped, hidden, sold). A key nothing
+    // told us was one is in the pack, so the pack gives up its copies first and
+    // the ring the rest. Without the ring a key that had left stayed "held", and a
+    // door it opens stayed passable to the route planner.
     private void RemoveHeld(string name, int count)
     {
         int fromPack;
