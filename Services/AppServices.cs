@@ -3631,6 +3631,16 @@ public sealed class AppServices
         Profile.BbsPinApplied += _ => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
         Profile.ProfileClosed += () => Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
         Bosses.OnRealmChanged(ActiveRealmFolder(), ProfileGameDataSet());
+        // Stop before and Grab All are each character's own, kept in its profile.
+        Bosses.SetCharacterFlags(
+            hasCharacter: () => Profile.Current is not null,
+            read: () => Profile.Current?.BossFlags,
+            write: choices =>
+            {
+                if (Profile.Current is not { } profile) return;
+                profile.BossFlags = choices;
+                Profile.Save();
+            });
         GameData.ActiveSetChanged += _ => Bosses.NoteGameDataChanged();
         Tick.HeartbeatElapsed += () => Bosses.TakeInOutsideChanges();
 

@@ -1,5 +1,9 @@
 # Version history
 
+## 3.150.12
+
+- Stop before and Grab All on the Bosses tab are each character's own; the boss list itself stays the realm's. A character starts from the ticks the realm's list held
+
 ## 3.150.11
 
 - An exit open to one race only shows the race by name (*Gaunt One only*) instead of its number, and routes keep a character of another race off it, as they do for class-only exits

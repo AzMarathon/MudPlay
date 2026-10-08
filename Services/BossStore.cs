@@ -21,6 +21,11 @@ namespace MudPlay.Services;
 //
 // Clients on the same realm share the file, so it is re-read when another one has
 // written it, on a poll and before a save.
+//
+// Stop before and Grab All are the exception: each character's own (user,
+// 2026-10-08), kept in its profile and laid over the list as it is resolved
+// (SetCharacterFlags). The realm file keeps the values it held from when it carried
+// them, untouched, so a character loading for the first time starts from those.
 public sealed class BossStore
 {
     private readonly LogService? _log;
@@ -53,6 +58,53 @@ public sealed class BossStore
             foreach (BossDef b in seed) { _seed.Add(b); _seedByName[b.Name] = b; }
     }
 
+    // ----- Stop before / Grab All: the character's own -------------------------
+    private Func<bool>? _hasCharacter;
+    private Func<Dictionary<string, BossFlagChoice>?>? _readFlags;
+    private Action<Dictionary<string, BossFlagChoice>>? _writeFlags;
+
+    // hasCharacter: a profile is loaded. read: its stored choices, null when it has
+    // never had any. write: replace them and save the profile. Until this is called
+    // the two flags are read from the list itself, as they were.
+    public void SetCharacterFlags(Func<bool> hasCharacter,
+        Func<Dictionary<string, BossFlagChoice>?> read, Action<Dictionary<string, BossFlagChoice>> write)
+    {
+        ArgumentNullException.ThrowIfNull(hasCharacter);
+        ArgumentNullException.ThrowIfNull(read);
+        ArgumentNullException.ThrowIfNull(write);
+        _hasCharacter = hasCharacter;
+        _readFlags = read;
+        _writeFlags = write;
+        AdoptRealmFlags();
+        _current = null;
+    }
+
+    // A character with no choices of its own yet takes the ones the realm's list
+    // holds, once. An empty set is still "has its own", so this never runs twice.
+    private void AdoptRealmFlags()
+    {
+        if (_writeFlags is null || _hasCharacter?.Invoke() != true || _readFlags?.Invoke() is not null) return;
+        if (ActiveRealmFolder is null) return;
+        Dictionary<string, BossFlagChoice> adopted = FlagChoices(ResolveStored());
+        _writeFlags(adopted);
+        _log?.Info("Bosses",
+            $"Stop before / Grab All are now this character's own: took {adopted.Count} choice(s) from the realm's list");
+    }
+
+    // The choices in a list that differ from each boss's own default.
+    private static Dictionary<string, BossFlagChoice> FlagChoices(IEnumerable<BossDef> list)
+    {
+        var choices = new Dictionary<string, BossFlagChoice>(StringComparer.OrdinalIgnoreCase);
+        foreach (BossDef b in list)
+        {
+            bool? stop = b.StopBefore != b.ResetStopBefore ? b.StopBefore : null;
+            bool? grab = b.GrabAll != b.ResetGrabAll ? b.GrabAll : null;
+            if (stop is not null || grab is not null)
+                choices[b.Name] = new BossFlagChoice { StopBefore = stop, GrabAll = grab };
+        }
+        return choices;
+    }
+
     // Load realmFolder's boss list. legacySet names the game-data set the realm
     // runs on: a realm with no list of its own yet takes a copy of the one that set
     // carried, from when the list was kept per set.
@@ -61,6 +113,7 @@ public sealed class BossStore
         ActiveRealmFolder = string.IsNullOrWhiteSpace(realmFolder) ? null : realmFolder;
         if (ActiveRealmFolder is not null) AdoptLegacyList(ActiveRealmFolder, legacySet);
         Load();
+        AdoptRealmFlags();
         Changed?.Invoke();   // fire even when cleared to null, so derived markers clear
     }
 
@@ -136,6 +189,25 @@ public sealed class BossStore
 
     public IReadOnlyList<BossDef> Resolve()
     {
+        List<BossDef> list = ResolveStored();
+        if (_readFlags is null) return list;
+
+        // Stop before and Grab All come from the loaded character: its choice where
+        // it made one, the boss's own default where it didn't.
+        Dictionary<string, BossFlagChoice>? choices = _readFlags();
+        foreach (BossDef b in list)
+        {
+            BossFlagChoice? choice = null;
+            choices?.TryGetValue(b.Name, out choice);
+            b.StopBefore = choice?.StopBefore ?? b.ResetStopBefore;
+            b.GrabAll = choice?.GrabAll ?? b.ResetGrabAll;
+        }
+        return list;
+    }
+
+    // The list as the seed and the realm's file hold it, the two flags included.
+    private List<BossDef> ResolveStored()
+    {
         var byName = new Dictionary<string, BossDef>(StringComparer.OrdinalIgnoreCase);
         foreach (BossDef s in _seed) byName[s.Name] = s;
         foreach ((string name, BossDef ov) in _overlay)
@@ -206,11 +278,32 @@ public sealed class BossStore
             return;
         }
 
+        // The two flags go to the character. The realm's file keeps whatever it
+        // held for them before, so a boss ticked here doesn't change for the other
+        // characters on the realm, and one that hasn't loaded yet still finds the
+        // realm's old choices to start from.
+        List<BossDef> rows = current.ToList();
+        bool flagsAreTheCharacters = _writeFlags is not null && _hasCharacter?.Invoke() == true;
+        Dictionary<string, BossDef>? stored = null;
+        if (flagsAreTheCharacters)
+        {
+            stored = ResolveStored().ToDictionary(b => b.Name, StringComparer.OrdinalIgnoreCase);
+            _writeFlags!(FlagChoices(rows));
+        }
+
         var overlay = new List<BossDef>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (BossDef b in current)
+        foreach (BossDef row in rows)
         {
-            if (!seen.Add(b.Name)) continue;   // dedupe by name
+            if (!seen.Add(row.Name)) continue;   // dedupe by name
+            BossDef b = row;
+            if (stored is not null)
+            {
+                b = row.Clone();
+                stored.TryGetValue(row.Name, out BossDef? was);
+                b.StopBefore = was?.StopBefore ?? true;
+                b.GrabAll = was?.GrabAll ?? false;
+            }
             if (_seedByName.TryGetValue(b.Name, out BossDef? seed) && b.MatchesSeed(seed)) continue;
             overlay.Add(b.Clone());
         }
