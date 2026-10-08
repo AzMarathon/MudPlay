@@ -1,15 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.152.0**
-> - New **Import MegaMUD profile…** in Profile Management: makes a new character from a MegaMUD character file (.ini)
-> - A review lists every setting that comes across, under its MudPlay name, and every one that doesn't with the reason, before anything is created
-> - Carries over the auto switches, Health, Spells, Combat, Party, Cash, Talk and Other settings that mean the same in both clients; MegaMUD's profiles become combat profiles and its blesses become Buff Watchdog slots
-> - The file's BBS user ID and password can be stored as the new character's login, encrypted; it is a tick box in the review
-> - Every value in the review can be changed before importing: switches, numbers, spells and commands
-> - Party rank comes across (front, mid or back)
-> - The pre / post rest commands are highlighted in the review, in red when they change gear (rem / eq / wear): gear swaps belong to the Equipment Manager's Pre-rest sets
-> - MegaMUD's redial and cleanup settings can be written onto the BBS, by a tick box that starts ticked only for a BBS with no characters yet
+> **Version 3.152.3**
+> - Events: the Walk to boxes list matching rooms as you type, like the Navigation room search (room names, coordinates, boss names, GOTO favourites); picking one fills in the room
+> - A Walk to box shows the room's name beside its number, including when an event is reopened
+> - Events: a Walk to whose room is a boss room marked Stop before entering says so, with a tick box to ignore the stop and walk in; unticked, the stop is kept and the Then block spells out that the event stays outside the room and what Then does from there
+> - Fixed: an event walking to a Stop before boss room stopped one room short and then never finished, so its Then step never ran
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

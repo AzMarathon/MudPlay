@@ -1,5 +1,12 @@
 # Version history
 
+## 3.152.3
+
+- Events: the Walk to boxes list matching rooms as you type, like the Navigation room search (room names, coordinates, boss names, GOTO favourites); picking one fills in the room
+- A Walk to box shows the room's name beside its number, including when an event is reopened
+- Events: a Walk to whose room is a boss room marked Stop before entering says so, with a tick box to ignore the stop and walk in; unticked, the stop is kept and the Then block spells out that the event stays outside the room and what Then does from there
+- Fixed: an event walking to a Stop before boss room stopped one room short and then never finished, so its Then step never ran
+
 ## 3.152.0
 
 - New **Import MegaMUD profile…** in Profile Management: makes a new character from a MegaMUD character file (.ini)

@@ -174,7 +174,12 @@ public sealed partial class EventsSectionViewModel : SettingsSectionViewModel
             banks: Game.GameData.BankCatalog.Enumerate(AppServices.Current.GameData)
                 .OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ThenBy(b => b.Map).ThenBy(b => b.Room)
                 .Select(b => ($"{b.Name} {b.Map}/{b.Room}", new Models.Profile.RoomRef(b.Map, b.Room)))
-                .ToList());
+                .ToList(),
+            // Asked live, so a Stop before entering box ticked on the Bosses tab while
+            // this window is open shows up as the room is typed.
+            stopBeforeBoss: room => AppServices.Current.BossStopRooms().Contains(room)
+                ? AppServices.Current.BossInRoom(room) ?? "A boss"
+                : null);
 
     // The Bosses tab's early-window columns for the realm, in the tab's order.
     private static IReadOnlyList<(string, double)> BossWindowColumns(Game.RealmType realm)
