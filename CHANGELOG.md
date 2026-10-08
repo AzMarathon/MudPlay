@@ -1,9 +1,10 @@
 # Version history
 
-## 3.151.7
+## 3.151.8
 
 - Bosses tab: **Hit magic** and **Spell level** dropdowns filter the table to the bosses a weapon of that hit-magic level can hit and a spell of that level lands on
 - Hovering a boss's name shows the hit magic and spell level it takes to hurt it
+- A bug report no longer copies the board's login screen: its Scrollback and raw-wire sections take only what was written while in the game, from the first game prompt until a disconnect or an exit to the menus. The terminal, Backscroll and Wire Inspector still show everything
 
 ## 3.151.6
 

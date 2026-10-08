@@ -2292,6 +2292,8 @@ Press **F5** to open the **Wire Inspector** — a troubleshooting view of the da
 
 Reach for this when reporting a display or parsing glitch — it shows exactly what arrived on the wire. Because **Raw and Classified are on by default**, a **Bug Report** attaches the last 750 lines of each unless you turn them off — so a combat-recognition problem lands with the exact wire and the engine's read of every combat line and death.
 
+**A bug report leaves your login out.** The report's **Scrollback** and raw-wire sections copy only what was written while you were inside the game: from your first game prompt, until you disconnect or exit to the board's menus, and again from the next game prompt. So the board's login screen, with your account name on it, isn't in a report even when it's still on your terminal or in the Backscroll window, which go on showing everything. A report made before you've entered the game says the section was left out. The program log section was already safe: what you type isn't logged, and the automatic login logs only the prompts it waits for, not what it sends.
+
 ---
 
 # Settings Menu

@@ -285,6 +285,7 @@ public sealed class AppServices
     // connection. Feeds the Wire Inspector window and any future
     // "what did the server just say" diagnostic.
     public WireBuffer Wire { get; }
+    public Game.InGameCapture InGameCapture { get; private set; } = null!;
 
     // Which Wire Inspector panes are currently visible — read by BugReportBuilder to
     // decide whether to attach the raw / classified wire. Updated by the inspector VM.
@@ -5673,6 +5674,9 @@ public sealed class AppServices
         // types), so without this the keyboard stays captured and the next
         // command is sent byte-by-byte (report paradigm-20260906-090057).
         PromptScanner.PromptObserved += _ => TrainerMenu.NotifyLivePromptObserved();
+        // A bug report copies the terminal only from the time spent in the game, so a
+        // login screen never rides along in one.
+        InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
         PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();

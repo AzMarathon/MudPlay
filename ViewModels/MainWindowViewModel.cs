@@ -3243,6 +3243,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // latch. The actual Logon fire happens on the first
                 // PromptObserved, not here.
                 AppServices.Current.EventScheduler.NotifyConnected();
+                // A new link starts at the board's login: nothing from here is
+                // copied into a bug report until the game is entered.
+                AppServices.Current.InGameCapture.NotifyConnected();
                 // Same lifecycle signal to the default-task runner — it resets its
                 // per-connection latches and fires the configured startup task on
                 // the first in-game prompt with a known room.
@@ -3388,6 +3391,7 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.CastDirector.PauseBuffTimers();
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
+                AppServices.Current.InGameCapture.NotifyDisconnected();
                 // A drop we didn't ask for plays the Disconnected sound, and arms the
                 // Reconnected one for when the link comes back.
                 if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)

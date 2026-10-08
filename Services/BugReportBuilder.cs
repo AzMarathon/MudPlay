@@ -90,7 +90,7 @@ public static class BugReportBuilder
             new("Effective settings (resolved)", SafeSection(() => BuildEffectiveSettings(svc))),
             new("Settings overrides (deltas, excluding BBS + Display)", SafeSection(() => BuildSettings(svc))),
             new("Program log", SafeSection(() => BuildLog(svc))),
-            new("Scrollback", SafeSection(() => BuildScrollback(emulator))),
+            new("Scrollback", SafeSection(() => BuildScrollback(emulator, svc.InGameCapture))),
         ];
 
         // Wire Inspector capture — only when the user has those panes up (they're
@@ -2214,9 +2214,17 @@ public static class BugReportBuilder
 
     // The raw ANSI wire, last ScrollbackLines lines (non-printables shown as the
     // Wire Inspector renders them). Only emitted when the Raw pane is visible.
+    // Only the wire read since the game was entered: what came before it is the
+    // board's login, which a report must not carry (InGameCapture).
     private static string BuildRawWire(AppServices svc)
     {
-        string raw = WireFormatter.RenderRaw(svc.Wire.Snapshot());
+        if (svc.InGameCapture.WireMark is not { } enteredAt) return NotInGame;
+        // The total first: bytes read between the two calls then only shorten what
+        // is kept, never reach back past the mark.
+        long sinceEntry = svc.Wire.TotalBytes - enteredAt;
+        byte[] bytes = svc.Wire.Snapshot();
+        if (sinceEntry < bytes.Length) bytes = bytes[^(int)Math.Max(0, sinceEntry)..];
+        string raw = WireFormatter.RenderRaw(bytes);
         string tail = LastLines(raw, ScrollbackLines);
         if (tail.Length == 0) return "_(no wire captured)_";
         return "```\n" + tail + "\n```";
@@ -2241,7 +2249,13 @@ public static class BugReportBuilder
         return string.Join('\n', lines.Skip(skip));
     }
 
-    private static string BuildScrollback(TerminalEmulator emulator)
+    private const string NotInGame =
+        "_(left out: nothing from outside the game is copied into a report, so a login screen can't ride along)_";
+
+    // Only rows written while in the game (InGameCapture): the backscroll and the
+    // terminal still show the board's login, and a report made at login would
+    // otherwise carry the account name with it.
+    private static string BuildScrollback(TerminalEmulator emulator, Game.InGameCapture inGame)
     {
         // Every content row carries the instant its content was written — the same
         // per-row write stamp whether it has scrolled off into the ring or is still
@@ -2250,12 +2264,14 @@ public static class BugReportBuilder
         // it, or a combat resume to the buff that interrupted it). Only blank
         // spacing rows have no time.
         IReadOnlyList<TranscriptSnapshot.Line> lines =
-            TranscriptSnapshot.Tail(emulator, ScrollbackLines);
-        if (lines.Count == 0) return "_(nothing on screen yet)_";
+            TranscriptSnapshot.Tail(emulator, ScrollbackLines, only: inGame.Window);
+        if (lines.Count == 0) return NotInGame;
 
         StringBuilder sb = new();
         sb.Append("Last ").Append(lines.Count)
-          .Append(" line(s), each prefixed with its write time (blank spacing rows have none).\n\n```\n");
+          .Append(" line(s) written while in the game, each prefixed with its write time (blank spacing rows have none). ")
+          .Append(inGame.InGame ? "In the game now." : "Not in the game now.")
+          .Append("\n\n```\n");
         foreach (TranscriptSnapshot.Line line in lines)
         {
             sb.Append(line.Timestamp is { } t ? t.ToLocalTime().ToString("HH:mm:ss") : "        ")
