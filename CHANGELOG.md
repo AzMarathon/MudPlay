@@ -1,5 +1,11 @@
 # Version history
 
+## 3.149.2
+
+- Gear Finder under a Target weight: the weapon is picked first, then the other slots get the combination with the best total that fits, instead of each slot taking the first item that fits from the top down
+- With a search order, the weapon goes to the first criterion that finds one before any other slot is filled
+- bug reports addressed: paradigm-20261007-181401
+
 ## 3.149.1
 
 - The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further

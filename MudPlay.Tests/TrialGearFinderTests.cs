@@ -331,6 +331,70 @@ public sealed class TrialGearFinderTests
         Assert.False(best.ContainsKey(EquipmentSlot.Torso));
     }
 
+    // A search order whose first entry scores no weapon (armour only here, Stealth
+    // in practice) used to spend the budget on armour before a later entry got to
+    // pick a weapon. The weapon is settled first, by the first entry that finds one.
+    private static TrialGearFinder.OrderedCriterion Criterion(Func<ItemFinderEntry, double> score, ItemFinderEntry[] catalog) =>
+        (free, settled, now, budget) => TrialGearFinder.FindBest(
+            catalog, free, settled, now, score, 0, ClassEquipProfile.Unknown, null, weightBudget: budget);
+
+    [Fact]
+    public void FindBestInOrder_WeightBudget_WeaponComesBeforeAnEarlierEntrysArmour()
+    {
+        var catalog = new[]
+        {
+            Item("helm", EquipmentSlot.Head, ac: 5, encum: 6),
+            Item("sword", EquipmentSlot.Weapon, ac: 9, encum: 6),
+        };
+        Func<ItemFinderEntry, double> armourOnly = e => e.Slot == EquipmentSlot.Weapon ? 0 : e.Ac;
+        var order = new[] { Criterion(armourOnly, catalog), Criterion(Ac, catalog) };
+
+        var best = TrialGearFinder.FindBestInOrder(order, SlotsWithWeapon, new HashSet<EquipmentSlot>(),
+            NoCurrentWithWeapon(), weightBudget: 8, weightOf: n => 6);
+
+        Assert.Equal("sword", best[EquipmentSlot.Weapon]);   // not starved by the helm
+        Assert.False(best.ContainsKey(EquipmentSlot.Head));  // 2 left: the helm no longer fits
+    }
+
+    // With no budget nothing competes, so each slot still goes to the first entry
+    // that finds anything for it.
+    [Fact]
+    public void FindBestInOrder_NoBudget_EachSlotGoesToTheFirstEntryThatFillsIt()
+    {
+        var catalog = new[]
+        {
+            Item("helm", EquipmentSlot.Head, ac: 5, encum: 6),
+            Item("sword", EquipmentSlot.Weapon, ac: 9, encum: 6),
+        };
+        Func<ItemFinderEntry, double> armourOnly = e => e.Slot == EquipmentSlot.Weapon ? 0 : e.Ac;
+        var order = new[] { Criterion(armourOnly, catalog), Criterion(Ac, catalog) };
+
+        var best = TrialGearFinder.FindBestInOrder(order, SlotsWithWeapon, new HashSet<EquipmentSlot>(),
+            NoCurrentWithWeapon(), weightBudget: null, weightOf: n => 6);
+
+        Assert.Equal("sword", best[EquipmentSlot.Weapon]);
+        Assert.Equal("helm", best[EquipmentSlot.Head]);
+    }
+
+    // A held weapon is left alone, and the order runs for the other slots.
+    [Fact]
+    public void FindBestInOrder_HeldWeapon_IsNotReplaced()
+    {
+        var catalog = new[]
+        {
+            Item("helm", EquipmentSlot.Head, ac: 5, encum: 6),
+            Item("sword", EquipmentSlot.Weapon, ac: 9, encum: 6),
+        };
+        var held = new HashSet<EquipmentSlot> { EquipmentSlot.Weapon };
+        var order = new[] { Criterion(Ac, catalog) };
+
+        var best = TrialGearFinder.FindBestInOrder(order, SlotsWithWeapon, held,
+            NoCurrentWithWeapon(), weightBudget: 8, weightOf: n => 6);
+
+        Assert.False(best.ContainsKey(EquipmentSlot.Weapon));
+        Assert.Equal("helm", best[EquipmentSlot.Head]);
+    }
+
     [Fact]
     public void FindBest_WeightBudget_WeaponOverBudget_FallsToNextBestThatFits()
     {

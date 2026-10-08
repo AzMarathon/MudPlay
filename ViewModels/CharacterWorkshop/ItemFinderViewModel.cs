@@ -843,15 +843,18 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
     // Find Best to consider — set Armour Type to Leather, say — and it searches
     // exactly that; leave every filter at its default and it searches everything,
     // same as before. The target-weight dropdown layers a second constraint on top:
-    // pick a None/Light/Medium/Heavy band and Find Best stops filling slots once the
-    // projected trial set would push past it, so "best AC" can mean "best AC that
-    // keeps me Light" instead of raw-highest regardless of what it weighs.
+    // pick a None/Light/Medium/Heavy band and Find Best keeps the projected trial set
+    // within it, so "best AC" can mean "best AC that keeps me Light" instead of
+    // raw-highest regardless of what it weighs. Under a band the weapon is settled
+    // first and the other slots get the best combination that fits in what is left
+    // (TrialGearFinder.FindBest), not whatever each slot found first.
     //
     // With a search order built (e.g. VileWard, then Armour Class, then
     // Spellcasting), each criterion runs in turn against only the slots the ones
     // before it left unresolved — so a slot goes to the highest-priority criterion
     // that finds anything for it, and lower-priority criteria only get a turn at
-    // whatever's left. This is exactly the manual Hold-then-rerun workflow, automated
+    // whatever's left. The weapon goes first, to the first criterion that finds one
+    // (TrialGearFinder.FindBestInOrder). This is exactly the manual Hold-then-rerun workflow, automated
     // — no cross-stat conversion is invented to blend unrelated stats into one score.
     [RelayCommand]
     private void FindBest()
@@ -873,28 +876,24 @@ public sealed partial class ItemFinderViewModel : ObservableObject, IDialogViewM
         foreach (TrialSlotRow row in TrialSlots)
             if (!row.Hold) row.SetItemQuiet(null);
 
-        foreach (TrialFindFilter filter in chain)
-        {
-            List<EquipmentSlot> remaining = targets.Where(t => !filled.Contains(t)).ToList();
-            if (remaining.Count == 0) break;
-            Dictionary<EquipmentSlot, string> best = filter.BackstabRange is { } end && _damage is { IsUsable: true } model
+        // One search-order entry as the engine runs it: the computed backstab min /
+        // max price whole sets (FindBestOfPasses), everything else scores per item.
+        TrialGearFinder.OrderedCriterion Criterion(TrialFindFilter filter) => (free, settled, now, budget) =>
+            filter.BackstabRange is { } end && _damage is { IsUsable: true } model
                 ? TrialGearFinder.FindBestOfPasses(
                     [filter.Score, e => e.BsSideMinScore, e => e.BsSideMaxScore, e => e.BsScoreAvg],
-                    picks => model.BackstabOfPicks(PickedEntries(picks), HeldWeapon(filled, current)) is { } r ? end(r) : 0,
-                    candidates, remaining, filled, current, UsableLevel, _activeClass, _activeAlignment,
-                    weightBudget: weightBudget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints)
+                    picks => model.BackstabOfPicks(PickedEntries(picks), HeldWeapon(settled, now)) is { } r ? end(r) : 0,
+                    candidates, free, settled, now, UsableLevel, _activeClass, _activeAlignment,
+                    weightBudget: budget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints)
                 : TrialGearFinder.FindBest(
-                    candidates, remaining, filled, current, filter.Score, UsableLevel, _activeClass, _activeAlignment,
-                    weightBudget: weightBudget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints);
-            foreach ((EquipmentSlot slot, string name) in best)
-            {
-                TrialSlots.First(r => r.Slot == slot).SetItemQuiet(name);
-                filled.Add(slot);
-                current[slot] = name;
-                if (weightBudget.HasValue && _entryByName.TryGetValue(name, out ItemFinderEntry? e))
-                    weightBudget = Math.Max(0, weightBudget.Value - e.Encum);
-            }
-        }
+                    candidates, free, settled, now, filter.Score, UsableLevel, _activeClass, _activeAlignment,
+                    weightBudget: budget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints);
+
+        Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBestInOrder(
+            chain.Select(Criterion).ToList(), targets, filled, current, weightBudget,
+            name => _entryByName.TryGetValue(name, out ItemFinderEntry? e) ? e.Encum : 0);
+        foreach ((EquipmentSlot slot, string name) in best)
+            TrialSlots.First(r => r.Slot == slot).SetItemQuiet(name);
         RecomputeTrial();
     }
 

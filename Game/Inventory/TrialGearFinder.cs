@@ -403,6 +403,72 @@ public static class TrialGearFinder
         return false;
     }
 
+    // One entry of a search order: fill what it can of the given free slots within the
+    // budget, seeing the slots already settled (held or picked) and what is in them.
+    public delegate Dictionary<EquipmentSlot, string> OrderedCriterion(
+        IReadOnlyList<EquipmentSlot> freeSlots, ISet<EquipmentSlot> settled,
+        IReadOnlyDictionary<EquipmentSlot, string?> current, int? weightBudget);
+
+    // Runs a search order: each criterion in turn gets the slots the ones before it
+    // left empty, and what it picks comes off the weight budget for the rest.
+    //
+    // The weapon is settled before any of that, by the first criterion in the order
+    // that finds one. Left to its turn, a criterion ahead of it that scores no weapon
+    // (Stealth, then a backstab criterion) would spend the budget on armour first and
+    // the weapon would get what was left. Without a budget the weapon comes out the
+    // same either way.
+    public static Dictionary<EquipmentSlot, string> FindBestInOrder(
+        IReadOnlyList<OrderedCriterion> criteria,
+        IReadOnlyList<EquipmentSlot> targetSlots,
+        ISet<EquipmentSlot> heldSlots,
+        IReadOnlyDictionary<EquipmentSlot, string?> current,
+        int? weightBudget,
+        Func<string, int> weightOf)
+    {
+        ArgumentNullException.ThrowIfNull(criteria);
+        ArgumentNullException.ThrowIfNull(targetSlots);
+        ArgumentNullException.ThrowIfNull(heldSlots);
+        ArgumentNullException.ThrowIfNull(current);
+        ArgumentNullException.ThrowIfNull(weightOf);
+
+        var result = new Dictionary<EquipmentSlot, string>();
+        var settled = new HashSet<EquipmentSlot>(heldSlots);
+        var now = new Dictionary<EquipmentSlot, string?>(current);
+        int? budget = weightBudget;
+
+        void Take(Dictionary<EquipmentSlot, string> picks)
+        {
+            foreach ((EquipmentSlot slot, string name) in picks)
+            {
+                result[slot] = name;
+                settled.Add(slot);
+                now[slot] = name;
+                if (budget is int left) budget = Math.Max(0, left - Math.Max(0, weightOf(name)));
+            }
+        }
+
+        var weaponOnly = new List<EquipmentSlot>();
+        foreach (EquipmentSlot t in targetSlots)
+            if (IsWeaponSlot(t) && !settled.Contains(t)) weaponOnly.Add(t);
+        if (weaponOnly.Count > 0)
+            foreach (OrderedCriterion criterion in criteria)
+            {
+                Take(criterion(weaponOnly, settled, now, budget));
+                weaponOnly.RemoveAll(settled.Contains);
+                if (weaponOnly.Count == 0) break;
+            }
+
+        foreach (OrderedCriterion criterion in criteria)
+        {
+            var free = new List<EquipmentSlot>();
+            foreach (EquipmentSlot t in targetSlots)
+                if (!settled.Contains(t)) free.Add(t);
+            if (free.Count == 0) break;
+            Take(criterion(free, settled, now, budget));
+        }
+        return result;
+    }
+
     // Find Best for a criterion whose per-item scores don't add up across slots — the
     // computed backstab min / max, where the side fed by +min damage and BS min can
     // overtake the other and the realm then swaps (Paradigm) or clamps (Stock) the

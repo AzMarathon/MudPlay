@@ -1176,11 +1176,17 @@ Want the best AC available in **Leather** even though your class could wear Plat
 
 **Effective AC vs Evil** is a separate criterion from plain **Armour Class**: Prot-Evil is a confirmed 1 AC per point against evil monsters (most of what you'll fight), so an item with modest raw AC but a big Prot-Evil bonus can be the better pick even though plain AC sorting would rank it low — this criterion scores `AC + Prot-Evil` so that item shows up where it belongs.
 
-Need more than one stat at once — "best VileWard, then AC, then Spellcasting"? Pick a criterion and click **+ Add to search order** to build a priority list (shown as "Search order: A → B → C" below the buttons); **Find Best** then resolves it highest-priority-first, filling each slot with whichever criterion earliest finds something for it — lower-priority criteria only get a turn at whatever's left over.
+Need more than one stat at once — "best VileWard, then AC, then Spellcasting"? Pick a criterion and click **+ Add to search order** to build a priority list (shown as "Search order: A → B → C" below the buttons); **Find Best** then resolves it highest-priority-first, filling each slot with whichever criterion earliest finds something for it — lower-priority criteria only get a turn at whatever's left over. **The weapon always goes first**: before any other slot, the first criterion in the order that finds a weapon settles it.
 
 This is the same as manually **Hold**-ing a slot and re-running Find Best with a different criterion, automated into one click. **Clear order** empties the list, dropping back to searching by the single dropdown criterion.
 
-The **Target weight** dropdown next to it caps what Find Best is willing to add: pick **None / Light / Medium / Heavy** and it stops picking items for a slot once the projected Gear Finder loadout's encumbrance would push past that band, using your character's live carry capacity — so "best AC" can mean "best AC that keeps me Light" instead of the raw-highest scorer regardless of what it weighs. **(Any)**, the default, is uncapped — the original behavior.
+The **Target weight** dropdown next to it caps what Find Best is willing to add: pick **None / Light / Medium / Heavy** and it keeps the projected Gear Finder loadout's encumbrance inside that band, using your character's live carry capacity — so "best AC" can mean "best AC that keeps me Light" instead of the raw-highest scorer regardless of what it weighs. **(Any)**, the default, is uncapped. Note that **None** is the encumbrance band called None, the lightest one (about 16% of what you can carry), not "no limit".
+
+Under a target weight the slots compete for the weight:
+
+- **The weapon is picked first**: the best one for the criterion that fits, and its weight comes off before anything else is weighed. It isn't traded off against armour.
+- **The other slots are then chosen together**: the combination with the highest total for the criterion that fits in what is left. It doesn't take the best item for the first slot and work down, so one heavy piece can't use up the weight that several better pieces elsewhere would have had. Of two combinations that total the same, the lighter wins.
+- A slot the best combination leaves empty stays empty for that criterion; with a search order, the next criterion gets it.
 
 It only takes effect once your inventory has been read at least once this session (so the client knows your max carry weight); Hold locks, a search order, and the current filter/criterion still apply on top of it the same as always.
 
