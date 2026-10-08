@@ -499,7 +499,11 @@ public sealed class RoundDamageTracker : IDisposable
     // in the room gets a row up front, so the totals list them even at zero.
     private RoundAccumulator Current(DateTimeOffset now)
     {
-        if (_current is not null) return _current;
+        if (_current is { } open)
+        {
+            open.Engaged |= _state.InCombat;
+            return open;
+        }
         if (_fightOver || _lastClosedAt is not { } closed || now - closed > FightGap) _fightRound = 0;
         _fightOver = false;
         _fightRound++;
@@ -509,6 +513,7 @@ public sealed class RoundDamageTracker : IDisposable
             StartedAt  = now,
             HpStart    = _state.Hp,
             MaStart    = _state.Ma,
+            Engaged    = _state.InCombat,
         };
         _current.For(DamageLineAttributor.Self);
         _current.Seed(Names().Values);
@@ -591,7 +596,8 @@ public sealed class RoundDamageTracker : IDisposable
             HpBefore:     _current.HpStart,
             HpAfter:      _state.Hp,
             MaBefore:     _current.MaStart,
-            MaAfter:      _state.Ma);
+            MaAfter:      _state.Ma,
+            Engaged:      _current.Engaged);
 
         lock (_ringLock)
         {
@@ -652,6 +658,9 @@ public sealed class RoundDamageTracker : IDisposable
         public int UnknownTaken;
         public int HpStart;
         public int MaStart;
+        // Kept once set: the kill that clears the room drops InCombat before the
+        // round closes.
+        public bool Engaged;
 
         public Row For(string name)
         {

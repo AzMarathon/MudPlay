@@ -2,6 +2,9 @@ using System.Collections.Specialized;
 using System.Text;
 using System.Text.RegularExpressions;
 using Avalonia.Threading;
+using MudPlay.Game.Combat;
+using MudPlay.Models.Profile;
+using MudPlay.Services;
 
 namespace MudPlay.Game;
 
@@ -12,10 +15,11 @@ namespace MudPlay.Game;
 //      poller telepaths `@health` to that member, parses the reply, and writes
 //      the absolute HP/MA into the matching PartyMember's BaselineHp /
 //      BaselineMp through PartyManager.SetMemberHealthSnapshot.
-//   2. `par` poll. A DispatcherTimer ticks at ParCadence (5 s default;
-//      Settings.Party makes this user-configurable). Each tick sends `par` on
-//      the wire, which the server responds to with the multi-line table
-//      PartyManager already parses to update HP%/MA%/position for every member.
+//   2. `par` poll. Sends `par` on the wire, which the server responds to with
+//      the multi-line table PartyManager already parses to update HP%/MA%/position
+//      for every member. Settings → Party picks what sends it, any mix or none: a
+//      DispatcherTimer ticking at ParCadence (5 s default), a combat round we
+//      fought in closing, and a round whose totals carry unknown damage.
 //
 // Reply-format match: the on-join replies come back as
 // "X telepaths: HP 690/720, MA 200/300 (Resting)" — i.e. the other party
@@ -29,15 +33,18 @@ namespace MudPlay.Game;
 // which is fresher than a self-sent telepath would be.
 //
 // Lifetime: poller is app-singleton like PartyManager; it's safe to keep the
-// timer running even when not in a party — DoParPoll short-circuits on
+// timer running even when not in a party — SendPar short-circuits on
 // PartyState.IsInParty = false so we don't spam `par` at the wire while solo.
 // It also short-circuits on IsParPollEnabled so the poll obeys the
 // auto-heal toggle (and, through it, the auto-all kill switch).
 public sealed partial class PartyPoller : IDisposable
 {
+    public const string LogSource = "PartyPoll";
+
     private readonly ChatRouter _chat;
     private readonly PartyState _state;
     private readonly PartyManager _manager;
+    private readonly LogService? _log;
     private readonly DispatcherTimer? _timer;
     private DispatcherTimer? _healthNagTimer;
     private Action<byte[]>? _wireSender;
@@ -49,14 +56,21 @@ public sealed partial class PartyPoller : IDisposable
     private bool _suspended;
     private bool _disposed;
 
-    // How often to send `par` on the wire. Default 5 s.
+    // How often the timer sends `par` on the wire. Default 5 s.
     public TimeSpan ParCadence { get; private set; } = TimeSpan.FromSeconds(5);
 
-    // Live gate for the timed `par` poll. `par`'s sole purpose is reading party
+    // What sends `par` (Settings → Party, ApplyParSettings): any mix of the three,
+    // or none — then nothing here sends it, and members' HP between the user's own
+    // `par`s is whatever PartyHpEstimator reads off the round ledger.
+    public bool ParOnTimer { get; private set; } = true;
+    public bool ParAfterCombatRound { get; private set; }
+    public bool ParOnUnknownRoundDamage { get; private set; }
+
+    // Live gate for every automatic `par`. `par`'s sole purpose is reading party
     // health for the party heals, so it rides the auto-heal toggle — when that's
     // off (and because AutoModeController's kill-all zeroes the heal flag, when
-    // auto-all is off too) the timer
-    // must not put `par` on the wire. Null = ungated (test / pre-wire default),
+    // auto-all is off too) nothing here
+    // may put `par` on the wire. Null = ungated (test / pre-wire default),
     // matching the historical always-on behaviour.
     public Func<bool>? IsParPollEnabled { get; set; }
 
@@ -131,10 +145,10 @@ public sealed partial class PartyPoller : IDisposable
 
     // Default constructor — wires the in-process DispatcherTimer. Use the
     // test-seam ctor (no timer) for unit tests.
-    public PartyPoller(ChatRouter chat, PartyState state, PartyManager manager)
-        : this(chat, state, manager, useTimer: true) { }
+    public PartyPoller(ChatRouter chat, PartyState state, PartyManager manager, LogService? log = null)
+        : this(chat, state, manager, useTimer: true, log) { }
 
-    internal PartyPoller(ChatRouter chat, PartyState state, PartyManager manager, bool useTimer)
+    internal PartyPoller(ChatRouter chat, PartyState state, PartyManager manager, bool useTimer, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentNullException.ThrowIfNull(state);
@@ -142,6 +156,7 @@ public sealed partial class PartyPoller : IDisposable
         _chat    = chat;
         _state   = state;
         _manager = manager;
+        _log     = log;
 
         _state.Members.CollectionChanged += OnMembersChanged;
         _chat.EntryClassified += OnChatEntry;
@@ -152,7 +167,7 @@ public sealed partial class PartyPoller : IDisposable
             {
                 Interval = ParCadence,
             };
-            _timer.Tick += (_, _) => DoParPoll();
+            _timer.Tick += (_, _) => OnParTimer();
             _timer.Start();
         }
     }
@@ -166,18 +181,42 @@ public sealed partial class PartyPoller : IDisposable
         _wireSender = sender;
     }
 
-    // Update the `par` poll cadence. The Settings.Party tab calls this when the
-    // user edits the par-frequency field.
-    public void SetParCadence(TimeSpan cadence)
+    // Take the `par` triggers and the timer's cadence from the character's Party
+    // settings — on profile load and on every Settings save.
+    public void ApplyParSettings(PartySettings settings)
     {
-        if (cadence <= TimeSpan.Zero)
-            throw new ArgumentOutOfRangeException(nameof(cadence), "par cadence must be positive.");
-        ParCadence = cadence;
-        if (_timer is not null) _timer.Interval = cadence;
+        ArgumentNullException.ThrowIfNull(settings);
+        string before = ParTriggerSummary;
+        TimeSpan cadence = TimeSpan.FromSeconds(Math.Clamp(settings.ParPollFrequencySec, 1, 60));
+        // Only a changed cadence touches the timer: this runs on every profile save,
+        // and re-setting the interval would start the countdown over each time.
+        if (cadence != ParCadence)
+        {
+            ParCadence = cadence;
+            if (_timer is not null) _timer.Interval = cadence;
+        }
+        ParOnTimer              = settings.ParPollOnTimer;
+        ParAfterCombatRound     = settings.ParPollAfterCombatRound;
+        ParOnUnknownRoundDamage = settings.ParPollOnUnknownDamage;
+        SyncTimer();
+        if (ParTriggerSummary != before) _log?.Info(LogSource, $"par is sent: {ParTriggerSummary}.");
     }
 
-    // Test seam — drives one par poll without a real timer tick.
-    internal void DoParPollForTests() => DoParPoll();
+    // The ticked triggers in words, for the program log and the bug report.
+    public string ParTriggerSummary
+    {
+        get
+        {
+            List<string> on = new(3);
+            if (ParOnTimer) on.Add($"every {ParCadence.TotalSeconds:0} s");
+            if (ParAfterCombatRound) on.Add("after each combat round");
+            if (ParOnUnknownRoundDamage) on.Add("when a round has unknown damage");
+            return on.Count == 0 ? "never (no trigger ticked)" : string.Join(", ", on);
+        }
+    }
+
+    // Test seam — drives one timer tick without a real timer.
+    internal void DoParPollForTests() => OnParTimer();
 
     // Test seam — drives the @health round-trip request side without a
     // CollectionChanged event.
@@ -425,18 +464,57 @@ public sealed partial class PartyPoller : IDisposable
     {
         if (!_suspended) return;
         _suspended = false;
-        _timer?.Start();
+        SyncTimer();
     }
 
     // ----- par poll ------------------------------------------------------
 
-    private void DoParPoll()
+    // The timer runs only while its box is ticked and we're in the realm. Start on
+    // a running timer is a no-op, so this never restarts a countdown in flight.
+    private void SyncTimer()
     {
-        if (_wireSender is null) return;
-        if (_suspended) return;
-        if (!_state.IsInParty) return;
-        if (InTrainerMenu) return;
-        if (IsParPollEnabled is { } gate && !gate()) return;
+        if (_timer is null) return;
+        if (ParOnTimer && !_suspended) _timer.Start();
+        else _timer.Stop();
+    }
+
+    private void OnParTimer()
+    {
+        if (ParOnTimer) SendPar();
+    }
+
+    // A round's ledger closed (RoundDamageTracker.RoundComplete). One `par` per
+    // round at most, however many of the round boxes ask for it. A round we only
+    // stood by for (a member's fight in the room) isn't ours, so "after each combat
+    // round" skips it; unknown damage in it still counts.
+    public void NoteRoundComplete(RoundSummary round)
+    {
+        string why;
+        if (ParAfterCombatRound && round.Engaged)
+            why = $"combat round {round.FightRound} ended";
+        else if (ParOnUnknownRoundDamage && round.HasUnknown)
+            why = $"round {round.FightRound} had unknown damage (dealt {round.UnknownDealt}, taken {round.UnknownTaken})";
+        else
+            return;
+        if (!SendPar()) return;
+        _log?.Debug(LogSource, $"par sent: {why}.");
+        // The timer counts from the latest `par`, so the two together don't send a
+        // pair back to back; with rounds coming faster than the cadence it stays quiet.
+        if (_timer is { IsEnabled: true })
+        {
+            _timer.Stop();
+            _timer.Start();
+        }
+    }
+
+    private bool SendPar()
+    {
+        if (_wireSender is null) return false;
+        if (_suspended) return false;
+        if (!_state.IsInParty) return false;
+        if (InTrainerMenu) return false;
+        if (IsParPollEnabled is { } gate && !gate()) return false;
         _wireSender(Encoding.Latin1.GetBytes("par\r"));
+        return true;
     }
 }

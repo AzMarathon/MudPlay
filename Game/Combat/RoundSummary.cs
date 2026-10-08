@@ -12,6 +12,8 @@ namespace MudPlay.Game.Combat;
 // UnknownTaken is damage whose victim none named (an area effect). HpBefore/HpAfter
 // and MaBefore/MaAfter snapshot PlayerState at StartedAt and EndedAt. EachMonster
 // splits the monsters' rows per monster (those with HP data), numbered by name.
+// Engaged is whether we were in combat ourselves at any line of the round — a round
+// also covers a fight in the room we only stood by for.
 public readonly record struct RoundSummary(
     int RoundNumber,
     int FightRound,
@@ -29,8 +31,12 @@ public readonly record struct RoundSummary(
     // unknown-dealt total under the opposite choice. Each row carries its own
     // opposite numbers (CombatantDamage.DealtOther / TakenOther).
     bool Capped = false,
-    int UnknownDealtOther = 0)
+    int UnknownDealtOther = 0,
+    bool Engaged = false)
 {
+    // The round has damage no line named a side for — the totals' "unknown" row.
+    public bool HasUnknown => UnknownDealt > 0 || UnknownTaken > 0;
+
     // The local player's own row.
     public int DamageDealt => Self.Dealt;
     public int DamageTaken => Self.Taken;

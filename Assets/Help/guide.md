@@ -786,7 +786,7 @@ The healing, ranks, nags, and re-invite behaviour the window reflects are all co
 
 ### HP between `par` polls
 
-The game only tells MudPlay a partymate's HP through the `par` party screen, as a percentage, every few seconds (Settings → Party → *par poll frequency*). In between, MudPlay keeps each member's HP moving from what it sees:
+The game only tells MudPlay a partymate's HP through the `par` party screen, as a percentage, each time `par` is sent (Settings → Party → *Send `par`*: on a timer, after a combat round, on unknown round damage, or never). In between, MudPlay keeps each member's HP moving from what it sees:
 
 - **Damage** — every hit the round ledger credits to that member (the same reading behind *Show combat round totals*) comes off their HP.
 - **Heals** — an instant heal seen landing on them goes on: yours, another member's, or a stranger's. When the line prints the amount (*"You cast minor healing on Raijin, healing 12 damage!"*) that amount is used; when it doesn't (the room's *"Raijin casts minor healing on Bob!"*) MudPlay uses the spell's **average** heal at the caster's level — your level for your own casts, a member's known level for theirs, and the spell's **lowest** level when the caster's level is unknown, so a guess never runs ahead of the member's real HP. A **party heal** adds its amount to every member, but only when it was your party's (you or a member cast it, or you felt it too). Heals over time (regeneration and the like) aren't counted — the next `par` picks them up.
@@ -3624,10 +3624,19 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 **Default:** `2`
 **What it does:** How many minutes after a member drops (or is left behind) you'll still honour their `@comeback` and go back for them. If a search for them gives up, the walk, loop or Auto-Lair it stopped is kept this long, so a later `@comeback` still recovers them and then resumes it. As a follower, the same value limits your own rejoin: after a longer drop, you don't send `@comeback` when you re-enter. `0` turns `@comeback` rejoin off.
 
-### par poll frequency (s)
+### Send `par` (party status)
 
-**Default:** `5` seconds
-**What it does:** How often MudPlay checks in-game party status to keep everyone's info current.
+`par` is the game's party screen: each member's HP and mana percentage, whether they're resting, and who is still in the party. This list picks what makes MudPlay send it. Tick any mix of the three, or none; they all apply at once.
+
+- **every N seconds** — **Default:** on, `5` seconds (1–60). `par` on a timer, as MegaMUD does.
+- **after each combat round** — **Default:** off. `par` as soon as a combat round you fought in ends, when its round totals are worked out. A round you only stood by for (a member's fight in the room) doesn't count.
+- **when a combat round has unknown damage** — **Default:** off. `par` when a round's totals have an **unknown** row: damage no line named a dealer or a victim for, so it may have landed on a member without MudPlay seeing whom. This one doesn't need you in the fight.
+
+A round sends one `par` at most, whichever of the two round boxes asked for it, and a round's `par` starts the timer's count over, so the timer and the rounds together don't send two in a row. In a fight whose rounds come as fast as the timer, the timer stays quiet and takes over again between fights.
+
+**With none ticked** MudPlay never sends `par` itself. Members' HP then moves only from the round totals (see *HP between `par` polls* under The Party window), which works only for members whose maximum HP is known, and is only as right as the totals are. Their mana, their resting state and whether they're still in the party aren't re-read until you type `par` yourself.
+
+Whatever is ticked, `par` is only sent while you're in a party and **Auto Heal** is on, and never into the trainer screen or the board's menus. The program log notes each change to this list under `PartyPoll`.
 
 ---
 
@@ -4797,7 +4806,8 @@ This section is a compact, technical lookup table for every setting documented a
 | Wait if members below % | `0` | 0–100 | `WaitIfMemberBelowPercent` | Models/Profile/PartySettings.cs |
 | If leading, wait only (s) / Return distance (rooms) | 90 / 30 | 0–3600 / 1–500 | `IfLeadingWaitTotalSec` / `ReturnDistanceRooms` | Models/Profile/PartySettings.cs |
 | If leading, accept @comeback for (min) | 2 | 0–60 | `AcceptComebackMinutes` | Models/Profile/PartySettings.cs |
-| par poll frequency (s) | `5` | 1–60 | `ParPollFrequencySec` | Models/Profile/PartySettings.cs |
+| Send par: every N seconds | `true`, `5` | bool, 1–60 | `ParPollOnTimer`, `ParPollFrequencySec` | Models/Profile/PartySettings.cs |
+| Send par: after each combat round / when a round has unknown damage | `false` / `false` | bool | `ParPollAfterCombatRound` / `ParPollOnUnknownDamage` | Models/Profile/PartySettings.cs |
 | PvP action | `HangUp` | HangUp / FleeThenHangUp / Flee / Attack / ChaseAttack | `Action` | Models/Profile/PvpSettings.cs |
 | PvP flee to / rooms to flee | none / `10` | a favourite room / 1–99 | `FleeTo` / `RoomsToFlee` | Models/Profile/PvpSettings.cs |
 | PvP flee hangup delay / come back after (s) | `30` / `60` | 0–600 / 0–3600 | `FleeHangupDelaySeconds` / `ComeBackAfterSeconds` | Models/Profile/PvpSettings.cs |

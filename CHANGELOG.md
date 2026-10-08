@@ -1,5 +1,10 @@
 # Version history
 
+## 3.152.1
+
+- Settings → Party: **Send `par`** is now a tick list — every N seconds (as before), after each combat round, and when a combat round has unknown damage. Any mix, or none
+- With none ticked MudPlay never sends `par` itself; members' HP then moves only from the round totals
+
 ## 3.152.0
 
 - New **Import MegaMUD profile…** in Profile Management: makes a new character from a MegaMUD character file (.ini)

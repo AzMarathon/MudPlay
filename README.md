@@ -1,15 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.152.0**
-> - New **Import MegaMUD profile…** in Profile Management: makes a new character from a MegaMUD character file (.ini)
-> - A review lists every setting that comes across, under its MudPlay name, and every one that doesn't with the reason, before anything is created
-> - Carries over the auto switches, Health, Spells, Combat, Party, Cash, Talk and Other settings that mean the same in both clients; MegaMUD's profiles become combat profiles and its blesses become Buff Watchdog slots
-> - The file's BBS user ID and password can be stored as the new character's login, encrypted; it is a tick box in the review
-> - Every value in the review can be changed before importing: switches, numbers, spells and commands
-> - Party rank comes across (front, mid or back)
-> - The pre / post rest commands are highlighted in the review, in red when they change gear (rem / eq / wear): gear swaps belong to the Equipment Manager's Pre-rest sets
-> - MegaMUD's redial and cleanup settings can be written onto the BBS, by a tick box that starts ticked only for a BBS with no characters yet
+> **Version 3.152.1**
+> - Settings → Party: **Send `par`** is now a tick list — every N seconds (as before), after each combat round, and when a combat round has unknown damage. Any mix, or none
+> - With none ticked MudPlay never sends `par` itself; members' HP then moves only from the round totals
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

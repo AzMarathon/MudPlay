@@ -1,5 +1,7 @@
 using System.Text;
 using MudPlay.Game;
+using MudPlay.Game.Combat;
+using MudPlay.Models.Profile;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using Xunit;
@@ -188,22 +190,109 @@ public sealed class PartyPollerTests
         Assert.Equal("/Helper @health\r", Encoding.Latin1.GetString(wire[0]));
     }
 
-    // ===== Settings.Party par-cadence setter =====
+    // ===== Settings.Party "Send par" triggers =====
+
+    private static (PartyPoller poller, List<byte[]> wire) InParty(PartySettings settings)
+    {
+        var (poller, _, state, _, _, wire) = Setup();
+        state.Members.Add(new PartyMember { Name = "Forged" });
+        state.IsInParty = true;
+        poller.ApplyParSettings(settings);
+        wire.Clear();   // drop the on-join @health send; isolate the par sends
+        return (poller, wire);
+    }
+
+    private static RoundSummary Round(bool engaged, int unknownDealt = 0, int unknownTaken = 0) =>
+        new(1, 1, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, Array.Empty<CombatantDamage>(),
+            unknownDealt, unknownTaken, 0, 0, 0, 0, Engaged: engaged);
+
+    private static int Pars(List<byte[]> wire) =>
+        wire.Count(b => Encoding.Latin1.GetString(b) == "par\r");
 
     [Fact]
-    public void SetParCadence_UpdatesProperty()
+    public void ApplyParSettings_TakesTheCadence_ClampedToItsRange()
     {
         var (poller, _, _, _, _, _) = Setup();
-        poller.SetParCadence(TimeSpan.FromSeconds(15));
+        poller.ApplyParSettings(new PartySettings { ParPollFrequencySec = 15 });
         Assert.Equal(TimeSpan.FromSeconds(15), poller.ParCadence);
+        poller.ApplyParSettings(new PartySettings { ParPollFrequencySec = 0 });
+        Assert.Equal(TimeSpan.FromSeconds(1), poller.ParCadence);
     }
 
     [Fact]
-    public void SetParCadence_NonPositive_Throws()
+    public void TimerUnticked_ATimerTickSendsNothing()
     {
-        var (poller, _, _, _, _, _) = Setup();
-        Assert.Throws<ArgumentOutOfRangeException>(() => poller.SetParCadence(TimeSpan.Zero));
-        Assert.Throws<ArgumentOutOfRangeException>(() => poller.SetParCadence(TimeSpan.FromSeconds(-1)));
+        var (poller, wire) = InParty(new PartySettings { ParPollOnTimer = false });
+        poller.DoParPollForTests();
+        Assert.Empty(wire);
+    }
+
+    [Fact]
+    public void AfterCombatRound_SendsParForARoundWeFoughtIn_NotOneWeStoodByFor()
+    {
+        var (poller, wire) = InParty(new PartySettings { ParPollAfterCombatRound = true });
+
+        poller.NoteRoundComplete(Round(engaged: false));
+        Assert.Empty(wire);
+
+        poller.NoteRoundComplete(Round(engaged: true));
+        Assert.Equal(1, Pars(wire));
+    }
+
+    [Fact]
+    public void OnUnknownDamage_SendsParOnlyForARoundWithAnUnknownRow()
+    {
+        var (poller, wire) = InParty(new PartySettings { ParPollOnUnknownDamage = true });
+
+        poller.NoteRoundComplete(Round(engaged: true));
+        Assert.Empty(wire);
+
+        // Unknown dealer, then unknown victim; neither needs us in the fight.
+        poller.NoteRoundComplete(Round(engaged: false, unknownDealt: 6));
+        poller.NoteRoundComplete(Round(engaged: false, unknownTaken: 20));
+        Assert.Equal(2, Pars(wire));
+    }
+
+    [Fact]
+    public void BothRoundBoxesTicked_OneParPerRound()
+    {
+        var (poller, wire) = InParty(new PartySettings
+        {
+            ParPollAfterCombatRound = true,
+            ParPollOnUnknownDamage  = true,
+        });
+        poller.NoteRoundComplete(Round(engaged: true, unknownDealt: 6, unknownTaken: 20));
+        Assert.Equal(1, Pars(wire));
+    }
+
+    [Fact]
+    public void NothingTicked_NothingSendsPar()
+    {
+        var (poller, wire) = InParty(new PartySettings { ParPollOnTimer = false });
+        poller.DoParPollForTests();
+        poller.NoteRoundComplete(Round(engaged: true, unknownDealt: 6, unknownTaken: 20));
+        Assert.Empty(wire);
+        Assert.StartsWith("never", poller.ParTriggerSummary);
+    }
+
+    // A round `par` passes the same gates as the timed one.
+    [Fact]
+    public void RoundPar_ObeysTheAutoHealGate_AndTheTrainerMenu()
+    {
+        bool healOn = false, inMenu = false;
+        var (poller, wire) = InParty(new PartySettings { ParPollAfterCombatRound = true });
+        poller.IsParPollEnabled = () => healOn;
+        poller.IsInTrainerMenu = () => inMenu;
+
+        poller.NoteRoundComplete(Round(engaged: true));
+        healOn = true;
+        inMenu = true;
+        poller.NoteRoundComplete(Round(engaged: true));
+        Assert.Empty(wire);
+
+        inMenu = false;
+        poller.NoteRoundComplete(Round(engaged: true));
+        Assert.Equal(1, Pars(wire));
     }
 
     // ===== on-join @health request =====

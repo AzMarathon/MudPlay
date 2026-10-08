@@ -5,9 +5,22 @@ namespace MudPlay.Models.Profile;
 // the "Party" entry in CharacterProfile.Settings.
 public sealed class PartySettings
 {
-    // Cadence for Game.PartyPoller's periodic par poll, in seconds. MegaMUD
-    // default is 5; range 1..60.
+    // What makes Game.PartyPoller send par — any mix of the three, or none. With
+    // none, the client never sends par itself and members' HP between the user's
+    // own par commands is whatever Game.PartyHpEstimator reads off the round ledger.
+
+    // On a timer, every ParPollFrequencySec. On by default (MegaMUD parity).
+    public bool ParPollOnTimer { get; set; } = true;
+
+    // Cadence for the timed par, in seconds. MegaMUD default is 5; range 1..60.
     public int ParPollFrequencySec { get; set; } = 5;
+
+    // When a combat round we fought in closes.
+    public bool ParPollAfterCombatRound { get; set; }
+
+    // When a round's totals carry damage no line named a dealer or a victim for —
+    // the "unknown" row — so the ledger's read of members' HP can't be trusted.
+    public bool ParPollOnUnknownDamage { get; set; }
 
     // When a party member disconnects and reconnects within the
     // Game.PartyManager.DisconnectGraceWindow, the leader auto-sends
