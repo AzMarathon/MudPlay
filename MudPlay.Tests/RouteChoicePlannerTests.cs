@@ -1299,6 +1299,69 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // Teleport 1/1 → 1/5 (1 hop) against a 4-hop walk there, then 3 hops on to 1/9:
+    // teleport route 4, walking route 7. An item opens 1/5 → 1/9 directly, so with
+    // the item the route is 2 hops by the teleport but 5 on foot.
+    private const string TeleportThenItemShortcutJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "CMD": 5,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/5 (Item: 5)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "W1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "W2",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "W3",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/5", "S": "1/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Landing",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/9 (Item: 42)", "E": "1/6", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "L1",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/7", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 7, "Name": "L2",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/6",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/7",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // An obtainable route that is shorter only because it takes the same teleport is
+    // no alternative to the teleport. Deferring on it dropped the walk-vs-teleport
+    // question, and the item fork's picks then walked the long way round.
+    [Fact]
+    public void OffersTeleportChoice_WhenTheObtainableRouteNeedsTheSameTeleport()
+    {
+        WithGraph(TeleportThenItemShortcutJson, (bfs, graph, filter) =>
+        {
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = id => id != 42;   // lacking only the shortcut's item
+
+            RouteChoice? choice = RouteChoicePlanner.EvaluateTeleport(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(RouteChoiceKind.Teleport, choice!.Kind);
+            Assert.Equal(7, choice.FreeStepCount);
+            Assert.Equal(4, choice.GatedStepCount);
+            Assert.Contains("Landing", choice.TeleportLanding!);
+        },
+        tbInfoJson: TeleportTo5TbInfo);
+    }
+
     // Trapped shortest (1/1-E(Trap)-1/5-E-1/6-E-1/9, 3 hops) vs a 4-hop trap-free
     // detour — trap-avoid fires. But a boat opens a 2-hop trap-free river route.
     private const string TrapObtainBypassJson = """

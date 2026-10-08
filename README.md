@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.1**
+> **Version 3.149.2**
 > - An item another player hands you (`<Player> gives you <item>.`) is added to your carried items at once, so route gates and other "do you carry it" checks no longer wait for the next `i`
 > - That line is no longer flagged as unrecognized
 >

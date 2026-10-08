@@ -378,14 +378,20 @@ public static class RouteChoicePlanner
         // danger — a one-room shortcut isn't worth a lethal-plane gamble.
         if (walk.Count - tele.Count < MinTeleportSavings) return null;
 
-        // ...but if OBTAINING an acquirable gate item opens a route shorter than the
-        // teleport itself, that route is the better answer — defer to Evaluate, which
+        // ...but if OBTAINING an acquirable gate item opens a WALKING route shorter than
+        // the teleport itself, that route is the better answer — defer to Evaluate, which
         // surfaces the obtain/cross options, rather than framing the choice as a
         // lethal-teleport gamble. Same deferral the avoid-override fork uses, so a
         // buyable boat isn't hidden behind a teleport warning. (obtainable < tele can
         // only happen by crossing a suspended gate, so Evaluate is guaranteed to fire.)
+        //
+        // Teleports are refused for the comparison: an obtainable route that is shorter
+        // only because it takes this same teleport is no alternative to it. Deferring on
+        // one drops the teleport question altogether, and the item fork's picks commit
+        // teleport-free — the walk then goes the long way round a portal nobody was
+        // asked about.
         using (filter.SuspendAcquirableGates())
-            if (bfs.FindPath(source, destination, filter) is { Count: > 0 } obtainable
+            if (bfs.FindPath(source, destination, filter, refuseTeleports: true) is { Count: > 0 } obtainable
                 && obtainable.Count < tele.Count)
                 return null;
 
