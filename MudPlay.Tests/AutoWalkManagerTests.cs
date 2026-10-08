@@ -126,7 +126,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         public void Dispose() { /* nothing to dispose */ }
     }
 
-    private Harness NewHarness(string json = LineGraphJson, bool wireRecovery = false)
+    private Harness NewHarness(string json = LineGraphJson, bool wireRecovery = false, string? tbinfoJson = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
@@ -135,7 +135,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         // teleporting to the exit's target (only rooms with CMD 100 + an exit to
         // 7/131, i.e. the teleport tests, are affected).
         File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"),
-            """[ { "Number": 100, "Action": "go arch:teleport 131 7\n" } ]""");
+            tbinfoJson ?? """[ { "Number": 100, "Action": "go arch:teleport 131 7\n" } ]""");
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
         TBInfoStore tbinfo = new(cache);
@@ -2366,6 +2366,385 @@ public sealed class AutoWalkManagerTests : IDisposable
         h.Walker.WalkTo(new RoomKey(1, 2));
 
         Assert.NotEmpty(h.Sent);
+    }
+
+    // ----- teleports on automatic walks -------------------------------
+    //
+    // A fork where both routes reach 7/131: three ordinary steps north, or one
+    // teleport hop southwest. The route search counts the teleport as a single step,
+    // so it is the shortest route, which is why an automatic walk needs telling.
+    //
+    // 1/10 Grove --N-- 1/11 --N-- 1/12 --N-- 7/131 Stone Arch
+    //   \__ SW (CMD 100 teleport) ______________/
+    private const string TeleportVsWalkGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 10, "Name": "Grove",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 100,
+            "N": "1/11", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "7/131 (Item: 474)",
+            "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 11, "Name": "Trail",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/12", "S": "1/10", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 12, "Name": "Ridge",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "7/131", "S": "1/11", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 7, "Room Number": 131, "Name": "Stone Arch",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/12", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static Harness ArmTeleport(Harness h)
+    {
+        h.Walker.SetTeleportResolver((_, _) => "go arch");
+        h.Tracker.SetLocated(new RoomKey(1, 10));
+        return h;
+    }
+
+    private static readonly (RoomKey From, RoomKey To) Arch = (new RoomKey(1, 10), new RoomKey(7, 131));
+
+    private static IReadOnlySet<(RoomKey From, RoomKey To)> Allow(params (RoomKey From, RoomKey To)[] teleports) =>
+        new HashSet<(RoomKey From, RoomKey To)>(teleports);
+
+    // A walk the client starts on its own states no teleport preference. It used to
+    // take whichever teleport was on the shortest route with nobody asked; now it
+    // uses only the ones the user allowed, and with none allowed it goes on foot.
+    [Fact]
+    public void AutomaticWalk_TeleportNotAllowed_GoesOnFoot()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    [Fact]
+    public void AutomaticWalk_TeleportAllowed_TakesIt()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow(Arch));
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Single(h.Sent);
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // Allowing some other teleport doesn't open this one: each is its own choice.
+    [Fact]
+    public void AutomaticWalk_AnotherTeleportAllowed_StillGoesOnFoot()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow((new RoomKey(1, 11), new RoomKey(7, 131))));
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // When the only way there is a teleport the walk may not use, it doesn't take it
+    // quietly: it fails, and says which teleport so the user knows what to tick.
+    [Fact]
+    public void AutomaticWalk_OnlyRouteIsATeleportItMayNotUse_FailsAndNamesIt()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        WalkEvent failed = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Contains("the teleport from 1/10 (Grove) to 7/131 (Stone Arch)", failed.Detail);
+        Assert.Contains("Settings → Teleports", failed.Detail);
+    }
+
+    // A walk the user started says which route it wants (the route cards pass it),
+    // and the list is never read for it, whatever it holds.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UserWalk_KeepsItsOwnChoice_WhateverIsAllowed(bool archAllowed)
+    {
+        IReadOnlySet<(RoomKey From, RoomKey To)> allowed = archAllowed ? Allow(Arch) : Allow();
+
+        Harness teleportPick = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        teleportPick.Walker.SetAutomaticWalkTeleports(() => allowed);
+        teleportPick.Walker.WalkTo(new RoomKey(7, 131), preferTeleportFree: false);   // "Teleport"
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(teleportPick.Sent[0]));
+
+        Harness plainCommit = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        plainCommit.Walker.SetAutomaticWalkTeleports(() => allowed);
+        plainCommit.Walker.WalkTo(new RoomKey(7, 131), preferTeleportFree: true);     // any other card
+        Assert.Equal("n\r", Encoding.Latin1.GetString(plainCommit.Sent[0]));
+
+        Harness walkIt = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        walkIt.Walker.SetAutomaticWalkTeleports(() => allowed);
+        walkIt.Walker.WalkTo(new RoomKey(7, 131), avoidTeleports: true, preferTeleportFree: true);   // "Walk it"
+        Assert.Equal("n\r", Encoding.Latin1.GetString(walkIt.Sent[0]));
+
+        // The only route being a teleport, the user's plain commit still takes it.
+        Harness onlyWay = ArmTeleport(NewHarness(TeleportGraphJson));
+        onlyWay.Walker.SetAutomaticWalkTeleports(() => allowed);
+        onlyWay.Walker.WalkTo(new RoomKey(7, 131), preferTeleportFree: true);
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(onlyWay.Sent[0]));
+    }
+
+    // The list is read as each walk starts, so a change reaches the next walk
+    // without a reconnect.
+    [Fact]
+    public void AutomaticWalkTeleports_AreReadAtTheStartOfEachWalk()
+    {
+        IReadOnlySet<(RoomKey From, RoomKey To)> allowed = Allow(Arch);
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => allowed);
+
+        h.Walker.WalkTo(new RoomKey(7, 131));
+        Assert.Equal("go arch\r", Encoding.Latin1.GetString(h.Sent[0]));
+
+        allowed = Allow();
+        h.Walker.Stop("test");
+        h.Sent.Clear();
+        h.Tracker.SetLocated(new RoomKey(1, 10));
+        h.Walker.WalkTo(new RoomKey(7, 131));
+
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // A loop walks to its nearest room before it starts lapping. Started by the user
+    // that walk is the user's own and keeps the shortest route; started by an event,
+    // a remote command or a sweep it is an automatic walk and uses only what is allowed.
+    [Theory]
+    [InlineData(true, "go arch\r")]
+    [InlineData(false, "n\r")]
+    public void LoopApproach_IsAnAutomaticWalk_OnlyWhenTheUserDidNotStartIt(bool userStarted, string firstSend)
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
+            walker: h.Walker, postToUi: a => a());
+        runner.SetWireSender(b => h.Sent.Add(b));
+        Loop loop = new("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) });
+
+        Assert.True(runner.Start(loop, userStarted));
+
+        Assert.Equal(LoopState.Approaching, runner.State);
+        Assert.Equal(firstSend, Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // The user asked to go to the loop, not for what the run does once there: after
+    // the loop is reached, the walk back to it from a detour is an automatic walk. It
+    // is not asked about, and uses only the teleports allowed to automatic walks.
+    [Fact]
+    public void UserStartedLoop_OnceReached_WalksBackAsAnAutomaticWalk()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
+            walker: h.Walker, postToUi: a => a());
+        runner.SetWireSender(b => h.Sent.Add(b));
+        Loop loop = new("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) });
+        h.Tracker.SetLocated(new RoomKey(1, 12));           // standing on the loop
+        Assert.True(runner.Start(loop, userStarted: true));
+        Assert.Equal(LoopState.Running, runner.State);
+
+        // A detour took the character off to 1/10; the loop resumes from there.
+        h.Tracker.SetLocated(new RoomKey(1, 10));
+        h.Sent.Clear();
+        Assert.True(runner.ResumeAfterDetour(loop));
+
+        Assert.Equal(LoopState.Approaching, runner.State);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
+    // ----- a loop started from off it: a walk-to first, then the loop --------
+
+    private (LoopRunner Runner, LoopWalkHandoff Handoff, Harness H, Loop Loop) LoopHandoffAtTheGrove()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
+            walker: h.Walker, postToUi: a => a());
+        runner.SetWireSender(b => h.Sent.Add(b));
+        LoopWalkHandoff handoff = new(runner, post: a => a());
+        h.Walker.Event += handoff.OnWalkerEvent;
+        runner.Event += handoff.OnLoopEvent;
+        return (runner, handoff, h, new Loop("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) }));
+    }
+
+    // Where a start from off the loop joins it is the destination of the walk-to.
+    [Fact]
+    public void NearestRoomOf_IsTheLoopRoomAStartWouldWalkTo_AndNothingWhenStandingOnIt()
+    {
+        var (runner, _, _, loop) = LoopHandoffAtTheGrove();
+
+        Assert.Equal(new RoomKey(7, 131), runner.NearestRoomOf(loop, new RoomKey(1, 10)));   // one teleport hop
+        Assert.Equal(new RoomKey(1, 12), runner.NearestRoomOf(loop, new RoomKey(1, 11)));
+        Assert.Null(runner.NearestRoomOf(loop, new RoomKey(1, 12)));
+        Assert.Equal(LoopState.Idle, runner.State);
+    }
+
+    // The loop runner is not involved until the walk-to arrives; then it has the run.
+    [Fact]
+    public void LoopHandoff_TheLoopStartsWhenTheWalkArrives()
+    {
+        var (runner, handoff, h, loop) = LoopHandoffAtTheGrove();
+        RoomKey entry = new(7, 131);
+
+        handoff.Begin(loop, entry);
+        handoff.NoteWalkCommitted(entry);
+        Assert.Equal(LoopState.Idle, runner.State);
+        Assert.Same(loop, handoff.Pending);
+
+        h.Tracker.SetLocated(entry);                          // the walk-to got there
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "reached", entry));
+
+        Assert.Null(handoff.Pending);
+        Assert.Equal(LoopState.Running, runner.State);
+    }
+
+    // A walk finishing somewhere else on the way (a stage of a longer trip) isn't the arrival.
+    [Fact]
+    public void LoopHandoff_AWalkFinishingElsewhere_IsNotTheArrival()
+    {
+        var (runner, handoff, _, loop) = LoopHandoffAtTheGrove();
+        handoff.Begin(loop, new RoomKey(7, 131));
+
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "reached", new RoomKey(1, 11)));
+
+        Assert.Same(loop, handoff.Pending);
+        Assert.Equal(LoopState.Idle, runner.State);
+    }
+
+    [Fact]
+    public void LoopHandoff_IsDropped_WhenTheWalkFails_OrGoesSomewhereElse_OrIsCancelled()
+    {
+        var (runner, handoff, _, loop) = LoopHandoffAtTheGrove();
+        RoomKey entry = new(7, 131);
+
+        handoff.Begin(loop, entry);
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Failed, "no path", entry));
+        Assert.Null(handoff.Pending);
+
+        handoff.Begin(loop, entry);
+        handoff.NoteWalkCommitted(new RoomKey(1, 11));        // the user picked a walk that stops short
+        Assert.Null(handoff.Pending);
+
+        handoff.Begin(loop, entry);
+        handoff.Cancel("cancelled at the route cards");
+        Assert.Null(handoff.Pending);
+
+        // Nothing is waiting, so a later arrival there starts nothing.
+        handoff.OnWalkerEvent(new WalkEvent(WalkEventKind.Finished, "reached", entry));
+        Assert.Equal(LoopState.Idle, runner.State);
+    }
+
+    // Another loop starting first supersedes the one that was waiting.
+    [Fact]
+    public void LoopHandoff_IsDropped_WhenAnotherLoopStarts()
+    {
+        var (runner, handoff, h, loop) = LoopHandoffAtTheGrove();
+        handoff.Begin(loop, new RoomKey(7, 131));
+
+        h.Tracker.SetLocated(new RoomKey(1, 12));
+        Assert.True(runner.Start(new Loop("other", new[] { new RoomKey(1, 12), new RoomKey(1, 11) })));
+
+        Assert.Null(handoff.Pending);
+    }
+
+    // ----- the list of teleports, built from the game data ----------------
+
+    // A teleport to somewhere that can also be walked to is a shortcut: nothing lies
+    // beyond it that can't be reached on foot.
+    [Fact]
+    public void TeleportCatalog_ListsAShortcut_WithNothingBeyondIt()
+    {
+        Harness h = NewHarness(TeleportVsWalkGraphJson);
+
+        TeleportChoice choice = Assert.Single(TeleportCatalog.Build(h.Graph, (_, _) => "go arch"));
+
+        Assert.Equal((new RoomKey(1, 10), "Grove"), (choice.From, choice.FromName));
+        Assert.Equal((new RoomKey(7, 131), "Stone Arch"), (choice.To, choice.ToName));
+        Assert.False(choice.TwoWay);
+        Assert.Equal(0, choice.RoomsBeyond);
+        Assert.Equal(new[] { Arch }, choice.Exits);
+        Assert.Equal("go arch", choice.Commands);
+    }
+
+    // A room only a teleport reaches is counted as lying beyond it.
+    [Fact]
+    public void TeleportCatalog_CountsTheRoomsOnlyATeleportReaches()
+    {
+        const string json = """
+            [
+              { "Map Number": 1, "Room Number": 10, "Name": "Grove", "CMD": 100,
+                "N": "1/11", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0",
+                "SW": "7/131 (Item: 474)", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 11, "Name": "Trail",
+                "N": "0", "S": "1/10", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 7, "Room Number": 131, "Name": "Stone Arch, Threshold",
+                "N": "7/132", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 7, "Room Number": 132, "Name": "Stone Arch, Inner Ring",
+                "N": "0", "S": "7/131", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        Harness h = NewHarness(json);
+
+        TeleportChoice choice = Assert.Single(TeleportCatalog.Build(h.Graph, (_, _) => null));
+
+        Assert.Equal("Stone Arch", choice.Area);
+        Assert.Equal(2, choice.RoomsBeyond);
+        Assert.Equal(string.Empty, choice.Commands);
+    }
+
+    // A teleport and the one straight back are one spot: one line, allowed together.
+    [Fact]
+    public void TeleportCatalog_ATeleportAndItsWayBack_AreOneSpot()
+    {
+        const string json = """
+            [
+              { "Map Number": 1, "Room Number": 10, "Name": "Grove", "CMD": 100,
+                "N": "0", "S": "0", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0",
+                "SW": "7/131 (Item: 474)", "U": "0", "D": "0" },
+              { "Map Number": 7, "Room Number": 131, "Name": "Stone Arch", "CMD": 101,
+                "N": "0", "S": "0", "E": "0", "W": "0", "NE": "1/10 (Item: 474)", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        Harness h = NewHarness(json, tbinfoJson: """
+            [ { "Number": 100, "Action": "go arch:teleport 131 7\n" },
+              { "Number": 101, "Action": "go grove:teleport 10 1\n" } ]
+            """);
+
+        TeleportChoice choice = Assert.Single(TeleportCatalog.Build(h.Graph,
+            (from, _) => from.Map == 1 ? "go arch" : "go grove"));
+
+        Assert.True(choice.TwoWay);
+        Assert.Equal("go arch / go grove", choice.Commands);
+        Assert.Equal(new[] { Arch, (Arch.To, Arch.From) }, choice.Exits);
+
+        MudPlay.ViewModels.Settings.TeleportChoiceViewModel row = new(choice, allowed: false, changed: () => { });
+        Assert.Equal("Grove (1/10) ⇄ Stone Arch (7/131)", row.Title);
+        Assert.True(row.Matches("7/131"));
+        Assert.True(row.Matches("go grove"));
+        Assert.False(row.Matches("vortex"));
+    }
+
+    [Fact]
+    public void TeleportCatalog_KeysRoundTrip_AndBadOnesAreDropped()
+    {
+        string key = TeleportCatalog.KeyOf(Arch.From, Arch.To);
+        Assert.Equal("1/10>7/131", key);
+
+        IReadOnlySet<(RoomKey From, RoomKey To)> parsed =
+            TeleportCatalog.ParseKeys(new[] { key, "nonsense", "1/10>", "" });
+
+        Assert.Equal(new[] { Arch }, parsed);
     }
 
 }

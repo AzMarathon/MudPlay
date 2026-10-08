@@ -1,16 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.148.9**
-> - Bosses the game gives one name are separate rows, each with its own room and timer: nahr (spheres) and nahr (spaceghost), master assassin (cob key) and master assassin (dying assassin)
-> - A boss's respawn time is read from its own monster record, not the first monster of its name: the great green dragon is 15 hours and the giant roc 6 on Paradigm
-> - Six bosses added to the list: haggard witch, master torturer, giant toad-beast, small stone box, dark-elf queen chests, pastor lander's box
-> - Two rows are named for what the boss dies into: lord chisholm (malformation) and mayor of arlysia (arachnigoth). Each keeps the first one's timer, started at its death
-> - Grab All follows a boss that dies into another monster (Lord Chisholm into the malformation, the mayor of Arlysia into arachnigoth): it grabs the drops of whichever one just died
-> - Out of combat, a between-round cast (a buff, a deck of cards draw) no longer runs into "You have already cast a spell this round!": rounds are projected at the board's measured length and the cast goes just after the round
-> - A see-hidden room met after a quiet walk is held and cleared: the stall watchdog no longer drops the fight a moment after it starts and lets the walker leave
-> - With Auto-Combat off, a see-hidden, failed-sneak or rest-blocker clear moves straight on to the next monster after a kill
-> - A sneak broken by a see-hidden monster stays broken until you sneak again: you stop and clear the first room inside your Min/Max monsters, then re-sneak and carry on
+> **Version 3.149.0**
+> - New Settings → Teleports tab: Allow automatic walks to use the following teleports, one line per teleport spot from your game data with both ends' map/room numbers; none are ticked by default
+> - Automatic walks (bank and sell trips, training trips, Auto-Lair, events, remote commands) use only the teleports you tick; a trip that needs another stops and names it
+> - Starting a loop from off the loop is now a walk-to to it, with every route card a walk-to shows; the loop begins when you arrive. Recover Now goes through the route cards too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

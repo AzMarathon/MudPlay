@@ -2159,6 +2159,16 @@ public sealed class AppServices
     // any cached room references.
     public Game.Map.RoomGraphManager RoomGraph { get; private set; } = null!;
 
+    // The teleport spots in the loaded game data, for the
+    // setting that says which of them automatic walks may use. Worked out from the
+    // room graph on first use and again after the graph reloads.
+    public IReadOnlyList<Game.Map.TeleportChoice> TeleportChoices =>
+        _teleportChoices ??= Game.Map.TeleportCatalog.Build(RoomGraph, (from, to) =>
+            RoomGraph.GetRoom(from) is { Cmd: > 0 } room
+                ? Game.Map.TBInfoTeleportResolver.Resolve(TBInfo, room.Cmd, to)
+                : null);
+    private IReadOnlyList<Game.Map.TeleportChoice>? _teleportChoices;
+
     // TextBlock Info index for the active game-data set. Loaded from
     // TBInfo.json; consumed by the teleport handler (room
     // CMD > 0 + (Item: N) exit promotes to
@@ -2527,6 +2537,9 @@ public sealed class AppServices
     // coalesces their run-state and routes Pause / Resume / Stop to the
     // right engine. Backs the toolbar movement-flow buttons.
     public Game.Map.MovementController MovementControl { get; private set; } = null!;
+
+    // The loop the user started from off it, waiting on its walk-to to arrive.
+    public Game.Map.LoopWalkHandoff LoopHandoff { get; private set; } = null!;
 
     // Roomba Mode: sorts labeled gang-house rooms by building a Loop from
     // GhRoomLabels and driving it through LoopRunner — see GhSweepManager.
@@ -6797,6 +6810,12 @@ public sealed class AppServices
                 dir, statRequirement: 0, canBash: true, keyItemId: 0, sender: "maze",
                 reply: r => done(r is Game.Map.DoorOpenResult.Opened)));
         Walker.SetMazeSolver(MazeSolver);
+        // Teleports on walks the client starts by itself (a walk the user starts states
+        // its own preference and never reads this). Read live from the character, so a
+        // change reaches the next walk and a profile swap brings its own list.
+        Walker.SetAutomaticWalkTeleports(() => Game.Map.TeleportCatalog.ParseKeys(
+            ReadSection<Models.Profile.TeleportSettings>(Profile.Current, "Teleports").AutomaticWalkTeleports));
+        RoomGraph.GraphReloaded += () => _teleportChoices = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
         // (canDrive), pre-flighting the floor-1 timer against live encumbrance +
@@ -7681,6 +7700,16 @@ public sealed class AppServices
         // the Nav window because both act on the same engine primitives.
         MovementControl = new Game.Map.MovementController(
             Walker, LoopRunner, AutoLair, MovementCoordinator, Log);
+        // A loop the user starts from off it is a walk-to to the loop first; the loop
+        // runner takes over when that walk arrives. Stop, a profile change or another
+        // loop starting drops the one waiting.
+        LoopHandoff = new Game.Map.LoopWalkHandoff(
+            LoopRunner, action => Avalonia.Threading.Dispatcher.UIThread.Post(action), Log);
+        Walker.Event += LoopHandoff.OnWalkerEvent;
+        LoopRunner.Event += LoopHandoff.OnLoopEvent;
+        MovementControl.Stopping += () => LoopHandoff.Cancel("stopped");
+        Profile.ProfileLoaded += _ => LoopHandoff.Cancel("another character was loaded");
+        Profile.ProfileClosed += () => LoopHandoff.Cancel("the character was closed");
         // A pyramid climb or an asylum maze solve counts as navigation running: the
         // toolbar's Pause holds it on the user gate and Stop ends it.
         MovementControl.AddSolver(
