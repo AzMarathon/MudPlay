@@ -4398,6 +4398,7 @@ public sealed class AppServices
         // in" arrivals + the room re-display resolve to one engage decision on the
         // full group (rooms nuke-first instead of pecking single-target). Same shape
         // as the walker's voyage scheduler — keeps the Game/Combat layer UI-free.
+        Combat.SetDeathSummonProbe(MonsterDeathSummon.SummonsOnDeath);
         Combat.SetArrivalSettleScheduler((delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -12588,17 +12589,21 @@ public sealed class AppServices
     // walk crossed unprovisioned — it would `rub bloodstone orb` while carrying no
     // orb and bonk on the hidden exit (report paradigm-20260911-095404).
     //
-    // A door key is admitted only when a room command can summon a guaranteed
-    // dropper for it; any other key has no source to arm, so forcing it would only
-    // switch on a per-room `sea` that can never succeed.
+    // A door key is admitted only when it has a reliable source (DoorKeyIsFetchable);
+    // any other key has none to arm, so forcing it would only switch on a per-room
+    // `sea` that can never succeed.
     public IReadOnlyList<int> SourceableGateItems(IReadOnlyList<RouteRequirement> requirements)
         => RouteChoicePlanner.SourceableGateItems(requirements, DoorKeyIsFetchable);
 
     // A door key the walk can reliably go and get: a room command summons a
-    // monster that always drops it, or an NPC hands it over for the asking (the
-    // old hermit's jagged bone key for the Library).
+    // monster that always drops it, an NPC hands it over for the asking (the old
+    // hermit's jagged bone key for the Library), or a shop sells it (the Thieves'
+    // Guild's skeleton key). A shop was left out, so a route through a door the
+    // character could neither pick nor bash walked up to it keyless and failed
+    // there (report paradigm-20261007-192215).
     private bool DoorKeyIsFetchable(int itemId)
-        => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId);
+        => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId)
+           || ShopStock.ShopsSelling(itemId).Count > 0;
 
     // A loop is about to approach through gates because nothing on it can be
     // reached as things stand. Arm the fetch for what the way in needs, exactly as

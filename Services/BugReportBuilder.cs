@@ -624,6 +624,7 @@ public static class BugReportBuilder
         Kv(sb, "Awaiting backstab resolution", combat.AwaitingBackstabResolution
             ? $"yes (target={combat.PendingBackstabSpecies ?? "(none)"})"
             : "no");
+        Kv(sb, "Next pick held for a summon-on-death re-display", svc.Combat.AwaitingSummonRescan ? "yes" : "no");
         // ShadowRest hold explains a stealthed character resting instead of
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());

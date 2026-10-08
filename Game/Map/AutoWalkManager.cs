@@ -756,10 +756,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // deliberately NOT a possession gate — pick and bash are the usual openers, and
     // a key we simply lack fails the exit in place rather than sending the walk off
     // to find one. The one exception is a key whose whole acquisition chain is
-    // deterministic: a room command that summons a monster dropping it at 100%. The
-    // probe answers only for those, so a low-drop lair key (the black star key,
-    // 1-10% off lair cultists) stays unannounced and keeps failing in place.
-    // Bound to AppServices' summon-source lookup; unbound means no key is fetchable.
+    // deterministic: a room command that summons a monster dropping it at 100%, an
+    // NPC that hands it over, or a shop that sells it. The probe answers only for
+    // those, so a low-drop lair key (the black star key, 1-10% off lair cultists)
+    // stays unannounced and keeps failing in place.
+    // Bound to AppServices' key-source lookup; unbound means no key is fetchable.
     public void SetDoorKeySourceProbe(Func<int, bool> probe)
     {
         ArgumentNullException.ThrowIfNull(probe);

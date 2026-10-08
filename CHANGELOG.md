@@ -1,5 +1,13 @@
 # Version history
 
+## 3.149.5
+
+- A monster that needs a magical weapon is judged by the weapon in your hand when the combat profile names one you no longer carry, instead of being skipped as unhittable
+- After killing a monster that turns into or summons another as it dies (the Champion of Blood's greater hellion), the next target is picked once the room shows the newcomer
+- A follower who walks off by themselves (sent on with `@do`, say) is no longer gone back for as if your move had left them behind
+- A locked door you can't pick or bash whose key a shop sells (the skeleton key): the route card names the shop, and picking that route buys the key on the way
+- bug reports addressed: paradigm-20261007-182916, paradigm-20261007-185740, paradigm-20261007-183903, paradigm-20261007-192215
+
 ## 3.149.1
 
 - The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further
