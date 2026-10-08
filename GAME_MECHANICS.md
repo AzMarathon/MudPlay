@@ -502,7 +502,13 @@ What the game prints on the wire, including the prompt/statline, the command rat
 *Status: CONFIRMED 2026-09-05 (user + report `stock-20260904-230111`); Paradigm sequence CONFIRMED 2026-10-08 (user) · Realm: differs*
 
 - **You exit the realm from inside the game with the exit command** (on the user's board, a bare `x`).
-- **Stock: `x` → "You will exit after a period of silent meditation." → a few seconds later "Your character has been saved."** At that point the character is safely out of the game. The trailing "leave comments in E-mail to Sysop" text is board-customised.
+- **Stock: `quit` starts the logout; `exit` doesn't work there** *([CONFIRMED] 2026-10-08, user)*. In the user's capture `exit` only printed the room's `Obvious exits:` line again. The sequence, in order:
+  - `quit`
+  - `You will exit after a period of silent meditation.`
+  - a row of dots counting the wait out (`...............`);
+  - `Your character has been saved. If you have any comments or suggestions, please leave them in E-mail to Sysop. Thanks.` (the tail is board-customised);
+  - a `[MAJORMUD]:` prompt.
+- **Stock (2026-09-05 note): `x` → "You will exit after a period of silent meditation." → a few seconds later "Your character has been saved."** At that point the character is safely out of the game. The trailing "leave comments in E-mail to Sysop" text is board-customised.
 - **No Y/N confirm prompt fires on the exit path.**
 - **Where you land after that depends on the board.** Some boards drop straight to MajorMUD's own entry menu (`[E] . Enter the Realm`). Others nest the realm under extra door/games menus, so a second `x` is needed to walk back out. Example: the door post-game screen with a `[MAJORMUD]:` prompt, then the BBS games menu `[M]...MajorMUD! …` with a `Fujin, your selection or ? for help:` prompt. The entry-menu row does NOT appear on the nested boards.
 - **On Stock, "Your character has been saved." is the board-agnostic "we're out of the realm" signal**, not the entry menu. Paradigm doesn't print it, so there the entry-menu row is the signal.
@@ -519,7 +525,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 **Client use:**
 - The cleanup-logoff orchestrator keys its carrier-drop on that line (`KnownPatterns.RealmExitSaved`). The entry-menu row and a wait-timeout remain secondary fallbacks.
 - `InGameCapture.AtBoardMenu` is set when the saved line or the entry-menu row is seen after the character has been in the game, and cleared by the next statline prompt or the link ending. While it is set `EngineSendGate` holds every automatic command, `OutboundMovementObserver` doesn't read a typed selection as a move, `MessageCandidateWatcher` stages nothing, and `StatlineReconciler` is re-armed so it waits for a room display. Before this the party poll, a buff, `sn` and `set statline full` were each sent into the menu, and the `e` typed to re-enter was tracked as a step east (report `paradigm-20261008-125639`).
-- The two wait lines are router patterns (`KnownPatterns.RealmExitMeditation`, `RealmExitWaiting`) only so they aren't staged as unrecognized lines.
+- The wait's lines are router patterns (`KnownPatterns.RealmExitMeditation`, `RealmExitWaiting`, and `RealmExitDots` for Stock's row of dots) only so they aren't staged as unrecognized lines.
 
 ### MegaMUD `messages.md` format
 *Status: CONFIRMED 2026-08-17 (user + decode of both stock/paramud files)*

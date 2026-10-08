@@ -844,6 +844,8 @@ public static class DefaultPatterns
             @"^You will exit after a period of silent meditation\.");
         yield return new RegexPattern(KnownPatterns.RealmExitWaiting,
             @"^You may not perform any commands while waiting to exit!");
+        // Stock counts the wait out as a row of dots, a different length each time.
+        yield return new RegexPattern(KnownPatterns.RealmExitDots, @"^\.{2,}$");
 
         // Marker for the train-stats menu's "Point Cost Chart" panel
         // header. NOT anchored to line start/end — the panel sits in the
