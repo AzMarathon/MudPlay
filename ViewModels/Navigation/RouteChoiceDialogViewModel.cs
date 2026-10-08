@@ -86,6 +86,7 @@ public sealed partial class RouteChoiceDialogViewModel
     // item-gate choice, the teleport caveat for a teleport choice, the trap caveat
     // for a trap-avoid choice, the avoided-rooms caveat for an avoid-override choice.
     public string GatedDetail =>
+        IsBossRoomChoice ? BossWaitDetail :
         IsBlockedChoice ? BlockedDetail :
         IsTeleportChoice ? TeleportCaveat :
         IsTrapAvoidChoice ? TrapCaveat :
@@ -127,6 +128,14 @@ public sealed partial class RouteChoiceDialogViewModel
     // pre-selected so respecting the user's own avoid is the default.
     public bool IsAvoidOverrideChoice { get; private set; }
 
+    // True when this is the boss-room fork: the shortest route passes through a boss
+    // room marked "stop before entering" and a way around exists. Three cards: walk
+    // around (Free), walk up to it and wait (the Gated card, pre-selected, since
+    // stopping there is what the mark asks for), walk through regardless (the
+    // send-it card).
+    public bool IsBossRoomChoice { get; private set; }
+    public string BossWaitDetail { get; private set; } = "";
+
     // True when this is the Paradigm token fork: a held transport token reaches the
     // destination faster than walking. A plain two-way choice — walk it (Free) vs use
     // the token (the blue token card) — no acquire / send-it / search split. Never
@@ -157,6 +166,7 @@ public sealed partial class RouteChoiceDialogViewModel
     //     way past those, so walking in unprotected is not a choice we hand the user.
     // A teleport / trap-avoid choice has no send-it split.
     public bool ShowSendItCard =>
+        IsBossRoomChoice ||
         (HasFreeRoute || _crossesSurvivableHazard)
         && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice && !IsTokenChoice;
 
@@ -203,7 +213,9 @@ public sealed partial class RouteChoiceDialogViewModel
 
     // The muted sub-line under the send-it card — reframed for the hazard flavour
     // (take the damage) vs the item-gate flavour (carry the gate items yourself).
-    public string SendItDetail => _crossesSurvivableHazard
+    public string SendItDetail =>
+        IsBossRoomChoice ? "Takes the same route without stopping. The stop-before mark stays set — only this walk ignores it." :
+        _crossesSurvivableHazard
         ? "Walks straight through the hazard and takes the damage — no counter fetched."
         : "Crosses the gates as-is — nothing acquired; you must already carry what's needed.";
 
@@ -348,6 +360,7 @@ public sealed partial class RouteChoiceDialogViewModel
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
         IsAvoidOverrideChoice = choice.Kind == RouteChoiceKind.AvoidOverride;
         IsTokenChoice = choice.Kind == RouteChoiceKind.Token;
+        IsBossRoomChoice = choice.Kind == RouteChoiceKind.BossRoom;
         IsBlockedChoice = choice.Kind == RouteChoiceKind.Blocked;
         HasFreeRoute = choice.HasFreeRoute;
 
@@ -453,6 +466,21 @@ public sealed partial class RouteChoiceDialogViewModel
             // Default to the safer route so a plain Go dodges what it can; the user
             // can still click the shortcut. Previewed on open via RaiseSelectionPreview.
             SelectedRoute = RouteChoiceResult.Free;
+        }
+        else if (IsBossRoomChoice)
+        {
+            string boss = choice.BossRoomLabel ?? "a boss room";
+            int toWait = Math.Max(0, (choice.BossWaitPath?.Count ?? 1) - 1);
+            FreeSummary = $"Walk around {boss} — {StepsEta(choice.FreeStepCount, freeEta)}";
+            GatedSummary = $"Walk up to {boss} and wait — {toWait} step{(toWait == 1 ? "" : "s")} to the room before it";
+            BossWaitDetail = $"Stops one room short, as its stop-before mark asks. Press Play (Resume), or step in "
+                + $"yourself, to go on through to the destination ({StepsEta(choice.GatedStepCount, gatedEta)} in all).";
+            SendItSummary = $"Walk through {boss} without stopping — {StepsEta(choice.GatedStepCount, gatedEta)}";
+            RequirementSummary = string.Empty;
+            TeleportCaveat = string.Empty;
+            TrapCaveat = string.Empty;
+            AvoidCaveat = string.Empty;
+            SelectedRoute = RouteChoiceResult.Gated;
         }
         else if (IsAvoidOverrideChoice)
         {

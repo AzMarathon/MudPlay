@@ -1696,6 +1696,9 @@ public static class BugReportBuilder
         Kv(sb, "Next planned direction",
             walker.PeekNextPlannedDirection() is { } dir ? dir.ToString() : "(none / command step)");
         Kv(sb, "Room command held for an empty room", walker.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
+        Kv(sb, "Stop-before boss rooms on this walk", walker.BossRoomRuleSummary);
+        Kv(sb, "Paused before a boss room", walker.HaltedBeforeBossRoom is { } bossRoom
+            ? $"{bossRoom.Map}/{bossRoom.Room} ({svc.BossInRoom(bossRoom) ?? "boss"}) — Resume walks through" : "no");
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",

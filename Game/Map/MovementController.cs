@@ -220,6 +220,16 @@ public sealed class MovementController : IDisposable
         PausedByTypedMoveChanged?.Invoke();
     }
 
+    // A walk reached the room before a boss room marked "stop before entering" and
+    // waits there on the user's own gate, so the Play button (Resume) sends it on
+    // through. False when nothing is running to pause.
+    public bool PauseBeforeBossRoom()
+    {
+        if (IsIdle) return false;
+        if (!IsUserPaused) Pause();
+        return IsUserPaused;
+    }
+
     private void ForgetTypedMoveOnceResumed()
     {
         if (PausedByTypedMove is null || IsUserPaused) return;

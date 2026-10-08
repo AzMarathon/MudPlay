@@ -570,6 +570,30 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("Fungus Forest (7/246)", vm.AvoidAltDetail);
     }
 
+    // ----- Boss-room fork: around, up to it and wait, or through ----------
+
+    [Fact]
+    public void BossRoom_ShowsThreeCards_AndPreSelectsWalkUpAndWait()
+    {
+        RouteChoice choice = new(FreeStepCount: 9, GatedStepCount: 5,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.BossRoom,
+            BossRoom: new RoomKey(12, 2247),
+            BossWaitPath: new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) },
+            BossRoomLabel: "rakshasha sage's room (12/2247)");
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Secret Library (12/2248)", id => "");
+
+        Assert.True(vm.IsBossRoomChoice);
+        Assert.StartsWith("Walk around rakshasha sage's room (12/2247)", vm.FreeSummary);
+        Assert.StartsWith("Walk up to rakshasha sage's room (12/2247) and wait — 2 steps", vm.GatedSummary);
+        Assert.Contains("Press Play", vm.GatedDetail);
+        Assert.True(vm.ShowSendItCard);
+        Assert.StartsWith("Walk through rakshasha sage's room (12/2247) without stopping", vm.SendItSummary);
+        Assert.Contains("stop-before mark stays set", vm.SendItDetail);
+        Assert.Equal(RouteChoiceResult.Gated, vm.SelectedRoute);
+    }
+
     // ----- Trap-avoid fork -----------------------------------------------
 
     private static RouteChoice TrapAvoidChoice(int freeTraps = 0, int gatedTraps = 2) =>

@@ -56,6 +56,9 @@ public enum RouteChoiceKind
                // gold + a daily charge + wipes buffs), lands the player at the token's
                // town, then the walk resumes from there. Never auto-taken — the user
                // picks it against the plain overland route shown alongside.
+    BossRoom,  // the shortest route passes through a boss room flagged "stop before
+               // entering" and a way around exists: walk around it, walk up to it
+               // and wait, or walk through regardless.
 }
 
 // A "run to the blocked room anyway" plan: the furthest room the walker can
@@ -141,7 +144,15 @@ public sealed record RouteChoice(
     // them: a count alone left the player hunting the map for a room that may sit
     // on another map altogether (report paradigm-20261007-215302).
     IReadOnlyList<string>? AvoidedRoomNames = null,
-    IReadOnlyList<string>? AvoidAlternativeNames = null)
+    IReadOnlyList<string>? AvoidAlternativeNames = null,
+    // For a BossRoom choice: the stop-before boss room the shortest route passes
+    // through, and that route cut off at the room before it (where "walk up and
+    // wait" stops). FreePath is the way around every stop-before boss room;
+    // GatedPath is the shortest route, through the boss room.
+    RoomKey? BossRoom = null,
+    IReadOnlyList<RoomKey>? BossWaitPath = null,
+    // "pharaoh rastep's room (12/2250)", filled in by the caller for the cards.
+    string? BossRoomLabel = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -583,6 +594,65 @@ public static class RouteChoicePlanner
             RouteChoiceKind.AvoidOverride,
             AvoidedRoomCount: avoidedCrossed,
             AvoidedRoomNames: avoidedNames);
+    }
+
+    // A walk the user starts whose shortest route passes THROUGH a boss room flagged
+    // "stop before entering" on the way to somewhere else (a walk that ends in one
+    // already stops a room short). Returns the three ways to take it — around every
+    // such room, up to the first one and wait, or straight through — when a way
+    // around exists. Null when the route meets no such room, or there is no way
+    // around: the walk then simply stops before the boss room, with nothing to pick.
+    //
+    // A boss room that is the very next step doesn't count: standing beside it and
+    // asking to walk on past is the go-ahead to enter.
+    public static RouteChoice? EvaluateBossRoom(
+        BfsMapper bfs,
+        IRoomFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination,
+        IReadOnlySet<RoomKey> stopRooms,
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(stopRooms);
+        if (stopRooms.Count == 0) return null;
+
+        IReadOnlyList<Direction>? through = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
+        if (through is not { Count: > 0 }) return null;
+        IReadOnlyList<RoomKey> throughKeys = BuildKeyPath(graph, source, through);
+
+        int bossAt = FirstBossRoomAhead(throughKeys, stopRooms);
+        if (bossAt < 0) return null;
+
+        // The way around avoids every stop-before boss room but the destination
+        // itself, not just the first one met: a detour past one that runs into the
+        // next would be no way around.
+        HashSet<RoomKey> around = new(stopRooms);
+        around.Remove(destination);
+        around.Remove(source);
+        IReadOnlyList<Direction>? detour = bfs.FindPath(source, destination, new WalkAroundRoomsFilter(filter, around));
+        if (detour is not { Count: > 0 }) return null;
+
+        return new RouteChoice(
+            detour.Count, through.Count,
+            Array.Empty<RouteRequirement>(),
+            BuildKeyPath(graph, source, detour),
+            throughKeys,
+            RouteChoiceKind.BossRoom,
+            BossRoom: throughKeys[bossAt],
+            BossWaitPath: throughKeys.Take(bossAt).ToList());
+    }
+
+    // Index on a key path of the first stop-before boss room a walk would stop for:
+    // past the next room, and short of the destination. -1 when there is none.
+    private static int FirstBossRoomAhead(IReadOnlyList<RoomKey> keys, IReadOnlySet<RoomKey> stopRooms)
+    {
+        for (int i = 2; i < keys.Count - 1; i++)
+            if (stopRooms.Contains(keys[i])) return i;
+        return -1;
     }
 
     // The avoid-crossing route to offer as an EXTRA card alongside a hazard/gate

@@ -103,6 +103,13 @@ public static class RouteChoicePrompt
 
         RoomKey src = source.Key;
 
+        // Boss rooms marked "stop before entering" matter to a walk the user starts.
+        // One the client starts for them (a Sell Tour stop) walks as it always has.
+        // Read here, on the UI thread, for the plan that may run off it.
+        bool stopsForBossRooms = !askOnlyOverAvoids;
+        IReadOnlySet<RoomKey> bossStopRooms = stopsForBossRooms
+            ? services.BossStopRooms() : new HashSet<RoomKey>();
+
         // Plan the route (which fork, if any, to surface). The BFS passes are
         // synchronous and, on a large graph (Paradigm), can take up to ~1s. When the
         // walker is IDLE, run them on a background thread so the UI thread stays live —
@@ -116,7 +123,7 @@ public static class RouteChoicePrompt
         RoutePlan plan;
         if (services.Walker.State == WalkState.Idle)
         {
-            Task<RoutePlan> planTask = CountThenPlanAsync(services, src, destination);
+            Task<RoutePlan> planTask = CountThenPlanAsync(services, src, destination, bossStopRooms);
             // Only pop the "Calculating…" window if planning takes long enough to
             // notice — a fast plan (most walk-tos) wins the race and never flashes a
             // window; the picker, if any, is then built fully-populated below.
@@ -142,13 +149,13 @@ public static class RouteChoicePrompt
                 // freeze). Not silent — the walk still proceeds from the re-plan.
                 services.Log.Warn(LogCat,
                     $"route pick {src} -> {destination}: off-thread plan faulted ({ex.GetType().Name}: {ex.Message}); re-planning on the UI thread");
-                plan = PlanRouteChoice(services, src, destination);
+                plan = PlanRouteChoice(services, src, destination, bossStopRooms);
             }
         }
         else
         {
             await services.CountPartyGateItemsAsync(src, destination);
-            plan = PlanRouteChoice(services, src, destination);
+            plan = PlanRouteChoice(services, src, destination, bossStopRooms);
         }
 
         // Nav lifecycle stays Info for a fork that surfaces; a plain no-fork walk is
@@ -178,7 +185,7 @@ public static class RouteChoicePrompt
                     $"route pick {src} -> {destination}: {plan.Kind} fork, no avoid on the route — taking the default route");
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
-                CommitWalk(services, destination, gated: false);
+                CommitWalk(services, destination, gated: false, stopForBossRooms: stopsForBossRooms);
                 return true;
             }
         }
@@ -188,8 +195,14 @@ public static class RouteChoicePrompt
             case RoutePlanKind.PlainWalk:
                 calcVm?.Close();   // no picker to show — dismiss any "Calculating…" window
                 ApplyStartMode(services, startMode);
-                CommitWalk(services, destination, gated: false);
+                CommitWalk(services, destination, gated: false, stopForBossRooms: stopsForBossRooms);
                 return true;
+            case RoutePlanKind.BossRoom when plan.Choice is { BossRoom: { } bossRoom } bossChoice:
+                // Named here, on the UI thread: the plan may have run off it.
+                string bossLabel = (services.BossInRoom(bossRoom) is { } bossName ? $"{bossName}'s room" : "a boss room")
+                    + $" ({bossRoom.Map}/{bossRoom.Room})";
+                return await RunPickerAsync(services, destination, src,
+                    bossChoice with { BossRoomLabel = bossLabel }, previewSink, calcVm, calcDialogTask, startMode);
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
@@ -201,7 +214,7 @@ public static class RouteChoicePrompt
                 if (plan.Choice is { } sole
                     && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
                     services.ForcePathObtain(soleItems);
-                CommitWalk(services, destination, gated: true);
+                CommitWalk(services, destination, gated: true, stopForBossRooms: stopsForBossRooms);
                 return true;
             default:
                 return await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
@@ -217,10 +230,11 @@ public static class RouteChoicePrompt
     // only the leader does. The count asks the party and can take a few seconds;
     // it's part of the awaited plan so the "Calculating…" window covers it. It
     // returns at once for a solo walk or a route with no such gate.
-    private static async Task<RoutePlan> CountThenPlanAsync(AppServices services, RoomKey src, RoomKey destination)
+    private static async Task<RoutePlan> CountThenPlanAsync(
+        AppServices services, RoomKey src, RoomKey destination, IReadOnlySet<RoomKey> bossStopRooms)
     {
         await services.CountPartyGateItemsAsync(src, destination);
-        return await Task.Run(() => PlanRouteChoice(services, src, destination));
+        return await Task.Run(() => PlanRouteChoice(services, src, destination, bossStopRooms));
     }
 
     private static bool TakesDefaultRouteUnasked(RoutePlan plan) => plan.Kind switch
@@ -240,7 +254,7 @@ public static class RouteChoicePrompt
     // walk-to doesn't flash a window; a plan that drags gets the feedback.
     private const int RouteCalcRevealDelayMs = 150;
 
-    private enum RoutePlanKind { Token, Teleport, TrapAvoid, AvoidOverride, ItemGate, Blocked, AutoObtainSole, PlainWalk }
+    private enum RoutePlanKind { Token, Teleport, TrapAvoid, AvoidOverride, ItemGate, Blocked, AutoObtainSole, BossRoom, PlainWalk }
 
     // The outcome of route planning: which fork (if any) to surface, the resolved
     // choice for the picker, and the ready-to-log decision line. Pure computation —
@@ -253,7 +267,8 @@ public static class RouteChoicePrompt
     // behind a memoized closure (caches the result, null included) rather than
     // re-running per fork. Reads the graph / movement filter and settings only; does
     // no UI or logging, so it's safe to call from a background thread.
-    private static RoutePlan PlanRouteChoice(AppServices services, RoomKey src, RoomKey destination)
+    private static RoutePlan PlanRouteChoice(
+        AppServices services, RoomKey src, RoomKey destination, IReadOnlySet<RoomKey> bossStopRooms)
     {
         IReadOnlyList<Direction>? baseCache = null; bool baseDone = false;
         IReadOnlyList<Direction>? BaseRoute()
@@ -336,6 +351,14 @@ public static class RouteChoicePrompt
                     BuildBlockedChoice(services, src, destination, blocked),
                     $"route pick {src} -> {destination}: blocked — no full route; can run as far as "
                     + $"{blocked.StopRoom} ({blocked.BlockDir} is {blocked.BlockExit.Hint}); showing picker");
+            // An otherwise plain walk whose route passes through a boss room marked
+            // "stop before entering", with a way around it: around, up to it, or through.
+            if (RouteChoicePlanner.EvaluateBossRoom(
+                    services.Bfs, services.Movement, services.RoomGraph, src, destination, bossStopRooms, BaseRoute)
+                is { } boss)
+                return new(RoutePlanKind.BossRoom, boss,
+                    $"route pick {src} -> {destination}: boss-room fork — the route passes through stop-before boss room "
+                    + $"{boss.BossRoom} ({boss.GatedStepCount} step(s)); a way around is {boss.FreeStepCount}; showing picker");
             return new(RoutePlanKind.PlainWalk, null,
                 $"route pick {src} -> {destination}: no fork (free route needs nothing acquirable); plain walk");
         }
@@ -687,6 +710,30 @@ public static class RouteChoicePrompt
             return result is not null;
         }
 
+        if (choice.Kind == RouteChoiceKind.BossRoom)
+        {
+            switch (result)
+            {
+                case RouteChoiceResult.Free:
+                    // "Walk around": keep every stop-before boss room out of the route.
+                    HashSet<RoomKey> around = new(services.BossStopRooms());
+                    around.Remove(destination);
+                    around.Remove(source);
+                    CommitWalk(services, destination, gated: false, walkAround: around);
+                    break;
+                case RouteChoiceResult.Gated:
+                    // "Walk up to it and wait": the route through, paused one room short.
+                    CommitWalk(services, destination, gated: false);
+                    break;
+                case RouteChoiceResult.GatedNoAcquire:
+                    // "Walk through": the same route, with the stop-before mark set aside.
+                    CommitWalk(services, destination, gated: false, stopForBossRooms: false);
+                    break;
+                // null → cancelled: walk nothing.
+            }
+            return result is not null;
+        }
+
         if (choice.Kind == RouteChoiceKind.AvoidOverride)
         {
             switch (result)
@@ -840,7 +887,11 @@ public static class RouteChoicePrompt
     private static void CommitWalk(
         AppServices services, RoomKey destination, bool gated,
         bool armAcquisition = true, bool avoidTeleports = false, bool avoidTraps = false,
-        bool ignoreAvoids = false, bool preferTeleportFree = true)
+        bool ignoreAvoids = false, bool preferTeleportFree = true,
+        // A walk the user starts pauses one room short of each boss room marked "stop
+        // before entering" that it passes through, unless they picked the walk around
+        // them (walkAround) or the walk through regardless (stopForBossRooms: false).
+        IReadOnlySet<RoomKey>? walkAround = null, bool stopForBossRooms = true)
     {
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -853,6 +904,8 @@ public static class RouteChoicePrompt
         services.MovementCoordinator.ClearGate(
             MovementCoordinator.UserGate, nameof(RouteChoicePrompt));
         services.LoopHandoff.NoteWalkCommitted(destination);
+        services.Walker.SetBossRoomRule(destination, walkAround,
+            haltBefore: stopForBossRooms && walkAround is null ? services.BossStopRooms() : null);
         services.Walker.WalkTo(
             destination,
             planThroughAcquirableGates: gated,

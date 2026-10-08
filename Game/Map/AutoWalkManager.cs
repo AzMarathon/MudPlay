@@ -1041,6 +1041,15 @@ public sealed class AutoWalkManager : IRecoverableEngine
             : preferTeleportFree is null ? _automaticWalkTeleports?.Invoke()
             : null;
         bool preferFree = preferTeleportFree ?? false;
+        // The boss-room choice belongs to the walk it was made for. A walk's own
+        // re-plan keeps it and so does a detour that takes the walker over silently
+        // and hands it back; any other new walk starts without one.
+        if (!_replanningInPlace)
+        {
+            if (_pendingBossRule is not null) _bossRule = _pendingBossRule;
+            else if (!supersedeSilently) _bossRule = null;
+            _pendingBossRule = null;
+        }
         if (preferTeleportFree is null && !_replanningInPlace && automaticTeleports is not null)
             _log?.Info("Walker",
                 $"automatic walk to {destination}: may use {automaticTeleports.Count} allowed teleport(s) (Settings → Teleports)");
@@ -1111,6 +1120,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // _destination so failures don't leave the walker stuck.
         Reset();
         _walkFilter = automaticTeleports is null ? null : new AutomaticWalkTeleportFilter(_filter, automaticTeleports);
+        _bossRuleActive = _bossRule is { } bossRule && bossRule.IsFor(destination);
+        if (_bossRuleActive && _bossRule!.WalkAround is { } aroundRooms)
+            _walkFilter = new WalkAroundRoomsFilter(_walkFilter ?? _filter, aroundRooms);
 
         Room? source = _tracker.State.CurrentRoom;
         if (source is null)
@@ -1141,7 +1153,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // room one hop short, so the walker halts adjacent instead of stepping in
         // and tripping the spawn. Applied here so every WalkTo caller (map click,
         // GOTO, @goto, events, recovery) honours it; loop / auto-lair are untouched.
+        RoomKey requested = destination;
         destination = ApplyStopBefore(source.Key, destination);
+        if (_bossRuleActive) _bossRule!.NoteWalkedTo(requested, destination);
 
         if (source.Key.Equals(destination))
         {
@@ -1832,6 +1846,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // A room command that only works in an empty room waits for the room to
         // clear instead of going out to be refused.
         if (HeldForEmptyRoom(_path[_index], alreadySent: false)) return;
+        if (HaltsBeforeBossRoom(_path[_index])) return;
 
         WalkStep step = _path[_index];
         // Auto-sneak wants a sneak in place before we step; it holds the coordinator
@@ -3017,6 +3032,99 @@ public sealed class AutoWalkManager : IRecoverableEngine
         ClearGreetTeleportWait();
     }
 
+    // ----- Stopping before a boss room on the way ----------------------------
+    //
+    // ApplyStopBefore covers a walk that ENDS in a boss room flagged "stop before
+    // entering". A walk the user starts that only passes through one used to walk
+    // straight in (report paradigm-20261007-224918). The route card settles how such
+    // a walk goes (RouteChoicePrompt), and that choice rides with the walk here:
+    // rooms to keep out of the route altogether, and rooms to stop one short of.
+    // The stop is a pause on the user's own gate, so Resume walks on through.
+    private sealed class BossRoomRule(
+        RoomKey destination, IReadOnlySet<RoomKey>? walkAround, IReadOnlySet<RoomKey>? haltBefore)
+    {
+        private RoomKey? _walkedTo;
+
+        public IReadOnlySet<RoomKey>? WalkAround { get; } = walkAround;
+        public IReadOnlySet<RoomKey>? HaltBefore { get; } = haltBefore;
+        // Boss rooms this walk no longer stops for: stopped at once already, or
+        // beside the room the walk began in.
+        public HashSet<RoomKey> Passed { get; } = new();
+
+        // The walk's own re-plans name where it is headed, which a stop-before
+        // destination moved one room short of what was asked for.
+        public bool IsFor(RoomKey target) => target.Equals(destination) || target.Equals(_walkedTo);
+        public void NoteWalkedTo(RoomKey requested, RoomKey actual)
+        {
+            if (requested.Equals(destination)) _walkedTo = actual;
+        }
+    }
+
+    private BossRoomRule? _bossRule;
+    private BossRoomRule? _pendingBossRule;
+    private bool _bossRuleActive;
+    private Action<RoomKey>? _bossRoomHalt;
+
+    // The boss room the walk is paused beside, until a step goes out again.
+    public RoomKey? HaltedBeforeBossRoom { get; private set; }
+
+    // For the bug report: what this walk does about stop-before boss rooms.
+    public string BossRoomRuleSummary =>
+        !_bossRuleActive || _bossRule is not { } rule ? "none (walks through)"
+        : rule.WalkAround is { } around ? $"walking around {around.Count} stop-before boss room(s)"
+        : $"pausing before {rule.HaltBefore?.Count ?? 0} stop-before boss room(s); "
+            + $"not stopping again for: {(rule.Passed.Count == 0 ? "(none)" : string.Join(", ", rule.Passed))}";
+
+    // Called when the walk reaches the room before a boss room it was told to stop
+    // for. The handler pauses movement and tells the user; if it leaves the walk
+    // running, the walk goes on in.
+    public void SetBossRoomHaltHandler(Action<RoomKey> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        _bossRoomHalt = handler;
+    }
+
+    // How the next WalkTo to destination treats boss rooms flagged "stop before
+    // entering": walkAround keeps them out of every plan the walk makes, haltBefore
+    // pauses the walk one room short of each. Both null clears any earlier choice.
+    // A boss room beside the room we stand in is never stopped for: walking on from
+    // there is the go-ahead to enter.
+    public void SetBossRoomRule(RoomKey destination, IReadOnlySet<RoomKey>? walkAround, IReadOnlySet<RoomKey>? haltBefore)
+    {
+        if (walkAround is null && haltBefore is null)
+        {
+            _pendingBossRule = null;
+            _bossRule = null;
+            return;
+        }
+        BossRoomRule rule = new(destination, walkAround, haltBefore);
+        if (haltBefore is not null && _tracker.State.CurrentRoom is { } here)
+        {
+            if (haltBefore.Contains(here.Key)) rule.Passed.Add(here.Key);
+            foreach (RoomExit exit in here.Exits.Values)
+                if (haltBefore.Contains(exit.Target)) rule.Passed.Add(exit.Target);
+        }
+        _pendingBossRule = rule;
+    }
+
+    private bool HaltsBeforeBossRoom(WalkStep step)
+    {
+        HaltedBeforeBossRoom = null;
+        if (!_bossRuleActive || _bossRule is not { HaltBefore: { } stopRooms } rule) return false;
+        if (step is not MoveStep move
+            || _tracker.State.CurrentRoom is not { } here
+            || !here.Exits.TryGetValue(move.Direction, out RoomExit exit))
+            return false;
+        if (!stopRooms.Contains(exit.Target) || !rule.Passed.Add(exit.Target)) return false;
+
+        _log?.Info("Walker",
+            $"step {_index + 1}: the next room ({exit.Target}) is a boss room marked stop-before — pausing here ({here.Key})");
+        _bossRoomHalt?.Invoke(exit.Target);
+        if (!_coordinator.IsPaused) return false;
+        HaltedBeforeBossRoom = exit.Target;
+        return true;
+    }
+
     // ----- A room command that only works in an empty room -------------------
     //
     // Some room commands carry a `nomonsters` condition (`go hole:nomonsters …`):
@@ -3457,6 +3565,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _origin = null;
         _stepInFlight = false;
         _emptyRoom.End();
+        _bossRuleActive = false;
+        HaltedBeforeBossRoom = null;
         _awaitingPromptForCommand = false;
         _awaitingTrapDisarm = false;
         _awaitingDoorOpen = false;
