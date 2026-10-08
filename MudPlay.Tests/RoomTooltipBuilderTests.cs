@@ -993,6 +993,64 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Assert.DoesNotContain("grants an ability", text);
     }
 
+    // Report paradigm-20261007-194642: 2/12043's "lift latch" summons a monster and
+    // casts a quest spell. Any line with a `cast` was taken to be shown as a teleport,
+    // so this one was shown nowhere. A cast that doesn't move you is an effect of its
+    // own: it no longer hides the summon beside it, and a command that only casts
+    // reads "casts <spell>". A cast that does teleport still reads as the teleport.
+    [Fact]
+    public void Build_CommandThatCastsANonTeleportSpell_IsStillListed()
+    {
+        const string cmdRooms = """
+            [
+              { "Map Number": 2, "Room Number": 12043, "Name": "Ruined Bedroom",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 1, "CMD": 5369,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 2, "Room Number": 20, "Name": "Cellar",
+                "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 0, "CMD": 0,
+                "N": "0", "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string cmdTbinfo = """
+            [
+              { "Number": 5369, "LinkTo": 0,
+                "Action": "lift latch:checkability 210 3:message 9461:summon 1293:cast 5605:text 5370\npray:message 12:cast 300\ngo trapdoor:cast 700\n",
+                "Called From": "Room 2/12043" }
+            ]
+            """;
+        const string monsterRows = """
+            [ { "Number": 1293, "Name": "shade of Tarl" } ]
+            """;
+        const string spellRows = """
+            [ { "Number": 5605, "Name": "tarl text" },
+              { "Number": 300, "Name": "minor healing" },
+              { "Number": 700, "Name": "trapdoor drop", "Abil-0": 140, "AbilVal-0": 20, "Abil-1": 141, "AbilVal-1": 2 } ]
+            """;
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Rooms.json"),    cmdRooms);
+        File.WriteAllText(Path.Combine(setRoot, "TBInfo.json"),   cmdTbinfo);
+        File.WriteAllText(Path.Combine(setRoot, "Monsters.json"), monsterRows);
+        File.WriteAllText(Path.Combine(setRoot, "Spells.json"),   spellRows);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+        RoomGraphManager graph = new(cache);
+        graph.OnActiveSetChanged(_setName);
+        TBInfoStore tbinfo = new(cache);
+        tbinfo.OnActiveSetChanged(_setName);
+
+        Room room = graph.GetRoom(new RoomKey(2, 12043))!;
+        string text = RoomTooltipBuilder.Build(room, graph, cache, tbinfo,
+            spellCatalog: new MudPlay.Game.Spells.KnownSpellCatalog(cache));
+
+        Assert.Contains("lift latch — summons shade of Tarl", text);
+        Assert.Contains("pray — casts minor healing", text);
+        Assert.Contains("go trapdoor → Cellar (2/20)", text);
+        Assert.DoesNotContain("casts trapdoor drop", text);
+    }
+
     [Fact]
     public void Build_EffectRoomCommands_NameSpellItemAndAbility()
     {

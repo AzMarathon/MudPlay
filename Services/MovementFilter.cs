@@ -114,6 +114,19 @@ public sealed class MovementFilter : IRoomFilter
     // (see InventoryReadyProbe) — an unparsed inventory never refuses a walk.
     public Func<int, bool>? ItemCarriedProbe { get; set; }
 
+    // Whether the party is short of a gate item the leader holds: an (Item: N) or
+    // (Ticket: N) exit carries across only the member holding the item, so one
+    // copy in the leader's pack doesn't open the gate for the followers. Wired by
+    // AppServices to what the last party count found; unset or false leaves the
+    // gate to the leader's own pack, as for a solo crosser.
+    public Func<int, bool>? PartyShortOfItemProbe { get; set; }
+
+    // Whether the crosser holds an item gate's item as far as crossing goes.
+    // perMember is an Item / Ticket exit, where a party short of copies doesn't.
+    public bool HoldsGateItem(int itemId, bool perMember) =>
+        ItemCarriedProbe?.Invoke(itemId) == true
+        && !(perMember && PartyShortOfItemProbe?.Invoke(itemId) == true);
+
     // True once an inventory dump has parsed. Until then the item / hazard
     // gates stand down — same "don't refuse on what we can't evaluate" rule as
     // an unknown level. Wired by AppServices to Inventory.IsLoaded.
@@ -261,8 +274,9 @@ public sealed class MovementFilter : IRoomFilter
             case RoomExitHint.Ticket:
                 // A raft / ticket / held-item exit: the item must be in hand to
                 // cross — no bash or pick alternative. Route around when we
-                // lack it (or acquire it, per the item's path flags).
-                return exit.KeyItemId > 0 && !carries(exit.KeyItemId);
+                // lack it (or acquire it, per the item's path flags). In hand for
+                // every member: a party short of copies splits at the gate.
+                return exit.KeyItemId > 0 && !HoldsGateItem(exit.KeyItemId, perMember: true);
 
             case RoomExitHint.KeyLocked:
                 return IsLockedDoorImpassable(in exit, carries);

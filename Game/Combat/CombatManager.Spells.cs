@@ -1716,7 +1716,7 @@ public sealed partial class CombatManager
         int magical = _monsterMagic.MagicalLevel(monsterNumber);
         if (magical <= 0) return false;                 // any weapon hits
 
-        int normalHit = _itemMagic.HitMagic(settings.NormalWeapon);
+        int normalHit = NormalHitMagic(settings);
         if (normalHit < 0) return false;                // unknown normal → don't second-guess
         if (normalHit >= magical) return false;         // normal already hits → keep it
 
@@ -1734,13 +1734,13 @@ public sealed partial class CombatManager
     private bool WeaponPathExhausted(
         CombatSettings settings, string resolvedSpecies, int monsterNumber)
     {
-        if (!WeaponCannotHit(settings.NormalWeapon, resolvedSpecies, monsterNumber,
+        if (!WeaponCannotHit(NormalHitMagic(settings), resolvedSpecies, monsterNumber,
                 _normalWeaponFailedMonsters))
             return false;
 
         if (!string.IsNullOrWhiteSpace(settings.AlternateWeapon)
-            && !WeaponCannotHit(settings.AlternateWeapon, resolvedSpecies, monsterNumber,
-                _alternateWeaponFailedMonsters))
+            && !WeaponCannotHit(_itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1,
+                resolvedSpecies, monsterNumber, _alternateWeaponFailedMonsters))
             return false;
 
         return true;
@@ -1752,16 +1752,52 @@ public sealed partial class CombatManager
     // indexes aren't wired or the weapon / monster levels are unknown — we don't
     // second-guess a swing on missing data.
     private bool WeaponCannotHit(
-        string? weapon, string resolvedSpecies, int monsterNumber, HashSet<string> failSet)
+        int hit, string resolvedSpecies, int monsterNumber, HashSet<string> failSet)
     {
         if (!string.IsNullOrEmpty(resolvedSpecies) && failSet.Contains(resolvedSpecies))
             return true;
         if (_monsterMagic is null || _itemMagic is null) return false;
         int magical = _monsterMagic.MagicalLevel(monsterNumber);
         if (magical <= 0) return false;                 // any weapon hits
-        int hit = _itemMagic.HitMagic(weapon);
         if (hit < 0) return false;                       // unknown weapon → don't assume
         return hit < magical;
+    }
+
+    // Why the weapons are out against a monster, for the skip line in the log: the
+    // magic it needs against what each weapon hits with, and any no-effect evidence
+    // from this room. Empty when the monster needs no magic and nothing was observed.
+    private string WeaponGateNote(CombatSettings settings, int monsterNumber, string? species)
+    {
+        int magical = _monsterMagic?.MagicalLevel(monsterNumber) ?? 0;
+        bool normalFailed = !string.IsNullOrEmpty(species) && _normalWeaponFailedMonsters.Contains(species);
+        bool altFailed = !string.IsNullOrEmpty(species) && _alternateWeaponFailedMonsters.Contains(species);
+        if (magical <= 0 && !normalFailed && !altFailed) return string.Empty;
+        return $" (needs hit magic {magical}; normal weapon hits {NormalHitMagic(settings)}" +
+               (normalFailed ? ", no effect seen" : string.Empty) +
+               $"; alternate hits {_itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1}" +
+               (altFailed ? ", no effect seen" : string.Empty) + "; -1 = unknown)";
+    }
+
+    // The magic-hit level of the weapon that swings on the normal side, or -1 when
+    // unknown (callers fail open). That is the configured normal weapon while it
+    // can come to hand. When the character doesn't have it, the swap to it can't
+    // land and whatever is on the hand does the swinging, so that weapon is judged
+    // instead: a profile still naming the plain weapon a magical one replaced wrote
+    // off every monster that needs magic to hit (report paradigm-20261007-182916).
+    private int NormalHitMagic(CombatSettings settings)
+    {
+        if (_itemMagic is null) return -1;
+        int configured = _itemMagic.HitMagic(settings.NormalWeapon);
+        if (string.IsNullOrWhiteSpace(settings.NormalWeapon)) return configured;
+        if (_hasItem?.Invoke(settings.NormalWeapon) != false) return configured;
+
+        string? worn = _readWornWeapon?.Invoke();
+        if (string.IsNullOrWhiteSpace(worn)) return configured;
+        // The alternate on the hand says nothing about the normal side.
+        if (!string.IsNullOrWhiteSpace(settings.AlternateWeapon)
+            && string.Equals(worn.Trim(), settings.AlternateWeapon.Trim(), StringComparison.OrdinalIgnoreCase))
+            return configured;
+        return _itemMagic.HitMagic(worn);
     }
 
     // Both configured weapons proved ineffective against the current target (a "no
@@ -1834,7 +1870,7 @@ public sealed partial class CombatManager
         if (_speciesByNumber.Count == 0) return list;
 
         CombatSettings settings = _readSettings();
-        int normalHit = _itemMagic?.HitMagic(settings.NormalWeapon) ?? -1;
+        int normalHit = NormalHitMagic(settings);
         int altHit = _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1;
         foreach ((int number, string species) in _speciesByNumber)
         {
@@ -1976,7 +2012,7 @@ public sealed partial class CombatManager
         int magical = _monsterMagic.MagicalLevel(monsterNumber);
         if (magical <= 0) return null;                                  // any weapon hits
 
-        int normalHit = _itemMagic.HitMagic(settings.NormalWeapon);
+        int normalHit = NormalHitMagic(settings);
         if (normalHit < 0) return null;                                 // unknown normal weapon → fail open
         if (normalHit >= magical) return null;                          // normal hits
 

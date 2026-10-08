@@ -657,9 +657,9 @@ public sealed class TrialGearFinderTests
         };
     }
 
-    private static ItemFinderEntry StabWeapon(ItemDamageModel model, string name, int min, int max, int encum = 0)
+    private static ItemFinderEntry StabWeapon(ItemDamageModel model, string name, int min, int max, int encum = 0, int bsMin = 0)
     {
-        var weapon = new ItemDamageModel.WeaponInputs(min, max, 1000, 0, 0, 0, 0, 0, 0, CanBackstab: true);
+        var weapon = new ItemDamageModel.WeaponInputs(min, max, 1000, 0, 0, 0, 0, bsMin, 0, CanBackstab: true);
         BSDamageResult? bs = model.Backstab(weapon);
         (double sideMin, double sideMax) = model.BackstabSides(weapon);
         return new ItemFinderEntry
@@ -811,6 +811,30 @@ public sealed class TrialGearFinderTests
         Assert.Equal("sabre", best[EquipmentSlot.Weapon]);
         Assert.Equal(ExhaustiveBestBackstab(model, RealmType.ParaMud, catalog, StabSlots, null),
             RangeOf(model, RealmType.ParaMud, catalog, best));
+    }
+
+    // A weapon's minimum is its min damage and its own BS-min modifier together
+    // (user, 2026-10-07). The dirk hits lower than the stiletto but carries +12 BS
+    // min, which puts its backstab minimum ahead: both count, and the higher
+    // resulting minimum wins.
+    [Fact]
+    public void FindBestBackstab_WeaponMinDamageAndItsBsMinModifierBothCount()
+    {
+        ItemDamageModel model = Stabber(RealmType.ParaMud);
+        var catalog = new[]
+        {
+            StabWeapon(model, "stiletto", min: 7, max: 20),
+            StabWeapon(model, "dirk", min: 4, max: 20, bsMin: 12),
+        };
+        var slots = new[] { EquipmentSlot.Weapon };
+
+        var best = TrialGearFinder.FindBestBackstab(catalog, slots, new HashSet<EquipmentSlot>(), NoStabCurrent(),
+            picks => SidesOf(model, catalog, picks), 0, ClassEquipProfile.Unknown, null);
+
+        BSDamageResult stiletto = RangeOf(model, RealmType.ParaMud, catalog, new Dictionary<EquipmentSlot, string> { [EquipmentSlot.Weapon] = "stiletto" });
+        BSDamageResult dirk = RangeOf(model, RealmType.ParaMud, catalog, new Dictionary<EquipmentSlot, string> { [EquipmentSlot.Weapon] = "dirk" });
+        Assert.True(dirk.MinDamage > stiletto.MinDamage);   // 2·4 + 12 beats 2·7
+        Assert.Equal("dirk", best[EquipmentSlot.Weapon]);
     }
 
     // The weapon-first pass of a search order asks for the weapon alone; the gear

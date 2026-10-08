@@ -624,6 +624,7 @@ public static class BugReportBuilder
         Kv(sb, "Awaiting backstab resolution", combat.AwaitingBackstabResolution
             ? $"yes (target={combat.PendingBackstabSpecies ?? "(none)"})"
             : "no");
+        Kv(sb, "Next pick held for a summon-on-death re-display", svc.Combat.AwaitingSummonRescan ? "yes" : "no");
         // ShadowRest hold explains a stealthed character resting instead of
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
@@ -1688,6 +1689,7 @@ public static class BugReportBuilder
             walker.JourneyOrigin is { } origin ? $"{origin.Map}/{origin.Room}" : "(none)");
         Kv(sb, "Next planned direction",
             walker.PeekNextPlannedDirection() is { } dir ? dir.ToString() : "(none / command step)");
+        Kv(sb, "Room command held for an empty room", walker.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",
@@ -1739,6 +1741,7 @@ public static class BugReportBuilder
         sb.Append("\n**Path-item detours**\n\n");
         Kv(sb, "Path-item search demand", svc.PathItemDemand.SearchDemandActive.ToString());
         Kv(sb, "Party path-item search demand", svc.PartyPathItemGate.SearchDemandActive.ToString());
+        Kv(sb, "Party count of per-member gate items", svc.PartyGateCountSummary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));

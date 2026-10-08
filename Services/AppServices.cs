@@ -3868,6 +3868,7 @@ public sealed class AppServices
         // (same rule as level / wealth / class above).
         Movement.InventoryReadyProbe = () => Inventory.IsLoaded;
         Movement.ItemCarriedProbe = IsItemCarried;
+        Movement.PartyShortOfItemProbe = IsPartyShortOfGateItem;
         Movement.StrengthProvider = () => Stats.HasParsed ? PlayerStats.Strength : (int?)null;
         Movement.PicklocksProvider = () => Stats.HasParsed ? PlayerStats.Picklocks : (int?)null;
         // Same bash ceiling the door FSM uses, so the filter and DoorOpenManager
@@ -4398,6 +4399,7 @@ public sealed class AppServices
         // in" arrivals + the room re-display resolve to one engage decision on the
         // full group (rooms nuke-first instead of pecking single-target). Same shape
         // as the walker's voyage scheduler — keeps the Game/Combat layer UI-free.
+        Combat.SetDeathSummonProbe(MonsterDeathSummon.SummonsOnDeath);
         Combat.SetArrivalSettleScheduler((delay, callback) =>
         {
             var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
@@ -4678,6 +4680,9 @@ public sealed class AppServices
                 // live capture flag cover the rest.
                 || text.StartsWith("You are carrying ", StringComparison.Ordinal)
                 || Inventory.IsCapturing
+                // Another character handing us an item or coins: InventoryManager
+                // reads the line itself and files it.
+                || Inventory.IsReceivedHandOverLine(text)
                 // "Uses remaining: N" off an item look — ItemChargeTracker reads it via
                 // TokenCatalog with no router pattern, so reuse that same recognizer.
                 || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0
@@ -5407,7 +5412,9 @@ public sealed class AppServices
             // and fights to clear it — the do-not-attack rest exception.
             isAutoCombatEnabled: () => ReadAutoModeFlag(d => d.AutoCombat) && !CombatSuppressedInCurrentRoom(),
             requestEngage: Combat.RequestRestClearEngage);
-        Combat.SetRestClearGate(() => Health.ForceClearForRest);
+        // The walker asks for the same clear while a room command that only works in
+        // an empty room waits on a monster (AutoWalkManager.AwaitingEmptyRoom).
+        Combat.SetRestClearGate(() => Health.ForceClearForRest || Walker is { AwaitingEmptyRoom: true });
 
         // Break-before-run: turning auto-attack OFF mid-fight releases the Combat
         // gate so the walker resumes — send `break` first when the user has
@@ -5456,14 +5463,19 @@ public sealed class AppServices
         // lets item transactions move the encumbrance estimate between dumps;
         // the slot resolver labels a freshly-worn piece with its real slot (the
         // wear line names none) so "Snapshot Current" files it correctly (both
-        // read ItemNames, already loaded above). MarkStale on profile swap so the
-        // new character's first gate evaluation waits for a fresh `i`.
+        // read ItemNames, already loaded above); the record-name check tells a
+        // player's "gives you" hand-over from an NPC's flavour line, and the key
+        // check sends a handed-over key to the key ring. MarkStale on profile swap
+        // so the new character's first gate evaluation waits for a fresh `i`.
         Inventory = new Game.Inventory.InventoryManager(
             Log,
             ItemNames.WeightOf,
             name => ItemNames.WornCodeOf(name) is int worn
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
-                : null);
+                : null,
+            ItemNames.IsRecordName,
+            name => ItemNames.FindByName(name) is int number
+                && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData,
             () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
@@ -6624,6 +6636,10 @@ public sealed class AppServices
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
+        // Handed out: the gate the party was short for is open again.
+        PartyPathItemGate.Provisioned += ClearPartyShortGateItem;
+        // A count is about one roster; a member joining or leaving voids it.
+        PartyState.Members.CollectionChanged += (_, _) => ClearPartyShortGateItems("the party changed");
 
         // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
         // drop an item from the override once it's covered — the item itself or
@@ -6632,7 +6648,10 @@ public sealed class AppServices
         // crosser who picks up a different boat mid-route stops being chased for
         // the one the picker chose. The abandon-clear on Walker.Event is wired after
         // the walker is constructed (see below).
-        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsPathItemCovered);
+        // An item the party is short of stays forced though the leader holds a copy:
+        // the copies still to come are for the members.
+        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(
+            id => IsPathItemCovered(id) && !IsPartyShortOfGateItem(id));
 
         // Registered AFTER the forced-obtain draining handler above so the set is
         // fully emptied before this checks it: once the route counter lands (found on
@@ -7045,6 +7064,12 @@ public sealed class AppServices
         // A key an NPC hands over for the asking is as fetchable as one a summoned
         // monster always drops (the old hermit's jagged bone key for the Library).
         Walker.SetDoorKeySourceProbe(DoorKeyIsFetchable);
+        Walker.SetRoomClearHooks(
+            roomHasMonster: () => RoomClassifier.Current is { } obs
+                && obs.Entities.Any(e => e.Kind == Game.Combat.EntityKind.Monster),
+            requestRoomClear: () => Combat.RequestRestClearEngage(),
+            abortPartyReform: () => AutoParty.AbortReformWaits("the teleport was refused"));
+        RoomClassifier.EntitiesObserved += _ => Walker.NoteRoomObserved();
 
         // Hold a crossing whose gate item is missing but already being fetched,
         // rather than sending an opener and a move that can only fail. Requires a
@@ -12200,6 +12225,125 @@ public sealed class AppServices
 
     private bool IsPathItemCovered(int itemId) => CountPathItemCoverage(itemId) > 0;
 
+    // ----- Gate items the party is short of ------------------------------
+    //
+    // An (Item: N) / (Ticket: N) exit carries across only the member holding the
+    // item, so a leader with a copy who leads followers without one crosses alone
+    // and splits the party (report paradigm-20261007-183903: two darkwood rings
+    // for three people, no route card, the walk failed only after the split).
+    // Before a walk the user starts is planned, the leader asks the party how many
+    // each holds; an item the party is short of then gates its exits for planning,
+    // so the route card names it. Swapped whole, never edited in place: the plan
+    // reads it from a background thread.
+    private volatile IReadOnlyDictionary<int, (int Need, int OthersHeld)> _partyGateCounts =
+        new Dictionary<int, (int, int)>();
+
+    // Short while the leader's own copies plus what the members reported don't
+    // reach one each. The leader's count is read live, so buying the missing
+    // copies opens the gate without another round of asking.
+    private bool IsPartyShortOfGateItem(int itemId) =>
+        _partyGateCounts.TryGetValue(itemId, out (int Need, int OthersHeld) c)
+        && CountItemCarried(itemId) + c.OthersHeld < c.Need;
+
+    // "darkwood ring (one each for your party of 3; 2 held)" on a route card, or
+    // the plain name when the party isn't short of it.
+    public string? RouteItemLabel(int itemId)
+    {
+        string? name = ItemNames.GetName(itemId);
+        if (name is null || !IsPartyShortOfGateItem(itemId)) return name;
+        (int need, int othersHeld) = _partyGateCounts[itemId];
+        return $"{name} (one each for your party of {need}; {CountItemCarried(itemId) + othersHeld} held)";
+    }
+
+    // The last party count per gate item, for the bug report.
+    public string PartyGateCountSummary
+    {
+        get
+        {
+            IReadOnlyDictionary<int, (int Need, int OthersHeld)> counts = _partyGateCounts;
+            if (counts.Count == 0) return "(none)";
+            return string.Join("; ", counts.Select(kv =>
+            {
+                int held = CountItemCarried(kv.Key) + kv.Value.OthersHeld;
+                return $"{ItemNames.GetName(kv.Key) ?? $"item #{kv.Key}"}: party of {kv.Value.Need} holds {held}"
+                    + (held < kv.Value.Need ? " (short — gates closed to the plan)" : "");
+            }));
+        }
+    }
+
+    private void ClearPartyShortGateItem(int itemId)
+    {
+        if (!_partyGateCounts.ContainsKey(itemId)) return;
+        var next = new Dictionary<int, (int, int)>(_partyGateCounts);
+        next.Remove(itemId);
+        _partyGateCounts = next;
+        Log.Info(Game.Map.AutoSearchManager.LogCategory,
+            $"party gate count: item {itemId} handed out — its gates are open to the party again");
+    }
+
+    private void ClearPartyShortGateItems(string why)
+    {
+        if (_partyGateCounts.Count == 0) return;
+        _partyGateCounts = new Dictionary<int, (int, int)>();
+        Log.Info(Game.Map.AutoSearchManager.LogCategory, $"party gate count: dropped — {why}");
+    }
+
+    // Count the party's copies of every per-member gate item on the way to
+    // destination that the leader holds, so the plan that follows can tell a gate
+    // the whole party clears from one only the leader does. A no-op unless we lead
+    // followers. Closing one gate can send the route through another, so the route
+    // is re-read until it crosses nothing uncounted (three rounds at most).
+    public async Task CountPartyGateItemsAsync(Game.Map.RoomKey source, Game.Map.RoomKey destination)
+    {
+        ClearPartyShortGateItems("a new walk is being planned");
+        if (!PartyState.IsInParty || !PartyState.SelfIsLeader || PartyState.Members.Count <= 1) return;
+        if (!Inventory.IsLoaded) return;
+
+        var counted = new HashSet<int>();
+        for (int round = 0; round < 3; round++)
+        {
+            List<int> toCount = PerMemberGateItemsOnRoute(source, destination, counted);
+            if (toCount.Count == 0) return;
+
+            var next = new Dictionary<int, (int, int)>(_partyGateCounts);
+            foreach (int id in toCount)
+            {
+                counted.Add(id);
+                if (ItemNames.GetName(id) is not { Length: > 0 } name) continue;
+                Game.Remote.PartyInventoryProbe.PartyItemResult r = await PartyInventory.QueryAsync(id, name);
+                int need = 1 + r.Expected;
+                int own = CountItemCarried(id);
+                next[id] = (need, r.TotalCount);
+                string members = r.CountsByMember.Count == 0 ? "nobody answered"
+                    : string.Join(", ", r.CountsByMember.Select(kv => $"{kv.Key} {kv.Value}"));
+                Log.Info(Game.Map.AutoSearchManager.LogCategory,
+                    $"party gate count: {name} — party of {need} holds {own + r.TotalCount} (you {own}; {members}; "
+                    + $"{r.Replied}/{r.Expected} answered)"
+                    + (own + r.TotalCount < need ? " — short, its gates are closed to the plan" : " — enough"));
+            }
+            _partyGateCounts = next;
+        }
+    }
+
+    // The (Item: N) / (Ticket: N) gate items on the route as it plans now that the
+    // leader holds and hasn't counted yet.
+    private List<int> PerMemberGateItemsOnRoute(
+        Game.Map.RoomKey source, Game.Map.RoomKey destination, HashSet<int> counted)
+    {
+        var ids = new List<int>();
+        if (Bfs.FindPath(source, destination, Movement) is not { } path) return ids;
+        Game.Map.RoomKey cur = source;
+        foreach (Game.Map.Direction dir in path)
+        {
+            if (RoomGraph.GetRoom(cur) is not { } room || !room.Exits.TryGetValue(dir, out Game.Map.RoomExit exit)) break;
+            if (exit.Hint is Game.Map.RoomExitHint.Item or Game.Map.RoomExitHint.Ticket
+                && exit.KeyItemId > 0 && !counted.Contains(exit.KeyItemId) && !ids.Contains(exit.KeyItemId))
+                ids.Add(exit.KeyItemId);
+            cur = exit.Target;
+        }
+        return ids;
+    }
+
     // Set (replacing any prior) the items the next walk should obtain for its path
     // regardless of their AutoObtainForPath flag. Called by RouteChoicePrompt when
     // the user picks the hazard "obtain then cross" route.
@@ -12588,17 +12732,21 @@ public sealed class AppServices
     // walk crossed unprovisioned — it would `rub bloodstone orb` while carrying no
     // orb and bonk on the hidden exit (report paradigm-20260911-095404).
     //
-    // A door key is admitted only when a room command can summon a guaranteed
-    // dropper for it; any other key has no source to arm, so forcing it would only
-    // switch on a per-room `sea` that can never succeed.
+    // A door key is admitted only when it has a reliable source (DoorKeyIsFetchable);
+    // any other key has none to arm, so forcing it would only switch on a per-room
+    // `sea` that can never succeed.
     public IReadOnlyList<int> SourceableGateItems(IReadOnlyList<RouteRequirement> requirements)
         => RouteChoicePlanner.SourceableGateItems(requirements, DoorKeyIsFetchable);
 
     // A door key the walk can reliably go and get: a room command summons a
-    // monster that always drops it, or an NPC hands it over for the asking (the
-    // old hermit's jagged bone key for the Library).
+    // monster that always drops it, an NPC hands it over for the asking (the old
+    // hermit's jagged bone key for the Library), or a shop sells it (the Thieves'
+    // Guild's skeleton key). A shop was left out, so a route through a door the
+    // character could neither pick nor bash walked up to it keyless and failed
+    // there (report paradigm-20261007-192215).
     private bool DoorKeyIsFetchable(int itemId)
-        => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId);
+        => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId)
+           || ShopStock.ShopsSelling(itemId).Count > 0;
 
     // A loop is about to approach through gates because nothing on it can be
     // reached as things stand. Arm the fetch for what the way in needs, exactly as
