@@ -255,6 +255,8 @@ public static class BugReportBuilder
         // them off has Info-only logs. Surface the state so a triager knows why.
         Kv(sb, "Debug diagnostics", (svc.Log.Diagnostics?.DebugDiagnostics ?? false) ? "on" : "off");
         Kv(sb, "Combat diagnostics", (svc.Log.Diagnostics?.CombatDiagnostics ?? false) ? "on" : "off");
+        // Whether a session-statistics file exists to ask for alongside the report.
+        Kv(sb, "Session statistics log", svc.SessionStatsLog.Summary);
         // Local control API. Worth recording because something may have been
         // driving this client over it, which changes how a report should be read.
         // The TOKEN IS NEVER INCLUDED — a bug report gets attached to public

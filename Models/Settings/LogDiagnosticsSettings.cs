@@ -32,4 +32,9 @@ public sealed class LogDiagnosticsSettings
     // feature is catching silent Messages-catalogue misses, matching Debug/
     // Combat's "default to visibility" rationale.
     public bool CaptureUnrecognizedMessages { get; set; } = true;
+
+    // Gate for Services.SessionStatsLog, and how often it writes. Default off,
+    // every 5 minutes.
+    public bool SessionStatistics { get; set; }
+    public int SessionStatisticsMinutes { get; set; } = 5;
 }

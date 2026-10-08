@@ -228,6 +228,11 @@ public sealed class AppServices
     // session leaves a trail that tells a managed-heap leak from working-set creep.
     // Only writes while LogDiagnostics.AutoCollectLogs is on (default off).
     public MemoryUsageLog MemoryLog { get; }
+
+    // The Session Statistics window's figures, written to their own file under Logs
+    // every few minutes while in the game. Only while
+    // LogDiagnostics.LogSessionStatistics is on (default off).
+    public SessionStatsLog SessionStatsLog { get; private set; } = null!;
     // UI-thread stall probe and work timings, written to their own log while
     // Auto-collect logs is on.
     public PerformanceMonitor Performance { get; }
@@ -5777,6 +5782,10 @@ public sealed class AppServices
         // into every cash parser / command builder so a board-renamed runic word
         // is matched on the wire and sent back on outgoing get/drop/hide commands.
         Currency = new Game.Cash.CurrencyNaming(() => ResolveActiveRealm()?.Realm.RunicCurrencyName);
+        // Program Log → "Log session statistics". The block is built when one is
+        // due, so the trackers it reads only have to exist by then.
+        SessionStatsLog = new SessionStatsLog(LogDiagnostics, () => InGameCapture.InGame, SessionStatsBlock, Log);
+        InGameCapture.InGameChanged += SessionStatsLog.NoteInGameChanged;
         Profile.ProfileLoaded += _ => Currency.Refresh();
         Profile.BbsPinApplied += _ => Currency.Refresh();
 
@@ -9085,6 +9094,25 @@ public sealed class AppServices
             Game.Quests.QuestStepGraph.Build(GameData, quest.Flag, quest.ProgressByValue);
     }
 
+    // One block for the session-statistics log: the Session Statistics window's
+    // three sections as they stand now, headed by whose they are.
+    private string SessionStatsBlock(DateTimeOffset at, string why)
+    {
+        string who = Profile.CurrentProfileName ?? "{default}";
+        if (ResolveActiveRealm() is { } active) who += $" — {active.Bbs.Name}:{active.Realm.Name}";
+        Game.Map.LoopRunner runner = LoopRunner;
+        bool anyLaps = runner.LapHistory.Count > 0;
+        bool running = runner.State != Game.Map.LoopState.Idle;
+        return SessionStatsLogFormatter.Format(at, who, why,
+            CombatSession.Snapshot(), TimeAnalysis.Snapshot(), SessionActivity.Snapshot(),
+            SelfTimeToLevel(), PlayerStats.Level, Currency.RunicName,
+            new SessionStatsLogFormatter.Laps(
+                runner.CurrentLoop?.Name ?? runner.LastRunLoopName, running, runner.CompletedLaps,
+                anyLaps ? runner.LapHistory[^1] : null,
+                anyLaps ? runner.AverageLapTime : null,
+                running ? runner.CurrentLapTime : null));
+    }
+
     private void ApplyLogDiagnostics(Models.Settings.LogDiagnosticsSettings dto)
     {
         _suppressLogDiagnosticsPersist = true;
@@ -9093,6 +9121,8 @@ public sealed class AppServices
         LogDiagnostics.AutoCollectLogs   = dto.AutoCollect;
         LogDiagnostics.HopTiming         = dto.HopTiming;
         LogDiagnostics.CaptureUnrecognizedMessages = dto.CaptureUnrecognizedMessages;
+        LogDiagnostics.SessionStatisticsMinutes = dto.SessionStatisticsMinutes;
+        LogDiagnostics.LogSessionStatistics = dto.SessionStatistics;
         _suppressLogDiagnosticsPersist = false;
     }
 
@@ -9117,6 +9147,8 @@ public sealed class AppServices
             AutoCollect = LogDiagnostics.AutoCollectLogs,
             HopTiming  = LogDiagnostics.HopTiming,
             CaptureUnrecognizedMessages = LogDiagnostics.CaptureUnrecognizedMessages,
+            SessionStatistics = LogDiagnostics.LogSessionStatistics,
+            SessionStatisticsMinutes = LogDiagnostics.SessionStatisticsMinutes,
         };
         Settings.Save();
     }

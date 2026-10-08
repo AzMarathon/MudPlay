@@ -4,8 +4,9 @@ namespace MudPlay.Services;
 // Debug and Combat log channels; the third gates whether the on-disk
 // diagnostic files (program / memory / combat trace) are written at all; the
 // fourth gates the navigation hop-timing calibration trace; the fifth gates
-// whether Game.MessageCandidateWatcher captures unrecognized wire lines.
-// Surfaced as the toggles in the Log pane.
+// whether Game.MessageCandidateWatcher captures unrecognized wire lines; the
+// sixth gates the periodic session-statistics file (SessionStatsLog) and carries
+// how often it writes. Surfaced as the toggles in the Log pane.
 //
 // This is the in-memory source of truth. AppServices mirrors it to the Global-tier
 // GlobalSettings.LogDiagnostics: it applies the saved values at launch and writes
@@ -106,6 +107,38 @@ public sealed class LogDiagnosticState
         {
             if (_captureUnrecognizedMessages == value) return;
             _captureUnrecognizedMessages = value;
+            Changed?.Invoke();
+        }
+    }
+
+    // Master toggle for SessionStatsLog: while on, the Session Statistics window's
+    // figures are written to their own file under Logs every
+    // SessionStatisticsMinutes while the character is in the game. Off by default.
+    private bool _logSessionStatistics;
+    public bool LogSessionStatistics
+    {
+        get => _logSessionStatistics;
+        set
+        {
+            if (_logSessionStatistics == value) return;
+            _logSessionStatistics = value;
+            Changed?.Invoke();
+        }
+    }
+
+    public const int MinSessionStatisticsMinutes = 1;
+    public const int MaxSessionStatisticsMinutes = 120;
+    public const int DefaultSessionStatisticsMinutes = 5;
+
+    private int _sessionStatisticsMinutes = DefaultSessionStatisticsMinutes;
+    public int SessionStatisticsMinutes
+    {
+        get => _sessionStatisticsMinutes;
+        set
+        {
+            int minutes = Math.Clamp(value, MinSessionStatisticsMinutes, MaxSessionStatisticsMinutes);
+            if (_sessionStatisticsMinutes == minutes) return;
+            _sessionStatisticsMinutes = minutes;
             Changed?.Invoke();
         }
     }
