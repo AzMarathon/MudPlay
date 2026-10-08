@@ -231,7 +231,7 @@
                                     <TextBlock Classes="BossNotice" Text="{Binding WalkToBossNotice}"/>
                                     <CheckBox Content="Ignore the stop and walk into the room"
                                               IsChecked="{Binding WalkToEntersBossRoom, Mode=TwoWay}"
-                                              ToolTip.Tip="Unticked, the walk respects Stop before entering: it ends in the room next to the boss room, and the event counts that as arriving. Ticked, this event's walk goes into the boss room. The Bosses tab setting itself isn't changed, so your own walks there still stop short."/>
+                                              ToolTip.Tip="Unticked, the walk respects Stop before entering: it ends in the room next to the boss room and does not go in. For the event's own Walk to, that counts as arriving and Then runs from there, so Then (or an event it fires) decides what happens next. Ticked, this walk goes into the boss room. The Bosses tab setting itself isn't changed, so your own walks there still stop short."/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -356,7 +356,7 @@
                     <!-- THEN: once the action is done. -->
                     <Border Grid.Row="2" Grid.Column="2" Classes="Section">
                         <Grid ColumnDefinitions="110,*" RowSpacing="4"
-                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                             <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Classes="SectionHeader" Text="THEN (once it's done)"/>
 
                             <RadioButton Grid.Row="1" GroupName="Then" Content="Go back"
@@ -396,7 +396,7 @@
                                     <TextBlock Classes="BossNotice" Text="{Binding ThenWalkToBossNotice}"/>
                                     <CheckBox Content="Ignore the stop and walk into the room"
                                               IsChecked="{Binding ThenWalkToEntersBossRoom, Mode=TwoWay}"
-                                              ToolTip.Tip="Unticked, the walk respects Stop before entering: it ends in the room next to the boss room, and the event counts that as arriving. Ticked, this event's walk goes into the boss room. The Bosses tab setting itself isn't changed, so your own walks there still stop short."/>
+                                              ToolTip.Tip="Unticked, the walk respects Stop before entering: it ends in the room next to the boss room and does not go in. For the event's own Walk to, that counts as arriving and Then runs from there, so Then (or an event it fires) decides what happens next. Ticked, this walk goes into the boss room. The Bosses tab setting itself isn't changed, so your own walks there still stop short."/>
                                 </StackPanel>
                             </StackPanel>
 
@@ -416,6 +416,11 @@
                             <TextBlock Grid.Row="7" Grid.ColumnSpan="2" Classes="Error" TextWrapping="Wrap"
                                        IsVisible="{Binding ThenNeverRuns}"
                                        Text="A loop or auto-lair never finishes on its own — set a STOP AFTER rule, or Then never runs."/>
+                            <!-- The action's walk keeps a boss room's stop: it ends
+                                 outside the room, and this says what Then makes of it. -->
+                            <TextBlock Grid.Row="8" Grid.ColumnSpan="2" Classes="BossNotice"
+                                       IsVisible="{Binding HasStopsOutsideHint}"
+                                       Text="{Binding StopsOutsideHint}"/>
                         </Grid>
                     </Border>
             </Grid>

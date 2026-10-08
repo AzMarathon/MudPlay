@@ -284,9 +284,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     // ----- DO (action) ------------------------------------------------
 
     [ObservableProperty] private bool _isActionWalkTo;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WalkToBossNotice), nameof(HasWalkToBossNotice))]
-    private string _walkToText = string.Empty;
+    [ObservableProperty] private string _walkToText = string.Empty;
 
     // The event's choice for a walk-to room that is a boss room marked "stop before
     // entering": ticked walks in, unticked ends the walk one room short. Only
@@ -294,9 +292,9 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     [ObservableProperty] private bool _walkToEntersBossRoom;
     [ObservableProperty] private bool _thenWalkToEntersBossRoom;
 
-    public string WalkToBossNotice => BossNotice(WalkToText);
+    public string WalkToBossNotice => BossNotice(WalkToText, WalkToEntersBossRoom, "This walk");
     public bool HasWalkToBossNotice => WalkToBossNotice.Length > 0;
-    public string ThenWalkToBossNotice => BossNotice(ThenWalkToText);
+    public string ThenWalkToBossNotice => BossNotice(ThenWalkToText, ThenWalkToEntersBossRoom, "Then's walk");
     public bool HasThenWalkToBossNotice => ThenWalkToBossNotice.Length > 0;
 
     [ObservableProperty] private bool _isActionLoop;
@@ -392,9 +390,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     [ObservableProperty] private bool _isThenEvent;
     [ObservableProperty] private string? _thenLoopName;
     [ObservableProperty] private string? _thenAutoLairSetupName;
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ThenWalkToBossNotice), nameof(HasThenWalkToBossNotice))]
-    private string _thenWalkToText = string.Empty;
+    [ObservableProperty] private string _thenWalkToText = string.Empty;
     [ObservableProperty] private string? _thenEventName;
 
     // The character's other events, for a Then that fires one.
@@ -686,6 +682,7 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
         OnPropertyChanged(nameof(CanSave));
         OnPropertyChanged(nameof(ShowsStopAfter));
         OnPropertyChanged(nameof(ThenNeverRuns));
+        RefreshBossNotices();
     }
 
     private EventTriggerType SelectedTriggerType()
@@ -795,18 +792,76 @@ public sealed partial class EventEditDialogViewModel : ObservableObject, IDialog
     private string? StopBeforeBossIn(WalkToResolution room) =>
         room.Ok ? _stopBeforeBoss?.Invoke(new RoomKey(room.Map!.Value, room.Room!.Value)) : null;
 
-    // Shown under a Walk to box whose room is a boss room marked "stop before
-    // entering". Read from the box's coordinate alone (typed, or left by a picked
-    // suggestion): it is asked on every keystroke, and a name search isn't.
-    private string BossNotice(string text)
+    // The boss whose stop-before room a Walk to box holds, null for any other room.
+    // Read from the box's coordinate alone (typed, or left by a picked suggestion):
+    // it is asked on every keystroke, and a name search isn't.
+    private (RoomKey Room, string Boss)? StopBeforeBossIn(string text)
     {
-        if (_stopBeforeBoss is null || string.IsNullOrWhiteSpace(text)) return string.Empty;
+        if (_stopBeforeBoss is null || string.IsNullOrWhiteSpace(text)) return null;
         int nameAt = text.IndexOf(" - ", StringComparison.Ordinal);
         (int? map, int? room) = RoomSearchService.TryParseCoordinate(nameAt > 0 ? text[..nameAt] : text);
-        if (map is not int m || room is not int r || _stopBeforeBoss(new RoomKey(m, r)) is not { } boss)
-            return string.Empty;
-        return $"{boss}'s room is marked Stop before entering on the Bosses tab. Unless you tick the box below, this walk ends one room short of it.";
+        if (map is not int m || room is not int r) return null;
+        RoomKey key = new(m, r);
+        return _stopBeforeBoss(key) is { } boss ? (key, boss) : null;
     }
+
+    // Shown under a Walk to box whose room is such a boss room: what this walk
+    // will do about the stop, as the tick box under it stands.
+    private string BossNotice(string text, bool enters, string walk)
+    {
+        if (StopBeforeBossIn(text) is not { } hit) return string.Empty;
+        string marked = $"{hit.Boss}'s room is marked Stop before entering on the Bosses tab.";
+        return enters
+            ? $"{marked} {walk} ignores that and goes into the room."
+            : $"{marked} {walk} ends in the room next to it and does NOT go in.";
+    }
+
+    // Shown in the Then block while the action's walk keeps the stop. The walk ends
+    // outside the boss room and Then is all that happens after it, so an event set
+    // up this way never enters the room unless Then (or an event it fires) does.
+    // That can be the point (walk up, look in, let a follow-on event decide), so
+    // this explains rather than blocks.
+    public string StopsOutsideHint
+    {
+        get
+        {
+            if (!IsActionWalkTo || WalkToEntersBossRoom || StopBeforeBossIn(WalkToText) is not { } hit)
+                return string.Empty;
+            string outside = $"This event stops in the room next to {hit.Boss}'s room and does not go in. Then is what happens from there.";
+            const string goIn = "To go in, set Then to Walk to this same room and tick its box, or fire a follow-on event that walks in.";
+
+            if (IsThenWalkTo && StopBeforeBossIn(ThenWalkToText) is { } then && then.Room.Equals(hit.Room))
+                return ThenWalkToEntersBossRoom
+                    ? $"{outside} As set, Then walks into the room."
+                    : $"{outside} As set, Then walks to the same room and stops short of it again, so the event never goes in. Tick Then's box to walk in.";
+            if (IsThenEvent)
+                return $"{outside} As set, Then fires {(string.IsNullOrWhiteSpace(ThenEventName) ? "another event" : $"\"{ThenEventName}\"")} from outside the room: "
+                    + "that event has to do whatever comes next (look in, walk in).";
+            string asSet = IsThenResume ? "Then goes back to what was running, without entering."
+                : IsThenNothing ? "Then does nothing, so the character stays outside the room."
+                : IsThenWalkTo ? "Then walks on to a different room, without entering."
+                : "Then starts from outside the room, without entering.";
+            return $"{outside} As set, {asSet} {goIn}";
+        }
+    }
+
+    public bool HasStopsOutsideHint => StopsOutsideHint.Length > 0;
+
+    private void RefreshBossNotices()
+    {
+        OnPropertyChanged(nameof(WalkToBossNotice));
+        OnPropertyChanged(nameof(HasWalkToBossNotice));
+        OnPropertyChanged(nameof(ThenWalkToBossNotice));
+        OnPropertyChanged(nameof(HasThenWalkToBossNotice));
+        OnPropertyChanged(nameof(StopsOutsideHint));
+        OnPropertyChanged(nameof(HasStopsOutsideHint));
+    }
+
+    partial void OnWalkToTextChanged(string value) => RefreshBossNotices();
+    partial void OnThenWalkToTextChanged(string value) => RefreshBossNotices();
+    partial void OnWalkToEntersBossRoomChanged(bool value) => RefreshBossNotices();
+    partial void OnThenWalkToEntersBossRoomChanged(bool value) => RefreshBossNotices();
+    partial void OnThenEventNameChanged(string? value) => RefreshBossNotices();
 
     // Resolve a room box via RoomSearchService. Accepts coord (1/297, 1 297,
     // 1,297) directly, alone or leading a picked suggestion's "1/297 - Name"; for

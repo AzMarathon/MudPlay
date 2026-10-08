@@ -4370,7 +4370,10 @@ Settings → Events. Lets you define per-character events. Each has three parts,
   - Typing a coordinate by hand still works. The list shows the room that number is, so you can check it before saving.
   - A saved event reopens showing the room's name beside its number.
   - **A boss room marked Stop before entering.** When the room in the box belongs to a boss with **Stop before** ticked on the Bosses tab, a note says so under the box and a tick box appears: **Ignore the stop and walk into the room**.
-    - **Unticked** (the default), the event respects the stop: the walk ends in the room next to the boss room, and the event counts that as arriving, so its **Then** step runs from there.
+    - **Unticked** (the default), the event respects the stop: the walk ends in the room next to the boss room and **does not go in**. The event counts that as arriving, so its **Then** step runs from there, and Then is all that happens after it.
+      - The note under the box says this, and the **Then** block adds a line spelling out what the event does from outside the room as Then is currently set: goes back to what was running, stays there, fires a follow-on event, or walks on.
+      - An event left like this never enters the boss room. That can be exactly what you want: walk up to the room, then fire a follow-on event that looks in and decides what to do. If you want this event to go in, either tick the box, or set **Then** to **Walk to** the same room and tick Then's box.
+      - Then set to Walk to the same room with its box unticked stops short a second time and does nothing more; the Then block points that out.
     - **Ticked**, this event's walk goes into the boss room. It doesn't change the Bosses tab setting, so your own walks to that room still stop one room short.
     - The note shows for a coordinate or a picked row. A name typed without picking from the list isn't checked until you pick it.
 - **Start loop** — starts a saved Loop by name. Done only by a **Stop after** rule (below).

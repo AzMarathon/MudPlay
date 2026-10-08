@@ -169,6 +169,75 @@ public sealed class EventWalkToRoomSearchTests : IDisposable
         Assert.True(vm.HasThenWalkToBossNotice);
     }
 
+    // The note under the box says what the walk will do as the box stands.
+    [Fact]
+    public void TheNote_SaysWhetherTheWalkGoesIn()
+    {
+        EventEditDialogViewModel vm = Editor();
+        vm.IsActionWalkTo = true;
+        vm.WalkToText = "1/1810";
+        Assert.Contains("ends in the room next to it and does NOT go in", vm.WalkToBossNotice);
+
+        vm.WalkToEntersBossRoom = true;
+        Assert.Contains("ignores that and goes into the room", vm.WalkToBossNotice);
+    }
+
+    // Keeping the stop leaves the character outside the boss room with only Then
+    // to follow, so the Then block spells out what the event does from there.
+    [Fact]
+    public void KeepingTheStop_IsExplainedInTheThenBlock_ByWhatThenIsSetTo()
+    {
+        EventEditDialogViewModel vm = Editor();
+        vm.IsActionWalkTo = true;
+        Assert.False(vm.HasStopsOutsideHint);               // no boss room in the box yet
+
+        vm.WalkToText = "1/1810";
+        vm.IsThenResume = true;
+        Assert.Contains("stops in the room next to Thrag's room and does not go in", vm.StopsOutsideHint);
+        Assert.Contains("goes back to what was running, without entering", vm.StopsOutsideHint);
+        Assert.Contains("To go in, set Then to Walk to this same room and tick its box", vm.StopsOutsideHint);
+
+        vm.IsThenNothing = true;
+        Assert.Contains("stays outside the room", vm.StopsOutsideHint);
+
+        // A follow-on event is a fair way to use it: walk up, then let that decide.
+        vm.IsThenEvent = true;
+        vm.ThenEventName = "check thrag";
+        Assert.Contains("fires \"check thrag\" from outside the room", vm.StopsOutsideHint);
+
+        // Then walking to the same room, stop kept: it never goes in.
+        vm.IsThenWalkTo = true;
+        vm.ThenWalkToText = "1/1810 - Gigantic Cave";
+        Assert.Contains("stops short of it again, so the event never goes in", vm.StopsOutsideHint);
+
+        vm.ThenWalkToEntersBossRoom = true;
+        Assert.Contains("As set, Then walks into the room.", vm.StopsOutsideHint);
+
+        vm.ThenWalkToText = "1/297";
+        Assert.Contains("walks on to a different room, without entering", vm.StopsOutsideHint);
+    }
+
+    // Nothing to explain once the walk goes in, isn't to a boss room, or isn't a walk.
+    [Fact]
+    public void TheThenBlock_SaysNothing_WhenTheEventDoesNotStopOutside()
+    {
+        EventEditDialogViewModel vm = Editor();
+        vm.IsActionWalkTo = true;
+        vm.WalkToText = "1/1810";
+        Assert.True(vm.HasStopsOutsideHint);
+
+        vm.WalkToEntersBossRoom = true;
+        Assert.False(vm.HasStopsOutsideHint);
+
+        vm.WalkToEntersBossRoom = false;
+        vm.WalkToText = "1/297";
+        Assert.False(vm.HasStopsOutsideHint);
+
+        vm.WalkToText = "1/1810";
+        vm.IsActionCommand = true;
+        Assert.False(vm.HasStopsOutsideHint);
+    }
+
     [Fact]
     public void TheChoice_IsSavedWithTheEvent_AndComesBackWhenReopened()
     {
