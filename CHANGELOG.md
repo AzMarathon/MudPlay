@@ -1,5 +1,10 @@
 # Version history
 
+## 3.149.1
+
+- The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further
+- bug reports addressed: paradigm-20261007-164408
+
 ## 3.149.0
 
 - New Settings → Teleports tab: Allow automatic walks to use the following teleports, one line per teleport spot from your game data with both ends' map/room numbers; none are ticked by default
