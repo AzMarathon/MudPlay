@@ -162,7 +162,7 @@ public sealed class StashRoomManager : IDisposable
         {
             if (_resolveAutoStashItem(entry) is not { } name) continue;
             if (!toHide.ContainsKey(name)) hideOrder.Add(name);
-            toHide[name] = toHide.GetValueOrDefault(name) + 1;
+            toHide[name] = toHide.GetValueOrDefault(name) + CopiesIn(entry, name);
         }
         List<string> hiddenItems = new();
         foreach (string name in hideOrder)
@@ -179,6 +179,17 @@ public sealed class StashRoomManager : IDisposable
                 + $"currencies={dispatched.Count} items={hiddenItems.Count}");
             StashExecuted?.Invoke(new StashDispatch(enteredRoom, dispatched, hiddenItems));
         }
+    }
+
+    // How many copies one carried-list entry stands for. Paradigm lists a stack as
+    // one entry with its count in front ("9 green dragon hide"); counting that as
+    // one copy hid a single hide a visit. The count is only taken when what follows
+    // it is the item's own name, so an item whose name starts with a number still
+    // counts as one.
+    private static int CopiesIn(string entry, string name)
+    {
+        (int count, string rest) = CountedCommand.SplitLeadingCount(entry.Trim());
+        return string.Equals(rest, name, StringComparison.OrdinalIgnoreCase) ? count : 1;
     }
 
     private void Send(string text)

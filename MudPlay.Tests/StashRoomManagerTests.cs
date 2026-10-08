@@ -42,7 +42,10 @@ public sealed class StashRoomManagerTests
             Stash = new StashRoomManager(Profile,
                 readCash: () => CashSettings,
                 getSnapshot: () => Snapshot,
-                resolveAutoStashItem: entry => AutoStashItems.Contains(entry) ? entry : null,
+                // As the live resolver does: the canonical name, whether or not the
+                // entry carries a stack count in front.
+                resolveAutoStashItem: entry => AutoStashItems.FirstOrDefault(
+                    name => entry == name || entry.EndsWith(" " + name, StringComparison.Ordinal)),
                 isEnabled: () => AutoGetCashEnabled,
                 log: Log,
                 isParadigm: () => Paradigm);
@@ -327,6 +330,35 @@ public sealed class StashRoomManagerTests
 
         Assert.Equal("hide 3 a torch", Assert.Single(h.SentLines()));
         Assert.Equal(3, h.Executed[0].Items.Count);   // dispatched count preserved
+    }
+
+    // Paradigm's carried list shows a stack as one entry with its count in front.
+    [Fact]
+    public void Paradigm_StackedEntry_HidesTheWholeStack()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.MarkRoomAsStash(1, 42);
+        h.Snapshot = Coins(carried: new[] { "token of Khazarad", "9 green dragon hide" });
+        h.AutoStashItems.Add("green dragon hide");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal("hide 9 green dragon hide", Assert.Single(h.SentLines()));
+        Assert.Equal(9, h.Executed[0].Items.Count);
+    }
+
+    // A number that is part of the item's own name isn't a stack count.
+    [Fact]
+    public void NumberInTheItemsName_IsNotACount()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.MarkRoomAsStash(1, 42);
+        h.Snapshot = Coins(carried: new[] { "10 foot pole", "3 10 foot pole" });
+        h.AutoStashItems.Add("10 foot pole");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal("hide 4 10 foot pole", Assert.Single(h.SentLines()));
     }
 
     [Fact]
