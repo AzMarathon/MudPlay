@@ -137,7 +137,7 @@ public sealed class MessageCandidateWatcherTests
         Harness h = new(seedDefaultPatterns: true);
         h.Candidates.RecordSighting("A strange humming fills the air.", DateTimeOffset.UtcNow.AddMinutes(-5), null, null);
         h.Feed("You will exit after a period of silent meditation.");
-        h.Feed("...............");   // Stock's count of the wait
+        h.Feed("...............");   // the wait, counted out in dots
         h.Feed("P A R A D I G M v26.8.30.1 (Aug 30 2026 10:23:10)");
         h.Feed("{ A New Era of MUD }");
         Assert.Equal(3, h.Candidates.Candidates.Count);   // the wait lines are known patterns

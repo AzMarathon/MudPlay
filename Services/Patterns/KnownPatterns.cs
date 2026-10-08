@@ -511,7 +511,7 @@ public static class KnownPatterns
     // game line; nothing acts on them.
     public const string RealmExitMeditation = "realm.exit-meditation";   // "You will exit after a period of silent meditation."
     public const string RealmExitWaiting = "realm.exit-waiting";         // "You may not perform any commands while waiting to exit!"
-    public const string RealmExitDots = "realm.exit-dots";               // "..............." — Stock counts the wait out in dots
+    public const string RealmExitDots = "realm.exit-dots";               // "..............." — the wait is counted out in dots, on both realms
 
     // ----- Trainer menu marker -------------------------------------------
     // The "train stats" trainer screen has a "Point Cost Chart" panel
