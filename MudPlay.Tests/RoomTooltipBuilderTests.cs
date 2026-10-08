@@ -703,6 +703,22 @@ public sealed class RoomTooltipBuilderTests : IDisposable
             RoomTooltipBuilder.Build(room, graph, cache, tbinfo: tbinfo));
     }
 
+    // "(Race: 13 OK, 0 NO)" used to print as it stands in the data; it names the race
+    // now, as a class gate names the class.
+    [Fact]
+    public void RaceGatedExit_NamesTheRace()
+    {
+        RoomExit gated = new(new RoomKey(7, 1362), RoomExitHint.None, RawHint: "Race: 13 OK, 0 NO", RaceGate: 13);
+        string setRoot = Path.Combine(_root, _setName);
+        Directory.CreateDirectory(setRoot);
+        File.WriteAllText(Path.Combine(setRoot, "Races.json"), """[ { "Number": 13, "Name": "Gaunt One" } ]""");
+        GameDataCache cache = new(_root);
+        cache.SwitchSet(_setName);
+
+        Assert.Equal("Gaunt One only", RoomTooltipBuilder.FormatExitHint(gated, cache, null, 0));
+        Assert.Equal("Race #13 only", RoomTooltipBuilder.FormatExitHint(gated, null, null, 0));
+    }
+
     // The Room Info panel is narrow: a short requirement stays beside its exit, a
     // long one goes on its own line instead of wrapping wherever it runs out.
     [Fact]

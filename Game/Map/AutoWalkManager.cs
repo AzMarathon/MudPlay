@@ -1656,6 +1656,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (reasons.HasFlag(ExitBlockReason.Toll)) parts.Add("a toll you can't afford");
         if (reasons.HasFlag(ExitBlockReason.Fare)) parts.Add("a paid transport a party member can't afford");
         if (reasons.HasFlag(ExitBlockReason.Class)) parts.Add("a class restriction");
+        if (reasons.HasFlag(ExitBlockReason.Race)) parts.Add("a race restriction");
         // A locked or plain door blocks the same way to the user — name the one
         // barrier once, with its room / direction / key / skill, rather than two
         // generic lines.

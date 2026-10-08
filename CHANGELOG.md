@@ -1,5 +1,9 @@
 # Version history
 
+## 3.150.11
+
+- An exit open to one race only shows the race by name (*Gaunt One only*) instead of its number, and routes keep a character of another race off it, as they do for class-only exits
+
 ## 3.150.10
 
 - *Clear hostiles when sneak broken by see-hidden monster* has two ticks under it, While solo and While in a party, so it can clear when you're alone and keep running when you're grouped; both on by default

@@ -75,6 +75,10 @@ public sealed class MovementFilter : IRoomFilter
     // When null we don't gate — same rule as an unknown level.
     public Func<int?>? ClassNumberProvider { get; set; }
 
+    // The crosser's race Number (Races table), or null while it isn't known. Feeds
+    // the "(Race: N OK)" gate the way ClassNumberProvider feeds the class gate.
+    public Func<int?>? RaceNumberProvider { get; set; }
+
     // Supplies the numeric alignment of every crosser — the controlling character
     // plus, when leading a party, each follower — for "(Alignment: X to Y)" exit
     // gates. Each entry is the member's alignment value, or null when we don't know
@@ -229,7 +233,7 @@ public sealed class MovementFilter : IRoomFilter
     // plain cardinal carrying a window / allowed-class), so each is checked.
     public bool IsExitBlocked(in RoomExit exit) =>
         IsLevelGateBlocked(in exit) || IsTollGateBlocked(in exit) || IsFareGateBlocked(in exit)
-        || IsClassGateBlocked(in exit)
+        || IsClassGateBlocked(in exit) || IsRaceGateBlocked(in exit)
         || IsItemGateBlocked(in exit) || IsImpassableDoorBlocked(in exit) || IsHazardEntryBlocked(in exit)
         || IsAlignmentGateBlocked(in exit);
 
@@ -247,6 +251,7 @@ public sealed class MovementFilter : IRoomFilter
         if (IsTollGateBlocked(in exit)) reasons |= ExitBlockReason.Toll;
         if (IsFareGateBlocked(in exit)) reasons |= ExitBlockReason.Fare;
         if (IsClassGateBlocked(in exit)) reasons |= ExitBlockReason.Class;
+        if (IsRaceGateBlocked(in exit)) reasons |= ExitBlockReason.Race;
         if (IsItemGateBlocked(in exit))
             reasons |= exit.Hint == RoomExitHint.KeyLocked
                 ? ExitBlockReason.LockedDoor
@@ -441,6 +446,13 @@ public sealed class MovementFilter : IRoomFilter
         // don't block on unknown, walk up and halt on the game's own refusal.
         return exit.Hint == RoomExitHint.Teleport;
     }
+
+    // A "(Race: N OK)" exit only admits race Number N (GAME_MECHANICS "Class and
+    // race gated exits"). Gated only when our own race is known, the same rule as
+    // a class-gated cardinal: an unparsed character walks up and halts on the
+    // game's own refusal rather than being routed around on a guess.
+    private bool IsRaceGateBlocked(in RoomExit exit)
+        => exit.HasRaceGate && RaceNumberProvider?.Invoke() is { } myRace && myRace != exit.RaceGate;
 
     // An "(Alignment: X to Y)" exit admits only crossers whose alignment value is
     // inside [X, Y]. Whole-party: block (route around) when ANY member whose
