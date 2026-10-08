@@ -3868,6 +3868,7 @@ public sealed class AppServices
         // (same rule as level / wealth / class above).
         Movement.InventoryReadyProbe = () => Inventory.IsLoaded;
         Movement.ItemCarriedProbe = IsItemCarried;
+        Movement.PartyShortOfItemProbe = IsPartyShortOfGateItem;
         Movement.StrengthProvider = () => Stats.HasParsed ? PlayerStats.Strength : (int?)null;
         Movement.PicklocksProvider = () => Stats.HasParsed ? PlayerStats.Picklocks : (int?)null;
         // Same bash ceiling the door FSM uses, so the filter and DoorOpenManager
@@ -6635,6 +6636,10 @@ public sealed class AppServices
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
+        // Handed out: the gate the party was short for is open again.
+        PartyPathItemGate.Provisioned += ClearPartyShortGateItem;
+        // A count is about one roster; a member joining or leaving voids it.
+        PartyState.Members.CollectionChanged += (_, _) => ClearPartyShortGateItems("the party changed");
 
         // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
         // drop an item from the override once it's covered — the item itself or
@@ -6643,7 +6648,10 @@ public sealed class AppServices
         // crosser who picks up a different boat mid-route stops being chased for
         // the one the picker chose. The abandon-clear on Walker.Event is wired after
         // the walker is constructed (see below).
-        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(IsPathItemCovered);
+        // An item the party is short of stays forced though the leader holds a copy:
+        // the copies still to come are for the members.
+        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(
+            id => IsPathItemCovered(id) && !IsPartyShortOfGateItem(id));
 
         // Registered AFTER the forced-obtain draining handler above so the set is
         // fully emptied before this checks it: once the route counter lands (found on
@@ -12216,6 +12224,125 @@ public sealed class AppServices
         PathItemSubstitutes.Coverage(itemId, CountItemCarried);
 
     private bool IsPathItemCovered(int itemId) => CountPathItemCoverage(itemId) > 0;
+
+    // ----- Gate items the party is short of ------------------------------
+    //
+    // An (Item: N) / (Ticket: N) exit carries across only the member holding the
+    // item, so a leader with a copy who leads followers without one crosses alone
+    // and splits the party (report paradigm-20261007-183903: two darkwood rings
+    // for three people, no route card, the walk failed only after the split).
+    // Before a walk the user starts is planned, the leader asks the party how many
+    // each holds; an item the party is short of then gates its exits for planning,
+    // so the route card names it. Swapped whole, never edited in place: the plan
+    // reads it from a background thread.
+    private volatile IReadOnlyDictionary<int, (int Need, int OthersHeld)> _partyGateCounts =
+        new Dictionary<int, (int, int)>();
+
+    // Short while the leader's own copies plus what the members reported don't
+    // reach one each. The leader's count is read live, so buying the missing
+    // copies opens the gate without another round of asking.
+    private bool IsPartyShortOfGateItem(int itemId) =>
+        _partyGateCounts.TryGetValue(itemId, out (int Need, int OthersHeld) c)
+        && CountItemCarried(itemId) + c.OthersHeld < c.Need;
+
+    // "darkwood ring (one each for your party of 3; 2 held)" on a route card, or
+    // the plain name when the party isn't short of it.
+    public string? RouteItemLabel(int itemId)
+    {
+        string? name = ItemNames.GetName(itemId);
+        if (name is null || !IsPartyShortOfGateItem(itemId)) return name;
+        (int need, int othersHeld) = _partyGateCounts[itemId];
+        return $"{name} (one each for your party of {need}; {CountItemCarried(itemId) + othersHeld} held)";
+    }
+
+    // The last party count per gate item, for the bug report.
+    public string PartyGateCountSummary
+    {
+        get
+        {
+            IReadOnlyDictionary<int, (int Need, int OthersHeld)> counts = _partyGateCounts;
+            if (counts.Count == 0) return "(none)";
+            return string.Join("; ", counts.Select(kv =>
+            {
+                int held = CountItemCarried(kv.Key) + kv.Value.OthersHeld;
+                return $"{ItemNames.GetName(kv.Key) ?? $"item #{kv.Key}"}: party of {kv.Value.Need} holds {held}"
+                    + (held < kv.Value.Need ? " (short — gates closed to the plan)" : "");
+            }));
+        }
+    }
+
+    private void ClearPartyShortGateItem(int itemId)
+    {
+        if (!_partyGateCounts.ContainsKey(itemId)) return;
+        var next = new Dictionary<int, (int, int)>(_partyGateCounts);
+        next.Remove(itemId);
+        _partyGateCounts = next;
+        Log.Info(Game.Map.AutoSearchManager.LogCategory,
+            $"party gate count: item {itemId} handed out — its gates are open to the party again");
+    }
+
+    private void ClearPartyShortGateItems(string why)
+    {
+        if (_partyGateCounts.Count == 0) return;
+        _partyGateCounts = new Dictionary<int, (int, int)>();
+        Log.Info(Game.Map.AutoSearchManager.LogCategory, $"party gate count: dropped — {why}");
+    }
+
+    // Count the party's copies of every per-member gate item on the way to
+    // destination that the leader holds, so the plan that follows can tell a gate
+    // the whole party clears from one only the leader does. A no-op unless we lead
+    // followers. Closing one gate can send the route through another, so the route
+    // is re-read until it crosses nothing uncounted (three rounds at most).
+    public async Task CountPartyGateItemsAsync(Game.Map.RoomKey source, Game.Map.RoomKey destination)
+    {
+        ClearPartyShortGateItems("a new walk is being planned");
+        if (!PartyState.IsInParty || !PartyState.SelfIsLeader || PartyState.Members.Count <= 1) return;
+        if (!Inventory.IsLoaded) return;
+
+        var counted = new HashSet<int>();
+        for (int round = 0; round < 3; round++)
+        {
+            List<int> toCount = PerMemberGateItemsOnRoute(source, destination, counted);
+            if (toCount.Count == 0) return;
+
+            var next = new Dictionary<int, (int, int)>(_partyGateCounts);
+            foreach (int id in toCount)
+            {
+                counted.Add(id);
+                if (ItemNames.GetName(id) is not { Length: > 0 } name) continue;
+                Game.Remote.PartyInventoryProbe.PartyItemResult r = await PartyInventory.QueryAsync(id, name);
+                int need = 1 + r.Expected;
+                int own = CountItemCarried(id);
+                next[id] = (need, r.TotalCount);
+                string members = r.CountsByMember.Count == 0 ? "nobody answered"
+                    : string.Join(", ", r.CountsByMember.Select(kv => $"{kv.Key} {kv.Value}"));
+                Log.Info(Game.Map.AutoSearchManager.LogCategory,
+                    $"party gate count: {name} — party of {need} holds {own + r.TotalCount} (you {own}; {members}; "
+                    + $"{r.Replied}/{r.Expected} answered)"
+                    + (own + r.TotalCount < need ? " — short, its gates are closed to the plan" : " — enough"));
+            }
+            _partyGateCounts = next;
+        }
+    }
+
+    // The (Item: N) / (Ticket: N) gate items on the route as it plans now that the
+    // leader holds and hasn't counted yet.
+    private List<int> PerMemberGateItemsOnRoute(
+        Game.Map.RoomKey source, Game.Map.RoomKey destination, HashSet<int> counted)
+    {
+        var ids = new List<int>();
+        if (Bfs.FindPath(source, destination, Movement) is not { } path) return ids;
+        Game.Map.RoomKey cur = source;
+        foreach (Game.Map.Direction dir in path)
+        {
+            if (RoomGraph.GetRoom(cur) is not { } room || !room.Exits.TryGetValue(dir, out Game.Map.RoomExit exit)) break;
+            if (exit.Hint is Game.Map.RoomExitHint.Item or Game.Map.RoomExitHint.Ticket
+                && exit.KeyItemId > 0 && !counted.Contains(exit.KeyItemId) && !ids.Contains(exit.KeyItemId))
+                ids.Add(exit.KeyItemId);
+            cur = exit.Target;
+        }
+        return ids;
+    }
 
     // Set (replacing any prior) the items the next walk should obtain for its path
     // regardless of their AutoObtainForPath flag. Called by RouteChoicePrompt when

@@ -389,6 +389,23 @@ public sealed class PartyPathItemGateTests
         Assert.Empty(h.Forwarded);
     }
 
+    // Handing the copies out is what reopens a gate the route plan had closed for
+    // a party short of the item, so the gate says when it has done so.
+    [Fact]
+    public void Leader_HandsOut_RaisesProvisioned()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[1] = "rope";
+        h.SelfCounts[1] = 2;
+        h.SetResult(1, ("Bob", 0));
+        List<int> provisioned = new();
+        h.Gate.Provisioned += provisioned.Add;
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.Equal(new[] { 1 }, provisioned);
+    }
+
     [Fact]
     public void Leader_HolderSurplus_DirectsHolderToZeroHolders()
     {

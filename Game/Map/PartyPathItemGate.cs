@@ -364,8 +364,13 @@ public sealed class PartyPathItemGate
             if (!_pending.Remove(id)) return true;   // another pass already handled it
         }
         Redistribute(p.Name, p.Others, self, id, q);
+        Provisioned?.Invoke(id);
         return true;
     }
+
+    // The pool held a copy for every member and the hand-offs went out: the party
+    // is no longer short of this item.
+    public event Action<int>? Provisioned;
 
     // The copies a member can give away: everything above the quota q they keep
     // for their own crossing. The representative item is handed over first, so a

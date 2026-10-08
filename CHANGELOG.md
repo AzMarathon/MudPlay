@@ -1,5 +1,10 @@
 # Version history
 
+## 3.149.13
+
+- Leading a party past an exit that needs an item (a darkwood ring, a rope and grapple): the party is asked how many each holds before the route is planned, and if there isn't one each the route card names the item and the count instead of the leader crossing alone
+- bug reports addressed: paradigm-20261007-183903
+
 ## 3.149.12
 
 - A monster that needs a magical weapon is judged by the weapon in your hand when the combat profile names one you no longer carry, instead of being skipped as unhittable

@@ -1741,6 +1741,7 @@ public static class BugReportBuilder
         sb.Append("\n**Path-item detours**\n\n");
         Kv(sb, "Path-item search demand", svc.PathItemDemand.SearchDemandActive.ToString());
         Kv(sb, "Party path-item search demand", svc.PartyPathItemGate.SearchDemandActive.ToString());
+        Kv(sb, "Party count of per-member gate items", svc.PartyGateCountSummary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
