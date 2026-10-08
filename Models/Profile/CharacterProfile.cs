@@ -221,6 +221,12 @@ public sealed class CharacterProfile
     // consumed at runtime by MovementFilter. null or empty = no rooms avoided.
     public List<RoomRef>? AvoidedRooms { get; set; }
 
+    // This character's Stop before / Grab All choices on the Bosses tab, by boss
+    // Name. The boss list itself is the realm's; these two ticks are each
+    // character's own (user, 2026-10-08). null = never set: the first load takes
+    // the choices the realm's list held from when it carried them (BossStore).
+    public Dictionary<string, BossFlagChoice>? BossFlags { get; set; }
+
     // Rooms the user has flagged as drop-off / stash points. Per-character only.
     // null or empty = no stash rooms flagged.
     public List<RoomRef>? StashRooms { get; set; }

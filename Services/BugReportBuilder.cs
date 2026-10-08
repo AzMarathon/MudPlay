@@ -1696,6 +1696,11 @@ public static class BugReportBuilder
         Kv(sb, "Next planned direction",
             walker.PeekNextPlannedDirection() is { } dir ? dir.ToString() : "(none / command step)");
         Kv(sb, "Room command held for an empty room", walker.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
+        Kv(sb, "Boss Stop before / Grab All choices (this character)", svc.Profile.Current?.BossFlags is { } bossFlags
+            ? (bossFlags.Count == 0 ? "none: every boss on its own default"
+                : string.Join(", ", bossFlags.Select(kv =>
+                    $"{kv.Key}[{(kv.Value.StopBefore is { } sb2 ? $"stop={sb2}" : "")}{(kv.Value.GrabAll is { } ga ? $" grab={ga}" : "")}]")))
+            : "(not taken over from the realm's list yet)");
         Kv(sb, "Stop-before boss rooms on this walk", walker.BossRoomRuleSummary);
         Kv(sb, "Paused before a boss room", walker.HaltedBeforeBossRoom is { } bossRoom
             ? $"{bossRoom.Map}/{bossRoom.Room} ({svc.BossInRoom(bossRoom) ?? "boss"}) — Resume walks through" : "no");

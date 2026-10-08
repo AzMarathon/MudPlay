@@ -349,4 +349,102 @@ public sealed class BossStoreTests : IDisposable
             try { Directory.Delete(dir, recursive: true); } catch { /* temp cleanup */ }
         }
     }
+
+    // ----- Stop before / Grab All are each character's own --------------------
+
+    // A character's profile, as far as the store sees it: whether one is loaded and
+    // the choices it holds.
+    private sealed class Character
+    {
+        public Dictionary<string, BossFlagChoice>? Flags;
+        public int Saves;
+        public void Wire(BossStore store) => store.SetCharacterFlags(
+            hasCharacter: () => true, read: () => Flags, write: f => { Flags = f; Saves++; });
+    }
+
+    [Fact]
+    public void CharacterFlags_OverlayTheRealmsList_AndASaveKeepsThemOutOfIt()
+    {
+        WriteSeed(Boss("cyclops", rooms: "7/730"), Boss("chimera", rooms: "3/583"));
+        BossStore store = new(seedPath: _seedPath); store.OnRealmChanged(RealmFolder);
+        Character fujin = new() { Flags = new() };
+        fujin.Wire(store);
+
+        List<BossDef> rows = store.Resolve().ToList();
+        Assert.All(rows, b => Assert.True(b.StopBefore));          // the bosses' own default
+        rows.First(b => b.Name == "cyclops").StopBefore = false;
+        rows.First(b => b.Name == "chimera").GrabAll = true;
+        store.Save(rows);
+
+        Assert.False(fujin.Flags!["cyclops"].StopBefore);
+        Assert.True(fujin.Flags["chimera"].GrabAll);
+        Assert.False(store.Resolve().First(b => b.Name == "cyclops").StopBefore);
+
+        // Another character on the same realm sees none of it.
+        BossStore other = new(seedPath: _seedPath); other.OnRealmChanged(RealmFolder);
+        Character raijin = new() { Flags = new() };
+        raijin.Wire(other);
+        Assert.True(other.Resolve().First(b => b.Name == "cyclops").StopBefore);
+        Assert.False(other.Resolve().First(b => b.Name == "chimera").GrabAll);
+        // ...and the realm's file holds no entry for a boss only ticked, so a later
+        // seed change still flows through.
+        Assert.False(File.Exists(AppPaths.RealmBossesFile(RealmFolder))
+            && File.ReadAllText(AppPaths.RealmBossesFile(RealmFolder)).Contains("cyclops"));
+    }
+
+    // The realm's list used to carry the two ticks. A character that has never had
+    // its own takes those once, and they stay in the file for the next character.
+    [Fact]
+    public void CharacterWithNoChoicesYet_TakesTheRealmsOldOnes_Once()
+    {
+        WriteSeed(Boss("cyclops", rooms: "7/730"), Boss("chimera", rooms: "3/583"));
+        BossStore before = new(seedPath: _seedPath); before.OnRealmChanged(RealmFolder);
+        List<BossDef> old = before.Resolve().ToList();
+        old.First(b => b.Name == "cyclops").StopBefore = false;     // saved realm-wide, the old way
+        before.Save(old);
+
+        BossStore store = new(seedPath: _seedPath); store.OnRealmChanged(RealmFolder);
+        Character fujin = new();                                    // Flags null: never set
+        fujin.Wire(store);
+
+        Assert.NotNull(fujin.Flags);
+        Assert.False(fujin.Flags!["cyclops"].StopBefore);
+        Assert.Equal(1, fujin.Saves);
+        Assert.False(store.Resolve().First(b => b.Name == "cyclops").StopBefore);
+
+        // Ticking it back on is this character's business only...
+        List<BossDef> rows = store.Resolve().ToList();
+        rows.First(b => b.Name == "cyclops").StopBefore = true;
+        store.Save(rows);
+        Assert.Empty(fujin.Flags!);
+        store.OnRealmChanged(RealmFolder);                          // a reload doesn't take them again
+        Assert.True(store.Resolve().First(b => b.Name == "cyclops").StopBefore);
+
+        // ...and a character loading later still starts from what the realm had.
+        BossStore later = new(seedPath: _seedPath); later.OnRealmChanged(RealmFolder);
+        Character raijin = new();
+        raijin.Wire(later);
+        Assert.False(raijin.Flags!["cyclops"].StopBefore);
+    }
+
+    // A boss whose own default is off (a Neutral one) needs no stored choice to stay off.
+    [Fact]
+    public void CharacterFlags_AreStoredOnlyWhereTheyDifferFromTheBosssDefault()
+    {
+        BossDef cocoon = Boss("cocoon", rooms: "9/1");
+        cocoon.DefaultStopBefore = false;
+        WriteSeed(cocoon);
+        BossStore store = new(seedPath: _seedPath); store.OnRealmChanged(RealmFolder);
+        Character fujin = new() { Flags = new() };
+        fujin.Wire(store);
+
+        Assert.False(Assert.Single(store.Resolve()).StopBefore);
+        store.Save(store.Resolve());
+        Assert.Empty(fujin.Flags!);
+
+        List<BossDef> rows = store.Resolve().ToList();
+        rows[0].StopBefore = true;
+        store.Save(rows);
+        Assert.True(fujin.Flags!["cocoon"].StopBefore);
+    }
 }
