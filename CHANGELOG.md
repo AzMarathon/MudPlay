@@ -22,7 +22,7 @@
 - A see-hidden room met after a quiet walk is held and cleared: the stall watchdog no longer drops the fight a moment after it starts and lets the walker leave
 - With Auto-Combat off, a see-hidden, failed-sneak or rest-blocker clear moves straight on to the next monster after a kill
 - A sneak broken by a see-hidden monster stays broken until you sneak again: you stop and clear the first room inside your Min/Max monsters, then re-sneak and carry on
-- bug reports addressed: paradigm-20261007-141844, paradigm-20261007-143049
+- bug reports addressed: paradigm-20261007-141844, paradigm-20261007-143049, paradigm-20261007-184625, paradigm-20261007-185046
 
 ## 3.148.2
 
