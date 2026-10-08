@@ -4325,6 +4325,7 @@ Among protectable hazards, a further split governs whether the navigator may off
   - A same-room lever variant also exists (`1/1375 S`, the courtyard, whose lever is on this room's own
     W slot — one action, no remote detour).
 - **Client use:**
+  - A walk resumed after a pause carries on from the step it stood at even when the go-act-return detour comes back through that room later (`AutoWalkManager.TryReconcileIndexAfterResume`, `RoomBeforeStep`). Matching the later visit skipped the detour and its action. Report `paradigm-20261007-202509` *([OBSERVED], Paradigm)*: the Ancient Darkwood Tree's `9/1343` S → `9/1413` is `(Hidden/Needs 1 Actions, any order)`, opened by `turn statue` in `9/1412` (Small Statue), which answers `You grasp the ivory statue, and it turns easily on its base.`; until then `s` in `9/1343` answers `There is no exit in that direction!`.
   - Walker takeaway: walk-to-action-room → send the command(s) in `StepNumber` order → walk-back to the
     exit's room → send the cardinal. The generous open window makes normal walk distances safe; do not
     gate on a data-supplied timer (there isn't one) or on parsing a confirmation line.

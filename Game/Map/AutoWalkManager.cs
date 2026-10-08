@@ -3343,12 +3343,22 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_tracker.State.CurrentRoom is not { } here) return true;
         RoomKey hereKey = here.Key;
 
+        // Still standing where the walk left off: nothing landed during the pause,
+        // so there is nothing to fast-forward. This has to be settled before the
+        // forward scan. A route that comes back through this room (the go-act-return
+        // detour out to a lever or a statue and back) has a later step that also
+        // ends here, and matching that one skipped the whole detour, its action
+        // included: the walk went straight to the exit the action opens and was
+        // refused there (report paradigm-20261007-202509: a held cast paused the walk
+        // on the way to `turn statue`, and it resumed 43 steps on, past the statue).
+        bool stillHere = RoomBeforeStep(_index) is { } standing && standing.Equals(hereKey);
+
         // Did the player reach one or more upcoming MoveStep targets
         // during the pause? Walk forward looking for the first match —
         // that's where they landed. (If the path revisits the same room
         // later, we conservatively assume the earliest matching step;
         // a manual long-traverse would surface as off-path further down.)
-        for (int i = _index; i < _path.Count; i++)
+        for (int i = _index; !stillHere && i < _path.Count; i++)
         {
             if (_path[i] is MoveStep move && move.ExpectedTarget.Equals(hereKey))
             {
@@ -3393,6 +3403,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_index >= _path.Count) return true;
         if (_path[_index] is not MoveStep nextMove) return true;
         return here.Exits.ContainsKey(nextMove.Direction);
+    }
+
+    // The room the walk stands in before step index: where the last move before it
+    // lands, or the room the walk was planned from when no move comes before it.
+    // Command steps in between don't change the room.
+    private RoomKey? RoomBeforeStep(int index)
+    {
+        if (_path is null) return null;
+        for (int i = Math.Min(index, _path.Count) - 1; i >= 0; i--)
+            if (_path[i] is MoveStep move) return move.ExpectedTarget;
+        return _origin;
     }
 
     private void Reset()

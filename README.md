@@ -1,13 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.7**
+> **Version 3.149.8**
 > - A monster that needs a magical weapon is judged by the weapon in your hand when the combat profile names one you no longer carry, instead of being skipped as unhittable
 > - After killing a monster that turns into or summons another as it dies (the Champion of Blood's greater hellion), the next target is picked once the room shows the newcomer
 > - A follower who walks off by themselves (sent on with `@do`, say) is no longer gone back for as if your move had left them behind
 > - A locked door you can't pick or bash whose key a shop sells (the skeleton key): the route card names the shop, and picking that route buys the key on the way
 > - A room command that only works in an empty room (the Dark Alley's `go hole`), refused because a monster followed you in: the room is cleared and the command sent again, instead of the walk stalling
 > - Room commands that cast a spell now show on the map tooltip and in room info (the Tarl quest's `lift latch`, `pray — casts …`); a command that both summons and casts was hidden altogether
+> - A walk paused on its way to pull a lever or turn a statue no longer resumes past it: it carries on from where it stood, even when the route comes back through that room
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
