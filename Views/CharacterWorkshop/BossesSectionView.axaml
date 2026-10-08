@@ -9,7 +9,7 @@
 
     <Grid Margin="22" RowDefinitions="Auto,*">
 
-        <!-- Toolbar, left to right: filter, the active-timer summary,
+        <!-- Toolbar, left to right: filter, the two reach dropdowns, the active-timer summary,
              the two bulk toggles, timer sync, import / export, then Manage Bosses;
              Reset to default sits alone at the right edge.
              Editing the boss list lives in the Manage Bosses dialog; the table itself
@@ -19,6 +19,24 @@
         <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
             <TextBox Classes="clearable" Width="200" Margin="0,0,10,6" PlaceholderText="Filter by boss or room…"
                      Text="{Binding FilterText, Mode=TwoWay}"/>
+            <!-- What can I hurt: each dropdown lists the levels the bosses in the
+                 table ask for, and keeps the ones that level gets through. -->
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,6" VerticalAlignment="Center">
+                <TextBlock Text="Hit magic" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <ComboBox ItemsSource="{Binding HitMagicOptions}"
+                          SelectedItem="{Binding SelectedHitMagic, Mode=TwoWay}"
+                          MinWidth="76"
+                          ToolTip.Tip="Pick your weapon's hit-magic level to show only the bosses it can hit: those that need that level or less. 0 is a weapon with no magic. Hover a boss's name for what it needs."/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,6" VerticalAlignment="Center">
+                <TextBlock Text="Spell level" VerticalAlignment="Center"
+                           Foreground="{StaticResource ChromeFgSecBrush}"/>
+                <ComboBox ItemsSource="{Binding SpellLevelOptions}"
+                          SelectedItem="{Binding SelectedSpellLevel, Mode=TwoWay}"
+                          MinWidth="76"
+                          ToolTip.Tip="Pick the level your attack spell is learned at (the spell's own level, not yours) to show only the bosses it lands on: those immune to spells below that level or lower. 0 shows the bosses with no spell immunity. Hover a boss's name for what it needs."/>
+            </StackPanel>
             <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,18,6"
                        Foreground="{StaticResource AccentAmberBrush}"/>
             <Button Content="Stop Before Toggle" Margin="0,0,6,6" Command="{Binding ToggleAllStopBeforeCommand}"
@@ -89,8 +107,17 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Boss" Width="190" IsReadOnly="True" SortMemberPath="Name"
-                                    Binding="{ReflectionBinding Name}"/>
+                <!-- A template column for the hover text: what a weapon and a spell
+                     need to hurt this boss, which the two reach dropdowns filter on. -->
+                <DataGridTemplateColumn Header="Boss" Width="190" IsReadOnly="True" SortMemberPath="Name">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate x:DataType="vm:BossRowViewModel">
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Margin="12,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding ReachTip}"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Respawn" Width="90" IsReadOnly="True" SortMemberPath="RespawnSortKey"
                                     Binding="{ReflectionBinding RespawnDisplay}"
                                     FontFamily="{StaticResource FontMono}"

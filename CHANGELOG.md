@@ -1,5 +1,10 @@
 # Version history
 
+## 3.151.7
+
+- Bosses tab: **Hit magic** and **Spell level** dropdowns filter the table to the bosses a weapon of that hit-magic level can hit and a spell of that level lands on
+- Hovering a boss's name shows the hit magic and spell level it takes to hurt it
+
 ## 3.151.6
 
 - Favourite loops and auto-lair setups are each character's own: favouriting one no longer adds it to every character's Favorites menus. The loops and setups themselves stay shared with the game data

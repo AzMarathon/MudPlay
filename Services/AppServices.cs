@@ -10592,6 +10592,23 @@ public sealed class AppServices
         return chain;
     }
 
+    // What it takes to hurt a boss: the hit-magic level a weapon needs (the monster's
+    // Magical) and the level a spell needs (its spell immunity). A boss that turns
+    // into something else as it dies isn't dead until that is, so it's the highest
+    // any monster in the chain asks for. Both 0 for a box, or a boss this game data
+    // has no monster for.
+    public (int HitMagic, int SpellLevel) BossReach(Models.Profile.BossDef def)
+    {
+        int hitMagic = 0, spellLevel = 0;
+        foreach (Game.Inventory.BossDeathLoot.ChainMonster link in BossDeathChain(def))
+        {
+            if (MonsterCatalog.Get(link.Number) is not { } m) continue;
+            hitMagic = Math.Max(hitMagic, m.Magical);
+            spellLevel = Math.Max(spellLevel, m.SpellImmunity);
+        }
+        return (hitMagic, spellLevel);
+    }
+
     // How long a monster's death leaves the room unable to act: the length of its
     // "... temp" death spell, or zero when it has none.
     private TimeSpan DeathStallOf(int monsterNumber)
