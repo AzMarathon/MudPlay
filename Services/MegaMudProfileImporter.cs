@@ -77,7 +77,7 @@ public static class MegaMudProfileImporter
         general.AutoModeBase = JsonSerializer.Deserialize<AutoActionDefaults>(
             JsonSerializer.Serialize(auto, JsonStore.Options), JsonStore.Options);
         p.Skip("MegaMud", "AutoPreAttack", g, "Auto pre-attack switch", "no separate switch: a pre-attack spell casts while Auto-Nuke is on");
-        p.Skip("MegaMud", "AutoTrack", g, "Auto-Track", "MudPlay has no tracking engine");
+        p.Skip("MegaMud", "AutoTrack", g, "Auto-Track", "tracking is a PvP feature in MudPlay, with no PvE use; switch it on in Settings → PvP");
         p.Skip("MegaMud", "DefaultLoop", g, "Default loop", "MegaMUD loop files are imported separately (Navigation Management → Import .mp)");
         Put(profile, "General", general);
     }
@@ -233,7 +233,7 @@ public static class MegaMudProfileImporter
         p.Skip(s, "PostBsCmd", g, "Post-backstab command", "MudPlay swaps back from the Backstab gear set instead");
         p.SkipUnlessZero(s, "PoliteAttacks", g, "Polite attacks", "MudPlay's polite mode has more than on and off; choose it on the Combat tab");
         p.SkipUnlessZero(s, "ClearOnceEngaged", g, "Clear the room once engaged", "not the same rule as MudPlay's Kill all engaged; choose it on the Combat tab");
-        p.SkipUnlessZero(s, "FailoverSpellAttacks", g, "Fail over spell attacks", "no equivalent");
+        p.SkipUnlessZero(s, "FailoverSpellAttacks", g, "Fail over spell attacks", "no matching MudPlay setting is mapped for it yet");
         foreach ((string key, string label) in new[]
                  {
                      ("MultMaxDmg", "Multi-attack max damage"), ("PreMultMaxDmg", "Area debuff max damage"),
@@ -246,7 +246,7 @@ public static class MegaMudProfileImporter
                      ("PreMinExp", "Debuff minimum monster exp"), ("AttMinExp2", "Alternate spell minimum monster exp"),
                  })
             p.SkipUnlessZero(s, key, g, label, "MudPlay chooses spells by monster, not by exp");
-        p.SkipUnless(s, "MaxMstrExp", v => v != "999999999" && v != "0", g, "Most monster exp to fight", "no equivalent");
+        p.SkipUnless(s, "MaxMstrExp", v => v != "999999999" && v != "0", g, "Most monster exp to fight", "no matching MudPlay setting is mapped for it yet");
 
         void Slot(Pass pass, string spellKey, string manaKey, string castsKey, string? enemiesKey, string label, CombatSpellSlot slot)
         {
@@ -297,7 +297,7 @@ public static class MegaMudProfileImporter
                      ("AreaHealPriority", "Area heal priority"), ("ShareCash", "Share cash"), ("DefendParty", "Defend the party"),
                      ("ShareDamage", "Share damage"), ("IgnoreParty", "Ignore the party"),
                  })
-            p.SkipUnlessZero(s, key, g, label, "no matching switch");
+            p.SkipUnlessZero(s, key, g, label, "no matching MudPlay setting is mapped for it yet");
     }
 
     // ----- Buffs: self and party blesses become Buff Watchdog slots ---------
@@ -374,7 +374,7 @@ public static class MegaMudProfileImporter
         p.SkipUnlessZero(s, "StashCoin", g, "Stash coin", "mark your stash rooms on the map, then choose what to stash on the Cash tab");
         p.SkipUnlessZero(s, "LimitWealth", g, "Wealth limits", "MegaMUD and MudPlay count wealth in different units; set the deposit thresholds on the Cash tab");
         p.SkipUnlessZero(s, "LimitCoins", g, "Coin limit", "set the deposit thresholds on the Cash tab");
-        p.SkipUnlessZero(s, "GetOnlyInCombat", g, "Collect only in combat", "no equivalent");
+        p.SkipUnlessZero(s, "GetOnlyInCombat", g, "Collect only in combat", "no matching MudPlay setting is mapped for it yet");
         p.SkipUnlessZero(s, "AutoCollectLootbox", g, "Auto-collect loot boxes", "flag the box Auto-collect in Game Data → Items");
         Put(profile, "Cash", cash);
 
@@ -409,7 +409,7 @@ public static class MegaMudProfileImporter
         // MegaMUD stores the reply with the braces it is sent in; MudPlay adds them.
         p.Text(s, "CmdReply", g, "Invalid remote command reply", v => talk.RemoteCommandFailureMessage = v.Trim().Trim('{', '}').Trim(),
             v => v.Trim().Trim('{', '}').Trim());
-        p.SkipUnlessZero(s, "AutoAfk", g, "Auto-AFK", "MudPlay has no AFK mode");
+        p.SkipUnlessZero(s, "AutoAfk", g, "Auto-AFK", "no matching MudPlay setting is mapped for it yet");
         Put(profile, "Talk", talk);
     }
 
@@ -424,10 +424,10 @@ public static class MegaMudProfileImporter
         p.Int(s, "DisarmMax", g, "Most trap disarm attempts", v => other.MaxTrapDisarmAttempts = Math.Max(1, v));
         p.Int(s, "PickMax", g, "Most picklock attempts", v => other.MaxPickAttempts = Math.Max(1, v));
         p.Int(s, "SearchMax", g, "Most hidden-exit searches", v => other.MaxHiddenSearchAttempts = Math.Max(1, v));
-        p.Skip(s, "BashMax", g, "Most door bash attempts", "MudPlay has no separate bash limit");
+        p.Skip(s, "BashMax", g, "Most door bash attempts", "no matching MudPlay setting is mapped for it yet");
         p.SkipUnlessZero(s, "AutoTrain", g, "Auto-train", "needs a training plan first: set it on the Workshop's CP Allocation tab");
-        p.SkipUnlessZero(s, "HangupNaked", g, "Hang up if naked", "no equivalent");
-        p.SkipUnlessZero(s, "RelogInstead", g, "Relog instead of hanging up", "no equivalent");
+        p.SkipUnlessZero(s, "HangupNaked", g, "Hang up if naked", "no matching MudPlay setting is mapped for it yet");
+        p.SkipUnlessZero(s, "RelogInstead", g, "Relog instead of hanging up", "no matching MudPlay setting is mapped for it yet");
         p.Skip(s, "EntryCmd", g, "Realm entry command", "kept with the realm, in Profile Management → Realm settings");
         p.Skip(s, "ExitCmd", g, "Realm exit command", "kept with the realm, in Profile Management → Realm settings");
         Put(profile, "Other", other);
@@ -439,7 +439,7 @@ public static class MegaMudProfileImporter
         Area("PvP", "PvP", "PvP settings", "MudPlay's PvP tab is laid out differently; set it up there");
         Area("Alerts", "Sounds", "Alert sounds", "pick sounds in Settings → Sounds");
         Area("Schedule", "Events", "Scheduled events", "MegaMUD's event format isn't read yet; re-create them in Settings → Events");
-        Area("Auto-roam", "Navigation", "Auto-roam rooms and commands", "no equivalent; loops and Auto-Lair do this job");
+        Area("Auto-roam", "Navigation", "Auto-roam rooms and commands", "not carried over; in MudPlay, loops and Auto-Lair do the roaming");
         Area("Comms", "BBS", "Redial and cleanup settings", "kept with the BBS, in Profile Management → BBS settings");
         Area("Player", "Character", "Stats and level", "read from the game with `stat` when the character logs in");
         if (p.Ini.Keys("MegaMud").Any(k => k.StartsWith("FavRoom", StringComparison.OrdinalIgnoreCase)))
