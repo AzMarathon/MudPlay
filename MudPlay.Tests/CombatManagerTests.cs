@@ -2198,6 +2198,149 @@ public sealed class CombatManagerTests
         Assert.False(h.Combat.CanEngageMonster(1));
     }
 
+    // Report paradigm-20261007-185740: the Champion of Blood dies into a greater
+    // hellion. The next target was picked the instant the champion died, from a
+    // roster the hellion wasn't on yet, so a dark priest was attacked and the hellion
+    // left to the party. The pick waits for the room display that shows the summon.
+    private static List<string> SentText(Harness h) =>
+        h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
+
+    private static Harness SummonerRoom(out Action? fireTimeout)
+    {
+        Harness h = new();
+        Action? pending = null;
+        h.Combat.SetArrivalSettleScheduler((_, cb) => pending = cb);
+        h.Combat.SetDeathSummonProbe(n => n == 180);
+        h.AddMonster(180, "Champion of Blood", killable: true);
+        h.AddMonster(181, "greater hellion", killable: true);
+        h.AddMonster(144, "dark priest", killable: true);
+        h.SetOverlay(180, priority: MonsterAttackPriority.High);
+        h.SetOverlay(181, priority: MonsterAttackPriority.High);
+        h.Feed("Also here: Champion of Blood, dark priest.");
+        Assert.Equal("a Champion of Blood", h.LastSent);
+        h.Sent.Clear();
+        fireTimeout = () => pending?.Invoke();
+        return h;
+    }
+
+    [Fact]
+    public void KillOfASummoner_HoldsTheNextPick_ThenTakesTheSummonedMonster()
+    {
+        using Harness h = SummonerRoom(out _);
+
+        h.Feed("You gain 20000 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
+
+        Assert.True(h.Combat.AwaitingSummonRescan);
+        Assert.DoesNotContain("a dark priest", SentText(h));   // no pick off the stale roster
+        Assert.Contains("", SentText(h));                      // the re-display was asked for
+
+        h.Feed("Also here: dark priest, greater hellion.");
+
+        Assert.False(h.Combat.AwaitingSummonRescan);
+        Assert.Equal("a greater hellion", h.LastSent);
+    }
+
+    [Fact]
+    public void KillOfASummoner_NoRoomDisplay_PicksFromTheRosterWhenTheWaitRunsOut()
+    {
+        using Harness h = SummonerRoom(out Action? fireTimeout);
+
+        h.Feed("You gain 20000 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
+        Assert.DoesNotContain("a dark priest", SentText(h));
+
+        fireTimeout!();
+
+        Assert.False(h.Combat.AwaitingSummonRescan);
+        Assert.Equal("a dark priest", h.LastSent);
+    }
+
+    // A monster that summons nothing as it dies is re-picked from at once, as before.
+    [Fact]
+    public void KillOfAnOrdinaryMonster_PicksTheNextTargetAtOnce()
+    {
+        using Harness h = SummonerRoom(out _);
+        h.Combat.SetDeathSummonProbe(_ => false);
+
+        h.Feed("You gain 20000 experience.");
+        h.Feed("*Combat Off*");
+        h.Combat.NoteUnattributedDeath();
+
+        Assert.False(h.Combat.AwaitingSummonRescan);
+        Assert.Equal("a dark priest", h.LastSent);
+    }
+
+    // Game data for the magic-hit gate: a plain shortsword, a rapier that hits magic
+    // 1, and a monster only magic 1 can hit.
+    private static void WireMagicGate(Harness h, string root)
+    {
+        string dir = Path.Combine(root, "alpha");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Items.json"), """
+            [ { "Number": 1, "Name": "shortsword" },
+              { "Number": 2, "Name": "silver rapier", "Abil-0": 28, "AbilVal-0": 1 } ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), """
+            [ { "Number": 108, "Name": "ice sorceress", "Abil-0": 28, "AbilVal-0": 1 } ]
+            """);
+        GameDataCache cache = new(root);
+        cache.SwitchSet("alpha");
+        h.Combat.SetMagicEligibility(
+            new MonsterMagicIndex(cache), new ItemMagicIndex(cache), new SpellReqLevelIndex(cache),
+            new MonsterResistIndex(cache), new SpellAttackTypeIndex(cache));
+    }
+
+    // Report paradigm-20261007-182916: the profile still named the plain shortsword a
+    // magical rapier had replaced. The engine judged the name, wrote the ice sorceress
+    // off as unhittable and stood there while the party killed her. A configured
+    // weapon the character doesn't have can't come to hand, so the one on the hand
+    // is what swings and what the gate weighs.
+    [Fact]
+    public void MagicalMonster_IsJudgedByTheWeaponOnTheHand_WhenTheConfiguredOneIsntCarried()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-magic-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireMagicGate(h, root);
+            h.Settings.NormalWeapon = "shortsword";
+            h.WornWeapon = "silver rapier";
+            h.Combat.SetCarriedCheck(name => name == "silver rapier");
+            h.AddMonster(108, "ice sorceress", killable: true);
+
+            h.Feed("Also here: ice sorceress.");
+
+            Assert.True(h.Combat.CanEngageMonster(108));
+            Assert.Equal("a ice sorceress", h.LastSent);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // While the configured weapon is carried the engine puts it on to attack, so it
+    // is still the one judged, whatever is on the hand beforehand.
+    [Fact]
+    public void MagicalMonster_IsJudgedByTheConfiguredWeapon_WhileItIsCarried()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-magic-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireMagicGate(h, root);
+            h.Settings.NormalWeapon = "shortsword";
+            h.WornWeapon = "silver rapier";
+            h.Combat.SetCarriedCheck(_ => true);
+            h.AddMonster(108, "ice sorceress", killable: true);
+
+            h.Feed("Also here: ice sorceress.");
+
+            Assert.False(h.Combat.CanEngageMonster(108));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
     // Even with the alternate carried, a swap that never lands stops being retried.
     [Fact]
     public void WeaponNoEffect_SwapNeverLands_StopsAfterAFewTries()

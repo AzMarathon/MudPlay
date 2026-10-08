@@ -895,7 +895,7 @@ public static class RoomTooltipBuilder
         foreach (CastTeleportGroup g in castGroups) renderedKeywords.AddRange(g.Keywords);
         renderedKeywords.AddRange(actionKeywords);
         IReadOnlyList<RoomEffectRow> effectRows =
-            ResolveRoomEffectRows(room, data, tbinfo, renderedKeywords);
+            ResolveRoomEffectRows(room, data, tbinfo, renderedKeywords, spellCatalog);
 
         if (byDest.Count == 0 && castGroups.Count == 0 && actionKeywords.Count == 0
             && requirements.Count == 0 && effectRows.Count == 0)
@@ -1009,7 +1009,7 @@ public static class RoomTooltipBuilder
     // Empty when the room has no CMD, no TBInfo store, or nothing but flavour text.
     public static IReadOnlyList<RoomEffectRow> ResolveRoomEffectRows(
         Room room, GameDataCache? data, TBInfoStore? tbinfo,
-        IEnumerable<string>? alreadyShown = null)
+        IEnumerable<string>? alreadyShown = null, Game.Spells.KnownSpellCatalog? spellCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(room);
         if (tbinfo is null || room.Cmd <= 0) return Array.Empty<RoomEffectRow>();
@@ -1035,7 +1035,8 @@ public static class RoomTooltipBuilder
         var keywordOrder = new List<string>();
 
         foreach (TBInfoActionResolver.RoomEffectCommand ec
-                 in TBInfoActionResolver.EnumerateEffectCommands(tbinfo, room.Cmd))
+                 in TBInfoActionResolver.EnumerateEffectCommands(tbinfo, room.Cmd,
+                        spellCatalog is null ? null : n => TBInfoCastTeleportResolver.IsTeleportSpell(spellCatalog, n)))
         {
             if (shown.Contains(ec.Keyword)) continue;
             string cost = requirementByKeyword.TryGetValue(ec.Keyword, out TBInfoActionResolver.CommandRequirement pc)
@@ -1095,6 +1096,7 @@ public static class RoomTooltipBuilder
             TBInfoActionResolver.RoomEffectKind.LearnSpell => $"teaches {Named("Spells")}",
             TBInfoActionResolver.RoomEffectKind.PlaceRoomItem => $"drops {Named("Items")} in the room",
             TBInfoActionResolver.RoomEffectKind.TakeItem => $"takes {Named("Items")}",
+            TBInfoActionResolver.RoomEffectKind.CastSpell => $"casts {Named("Spells")}",
             // Ability ids resolve against no shipped table, so this one is unnamed
             // by construction (see RoomEffectCommand).
             _ => "grants an ability",

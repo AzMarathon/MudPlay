@@ -896,6 +896,29 @@ public sealed class AutoWalkManagerTests : IDisposable
             h.Walker.RemainingRoomKeys);
     }
 
+    // Report paradigm-20261007-202509: a route that goes out to turn a statue and
+    // comes back passes the same room twice. A pause between steps there (a held
+    // cast going out) resumed at the LATER visit, so the walk skipped the statue
+    // and was refused at the exit it opens. Standing where the walk left off, a
+    // resume carries on from that step.
+    [Fact]
+    public void Resume_OnARouteThatComesBackThroughThisRoom_DoesNotSkipTheDetour()
+    {
+        Harness h = NewHarness(LeverDetourGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+
+        // Held before the first step can go: 1/2 is both where the walk stands and
+        // where the return leg from the lever room ends.
+        h.Coordinator.AssertGate("user");
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 3)));   // E→1/4, pull lever, W→1/2, N→1/3
+        Assert.Empty(h.Sent);
+
+        h.Coordinator.ClearGate("user");
+
+        Assert.Equal("e\r", System.Text.Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+    }
+
     [Fact]
     public void Resume_StepStillInFlight_DoesNotResend_ConfirmsOnArrival()
     {

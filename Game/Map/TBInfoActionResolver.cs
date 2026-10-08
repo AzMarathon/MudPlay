@@ -245,6 +245,7 @@ public static class TBInfoActionResolver
         GrantAbility,   // `giveability` / `addability` — an ability or quest-flag award.
         PlaceRoomItem,  // `roomitem <item>` — drops an item on the floor to `get`.
         TakeItem,       // `takeitem <item>` — hands an item over with nothing returned.
+        CastSpell,      // `cast <spell>` — a spell that doesn't move you (a teleport cast is shown as one).
     }
 
     // One room command explained by its effect. TargetId is the monster / spell /
@@ -254,16 +255,24 @@ public static class TBInfoActionResolver
     public readonly record struct RoomEffectCommand(string Keyword, RoomEffectKind Kind, int TargetId);
 
     // Yields each keyword line whose effect only one of the directives above
-    // explains. Lines already surfaced elsewhere (teleport / cast / remoteaction /
-    // giveitem / random) are skipped so a keyword never renders twice; `price`
-    // lines are left in, and the caller drops them in favour of its own priced row
-    // exactly as it does for the room-action keywords.
+    // explains. Lines already surfaced elsewhere (teleport / a teleporting cast /
+    // remoteaction / giveitem / random) are skipped so a keyword never renders twice;
+    // `price` lines are left in, and the caller drops them in favour of its own priced
+    // row exactly as it does for the room-action keywords.
+    //
+    // castIsTeleport says whether a spell number moves its caster. A cast that
+    // doesn't is an effect in its own right, and must not hide the line: every
+    // `cast` used to count as "shown as a teleport", so a command that summons a
+    // monster and casts a quest spell (2/12043's "lift latch") appeared nowhere
+    // (report paradigm-20261007-194642). Without the predicate nothing can tell the
+    // two apart, and a line with a cast is left out as before.
     //
     // One effect per keyword, highest-priority first: a summon outranks the rest
     // because a spawned monster is the consequence worth warning about before the
     // reward it guards ("touch hammer" both drops an item and summons a frost
     // hydra — the hydra is the part you want to read first).
-    public static IEnumerable<RoomEffectCommand> EnumerateEffectCommands(TBInfoStore store, int roomCmd)
+    public static IEnumerable<RoomEffectCommand> EnumerateEffectCommands(
+        TBInfoStore store, int roomCmd, Func<int, bool>? castIsTeleport = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         if (roomCmd <= 0) yield break;
@@ -289,7 +298,9 @@ public static class TBInfoActionResolver
             for (int i = 1; i < parts.Length; i++)
             {
                 string d = parts[i];
-                if (StartsWithWord(d, "teleport") || StartsWithWord(d, "cast")
+                bool cast = StartsWithWord(d, "cast");
+                if (StartsWithWord(d, "teleport")
+                    || (cast && (castIsTeleport is null || castIsTeleport(FirstArg(d))))
                     || StartsWithWord(d, "remoteaction") || StartsWithWord(d, "giveitem")
                     || StartsWithWord(d, "random"))
                 {
@@ -316,6 +327,7 @@ public static class TBInfoActionResolver
               || StartsWithWord(directive, "addability")) found = RoomEffectKind.GrantAbility;
         else if (StartsWithWord(directive, "roomitem")) found = RoomEffectKind.PlaceRoomItem;
         else if (StartsWithWord(directive, "takeitem")) found = RoomEffectKind.TakeItem;
+        else if (StartsWithWord(directive, "cast") && FirstArg(directive) > 0) found = RoomEffectKind.CastSpell;
         else return;
 
         if (kind is { } existing && existing <= found) return;
