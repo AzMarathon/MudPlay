@@ -86,6 +86,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Recovery.TierChanged    += OnRecoveryTierChanged;
         _services.Walker.Event += OnWalkerEvent;
         _services.PyramidSolver.StateChanged += OnPyramidClimbChanged;
+        _services.LoopHandoff.Changed += OnLoopHandoffChanged;
         // Opened part-way up a climb: its floor-1 clock still needs the tick.
         if (_services.PyramidSolver.Active) _sailingTick.Start();
         _services.TokenRoute.RegroupFailed += OnTokenRegroupFailed;
@@ -267,6 +268,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Recovery.TierChanged    -= OnRecoveryTierChanged;
         _services.Walker.Event -= OnWalkerEvent;
         _services.PyramidSolver.StateChanged -= OnPyramidClimbChanged;
+        _services.LoopHandoff.Changed -= OnLoopHandoffChanged;
         _services.TokenRoute.RegroupFailed -= OnTokenRegroupFailed;
         _services.TokenRoute.Changed -= OnTokenRouteChanged;
         _services.MapComparison.Changed -= OnMapComparisonChanged;
@@ -744,7 +746,11 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (runner.CurrentLoop is not { } loop)
         {
             LoopPath = null;
-            LoopApproachPreviewPath = null;
+            // A loop started from off it is walked to like any destination, and
+            // held aside until that walk arrives (LoopWalkHandoff), so the runner
+            // has no loop yet. Its ring is still where the walk is going: draw it
+            // as the approach preview (report paradigm-20261008-014635).
+            LoopApproachPreviewPath = PendingLoopRing();
             return;
         }
 
@@ -793,6 +799,25 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         LoopRunningWaypoints = loop.Waypoints.Select(w => w.Key).ToList();
         IReadOnlyList<RoomKey> keys = runner.ResolveLoopRoomKeys();
         LoopPath = keys.Count >= 2 ? keys : null;
+    }
+
+    // The ring of the loop waiting on its walk-to, worked out once per loop: it is
+    // asked for on every overlay refresh while the walk is under way.
+    private (Game.Map.Loop Loop, IReadOnlyList<RoomKey>? Ring)? _pendingLoopRing;
+
+    private IReadOnlyList<RoomKey>? PendingLoopRing()
+    {
+        if (_services.LoopHandoff.Pending is not { Waypoints.Count: >= 2 } pending)
+        {
+            _pendingLoopRing = null;
+            return null;
+        }
+        if (_pendingLoopRing is { } cached && ReferenceEquals(cached.Loop, pending)) return cached.Ring;
+        IReadOnlyList<RoomKey> keys = LoopExpander.ResolveCycleRoomKeys(
+            pending.Waypoints, _services.Bfs, _services.RoomGraph, _services.Movement);
+        IReadOnlyList<RoomKey>? ring = keys.Count >= 2 ? keys : null;
+        _pendingLoopRing = (pending, ring);
+        return ring;
     }
 
     // ----- Status strip ---------------------------------------------
@@ -3705,6 +3730,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // Refresh the boat countdown label each second while a sail is in flight;
     // stop the pump the moment the walker lands and clears IsSailing.
+    // A loop began waiting on its walk-to, or stopped waiting: show or drop its ring.
+    private void OnLoopHandoffChanged()
+    {
+        RefreshLoopOverlays();
+        RaiseTopBarStatus();
+    }
+
     // The climb started, ended, or went into or out of a hold: redraw its route
     // and run the one-second tick while floor 1's clock is showing.
     private void OnPyramidClimbChanged()
@@ -4482,7 +4514,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                     string dest = _services.Walker.Destination is { } k
                         ? FormatRoomRef(k)
                         : "?";
-                    return WalkToStatus(dest);
+                    // The walk to a loop says what it is for, until the loop takes over.
+                    return WalkToStatus(dest, _services.LoopHandoff.Pending is { } waiting
+                        ? $" then looping {waiting.Name}" : "");
                 }
                 case NavigationEngineKind.Looping:
                 {

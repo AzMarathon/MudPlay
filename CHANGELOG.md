@@ -1,8 +1,10 @@
 # Version history
 
-## 3.150.12
+## 3.150.13
 
 - Stop before and Grab All on the Bosses tab are each character's own; the boss list itself stays the realm's. A character starts from the ticks the realm's list held
+- The map shows a loop's ring while you are still walking to it, and the status names the loop the walk is for
+- bug reports addressed: paradigm-20261008-014635
 
 ## 3.150.11
 
