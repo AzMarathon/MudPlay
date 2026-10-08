@@ -1,5 +1,9 @@
 # Version history
 
+## 3.150.8
+
+- *Clear hostiles when sneak broken by see-hidden monster* has two ticks under it, While solo and While in a party, so it can clear when you're alone and keep running when you're grouped; both on by default
+
 ## 3.150.7
 
 - Auto-Sneak stands down, with a line on the terminal, while you carry something that takes your Stealth to nothing (a log raft), instead of resending `sn` in every room; it sneaks again once the item is gone (Settings → Other sets the sneak chance it stands down under, 15% by default)

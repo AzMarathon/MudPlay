@@ -96,6 +96,13 @@ public sealed class CombatSettings
     // false — combat-off means combat-off unless the user opts in.
     public bool ClearHostilesWhenSeenHidden { get; set; }
 
+    // When the see-hidden clear above applies: alone, in a party, or both. A lone
+    // runner has to deal with what a see-hidden monster woke; a party can afford to
+    // keep running and may not want the stop. Both default on, which is the
+    // behaviour before the two were split (user, 2026-10-07).
+    public bool SeenHiddenClearWhileSolo { get; set; } = true;
+    public bool SeenHiddenClearWhileInParty { get; set; } = true;
+
     // The same stealth run, when a sneaked move fails (the loud entry line, or a room
     // shown without "Sneaking..."): a room inside the Min/Max monster window is
     // cleared of every engageable hostile before the route re-sneaks and walks on;

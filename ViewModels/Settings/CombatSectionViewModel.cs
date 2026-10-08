@@ -139,6 +139,9 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     public bool IsRunIfBackstabFailsEditable => !HitAndRunTactics;
     [ObservableProperty] private int _hitAndRunMaxRuns = 3;
     [ObservableProperty] private bool _clearHostilesWhenSeenHidden;
+    // When the see-hidden clear applies: alone, in a party, or both.
+    [ObservableProperty] private bool _seenHiddenClearWhileSolo = true;
+    [ObservableProperty] private bool _seenHiddenClearWhileInParty = true;
     [ObservableProperty] private bool _clearHostilesWhenSneakFails;
 
     // ----- Targeting ------------------------------------------------
@@ -661,6 +664,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
             HitAndRunTactics   = HitAndRunTactics,
             HitAndRunMaxRuns             = Math.Clamp(HitAndRunMaxRuns, 1, 20),
             ClearHostilesWhenSeenHidden  = ClearHostilesWhenSeenHidden,
+            SeenHiddenClearWhileSolo     = SeenHiddenClearWhileSolo,
+            SeenHiddenClearWhileInParty  = SeenHiddenClearWhileInParty,
             ClearHostilesWhenSneakFails  = ClearHostilesWhenSneakFails,
 
             TargetOrder              = TargetOrderReverse ? TargetOrder.Reverse : TargetOrder.Normal,
@@ -826,6 +831,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
         HitAndRunTactics  = dto.HitAndRunTactics;
         HitAndRunMaxRuns            = dto.HitAndRunMaxRuns;
         ClearHostilesWhenSeenHidden = dto.ClearHostilesWhenSeenHidden;
+        SeenHiddenClearWhileSolo = dto.SeenHiddenClearWhileSolo;
+        SeenHiddenClearWhileInParty = dto.SeenHiddenClearWhileInParty;
         ClearHostilesWhenSneakFails = dto.ClearHostilesWhenSneakFails;
 
         TargetOrderNormal  = dto.TargetOrder == TargetOrder.Normal;
@@ -946,6 +953,8 @@ public sealed partial class CombatSectionViewModel : SettingsSectionViewModel
     partial void OnHitAndRunTacticsChanged(bool value)    => MarkDirty();
     partial void OnHitAndRunMaxRunsChanged(int value)               => MarkDirty();
     partial void OnClearHostilesWhenSeenHiddenChanged(bool value)   => MarkDirty();
+    partial void OnSeenHiddenClearWhileSoloChanged(bool value)      => MarkDirty();
+    partial void OnSeenHiddenClearWhileInPartyChanged(bool value)   => MarkDirty();
     partial void OnClearHostilesWhenSneakFailsChanged(bool value)   => MarkDirty();
 
     // Targeting

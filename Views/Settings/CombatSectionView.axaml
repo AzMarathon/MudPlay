@@ -289,6 +289,18 @@
                             <CheckBox Content="Clear hostiles when sneak broken by see-hidden monster"
                                       IsChecked="{Binding ClearHostilesWhenSeenHidden, Mode=TwoWay}"
                                       ToolTip.Tip="Combat-off override for stealth runners. When sprinting a walk-to route with combat OFF and auto-sneak ON, a room holding a see-hidden monster breaks sneak. With this on, the engine force-clears every hostile in that room (bypassing the Min/Max gate) so the route can resume sneaking — preventing monsters from dragging and stacking across rooms. Off by default."/>
+                            <!-- When the see-hidden clear applies. Both on is the behaviour
+                                 before the split; a party that would rather keep running
+                                 unticks the second. -->
+                            <StackPanel Orientation="Horizontal" Spacing="16" Margin="24,0,0,0"
+                                        IsEnabled="{Binding ClearHostilesWhenSeenHidden}">
+                                <CheckBox Content="While solo"
+                                          IsChecked="{Binding SeenHiddenClearWhileSolo, Mode=TwoWay}"
+                                          ToolTip.Tip="Clear the room when a see-hidden monster breaks your sneak while you are on your own. On by default."/>
+                                <CheckBox Content="While in a party"
+                                          IsChecked="{Binding SeenHiddenClearWhileInParty, Mode=TwoWay}"
+                                          ToolTip.Tip="Clear the room when a see-hidden monster breaks your sneak while you are in a party, leading or following. Untick to keep running with the party instead. On by default."/>
+                            </StackPanel>
                             <CheckBox Content="Clear hostiles when sneak fails"
                                       IsChecked="{Binding ClearHostilesWhenSneakFails, Mode=TwoWay}"
                                       ToolTip.Tip="Run through areas with combat OFF and auto-sneak ON, but when a sneaked move fails — 'You make a sound as you enter the room!', or a room shown without 'Sneaking...' — and the room's monster count is inside your Min/Max room thresholds, stop, clear every hostile there, then re-sneak and carry on. A room outside the thresholds is walked through as usual. Off by default."/>

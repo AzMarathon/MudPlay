@@ -65,6 +65,8 @@ public sealed class CombatSpellProfile
     public bool HitAndRunTactics { get; set; }
     public int HitAndRunMaxRuns { get; set; } = 3;
     public bool ClearHostilesWhenSeenHidden { get; set; }
+    public bool SeenHiddenClearWhileSolo { get; set; } = true;
+    public bool SeenHiddenClearWhileInParty { get; set; } = true;
     public bool ClearHostilesWhenSneakFails { get; set; }
     public bool KillAllEngaged { get; set; }
 
@@ -134,6 +136,8 @@ public sealed class CombatSpellProfile
             HitAndRunTactics = src.HitAndRunTactics,
             HitAndRunMaxRuns = src.HitAndRunMaxRuns,
             ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden,
+            SeenHiddenClearWhileSolo = src.SeenHiddenClearWhileSolo,
+            SeenHiddenClearWhileInParty = src.SeenHiddenClearWhileInParty,
             ClearHostilesWhenSneakFails = src.ClearHostilesWhenSneakFails,
             KillAllEngaged = src.KillAllEngaged,
             RunDirection = src.RunDirection,
@@ -176,6 +180,8 @@ public sealed class CombatSpellProfile
         dst.HitAndRunTactics = HitAndRunTactics;
         dst.HitAndRunMaxRuns = HitAndRunMaxRuns;
         dst.ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden;
+        dst.SeenHiddenClearWhileSolo = SeenHiddenClearWhileSolo;
+        dst.SeenHiddenClearWhileInParty = SeenHiddenClearWhileInParty;
         dst.ClearHostilesWhenSneakFails = ClearHostilesWhenSneakFails;
         dst.KillAllEngaged = KillAllEngaged;
         dst.RunDirection = RunDirection;
@@ -217,6 +223,8 @@ public sealed class CombatSpellProfile
         HitAndRunTactics = src.HitAndRunTactics;
         HitAndRunMaxRuns = src.HitAndRunMaxRuns;
         ClearHostilesWhenSeenHidden = src.ClearHostilesWhenSeenHidden;
+        SeenHiddenClearWhileSolo = src.SeenHiddenClearWhileSolo;
+        SeenHiddenClearWhileInParty = src.SeenHiddenClearWhileInParty;
         ClearHostilesWhenSneakFails = src.ClearHostilesWhenSneakFails;
         KillAllEngaged = src.KillAllEngaged;
         RunDirection = src.RunDirection;
@@ -256,6 +264,8 @@ public sealed class CombatSpellProfile
         HitAndRunTactics = HitAndRunTactics,
         HitAndRunMaxRuns = HitAndRunMaxRuns,
         ClearHostilesWhenSeenHidden = ClearHostilesWhenSeenHidden,
+        SeenHiddenClearWhileSolo = SeenHiddenClearWhileSolo,
+        SeenHiddenClearWhileInParty = SeenHiddenClearWhileInParty,
         ClearHostilesWhenSneakFails = ClearHostilesWhenSneakFails,
         KillAllEngaged = KillAllEngaged,
         RunDirection = RunDirection,

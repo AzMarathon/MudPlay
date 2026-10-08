@@ -3029,6 +3029,8 @@ It doesn't run where a backstab couldn't work anyway: a room with a see-hidden m
 
 This works whether **Auto-Combat is on or off**: with Auto-Combat off it engages just for that room and fights it to the end, moving to the next monster as each one dies.
 
+**While solo / While in a party.** Two ticks under the option say when it applies. **While solo** covers you on your own; **While in a party** covers you leading or following. Both are on by default, which is how the option behaved before. Untick **While in a party** to clear see-hidden rooms when you're alone but keep running with the party when you're grouped (or the other way round). With both unticked the option does nothing. Like the option itself, the two ticks are saved with a combat profile's Backstab group.
+
 ### Clear hostiles when sneak fails
 
 **Default:** Off
@@ -4654,6 +4656,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Run if BS fails | `false` | bool | `RunIfBackstabFails` | Models/Profile/CombatSettings.cs |
 | Hit and Run tactics / Give up and fight after N runs | `false` / 3 | bool / 1–20 | `HitAndRunTactics` / `HitAndRunMaxRuns` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when seen hidden | `false` | bool | `ClearHostilesWhenSeenHidden` | Models/Profile/CombatSettings.cs |
+| Clear hostiles when seen hidden: While solo / While in a party | `true` / `true` | bool / bool | `SeenHiddenClearWhileSolo`, `SeenHiddenClearWhileInParty` | Models/Profile/CombatSettings.cs |
 | Clear hostiles when sneak fails | `false` | bool | `ClearHostilesWhenSneakFails` | Models/Profile/CombatSettings.cs |
 | Target order | `Normal` | Normal / Reverse | `TargetOrder` | Models/Profile/CombatSettings.cs |
 | Target Priority (+ member name) | `Default` / `null` | Default / FollowLeader / FollowMember | `TargetPriority` / `TargetPriorityMemberName` | Models/Profile/CombatSettings.cs |
