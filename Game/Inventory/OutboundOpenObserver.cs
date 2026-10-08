@@ -4,7 +4,7 @@ using System.Text;
 namespace MudPlay.Game.Inventory;
 
 // Watches what the user types for `open <target>` and announces the target, so the
-// Chest Offload window can track a chest opened from the terminal the same as one
+// Chest Offload tab can track a chest opened from the terminal the same as one
 // opened from its own button. Only typed input reaches it (engine sends skip the
 // outbound observers); the window decides whether the target is a carried container.
 public sealed class OutboundOpenObserver

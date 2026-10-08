@@ -9,7 +9,7 @@
 
     <Grid Margin="22" RowDefinitions="Auto,*">
 
-        <!-- Toolbar, left to right: filter, the active-timer summary, chest offload,
+        <!-- Toolbar, left to right: filter, the active-timer summary,
              the two bulk toggles, timer sync, import / export, then Manage Bosses;
              Reset to default sits alone at the right edge.
              Editing the boss list lives in the Manage Bosses dialog; the table itself
@@ -21,8 +21,6 @@
                      Text="{Binding FilterText, Mode=TwoWay}"/>
             <TextBlock Text="{Binding ActiveSummary}" VerticalAlignment="Center" Margin="0,0,18,6"
                        Foreground="{StaticResource AccentAmberBrush}"/>
-            <Button Content="Chest Offload…" Margin="0,0,6,6" Command="{Binding OpenChestOffloadCommand}"
-                    ToolTip.Tip="Open the boss chests you're carrying and vendor the loot shop-by-shop."/>
             <Button Content="Stop Before Toggle" Margin="0,0,6,6" Command="{Binding ToggleAllStopBeforeCommand}"
                     ToolTip.Tip="Tick Stop before on every boss shown; if they're all ticked already, untick them all."/>
             <Button Content="Grab All Toggle" Margin="0,0,6,6" Command="{Binding ToggleAllGrabAllCommand}"

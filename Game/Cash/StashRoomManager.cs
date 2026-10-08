@@ -48,10 +48,15 @@ public sealed class StashRoomManager : IDisposable
         IReadOnlyList<(string Currency, long Amount)> Currencies,
         IReadOnlyList<string> Items);
 
+    // A carried entry flagged Auto-stash: its canonical name, and how many copies
+    // stay in hand (Min. to keep when Must have minimum is set, else none), the
+    // same floor Auto-sell and Auto-discard leave.
+    public sealed record ResolvedStash(string Name, int KeepCount);
+
     private readonly ProfileService _profile;
     private readonly Func<CashSettings> _readCash;
     private readonly Func<InventorySnapshot> _getSnapshot;
-    private readonly Func<string, string?> _resolveAutoStashItem;
+    private readonly Func<string, ResolvedStash?> _resolveAutoStashItem;
     private readonly Func<bool> _isEnabled;
     private readonly Func<bool> _isParadigm;
     private readonly LogService? _log;
@@ -68,7 +73,7 @@ public sealed class StashRoomManager : IDisposable
         ProfileService profile,
         Func<CashSettings> readCash,
         Func<InventorySnapshot> getSnapshot,
-        Func<string, string?> resolveAutoStashItem,
+        Func<string, ResolvedStash?> resolveAutoStashItem,
         Func<bool> isEnabled,
         LogService? log = null,
         CurrencyNaming? naming = null,
@@ -156,18 +161,28 @@ public sealed class StashRoomManager : IDisposable
         // copies so Paradigm can stash the pile in one `hide N <item>` (Stock
         // still sends one `hide <item>` per copy); the server echoes the count
         // back and InventoryManager decrements weight by N.
-        Dictionary<string, int> toHide = new(StringComparer.OrdinalIgnoreCase);
+        // Keys are flagged the same way but sit on the key ring, a list the game
+        // keeps apart from the pack; reading the pack alone never stashed one.
+        Dictionary<string, (int Held, int Keep)> toHide = new(StringComparer.OrdinalIgnoreCase);
         List<string> hideOrder = new();
-        foreach (string entry in snapshot.CarriedItems)
+        foreach (string entry in snapshot.CarriedItems.Concat(snapshot.Keys ?? Array.Empty<string>()))
         {
-            if (_resolveAutoStashItem(entry) is not { } name) continue;
-            if (!toHide.ContainsKey(name)) hideOrder.Add(name);
-            toHide[name] = toHide.GetValueOrDefault(name) + 1;
+            if (_resolveAutoStashItem(entry) is not { } item) continue;
+            if (!toHide.ContainsKey(item.Name)) hideOrder.Add(item.Name);
+            toHide[item.Name] = (toHide.GetValueOrDefault(item.Name).Held + CopiesIn(entry, item.Name), item.KeepCount);
         }
         List<string> hiddenItems = new();
         foreach (string name in hideOrder)
         {
-            int count = toHide[name];
+            (int copies, int keep) = toHide[name];
+            int count = copies - Math.Max(0, keep);
+            if (count <= 0)
+            {
+                _log?.Debug(LogCategory, $"keeping item={name} (holding {copies}, min to keep {keep})");
+                continue;
+            }
+            if (keep > 0)
+                _log?.Info(LogCategory, $"stash {count}x item={name} (holding {copies}, min to keep {keep})");
             CountedCommand.Emit(Send, "hide", count, name, _isParadigm());
             for (int i = 0; i < count; i++) hiddenItems.Add(name);
         }
@@ -179,6 +194,17 @@ public sealed class StashRoomManager : IDisposable
                 + $"currencies={dispatched.Count} items={hiddenItems.Count}");
             StashExecuted?.Invoke(new StashDispatch(enteredRoom, dispatched, hiddenItems));
         }
+    }
+
+    // How many copies one carried-list entry stands for. Paradigm lists a stack as
+    // one entry with its count in front ("9 green dragon hide"); counting that as
+    // one copy hid a single hide a visit. The count is only taken when what follows
+    // it is the item's own name, so an item whose name starts with a number still
+    // counts as one.
+    private static int CopiesIn(string entry, string name)
+    {
+        (int count, string rest) = CountedCommand.SplitLeadingCount(entry.Trim());
+        return string.Equals(rest, name, StringComparison.OrdinalIgnoreCase) ? count : 1;
     }
 
     private void Send(string text)

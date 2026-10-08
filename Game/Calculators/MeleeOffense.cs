@@ -9,9 +9,14 @@ namespace MudPlay.Game.Calculators;
 //   CritChance     — normal-attack crit chance (0-100); 0 for Bash / Smash.
 //   AvgCritDamage  — average crit damage before mitigation (3x the max); 0 for Bash / Smash.
 //   HasWeapon      — false when unarmed; gates the DPS / rounds-to-kill projection.
+//   MinDamage / MaxDamage — the per-hit range AvgDamage is the middle of (0 when unarmed).
+//   QuickAndDeadlyBonus   — the crit a fast swing added to CritChance; 0 for Bash / Smash.
 public readonly record struct MeleeOffense(
     int AvgDamage,
     double SwingsPerRound,
     int CritChance,
     int AvgCritDamage,
-    bool HasWeapon);
+    bool HasWeapon,
+    int MinDamage = 0,
+    int MaxDamage = 0,
+    int QuickAndDeadlyBonus = 0);

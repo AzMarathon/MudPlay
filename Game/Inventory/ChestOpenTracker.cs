@@ -6,7 +6,7 @@ using MudPlay.Services;
 
 namespace MudPlay.Game.Inventory;
 
-// Tracks every chest the player opens — from the Chest Offload window's Open button
+// Tracks every chest the player opens — from the Chest Offload tab's Open button
 // or by typing `open <chest>` — whether or not the window is up. An open reads the
 // inventory (`i`), opens, and reads it again; only what that one open added joins
 // the list (ChestLootLedger), and — when the character has it switched on — its

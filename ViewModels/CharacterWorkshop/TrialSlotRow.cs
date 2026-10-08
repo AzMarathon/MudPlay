@@ -52,6 +52,20 @@ public sealed partial class TrialSlotRow : ObservableObject
     // when empty). Distinct from each TrialOption's own tooltip, which covers the
     // open dropdown's candidates.
     [ObservableProperty] private string? _itemTooltip;
+    // The "Missing?" check's verdict for this slot; the row is tinted by it.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsWorn), nameof(IsNotWorn), nameof(IsUnfilled), nameof(WornCheckTip))]
+    private TrialWornCheck _wornCheck;
+    public bool IsWorn => WornCheck == TrialWornCheck.Worn;
+    public bool IsNotWorn => WornCheck == TrialWornCheck.NotWorn;
+    public bool IsUnfilled => WornCheck == TrialWornCheck.Unfilled;
+    public string? WornCheckTip => WornCheck switch
+    {
+        TrialWornCheck.Worn => "You're wearing this.",
+        TrialWornCheck.NotWorn => "You aren't wearing this.",
+        TrialWornCheck.Unfilled => "Nothing is picked for this slot.",
+        _ => null,
+    };
 
     public TrialSlotRow(EquipmentSlot slot, string slotLabel, Action onChanged, Func<string, string> tooltipFactory)
     {

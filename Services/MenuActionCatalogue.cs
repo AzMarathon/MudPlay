@@ -134,9 +134,14 @@ public static class MenuActionCatalogue
         new("tab.cpallocation", "Workshop: CP Allocation", Kind.WorkshopTab, "Workshop tabs", Parameter: "cpallocation"),
         new("tab.queststatus", "Workshop: Quest Status", Kind.WorkshopTab, "Workshop tabs", Parameter: "queststatus"),
         new("tab.equipment", "Workshop: Equipment Manager", Kind.WorkshopTab, "Workshop tabs", Parameter: "equipment"),
+        new("tab.itemfinder", "Workshop: Item Finder", Kind.WorkshopTab, "Workshop tabs", Parameter: "itemfinder"),
         new("tab.calculators", "Workshop: Calculators", Kind.WorkshopTab, "Workshop tabs", Parameter: "calculators"),
         new("tab.bosses", "Workshop: Bosses", Kind.WorkshopTab, "Workshop tabs", Parameter: "bosses"),
+        new("tab.chestoffload", "Workshop: Chest Offload", Kind.WorkshopTab, "Workshop tabs", Parameter: "chestoffload"),
         new("tab.ghmanagement", "Workshop: Roomba", Kind.WorkshopTab, "Workshop tabs", Parameter: "ghmanagement"),
+        // Realm Rankings was a calculator before it became a tab; the key stays so
+        // a menu that already lists it keeps its entry.
+        new("calc.realmrankings", "Workshop: Realm Rankings", Kind.WorkshopTab, "Workshop tabs", Parameter: "realmrankings"),
     };
 
     // ----- Calculator deep-links (Workshop → Calculators tab → expanded + centered) -----
@@ -148,7 +153,6 @@ public static class MenuActionCatalogue
         new("calc.swing", "Calculator: Swing Calculator", Kind.Calculator, "Calculators", Parameter: "Swing"),
         new("calc.backstab", "Calculator: Backstab Calculator", Kind.Calculator, "Calculators", Parameter: "Backstab"),
         new("calc.manaregen", "Calculator: Mana Regen", Kind.Calculator, "Calculators", Parameter: "ManaRegen"),
-        new("calc.realmrankings", "Calculator: Realm Rankings", Kind.Calculator, "Calculators", Parameter: "RealmRankings"),
         new("calc.monsteraggro", "Calculator: Monster Aggro", Kind.Calculator, "Calculators", Parameter: "MonsterAggro"),
     };
 

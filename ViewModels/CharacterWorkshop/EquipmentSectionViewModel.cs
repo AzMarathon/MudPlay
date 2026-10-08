@@ -115,7 +115,7 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
     private string _applyStatus = string.Empty;
 
     // The last gear set the engine equipped (or confirmed already worn) — shown
-    // next to the Item Finder button. "—" before any apply this session, or when
+    // beside the set buttons. "—" before any apply this session, or when
     // the tracked id no longer matches a set (e.g. after a profile swap).
     [ObservableProperty] private string _currentlyEquipped = "—";
 
@@ -354,21 +354,6 @@ public sealed partial class EquipmentSectionViewModel : WorkshopSectionViewModel
             EquipResult.Busy => "An apply is already in progress.",
             _ => "Set could not be resolved.",
         };
-    }
-
-    // Open the read-only Item Finder — the full equippable-item catalog with
-    // grouped class / level / alignment / stat filters. A browse aid for picking
-    // slot items; it doesn't write the set. Concurrent opens are blocked by the
-    // async command, so the button can't stack multiple finder windows.
-    [RelayCommand]
-    private async Task OpenItemFinder()
-    {
-        var finder = new ItemFinderViewModel(
-            _gameData, _stats, _inventory,
-            ItemEquipFilter.GearBucketForWord(LocalAlignmentWord(), _gameData.ActiveRealm),
-            _alignment?.SelfEvilPoints(_gameData.ActiveRealm));
-        await AppServices.Current.Dialogs
-            .OpenWindowAsync<ItemFinderViewModel, bool>(finder);
     }
 
     // Seed the physical slots from the live worn loadout.

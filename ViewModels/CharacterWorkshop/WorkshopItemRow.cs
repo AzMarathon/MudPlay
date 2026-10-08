@@ -21,13 +21,15 @@ public sealed class WorkshopItemRow
     public string Charges { get; }
     public bool HasCharges => Charges.Length > 0;
 
-    // A carried container (chest, box) gets a treasure-chest icon that opens the
-    // Chest Offload window.
+    // A carried container (chest, box) gets a treasure-chest icon that goes to the
+    // Workshop's Chest Offload tab.
     public bool IsContainer { get; }
-    public ICommand OpenChestOffload { get; } = new AsyncRelayCommand(ChestOffloadViewModel.OpenRaiseOrClose);
+    public ICommand OpenChestOffload { get; }
 
-    public WorkshopItemRow(string name, string slot, int itemNumber, string charges = "", bool isContainer = false)
+    public WorkshopItemRow(string name, string slot, int itemNumber, string charges = "",
+        bool isContainer = false, Action? openChestOffload = null)
     {
+        OpenChestOffload = new RelayCommand(() => openChestOffload?.Invoke());
         Name = name;
         Slot = slot;
         Charges = charges;

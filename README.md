@@ -1,9 +1,23 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.150.13**
-> - Stop before and Grab All on the Bosses tab are each character's own; the boss list itself stays the realm's. A character starts from the ticks the realm's list held
-> - The map shows a loop's ring while you are still walking to it, and the status names the loop the walk is for
+> **Version 3.151.4**
+> - Player Workshop tabs regrouped: **Auto-Train** holds CP Allocation and Level Projection, **My Equipment** holds Equipment Manager and Item Finder, **Record Keeping** holds Bosses, Chest Offload, Roomba and Realm Rankings
+> - Item Finder is a sub-tab of My Equipment instead of a window opened from a button on Equipment Manager
+> - Chest Offload is a sub-tab of Record Keeping instead of a window opened from a button on Bosses; the chest icon on Character Info jumps to it
+> - Realm Rankings moved out of Calculators to its own sub-tab, with the table filling the tab
+> - Menu entries and shortcuts that open a Workshop tab still land on it, now as a sub-tab; new *Workshop: Item Finder* and *Workshop: Chest Offload* entries are available
+> - Item Finder: the Gear Finder panel shows the trial set's damage with the selected attack type: accuracy, hit chance, damage range, swings, crit and Quick & Deadly, and damage per round
+> - New **Configure Estimates** window sets what that is worked out against: your level and stats with nothing worn (the trial set's bonuses go on top), and a target's armour class, damage resist, dodge and BS defence, typed or filled from a monster lookup
+> - Item Finder filters level one of two ways, picked by radio buttons: usable at a level, or a required-level range (min / max)
+> - The Workshop opens at the size its opening tab fits, the same as switching to that tab, instead of the size it last closed at
+> - Character Info sizes the Workshop to its own height, instead of taking the Equipment tab's and scrolling
+> - Showing the Gear Finder panel on a maximized window no longer lays it out off the edge of the screen; switching Workshop tabs while maximized no longer resizes the window either
+> - Gear Finder **Missing?** button tints each trial slot by what you're wearing now: green worn, red not worn, yellow nothing picked; it stays on until pressed again
+> - Gear Finder panel regrouped: the Find Best controls sit together, and Import from live / Clear sit on the trial set's slot list
+> - Auto-stash hides the whole stack of a flagged item in a stash room, instead of one copy a visit, when the pack lists it as one counted line (`9 green dragon hide`)
+> - Auto-stash also hides flagged keys, which sit on the key ring and were never stashed
+> - Auto-stash keeps Min. to keep in hand when Must have minimum is ticked, and hides only the copies above it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -13,7 +13,7 @@ using MudPlay.ViewModels.CharacterWorkshop;
 
 namespace MudPlay.Views.CharacterWorkshop;
 
-public partial class ItemFinderWindow : Window
+public partial class ItemFinderSectionView : UserControl
 {
     private ItemFinderViewModel? _vm;
 
@@ -41,7 +41,7 @@ public partial class ItemFinderWindow : Window
     // Stable key for the trial panel's slots-vs-stats split ratio (per-profile).
     private const string TrialSplitterId = "ItemFinderTrialSplit";
 
-    public ItemFinderWindow()
+    public ItemFinderSectionView()
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
@@ -53,7 +53,7 @@ public partial class ItemFinderWindow : Window
         // Trial panel's slots pane (row 3) vs. stats pane (row 5) split — remembered
         // per profile so a hand-sized layout survives reopening the finder.
         AppServices.Current.SplitterLayouts.AttachGridRows(
-            owner: this, grid: TrialGrid, topRowIndex: 3, bottomRowIndex: 5, id: TrialSplitterId);
+            host: this, grid: TrialGrid, topRowIndex: 3, bottomRowIndex: 5, id: TrialSplitterId);
     }
 
     private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -63,29 +63,13 @@ public partial class ItemFinderWindow : Window
             ItemsGrid.SelectedItem = entry;
     }
 
-    // Width the window grows/shrinks by when the trial flyout shows/hides — the
-    // panel (340) plus the grid's column spacing (12) — so the results table keeps
-    // its width instead of the panel eating into it.
-    private const double TrialPanelWidth = 352;
-
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_vm is not null)
-        {
-            _vm.ColumnLayoutChanged -= ApplyColumnLayout;
-            _vm.PropertyChanged -= OnVmPropertyChanged;
-        }
+        if (_vm is not null) _vm.ColumnLayoutChanged -= ApplyColumnLayout;
         _vm = DataContext as ItemFinderViewModel;
         if (_vm is null) return;
         _vm.ColumnLayoutChanged += ApplyColumnLayout;
-        _vm.PropertyChanged += OnVmPropertyChanged;
         ApplyColumnLayout();
-    }
-
-    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ItemFinderViewModel.ShowTrialPanel) && _vm is not null)
-            Width += _vm.ShowTrialPanel ? TrialPanelWidth : -TrialPanelWidth;
     }
 
     // Map each column to its layout key once — the Tag for the stat columns, and the

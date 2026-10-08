@@ -565,6 +565,18 @@ public static class CharacterCalculator
         EncumbranceReading encum, GameDataCache gameData, BuffOffense buff = default)
     {
         ArgumentNullException.ThrowIfNull(stats);
+        return BuildMeleeAttackProfile(type, AttackerStats.From(stats), worn, encum, gameData, buff);
+    }
+
+    // The same recipe for a character described by hand (the Item Finder's trial
+    // set: typed stats, a gearset nobody is wearing). stats must already hold the
+    // bonuses of worn, as the stat screen's do. questBonuses adds the completed
+    // quests' rewards, which the live profile above leaves out.
+    public static PlayerMatchupProfile BuildMeleeAttackProfile(
+        MudAttackType type, AttackerStats stats, IReadOnlyList<EquippedItem> worn,
+        EncumbranceReading encum, GameDataCache gameData, BuffOffense buff = default,
+        IReadOnlyList<QuestBonus>? questBonuses = null)
+    {
         ArgumentNullException.ThrowIfNull(worn);
         ArgumentNullException.ThrowIfNull(gameData);
 
@@ -573,6 +585,7 @@ public static class CharacterCalculator
         JsonElement? raceRow = gameData.FindRowByName("Races", stats.Race);
         if (raceRow is JsonElement r) ApplyAbilityBonuses(combined, r, stats.Race);
         if (classRow is JsonElement c) ApplyAbilityBonuses(combined, c, stats.Class);
+        if (questBonuses is not null) ApplyQuestBonuses(combined, questBonuses, "Quests");
         EquipmentStatSummary t = combined.Totals;
         if (buff.Any)
         {
@@ -597,6 +610,7 @@ public static class CharacterCalculator
         int critChance = 0;
         int avgCritDamage = 0;
         int bsMin = 0, bsMax = 0;
+        int minDamage, maxDamage, quickAndDeadly = 0;
 
         switch (type)
         {
@@ -622,6 +636,9 @@ public static class CharacterCalculator
                 hasWeapon = offense.HasWeapon;
                 critChance = offense.CritChance;
                 avgCritDamage = offense.AvgCritDamage;
+                minDamage = offense.MinDamage;
+                maxDamage = offense.MaxDamage;
+                quickAndDeadly = offense.QuickAndDeadlyBonus;
                 break;
             }
             case MudAttackType.Backstab:
@@ -639,8 +656,8 @@ public static class CharacterCalculator
                     stats.Level, stealth, stats.Strength, t.WeaponMin, t.WeaponMax,
                     t.PlusBSMin, t.PlusBSMax, t.PlusMaxDamage, hasClassStealth, realm, t.PlusMinDamage);
                 avgDamage = (bsDmg.MinDamage + bsDmg.MaxDamage) / 2;
-                bsMin = bsDmg.MinDamage;
-                bsMax = bsDmg.MaxDamage;
+                bsMin = minDamage = bsDmg.MinDamage;
+                bsMax = maxDamage = bsDmg.MaxDamage;
                 swingsPerRound = 1;   // a backstab is always a single strike
                 hasWeapon = avgDamage > 0;
                 break;
@@ -677,6 +694,8 @@ public static class CharacterCalculator
                     type, realm, stats.Level, maPlusSkill, stats.Strength, t.PlusMaxDamage, maPlusDmg,
                     plusMinDamage: t.PlusMinDamage);
                 avgDamage = (d.MinDamage + d.MaxDamage) / 2;
+                minDamage = d.MinDamage;
+                maxDamage = d.MaxDamage;
 
                 swingsPerRound = CombatCalculator.CalcSwings(
                     nCombatLevel, stats.Level, CombatCalculator.MartialArtsSpeed(type, realm),
@@ -705,7 +724,10 @@ public static class CharacterCalculator
             AvgCritDamage: avgCritDamage,
             MonsterDrMultiplier: CombatCalculator.DrMultiplierFor(type, realm),
             BackstabMin: bsMin,
-            BackstabMax: bsMax);
+            BackstabMax: bsMax,
+            MinDamage: minDamage,
+            MaxDamage: maxDamage,
+            QuickAndDeadlyBonus: quickAndDeadly);
     }
 
     // Maps a single MajorMUD ability ID + value onto the matching summary field

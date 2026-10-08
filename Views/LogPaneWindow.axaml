@@ -105,11 +105,11 @@
                                 <CheckBox IsChecked="{Binding ShowSimulateDeath}"
                                           Content="Simulate Death button"
                                           FontSize="11"
-                                          ToolTip.Tip="Reveal the 'Simulate Death' test button on the Character Workshop → Death Recovery tab."/>
+                                          ToolTip.Tip="Reveal the 'Simulate Death' test button on the Player Workshop → Death Recovery tab."/>
                                 <CheckBox IsChecked="{Binding ShowSimulateChest}"
                                           Content="Simulate Chest button"
                                           FontSize="11"
-                                          ToolTip.Tip="Reveal the 'Simulate Chest' test button on the Chest Offload window (Bosses tab → Chest Offload)."/>
+                                          ToolTip.Tip="Reveal the 'Simulate Chest' test button on the Player Workshop → Record Keeping → Chest Offload tab."/>
                                 <CheckBox IsChecked="{Binding ShowSimulateUnrecognized}"
                                           Content="Simulate entry button"
                                           FontSize="11"

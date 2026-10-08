@@ -1,17 +1,13 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="720"
-        x:Class="MudPlay.Views.CharacterWorkshop.ChestOffloadWindow"
-        x:DataType="vm:ChestOffloadViewModel"
-        Title="Chest Offload"
-        Width="620" Height="720"
-        MinWidth="460" MinHeight="420"
-        WindowStartupLocation="CenterOwner">
+        x:Class="MudPlay.Views.CharacterWorkshop.ChestOffloadSectionView"
+        x:DataType="vm:ChestOffloadViewModel">
 
-    <Window.Styles>
+    <UserControl.Styles>
         <Style Selector="TextBlock.Section">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -44,7 +40,7 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
         </Style>
-    </Window.Styles>
+    </UserControl.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
         <DockPanel LastChildFill="True">
@@ -57,7 +53,7 @@
                             <TextBlock Grid.Column="0" Classes="Section" Text="Containers you're holding" VerticalAlignment="Center"/>
                             <Button Grid.Column="1" Content="Simulate Chest" Command="{Binding SimulateChestCommand}"
                                     IsVisible="{Binding ShowSimulateChest}"
-                                    ToolTip.Tip="Seed a few random containers whose loot is rolled from the chest's own table — test the window without real chests. Shown only while the Log pane's 'Simulate Chest button' toggle is on."/>
+                                    ToolTip.Tip="Seed a few random containers whose loot is rolled from the chest's own table — test the tab without real chests. Shown only while the Log pane's 'Simulate Chest button' toggle is on."/>
                         </Grid>
                         <TextBlock Text="No containers in your inventory."
                                    Foreground="{StaticResource ChromeFgMutedBrush}"
@@ -90,9 +86,9 @@
                                 ToolTip.Tip="Stop the sell tour. A walk already under way keeps going; nothing more is sold."/>
                         <CheckBox Content="Say loot to the room" IsChecked="{Binding SayLootToRoom, Mode=TwoWay}"
                                   Margin="12,0,0,0" VerticalAlignment="Center"
-                                  ToolTip.Tip="Ticked: after each chest is opened (from this window or by typing), its items and coin are said to the room, so everyone there knows what came out. Off unless you tick it; saved with the character."/>
+                                  ToolTip.Tip="Ticked: after each chest is opened (from this tab or by typing), its items and coin are said to the room, so everyone there knows what came out. Off unless you tick it; saved with the character."/>
                         <Button Content="Clear list" Command="{Binding ClearListCommand}" Margin="6,0,0,0"
-                                ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped or taken off with ✕, even if you close this window."/>
+                                ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped or taken off with ✕, even if you close the Workshop."/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
@@ -251,4 +247,4 @@
             </ScrollViewer>
         </DockPanel>
     </Border>
-</Window>
+</UserControl>

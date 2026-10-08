@@ -1,0 +1,26 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
+             x:Class="MudPlay.Views.CharacterWorkshop.WorkshopGroupView"
+             x:DataType="vm:WorkshopGroupSectionViewModel">
+
+    <!-- The sub-tab strip of a grouped Workshop tab. The titles are a size down from
+         the main strip's so the two rows read as tab and sub-tab, not two rows of
+         the same thing. -->
+    <TabControl ItemsSource="{Binding Children}"
+                SelectedItem="{Binding SelectedChild, Mode=TwoWay}"
+                Background="{StaticResource ChromeBgBrush}"
+                Padding="0">
+        <TabControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:WorkshopSectionViewModel">
+                <TextBlock Text="{Binding Title}"
+                           FontSize="{StaticResource FontSizeSm}"/>
+            </DataTemplate>
+        </TabControl.ItemTemplate>
+        <TabControl.ContentTemplate>
+            <DataTemplate x:DataType="vm:WorkshopSectionViewModel">
+                <ContentControl Content="{Binding View}"/>
+            </DataTemplate>
+        </TabControl.ContentTemplate>
+    </TabControl>
+</UserControl>

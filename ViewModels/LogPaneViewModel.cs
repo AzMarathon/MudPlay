@@ -91,7 +91,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
     // displayed rows, so no Rebuild.
     [ObservableProperty] private bool _showSimulateDeath;
 
-    // Reveals the Chest Offload window's "Simulate Chest" test button. Mirrors
+    // Reveals the Chest Offload tab's "Simulate Chest" test button. Mirrors
     // LogDiagnosticState.ShowSimulateChest — session-only (off every launch), same
     // contract as ShowSimulateDeath. Doesn't touch displayed rows, so no Rebuild.
     [ObservableProperty] private bool _showSimulateChest;
@@ -265,7 +265,7 @@ public sealed partial class LogPaneViewModel : ObservableObject, IDisposable
 
     partial void OnShowSimulateChestChanged(bool value)
     {
-        // Only gates the Chest Offload window's test button visibility — no displayed rows change.
+        // Only gates the Chest Offload tab's test button visibility — no displayed rows change.
         if (_suppressDiagnosticEcho) return;
         if (_diagnostics is null) return;
         _diagnostics.ShowSimulateChest = value;

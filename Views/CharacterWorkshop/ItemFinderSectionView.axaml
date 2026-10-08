@@ -1,17 +1,19 @@
-<Window xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MudPlay.ViewModels.CharacterWorkshop"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"
-        x:Class="MudPlay.Views.CharacterWorkshop.ItemFinderWindow"
-        x:DataType="vm:ItemFinderViewModel"
-        Title="Item Finder"
-        Width="1180" Height="720"
-        MinWidth="900" MinHeight="560"
-        WindowStartupLocation="CenterOwner">
+        x:Class="MudPlay.Views.CharacterWorkshop.ItemFinderSectionView"
+        x:DataType="vm:ItemFinderViewModel">
 
-    <Window.Styles>
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="TrialWornWash" Color="{StaticResource AccentGreenColor}" Opacity="0.22"/>
+        <SolidColorBrush x:Key="TrialNotWornWash" Color="{StaticResource AccentRedColor}" Opacity="0.22"/>
+        <SolidColorBrush x:Key="TrialUnfilledWash" Color="{StaticResource AccentYellowColor}" Opacity="0.22"/>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
         <Style Selector="TextBlock.Group">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
             <Setter Property="FontSize" Value="{StaticResource FontSizeMd}"/>
@@ -40,7 +42,27 @@
             <Setter Property="FormatString" Value="0"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-    </Window.Styles>
+        <!-- The "Missing?" check's tint on a trial slot: a wash of the colour with a
+             full-strength edge, so the verdict reads without hiding the row. -->
+        <Style Selector="Border.trialSlot">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="0,1"/>
+        </Style>
+        <Style Selector="Border.trialSlot.worn">
+            <Setter Property="Background" Value="{StaticResource TrialWornWash}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentGreenBrush}"/>
+        </Style>
+        <Style Selector="Border.trialSlot.notWorn">
+            <Setter Property="Background" Value="{StaticResource TrialNotWornWash}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+        <Style Selector="Border.trialSlot.unfilled">
+            <Setter Property="Background" Value="{StaticResource TrialUnfilledWash}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentYellowBrush}"/>
+        </Style>
+    </UserControl.Styles>
 
     <Border Background="{StaticResource ChromeBgBrush}" Padding="12">
         <Grid ColumnDefinitions="280,*,Auto" ColumnSpacing="12">
@@ -69,25 +91,44 @@
                                               SelectedItem="{Binding SelectedAlignment, Mode=TwoWay}"
                                               HorizontalAlignment="Stretch"/>
                                 </StackPanel>
-                                <DockPanel>
-                                    <NumericUpDown DockPanel.Dock="Right" Classes="filter"
-                                                   Maximum="200"
-                                                   Value="{Binding UsableLevel, Mode=TwoWay}"
-                                                   ToolTip.Tip="Show only items a character of this level can wear (0 = any)."/>
-                                    <TextBlock Classes="FieldLabel" Text="Usable at level"/>
-                                </DockPanel>
-                                <DockPanel>
-                                    <NumericUpDown DockPanel.Dock="Right" Classes="filter"
-                                                   Maximum="200" Value="{Binding MaxLevelReq, Mode=TwoWay}"
-                                                   ToolTip.Tip="Show items whose required level is this or lower (0 = off)."/>
-                                    <TextBlock Classes="FieldLabel" Text="Level req"/>
-                                </DockPanel>
+                                <!-- Level is filtered one of two ways, picked by the radio
+                                     buttons: what a character of a level can wear, or the
+                                     items whose required level falls in a range. Only the
+                                     picked one's tickers are live. -->
+                                <StackPanel Spacing="4">
+                                    <TextBlock Classes="FieldLabel" Text="Level"/>
+                                    <DockPanel>
+                                        <NumericUpDown DockPanel.Dock="Right" Classes="filter" Maximum="200"
+                                                       Value="{Binding UsableLevel, Mode=TwoWay}"
+                                                       IsEnabled="{Binding FilterByUsableLevel}"
+                                                       ToolTip.Tip="Show only items a character of this level can wear (0 = any)."/>
+                                        <RadioButton GroupName="ItemFinderLevelFilter" Content="Usable at level"
+                                                     IsChecked="{Binding FilterByUsableLevel, Mode=TwoWay}"
+                                                     Foreground="{StaticResource ChromeFgSecBrush}"
+                                                     FontSize="{StaticResource FontSizeSm}"
+                                                     ToolTip.Tip="Filter by what a character of one level can wear. The required-level range below is ignored."/>
+                                    </DockPanel>
+                                    <RadioButton GroupName="ItemFinderLevelFilter" Content="Level req (min / max)"
+                                                 IsChecked="{Binding FilterByLevelRange, Mode=TwoWay}"
+                                                 Foreground="{StaticResource ChromeFgSecBrush}"
+                                                 FontSize="{StaticResource FontSizeSm}"
+                                                 ToolTip.Tip="Filter by the level an item asks for, between a lowest and a highest. Usable at level above is ignored."/>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right"
+                                                IsEnabled="{Binding FilterByLevelRange}">
+                                        <NumericUpDown Classes="filter" Width="104" Maximum="200"
+                                                       Value="{Binding MinLevelReq, Mode=TwoWay}"
+                                                       ToolTip.Tip="Show items whose required level is this or higher (0 = off)."/>
+                                        <NumericUpDown Classes="filter" Width="104" Maximum="200"
+                                                       Value="{Binding MaxLevelReq, Mode=TwoWay}"
+                                                       ToolTip.Tip="Show items whose required level is this or lower (0 = off)."/>
+                                    </StackPanel>
+                                </StackPanel>
                                 <StackPanel Spacing="2">
                                     <TextBlock Classes="FieldLabel" Text="Attack type"/>
                                     <ComboBox ItemsSource="{Binding AttackTypeOptions}"
                                               SelectedItem="{Binding SelectedAttackType, Mode=TwoWay}"
                                               HorizontalAlignment="Stretch"
-                                              ToolTip.Tip="Which attack the Swings and Dmg/Rnd columns model. Backstab is one strike with a backstab-capable weapon; Bash / Smash recompute each weapon; Punch / Kick / Jumpkick add a bare-handed row."/>
+                                              ToolTip.Tip="Which attack the Swings and Dmg/Rnd columns and the Gear Finder's trial damage model. Backstab is one strike with a backstab-capable weapon; Bash / Smash recompute each weapon; Punch / Kick / Jumpkick add a bare-handed row."/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -212,10 +253,8 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-                    <Button Content="Reset filters" Command="{Binding ResetCommand}" MinWidth="100"/>
-                    <Button Content="Close" Command="{Binding CloseCommand}" MinWidth="80"/>
-                </StackPanel>
+                <Button Grid.Row="1" Content="Reset filters" Command="{Binding ResetCommand}"
+                        MinWidth="100" Margin="0,8,0,0" HorizontalAlignment="Left"/>
             </Grid>
 
             <!-- ===== Right: the combined item list ===== -->
@@ -332,33 +371,35 @@
                      per-profile via SplitterLayoutStore. Both panes scroll when short. -->
                 <Grid x:Name="TrialGrid" RowDefinitions="Auto,Auto,Auto,3*,Auto,2*" RowSpacing="0">
 
-                    <StackPanel Grid.Row="0" Spacing="6">
-                        <TextBlock Classes="Group" Text="Gear Finder"/>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Button Content="Import from live" Command="{Binding ImportFromLiveCommand}"
-                                    ToolTip.Tip="Copy your currently-worn gear into the trial slots."/>
-                            <Button Content="Clear" Command="{Binding ClearTrialCommand}"/>
-                        </StackPanel>
-                    </StackPanel>
+                    <DockPanel Grid.Row="0">
+                        <Button DockPanel.Dock="Right" Content="Configure Estimates"
+                                Command="{Binding ConfigureEstimatesCommand}" VerticalAlignment="Center"
+                                ToolTip.Tip="Set the character stats and the target the trial damage below is worked out against."/>
+                        <TextBlock Classes="Group" Text="Gear Finder" VerticalAlignment="Center" Margin="0"/>
+                    </DockPanel>
 
-                    <StackPanel Grid.Row="1" Spacing="6" Margin="0,8,0,6">
-                        <!-- The dropdown fills the row rather than sizing to its selection,
-                             so stepping through the criteria doesn't resize it. -->
-                        <DockPanel>
-                            <Button DockPanel.Dock="Right" Margin="6,0,0,0"
+                    <!-- Find Best: what to search for, how heavy the result may be, and
+                         the search order. Labels share a column so the two dropdowns line
+                         up; the dropdowns fill the row, so stepping through the criteria
+                         doesn't resize them. -->
+                    <StackPanel Grid.Row="1" Spacing="6" Margin="0,10,0,0">
+                        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto"
+                              ColumnSpacing="6" RowSpacing="6">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="Find best"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1"
+                                      ItemsSource="{Binding TrialFilterOptions}"
+                                      SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
+                                      HorizontalAlignment="Stretch"/>
+                            <Button Grid.Row="0" Grid.Column="2"
                                     Content="Find Best" Command="{Binding FindBestCommand}"
                                     ToolTip.Tip="Fill each non-held slot with the best equippable item for the selected stat (or, with a search order below, in that priority order)."/>
-                            <ComboBox ItemsSource="{Binding TrialFilterOptions}"
-                                      SelectedItem="{Binding SelectedTrialFilter, Mode=TwoWay}"
-                                      HorizontalAlignment="Stretch" MinWidth="150"/>
-                        </DockPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Classes="FieldLabel" Text="Target weight" VerticalAlignment="Center"/>
-                            <ComboBox ItemsSource="{Binding TargetWeightOptions}"
+                            <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Target weight"/>
+                            <ComboBox Grid.Row="1" Grid.Column="1"
+                                      ItemsSource="{Binding TargetWeightOptions}"
                                       SelectedItem="{Binding SelectedTargetWeight, Mode=TwoWay}"
-                                      MinWidth="90"
+                                      HorizontalAlignment="Stretch"
                                       ToolTip.Tip="Cap Find Best's picks so the projected trial set stays within this encumbrance band."/>
-                        </StackPanel>
+                        </Grid>
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <Button Content="+ Add to search order" Command="{Binding AddToChainCommand}"
                                     ToolTip.Tip="Append the criterion above to a priority-ordered multi-stat search — e.g. VileWard, then Armour Class, then Spellcasting. Each slot goes to the highest-priority criterion that finds anything for it; lower ones only get a turn at what's left. Leave empty to just search by the single criterion above."/>
@@ -369,17 +410,45 @@
                                    Classes="FieldLabel" IsVisible="{Binding HasChain}"/>
                     </StackPanel>
 
-                    <Grid Grid.Row="2" ColumnDefinitions="44,72,*" Margin="0,0,0,4" ColumnSpacing="4">
-                        <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Hold"/>
-                        <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Slot"/>
-                        <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Item"/>
-                    </Grid>
+                    <!-- The trial set itself: the buttons that fill and empty it sit on
+                         the slot list they act on. -->
+                    <StackPanel Grid.Row="2" Spacing="6" Margin="0,10,0,4">
+                        <Border Height="1" Background="{StaticResource ChromeBorderBrush}"/>
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                                <Button Content="Import from live" Command="{Binding ImportFromLiveCommand}"
+                                        ToolTip.Tip="Copy your currently-worn gear into the trial slots."/>
+                                <Button Content="Clear" Command="{Binding ClearTrialCommand}"
+                                        ToolTip.Tip="Empty every trial slot."/>
+                            </StackPanel>
+                            <TextBlock Classes="Group" Text="Trial set" VerticalAlignment="Center" Margin="0"/>
+                        </DockPanel>
+                        <Grid ColumnDefinitions="44,72,*,Auto" ColumnSpacing="4">
+                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Hold"/>
+                            <TextBlock Grid.Column="1" Classes="FieldLabel" Text="Slot"/>
+                            <TextBlock Grid.Column="2" Classes="FieldLabel" Text="Item"/>
+                            <!-- Stays on until pressed again; the tints follow the trial
+                                 set and what's worn while it is. -->
+                            <ToggleButton Grid.Column="3" Content="Missing?" Margin="0,0,16,0"
+                                          IsChecked="{Binding ShowMissing, Mode=TwoWay}"
+                                          ToolTip.Tip="Mark each slot by what you're wearing right now. Green: you're wearing that item. Red: you aren't. Yellow: nothing is picked for the slot. Stays on until you press it again."/>
+                        </Grid>
+                        <TextBlock Text="{Binding MissingNote}" TextWrapping="Wrap"
+                                   Foreground="{StaticResource AccentAmberBrush}"
+                                   FontSize="{StaticResource FontSizeSm}"
+                                   IsVisible="{Binding HasMissingNote}"/>
+                    </StackPanel>
 
                     <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding TrialSlots}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:TrialSlotRow">
-                                    <Grid ColumnDefinitions="44,72,*" Margin="0,1,16,1" ColumnSpacing="4">
+                                    <Border Classes="trialSlot" Margin="0,1,16,1"
+                                            Classes.worn="{Binding IsWorn}"
+                                            Classes.notWorn="{Binding IsNotWorn}"
+                                            Classes.unfilled="{Binding IsUnfilled}"
+                                            ToolTip.Tip="{Binding WornCheckTip}">
+                                    <Grid ColumnDefinitions="44,72,*" ColumnSpacing="4">
                                         <CheckBox Grid.Column="0" IsChecked="{Binding Hold, Mode=TwoWay}"
                                                   VerticalAlignment="Center" Margin="8,0,0,0"
                                                   ToolTip.Tip="Lock this slot so Find Best won't change it."/>
@@ -396,6 +465,7 @@
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
                                     </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -407,7 +477,7 @@
                                   Background="{StaticResource ChromeBorderBrush}" ShowsPreview="False"
                                   ToolTip.Tip="Drag to resize the slots vs. the stats readout."/>
 
-                    <Grid Grid.Row="5" RowDefinitions="Auto,Auto,*" RowSpacing="0">
+                    <Grid Grid.Row="5" RowDefinitions="Auto,*" RowSpacing="0">
                         <StackPanel Grid.Row="0" Spacing="2">
                             <TextBlock Classes="FieldLabel" Text="{Binding CurrentEncumbranceText}"/>
                             <TextBlock Text="{Binding TrialEncumbranceText}"
@@ -415,28 +485,53 @@
                                        FontSize="{StaticResource FontSizeSm}"/>
                         </StackPanel>
 
-                        <TextBlock Grid.Row="1" Classes="Group" Text="Projected stats" Margin="0,8,0,4"
-                                   IsVisible="{Binding HasTrialBonuses}"/>
+                        <!-- One scroller for the damage readout and the stat list, so a
+                             short pane scrolls both instead of squeezing the list out. -->
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                            <StackPanel Spacing="0">
+                                <!-- The trial set's damage with the selected attack type,
+                                     against the character and target in Configure Estimates. -->
+                                <TextBlock Classes="Group" Text="{Binding TrialDamageTitle}" Margin="0,0,0,2"/>
+                                <TextBlock Classes="FieldLabel" Text="{Binding TrialDamageTarget}"
+                                           TextWrapping="Wrap" Margin="0,0,16,4"/>
+                                <TextBlock Text="{Binding TrialDamageNote}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource AccentAmberBrush}"
+                                           FontSize="{StaticResource FontSizeSm}" Margin="0,0,16,0"
+                                           IsVisible="{Binding HasTrialDamageNote}"/>
+                                <ItemsControl ItemsSource="{Binding TrialDamageRows}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:TrialDamageRow">
+                                            <!-- Right margin keeps the value clear of the scrollbar. -->
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,1,16,1"
+                                                  Background="Transparent" ToolTip.Tip="{Binding Tooltip}">
+                                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                           FontFamily="{StaticResource FontMono}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
 
-                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
-                                      IsVisible="{Binding HasTrialBonuses}">
-                            <ItemsControl ItemsSource="{Binding TrialBonusRows}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:EquipBonusRow">
-                                        <!-- Right margin keeps the value clear of the scrollbar. -->
-                                        <Grid ColumnDefinitions="*,Auto" Margin="0,1,16,1">
-                                            <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Stat}"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Value}"
-                                                       FontFamily="{StaticResource FontMono}"
-                                                       ToolTip.Tip="{Binding Tooltip}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                <TextBlock Classes="Group" Text="Projected stats" Margin="0,10,0,4"
+                                           IsVisible="{Binding HasTrialBonuses}"/>
+                                <ItemsControl ItemsSource="{Binding TrialBonusRows}"
+                                              IsVisible="{Binding HasTrialBonuses}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:EquipBonusRow">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,1,16,1">
+                                                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Stat}"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding Value}"
+                                                           FontFamily="{StaticResource FontMono}"
+                                                           ToolTip.Tip="{Binding Tooltip}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </ScrollViewer>
                     </Grid>
                 </Grid>
             </Border>
         </Grid>
     </Border>
-</Window>
+</UserControl>

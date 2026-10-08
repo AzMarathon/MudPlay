@@ -127,7 +127,7 @@ public sealed class LogDiagnosticState
         }
     }
 
-    // Reveals the Chest Offload window's "Simulate Chest" button — a test-only
+    // Reveals the Chest Offload tab's "Simulate Chest" button — a test-only
     // affordance that seeds random containers so the window can be exercised
     // without real boss chests. Same contract as ShowSimulateDeath: off by
     // default, session-only (resets off every launch), never persisted.

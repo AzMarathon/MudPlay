@@ -96,6 +96,41 @@ public sealed class MeleeMatchupProfilesTests : IDisposable
         Assert.Equal(viaNormal, viaGeneric);
     }
 
+    // The Item Finder prices a trial set from typed stats through the by-hand
+    // overload; it has to be the same recipe the live character goes through.
+    [Fact]
+    public void BuildMeleeAttackProfile_ByHandStatsEqualTheStatScreens()
+    {
+        GameDataCache cache = NewCache();
+        var worn = new[] { new EquippedItem("iron sword", "Weapon Hand") };
+        PlayerStats stats = Stats("Thief", "Human");
+
+        foreach (MudAttackType type in new[] { MudAttackType.Normal, MudAttackType.Bash, MudAttackType.Backstab })
+            Assert.Equal(
+                CharacterCalculator.BuildMeleeAttackProfile(type, stats, worn, NoEncum, cache),
+                CharacterCalculator.BuildMeleeAttackProfile(type, AttackerStats.From(stats), worn, NoEncum, cache));
+    }
+
+    [Fact]
+    public void BuildMeleeAttackProfile_CarriesThePerHitRange()
+    {
+        GameDataCache cache = NewCache();
+        var worn = new[] { new EquippedItem("iron sword", "Weapon Hand") };
+        PlayerStats stats = Stats("Thief", "Human");
+
+        // STR 60: +1 to the max, nothing to the min (GAME_MECHANICS "Melee damage
+        // bonus"), so the 5-15 sword swings 5-16.
+        PlayerMatchupProfile normal = CharacterCalculator.BuildMeleeAttackProfile(
+            MudAttackType.Normal, stats, worn, NoEncum, cache);
+        Assert.Equal((5, 16), (normal.MinDamage, normal.MaxDamage));
+        Assert.Equal((normal.MinDamage + normal.MaxDamage) / 2, normal.AvgWeaponDamage);
+
+        PlayerMatchupProfile stab = CharacterCalculator.BuildMeleeAttackProfile(
+            MudAttackType.Backstab, stats, worn, NoEncum, cache);
+        Assert.Equal((stab.BackstabMin, stab.BackstabMax), (stab.MinDamage, stab.MaxDamage));
+        Assert.True(stab.MinDamage > 0);
+    }
+
     [Fact]
     public void UsableMeleeAttacks_AlwaysIncludesNormalAndBash()
     {

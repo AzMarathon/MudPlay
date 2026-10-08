@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Game;
@@ -12,36 +14,28 @@ using MudPlay.Game.GameData;
 using MudPlay.Game.Inventory;
 using MudPlay.Game.Map;
 using MudPlay.Services;
+using MudPlay.Views.CharacterWorkshop;
 
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
-// Chest Offload window: a view over ChestOpenTracker's list of chest loot (which
-// lives on past the window and is saved on the profile) — open the containers you're
-// holding, see the coin and items the chests gave grouped into the fewest shops with a
-// charm picker and per-item sell quantities, and sell (walking to the shop first when
-// you aren't standing in it), drop, or take items off the list.
-public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogViewModel<bool>, IDisposable
+// Record Keeping → Chest Offload: a view over ChestOpenTracker's list of chest loot
+// (which lives on past the Workshop and is saved on the profile) — open the containers
+// you're holding, see the coin and items the chests gave grouped into the fewest shops
+// with a charm picker and per-item sell quantities, and sell (walking to the shop first
+// when you aren't standing in it), drop, or take items off the list.
+public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 {
-    // The one open Chest Offload window. Two would both read the inventory and diff
-    // the same chest opens, so every way in toggles this one instead.
-    private static ChestOffloadViewModel? _openWindow;
+    public const string SectionId = "chestoffload";
+    public const string SectionTitle = "Chest Offload";
+    public override string Id => SectionId;
+    public override string Title => SectionTitle;
 
-    // Open the window; pressed again, bring it forward when it's buried or close it
-    // when it's already in front — the Bosses tab button and the Character Info
-    // panel's chest icon both come through here.
-    public static async System.Threading.Tasks.Task OpenRaiseOrClose()
-    {
-        DialogService dialogs = AppServices.Current.Dialogs;
-        if (_openWindow is { } open && dialogs.RaiseOrCloseIfOpen(open)) return;
-        var vm = new ChestOffloadViewModel();
-        _openWindow = vm;
-        try { await dialogs.OpenWindowAsync<ChestOffloadViewModel, bool>(vm); }
-        finally { if (ReferenceEquals(_openWindow, vm)) _openWindow = null; }
-    }
+    private Control? _view;
+    public override Control View => _view ??= new ChestOffloadSectionView { DataContext = this };
 
-    // Modeless browse/action window: it closes via the title-bar X, so this stays
-    // unraised — it exists only to satisfy the DialogService contract.
-    public event Action<bool>? CloseRequested;
+    // A column of shop groups reads best at a set width; left to fit its content
+    // the window would stretch to the longest item line.
+    public override Size? PreferredSize => new Size(660, 780);
 
     private readonly InventoryManager _inventory;
     private readonly ShopStockIndex _shops;
@@ -148,7 +142,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
         RebuildLoot();
         _log?.Info(LogCategory,
-            $"window opened — charm {_charm}, {Containers.Count} container(s) held, " +
+            $"tab opened — charm {_charm}, {Containers.Count} container(s) held, " +
             $"{ShopGroups.Sum(g => g.Items.Count) + Unsellable.Count} item(s) on the list");
     }
 
@@ -389,7 +383,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
 
     // Test aid: seed the container list with a handful of random real containers.
     // Clicking one still sends the real "open" (below), but its loot is rolled from
-    // the chest's own table rather than waiting on a live drop, so the window can be
+    // the chest's own table rather than waiting on a live drop, so the tab can be
     // exercised without hunting chests. Re-clicking re-randomises the simulated set.
     private System.Collections.Generic.IReadOnlyDictionary<int, ChestContents>? _chestTables;
 
@@ -462,9 +456,6 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         long total = copper + silver * 10L + gold * 100L + plat * 10_000L + runic * 1_000_000L;
         return new CurrencyHoldings(copper, silver, gold, plat, runic, total);
     }
-
-    [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private void Close() => CloseRequested?.Invoke(false);
 
     // Take one item off the list (it stays in the pack). The tracker's Changed
     // rebuilds the view.
@@ -714,7 +705,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         => el.TryGetProperty(field, out JsonElement v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out int n)
             ? n : 0;
 
-    public void Dispose()
+    public override void Dispose()
     {
         _chests.Changed -= OnChestsChanged;
         _inventory.Changed -= OnInventoryChanged;
@@ -722,7 +713,7 @@ public sealed partial class ChestOffloadViewModel : ObservableObject, IDialogVie
         _inventory.ItemSold -= OnItemSold;
         _inventory.ItemDropped -= OnItemDropped;
         if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
-        _log?.Info(LogCategory, "window closed");
+        _log?.Info(LogCategory, "tab closed");
     }
 
     private readonly record struct LootItem(string Name, int Count, double BaseCopper, IReadOnlyCollection<int> Shops);

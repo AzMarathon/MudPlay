@@ -33,6 +33,8 @@ public sealed class StashRoomManagerTests
         // Carried entries whose resolver returns the same name (i.e. the
         // item is flagged AutoStash). Anything not here resolves to null.
         public HashSet<string> AutoStashItems { get; } = new();
+        // Min. to keep for a flagged item; absent = keep none.
+        public Dictionary<string, int> KeepCounts { get; } = new();
         public List<StashRoomManager.StashDispatch> Executed { get; } = new();
         public bool Paradigm { get; set; }
 
@@ -42,7 +44,13 @@ public sealed class StashRoomManagerTests
             Stash = new StashRoomManager(Profile,
                 readCash: () => CashSettings,
                 getSnapshot: () => Snapshot,
-                resolveAutoStashItem: entry => AutoStashItems.Contains(entry) ? entry : null,
+                // As the live resolver does: the canonical name, whether or not the
+                // entry carries a stack count in front.
+                resolveAutoStashItem: entry => AutoStashItems.FirstOrDefault(
+                        name => entry == name || entry.EndsWith(" " + name, StringComparison.Ordinal))
+                    is { } flagged
+                    ? new StashRoomManager.ResolvedStash(flagged, KeepCounts.GetValueOrDefault(flagged))
+                    : null,
                 isEnabled: () => AutoGetCashEnabled,
                 log: Log,
                 isParadigm: () => Paradigm);
@@ -327,6 +335,73 @@ public sealed class StashRoomManagerTests
 
         Assert.Equal("hide 3 a torch", Assert.Single(h.SentLines()));
         Assert.Equal(3, h.Executed[0].Items.Count);   // dispatched count preserved
+    }
+
+    // Paradigm's carried list shows a stack as one entry with its count in front.
+    [Fact]
+    public void Paradigm_StackedEntry_HidesTheWholeStack()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.MarkRoomAsStash(1, 42);
+        h.Snapshot = Coins(carried: new[] { "token of Khazarad", "9 green dragon hide" });
+        h.AutoStashItems.Add("green dragon hide");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal("hide 9 green dragon hide", Assert.Single(h.SentLines()));
+        Assert.Equal(9, h.Executed[0].Items.Count);
+    }
+
+    // A flagged key is on the key ring, not in the pack, stacked the same way.
+    [Fact]
+    public void FlaggedKeys_AreHiddenOffTheKeyRing()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.MarkRoomAsStash(1, 42);
+        h.Snapshot = Coins(carried: new[] { "rope and grapple" }) with
+        {
+            Keys = new[] { "2 black star key", "green metal key", "large iron key" },
+        };
+        h.AutoStashItems.Add("black star key");
+        h.AutoStashItems.Add("green metal key");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal(new[] { "hide 2 black star key", "hide green metal key" }, h.SentLines().ToArray());
+        Assert.Equal(3, h.Executed[0].Items.Count);
+    }
+
+    // Min. to keep stays in hand; only the copies above it are stashed.
+    [Fact]
+    public void MinToKeep_StaysInHand()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.MarkRoomAsStash(1, 42);
+        h.Snapshot = Coins(carried: new[] { "9 green dragon hide", "2 healing potion", "torch" });
+        h.AutoStashItems.Add("green dragon hide");
+        h.AutoStashItems.Add("healing potion");
+        h.AutoStashItems.Add("torch");
+        h.KeepCounts["green dragon hide"] = 4;
+        h.KeepCounts["healing potion"] = 2;   // holding exactly the floor: none go
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal(new[] { "hide 5 green dragon hide", "hide torch" }, h.SentLines().ToArray());
+        Assert.Equal(6, h.Executed[0].Items.Count);
+    }
+
+    // A number that is part of the item's own name isn't a stack count.
+    [Fact]
+    public void NumberInTheItemsName_IsNotACount()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.MarkRoomAsStash(1, 42);
+        h.Snapshot = Coins(carried: new[] { "10 foot pole", "3 10 foot pole" });
+        h.AutoStashItems.Add("10 foot pole");
+
+        h.Stash.ExecuteStash(new RoomKey(1, 42));
+
+        Assert.Equal("hide 4 10 foot pole", Assert.Single(h.SentLines()));
     }
 
     [Fact]
