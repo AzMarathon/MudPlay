@@ -51,7 +51,6 @@ public sealed class PyramidSolverTests : IDisposable
         public int KeyRoomVisits;
         public int KeyDropsOnVisit = 1;              // the floating key drops on this visit to its room
         public bool MemberGrabsKey;                  // …into a member's pack, not ours
-        public bool KeyAnswerComesLate;              // a trigger's `get` is out; "You took" lands after the solver looks
         public HashSet<string> EnginesOn { get; } = new();   // gates whose engine the player switched back on
         public List<bool> RunThrough { get; } = new();       // the run-through signal, as raised
         public int IgnorePushes;                     // the next N push blocks do nothing
@@ -234,7 +233,6 @@ public sealed class PyramidSolverTests : IDisposable
             {
                 // The floating key dies and its key is picked up as we walk in.
                 if (h.MemberGrabsKey) h.Solver.FeedLineForTests("Jroc picks up golden lion key");
-                else if (h.KeyAnswerComesLate) { /* the test feeds the line once the solver has looked */ }
                 else
                 {
                     h.LeaderHasKey = true;
@@ -1152,25 +1150,6 @@ public sealed class PyramidSolverTests : IDisposable
         AssertFinished(h);
         Assert.Equal(1, h.SentText.Count(t => t == "@party give golden lion key to MudPlay"));
         Assert.Equal(0, h.Solver.KeyRespawns);
-    }
-
-    // Report paradigm-20261007-235038: a trigger on the floating key's death had
-    // already sent `get golden lion key`, and the solver sent its own before the
-    // "You took" came back, drawing "You don't see golden lion key here."
-    [Fact]
-    public void Key_AlreadyBeingPickedUp_TheSolverDoesNotSendItsOwnGet()
-    {
-        using Harness h = Begin(NewHarness(leaderName: "MudPlay"));
-        h.KeyAnswerComesLate = true;
-        RunUntil(h, () => h.Room == PyramidScript.FloatingKeyRoom && h.Solver.IsAwaitingKeyForTests);
-        Assert.DoesNotContain("get golden lion key", h.SentText);
-
-        h.LeaderHasKey = true;
-        h.Solver.FeedLineForTests("You took golden lion key.");
-        RunToEnd(h);
-
-        AssertFinished(h);
-        Assert.DoesNotContain("get golden lion key", h.SentText);
     }
 
     [Fact]

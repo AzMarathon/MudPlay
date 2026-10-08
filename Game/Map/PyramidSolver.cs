@@ -1198,8 +1198,6 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     private bool HaveKey()
         => _selfTookKey || _holdsItem?.Invoke(PyramidScript.GoldenLionKeyItem) == true;
 
-    internal bool IsAwaitingKeyForTests => _phase == Phase.AwaitingKey;
-
     // Whether the step at hand may go ahead as far as the key is concerned. False
     // when it has scheduled a wait instead. The floating key's room is left only
     // once the key is in the leader's pack or the wait for it has run out; a room
@@ -1229,13 +1227,9 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
             {
                 if (_keyWaitTicks == 0)
                     _log?.Log(LogSeverity.Info, LogSource, "no golden lion key yet — waiting in the floating key's room");
-                // Nobody's client may be set to pick it up, so ask for it ourselves:
-                // after one tick, and once more for a kill that finishes late. Not at
-                // once: a trigger on the kill or an auto-get has usually sent the
-                // same `get` already, and its "You took" hasn't come back yet, so
-                // ours only drew "You don't see golden lion key here." (report
-                // paradigm-20261007-235038).
-                if (_keyWaitTicks % (KeyWaitTicks / 2) == 1 && CountSend())
+                // Nobody's client may be set to pick it up; ask for it ourselves, now
+                // and once more for a kill that finishes late.
+                if (_keyWaitTicks % (KeyWaitTicks / 2) == 0 && CountSend())
                     SendCommand("get golden lion key");
                 if (++_keyWaitTicks > KeyWaitTicks) return true;
             }
