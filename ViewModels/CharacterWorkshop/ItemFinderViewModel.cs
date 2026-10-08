@@ -259,6 +259,20 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
     // ----- Character group -----
     [ObservableProperty] private string? _selectedClass = AnyClass;
     [ObservableProperty] private int _usableLevel;
+    // The two level filters are one choice, not two that stack: either what a
+    // character of UsableLevel can wear, or the items whose required level falls
+    // in MinLevelReq..MaxLevelReq. The one not chosen is ignored.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilterByUsableLevel))]
+    private bool _filterByLevelRange;
+    // The other radio button. Unticking it is the range button being ticked, which
+    // sets the flag itself.
+    public bool FilterByUsableLevel
+    {
+        get => !FilterByLevelRange;
+        set { if (value) FilterByLevelRange = false; }
+    }
+    private int ActiveUsableLevel => FilterByLevelRange ? 0 : UsableLevel;
     [ObservableProperty] private string? _selectedAlignment = AnyAlign;
     // Which attack type the Swings column models; changing it rebuilds the catalog.
     [ObservableProperty] private string _selectedAttackType = AttackBase;
@@ -571,6 +585,8 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         {
             case nameof(CountText):
             case nameof(RowsView):
+            // Raised alongside FilterByLevelRange, which re-runs the filter itself.
+            case nameof(FilterByUsableLevel):
             // Trial-panel state isn't a results filter — don't re-run the predicate.
             case nameof(ShowTrialPanel):
             case nameof(SelectedTrialFilter):
@@ -633,7 +649,7 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
             _ => null,
         };
         _activeEvilPoints = _activeAlignment is not null && _activeAlignment == _liveAlignment ? _liveEvilPoints : null;
-        _activeCharFilter = _activeClass.ClassNumber > 0 || UsableLevel > 0 || _activeAlignment is not null;
+        _activeCharFilter = _activeClass.ClassNumber > 0 || ActiveUsableLevel > 0 || _activeAlignment is not null;
 
         _activeArmourOnly = SelectedSlot == AllSlots;
         _activeSlot = !_activeArmourOnly && SelectedSlot is { } sl && _slotByLabel.TryGetValue(sl, out EquipmentSlot s) ? s : null;
@@ -723,7 +739,7 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         if (BackstabOnly && !e.CanBackstab) return false;
 
         if (_activeCharFilter &&
-            !ItemEquipFilter.CanEquip(e.Row, UsableLevel, _activeClass, _activeAlignment, _gameData.ActiveRealm, _activeEvilPoints))
+            !ItemEquipFilter.CanEquip(e.Row, ActiveUsableLevel, _activeClass, _activeAlignment, _gameData.ActiveRealm, _activeEvilPoints))
             return false;
 
         if (MinHp > 0 && e.Hp < MinHp) return false;
@@ -743,8 +759,11 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         if (MinDr > 0 && e.Dr < MinDr) return false;
 
         if (MaxStrReq > 0 && e.StrReq > MaxStrReq) return false;
-        if (MinLevelReq > 0 && e.LevelReq < MinLevelReq) return false;
-        if (MaxLevelReq > 0 && e.LevelReq > MaxLevelReq) return false;
+        if (FilterByLevelRange)
+        {
+            if (MinLevelReq > 0 && e.LevelReq < MinLevelReq) return false;
+            if (MaxLevelReq > 0 && e.LevelReq > MaxLevelReq) return false;
+        }
 
         // Negate dropdown: keep only items that negate the selected spell (by id).
         if (SelectedNegate is { } sel && sel != NoNegate
@@ -763,6 +782,7 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
         NameFilter = string.Empty;
         SelectedClass = AnyClass;
         UsableLevel = 0;
+        FilterByLevelRange = false;
         SelectedAlignment = AnyAlign;
         SelectedSlot = AnySlot;
         SelectedWeaponType = AnyType;
@@ -964,17 +984,17 @@ public sealed partial class ItemFinderViewModel : WorkshopSectionViewModel
                 ? TrialGearFinder.FindBestBackstab(
                     candidates, free, settled, now,
                     picks => stabber.BackstabSidesOfPicks(PickedEntries(picks), HeldWeapon(settled, now)),
-                    UsableLevel, _activeClass, _activeAlignment,
+                    ActiveUsableLevel, _activeClass, _activeAlignment,
                     weightBudget: budget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints,
                     alsoFree: targets.Where(t => !settled.Contains(t) && !free.Contains(t)).ToList())
             : filter.BackstabRange is { } end && _damage is { IsUsable: true } model
                 ? TrialGearFinder.FindBestOfPasses(
                     [filter.Score, e => e.BsSideMinScore, e => e.BsSideMaxScore, e => e.BsScoreAvg],
                     picks => model.BackstabOfPicks(PickedEntries(picks), HeldWeapon(settled, now)) is { } r ? end(r) : 0,
-                    candidates, free, settled, now, UsableLevel, _activeClass, _activeAlignment,
+                    candidates, free, settled, now, ActiveUsableLevel, _activeClass, _activeAlignment,
                     weightBudget: budget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints)
                 : TrialGearFinder.FindBest(
-                    candidates, free, settled, now, filter.Score, UsableLevel, _activeClass, _activeAlignment,
+                    candidates, free, settled, now, filter.Score, ActiveUsableLevel, _activeClass, _activeAlignment,
                     weightBudget: budget, realm: _gameData.ActiveRealm, evilPoints: _activeEvilPoints);
 
         Dictionary<EquipmentSlot, string> best = TrialGearFinder.FindBestInOrder(

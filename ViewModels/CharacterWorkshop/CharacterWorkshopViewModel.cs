@@ -11,7 +11,7 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // Shell view-model for the Player Workshop window: a tab strip of sections, three
 // of them groups of sub-tabs — Character Info / Death Recovery / Auto-Train (CP
 // Allocation, Level Projection) / Quest Status / My Equipment (Equipment Manager, Item
-// Finder) / Calculators / Record Keeping (Bosses, Roomba, Realm Rankings).
+// Finder) / Calculators / Record Keeping (Bosses, Chest Offload, Roomba, Realm Rankings).
 public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisposable
 {
     private readonly ProfileService _profile;
@@ -99,7 +99,8 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         // shared state; the Character Info tab (reader) folds them into derived combat.
         var questBonuses = new QuestBonusState();
 
-        Sections.Add(new CharacterInfoSectionViewModel(playerStats, gameData, inventory, players, alignment, questBonuses, AppServices.Current.Currency, AppServices.Current.CarriedCharges));
+        Sections.Add(new CharacterInfoSectionViewModel(playerStats, gameData, inventory, players, alignment, questBonuses, AppServices.Current.Currency, AppServices.Current.CarriedCharges,
+            openChestOffload: () => Select(ChestOffloadViewModel.SectionId)));
 
         Sections.Add(new DeathSectionViewModel(recovery, profile));
 
@@ -130,6 +131,10 @@ public sealed partial class CharacterWorkshopViewModel : ObservableObject, IDisp
         Sections.Add(new WorkshopGroupSectionViewModel(RecordsGroupId, "Record Keeping",
             new LazyWorkshopSection(BossesSectionViewModel.SectionId, BossesSectionViewModel.SectionTitle,
                 () => new BossesSectionViewModel(gameData, AppServices.Current.Bosses, AppServices.Current.BossTimers, AppServices.Current.Tick, AppServices.Current.Profile)),
+            // One Workshop, so one of these: two would both read the inventory and
+            // diff the same chest opens.
+            new LazyWorkshopSection(ChestOffloadViewModel.SectionId, ChestOffloadViewModel.SectionTitle,
+                () => new ChestOffloadViewModel()),
             new GhManagementSectionViewModel(AppServices.Current.GhRoomLabels, AppServices.Current.GhSweep, AppServices.Current.RoomGraph, AppServices.Current.GhItemLocations, AppServices.Current.GhManagedRooms),
             new LazyWorkshopSection(RealmRankingsSectionViewModel.SectionId, RealmRankingsSectionViewModel.SectionTitle,
                 () => new RealmRankingsSectionViewModel(gameData, leaderboards))));

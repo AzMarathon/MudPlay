@@ -69,6 +69,7 @@ public sealed class ItemFinderViewModelTests : IDisposable
         ItemFinderViewModel finder = NewFinder(inventory);
         Assert.Equal(new[] { "great maul", "keen dagger", "ring of might" }, Shown(finder));
 
+        finder.FilterByLevelRange = true;
         finder.MinLevelReq = 10;
         Assert.Equal(new[] { "great maul", "ring of might" }, Shown(finder));
 
@@ -76,6 +77,30 @@ public sealed class ItemFinderViewModelTests : IDisposable
         Assert.Equal(new[] { "ring of might" }, Shown(finder));
 
         finder.MinLevelReq = 0;
+        Assert.Equal(new[] { "keen dagger", "ring of might" }, Shown(finder));
+    }
+
+    // The two level filters are a choice: the one not picked keeps its numbers but
+    // filters nothing.
+    [Fact]
+    public void LevelFilters_AreEitherOr()
+    {
+        using var inventory = new InventoryManager(log: null, itemWeightResolver: null, slotResolver: null);
+        ItemFinderViewModel finder = NewFinder(inventory);
+        finder.UsableLevel = 12;
+        finder.MinLevelReq = 15;
+
+        // Usable at 12: the range's floor of 15 is ignored.
+        Assert.True(finder.FilterByUsableLevel);
+        Assert.Equal(new[] { "keen dagger", "ring of might" }, Shown(finder));
+
+        // The range: only what asks for 15 or more, usable at 12 or not.
+        finder.FilterByLevelRange = true;
+        Assert.False(finder.FilterByUsableLevel);
+        Assert.Equal(new[] { "great maul" }, Shown(finder));
+
+        finder.FilterByUsableLevel = true;
+        Assert.False(finder.FilterByLevelRange);
         Assert.Equal(new[] { "keen dagger", "ring of might" }, Shown(finder));
     }
 

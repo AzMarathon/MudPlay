@@ -394,7 +394,7 @@
                                                         VerticalAlignment="Center"
                                                         IsVisible="{Binding IsContainer}"
                                                         Command="{Binding OpenChestOffload}"
-                                                        ToolTip.Tip="Open the Chest Offload window to open this and sell what it gives">
+                                                        ToolTip.Tip="Go to the Chest Offload tab to open this and sell what it gives">
                                                     <Path Data="{StaticResource IconTreasureChest}"
                                                           Stroke="{Binding $parent[Button].Foreground}"
                                                           StrokeThickness="1.5" StrokeJoin="Round" StrokeLineCap="Round"

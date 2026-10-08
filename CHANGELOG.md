@@ -2,13 +2,14 @@
 
 ## 3.151.0
 
-- Player Workshop tabs regrouped: **Auto-Train** holds CP Allocation and Level Projection, **My Equipment** holds Equipment Manager and Item Finder, **Record Keeping** holds Bosses, Roomba and Realm Rankings
+- Player Workshop tabs regrouped: **Auto-Train** holds CP Allocation and Level Projection, **My Equipment** holds Equipment Manager and Item Finder, **Record Keeping** holds Bosses, Chest Offload, Roomba and Realm Rankings
 - Item Finder is a sub-tab of My Equipment instead of a window opened from a button on Equipment Manager
+- Chest Offload is a sub-tab of Record Keeping instead of a window opened from a button on Bosses; the chest icon on Character Info jumps to it
 - Realm Rankings moved out of Calculators to its own sub-tab, with the table filling the tab
-- Menu entries and shortcuts that open a Workshop tab still land on it, now as a sub-tab; a new *Workshop: Item Finder* entry is available
+- Menu entries and shortcuts that open a Workshop tab still land on it, now as a sub-tab; new *Workshop: Item Finder* and *Workshop: Chest Offload* entries are available
 - Item Finder: the Gear Finder panel shows the trial set's damage with the selected attack type: accuracy, hit chance, damage range, swings, crit and Quick & Deadly, and damage per round
 - New **Configure Estimates** window sets what that is worked out against: your level and stats with nothing worn (the trial set's bonuses go on top), and a target's armour class, damage resist, dodge and BS defence, typed or filled from a monster lookup
-- Item Finder's Level req filter is a min / max range
+- Item Finder filters level one of two ways, picked by radio buttons: usable at a level, or a required-level range (min / max)
 - The Workshop opens at the size its opening tab fits, the same as switching to that tab, instead of the size it last closed at
 - Showing the Gear Finder panel on a maximized window no longer lays it out off the edge of the screen; switching Workshop tabs while maximized no longer resizes the window either
 - Gear Finder panel regrouped: the Find Best controls sit together, and Import from live / Clear sit on the trial set's slot list

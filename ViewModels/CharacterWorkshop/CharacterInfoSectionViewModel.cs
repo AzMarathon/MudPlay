@@ -46,6 +46,8 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     private readonly PlayerDatabase _playerDb;
     private readonly AlignmentTracker _alignmentTracker;
     private readonly QuestBonusState _questBonuses;
+    // Shows the Workshop's Chest Offload tab, for the chest icon on a carried container.
+    private readonly Action? _openChestOffload;
     // Resolves the per-BBS runic word for the carried-coins readout.
     private readonly CurrencyNaming _naming;
     // Realm-aware limited-use charge lookup (Paradigm look counts / stock counted-uses).
@@ -219,8 +221,10 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
     // False until the first `i` dump is parsed — drives the "type i to load" hint.
     [ObservableProperty] private bool _inventoryLoaded;
 
-    public CharacterInfoSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, PlayerDatabase playerDb, AlignmentTracker alignmentTracker, QuestBonusState questBonuses, CurrencyNaming naming, Game.Inventory.CarriedChargeReadout charges)
+    public CharacterInfoSectionViewModel(PlayerStats stats, GameDataCache gameData, InventoryManager inventory, PlayerDatabase playerDb, AlignmentTracker alignmentTracker, QuestBonusState questBonuses, CurrencyNaming naming, Game.Inventory.CarriedChargeReadout charges,
+        Action? openChestOffload = null)
     {
+        _openChestOffload = openChestOffload;
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -897,7 +901,8 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
             int number = ResolveItemNumber(name);
             CarriedItems.Add(new WorkshopItemRow(name, string.Empty, number, ChargesTextFor(name),
                 isContainer: number > 0
-                    && AppServices.Current.ItemNames.ItemTypeOf(number) == Game.Inventory.ChestOffloadPlanner.ContainerItemType));
+                    && AppServices.Current.ItemNames.ItemTypeOf(number) == Game.Inventory.ChestOffloadPlanner.ContainerItemType,
+                openChestOffload: _openChestOffload));
         }
 
         Keys.Clear();
