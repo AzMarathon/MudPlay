@@ -507,17 +507,25 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         }
 
         string? realm = SelectedRealm;
-        MegaMudImportDialogViewModel review = new(plan, Path.GetFileName(path), bbs, realm, n => _profile.Exists(bbs, n));
+        bool bbsHasCharacters = _profile.ListAll().Any(r => string.Equals(r.Bbs, bbs, StringComparison.OrdinalIgnoreCase));
+        MegaMudImportDialogViewModel review = new(plan, Path.GetFileName(path), bbs, realm, n => _profile.Exists(bbs, n),
+            bbsHasCharacters);
         MegaMudImportChoice? choice = await _dialogs.OpenWindowAsync<MegaMudImportDialogViewModel, MegaMudImportChoice>(review);
         if (choice is null || _profile.Exists(bbs, choice.Name)) return;
 
         _profile.CreateProfile(bbs, choice.Name,
-            fresh => plan.ApplyTo(fresh, bbs, choice.ImportLogin, AppServices.Current.Passwords));
+            fresh => plan.ApplyTo(fresh, bbs, choice.ImportLogin, AppServices.Current.Passwords, choice.Edits));
         if (realm is not null) _profile.AssignRealm(new ProfileRef(bbs, choice.Name), realm);
+        if (choice.ApplyBbsSettings && _bbs.Get(bbs) is { } board)
+        {
+            plan.ApplyToBbs(board, choice.Edits);
+            _bbs.Save(board);
+        }
         AppServices.Current.Log.Info("Profile",
             $"Imported MegaMUD profile '{Path.GetFileName(path)}' as '{choice.Name}' on '{bbs}': "
             + $"{plan.Lines.Count(static l => l.WasImported)} setting(s) carried over, "
-            + $"{plan.Lines.Count(static l => !l.WasImported)} left behind, login {(choice.ImportLogin ? "stored" : "not stored")}.");
+            + $"{plan.Lines.Count(static l => !l.WasImported)} left behind, {choice.Edits.Count} changed in the review, login {(choice.ImportLogin ? "stored" : "not stored")}, "
+            + $"BBS redial and cleanup settings {(choice.ApplyBbsSettings ? "applied" : "left as they were")}.");
         ReloadProfiles();
         SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, choice.Name, StringComparison.Ordinal));
     }

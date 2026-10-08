@@ -99,16 +99,25 @@ public sealed class MegaMudProfileImporterTests
         IgnoreBlind=1
         RunBackwards=1
         PickMax=3
+        [Comms]
+        RedialMax=0
+        RedialPause=45
+        RedialConnect=1
+        RedialCarrier=1
+        RedialNoResponse=0
+        RedialCleanup=1
+        CleanupPeriod=5000
         [PvP]
         PvpAction=5
         """;
 
-    private static (MegaMudImportPlan Plan, CharacterProfile Made) Import(bool withLogin = true)
+    private static (MegaMudImportPlan Plan, CharacterProfile Made) Import(bool withLogin = true,
+        Dictionary<string, string>? edits = null)
     {
         MegaMudImportPlan plan = MegaMudProfileImporter.Read(MegaMudIni.Parse(Ini), "Cleric");
         var made = new CharacterProfile();
         string keyFile = Path.Combine(Path.GetTempPath(), "mudplay-megamud-import-" + Path.GetRandomFileName());
-        plan.ApplyTo(made, "Paradigm", withLogin, new PasswordProtector(keyFile));
+        plan.ApplyTo(made, "Paradigm", withLogin, new PasswordProtector(keyFile), edits);
         try { File.Delete(keyFile); } catch (IOException) { /* best-effort */ }
         return (plan, made);
     }
@@ -261,5 +270,128 @@ public sealed class MegaMudProfileImporterTests
 
         (_, CharacterProfile without) = Import(withLogin: false);
         Assert.Null(without.BbsCredentials);
+    }
+
+    // The redial and cleanup settings are the board's, so the character import
+    // leaves them alone and ApplyToBbs writes them, held to what BBS settings takes.
+    [Fact]
+    public void RedialAndCleanup_GoOntoTheBbs_WithinItsLimits()
+    {
+        (MegaMudImportPlan plan, _) = Import();
+        Assert.True(plan.HasBbsSettings);
+
+        var bbs = new MudPlay.Models.Settings.BbsProfile();
+        plan.ApplyToBbs(bbs);
+
+        Assert.Equal(1, bbs.MaxRedials);                // 0 in the file: at least one
+        Assert.Equal(45, bbs.RedialPauseSeconds);
+        Assert.True(bbs.ReconnectOnFailedConnect);
+        Assert.True(bbs.ReconnectOnCarrierLost);
+        Assert.False(bbs.ReconnectOnNoResponse);
+        Assert.True(bbs.ReconnectAfterCleanup);
+        Assert.Equal(600, bbs.CleanupPeriodMinutes);    // 5000 in the file: the most it takes
+
+        MegaMudImportLine cleanup = plan.Lines.Single(l => l.Setting == "Cleanup period");
+        Assert.Equal(MegaMudProfileImporter.BbsGroup, cleanup.Group);
+        Assert.Equal("600 minutes", cleanup.Value);
+    }
+
+    [Fact]
+    public void AFileWithNoRedialSettings_OffersNoBbsSettings()
+    {
+        MegaMudImportPlan plan = MegaMudProfileImporter.Read(MegaMudIni.Parse("[Health]\r\nHpFull%=86\r\n"), "X");
+        Assert.False(plan.HasBbsSettings);
+    }
+
+    // Every carried-over setting names the value it came from and how it is edited,
+    // so the review can hand a changed value back.
+    [Fact]
+    public void CarriedOverSettings_SayHowTheyAreEdited()
+    {
+        (MegaMudImportPlan plan, _) = Import();
+
+        MegaMudImportLine restHp = plan.Lines.Single(l => l.Setting == "Rest until HP is at");
+        Assert.Equal(MegaMudImportEdit.Number, restHp.Edit);
+        Assert.Equal("90", restHp.EditValue);
+        Assert.Equal("%", restHp.Unit);
+        Assert.Equal("90%", restHp.Value);
+
+        Assert.Equal(MegaMudImportEdit.Flag, plan.Lines.Single(l => l.Setting == "Auto-Combat").Edit);
+        Assert.Equal(MegaMudImportEdit.Text, plan.Lines.Single(l => l.Setting == "Major heal spell").Edit);
+        Assert.Equal(MegaMudImportEdit.Text, plan.Lines.Single(l => l.Setting == "Self bless 1").Edit);
+        Assert.Equal(MegaMudImportEdit.Text, plan.Lines.Single(l => l.Setting == "Bank room (map/room)").Edit);
+
+        MegaMudImportLine[] editable = plan.Lines.Where(l => l.Edit != MegaMudImportEdit.None).ToArray();
+        Assert.All(editable, l => Assert.NotEqual(string.Empty, l.EditKey));
+        Assert.Equal(editable.Length, editable.Select(l => l.EditKey).Distinct().Count());
+    }
+
+    [Fact]
+    public void ValuesChangedInTheReview_AreWhatIsImported()
+    {
+        (MegaMudImportPlan plan, _) = Import();
+        string Key(string setting) => plan.Lines.Single(l => l.Setting == setting).EditKey;
+
+        var edits = new Dictionary<string, string>
+        {
+            [Key("Rest until HP is at")] = "95",
+            [Key("Auto-Combat")] = "0",
+            [Key("Major heal spell")] = "heal",
+            [Key("Pre-rest command")] = "",
+            [Key("Self bless 1")] = "bles",
+            [Key("Bank room (map/room)")] = "2/14",
+            [Key("Invalid remote command reply")] = "no",
+            [Key("Most monsters in a room to fight")] = "99",
+            [Key("Seconds between redials")] = "20",
+        };
+        (_, CharacterProfile made) = Import(edits: edits);
+
+        HealthSettings health = Section<HealthSettings>(made, "Health");
+        Assert.Equal(95, health.RestMaxHp);
+        Assert.Equal(50, health.RestIfBelowHp);                       // untouched
+        Assert.True(string.IsNullOrEmpty(health.PreRestCommand));     // cleared in the review
+        Assert.False(Section<GeneralSettings>(made, "General").AutoMode.AutoCombat);
+        Assert.Equal("heal", Section<SpellsSettings>(made, "Spells").MajorHealSpell);
+        Assert.Equal("bles", made.PartyBuffs!.Slots[0].Spell);
+        Assert.Equal("2/14", Section<CashSettings>(made, "Cash").BankRoomKey);
+        Assert.Equal("no", Section<TalkSettings>(made, "Talk").RemoteCommandFailureMessage);
+        Assert.Equal(20, Section<CombatSettings>(made, "Combat").MaxMonstersInRoom);   // still held to a room's 20
+
+        // The review itemises the active profile, so that is the one an edit to a
+        // Combat / Health / Spells value changes.
+        CombatProfileSettings profiles = made.CombatProfiles!;
+        Assert.Equal(95, profiles.Profiles[1].Health.RestMaxHp);
+        Assert.Equal(86, profiles.Profiles[0].Health.RestMaxHp);
+        Assert.Equal("heal", profiles.Profiles[1].Spells.MajorHealSpell);
+        Assert.Equal("grhe", profiles.Profiles[0].Spells.MajorHealSpell);
+
+        var bbs = new MudPlay.Models.Settings.BbsProfile();
+        plan.ApplyToBbs(bbs, edits);
+        Assert.Equal(20, bbs.RedialPauseSeconds);
+    }
+
+    // A pre / post rest command is flagged for a second look, and strongly when it
+    // changes gear, which is the Equipment Manager's job here.
+    [Fact]
+    public void RestCommands_AreFlagged_AndStronglyWhenTheyChangeGear()
+    {
+        (MegaMudImportPlan plan, _) = Import();
+        MegaMudImportLine pre = plan.Lines.Single(l => l.Setting == "Pre-rest command");
+
+        MegaMudImportAdvice asImported = pre.Advise!(pre.EditValue)!;
+        Assert.True(asImported.Strong);
+        Assert.Contains("Equipment Manager", asImported.Text);
+
+        Assert.True(MegaMudProfileImporter.RestCommandAdvice("wea robe")!.Strong);
+        Assert.True(MegaMudProfileImporter.RestCommandAdvice("sit^Mwear ring^M")!.Strong);
+        Assert.True(MegaMudProfileImporter.RestCommandAdvice("REMOVE helm")!.Strong);
+        Assert.True(MegaMudProfileImporter.RestCommandAdvice("equip staff")!.Strong);
+        // Flagged, but not as a gear swap: the verb has to be the command's own word.
+        Assert.False(MegaMudProfileImporter.RestCommandAdvice("gos resting, remember me")!.Strong);
+        Assert.False(MegaMudProfileImporter.RestCommandAdvice("weave")!.Strong);
+        // Cleared in the review: nothing left to warn about.
+        Assert.Null(MegaMudProfileImporter.RestCommandAdvice("  "));
+        // Other text settings carry no caution.
+        Assert.Null(plan.Lines.Single(l => l.Setting == "Major heal spell").Advise);
     }
 }

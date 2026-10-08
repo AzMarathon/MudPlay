@@ -25,7 +25,10 @@ public static class MegaMudProfileImporter
         var lines = new List<MegaMudImportLine>();
         // A dry run over a blank character: the same code that later writes the
         // real one, so the review can't say anything the import doesn't do.
-        Apply(ini, new CharacterProfile(), lines);
+        Apply(ini, new CharacterProfile(), lines, edits: null);
+        var bbsLines = new List<MegaMudImportLine>();
+        MapBbs(new Pass(ini, bbsLines, edits: null), new Models.Settings.BbsProfile());
+        lines.AddRange(bbsLines);
         string? user = Clean(ini.Get("BBS", "UserID"));
         string? password = Clean(ini.Get("BBS", "Password"));
         if (user is not null || password is not null)
@@ -34,14 +37,18 @@ public static class MegaMudProfileImporter
         return new MegaMudImportPlan(
             string.IsNullOrWhiteSpace(suggestedName) ? "Imported" : suggestedName.Trim(),
             Clean(ini.Get("BBS", "BbsName")), user, password, lines,
-            profile => Apply(ini, profile, new List<MegaMudImportLine>()));
+            (profile, edits) => Apply(ini, profile, lines: null, edits),
+            bbsLines.Any(static l => l.WasImported) ? (bbs, edits) => MapBbs(new Pass(ini, null, edits), bbs) : null);
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static void Apply(MegaMudIni ini, CharacterProfile profile, List<MegaMudImportLine> lines)
+    // edits: what the user changed in the review, by MegaMudImportLine.EditKey. Each
+    // stands in for the file's own value and goes through the same mapping.
+    private static void Apply(MegaMudIni ini, CharacterProfile profile, List<MegaMudImportLine>? lines,
+        IReadOnlyDictionary<string, string>? edits)
     {
-        var pass = new Pass(ini, lines);
+        var pass = new Pass(ini, lines, edits);
 
         MapGeneral(pass, profile);
         MapCombatProfiles(pass, profile);
@@ -142,19 +149,19 @@ public static class MegaMudProfileImporter
     {
         const string g = "Health";
         const string s = "Health";
-        p.Int(s, "HpFull%", g, "Rest until HP is at", v => h.RestMaxHp = v, Percent);
-        p.Int(s, "HpRest%", g, "Rest if HP is below", v => h.RestIfBelowHp = v, Percent);
-        p.Int(s, "HpHeal%", g, "Heal while resting if HP is below", v => h.HealRestTrigger = v, Percent);
-        p.Int(s, "HpHealAtt%", g, "Major heal in combat if HP is below", v => h.MajorHealCombatTrigger = v, Percent);
-        p.Int(s, "HpHealMinor%", g, "Minor heal in combat if HP is below", v => h.MinorHealCombatTrigger = v, Percent);
-        p.Int(s, "HpRun%", g, "Run if HP is below", v => h.RunIfBelowHp = v, Percent);
-        p.Int(s, "HpLogoff%", g, "Hang up if HP is below", v => h.HangIfBelowHp = v, Percent);
-        p.Int(s, "ManaFull%", g, "Rest until mana is at", v => h.RestMaxMa = v, Percent);
-        p.Int(s, "ManaRest%", g, "Rest if mana is below", v => h.RestIfBelowMa = v, Percent);
-        p.Int(s, "ManaHeal%", g, "Heal while resting only if mana is above", v => h.HealIfAboveMaResting = v, Percent);
-        p.Int(s, "ManaHealAtt%", g, "Heal in combat only if mana is above", v => h.HealIfAboveMaCombat = v, Percent);
-        p.Int(s, "ManaRun%", g, "Run if mana is below", v => h.RunIfBelowMa = v, Percent);
-        p.Int(s, "ManaBless%", g, "Bless only if mana is above", v => h.BlessIfAboveMa = v, Percent);
+        p.Int(s, "HpFull%", g, "Rest until HP is at", v => h.RestMaxHp = v, unit: "%");
+        p.Int(s, "HpRest%", g, "Rest if HP is below", v => h.RestIfBelowHp = v, unit: "%");
+        p.Int(s, "HpHeal%", g, "Heal while resting if HP is below", v => h.HealRestTrigger = v, unit: "%");
+        p.Int(s, "HpHealAtt%", g, "Major heal in combat if HP is below", v => h.MajorHealCombatTrigger = v, unit: "%");
+        p.Int(s, "HpHealMinor%", g, "Minor heal in combat if HP is below", v => h.MinorHealCombatTrigger = v, unit: "%");
+        p.Int(s, "HpRun%", g, "Run if HP is below", v => h.RunIfBelowHp = v, unit: "%");
+        p.Int(s, "HpLogoff%", g, "Hang up if HP is below", v => h.HangIfBelowHp = v, unit: "%");
+        p.Int(s, "ManaFull%", g, "Rest until mana is at", v => h.RestMaxMa = v, unit: "%");
+        p.Int(s, "ManaRest%", g, "Rest if mana is below", v => h.RestIfBelowMa = v, unit: "%");
+        p.Int(s, "ManaHeal%", g, "Heal while resting only if mana is above", v => h.HealIfAboveMaResting = v, unit: "%");
+        p.Int(s, "ManaHealAtt%", g, "Heal in combat only if mana is above", v => h.HealIfAboveMaCombat = v, unit: "%");
+        p.Int(s, "ManaRun%", g, "Run if mana is below", v => h.RunIfBelowMa = v, unit: "%");
+        p.Int(s, "ManaBless%", g, "Bless only if mana is above", v => h.BlessIfAboveMa = v, unit: "%");
         p.Flag(s, "UseMeditate", g, "Use the meditate ability", v => h.UseMeditateAbility = v);
         p.Flag(s, "MeditateB4Rest", g, "Meditate before resting", v => h.MeditateBeforeResting = v);
         h.HpThresholdMode = ThresholdMode.Percentage;
@@ -164,8 +171,8 @@ public static class MegaMudProfileImporter
         // MudPlay reads ^M as a carriage return too, so the text goes across as it is.
         if (p.Raw(s, "PrePostRest") == "1")
         {
-            p.Text(s, "PreRestCmd", g, "Pre-rest command", v => h.PreRestCommand = v);
-            p.Text(s, "PostRestCmd", g, "Post-rest command", v => h.PostRestCommand = v);
+            p.Text(s, "PreRestCmd", g, "Pre-rest command", v => h.PreRestCommand = v, advice: RestCommandAdvice);
+            p.Text(s, "PostRestCmd", g, "Post-rest command", v => h.PostRestCommand = v, advice: RestCommandAdvice);
         }
         else
         {
@@ -177,6 +184,40 @@ public static class MegaMudProfileImporter
         if (p.Raw(s, "PostMedCmd") is { Length: > 0 } medPost && medPost != p.Raw(s, "PostRestCmd"))
             p.Skip(s, "PostMedCmd", g, "Post-meditate command", "MudPlay has one post-rest command for resting and meditating; the rest one was kept");
         p.SkipUnlessZero(s, "ManaHealMinor%", g, "Minor heal only if mana is above", "MudPlay has one mana gate for combat heals");
+    }
+
+    // A pre / post rest command in MegaMUD is very often a gear swap typed out by
+    // hand. MudPlay swaps gear through the Equipment Manager's Pre-rest sets, and a
+    // typed swap on top of that puts both in charge of the same slots.
+    public static MegaMudImportAdvice? RestCommandAdvice(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command)) return null;
+        return SwapsGear(command)
+            ? new MegaMudImportAdvice(
+                "This command changes gear (rem / eq / wear). In MudPlay, gear swaps are the Equipment Manager's job: "
+                + "build a Pre-rest HP or Pre-rest Mana set in the Workshop and clear this box, "
+                + "or the command and the gear sets will both be changing what you wear.", Strong: true)
+            : new MegaMudImportAdvice(
+                "Check this is still wanted. If it is there to change gear for resting, leave it out: "
+                + "the Equipment Manager's Pre-rest sets do that in MudPlay.", Strong: false);
+    }
+
+    // GAME_MECHANICS "Equip / remove verbs": the verbs that put gear on or take it
+    // off, each down to the shortest form players type.
+    private static readonly (string Verb, int Shortest)[] GearVerbs =
+    {
+        ("remove", 3), ("equip", 2), ("wear", 3), ("wield", 5),
+    };
+
+    private static bool SwapsGear(string command)
+    {
+        foreach (string step in command.Split(new[] { "^M", ";", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            string word = step.Trim().Split(' ', 2)[0];
+            foreach ((string verb, int shortest) in GearVerbs)
+                if (word.Length >= shortest && verb.StartsWith(word, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     private static void MapSpells(Pass p, SpellsSettings sp)
@@ -216,8 +257,7 @@ public static class MegaMudProfileImporter
         p.Flag(s, "DontBsIfMulti", g, "Skip the backstab when multi-attacking", v => c.SkipBackstabIfMultiAttack = v);
         p.Flag(s, "RunIfBsFails", g, "Run if the backstab fails", v => c.RunIfBackstabFails = v);
         // A room holds 20 monsters at most, which is as high as MudPlay's cap goes.
-        p.Int(s, "MaxMstrs", g, "Most monsters in a room to fight", v => c.MaxMonstersInRoom = Math.Clamp(v, 0, 20),
-            v => Math.Clamp(v, 0, 20).ToString(CultureInfo.InvariantCulture));
+        p.Int(s, "MaxMstrs", g, "Most monsters in a room to fight", v => c.MaxMonstersInRoom = Math.Clamp(v, 0, 20));
         p.Int(s, "MinMstrs", g, "Fewest monsters in a room to fight", v => c.MinMonstersInRoom = Math.Clamp(v, 0, 20));
         p.Int(s, "RunRooms", g, "Rooms to run", v => c.RunDistance = Math.Clamp(v, 1, 100));
         p.Flag("Other", "RunBackwards", g, "Run back the way you came", v => c.RunDirection = v ? RunDirection.Backward : RunDirection.Forward);
@@ -251,10 +291,13 @@ public static class MegaMudProfileImporter
         void Slot(Pass pass, string spellKey, string manaKey, string castsKey, string? enemiesKey, string label, CombatSpellSlot slot)
         {
             if (!pass.Text(s, spellKey, g, label, v => slot.SpellName = v)) return;
-            pass.Int(s, manaKey, g, $"{label}: only if mana is above", v => slot.MinManaPerCast = v, Percent);
+            pass.Int(s, manaKey, g, $"{label}: only if mana is above", v => slot.MinManaPerCast = v, unit: "%");
             // MegaMUD's 0 is "no limit", which MudPlay stores as no number.
-            pass.Int(s, castsKey, g, $"{label}: most casts per room", v => slot.MaxCastsPerRoom = v > 0 ? v : null,
-                v => v > 0 ? v.ToString(CultureInfo.InvariantCulture) : "no limit");
+            pass.Int(s, castsKey, g, $"{label}: most casts per room (0 = no limit)", v =>
+            {
+                slot.MaxCastsPerRoom = v > 0 ? v : null;
+                return Math.Max(0, v);
+            });
             if (enemiesKey is not null)
                 pass.Int(s, enemiesKey, g, $"{label}: fewest monsters", v => slot.MinEnemies = Math.Max(0, v));
         }
@@ -266,9 +309,9 @@ public static class MegaMudProfileImporter
         const string s = "Party";
         p.Int(s, "ParPeriod", g, "Seconds between `par` polls", v => pt.ParPollFrequencySec = Math.Clamp(v, 1, 60));
         p.Text(s, "PartyHeal1", g, "Minor party heal spell", v => pt.MinorPartyHealSpell = v);
-        p.Int(s, "PartyHeal1%", g, "Minor party heal if a member is below", v => pt.MinorHealMemberThresholdPercent = v, Percent);
+        p.Int(s, "PartyHeal1%", g, "Minor party heal if a member is below", v => pt.MinorHealMemberThresholdPercent = v, unit: "%");
         p.Text(s, "PartyHeal2", g, "Major party heal spell", v => pt.MajorPartyHealSpell = v);
-        p.Int(s, "PartyHeal2%", g, "Major party heal if a member is below", v => pt.MajorHealMemberThresholdPercent = v, Percent);
+        p.Int(s, "PartyHeal2%", g, "Major party heal if a member is below", v => pt.MajorHealMemberThresholdPercent = v, unit: "%");
         // MegaMUD has one area heal; it goes in MudPlay's minor area-heal slot
         // (user, 2026-10-08), which fires on the minor party heal's threshold.
         if (p.Text(s, "PartyHealArea", g, "Minor party area heal spell", v => pt.MinorPartyHealAoeSpell = v))
@@ -276,9 +319,8 @@ public static class MegaMudProfileImporter
             p.Int(s, "PartyHealAreaAt", g, "Area heal: fewest hurt members", v => pt.AoeMinMembers = Math.Max(1, v));
             p.Skip(s, "PartyHealArea%", g, "Area heal threshold", "MudPlay's minor area heal fires on the minor party heal's threshold, above");
         }
-        p.Int(s, "PartyMaxMstrs", g, "Most monsters in a room when partying", v => pt.MaxMonstersWhenPartying = Math.Clamp(v, 0, 20),
-            v => Math.Clamp(v, 0, 20).ToString(CultureInfo.InvariantCulture));
-        p.Int(s, "PartyWait%", g, "Wait if a member's HP is below", v => pt.WaitIfMemberBelowPercent = v, Percent);
+        p.Int(s, "PartyMaxMstrs", g, "Most monsters in a room when partying", v => pt.MaxMonstersWhenPartying = Math.Clamp(v, 0, 20));
+        p.Int(s, "PartyWait%", g, "Wait if a member's HP is below", v => pt.WaitIfMemberBelowPercent = v, unit: "%");
         p.Flag(s, "IgnoreWait", g, "Ignore @wait when leading", v => pt.IgnoreWaitWhenLeading = v);
         p.Flag(s, "SendPanic", g, "Use panic while leading", v => pt.UsePanicWhileLeading = v);
         p.Flag(s, "IgnorePanic", g, "Ignore panics", v => pt.IgnorePanics = v);
@@ -316,13 +358,13 @@ public static class MegaMudProfileImporter
             if (Clean(p.Raw("Spells", $"BlessCmd{i}")) is { } spell)
             {
                 AddSlot(spell, self: true);
-                p.Add("Buffs", $"Self bless {i}", spell);
+                p.Add("Buffs", $"Self bless {i}", spell, editKey: Pass.Key("Spells", $"BlessCmd{i}"));
             }
         for (int i = 1; i <= 4; i++)
             if (Clean(p.Raw("Party", $"PartyBless{i}")) is { } spell)
             {
                 AddSlot(spell, self: false);
-                p.Add("Buffs", $"Party bless {i}", $"{spell}, on every member");
+                p.Add("Buffs", $"Party bless {i} (cast on every member)", spell, editKey: Pass.Key("Party", $"PartyBless{i}"));
                 p.Skip("Party", $"PartyBlessWait{i}", "Buffs", $"Party bless {i} wait", "MudPlay recasts a buff as its own timer runs out");
             }
         for (int i = 1; i <= 10; i++)
@@ -370,7 +412,7 @@ public static class MegaMudProfileImporter
         p.Flag(s, "AutoRecoverCorpse", g, "Auto-recover death piles", v => profile.DeathAutoRecover = v);
         // "Bank of Godfrey-1 297": the room's name, then its map and room number.
         if (BankRoom(p.Raw(s, "Bank")) is { } bank)
-            p.Add(g, "Bank room", bank, () => cash.BankRoomKey = bank);
+            p.Add(g, "Bank room (map/room)", bank, () => cash.BankRoomKey = bank, editKey: Pass.Key(s, "Bank"));
         else
             p.Skip(s, "Bank", g, "Bank", "couldn't read a map and room number out of it");
         p.SkipUnlessZero(s, "StashCoin", g, "Stash coin", "mark your stash rooms on the map, then choose what to stash on the Cash tab");
@@ -383,12 +425,13 @@ public static class MegaMudProfileImporter
         static CashPolicy Policy(bool want) => want ? CashPolicy.Collect : CashPolicy.Ignore;
     }
 
+    // MegaMUD's "Bank of Godfrey-1 297", or the "1/297" the review shows and takes
+    // back when edited.
     private static string? BankRoom(string? value)
     {
         if (Clean(value) is not { } text) return null;
         int dash = text.LastIndexOf('-');
-        if (dash < 0) return null;
-        string[] parts = text[(dash + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        string[] parts = text[(dash + 1)..].Split(new[] { ' ', '/' }, StringSplitOptions.RemoveEmptyEntries);
         return parts.Length == 2 && int.TryParse(parts[0], out int map) && int.TryParse(parts[1], out int room)
             && map > 0 && room > 0
             ? string.Create(CultureInfo.InvariantCulture, $"{map}/{room}")
@@ -413,6 +456,28 @@ public static class MegaMudProfileImporter
             v => v.Trim().Trim('{', '}').Trim());
         p.SkipUnlessZero(s, "AutoAfk", g, "Auto-AFK", "no matching MudPlay setting is mapped for it yet");
         Put(profile, "Talk", talk);
+    }
+
+    // ----- The BBS: redial and cleanup -------------------------------------
+    // These belong to the board, shared by every character on it, so they are
+    // written only when the user ticks them in the review (BbsGroup says so).
+
+    public const string BbsGroup = "BBS (tick box)";
+
+    private static void MapBbs(Pass p, Models.Settings.BbsProfile bbs)
+    {
+        const string g = BbsGroup;
+        const string s = "Comms";
+        // Held to what BBS settings itself accepts.
+        p.Int(s, "RedialMax", g, "Most redials", v => bbs.MaxRedials = Math.Clamp(v, 1, 9999));
+        p.Int(s, "RedialPause", g, "Seconds between redials", v => bbs.RedialPauseSeconds = Math.Clamp(v, 1, 300));
+        p.Flag(s, "RedialConnect", g, "Redial when a connect attempt fails", v => bbs.ReconnectOnFailedConnect = v);
+        p.Flag(s, "RedialCarrier", g, "Redial when the carrier is lost", v => bbs.ReconnectOnCarrierLost = v);
+        p.Flag(s, "RedialNoResponse", g, "Redial when the server stops responding", v => bbs.ReconnectOnNoResponse = v);
+        p.Flag(s, "RedialCleanup", g, "Redial after cleanup", v => bbs.ReconnectAfterCleanup = v);
+        p.Int(s, "CleanupPeriod", g, "Cleanup period", v => bbs.CleanupPeriodMinutes = Math.Clamp(v, 0, 600), unit: " minutes");
+        p.SkipUnlessZero(s, "LogoffLowExp", "BBS", "Log off on a low exp rate", "no matching MudPlay setting is mapped for it yet");
+        p.SkipUnlessZero(s, "LagWait", "BBS", "Lag wait", "no matching MudPlay setting is mapped for it yet");
     }
 
     // ----- Other ------------------------------------------------------------
@@ -442,7 +507,6 @@ public static class MegaMudProfileImporter
         Area("Alerts", "Sounds", "Alert sounds", "pick sounds in Settings → Sounds");
         Area("Schedule", "Events", "Scheduled events", "MegaMUD's event format isn't read yet; re-create them in Settings → Events");
         Area("Auto-roam", "Navigation", "Auto-roam rooms and commands", "not carried over; in MudPlay, loops and Auto-Lair do the roaming");
-        Area("Comms", "BBS", "Redial and cleanup settings", "kept with the BBS, in Profile Management → BBS settings");
         Area("Player", "Character", "Stats and level", "read from the game with `stat` when the character logs in");
         if (p.Ini.Keys("MegaMud").Any(k => k.StartsWith("FavRoom", StringComparison.OrdinalIgnoreCase)))
             p.Add("Navigation", "Favourite rooms", string.Empty, note: "MegaMUD stores them as room codes; add them from the map");
@@ -455,8 +519,6 @@ public static class MegaMudProfileImporter
     }
 
     // ----- Plumbing ---------------------------------------------------------
-
-    private static string Percent(int v) => string.Create(CultureInfo.InvariantCulture, $"{v}%");
 
     private static T Section<T>(CharacterProfile profile, string key) where T : new() =>
         profile.Settings is { } settings && settings.TryGetValue(key, out JsonElement el)
@@ -472,35 +534,62 @@ public static class MegaMudProfileImporter
     // One walk over the file: reads values, sets them, and writes the review lines.
     // For(section, n) reads a profile's own copy of a section first and the values
     // in play second, since a `.P<n>` section leaves out a few of the base's keys.
-    private sealed class Pass(MegaMudIni ini, List<MegaMudImportLine>? lines, string? baseSection = null, string? overlay = null)
+    //
+    // An edit from the review stands in for the file's value. Combat, Health and
+    // Spells are reviewed for the active profile only, so an edit to one of those
+    // reaches that profile alone (a quiet pass, which builds the others, ignores
+    // it); an edit anywhere else reaches every profile, as the setting itself does.
+    private sealed class Pass(MegaMudIni ini, List<MegaMudImportLine>? lines,
+        IReadOnlyDictionary<string, string>? edits, string? baseSection = null, string? overlay = null, bool reviewed = true)
     {
+        private static readonly string[] PerProfile = { "Combat", "Health", "Spells" };
+
         public MegaMudIni Ini => ini;
 
-        public Pass Quiet() => new(ini, null, baseSection, overlay);
+        public static string Key(string section, string key) => $"{section}|{key}";
+
+        public Pass Quiet() => new(ini, null, edits, baseSection, overlay, reviewed: false);
 
         public Pass For(string section, int profileNumber) =>
-            new(ini, lines, section, profileNumber > 0 ? $"{section}.P{profileNumber}" : null);
+            new(ini, lines, edits, section, profileNumber > 0 ? $"{section}.P{profileNumber}" : null, reviewed);
 
-        public string? Raw(string section, string key) =>
-            (overlay is not null && string.Equals(section, baseSection, StringComparison.OrdinalIgnoreCase)
-                ? ini.Get(overlay, key)
-                : null)
-            ?? ini.Get(section, key);
+        public string? Raw(string section, string key)
+        {
+            if (edits is not null && (reviewed || !PerProfile.Contains(section, StringComparer.OrdinalIgnoreCase))
+                && edits.TryGetValue(Key(section, key), out string? edited))
+                return edited;
+            return (overlay is not null && string.Equals(section, baseSection, StringComparison.OrdinalIgnoreCase)
+                    ? ini.Get(overlay, key)
+                    : null)
+                ?? ini.Get(section, key);
+        }
 
         public int IntOr(string section, string key, int fallback) =>
             int.TryParse(Raw(section, key), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : fallback;
 
-        public void Add(string group, string setting, string value, Action? set = null, string note = "")
+        // A line the mapping worked out for itself. editKey makes it a text the
+        // review can change.
+        public void Add(string group, string setting, string value, Action? set = null, string note = "", string? editKey = null)
         {
             set?.Invoke();
-            lines?.Add(new MegaMudImportLine(group, setting, value, note));
+            lines?.Add(new MegaMudImportLine(group, setting, value, note)
+            {
+                Edit = editKey is null ? MegaMudImportEdit.None : MegaMudImportEdit.Text,
+                EditKey = editKey ?? string.Empty,
+                EditValue = editKey is null ? string.Empty : value,
+            });
         }
 
-        public bool Int(string section, string key, string group, string label, Action<int> set, Func<int, string>? show = null)
+        // set returns the value it stored, which is what the review lists and edits:
+        // a clamp shows as the number that will really be used.
+        public bool Int(string section, string key, string group, string label, Func<int, int> set, string unit = "")
         {
             if (!int.TryParse(Raw(section, key), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v)) return false;
-            set(v);
-            lines?.Add(new MegaMudImportLine(group, label, show?.Invoke(v) ?? v.ToString(CultureInfo.InvariantCulture)));
+            string stored = set(v).ToString(CultureInfo.InvariantCulture);
+            lines?.Add(new MegaMudImportLine(group, label, stored + unit)
+            {
+                Edit = MegaMudImportEdit.Number, EditKey = Key(section, key), EditValue = stored, Unit = unit.Trim(),
+            });
             return true;
         }
 
@@ -509,16 +598,25 @@ public static class MegaMudProfileImporter
             if (Raw(section, key) is not { } raw || raw.Trim() is not ("0" or "1")) return false;
             bool on = raw.Trim() == "1";
             set(on);
-            lines?.Add(new MegaMudImportLine(group, label, on ? "on" : "off"));
+            lines?.Add(new MegaMudImportLine(group, label, on ? "on" : "off")
+            {
+                Edit = MegaMudImportEdit.Flag, EditKey = Key(section, key), EditValue = on ? "1" : "0",
+            });
             return true;
         }
 
         // Empty means the slot isn't used, which is what a fresh MudPlay setting is.
-        public bool Text(string section, string key, string group, string label, Action<string> set, Func<string, string>? show = null)
+        public bool Text(string section, string key, string group, string label, Action<string> set,
+            Func<string, string>? show = null, Func<string, MegaMudImportAdvice?>? advice = null)
         {
             if (Clean(Raw(section, key)) is not { } v) return false;
             set(v);
-            lines?.Add(new MegaMudImportLine(group, label, show?.Invoke(v) ?? v));
+            string shown = show?.Invoke(v) ?? v;
+            lines?.Add(new MegaMudImportLine(group, label, shown)
+            {
+                Edit = MegaMudImportEdit.Text, EditKey = Key(section, key), EditValue = shown,
+                Advise = advice,
+            });
             return true;
         }
 

@@ -1121,13 +1121,15 @@ Gear is organized into named equipment sets in the **Player Workshop** — a Def
 
 Before anything is created you get a **review**:
 
-- **Coming across**: every setting that is carried over, under its MudPlay name, with the value it will have.
+- **Coming across**: every setting that is carried over, under its MudPlay name, with the value it will have. **Each value can be changed right there** before you import: tick boxes for the switches, number boxes for thresholds and counts, text boxes for spells and commands. Clear a spell or command box to leave that setting unset. A number outside what MudPlay accepts is brought into range when the character is made.
+  - Where MegaMUD had several profiles, the Combat, Health and Spells lines are the active profile's, and a change to one of them changes that profile only.
 - **Not coming across**: every setting that isn't, with the reason. Nothing in the file is guessed at: a setting only comes across when it means the same thing in both clients.
 
 What comes across:
 
 - **The auto switches** (Auto-Combat, Auto-Nuke, Auto-Heal and Rest, Auto-Bless, Auto-Light, Auto-Get Cash and Items, Auto-Search, Auto-Sneak, Auto-Hide).
 - **Health**: the rest, heal, run and hang-up thresholds for HP and mana, meditate, and the pre / post rest commands.
+  - **The pre / post rest commands are highlighted** so you look at them before importing. In MegaMUD they are very often a hand-typed gear swap. When one contains `rem`, `eq`, `wear` or `wea` the line turns red and says so: in MudPlay, gear swaps for resting belong to the **Equipment Manager's Pre-rest HP / Pre-rest Mana sets** (Workshop → My Equipment). Build the set there and clear the box in the review, or the typed command and the gear sets will both be changing what you wear. The highlight follows the box as you edit it.
 - **Spells**: the heal, regen, cure, light and when-full spells, by the same short codes MegaMUD uses.
 - **Combat**: the attack command, the multi-attack, debuff and attack spells with their mana and cast limits, backstab switches, monster limits and the run settings.
 - **MegaMUD's profiles** (Smash / Bash / Attack and the like) each become a MudPlay combat profile, with the one MegaMUD had active made active.
@@ -1139,9 +1141,11 @@ What doesn't, and why:
 - **Weapons**: pick them in the Workshop's Equipment Manager, from the game's item list.
 - **Wealth limits**: the two clients count wealth in different units.
 - **PvP, alert sounds, scheduled events, auto-roam, favourite rooms**: laid out differently or not read yet; set them up in MudPlay.
-- **Redial and cleanup settings, realm entry / exit commands**: these belong to the BBS and realm, not the character.
+- **Realm entry / exit commands**: these belong to the realm, not the character (Profile Management → Realm settings).
 - **Stats and level**: read from the game with `stat` when the character logs in.
 - **Loops**: import those separately (Navigation Management → Import .mp).
+
+**Redial and cleanup settings.** How many times to redial, the pause between tries, what to redial on (failed connect, carrier lost, no response, after cleanup) and the cleanup period belong to the **BBS** in MudPlay, shared by every character on it. They are listed in the review under **BBS (tick box)** and are only written when you tick **Also set the BBS's redial and cleanup settings from the file**. The box starts ticked only when the BBS has no characters yet, so importing a second character doesn't quietly change the board's settings for the first. The numbers are held to what BBS settings accepts (1 to 9999 redials, 1 to 300 seconds, 0 to 600 minutes).
 
 **The login.** MegaMUD keeps the BBS user ID and password in the file as plain text. The review has a tick box to store them as the new character's login for that BBS, encrypted like any MudPlay login. Unticked, they aren't kept.
 

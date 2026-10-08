@@ -4,11 +4,11 @@
         xmlns:svc="using:MudPlay.Services"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="760" d:DesignHeight="640"
+        mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="700"
         x:Class="MudPlay.Views.Profile.MegaMudImportDialog"
         x:DataType="vm:MegaMudImportDialogViewModel"
         Title="Import MegaMUD profile"
-        Width="760" Height="640" MinWidth="560" MinHeight="420"
+        Width="820" Height="700" MinWidth="640" MinHeight="460"
         WindowStartupLocation="CenterOwner">
 
     <Window.Styles>
@@ -27,6 +27,29 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="3"/>
             <Setter Property="Padding" Value="8"/>
+        </Style>
+        <Style Selector="Border.Row">
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Margin" Value="0,0,14,0"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="BorderThickness" Value="2,0,0,0"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+        </Style>
+        <Style Selector="Border.Row.Mild">
+            <Setter Property="Background" Value="{StaticResource AccentAmberSoftBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentAmberBrush}"/>
+        </Style>
+        <Style Selector="Border.Row.Strong">
+            <Setter Property="Background" Value="{StaticResource AccentRedSoftBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource AccentRedBrush}"/>
+        </Style>
+        <Style Selector="TextBlock.Advice">
+            <Setter Property="Foreground" Value="{StaticResource AccentAmberBrush}"/>
+            <Setter Property="FontSize" Value="{StaticResource FontSizeSm}"/>
+        </Style>
+        <Style Selector="TextBlock.Advice.Strong">
+            <Setter Property="Foreground" Value="{StaticResource AccentRedBrush}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
     </Window.Styles>
 
@@ -48,6 +71,9 @@
                 <CheckBox Content="Also store the file's BBS user ID and password as this character's login"
                           IsChecked="{Binding ImportLogin, Mode=TwoWay}" IsVisible="{Binding HasLogin}"
                           ToolTip.Tip="MegaMUD keeps the user ID and password in the file as plain text. Ticked, they are saved encrypted on the new character for this BBS, as if typed into BBS settings. Unticked, they are not read into MudPlay at all."/>
+                <CheckBox Content="{Binding BbsSettingsText}"
+                          IsChecked="{Binding ApplyBbsSettings, Mode=TwoWay}" IsVisible="{Binding HasBbsSettings}"
+                          ToolTip.Tip="How many times to redial, how long to wait, what to redial on, and the cleanup period. These belong to the BBS, not the character, so ticking this changes them for every character on it. The values are the lines marked BBS (tick box) below. It starts ticked only when the BBS has no characters yet."/>
             </StackPanel>
 
             <TextBlock Grid.Row="1" Classes="Head" Text="{Binding ImportedHeader}" Margin="0,4,0,0"/>
@@ -55,15 +81,38 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding Imported}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="svc:MegaMudImportLine">
-                                <Grid ColumnDefinitions="110,*,Auto" ColumnSpacing="10" Margin="0,1,14,1">
-                                    <TextBlock Grid.Column="0" Classes="Dim" Text="{Binding Group}"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding Setting}" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="2" Text="{Binding Value}" MaxWidth="330"
-                                               TextTrimming="CharacterEllipsis"
-                                               FontFamily="{StaticResource FontMono}"
-                                               ToolTip.Tip="{Binding Value}"/>
-                                </Grid>
+                            <DataTemplate x:DataType="vm:MegaMudImportRowViewModel">
+                                <!-- A row with a caution gets a tinted band, so the
+                                     pre / post rest commands stand out of the list. -->
+                                <Border Classes="Row" Classes.Mild="{Binding IsMildAdvice}"
+                                        Classes.Strong="{Binding IsStrongAdvice}">
+                                    <Grid ColumnDefinitions="110,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="10">
+                                        <TextBlock Grid.Column="0" Classes="Dim" Text="{Binding Group}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Setting}" TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" ToolTip.Tip="{Binding Setting}"/>
+                                        <Panel Grid.Column="2" HorizontalAlignment="Right">
+                                            <CheckBox IsVisible="{Binding IsFlag}" IsChecked="{Binding IsOn, Mode=TwoWay}"
+                                                      MinWidth="0" Padding="0" HorizontalAlignment="Right"/>
+                                            <StackPanel IsVisible="{Binding IsNumber}" Orientation="Horizontal" Spacing="6">
+                                                <NumericUpDown Width="120" Minimum="0" Maximum="{Binding Maximum}"
+                                                               Increment="1" FormatString="0"
+                                                               HorizontalContentAlignment="Right"
+                                                               Value="{Binding Number, Mode=TwoWay}"/>
+                                                <TextBlock Classes="Dim" Text="{Binding Unit}" Width="48"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <TextBox IsVisible="{Binding IsText}" Width="330"
+                                                     FontFamily="{StaticResource FontMono}"
+                                                     Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock IsVisible="{Binding IsFixed}" Classes="Dim" Text="{Binding FixedText}"
+                                                       MaxWidth="330" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                        </Panel>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Classes="Advice"
+                                                   Classes.Strong="{Binding IsStrongAdvice}"
+                                                   Text="{Binding AdviceText}" IsVisible="{Binding HasAdvice}"
+                                                   TextWrapping="Wrap" Margin="0,4,0,2"/>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -95,7 +144,7 @@
                     <Button Content="Cancel" Command="{Binding CancelCommand}" IsCancel="True" MinWidth="80"/>
                 </StackPanel>
                 <TextBlock Classes="Dim" VerticalAlignment="Center" TextWrapping="Wrap"
-                           Text="A new character is made; nothing existing is changed. Review its settings before playing it."/>
+                           Text="Change any value above before importing. A new character is made; nothing existing is changed."/>
             </DockPanel>
         </Grid>
     </Border>
