@@ -1,5 +1,12 @@
 # Version history
 
+## 3.152.0
+
+- New **Import MegaMUD profile…** in Profile Management: makes a new character from a MegaMUD character file (.ini)
+- A review lists every setting that comes across, under its MudPlay name, and every one that doesn't with the reason, before anything is created
+- Carries over the auto switches, Health, Spells, Combat, Party, Cash, Talk and Other settings that mean the same in both clients; MegaMUD's profiles become combat profiles and its blesses become Buff Watchdog slots
+- The file's BBS user ID and password can be stored as the new character's login, encrypted; it is a tick box in the review
+
 ## 3.151.9
 
 - Bosses tab: filter the table by what it takes to hurt a boss. **Hit magic** takes a lowest and a highest (one level alone, or several together); **Spell immune** shows the bosses immune at that level or lower, the ones a spell of that level lands on

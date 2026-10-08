@@ -1,13 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.151.9**
-> - Bosses tab: filter the table by what it takes to hurt a boss. **Hit magic** takes a lowest and a highest (one level alone, or several together); **Spell immune** shows the bosses immune at that level or lower, the ones a spell of that level lands on
-> - Hovering a boss's name shows the hit magic and spell level it takes to hurt it
-> - A bug report no longer copies the board's login screen: its Scrollback and raw-wire sections take only what was written while in the game, from the first game prompt until a disconnect or an exit to the menus, the menu itself left out. The terminal, Backscroll and Wire Inspector still show everything
-> - Exiting to the board's menu without disconnecting no longer leaves the client sending into it: the party poll, buffs, `sn`, statline repair and loop steps are held until you're back in the game
-> - A selection typed at the board's menu (`e` to enter the realm) is no longer tracked as a move
-> - The board's menu and the exit wait lines are no longer listed as unrecognized lines
+> **Version 3.152.0**
+> - New **Import MegaMUD profile…** in Profile Management: makes a new character from a MegaMUD character file (.ini)
+> - A review lists every setting that comes across, under its MudPlay name, and every one that doesn't with the reason, before anything is created
+> - Carries over the auto switches, Health, Spells, Combat, Party, Cash, Talk and Other settings that mean the same in both clients; MegaMUD's profiles become combat profiles and its blesses become Buff Watchdog slots
+> - The file's BBS user ID and password can be stored as the new character's login, encrypted; it is a tick box in the review
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

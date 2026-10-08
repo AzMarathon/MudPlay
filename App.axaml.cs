@@ -183,6 +183,9 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.Profile.ProfileNameInputDialogViewModel,
                 MudPlay.Views.Profile.ProfileNameInputDialog>();
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.Profile.MegaMudImportDialogViewModel,
+                MudPlay.Views.Profile.MegaMudImportDialog>();
 
             // Room-name learned prompt — fires when the tracker adopts
             // a name for a previously-unnamed map-15 ganghouse room.

@@ -461,6 +461,67 @@ public sealed partial class ProfileManagerViewModel : ObservableObject, IDisposa
         SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, name, StringComparison.Ordinal));
     }
 
+    // Make a new character from a MegaMUD character file. The file is read and
+    // shown as a review (what comes across, what doesn't, and why) before anything
+    // is written; accepting it creates the character on the selected BBS and realm.
+    [RelayCommand]
+    private async Task ImportMegaMudProfileAsync()
+    {
+        if (SelectedBbs is not { } bbs) return;
+        if (Avalonia.Application.Current?.ApplicationLifetime
+            is not Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime { MainWindow: { } main })
+            return;
+
+        IReadOnlyList<Avalonia.Platform.Storage.IStorageFile> picked =
+            await main.StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+            {
+                Title = "Import MegaMUD profile",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new Avalonia.Platform.Storage.FilePickerFileType("MegaMUD character (*.ini)") { Patterns = new[] { "*.ini" } },
+                    Avalonia.Platform.Storage.FilePickerFileTypes.All,
+                },
+            });
+        if (picked.Count == 0) return;
+        string path = picked[0].Path.LocalPath;
+
+        MegaMudImportPlan plan;
+        try
+        {
+            // MegaMUD writes the file in the Windows ANSI code page; Latin-1 reads
+            // every byte of it without loss.
+            string text = await File.ReadAllTextAsync(path, System.Text.Encoding.Latin1);
+            plan = MegaMudProfileImporter.Read(MegaMudIni.Parse(text), Path.GetFileNameWithoutExtension(path));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _dialogs.ShowInfo("Couldn't read the file", ex.Message);
+            return;
+        }
+        if (!plan.Lines.Any(static l => l.WasImported))
+        {
+            _dialogs.ShowInfo("Nothing to import",
+                "That file doesn't look like a MegaMUD character file: none of its settings were recognised.");
+            return;
+        }
+
+        string? realm = SelectedRealm;
+        MegaMudImportDialogViewModel review = new(plan, Path.GetFileName(path), bbs, realm, n => _profile.Exists(bbs, n));
+        MegaMudImportChoice? choice = await _dialogs.OpenWindowAsync<MegaMudImportDialogViewModel, MegaMudImportChoice>(review);
+        if (choice is null || _profile.Exists(bbs, choice.Name)) return;
+
+        _profile.CreateProfile(bbs, choice.Name,
+            fresh => plan.ApplyTo(fresh, bbs, choice.ImportLogin, AppServices.Current.Passwords));
+        if (realm is not null) _profile.AssignRealm(new ProfileRef(bbs, choice.Name), realm);
+        AppServices.Current.Log.Info("Profile",
+            $"Imported MegaMUD profile '{Path.GetFileName(path)}' as '{choice.Name}' on '{bbs}': "
+            + $"{plan.Lines.Count(static l => l.WasImported)} setting(s) carried over, "
+            + $"{plan.Lines.Count(static l => !l.WasImported)} left behind, login {(choice.ImportLogin ? "stored" : "not stored")}.");
+        ReloadProfiles();
+        SelectedProfile = Profiles.FirstOrDefault(r => string.Equals(r.Name, choice.Name, StringComparison.Ordinal));
+    }
+
     [RelayCommand]
     private async Task RenameProfileAsync()
     {

@@ -1115,6 +1115,38 @@ Gear is organized into named equipment sets in the **Player Workshop** — a Def
 
 ---
 
+## Importing a MegaMUD profile
+
+**Profile Management → Import MegaMUD profile…** (under the Characters list) makes a new MudPlay character from a MegaMUD character file, the `.ini` MegaMUD keeps for each character. Pick the BBS and realm it belongs to first, then the file.
+
+Before anything is created you get a **review**:
+
+- **Coming across**: every setting that is carried over, under its MudPlay name, with the value it will have.
+- **Not coming across**: every setting that isn't, with the reason. Nothing in the file is guessed at: a setting only comes across when it means the same thing in both clients.
+
+What comes across:
+
+- **The auto switches** (Auto-Combat, Auto-Nuke, Auto-Heal and Rest, Auto-Bless, Auto-Light, Auto-Get Cash and Items, Auto-Search, Auto-Sneak, Auto-Hide).
+- **Health**: the rest, heal, run and hang-up thresholds for HP and mana, meditate, and the pre / post rest commands.
+- **Spells**: the heal, regen, cure, light and when-full spells, by the same short codes MegaMUD uses.
+- **Combat**: the attack command, the multi-attack, debuff and attack spells with their mana and cast limits, backstab switches, monster limits and the run settings.
+- **MegaMUD's profiles** (Smash / Bash / Attack and the like) each become a MudPlay combat profile, with the one MegaMUD had active made active.
+- **Blesses**: self and party blesses become Buff Watchdog slots. A spell listed for both is one slot that does both.
+- **Party, Cash, Talk and Other**: the settings with a direct equivalent, including the bank room.
+
+What doesn't, and why:
+
+- **Weapons**: pick them in the Workshop's Equipment Manager, from the game's item list.
+- **Wealth limits**: the two clients count wealth in different units.
+- **PvP, alert sounds, scheduled events, auto-roam, favourite rooms**: laid out differently or not read yet; set them up in MudPlay.
+- **Redial and cleanup settings, realm entry / exit commands**: these belong to the BBS and realm, not the character.
+- **Stats and level**: read from the game with `stat` when the character logs in.
+- **Loops**: import those separately (Navigation Management → Import .mp).
+
+**The login.** MegaMUD keeps the BBS user ID and password in the file as plain text. The review has a tick box to store them as the new character's login for that BBS, encrypted like any MudPlay login. Unticked, they aren't kept.
+
+The import only ever makes a new character. Look its settings over before you play it.
+
 # Player Workshop
 
 Press **F1** (or View → Player Workshop) to open the **Player Workshop** — a tabbed window for managing your character: gear, leveling, quests, bosses, deaths, your character sheet and calculators, and gang-house item sorting (**Roomba**). There are no Save buttons anywhere in it; every edit auto-saves to your profile.
