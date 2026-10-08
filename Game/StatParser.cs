@@ -72,6 +72,10 @@ public sealed partial class StatParser : IDisposable
     private bool _hitsReadThisArm;
     private bool _poolReadThisArm;
     public bool LastCaptureReadHits { get; private set; }
+    // The last screen carried a Stealth figure: the moment to note what the pack was
+    // doing to it (CarriedStealthPenalty).
+    public bool LastCaptureReadStealth { get; private set; }
+    private bool _stealthReadThisArm;
     public bool LastCaptureReadPool { get; private set; }
 
     // Idle self-close. The reactive gate-close in OnLine only fires when a *further*
@@ -340,7 +344,7 @@ public sealed partial class StatParser : IDisposable
         _windowOpenedAt = NowProvider();
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
-        _hitsReadThisArm = _poolReadThisArm = false;
+        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
         _home = SynchronizationContext.Current;   // (re)capture the pipeline thread for the settle-close
         _settleSession++;                          // invalidate any prior window's pending settle timer
         _log?.Log(LogSeverity.Info, "StatParser",
@@ -364,7 +368,7 @@ public sealed partial class StatParser : IDisposable
         _windowOpenedAt = NowProvider();
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
-        _hitsReadThisArm = _poolReadThisArm = false;
+        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
         _home = SynchronizationContext.Current;
         _settleSession++;
         _log?.Log(LogSeverity.Info, "StatParser",
@@ -532,7 +536,7 @@ public sealed partial class StatParser : IDisposable
         TryInt(text, LevelRx(),        "Level",        v => Stats.Level        = v);
         TryLong(text, ExpRx(),         "Exp",          v => Stats.Exp          = v);
         TryInt(text, PerceptionRx(),   "Perception",   v => Stats.Perception   = v);
-        TryInt(text, StealthRx(),      "Stealth",      v => Stats.Stealth      = v);
+        TryInt(text, StealthRx(),      "Stealth",      v => { Stats.Stealth = v; _stealthReadThisArm = true; });
         TryInt(text, ThieveryRx(),     "Thievery",     v => Stats.Thievery     = v);
         TryInt(text, TrapsRx(),        "Traps",        v => Stats.Traps        = v);
         TryInt(text, PicklocksRx(),    "Picklocks",    v => Stats.Picklocks    = v);
@@ -819,8 +823,9 @@ public sealed partial class StatParser : IDisposable
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
         LastCaptureReadHits = _hitsReadThisArm;
+        LastCaptureReadStealth = _stealthReadThisArm;
         LastCaptureReadPool = _poolReadThisArm;
-        _hitsReadThisArm = _poolReadThisArm = false;
+        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
         _settleSession++;   // cancel any settle timer still pending for this window
         // Fire ScreenParsed only when something actually changed —
         // there's no value in churning the profile snapshot for an

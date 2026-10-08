@@ -67,7 +67,22 @@ public sealed class ItemNameStore
     // rather than discovering them by a refused get on every lap.
     private readonly Dictionary<int, bool> _gettableByNumber = new();
 
+    // Item Number → the Stealth (ability 27) it adds or takes away just by being in
+    // the pack. The game totals a carried item's abilities when it is not a weapon
+    // and has no wear slot (GAME_MECHANICS "Abilities of carried items"): a log raft
+    // is Stealth -125 for as long as it is held. Only items with a value are kept.
+    private readonly Dictionary<int, int> _packStealthByNumber = new();
+    private const int StealthAbilityCode = 27;
+    private const int ItemAbilitySlots = 20;
+
     public string? ActiveSet { get; private set; }
+
+    // What carrying the named item does to Stealth: negative for a raft, 0 for
+    // anything worn, wielded, unknown or without a Stealth ability.
+    public int PackStealthOf(string displayName)
+        => FindByName(displayName) is int number
+           && _packStealthByNumber.TryGetValue(number, out int stealth)
+            ? stealth : 0;
 
     // Alphabetically-sorted, distinct names of every weapon (ItemType == 1)
     // in the active set — suggestion source for the Combat-tab weapon
@@ -264,6 +279,15 @@ public sealed class ItemNameStore
             or "six" or "seven" or "eight" or "nine" or "ten";
     }
 
+    private static int PackStealth(JsonElement row)
+    {
+        int total = 0;
+        for (int i = 0; i < ItemAbilitySlots; i++)
+            if (ReadInt(row, $"Abil-{i}") == StealthAbilityCode)
+                total += ReadInt(row, $"AbilVal-{i}");
+        return total;
+    }
+
     // Reload the store from setName's Items.json. Pass null to clear. Wired
     // by AppServices to GameDataCache.ActiveSetChanged.
     public void OnActiveSetChanged(string? setName)
@@ -277,6 +301,7 @@ public sealed class ItemNameStore
         _weaponTypeByNumber.Clear();
         _armourTypeByNumber.Clear();
         _gettableByNumber.Clear();
+        _packStealthByNumber.Clear();
         _weaponNames = Array.Empty<string>();
         _offHandNames = Array.Empty<string>();
         ActiveSet = setName;
@@ -329,6 +354,8 @@ public sealed class ItemNameStore
 
             if (itemType == 1) weapons.Add(name);
             if (worn == 12) offHands.Add(name);
+            if (itemType != 1 && worn == 0 && PackStealth(row) is int packStealth and not 0)
+                _packStealthByNumber[number] = packStealth;
 
             parsed++;
         }

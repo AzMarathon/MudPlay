@@ -537,6 +537,63 @@ public sealed class RouteChoiceDialogViewModelTests
             previews);
     }
 
+    // ----- Avoid-override fork: the card names the rooms ------------------
+
+    // Report paradigm-20261007-215302: the card said "3 rooms you marked Avoid" and
+    // nothing else, and the rooms were on another map than the one being looked at.
+    [Fact]
+    public void AvoidOverride_NamesTheAvoidedRoomsItCrosses()
+    {
+        RouteChoice choice = new(FreeStepCount: 180, GatedStepCount: 142,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.AvoidOverride,
+            AvoidedRoomCount: 3,
+            AvoidedRoomNames: new[] { "Black Wasteland (3/740)", "Black Wasteland (3/669)", "Black Wasteland (3/756)" });
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Lake of Fire (9/1427)", id => "");
+
+        Assert.Contains("3 rooms you marked Avoid", vm.GatedSummary);
+        Assert.Contains("Black Wasteland (3/740), Black Wasteland (3/669), Black Wasteland (3/756)", vm.AvoidCaveat);
+    }
+
+    [Fact]
+    public void AvoidAlternativeCard_NamesTheAvoidedRoomsItCrosses()
+    {
+        RouteChoice choice = new(FreeStepCount: 0, GatedStepCount: 4,
+            System.Array.Empty<RouteRequirement>(), System.Array.Empty<RoomKey>(), GatedLine,
+            AvoidAlternativePath: FreeLine, AvoidAlternativeCount: 1,
+            AvoidAlternativeNames: new[] { "Fungus Forest (7/246)" });
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Lake of Fire (9/1427)", id => "");
+
+        Assert.True(vm.ShowAvoidAltCard);
+        Assert.Contains("Fungus Forest (7/246)", vm.AvoidAltDetail);
+    }
+
+    // ----- Boss-room fork: around, up to it and wait, or through ----------
+
+    [Fact]
+    public void BossRoom_ShowsThreeCards_AndPreSelectsWalkUpAndWait()
+    {
+        RouteChoice choice = new(FreeStepCount: 9, GatedStepCount: 5,
+            System.Array.Empty<RouteRequirement>(), FreeLine, GatedLine,
+            RouteChoiceKind.BossRoom,
+            BossRoom: new RoomKey(12, 2247),
+            BossWaitPath: new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) },
+            BossRoomLabel: "rakshasha sage's room (12/2247)");
+
+        var vm = new RouteChoiceDialogViewModel(choice, "Secret Library (12/2248)", id => "");
+
+        Assert.True(vm.IsBossRoomChoice);
+        Assert.StartsWith("Walk around rakshasha sage's room (12/2247)", vm.FreeSummary);
+        Assert.StartsWith("Walk up to rakshasha sage's room (12/2247) and wait — 2 steps", vm.GatedSummary);
+        Assert.Contains("Press Play", vm.GatedDetail);
+        Assert.True(vm.ShowSendItCard);
+        Assert.StartsWith("Walk through rakshasha sage's room (12/2247) without stopping", vm.SendItSummary);
+        Assert.Contains("stop-before mark stays set", vm.SendItDetail);
+        Assert.Equal(RouteChoiceResult.Gated, vm.SelectedRoute);
+    }
+
     // ----- Trap-avoid fork -----------------------------------------------
 
     private static RouteChoice TrapAvoidChoice(int freeTraps = 0, int gatedTraps = 2) =>

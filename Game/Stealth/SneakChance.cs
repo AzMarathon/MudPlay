@@ -13,4 +13,8 @@ public static class SneakChance
 
     public static int Percent(int stealth, bool perfectStealth = false) =>
         perfectStealth ? 100 : Math.Clamp(stealth, 0, SnCap);
+
+    // What a load takes off the chance: 10 over 66% encumbrance, 5 over 33%.
+    public static int EncumbrancePenalty(int encumbrancePercent) =>
+        encumbrancePercent > 66 ? 10 : encumbrancePercent > 33 ? 5 : 0;
 }

@@ -629,6 +629,11 @@ public static class BugReportBuilder
         // engaging a monster in the room (combat stands down while true).
         Kv(sb, "ShadowRest holding", svc.Health.ShadowRestHolding.ToString());
         Kv(sb, "Sneak-cooldown hold", svc.Stealth.IsHoldingForSneakCooldown.ToString());
+        Game.Stealth.CarriedStealthPenalty.Verdict carried = svc.CarriedStealth.Current();
+        Kv(sb, "Auto-Sneak stood down for a carried item", svc.Stealth.StoodDownFor ?? "no");
+        Kv(sb, "Carried Stealth penalty", carried.Modifier >= 0
+            ? "none"
+            : $"{carried.Items}: estimated sn chance {carried.Chance}% (stands down under {svc.CarriedStealth.HopelessChance}%, Settings → Other)");
         // Sneak keeping: what automation is waiting so as not to end a sneak.
         Game.Stealth.SneakHold hold = svc.SneakGuard.Current;
         Kv(sb, "Sneak keeping", hold == Game.Stealth.SneakHold.None
@@ -1691,6 +1696,9 @@ public static class BugReportBuilder
         Kv(sb, "Next planned direction",
             walker.PeekNextPlannedDirection() is { } dir ? dir.ToString() : "(none / command step)");
         Kv(sb, "Room command held for an empty room", walker.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
+        Kv(sb, "Stop-before boss rooms on this walk", walker.BossRoomRuleSummary);
+        Kv(sb, "Paused before a boss room", walker.HaltedBeforeBossRoom is { } bossRoom
+            ? $"{bossRoom.Map}/{bossRoom.Room} ({svc.BossInRoom(bossRoom) ?? "boss"}) — Resume walks through" : "no");
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",
@@ -1938,10 +1946,19 @@ public static class BugReportBuilder
     {
         StringBuilder sb = new();
 
-        var avoided = svc.RoomBlacklist.Entries;
-        sb.Append("**Avoid rooms** (").Append(avoided.Count).Append(")\n\n");
+        // The character's own avoid list, which routes go around and the route
+        // picker asks about. It used to be missing here, with the realm's blacklist
+        // printed under its name (report paradigm-20261007-215302).
+        var avoided = svc.Movement.Avoided;
+        sb.Append("**Avoid rooms (this character)** (").Append(avoided.Count).Append(")\n\n");
         if (avoided.Count == 0) sb.Append("_(none)_\n");
-        else foreach (var r in avoided) sb.Append("- ").Append(r.Map).Append('/').Append(r.Room)
+        else foreach (var k in avoided) sb.Append("- ").Append(k.Map).Append('/').Append(k.Room)
+            .Append(" — ").Append(svc.RoomGraph.GetRoom(k)?.Name ?? "(not in the active map)").Append('\n');
+
+        var blacklisted = svc.RoomBlacklist.Entries;
+        sb.Append("\n**Blacklisted rooms (realm)** (").Append(blacklisted.Count).Append(")\n\n");
+        if (blacklisted.Count == 0) sb.Append("_(none)_\n");
+        else foreach (var r in blacklisted) sb.Append("- ").Append(r.Map).Append('/').Append(r.Room)
             .Append(" — ").Append(r.Name).Append('\n');
 
         var profile = svc.Profile.Current;

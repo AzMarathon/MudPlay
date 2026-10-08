@@ -113,6 +113,10 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     // Walker max pick <dir> retries before falling back to bash / failing.
     [ObservableProperty] private int _maxPickAttempts = 10;
 
+    // Auto-Sneak stands down while a carried item leaves the sn chance under this
+    // percentage. Read live by CarriedStealthPenalty through the resolver.
+    [ObservableProperty] private int _sneakStandDownChance = 15;
+
     // When checked, the walker prefers pick <dir> over bash <dir> on doors
     // where both verbs are viable. Thieves typically flip this on.
     [ObservableProperty] private bool _picklocksOverBash;
@@ -278,6 +282,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
             UtilizeDisarmTrapsIfAble = UtilizeDisarmTrapsIfAble,
             MaxTrapDisarmAttempts = Math.Clamp(MaxTrapDisarmAttempts, 1, 50),
             MaxPickAttempts       = Math.Clamp(MaxPickAttempts,       1, 100),
+            SneakStandDownChance  = Math.Clamp(SneakStandDownChance,  0, 95),
             PicklocksOverBash     = PicklocksOverBash,
             HideWhenDiscarding    = HideWhenDiscarding,
             AutoRequestComebackWhenLeftBehind = AutoRequestComebackWhenLeftBehind,
@@ -361,6 +366,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
         UtilizeDisarmTrapsIfAble = dto.UtilizeDisarmTrapsIfAble;
         MaxTrapDisarmAttempts = dto.MaxTrapDisarmAttempts;
         MaxPickAttempts       = dto.MaxPickAttempts;
+        SneakStandDownChance  = dto.SneakStandDownChance;
         PicklocksOverBash     = dto.PicklocksOverBash;
         HideWhenDiscarding    = dto.HideWhenDiscarding;
         AutoRequestComebackWhenLeftBehind = dto.AutoRequestComebackWhenLeftBehind;
@@ -429,6 +435,7 @@ public sealed partial class OtherSectionViewModel : SettingsSectionViewModel
     partial void OnUtilizeDisarmTrapsIfAbleChanged(bool value) => MarkDirty();
     partial void OnMaxTrapDisarmAttemptsChanged(int value) => MarkDirty();
     partial void OnMaxPickAttemptsChanged(int value)       => MarkDirty();
+    partial void OnSneakStandDownChanceChanged(int value)  => MarkDirty();
     partial void OnPicklocksOverBashChanged(bool value)    => MarkDirty();
     partial void OnHideWhenDiscardingChanged(bool value) => MarkDirty();
     partial void OnAutoRequestComebackWhenLeftBehindChanged(bool value) => MarkDirty();

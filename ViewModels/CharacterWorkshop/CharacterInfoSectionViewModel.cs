@@ -435,7 +435,7 @@ public sealed partial class CharacterInfoSectionViewModel : WorkshopSectionViewM
         int stealth = _stats.Stealth;
         EncumbranceReading encum = _inventory.Snapshot.Encumbrance;
         int encPct = encum.MaxWeight > 0 ? encum.CurrentWeight * 100 / encum.MaxWeight : 0;
-        int encPenalty = encPct > 66 ? 10 : encPct > 33 ? 5 : 0;
+        int encPenalty = Game.Stealth.SneakChance.EncumbrancePenalty(encPct);
         int chance = Math.Max(0, stealth - encPenalty);
         // A move re-rolls over 0–101 rather than `sn`'s 0–100, so even at its cap of
         // 100 a sneaked move keeps the sneak 100 in 101.

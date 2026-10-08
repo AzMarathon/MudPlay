@@ -711,7 +711,7 @@ Because using a token casts negate magic and **wipes every buff**, MudPlay pause
 - **"Route through N avoided room(s)"** — walk it this once, or cancel.
 - **Two-card fork** — when an avoid-respecting route *does* exist but a route through an avoided room is meaningfully shorter: **"Respect your avoids"** (the longer clean route, pre-selected) vs **"Shorter — through N avoided room(s)"**.
 
-Either way the card warns exactly how many marked rooms it crosses, and your **avoid list is left untouched** — only that one walk ignores it.
+Either way the card warns how many marked rooms it crosses and **names them** with their map/room numbers (an avoided room is often on another map or floor than the stretch you're looking at), and your **avoid list is left untouched** — only that one walk ignores it.
 
 It checks one thing first: if the destination *is* reachable without touching an avoided room once you **obtain** something — a raft to cross a river, a key for a door — the picker offers that obtain-and-cross route (which respects your avoids) instead of asking you to override them. So "route through your avoids" only comes up when crossing a marked room is genuinely the sole option, not when a raft two rooms away would do.
 
@@ -1375,6 +1375,14 @@ A respawn-timer tracker. Timers also start on their own: when you kill a boss, o
 
 The tab **opens sorted by the 100% timer with running timers on top**, so a fresh open surfaces what's active — and it **re-sorts live whenever a timer starts or clears** (a marked or auto-captured kill), so a boss that just went active floats up into the running group without reopening the tab. Sorting by any timer column — or by **Boss**, **Respawn**, or **Last Killed** — groups cleanup spawns first, then bosses with a running timer, then idle ones. The toolbar runs, left to right: the **filter** box, the count of running timers, **Chest Offload…**, **Stop Before Toggle**, **Grab All Toggle**, **Sync Timers…**, **Import… / Export…** (a shared table), and **Manage Bosses…**, which edits the list. **Stop before** halts automation one room short of a boss; it is **on by default**, except for the bosses that won't attack on sight — the Neutral ones (the cocoons, *kai master*, *storm giant king*, *mayor of arlysia (arachnigoth)* and the like), *sheriff lionheart*, *justicar halford* and *mayor godfrey* — plus the *lord of the hunt*, and the *gigantic black ooze*, which is hostile but can't be avoided once you meet it in the labyrinth. Untick any others you want to walk straight into. **Reset to default**, alone at the right end of the toolbar, puts **Stop before and Grab All** back to each boss's own defaults, for every boss in the table. Those defaults are per boss: **Manage Bosses…** has a **Default Stop Before** and a **Default Grab All** column, so a boss you add or edit carries the defaults you give it (and a boss you add starts on them). The two toggle buttons work on the bosses the filter is showing: they tick the column for all of them, or untick it when every one is already ticked (Grab All skips bosses that have no checkbox).
 
+**Passing through a Stop-before boss room.** A walk that *ends* in such a room stops one room short of it, as it always has. A walk **you start** (a map click, GOTO, a favourite) that only *passes through* one on its way somewhere else now respects the mark too:
+
+- **Another way exists** — the route card offers three choices: **Walk around** the boss room, **Walk up to it and wait** (pre-selected), or **Walk through without stopping**. The stop-before mark itself stays set whichever you pick.
+- **It's the only way** — no card: the walk goes up to the room before the boss room and pauses there, with a line on the terminal naming the boss.
+- **Going on from there** — press **Play / Resume** and the walk carries on through to its destination; or step in yourself; or start a new walk from that room. A walk begun in the room next to a boss room (or inside it) goes in without stopping, since asking to walk on from there is the go-ahead. It still pauses before the next marked boss room further along.
+
+Walks MudPlay starts on its own (training, selling and banking trips, corpse recovery, the walk to a loop, a party leader's `@goto`) aren't affected and go through as before, as do loops and Auto-Lair.
+
 **Bosses that share a name are listed one each.** The game has bosses with the same name in different rooms on different timers (two *Nahr*, two *master assassin*). Each gets its own row, labelled by what sets it apart (*nahr (spheres)*, *nahr (spaceghost)*, *master assassin (cob key)*, *master assassin (dying assassin)*), with its own room and its own timer; a kill starts the timer of the one whose room you're in. Every boss's respawn time is read from that boss's own monster record, so a name shared with another monster elsewhere doesn't change it. A boss that only appears when another dies shares that one's row and timer: *lord chisholm (malformation)* is Lord Chisholm, whose death summons the malformation, so the hour starts when he dies; *mayor of arlysia (arachnigoth)* is the mayor, whose death summons arachnigoth. A **?** in the Respawn column means the boss has no timer of its own: the *giant toad-beast* is summoned by placing the orbs in its shrine, and its Notes say so.
 
 **The boss list belongs to the realm too.** Bosses you add, remove or edit (rooms, Stop before, and the rest) are the realm's: every character on it sees the same list, and two realms keep their own even on the same game data. (The list used to be kept with the game-data set; each realm took a copy of its set's list the first time it loaded under this version.)
@@ -1493,6 +1501,8 @@ An engine only acts while it's on, and each has a matching Settings tab for its 
 
 **Sneak cooldown.** Right after a fight the game won't let you sneak for a few seconds (`You may not sneak right now!`). With **Auto-Sneak on**, your loop or walk waits instead of stepping on unsneaked: it retries the sneak every two seconds and moves once it takes, or after 15 seconds goes on unsneaked. **Being followed is different:** when a monster comes into the room right behind you, a sneak can't take while it's with you, so MudPlay stops sending `sn` and walks on unsneaked — no waiting, no stopping to cast — until you leave a room that nothing followed you into, or you kill what followed you. Then it sneaks again. The status bar reads *Waiting — sneak on cooldown* meanwhile. The route also waits for the game's answer before taking a step while you're not sneaking — each time you arrive in a room, and before the first step of a loop or walk — retrying a refused sneak until it takes (up to 15 seconds), so you don't walk into the next room seen (*Waiting — sneaking*). Entering a room without the game's `Sneaking...` line means the sneak silently broke: MudPlay treats that like `You make a sound as you enter the room!` and won't open with a backstab.
 
+**Something in your pack that kills your Stealth.** A few items cut your Stealth just by being carried: a **log raft** (-125), a wooden skiff, a silverbark canoe, a river punt, a wooden ladder, the large black gem. With one of them in your pack a sneak can be refused every time. When your Stealth less that penalty (and less the penalty for a heavy load) leaves under a **15%** chance to sneak, **Auto-Sneak stands down**: it says so once on the terminal, naming the item, sends no `sn`, and your walk or loop carries on unsneaked. It checks again whenever your inventory changes and starts sneaking again, with another line on the terminal, once the item is gone. A smaller penalty that still leaves a real chance changes nothing, and a character with Perfect Stealth is never stood down. The 15% is yours to set: **Settings → Other → Stop auto-sneaking while a carried item leaves under … % chance to sneak**.
+
 **Keeping the sneak.** A lot of what MudPlay does on its own ends a sneak in the game:
 - casting any spell;
 - swapping gear;
@@ -1517,7 +1527,7 @@ When **Auto-Sneak is on** it times those around your stealth. Commands you type 
   - chat such as level-up announcements or ailment calls, which are queued and sent then.
 - **Mid-step.** While a sneaked move is on its way, casts and the rest wait until the next room appears. The game carries out commands in order, so anything sent then would land in the room you're entering, unseen.
 - **Stopping to cast.** A sneaked walk is always mid-step, so on its own a buff would never find a gap. When a buff, cure or heal is due (and you have the mana), your walk or loop pauses in the next room with no NPCs — including a room where your sneak already broke — casts it, re-sneaks and carries on. The status bar reads *Waiting — casting before re-sneaking*; if the cast doesn't go out within 7 seconds, the route moves on.
-- **Walk steps still happen.** A door, a trap, a lever or winch, or a hidden exit the route needs is done anyway, along with its party relay. MudPlay then re-sneaks before the next move.
+- **Walk steps still happen.** A door, a trap, a lever or winch, a hidden exit, or a room command the route needs is done anyway, along with its party relay. That includes a **spoken password** that opens an exit or teleports you (`say gazmuldduhaz`): it is part of the route, not chatter, so it is never held. MudPlay then re-sneaks before the next move.
 - **Emergency heal while fleeing.** When your *run if below* HP / mana settings have you fleeing (not a hit-and-run or a failed backstab's run), the *emergency heal* slot fires as soon as it's needed, and the re-sneak waits until it has gone out.
 - **Rests you need still happen.** A rest your *rest if below* settings call for goes out even if it ends the sneak. On Paradigm, with **Utilize shadowrest** ticked and a race or class that has ShadowRest, it sneaks first and then rests, so the rest keeps you hidden — retrying a sneak that fails before the rest goes out. Without that, a rest ends the sneak, so a buff cast during the rest doesn't re-sneak; the sneak is taken again before your next step.
 - **Replies stay quiet.** While you're sneaking or hidden, a reply to an @-command someone said aloud goes back by telepath instead of a say.
@@ -4130,6 +4140,15 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 - **Recently disarmed:** a trap you disarmed stays down until the game re-arms it — 5 minutes on Stock, 2 on Paradigm. Coming back to that exit sooner, MudPlay crosses without disarming again, which saves the command and keeps your sneak. Once the time is up it disarms again. Only your own disarms count: a trap that was already down when you got there is disarmed again next time.
 - **No searching:** MudPlay never searches for a trap first. `disarm trap <dir>` works on the trap directly, and your game data already says which exits are trapped.
 
+### Stop auto-sneaking while a carried item leaves under … % chance to sneak
+
+**Default:** `15`
+**Available options:** 0–95
+**What it does:** A few items cut your Stealth just by being in your pack (a log raft is -125; see *Something in your pack that kills your Stealth* under Auto-Sneak). MudPlay estimates your chance to sneak from your Stealth with that penalty applied, less the penalty for a heavy load. While the estimate is **under this figure**, Auto-Sneak sends no `sn`, says so once on the terminal, and your walk goes on unsneaked until the item is gone.
+- **Why not just try anyway:** every sneaked move re-rolls against the same chance, so at a few percent a sneak that does take is lost a room later, after a long run of resent `sn`.
+- **`0`** never stands down (the old behaviour: keep resending `sn`). **`1`** stands down only when a sneak can't take at all.
+- It only applies while one of those items is carried. A character whose Stealth is simply low is never stood down.
+
 ### Door max pick
 
 **Default:** 10
@@ -4743,6 +4762,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Utilize disarm traps | `true` | bool | `OtherSettings.UtilizeDisarmTrapsIfAble` | Models/Profile/OtherSettings.cs |
 | @trap max disarms | 5 | 1–50 | `MaxTrapDisarmAttempts` | Models/Profile/OtherSettings.cs |
 | Door max bash / pick / Pick over bash | 10/10/false | 1–100 / 1–100 / bool | `MaxBashAttempts`, `MaxPickAttempts`, `PicklocksOverBash` | Models/Profile/OtherSettings.cs |
+| Stop auto-sneaking while a carried item leaves under … % | `15` | 0–95 | `OtherSettings.SneakStandDownChance` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |
 | Auto-request @comeback when left behind | true | bool | `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |

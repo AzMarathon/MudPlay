@@ -115,6 +115,19 @@
                           ToolTip.Tip="When checked, the walker prefers `pick &lt;dir&gt;` over `bash &lt;dir&gt;` on doors where both verbs are viable. Bash is louder and breaks stealth; thieves typically flip this on."/>
             </Grid>
 
+            <!-- Auto-Sneak stand-down for a carried Stealth penalty (a log raft): no
+                 `sn` while the estimated chance sits under this figure. Char-tier
+                 (OtherSettings.SneakStandDownChance), read live through the resolver. -->
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,12,0,0" VerticalAlignment="Center">
+                <TextBlock Classes="FieldLabel" Text="Stop auto-sneaking while a carried item leaves under"/>
+                <NumericUpDown Value="{Binding SneakStandDownChance, Mode=TwoWay}"
+                               Minimum="0" Maximum="95" Increment="1"
+                               FormatString="0" ShowButtonSpinner="True"
+                               Width="120" MinWidth="120"
+                               ToolTip.Tip="A few items cut your Stealth just by being in your pack (a log raft is -125). While one of them leaves your estimated chance to sneak under this figure, Auto-Sneak sends no `sn`, says so once on the terminal, and your walk goes on unsneaked until the item is gone. 0 never stands down; 1 stands down only when a sneak can't take at all. Default 15."/>
+                <TextBlock Classes="FieldLabel" Text="% chance to sneak."/>
+            </StackPanel>
+
             <!-- (The "search rooms if item needed" checkbox was retired — arming
                  the per-room `sea` for a route item is now the master Auto-Search
                  toggle's job, and the route picker's "Search en route" card turns it

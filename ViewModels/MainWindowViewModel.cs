@@ -1589,9 +1589,11 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Walker.SetPartySplitAbortHandler(
             () => AppServices.Current.AutoParty.AbortReformWaits("walk stopped"));
         // Walker + loop runner — gate-wrapped so a long walk doesn't
-        // blast moves through a password-entry prompt.
-        AppServices.Current.Walker.SetWireSender(engineSend);
-        AppServices.Current.LoopRunner.SetWireSender(engineSend);
+        // blast moves through a password-entry prompt. Their sends are route steps,
+        // which sneak keeping never takes for later.
+        Action<byte[]> routeSend = AppServices.Current.EngineGate.WrapEngineSender(SendUserInput, routeSteps: true);
+        AppServices.Current.Walker.SetWireSender(routeSend);
+        AppServices.Current.LoopRunner.SetWireSender(routeSend);
         // Paradigm position resolver — its `rm` re-sync ride the same
         // gate-wrapped pipeline so it can't land mid-password-prompt.
         AppServices.Current.ParadigmResync.SetWireSender(engineSend);

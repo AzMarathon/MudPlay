@@ -1778,6 +1778,32 @@ public sealed class AppServices
 
     // Holds automation that would end a sneak while keeping it matters (see its wiring).
     public Game.Stealth.SneakGuard SneakGuard { get; private set; } = null!;
+    public Game.Stealth.CarriedStealthPenalty CarriedStealth { get; private set; } = null!;
+
+    // The rooms of every boss flagged "stop before entering" on the active realm.
+    // Resolved live, so a realm swap or an edit on the Bosses tab takes effect at
+    // the next walk.
+    public IReadOnlySet<Game.Map.RoomKey> BossStopRooms()
+    {
+        var set = new HashSet<Game.Map.RoomKey>();
+        foreach (Models.Profile.BossDef b in Bosses.ResolveForRealm(GameData.ActiveRealm))
+        {
+            if (!b.StopBefore) continue;
+            foreach (string wire in b.Rooms)
+                if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k)) set.Add(k);
+        }
+        return set;
+    }
+
+    // The boss whose room this is, for a route card or a notice. Null when none.
+    public string? BossInRoom(Game.Map.RoomKey room)
+    {
+        foreach (Models.Profile.BossDef b in Bosses.ResolveForRealm(GameData.ActiveRealm))
+            foreach (string wire in b.Rooms)
+                if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k) && k.Equals(room))
+                    return b.Name;
+        return null;
+    }
 
     // Auto-light need poster. On a "can't see"
     // room-light line it posts a NeedKind.LightSource
@@ -5478,6 +5504,27 @@ public sealed class AppServices
             name => ItemNames.FindByName(name) is int number
                 && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
+        // Something in the pack that takes Stealth to nothing (a log raft) stands
+        // Auto-Sneak down until it is gone, instead of `sn` being resent into a
+        // refusal in every room.
+        CarriedStealth = new Game.Stealth.CarriedStealthPenalty(
+            carried: () => Inventory.Snapshot.CarriedItems,
+            packStealthOf: ItemNames.PackStealthOf,
+            stealthReading: () => PlayerStats.Stealth,
+            encumbrancePercent: () => Inventory.Snapshot.Encumbrance is { MaxWeight: > 0 } load
+                ? load.CurrentWeight * 100 / load.MaxWeight : 0,
+            perfectStealth: () => Profile.Current?.QuestLog?.Any(q =>
+                q.Complete && q.Flag == Game.Stealth.SneakChance.PerfectStealthAbility) == true,
+            hopelessChance: () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").SneakStandDownChance);
+        Stealth.SetCarriedPenaltyCheck(
+            () => CarriedStealth.Current() is { Hopeless: true } verdict ? verdict.Items : null,
+            msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        Stats.ScreenParsed += _ =>
+        {
+            if (Stats.LastCaptureReadStealth) CarriedStealth.NoteStealthRead();
+            Stealth.NoteCarriedChanged();
+        };
+        Inventory.Changed += () => Stealth.NoteCarriedChanged();
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData,
             () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,
                 Game.Quests.CompletedQuestBonuses.ResolveClassId(GameData, PlayerStats.Class), Profile.Current?.QuestLog));
@@ -7125,16 +7172,16 @@ public sealed class AppServices
         // room flagged StopBefore on the active realm. Resolved live so realm swaps
         // + tab edits take effect without re-wiring; only the point-to-point walker
         // consults it (loops / auto-lair route through boss rooms untouched).
-        Walker.SetBossStopRooms(() =>
+        Walker.SetBossStopRooms(BossStopRooms);
+        // A walk the user started reached the room before a stop-before boss room it
+        // only passes through: wait there until they press Play, step in, or walk on.
+        Walker.SetBossRoomHaltHandler(room =>
         {
-            var set = new HashSet<Game.Map.RoomKey>();
-            foreach (Models.Profile.BossDef b in Bosses.ResolveForRealm(GameData.ActiveRealm))
-            {
-                if (!b.StopBefore) continue;
-                foreach (string wire in b.Rooms)
-                    if (Game.Map.RoomKey.TryParseWire(wire, out Game.Map.RoomKey k)) set.Add(k);
-            }
-            return set;
+            if (!MovementControl.PauseBeforeBossRoom()) return;
+            string boss = BossInRoom(room) is { } name ? $"{name}'s room" : "a boss room";
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(
+                $"[Navigation paused before {boss} ({room.Map}/{room.Room}), marked stop before entering - "
+                + "Resume to walk through, or step in yourself]"));
         });
 
         // If an in-flight move carried us out of a room where combat had just

@@ -86,6 +86,7 @@ public sealed partial class RouteChoiceDialogViewModel
     // item-gate choice, the teleport caveat for a teleport choice, the trap caveat
     // for a trap-avoid choice, the avoided-rooms caveat for an avoid-override choice.
     public string GatedDetail =>
+        IsBossRoomChoice ? BossWaitDetail :
         IsBlockedChoice ? BlockedDetail :
         IsTeleportChoice ? TeleportCaveat :
         IsTrapAvoidChoice ? TrapCaveat :
@@ -127,6 +128,14 @@ public sealed partial class RouteChoiceDialogViewModel
     // pre-selected so respecting the user's own avoid is the default.
     public bool IsAvoidOverrideChoice { get; private set; }
 
+    // True when this is the boss-room fork: the shortest route passes through a boss
+    // room marked "stop before entering" and a way around exists. Three cards: walk
+    // around (Free), walk up to it and wait (the Gated card, pre-selected, since
+    // stopping there is what the mark asks for), walk through regardless (the
+    // send-it card).
+    public bool IsBossRoomChoice { get; private set; }
+    public string BossWaitDetail { get; private set; } = "";
+
     // True when this is the Paradigm token fork: a held transport token reaches the
     // destination faster than walking. A plain two-way choice — walk it (Free) vs use
     // the token (the blue token card) — no acquire / send-it / search split. Never
@@ -157,6 +166,7 @@ public sealed partial class RouteChoiceDialogViewModel
     //     way past those, so walking in unprotected is not a choice we hand the user.
     // A teleport / trap-avoid choice has no send-it split.
     public bool ShowSendItCard =>
+        IsBossRoomChoice ||
         (HasFreeRoute || _crossesSurvivableHazard)
         && !IsTeleportChoice && !IsTrapAvoidChoice && !IsAvoidOverrideChoice && !IsTokenChoice;
 
@@ -203,7 +213,9 @@ public sealed partial class RouteChoiceDialogViewModel
 
     // The muted sub-line under the send-it card — reframed for the hazard flavour
     // (take the damage) vs the item-gate flavour (carry the gate items yourself).
-    public string SendItDetail => _crossesSurvivableHazard
+    public string SendItDetail =>
+        IsBossRoomChoice ? "Takes the same route without stopping. The stop-before mark stays set — only this walk ignores it." :
+        _crossesSurvivableHazard
         ? "Walks straight through the hazard and takes the damage — no counter fetched."
         : "Crosses the gates as-is — nothing acquired; you must already carry what's needed.";
 
@@ -213,7 +225,7 @@ public sealed partial class RouteChoiceDialogViewModel
     private IReadOnlyList<RoomKey>? _avoidAltPath;
     public bool ShowAvoidAltCard => _avoidAltPath is { Count: > 0 };
     public string AvoidAltSummary { get; private set; } = "";
-    public string AvoidAltDetail =>
+    public string AvoidAltDetail { get; private set; } =
         "Skips the counter and plows through rooms you marked Avoid. Your avoid list stays "
         + "set — only this one walk crosses them.";
     public bool IsAvoidAltSelected => SelectedRoute == RouteChoiceResult.AvoidOverrideAlt;
@@ -348,6 +360,7 @@ public sealed partial class RouteChoiceDialogViewModel
         IsTrapAvoidChoice = choice.Kind == RouteChoiceKind.TrapAvoid;
         IsAvoidOverrideChoice = choice.Kind == RouteChoiceKind.AvoidOverride;
         IsTokenChoice = choice.Kind == RouteChoiceKind.Token;
+        IsBossRoomChoice = choice.Kind == RouteChoiceKind.BossRoom;
         IsBlockedChoice = choice.Kind == RouteChoiceKind.Blocked;
         HasFreeRoute = choice.HasFreeRoute;
 
@@ -359,6 +372,9 @@ public sealed partial class RouteChoiceDialogViewModel
             ? $"Route through {(avoidAltCount == 1 ? "1 room" : $"{avoidAltCount} rooms")} you marked Avoid — "
                 + $"{StepsEta(Math.Max(0, _avoidAltPath.Count - 1), default)}, no counter needed"
             : string.Empty;
+        if (RouteChoicePlanner.ListAvoided(choice.AvoidAlternativeNames) is { Length: > 0 } altRooms)
+            AvoidAltDetail = $"Skips the counter and plows through rooms you marked Avoid: {altRooms}. "
+                + "Your avoid list stays set — only this one walk crosses them.";
 
         // A fully-blocked route: no way through at all, but the destination is
         // physically reachable up to an obstacle. Offer to walk as far as possible
@@ -451,6 +467,21 @@ public sealed partial class RouteChoiceDialogViewModel
             // can still click the shortcut. Previewed on open via RaiseSelectionPreview.
             SelectedRoute = RouteChoiceResult.Free;
         }
+        else if (IsBossRoomChoice)
+        {
+            string boss = choice.BossRoomLabel ?? "a boss room";
+            int toWait = Math.Max(0, (choice.BossWaitPath?.Count ?? 1) - 1);
+            FreeSummary = $"Walk around {boss} — {StepsEta(choice.FreeStepCount, freeEta)}";
+            GatedSummary = $"Walk up to {boss} and wait — {toWait} step{(toWait == 1 ? "" : "s")} to the room before it";
+            BossWaitDetail = $"Stops one room short, as its stop-before mark asks. Press Play (Resume), or step in "
+                + $"yourself, to go on through to the destination ({StepsEta(choice.GatedStepCount, gatedEta)} in all).";
+            SendItSummary = $"Walk through {boss} without stopping — {StepsEta(choice.GatedStepCount, gatedEta)}";
+            RequirementSummary = string.Empty;
+            TeleportCaveat = string.Empty;
+            TrapCaveat = string.Empty;
+            AvoidCaveat = string.Empty;
+            SelectedRoute = RouteChoiceResult.Gated;
+        }
         else if (IsAvoidOverrideChoice)
         {
             string avoidedWord = choice.AvoidedRoomCount == 1
@@ -471,7 +502,11 @@ public sealed partial class RouteChoiceDialogViewModel
                 FreeSummary = $"No route that respects your avoids — every path there crosses {avoidedWord}";
                 GatedSummary = $"Route through {avoidedWord} — {StepsEta(choice.GatedStepCount, gatedEta)}";
             }
-            AvoidCaveat = $"Routes through {avoidedWord}. Your avoid list stays set — only this "
+            // Named, so the player can find them: an avoided room on another map or
+            // floor doesn't show anywhere near the route on the map in front of them.
+            string whichRooms = RouteChoicePlanner.ListAvoided(choice.AvoidedRoomNames) is { Length: > 0 } listed
+                ? $": {listed}" : "";
+            AvoidCaveat = $"Routes through {avoidedWord}{whichRooms}. Your avoid list stays set — only this "
                 + "walk crosses them; unmark the room(s) if you want it gone for good.";
             RequirementSummary = string.Empty;
             TeleportCaveat = string.Empty;

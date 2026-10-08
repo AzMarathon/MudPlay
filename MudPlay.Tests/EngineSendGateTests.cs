@@ -160,4 +160,37 @@ public sealed class EngineSendGateTests
         EngineSendGate gate = new();
         gate.ReplayLastClientCommand();   // must not throw
     }
+
+    // Report paradigm-20261007-225617: sneak keeping took the walker's `say
+    // gazmuldduhaz` (a spoken password that opens an exit) for later, as if it were
+    // say-channel chatter, and the move behind it found no exit.
+    [Fact]
+    public void RouteStepSender_IsNeverTakenForLater_ButIsStillReported()
+    {
+        EngineSendGate gate = new();
+        List<string> reported = new();
+        gate.SetSneakHooks(takeForLater: _ => true, sent: reported.Add);
+        List<string> wire = new();
+        void Raw(byte[] b) => wire.Add(System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r'));
+
+        gate.WrapEngineSender(Raw)(System.Text.Encoding.Latin1.GetBytes("say hello\r"));
+        Assert.Empty(wire);                                     // chatter waits
+
+        gate.WrapEngineSender(Raw, routeSteps: true)(System.Text.Encoding.Latin1.GetBytes("say gazmuldduhaz\r"));
+
+        Assert.Equal(new[] { "say gazmuldduhaz" }, wire);
+        Assert.Equal(new[] { "say gazmuldduhaz" }, reported);   // so the sneak is taken again
+    }
+
+    [Fact]
+    public void RouteStepSender_StillStopsForAHold()
+    {
+        EngineSendGate gate = new();
+        gate.Hold("password prompt");
+        List<byte[]> wire = new();
+
+        gate.WrapEngineSender(wire.Add, routeSteps: true)(System.Text.Encoding.Latin1.GetBytes("n\r"));
+
+        Assert.Empty(wire);
+    }
 }

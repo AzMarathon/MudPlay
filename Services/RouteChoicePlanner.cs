@@ -56,6 +56,9 @@ public enum RouteChoiceKind
                // gold + a daily charge + wipes buffs), lands the player at the token's
                // town, then the walk resumes from there. Never auto-taken — the user
                // picks it against the plain overland route shown alongside.
+    BossRoom,  // the shortest route passes through a boss room flagged "stop before
+               // entering" and a way around exists: walk around it, walk up to it
+               // and wait, or walk through regardless.
 }
 
 // A "run to the blocked room anyway" plan: the furthest room the walker can
@@ -135,7 +138,21 @@ public sealed record RouteChoice(
     // walk already expanded, lever trips included. GatedPath is then the rooms that
     // walk passes, in order, with revisits, so re-expanding it would detour twice;
     // the step list is built from this instead. Null on every other choice.
-    IReadOnlyList<WalkStep>? GatedWalk = null)
+    IReadOnlyList<WalkStep>? GatedWalk = null,
+    // The avoided rooms behind AvoidedRoomCount / AvoidAlternativeCount, named in
+    // the order the route meets them ("Black Wasteland (3/740)"). The card lists
+    // them: a count alone left the player hunting the map for a room that may sit
+    // on another map altogether (report paradigm-20261007-215302).
+    IReadOnlyList<string>? AvoidedRoomNames = null,
+    IReadOnlyList<string>? AvoidAlternativeNames = null,
+    // For a BossRoom choice: the stop-before boss room the shortest route passes
+    // through, and that route cut off at the room before it (where "walk up and
+    // wait" stops). FreePath is the way around every stop-before boss room;
+    // GatedPath is the shortest route, through the boss room.
+    RoomKey? BossRoom = null,
+    IReadOnlyList<RoomKey>? BossWaitPath = null,
+    // "pharaoh rastep's room (12/2250)", filled in by the caller for the cards.
+    string? BossRoomLabel = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -514,7 +531,8 @@ public static class RouteChoicePlanner
         if (overrideRoute is null || overrideRoute.Count == 0) return null;
 
         IReadOnlyList<RoomKey> overrideKeys = BuildKeyPath(graph, source, overrideRoute);
-        int avoidedCrossed = CountAvoidedOnPath(filter, overrideKeys);
+        IReadOnlyList<string> avoidedNames = AvoidedOnPath(filter, graph, overrideKeys);
+        int avoidedCrossed = avoidedNames.Count;
         if (avoidedCrossed == 0) return null;   // route doesn't touch an avoided room — no override story
 
         // Route honouring the avoids, gates active. Null → no gate-free avoid-
@@ -545,7 +563,8 @@ public static class RouteChoicePlanner
                 Array.Empty<RoomKey>(),
                 overrideKeys,
                 RouteChoiceKind.AvoidOverride,
-                AvoidedRoomCount: avoidedCrossed);
+                AvoidedRoomCount: avoidedCrossed,
+                AvoidedRoomNames: avoidedNames);
         }
 
         // TWO-ROUTE: an avoid-honouring route exists — only offer the override when
@@ -573,7 +592,67 @@ public static class RouteChoicePlanner
             BuildKeyPath(graph, source, free),
             overrideKeys,
             RouteChoiceKind.AvoidOverride,
-            AvoidedRoomCount: avoidedCrossed);
+            AvoidedRoomCount: avoidedCrossed,
+            AvoidedRoomNames: avoidedNames);
+    }
+
+    // A walk the user starts whose shortest route passes THROUGH a boss room flagged
+    // "stop before entering" on the way to somewhere else (a walk that ends in one
+    // already stops a room short). Returns the three ways to take it — around every
+    // such room, up to the first one and wait, or straight through — when a way
+    // around exists. Null when the route meets no such room, or there is no way
+    // around: the walk then simply stops before the boss room, with nothing to pick.
+    //
+    // A boss room that is the very next step doesn't count: standing beside it and
+    // asking to walk on past is the go-ahead to enter.
+    public static RouteChoice? EvaluateBossRoom(
+        BfsMapper bfs,
+        IRoomFilter filter,
+        RoomGraphManager graph,
+        RoomKey source,
+        RoomKey destination,
+        IReadOnlySet<RoomKey> stopRooms,
+        Func<IReadOnlyList<Direction>?>? baseRoute = null)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+        ArgumentNullException.ThrowIfNull(stopRooms);
+        if (stopRooms.Count == 0) return null;
+
+        IReadOnlyList<Direction>? through = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
+        if (through is not { Count: > 0 }) return null;
+        IReadOnlyList<RoomKey> throughKeys = BuildKeyPath(graph, source, through);
+
+        int bossAt = FirstBossRoomAhead(throughKeys, stopRooms);
+        if (bossAt < 0) return null;
+
+        // The way around avoids every stop-before boss room but the destination
+        // itself, not just the first one met: a detour past one that runs into the
+        // next would be no way around.
+        HashSet<RoomKey> around = new(stopRooms);
+        around.Remove(destination);
+        around.Remove(source);
+        IReadOnlyList<Direction>? detour = bfs.FindPath(source, destination, new WalkAroundRoomsFilter(filter, around));
+        if (detour is not { Count: > 0 }) return null;
+
+        return new RouteChoice(
+            detour.Count, through.Count,
+            Array.Empty<RouteRequirement>(),
+            BuildKeyPath(graph, source, detour),
+            throughKeys,
+            RouteChoiceKind.BossRoom,
+            BossRoom: throughKeys[bossAt],
+            BossWaitPath: throughKeys.Take(bossAt).ToList());
+    }
+
+    // Index on a key path of the first stop-before boss room a walk would stop for:
+    // past the next room, and short of the destination. -1 when there is none.
+    private static int FirstBossRoomAhead(IReadOnlyList<RoomKey> keys, IReadOnlySet<RoomKey> stopRooms)
+    {
+        for (int i = 2; i < keys.Count - 1; i++)
+            if (stopRooms.Contains(keys[i])) return i;
+        return -1;
     }
 
     // The avoid-crossing route to offer as an EXTRA card alongside a hazard/gate
@@ -584,7 +663,7 @@ public static class RouteChoicePlanner
     // (the avoids aren't the wall) or the route touches no avoided room. The caller
     // attaches it only to an item-gate/hazard choice (whose own routes respect the
     // avoids), so the two never describe the same path.
-    public static (IReadOnlyList<RoomKey> Path, int AvoidedCount)? AvoidAlternative(
+    public static (IReadOnlyList<RoomKey> Path, int AvoidedCount, IReadOnlyList<string> AvoidedNames)? AvoidAlternative(
         BfsMapper bfs,
         MovementFilter filter,
         RoomGraphManager graph,
@@ -603,18 +682,33 @@ public static class RouteChoicePlanner
         if (route is null || route.Count == 0) return null;
 
         IReadOnlyList<RoomKey> keys = BuildKeyPath(graph, source, route);
-        int crossed = CountAvoidedOnPath(filter, keys);
-        return crossed > 0 ? (keys, crossed) : null;
+        IReadOnlyList<string> crossed = AvoidedOnPath(filter, graph, keys);
+        return crossed.Count > 0 ? (keys, crossed.Count, crossed) : null;
     }
 
-    // How many rooms on a key path (excluding the source the walker already stands
-    // in) the user marked "avoid" — the count the override card warns with.
-    private static int CountAvoidedOnPath(MovementFilter filter, IReadOnlyList<RoomKey> keys)
+    // The rooms on a key path (excluding the source the walker already stands in)
+    // the user marked "avoid", named in route order: what the override card warns
+    // with, one entry per crossing.
+    private static IReadOnlyList<string> AvoidedOnPath(
+        MovementFilter filter, RoomGraphManager graph, IReadOnlyList<RoomKey> keys)
     {
-        int n = 0;
+        List<string> crossed = new();
         for (int i = 1; i < keys.Count; i++)   // skip source
-            if (filter.IsAvoided(keys[i])) n++;
-        return n;
+        {
+            if (!filter.IsAvoided(keys[i])) continue;
+            string where = $"{keys[i].Map}/{keys[i].Room}";
+            crossed.Add(graph.GetRoom(keys[i])?.Name is { Length: > 0 } name ? $"{name} ({where})" : where);
+        }
+        return crossed;
+    }
+
+    // "Black Wasteland (3/740), Black Wasteland (3/669) and 2 more" for a card or a
+    // log line; empty when no names were recorded.
+    public static string ListAvoided(IReadOnlyList<string>? names, int show = 6)
+    {
+        if (names is not { Count: > 0 }) return string.Empty;
+        string listed = string.Join(", ", names.Take(show));
+        return names.Count > show ? $"{listed} and {names.Count - show} more" : listed;
     }
 
     // When every route to the destination is blocked — no gate-free route, and

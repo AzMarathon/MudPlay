@@ -827,6 +827,50 @@ public sealed class StealthManagerTests
         Assert.Equal(StealthState.AttemptingSneak, h.Stealth.State);
     }
 
+    // Report paradigm-20261007-213809: with a log raft in the pack every `sn` was
+    // refused, and Auto-Sneak resent it for the whole settle window in each room.
+    [Fact]
+    public void AutoSneak_CarryingAnItemThatKillsStealth_StandsDownWithOneNotice()
+    {
+        using AutoHarness h = new() { AutoSneakOn = true };
+        string? carrying = "log raft (Stealth -125)";
+        List<string> notices = new();
+        h.Stealth.SetCarriedPenaltyCheck(() => carrying, notices.Add);
+
+        h.Stealth.NoteRoomChanged();
+        h.Stealth.RequestPreMoveStealth();
+        h.Stealth.NoteRoomChanged();
+
+        Assert.Empty(h.Sent);
+        Assert.Equal("log raft (Stealth -125)", h.Stealth.StoodDownFor);
+        string notice = Assert.Single(notices);
+        Assert.Contains("log raft", notice);
+        Assert.True(h.Stealth.ReadyToMoveSneaking());      // the step isn't held for it
+
+        carrying = null;
+        h.Stealth.NoteCarriedChanged();
+
+        Assert.Null(h.Stealth.StoodDownFor);
+        Assert.Equal(2, notices.Count);
+        Assert.Contains("sneaking again", notices[1]);
+
+        h.Stealth.NoteRoomChanged();
+        Assert.Equal("sn", h.LastSent());
+    }
+
+    [Fact]
+    public void AutoSneakOff_CarryingTheItem_SaysNothing()
+    {
+        using AutoHarness h = new() { AutoSneakOn = false };
+        List<string> notices = new();
+        h.Stealth.SetCarriedPenaltyCheck(() => "log raft (Stealth -125)", notices.Add);
+
+        h.Stealth.NoteRoomChanged();
+
+        Assert.Empty(notices);
+        Assert.Null(h.Stealth.StoodDownFor);
+    }
+
     [Fact]
     public void AutoSneak_OnSoftRejection_ResendsSneak()
     {
