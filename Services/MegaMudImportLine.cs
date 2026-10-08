@@ -15,6 +15,7 @@ public sealed record MegaMudImportLine(string Group, string Setting, string Valu
     public string EditKey { get; init; } = string.Empty;
     public string EditValue { get; init; } = string.Empty;
     public string Unit { get; init; } = string.Empty;
+    public IReadOnlyList<string> Choices { get; init; } = Array.Empty<string>();
     public Func<string, MegaMudImportAdvice?>? Advise { get; init; }
 
     public bool WasImported => Note.Length == 0;

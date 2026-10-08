@@ -12,6 +12,7 @@ public sealed partial class MegaMudImportRowViewModel : ObservableObject
 
     [ObservableProperty] private bool _isOn;
     [ObservableProperty] private decimal? _number;
+    [ObservableProperty] private string _choice;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(AdviceText), nameof(HasAdvice), nameof(IsStrongAdvice), nameof(IsMildAdvice))]
@@ -23,6 +24,7 @@ public sealed partial class MegaMudImportRowViewModel : ObservableObject
         _isOn = line.EditValue == "1";
         _number = decimal.TryParse(line.EditValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out decimal n) ? n : 0;
         _text = line.EditValue;
+        _choice = line.EditValue;
     }
 
     public string Group => _line.Group;
@@ -34,6 +36,8 @@ public sealed partial class MegaMudImportRowViewModel : ObservableObject
     public bool IsFlag => _line.Edit == MegaMudImportEdit.Flag;
     public bool IsNumber => _line.Edit == MegaMudImportEdit.Number;
     public bool IsText => _line.Edit == MegaMudImportEdit.Text;
+    public bool IsChoice => _line.Edit == MegaMudImportEdit.Choice;
+    public IReadOnlyList<string> Choices => _line.Choices;
     public bool IsFixed => _line.Edit == MegaMudImportEdit.None;
 
     // A percentage can't pass 100; anything else is held to its own range when the
@@ -45,6 +49,8 @@ public sealed partial class MegaMudImportRowViewModel : ObservableObject
         MegaMudImportEdit.Flag => IsOn ? "1" : "0",
         MegaMudImportEdit.Number => ((int)(Number ?? 0)).ToString(CultureInfo.InvariantCulture),
         MegaMudImportEdit.Text => (Text ?? string.Empty).Trim(),
+        // A cleared selection falls back to what the file had.
+        MegaMudImportEdit.Choice => string.IsNullOrEmpty(Choice) ? _line.EditValue : Choice,
         _ => _line.EditValue,
     };
 

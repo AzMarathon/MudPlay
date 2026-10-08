@@ -1121,7 +1121,7 @@ Gear is organized into named equipment sets in the **Player Workshop** — a Def
 
 Before anything is created you get a **review**:
 
-- **Coming across**: every setting that is carried over, under its MudPlay name, with the value it will have. **Each value can be changed right there** before you import: tick boxes for the switches, number boxes for thresholds and counts, text boxes for spells and commands. Clear a spell or command box to leave that setting unset. A number outside what MudPlay accepts is brought into range when the character is made.
+- **Coming across**: every setting that is carried over, under its MudPlay name, with the value it will have. **Each value can be changed right there** before you import: tick boxes for the switches, number boxes for thresholds and counts, text boxes for spells and commands, a drop-down for party rank. Clear a spell or command box to leave that setting unset. A number outside what MudPlay accepts is brought into range when the character is made.
   - Where MegaMUD had several profiles, the Combat, Health and Spells lines are the active profile's, and a change to one of them changes that profile only.
 - **Not coming across**: every setting that isn't, with the reason. Nothing in the file is guessed at: a setting only comes across when it means the same thing in both clients.
 
@@ -1134,7 +1134,7 @@ What comes across:
 - **Combat**: the attack command, the multi-attack, debuff and attack spells with their mana and cast limits, backstab switches, monster limits and the run settings.
 - **MegaMUD's profiles** (Smash / Bash / Attack and the like) each become a MudPlay combat profile, with the one MegaMUD had active made active.
 - **Blesses**: self and party blesses become Buff Watchdog slots. A spell listed for both is one slot that does both.
-- **Party, Cash, Talk and Other**: the settings with a direct equivalent, including the bank room.
+- **Party, Cash, Talk and Other**: the settings with a direct equivalent, including the bank room and your **party rank** (MegaMUD's 0 / 1 / 2 is Front / Mid / Back).
 
 What doesn't, and why:
 

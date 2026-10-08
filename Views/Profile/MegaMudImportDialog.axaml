@@ -104,6 +104,9 @@
                                             <TextBox IsVisible="{Binding IsText}" Width="330"
                                                      FontFamily="{StaticResource FontMono}"
                                                      Text="{Binding Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <ComboBox IsVisible="{Binding IsChoice}" Width="120" HorizontalAlignment="Right"
+                                                      ItemsSource="{Binding Choices}"
+                                                      SelectedItem="{Binding Choice, Mode=TwoWay}"/>
                                             <TextBlock IsVisible="{Binding IsFixed}" Classes="Dim" Text="{Binding FixedText}"
                                                        MaxWidth="330" TextWrapping="Wrap" VerticalAlignment="Center"/>
                                         </Panel>

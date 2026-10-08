@@ -7,6 +7,7 @@
 > - Carries over the auto switches, Health, Spells, Combat, Party, Cash, Talk and Other settings that mean the same in both clients; MegaMUD's profiles become combat profiles and its blesses become Buff Watchdog slots
 > - The file's BBS user ID and password can be stored as the new character's login, encrypted; it is a tick box in the review
 > - Every value in the review can be changed before importing: switches, numbers, spells and commands
+> - Party rank comes across (front, mid or back)
 > - The pre / post rest commands are highlighted in the review, in red when they change gear (rem / eq / wear): gear swaps belong to the Equipment Manager's Pre-rest sets
 > - MegaMUD's redial and cleanup settings can be written onto the BBS, by a tick box that starts ticked only for a BBS with no characters yet
 >

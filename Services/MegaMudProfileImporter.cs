@@ -328,7 +328,10 @@ public static class MegaMudProfileImporter
         p.Flag(s, "AskHealth", g, "Ask members for their health", v => pt.SendHealthToMembers = v);
         p.Flag("Other", "BlessResting", g, "Bless party while resting", v => pt.BlessWhileResting = v);
         p.Flag("Other", "BlessCombat", g, "Bless party during combat", v => pt.BlessDuringCombat = v);
-        p.Skip(s, "PartyRank", g, "Party rank", "set Front / Mid / Back on the Party tab; MegaMUD stores it as a number");
+        // MegaMUD numbers the ranks 0 front, 1 mid, 2 back (user, 2026-10-08: 0 seen
+        // in a file, 1 and 2 taken from the order).
+        if (!p.Choice(s, "PartyRank", g, "Party rank", RankNames, v => pt.Rank = Enum.Parse<PartyRank>(v)))
+            p.Skip(s, "PartyRank", g, "Party rank", "not a rank number MudPlay knows; set Front / Mid / Back on the Party tab");
         foreach ((string key, string label) in new[]
                  {
                      ("AttackLast", "Attack last"), ("AttackLate", "Attack late"), ("AttackReverse", "Attack in reverse order"),
@@ -343,6 +346,8 @@ public static class MegaMudProfileImporter
                  })
             p.SkipUnlessZero(s, key, g, label, "no matching MudPlay setting is mapped for it yet");
     }
+
+    private static readonly string[] RankNames = { nameof(PartyRank.Front), nameof(PartyRank.Mid), nameof(PartyRank.Back) };
 
     // ----- Buffs: self and party blesses become Buff Watchdog slots ---------
 
@@ -601,6 +606,23 @@ public static class MegaMudProfileImporter
             lines?.Add(new MegaMudImportLine(group, label, on ? "on" : "off")
             {
                 Edit = MegaMudImportEdit.Flag, EditKey = Key(section, key), EditValue = on ? "1" : "0",
+            });
+            return true;
+        }
+
+        // The file holds the choice's position in the list; an edit from the review
+        // holds its name.
+        public bool Choice(string section, string key, string group, string label, IReadOnlyList<string> choices, Action<string> set)
+        {
+            string? raw = Raw(section, key)?.Trim();
+            string? chosen = int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out int at)
+                ? at < choices.Count ? choices[at] : null
+                : choices.FirstOrDefault(c => string.Equals(c, raw, StringComparison.OrdinalIgnoreCase));
+            if (chosen is null) return false;
+            set(chosen);
+            lines?.Add(new MegaMudImportLine(group, label, chosen)
+            {
+                Edit = MegaMudImportEdit.Choice, EditKey = Key(section, key), EditValue = chosen, Choices = choices,
             });
             return true;
         }

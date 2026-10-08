@@ -11,4 +11,6 @@ public enum MegaMudImportEdit
     Number,
     // Free text: a spell's short code, a command.
     Text,
+    // One of the line's Choices.
+    Choice,
 }

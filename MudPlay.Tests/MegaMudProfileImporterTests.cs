@@ -232,6 +232,7 @@ public sealed class MegaMudProfileImporterTests
         Assert.Equal("mrai", party.MinorPartyHealAoeSpell);   // MegaMUD's one area heal is our minor
         Assert.Null(party.MajorPartyHealAoeSpell);
         Assert.Equal(2, party.AoeMinMembers);
+        Assert.Equal(PartyRank.Front, party.Rank);            // MegaMUD's 0
 
         Assert.Equal(3, Section<OtherSettings>(made, "Other").MaxPickAttempts);
     }
@@ -246,7 +247,6 @@ public sealed class MegaMudProfileImporterTests
         string[] leftBehind = plan.Lines.Where(l => !l.WasImported).Select(l => l.Setting).ToArray();
         Assert.Contains("Normal weapon", leftBehind);
         Assert.Contains("Wealth limits", leftBehind);
-        Assert.Contains("Party rank", leftBehind);
         Assert.Contains("PvP settings", leftBehind);
         Assert.Contains("Favourite rooms", leftBehind);
         Assert.Contains("Area heal threshold", leftBehind);
@@ -343,6 +343,7 @@ public sealed class MegaMudProfileImporterTests
             [Key("Invalid remote command reply")] = "no",
             [Key("Most monsters in a room to fight")] = "99",
             [Key("Seconds between redials")] = "20",
+            [Key("Party rank")] = "Back",
         };
         (_, CharacterProfile made) = Import(edits: edits);
 
@@ -368,6 +369,31 @@ public sealed class MegaMudProfileImporterTests
         var bbs = new MudPlay.Models.Settings.BbsProfile();
         plan.ApplyToBbs(bbs, edits);
         Assert.Equal(20, bbs.RedialPauseSeconds);
+        Assert.Equal(PartyRank.Back, Section<PartySettings>(made, "Party").Rank);
+    }
+
+    [Theory]
+    [InlineData("0", PartyRank.Front)]
+    [InlineData("1", PartyRank.Mid)]
+    [InlineData("2", PartyRank.Back)]
+    public void PartyRank_ComesAcrossByMegaMudsNumber(string number, PartyRank expected)
+    {
+        MegaMudImportPlan plan = MegaMudProfileImporter.Read(MegaMudIni.Parse($"[Party]\r\nPartyRank={number}\r\n"), "X");
+        var made = new CharacterProfile();
+        string keyFile = Path.Combine(Path.GetTempPath(), "mudplay-megamud-import-" + Path.GetRandomFileName());
+        plan.ApplyTo(made, "Board", withLogin: false, new PasswordProtector(keyFile));
+
+        Assert.Equal(expected, Section<PartySettings>(made, "Party").Rank);
+        MegaMudImportLine line = plan.Lines.Single(l => l.Setting == "Party rank");
+        Assert.Equal(MegaMudImportEdit.Choice, line.Edit);
+        Assert.Equal(new[] { "Front", "Mid", "Back" }, line.Choices);
+    }
+
+    [Fact]
+    public void AnUnknownPartyRankNumber_IsLeftBehind()
+    {
+        MegaMudImportPlan plan = MegaMudProfileImporter.Read(MegaMudIni.Parse("[Party]\r\nPartyRank=7\r\n"), "X");
+        Assert.False(plan.Lines.Single(l => l.Setting == "Party rank").WasImported);
     }
 
     // A pre / post rest command is flagged for a second look, and strongly when it
