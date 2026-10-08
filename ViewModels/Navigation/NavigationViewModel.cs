@@ -1932,15 +1932,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Lairs.Delete(row.Source.Name);
     }
 
-    // Right-click → Add / Remove from favourites on a Setups row. Flips the
-    // setup's Favorite flag and re-saves; LairManager.Save fires SetupsChanged so
-    // the rail refreshes and the terminal Favourites flyout (amber) updates.
+    // Right-click → Add / Remove from favourites on a Setups row. The favourite is
+    // this character's, so the setup file isn't touched; LairManager fires
+    // SetupsChanged so the rail refreshes and the Favourites flyouts (amber) update.
     [RelayCommand]
     private void ToggleSetupFavorite(LairSetupRowViewModel? row)
     {
         if (row is null) return;
-        row.Source.Favorite = !row.Source.Favorite;
-        _services.Lairs.Save(row.Source);
+        _services.Lairs.SetFavorite(row.Source.Name, !row.Source.Favorite);
     }
 
     // True when the top-bar Save chip should be active — covers the four
@@ -2358,15 +2357,14 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Loops.Delete(row.Source.Name);
     }
 
-    // Right-click → Add / Remove from favourites on a Loops row. Flips the loop's
-    // Favorite flag and re-saves; LoopManager.Save fires LoopsChanged so the rail
-    // refreshes and the terminal Favourites flyout (green) updates.
+    // Right-click → Add / Remove from favourites on a Loops row. The favourite is
+    // this character's, so the loop file isn't touched; LoopManager fires
+    // LoopsChanged so the rail refreshes and the Favourites flyouts (green) update.
     [RelayCommand]
     private void ToggleLoopFavorite(LoopRowViewModel? row)
     {
         if (row is null) return;
-        row.Source.Favorite = !row.Source.Favorite;
-        _services.Loops.Save(row.Source);
+        _services.Loops.SetFavorite(row.Source.Name, !row.Source.Favorite);
     }
 
     // Right-click → Preview on a Loops-pane row. Lays the loop's expanded

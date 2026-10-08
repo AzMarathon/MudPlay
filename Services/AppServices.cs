@@ -2468,6 +2468,7 @@ public sealed class AppServices
     // Data/BBS/{bbs}/Loops/; consumers re-bind when the active
     // BBS changes.
     public Game.Map.LoopManager Loops { get; private set; } = null!;
+    public LoopFavoritesStore LoopFavorites { get; private set; } = null!;
 
     // MegaMUD .mp loop-file importer. Stateless w.r.t. the
     // profile; takes the active RoomGraph at construct
@@ -7462,6 +7463,11 @@ public sealed class AppServices
             Loops.LoadAll(GameData.ActiveSet);
             Lairs.LoadAll(GameData.ActiveSet);
         }
+
+        // Which loops and auto-lair setups are favourites is each character's own.
+        // Built after the first LoadAll above so a profile already loaded finds its
+        // game data's loops in hand; it plugs into both managers.
+        LoopFavorites = new LoopFavoritesStore(Profile, Loops, Lairs, ProfileGameDataSet, Log);
 
         // Shared folder CRUD over the Loops directory (loops + lairs
         // live in the same on-disk tree). Owns the filesystem move once

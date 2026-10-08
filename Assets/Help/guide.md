@@ -323,7 +323,7 @@ Or build it off the map: **Navigation Management → New Loop** opens an editor 
 
 **Run a saved loop** from the **LOOPS + AUTO-LAIRS** rail (or the Management dialog) — each has **Load** (stage it) and **Go** (start now; right-click, or the ▾ in Management, for **Run** / **Sprint**). Queue one and MudPlay joins the circuit at whichever of its rooms is nearest — a room partway along a leg as readily as a waypoint, and right where you stand if you're already on it — then carries on round from there (a lap begun partway along a leg isn't counted as a lap); combat, healing, and pickup keep running throughout. While it runs the badge reads **LOOPING** with "step X of Y on lap Z", and the **CURRENT NAV** rail shows the loop's rooms in **green** — click any room to tune it live without stopping (see *Live-editing a running loop* below). **Stop** ends the loop.
 
-**Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Go**, **Run**, **Sprint**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) alongside your starred GOTO rooms, so you can start it from anywhere.
+**Right-click a loop or Auto-Lair setup** in the rail for **Load**, **Go**, **Run**, **Sprint**, **Edit…** (opens its editor), **Move to folder…**, and **Add / Remove from favourites** — favouriting a loop or lair adds it to *both* right-click Favorites flyouts (the terminal's and the map's, green for loops, amber for lairs) for this character only alongside your starred GOTO rooms, so you can start it from anywhere.
 
 Each waypoint can carry its own per-room settings, edited **inline in the Edit Loop table**:
 
@@ -1665,6 +1665,8 @@ MudPlay also ships **built-in defaults** for the automation-facing bits (a monst
 The same applies to the **starter navigation loops** that come bundled with each set: they're baked into the program too, so **new ones added in a later release are added to your existing sets on the next launch** — added only, never overwriting a loop you already have, and **never re-adding one you deleted** (MudPlay remembers what it has already offered each set). Your own loops are always left untouched.
 
 **GOTO favourites belong to the character.** A new character starts with none and keeps its own list from there; nothing another character adds or removes reaches it. (Favourites used to be one list per game-data set, shared by every character on it. Each character from then took its own copy of that list the first time it loaded under this version.)
+
+**Favourite loops and auto-lair setups belong to the character too.** The loops and setups themselves stay with the game data, shared by every character on it, so a loop one character builds is there for the others. Which of them are *favourites* is each character's own choice: favouriting one adds it to that character's right-click Favorites menus and nobody else's, and it doesn't touch the loop file. (The favourite used to be stored in the loop file, so it showed for everyone. Each character from then took the favourites it could already see, the first time it loaded; a character made since starts with none.)
 
 ## Importing and switching sets
 

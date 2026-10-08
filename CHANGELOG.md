@@ -1,5 +1,10 @@
 # Version history
 
+## 3.151.6
+
+- Favourite loops and auto-lair setups are each character's own: favouriting one no longer adds it to every character's Favorites menus. The loops and setups themselves stay shared with the game data
+- Each existing character keeps the loop and auto-lair favourites it could already see; a new character starts with none
+
 ## 3.151.5
 
 - The line others see when a Gypsy shuffles their deck (`<name> shuffles their deck of cards.`) is recognized on Paradigm, instead of being listed as an unrecognized line

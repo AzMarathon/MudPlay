@@ -99,7 +99,7 @@ public sealed class LairManagerTests : IDisposable
         })
         {
             Notes = "test notes",
-            Favorite = true,
+            SharedFavorite = true,
         };
         m1.Save(setup);
 
@@ -110,8 +110,10 @@ public sealed class LairManagerTests : IDisposable
         Assert.NotNull(round);
         Assert.Equal(1, round!.SchemaVersion);
         Assert.Equal("test notes", round.Notes);
-        // "Set as favorite" (drives the terminal Favorites menu) round-trips.
-        Assert.True(round.Favorite);
+        // The flag an older file carried round-trips; the favourite itself is the
+        // character's (LoopFavoritesStore) and isn't in the file.
+        Assert.True(round.SharedFavorite);
+        Assert.False(round.Favorite);
         Assert.Equal(3, round.Markers.Count);
         Assert.Null(round.Markers[0].OverrideRespawnSeconds);
         Assert.False(round.Markers[0].Skip);

@@ -50,6 +50,36 @@ public sealed class LairManager
     // Fired after every mutation (load / save / delete).
     public event Action? SetupsChanged;
 
+    // The loaded character's favourites, kept on its profile and plugged in the
+    // same way LoopManager's are.
+    private Func<string, bool>? _isFavorite;
+    private Action<string, bool>? _setFavorite;
+
+    public void AttachFavorites(Func<string, bool> isFavorite, Action<string, bool> setFavorite)
+    {
+        _isFavorite = isFavorite ?? throw new ArgumentNullException(nameof(isFavorite));
+        _setFavorite = setFavorite ?? throw new ArgumentNullException(nameof(setFavorite));
+        RefreshFavorites();
+    }
+
+    public void RefreshFavorites()
+    {
+        foreach (LairSetup setup in _setups.Values) Stamp(setup);
+        SetupsChanged?.Invoke();
+    }
+
+    public void SetFavorite(string name, bool favorite)
+    {
+        if (_setFavorite is null) return;
+        _setFavorite(name, favorite);
+        RefreshFavorites();
+    }
+
+    private void Stamp(LairSetup setup)
+    {
+        if (_isFavorite is { } isFavorite) setup.Favorite = isFavorite(setup.Name);
+    }
+
     public LairSetup? Get(string name) =>
         _setups.TryGetValue(name, out LairSetup? setup) ? setup : null;
 
@@ -96,6 +126,7 @@ public sealed class LairManager
                 // per user direction.
                 if (setup is null || string.IsNullOrWhiteSpace(setup.Name)) { failed++; continue; }
                 setup.Folder = NavFolders.RelativeFolder(folder, path);
+                Stamp(setup);
                 _setups[setup.Name] = setup;
                 loaded++;
             }
@@ -131,6 +162,7 @@ public sealed class LairManager
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, SafeFileName(setup.Name));
         JsonStore.Save(path, setup);
+        Stamp(setup);
         _setups[setup.Name] = setup;
         SetupsChanged?.Invoke();
     }
@@ -155,6 +187,7 @@ public sealed class LairManager
         if (!_setups.Remove(name)) return false;
 
         DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name);
+        _setFavorite?.Invoke(name, false);
         SetupsChanged?.Invoke();
         return true;
     }

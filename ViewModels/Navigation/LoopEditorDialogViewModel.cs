@@ -401,7 +401,6 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
 
         _original.Name                  = newName;
         _original.Notes                 = Notes ?? string.Empty;
-        _original.Favorite              = Favorite;
         _original.OnlyAttackInLairRooms = OnlyAttackInLairRooms;
         _original.LairEntryDebuff = LairEntryDebuffModes.From(WaitToDebuffBeforeLairs, LairDebuffWaitChoice);
         _original.Waypoints             = waypoints;
@@ -411,6 +410,8 @@ public sealed partial class LoopEditorDialogViewModel : ObservableObject, IDialo
         // brand-new loop — there's nothing on disk yet to delete.)
         if (renamed && !_isNew) _loops.Delete(oldName);
         _loops.Save(_original);
+        // The tick box is this character's choice, kept apart from the loop file.
+        _loops.SetFavorite(_original.Name, Favorite);
         SaveError = string.Empty;
 
         // If we just edited the live running loop, reconcile the runner with

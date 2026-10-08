@@ -44,10 +44,19 @@ public sealed class Loop
     // Free-form user notes. Empty by default.
     public string Notes { get; set; } = string.Empty;
 
-    // When true, this loop appears in the terminal's right-click Favorites
-    // menu (green) — clicking it starts the loop. Toggled by the "Set as
-    // favorite" checkbox in the loop editor.
+    // Whether the loaded character has this loop among its favourites: it then
+    // appears in the right-click Favorites menus (green), where clicking it starts
+    // the loop. The character's choice, kept on its profile (LoopFavoritesStore) and
+    // stamped onto the loop by LoopManager; the loop file, shared by everyone on the
+    // game data, doesn't carry it.
+    [JsonIgnore]
     public bool Favorite { get; set; }
+
+    // The flag the loop file carried while favourites were shared by everyone on
+    // the game data. A character from before the move reads it once, as its first
+    // list; it is written back as found so each of them finds it.
+    [JsonPropertyName("Favorite")]
+    public bool SharedFavorite { get; set; }
 
     // Loop-wide combat setting. When true, the loop only engages hostiles in
     // game-data lair rooms (Room.HasLair) — every other room behaves as if
