@@ -41,6 +41,41 @@ public sealed class LoopManager
     // Fires after any mutation to Loops (load, save, delete).
     public event Action? LoopsChanged;
 
+    // Which loops the loaded character has favourited is the profile's to keep, not
+    // the loop file's. The store that keeps it plugs in here: the lookup stamps
+    // Loop.Favorite on every loop this catalogue hands out, and the setter takes a
+    // change back.
+    private Func<string, bool>? _isFavorite;
+    private Action<string, bool>? _setFavorite;
+
+    public void AttachFavorites(Func<string, bool> isFavorite, Action<string, bool> setFavorite)
+    {
+        _isFavorite = isFavorite ?? throw new ArgumentNullException(nameof(isFavorite));
+        _setFavorite = setFavorite ?? throw new ArgumentNullException(nameof(setFavorite));
+        RefreshFavorites();
+    }
+
+    // Re-read every loop's favourite flag (another character loaded, or the list
+    // changed) and tell the views.
+    public void RefreshFavorites()
+    {
+        foreach (Loop loop in _loops.Values) Stamp(loop);
+        LoopsChanged?.Invoke();
+    }
+
+    // Add the loop named name to the loaded character's favourites, or take it out.
+    public void SetFavorite(string name, bool favorite)
+    {
+        if (_setFavorite is null) return;
+        _setFavorite(name, favorite);
+        RefreshFavorites();
+    }
+
+    private void Stamp(Loop loop)
+    {
+        if (_isFavorite is { } isFavorite) loop.Favorite = isFavorite(loop.Name);
+    }
+
     public LoopManager(BfsMapper bfs, RoomGraphManager graph, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(bfs);
@@ -96,6 +131,7 @@ public sealed class LoopManager
                 if (loop is null || string.IsNullOrWhiteSpace(loop.Name)) { failed++; continue; }
                 if (UpgradeIfNeeded(loop)) upgraded++;
                 loop.Folder = NavFolders.RelativeFolder(folder, path);
+                Stamp(loop);
                 _loops[loop.Name] = loop;
                 loaded++;
             }
@@ -173,6 +209,9 @@ public sealed class LoopManager
         Directory.CreateDirectory(dir);
         string path = Path.Combine(dir, SafeFileName(loop.Name));
         JsonStore.Save(path, loop);
+        // A save may hand in a fresh object (a running loop's snapshot); it is
+        // still the same favourite it was.
+        Stamp(loop);
         _loops[loop.Name] = loop;
         LoopsChanged?.Invoke();
     }
@@ -200,6 +239,7 @@ public sealed class LoopManager
         if (root.Length > 0 && IsUnder(path, root))
         {
             loop.Folder = NavFolders.RelativeFolder(root, path);
+            Stamp(loop);
             _loops[loop.Name] = loop;
             _log?.Info("Loops", $"Saved loop '{loop.Name}' to {path}.");
             LoopsChanged?.Invoke();
@@ -240,6 +280,8 @@ public sealed class LoopManager
         if (!_loops.Remove(name)) return false;
 
         DeleteFileForName(AppPaths.GameDataSetLoopsFolder(_setName), name);
+        // A deleted loop's name is free for another; that one isn't a favourite.
+        _setFavorite?.Invoke(name, false);
         LoopsChanged?.Invoke();
         return true;
     }

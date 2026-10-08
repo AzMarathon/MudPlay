@@ -659,6 +659,10 @@ public sealed class ProfileService
         // favourites and triggers, and it would take the shared lists as its own.
         ProfileMigrations.Apply(fresh);
         fresh.PredatesOwnLists = false;
+        // A new character's loop and auto-lair favourites are its own from the
+        // start: with these left unset it would take the shared files' flags.
+        fresh.FavoriteLoops ??= new List<string>();
+        fresh.FavoriteLairSetups ??= new List<string>();
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), fresh);
         Log?.Info(LogCategory, $"Created profile '{profileName}' on '{bbsName}'.");

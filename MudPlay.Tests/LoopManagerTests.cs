@@ -146,19 +146,24 @@ public sealed class LoopManagerTests : IDisposable
     }
 
     [Fact]
-    public void Save_RoundTripsFavoriteFlag()
+    public void Save_KeepsTheFilesOwnFavoriteFlag_ButNotTheCharacters()
     {
-        // The "Set as favorite" flag (drives the terminal Favorites menu) must
-        // survive a save + reload.
+        // The favourite is the character's now (LoopFavoritesStore), so it isn't
+        // written to the shared file. The flag older files carried round-trips as
+        // it was, for a character that hasn't taken its copy yet.
         LoopManager m1 = NewManager();
         m1.LoadAll(_setName);
-        m1.Save(new Loop("Fav loop", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }) { Favorite = true });
+        m1.Save(new Loop("Fav loop", new[] { new RoomKey(1, 1), new RoomKey(1, 2) })
+        {
+            Favorite = true, SharedFavorite = true,
+        });
+        m1.Save(new Loop("Mine only", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }) { Favorite = true });
 
         LoopManager m2 = NewManager();
         m2.LoadAll(_setName);
-        Loop? round = m2.Get("Fav loop");
-        Assert.NotNull(round);
-        Assert.True(round!.Favorite);
+        Assert.True(m2.Get("Fav loop")!.SharedFavorite);
+        Assert.False(m2.Get("Fav loop")!.Favorite);
+        Assert.False(m2.Get("Mine only")!.SharedFavorite);
     }
 
     [Fact]

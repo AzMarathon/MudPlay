@@ -23,10 +23,18 @@ public sealed class LairSetup
     public string Name { get; set; } = string.Empty;
     public string? Notes { get; set; }
 
-    // When true, this setup appears in the terminal's right-click Favorites
-    // menu (amber) — clicking it loads the markers and starts auto-lairing.
-    // Toggled by the "Set as favorite" checkbox in the Auto-Lair editor.
+    // Whether the loaded character has this setup among its favourites: it then
+    // appears in the right-click Favorites menus (amber), where clicking it loads
+    // the markers and starts auto-lairing. The character's choice, kept on its
+    // profile (LoopFavoritesStore) and stamped on by LairManager; the setup file
+    // doesn't carry it.
+    [JsonIgnore]
     public bool Favorite { get; set; }
+
+    // The flag the file carried while favourites were shared by everyone on the
+    // game data; a character from before the move reads it once as its first list.
+    [JsonPropertyName("Favorite")]
+    public bool SharedFavorite { get; set; }
 
     public List<LairMarker> Markers { get; set; } = new();
 

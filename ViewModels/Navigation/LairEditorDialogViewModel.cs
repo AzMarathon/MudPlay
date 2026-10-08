@@ -305,7 +305,11 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
                 skip: false));
         }
 
-        LairSetup saved = new(trimmed, markers) { Notes = Notes ?? string.Empty, Favorite = Favorite };
+        LairSetup saved = new(trimmed, markers)
+        {
+            Notes = Notes ?? string.Empty,
+            SharedFavorite = _original.SharedFavorite,
+        };
 
         // Renaming an existing setup needs the old file deleted —
         // LairManager keys files by name so a rename leaves the old
@@ -314,6 +318,8 @@ public sealed partial class LairEditorDialogViewModel : ObservableObject, IDialo
             _setups.Delete(_original.Name);
 
         _setups.Save(saved);
+        // The tick box is this character's choice, kept apart from the setup file.
+        _setups.SetFavorite(saved.Name, Favorite);
         CloseRequested?.Invoke(saved);
     }
 

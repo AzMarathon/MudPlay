@@ -61,6 +61,14 @@ public sealed class CharacterProfile
     public List<FavoriteRoom>? Favorites { get; set; }
     public List<string>? FavoriteFolders { get; set; }
 
+    // The saved loops and auto-lair setups this character has favourited, by name.
+    // The loops and setups themselves stay with the game data, shared; which of
+    // them are favourites is each character's own, kept by LoopFavoritesStore.
+    // null = not taken yet: a character from before the flags moved here takes the
+    // ones its game data's files carried, the first time it loads with them.
+    public List<string>? FavoriteLoops { get; set; }
+    public List<string>? FavoriteLairSetups { get; set; }
+
     // User-defined outgoing-text aliases. Per-character; loaded into AliasEngine
     // on profile load. Variables substitution inside an alias's expansion reads
     // from the shared session-scoped variable store the trigger engine maintains.

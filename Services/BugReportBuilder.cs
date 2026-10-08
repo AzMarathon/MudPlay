@@ -2026,8 +2026,17 @@ public static class BugReportBuilder
             sb.Append('\n');
         }
 
+        // The loops and auto-lair setups are the game data's; which are favourites
+        // is this character's (LoopFavoritesStore).
+        sb.Append('\n');
+        Kv(sb, "Favourite loops (this character)", NamesOrNone(svc.LoopFavorites.Loops));
+        Kv(sb, "Favourite auto-lair setups (this character)", NamesOrNone(svc.LoopFavorites.LairSetups));
+
         return sb.ToString();
     }
+
+    private static string NamesOrNone(IReadOnlyCollection<string> names) =>
+        names.Count == 0 ? "(none)" : string.Join(", ", names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
 
     private static string BuildAutoMode(AppServices svc)
     {
