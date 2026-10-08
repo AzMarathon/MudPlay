@@ -597,7 +597,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachTarget = target;
         State = LoopState.Approaching;
         Raise(new LoopEvent(LoopEventKind.Resumed, $"walking back to {target} after a flee"));
-        if (_walker.WalkTo(target, avoidTeleports: _userStartedRun && _userApproachWalksIt,
+        if (_walker.WalkTo(target, avoidTeleports: _userApproach && _userApproachWalksIt,
                 preferTeleportFree: ApproachTeleportPreference)) return true;
         _fleeReturnTarget = null;
         _approachTarget = null;
@@ -837,31 +837,35 @@ public sealed class LoopRunner : IRecoverableEngine
     // false when the loop is empty.
     //
     // userStarted: the user pressed Start on this loop, against an event, a remote
-    // command or a sweep starting it. The walk to the loop is then the user's own and
-    // keeps the shortest route; started any other way it is an automatic walk and
-    // uses only the teleports allowed to those (AutoWalkManager.SetAutomaticWalkTeleports).
+    // command or a sweep starting it. The first walk to the loop is then the user's
+    // own, asked about on the route cards like a walk-to. Started any other way it
+    // is an automatic walk and uses only the teleports allowed to those
+    // (AutoWalkManager.SetAutomaticWalkTeleports).
     public bool Start(Loop loop, bool userStarted = false)
     {
-        _userStartedRun = userStarted;
+        _userApproach = userStarted;
+        _userApproachAnswered = false;
         _userApproachWalksIt = false;
         _approachQuestion++;
         return StartInternal(loop, isRecovery: false, gateFallback: true);
     }
 
-    // Whether the run in progress was started by the user (Start). Kept for the whole
-    // run, so the walk back to the loop after a detour or a flee is planned the way
-    // the walk to it was.
-    private bool _userStartedRun;
+    // The walk to the loop is the user's: set by a user Start and dropped the moment
+    // the loop is reached (BeginCircle). The user asked to go to the loop, not for
+    // what the run does afterwards, so a walk back to it after a detour or a flee is
+    // an automatic walk like any other (user, 2026-10-07).
+    private bool _userApproach;
 
-    // How the walk to a loop the user started treats a teleport on its shortest
-    // route: asked on the route cards as the walk begins (SetUserApproachAsker) and
-    // kept for the run. True is "Walk it".
+    // How that walk treats a teleport on its shortest route: asked on the route cards
+    // as it begins (SetUserApproachAsker), and kept until the loop is reached so a
+    // re-plan of the same walk isn't asked twice. True is "Walk it".
     private bool _userApproachWalksIt;
+    private bool _userApproachAnswered;
 
-    // The teleport preference the walks to the loop state: none for an automatic run
-    // (the walker then applies the allowed list); for the user's own, the pick made
-    // on the route cards, the shortest route when there was nothing to ask.
-    private bool? ApproachTeleportPreference => _userStartedRun ? _userApproachWalksIt : null;
+    // The teleport preference a walk to the loop states: none for an automatic one
+    // (the walker then applies the allowed list); for the user's, the pick made on
+    // the route cards, the shortest route when there was nothing to ask.
+    private bool? ApproachTeleportPreference => _userApproach ? _userApproachWalksIt : null;
 
     // Asks the user how to get to the loop, for a run the user started: called with
     // where the character is and the loop room it is walking to, it answers true
@@ -879,12 +883,12 @@ public sealed class LoopRunner : IRecoverableEngine
     // (stopped, restarted) is dropped.
     private int _approachQuestion;
 
-    // Start the walk to the loop. A run the user started asks first, the way a
-    // walk-to does when its shortest route teleports; the run sits in Approaching
-    // with nothing sent until the answer comes.
+    // Start the walk to the loop. The user's own asks first, the way a walk-to does
+    // when its shortest route teleports; the run sits in Approaching with nothing
+    // sent until the answer comes.
     private void BeginApproachWalk(RoomKey from, RoomKey entry, bool throughGates)
     {
-        if (!_userStartedRun || _userApproachAsker is null)
+        if (!_userApproach || _userApproachAnswered || _userApproachAsker is null)
         {
             WalkApproach(entry, throughGates);
             return;
@@ -902,13 +906,14 @@ public sealed class LoopRunner : IRecoverableEngine
                 return;
             }
             _userApproachWalksIt = pick;
+            _userApproachAnswered = true;
             WalkApproach(entry, throughGates);
         });
     }
 
     private void WalkApproach(RoomKey entry, bool throughGates) =>
         _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates,
-            avoidTeleports: _userStartedRun && _userApproachWalksIt,
+            avoidTeleports: _userApproach && _userApproachWalksIt,
             preferTeleportFree: ApproachTeleportPreference);
 
     // Resume a loop after an auto-deposit / bank / trainer detour that Stop()ed it
@@ -1314,6 +1319,8 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         if (_loop is null) return;
         _returningFromDetour = false;
+        // The loop is reached: from here on the run's walks are its own.
+        _userApproach = false;
 
         State = LoopState.Running;
         _recovery?.Attach(this);

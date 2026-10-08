@@ -2595,6 +2595,34 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Empty(h.Sent);
     }
 
+    // The user asked to go to the loop, not for what the run does once there: after
+    // the loop is reached, the walk back to it from a detour is an automatic walk. It
+    // is not asked about, and uses only the teleports allowed to automatic walks.
+    [Fact]
+    public void UserStartedLoop_OnceReached_WalksBackAsAnAutomaticWalk()
+    {
+        Harness h = ArmTeleport(NewHarness(TeleportVsWalkGraphJson));
+        h.Walker.SetAutomaticWalkTeleports(() => Allow());
+        LoopRunner runner = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs,
+            walker: h.Walker, postToUi: a => a());
+        runner.SetWireSender(b => h.Sent.Add(b));
+        int asked = 0;
+        runner.SetUserApproachAsker((_, _, _) => asked++);
+        Loop loop = new("arch", new[] { new RoomKey(7, 131), new RoomKey(1, 12) });
+        h.Tracker.SetLocated(new RoomKey(1, 12));           // standing on the loop
+        Assert.True(runner.Start(loop, userStarted: true));
+        Assert.Equal(LoopState.Running, runner.State);
+
+        // A detour took the character off to 1/10; the loop resumes from there.
+        h.Tracker.SetLocated(new RoomKey(1, 10));
+        h.Sent.Clear();
+        Assert.True(runner.ResumeAfterDetour(loop));
+
+        Assert.Equal(0, asked);
+        Assert.Equal(LoopState.Approaching, runner.State);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[0]));
+    }
+
     // A loop nobody at the keyboard started is never asked: it is an automatic walk.
     [Fact]
     public void AutomaticLoopStart_IsNotAsked()
