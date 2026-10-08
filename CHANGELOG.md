@@ -1,5 +1,9 @@
 # Version history
 
+## 3.151.5
+
+- The line others see when a Gypsy shuffles their deck (`<name> shuffles their deck of cards.`) is recognized on Paradigm, instead of being listed as an unrecognized line
+
 ## 3.151.4
 
 - Player Workshop tabs regrouped: **Auto-Train** holds CP Allocation and Level Projection, **My Equipment** holds Equipment Manager and Item Finder, **Record Keeping** holds Bosses, Chest Offload, Roomba and Realm Rankings

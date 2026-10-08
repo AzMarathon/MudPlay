@@ -26330,7 +26330,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "You shuffle your deck of cards.",
     "TargetMessage": "{null}",
-    "WitnessMessage": "",
+    "WitnessMessage": "{source} shuffles their deck of cards.",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
