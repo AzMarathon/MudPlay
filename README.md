@@ -1,8 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.1**
-> - The Walk it / Teleport choice is no longer skipped when an item you lack would shorten the teleport route further
+> **Version 3.149.5**
+> - An item another player hands you (`<Player> gives you <item>.`), one or several at once, is added to your carried items straight away, so route gates and other "do you carry it" checks no longer wait for the next `i`
+> - Items you hand over in that wording (`You give 2 darkwood ring to <player>.`) leave your carried items straight away
+> - Coins given, shared or received (`<Player> gave you 30 gold`, `<Player> gives you 30 platinum pieces`) reach or leave your purse straight away, on every realm
+> - A key you give, are handed, pick up, drop, hide, buy or sell joins or leaves your key list straight away
+> - The receiving lines are no longer flagged as unrecognized
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

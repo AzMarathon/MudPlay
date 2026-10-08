@@ -51,6 +51,21 @@ public sealed partial class InventoryManager : IDisposable
     // — the handler falls back to the generic slot.
     private readonly Func<string, string?>? _slotResolver;
 
+    // True when a text is an item's record name exactly as the game data spells
+    // it. Gates the "<Player> gives you <item>." hand-over, whose shape NPC give
+    // flavour text shares. Null in tests / when no game data is loaded: that
+    // hand-over form then goes unread and the next 'i' picks the item up.
+    private readonly Func<string, bool>? _isItemRecordName;
+
+    // True when a named item is a key. The game lists keys on a ring of their own
+    // in the 'i' dump, apart from the pack, so a key handed over lands there. Null
+    // in tests / when no game data is loaded: only a key already on the ring is
+    // then known to be one.
+    private readonly Func<string, bool>? _isKey;
+
+    // The Items table's ItemType for a key.
+    public const int KeyItemType = 7;
+
     private LineExtractor? _lines;
     private bool _disposed;
 
@@ -114,11 +129,15 @@ public sealed partial class InventoryManager : IDisposable
     public InventoryManager(
         LogService? log = null,
         Func<string, int?>? itemWeightResolver = null,
-        Func<string, string?>? slotResolver = null)
+        Func<string, string?>? slotResolver = null,
+        Func<string, bool>? isItemRecordName = null,
+        Func<string, bool>? isKey = null)
     {
+        _isKey = isKey;
         _log = log;
         _itemWeight = itemWeightResolver;
         _slotResolver = slotResolver;
+        _isItemRecordName = isItemRecordName;
     }
 
     // Fired (outside the lock) whenever the snapshot changes.
@@ -169,6 +188,17 @@ public sealed partial class InventoryManager : IDisposable
     // hand-off isn't raised. Lets death recovery treat gear a party member recovered
     // for us and gave back as our deathpile coming home.
     public event Action<string, string>? ItemReceived;
+
+    // True for another character's hand-over line this parser reads, item or
+    // coins. It reads the wire directly and registers no router pattern, so the
+    // unrecognized-line watcher asks here rather than restate the shapes.
+    public bool IsReceivedHandOverLine(string line)
+        => ReceivedItemRegex().IsMatch(line)
+           || TryMatchHandedItem(line, out _, out _, out _)
+           || (ReceivedCoinsRegex().Match(line) is { Success: true } coins
+               && HandOverCoinNoun(coins.Groups[2].Value) is not null)
+           || (HandedCoinsRegex().Match(line) is { Success: true } handed
+               && CoinNounSuffixRegex().IsMatch(handed.Groups[2].Value));
 
     // True after at least one successful full 'i' parse.
     public bool IsLoaded
@@ -511,7 +541,7 @@ public sealed partial class InventoryManager : IDisposable
             if (hiddenItem.Length > 0 && !CoinNounSuffixRegex().IsMatch(hiddenItem))
             {
                 (int count, string name) = CountedCommand.SplitLeadingCount(hiddenItem);
-                RemoveCarried(name, count);
+                RemoveHeld(name, count);
                 AdjustItemWeight(name, -count);
                 _log?.Debug(LogCategory, $"hid item={name} count={count} — carried/weight decremented");
                 ItemHidden?.Invoke(hiddenItem);
@@ -596,7 +626,7 @@ public sealed partial class InventoryManager : IDisposable
             // and "Equip all" sees an empty pack (the reported bug). Treat the
             // first purchase as the baseline.
             EnsureLoadedBaseline();
-            AddCarried(boughtName, boughtCount);
+            AddHeld(boughtName, boughtCount);
             AdjustItemWeight(boughtName, +boughtCount);
 
             string priceTail = bought.Groups[2].Value;
@@ -630,7 +660,7 @@ public sealed partial class InventoryManager : IDisposable
             // counted line ("You sold 5 orc-head for …"); strip the count.
             (int soldCount, string soldName) =
                 CountedCommand.SplitLeadingCount(sold.Groups[1].Value.TrimEnd());
-            RemoveCarried(soldName, soldCount);
+            RemoveHeld(soldName, soldCount);
             AdjustItemWeight(soldName, -soldCount);
             long price = ParsePriceToCopper(sold.Groups[2].Value);
             ItemSold?.Invoke(soldName, soldCount, price);
@@ -667,6 +697,54 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
+        // Receive, second wording: "Bob gives you magical quartz rod." / "Bob gives
+        // you 2 black star key." — the item as its record names it, under a count
+        // when there is more than one.
+        if (TryMatchHandedItem(line, out string handedItem, out int handedCount, out string handedBy))
+        {
+            _log?.Debug(LogCategory, $"handed {handedCount} '{handedItem}' by {handedBy}");
+            AddHeld(handedItem, handedCount);
+            AdjustItemWeight(handedItem, +handedCount);
+            for (int i = 0; i < handedCount; i++)
+                ItemReceived?.Invoke(handedItem, handedBy);
+            return;
+        }
+
+        // Give away, same wording: "You give 2 darkwood ring to Bob."
+        Match handedAway = HandedAwayRegex().Match(line);
+        if (handedAway.Success
+            && TryReadHandedName(handedAway.Groups[1].Value, out string awayItem, out int awayCount))
+        {
+            RemoveHeld(awayItem, awayCount);
+            AdjustItemWeight(awayItem, -awayCount);
+            return;
+        }
+
+        // Coins handed over. The engine words these apart from an item, with no
+        // "just" and no full stop: "You gave Bob 30 gold" / "Bob gave you 30 gold"
+        // for `give`, and the full coin noun ("30 gold crowns") for `share`.
+        Match coinsAway = GaveCoinsAwayRegex().Match(line);
+        if (coinsAway.Success
+            && TryApplyCoinHandOver(coinsAway.Groups[1].Value, coinsAway.Groups[2].Value, -1))
+            return;
+
+        Match coinsIn = ReceivedCoinsRegex().Match(line);
+        if (coinsIn.Success
+            && TryApplyCoinHandOver(coinsIn.Groups[1].Value, coinsIn.Groups[2].Value, +1))
+            return;
+
+        // The same in the second wording, which always prints the coin's full noun:
+        // "Bob gives you 30 platinum pieces" / "You give 2 runic coins to Bob".
+        Match handedCoins = HandedCoinsRegex().Match(line);
+        if (handedCoins.Success && CoinNounSuffixRegex().IsMatch(handedCoins.Groups[2].Value)
+            && TryApplyCoinHandOver(handedCoins.Groups[1].Value, handedCoins.Groups[2].Value, +1))
+            return;
+
+        Match handedCoinsAway = HandedCoinsAwayRegex().Match(line);
+        if (handedCoinsAway.Success && CoinNounSuffixRegex().IsMatch(handedCoinsAway.Groups[2].Value)
+            && TryApplyCoinHandOver(handedCoinsAway.Groups[1].Value, handedCoinsAway.Groups[2].Value, -1))
+            return;
+
         // Failed give: "You don't have a torch to give." — no state change (we
         // never held it), logged so a give-driven flow can see the attempt bounced.
         if (GiveFailedRegex().IsMatch(line))
@@ -685,7 +763,7 @@ public sealed partial class InventoryManager : IDisposable
             // Paradigm batches a get into one counted line ("You took 5 orc-head.")
             // with the singular name; strip the count and apply it N times.
             (int count, string name) = CountedCommand.SplitLeadingCount(gotItem.Groups[1].Value.TrimEnd());
-            AddCarried(name, count);
+            AddHeld(name, count);
             AdjustItemWeight(name, +count);
             ItemTaken?.Invoke(name, count);
             return;
@@ -698,7 +776,7 @@ public sealed partial class InventoryManager : IDisposable
         if (droppedItem.Success)
         {
             (int count, string name) = CountedCommand.SplitLeadingCount(droppedItem.Groups[1].Value.TrimEnd());
-            RemoveCarried(name, count);
+            RemoveHeld(name, count);
             AdjustItemWeight(name, -count);
             ItemDropped?.Invoke(name, count);
         }
@@ -981,15 +1059,128 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
-        if (sign > 0) AddCarried(name);
-        else RemoveCarried(name);
+        if (sign > 0) AddHeld(name, 1);
+        else RemoveHeld(name, 1);
         AdjustItemWeight(name, sign);
+    }
+
+    // An item that comes to us (handed over, picked up, bought): a key goes on the
+    // key ring, anything else in the pack.
+    private void AddHeld(string name, int count)
+    {
+        if (IsKey(name)) PatchKeyRing(name, +count);
+        else AddCarried(name, count);
+    }
+
+    // An item that leaves us (handed over, dropped, hidden, sold). A key nothing
+    // told us was one is in the pack, so the pack gives up its copies first and
+    // the ring the rest. Without the ring a key that had left stayed "held", and a
+    // door it opens stayed passable to the route planner.
+    private void RemoveHeld(string name, int count)
+    {
+        int fromPack;
+        lock (_lock)
+        {
+            int idx = FindCarriedIndex(_carried, name);
+            int inPack = idx < 0 ? 0 : CountedCommand.SplitLeadingCount(_carried[idx]).Count;
+            fromPack = Math.Min(count, inPack);
+        }
+        RemoveCarried(name, fromPack);
+        PatchKeyRing(name, -(count - fromPack));
+    }
+
+    private bool IsKey(string name)
+    {
+        if (_isKey?.Invoke(name) == true) return true;
+        lock (_lock) return FindCarriedIndex(_keys, name) >= 0;
+    }
+
+    // Add (or, negative, take) copies of a key on the ring, stacked the way the 'i'
+    // dump lists them. Gated on a loaded baseline, as PatchCarried is.
+    private void PatchKeyRing(string name, int delta)
+    {
+        if (delta == 0) return;
+        bool changed = false;
+        lock (_lock)
+        {
+            if (_loaded)
+            {
+                var ring = new List<string>(_keys);
+                int idx = FindCarriedIndex(ring, name);
+                int have = idx < 0 ? 0 : CountedCommand.SplitLeadingCount(ring[idx]).Count;
+                int now = Math.Max(0, have + delta);
+                if (now != have)
+                {
+                    if (now == 0) ring.RemoveAt(idx);
+                    else if (idx < 0) ring.Add(FormatStack(name, now));
+                    else ring[idx] = FormatStack(name, now);
+                    _keys = ring;
+                    changed = true;
+                }
+            }
+        }
+        if (changed) Changed?.Invoke();
+    }
+
+    // "<Player> gives you <item>." is a player's hand-over only when the item is a
+    // record name word for word. An NPC's keyword give prints the same shape as
+    // flavour text ("Dhelvanen gives you a green potion."), which names the item
+    // its own way and is no proof the give landed, so it must not add a row.
+    private bool TryMatchHandedItem(string line, out string item, out int count, out string giver)
+    {
+        item = giver = string.Empty;
+        count = 0;
+        Match m = HandedItemRegex().Match(line);
+        if (!m.Success || !TryReadHandedName(m.Groups[2].Value, out item, out count)) return false;
+        giver = m.Groups[1].Value;
+        return true;
+    }
+
+    // The item a hand-over in the second wording names: a record name, alone or
+    // under a leading count ("2 black star key"). A record name that itself opens
+    // with a number is taken whole.
+    private bool TryReadHandedName(string text, out string name, out int count)
+    {
+        name = string.Empty;
+        count = 0;
+        if (_isItemRecordName is null) return false;
+        (count, name) = CountedCommand.SplitLeadingCount(text);
+        if (_isItemRecordName(name)) return true;
+        if (!_isItemRecordName(text)) return false;
+        (count, name) = (1, text);
+        return true;
+    }
+
+    private bool TryApplyCoinHandOver(string countText, string coin, int sign)
+    {
+        if (HandOverCoinNoun(coin) is not { } noun || !int.TryParse(countText, out int count))
+            return false;
+        lock (_lock) AdjustCurrency(noun, sign * count);
+        Changed?.Invoke();
+        return true;
+    }
+
+    // The coin a coin hand-over names, as the noun AdjustCurrency keys on. `share`
+    // prints the full noun; `give` prints the bare metal, and for the fifth coin a
+    // name each board sets itself, so any other single word is that coin.
+    private static string? HandOverCoinNoun(string coin)
+    {
+        if (CoinNounSuffixRegex().IsMatch(coin)) return coin;
+        if (coin.Contains(' ')) return null;
+        return coin.ToLowerInvariant() switch
+        {
+            "copper" => "copper farthing",
+            "silver" => "silver noble",
+            "gold" => "gold crown",
+            "platinum" => "platinum piece",
+            _ => "runic coin",
+        };
     }
 
     // Index of the carried entry whose SINGULAR name equals `name`, ignoring any
     // leading stack count ("43 black diamond" matches "black diamond"), or -1. So a
     // get/drop of a single item finds and updates the stacked row instead of missing it.
-    private static int FindCarriedIndex(List<string> list, string name)
+    private static int FindCarriedIndex(IReadOnlyList<string> list, string name)
     {
         for (int i = 0; i < list.Count; i++)
             if (string.Equals(CountedCommand.SplitLeadingCount(list[i]).Name, name,
@@ -1376,6 +1567,28 @@ public sealed partial class InventoryManager : IDisposable
 
     [GeneratedRegex(@"^(.+?) just gave you (.+)\.$")]
     private static partial Regex ReceivedItemRegex();
+
+    // The second hand-over wording, Paradigm's: first name, the item's record name
+    // (under a count above one), a full stop. TryReadHandedName checks the item.
+    [GeneratedRegex(@"^(\S+) gives you (.+)\.$")]
+    private static partial Regex HandedItemRegex();
+
+    [GeneratedRegex(@"^You give (.+) to \S+\.$")]
+    private static partial Regex HandedAwayRegex();
+
+    // Coins in that wording carry no full stop, which keeps them apart from items.
+    [GeneratedRegex(@"^\S+ gives you (\d+) ([^.]+)$")]
+    private static partial Regex HandedCoinsRegex();
+
+    [GeneratedRegex(@"^You give (\d+) ([^.]+) to [^\s.]+$")]
+    private static partial Regex HandedCoinsAwayRegex();
+
+    // A coin hand-over: count, then the coin. Giver and recipient are one word.
+    [GeneratedRegex(@"^You gave \S+ (\d+) (.+?)\.?$")]
+    private static partial Regex GaveCoinsAwayRegex();
+
+    [GeneratedRegex(@"^\S+ gave you (\d+) (.+?)\.?$")]
+    private static partial Regex ReceivedCoinsRegex();
 
     [GeneratedRegex(@"^You don't have (.+) to give\.$")]
     private static partial Regex GiveFailedRegex();
