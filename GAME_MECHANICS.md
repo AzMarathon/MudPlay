@@ -5089,7 +5089,7 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 - **Paradigm lets a single action name a count**: `buy <N> <item>`, `sell <N> <item>`, `get <N> <item>`, `drop <N> <item>`, `give <N> <item>`, `hide <N> <item>`.
 - **`<item>` can be anything in the Items table** of a game-data import: keys (`drop 3 black star key`), equipment, weapons, usable items and loot.
 - **The confirmation echoes the count with the SINGULAR item name**, e.g. `You hid 35 orc-head.` (not `orc-heads`).
-- **The other verbs' bare-count confirmations are not all captured yet.** They have the same shape (`You took/dropped <N> <item>.`, buy/sell), but not every one has been captured from a live session.
+- **The other verbs' bare-count confirmations are not all captured yet.** They have the same shape (`You took/dropped <N> <item>.`, buy/sell), but not every one has been captured from a live session. `give` is captured: see *Giving items and coins to another player (`give`, `share`)*.
 - **[CONFIRMED] Stock: one item per action — `sell dagger` ×10 to sell ten; no quantity argument.** This holds for every verb and every kind of item: `buy <item>` and `sell <item>` each transact exactly one unit.
 - **Gets follow the same split** (user, 2026-09-26): the ground-stack entry's "there is no bulk-get verb, so each `get <name>` grabs a single unit" (2026-07-20) holds on Stock; Paradigm accepts `get <N> <item>` — the capacity-refusal screenshot (see *`get` failure responses*) shows `get 20 torch`.
 
@@ -5448,6 +5448,59 @@ There is no room to drop amethyst pendant here.
 - AutoDiscard exists to clean up after `open chest`: it drops the unwanted dumped items down to the keep band.
 - The loot readout shows items only, because chest coin amounts aren't in the data.
 - `ChestOpenTracker` diffs a fresh `i` taken just before each `open` (window button or typed) against one taken after it (`ChestLootLedger`), so items already carried or picked up between chests are never counted as chest loot. The list is saved on the profile (`CharacterProfile.ChestLoot`) and stays until sold, dropped or removed, and, when the character has the window's **Say loot to the room** box ticked (`CharacterProfile.SayChestLootToRoom`, off by default), each open's contents are said to the room with the undirected say `.` (*Talk & chat channels → Directed say vs undirected say*).
+
+### Giving items and coins to another player (`give`, `share`)
+*Status: OBSERVED 2026-10-07 (reports `paradigm-20261007-164408`, `paradigm-20261007-182345`, `paradigm-20261007-182434`, `paradigm-20260926-102406`; Stock `wccmmud.dll` 1.11p `_cmd_give` @0x467744 and `_share_currency` @0x46d254) · Realm: differs — tagged per bullet*
+
+- **[CONFIRMED] The game uses different lines for a hand-over** (user, 2026-10-07; the user does not know what decides which). What is on record:
+  - an item, worded `<Player> just gave you <item>.` (Stock engine; also seen once on Paradigm);
+  - an item, worded `<Player> gives you <item>.` (Paradigm);
+  - coins, worded `<Player> gave you <N> <coin>` (Stock engine);
+  - coins, worded `<Player> gives you <N> <coin noun>` (Paradigm).
+- **[OBSERVED] Paradigm's `give`, both sides, items** (the user's own captures of two characters trading, reports `paradigm-20261007-182345` and `paradigm-20261007-182434`; receiving side first seen in report `paradigm-20261007-164408`: `<Player> gives you magical quartz rod.`, `<Player> gives you titanium fork.`):
+
+  | Typed by the giver | Giver sees | Receiver sees |
+  |---|---|---|
+  | `give mine pass to fuj` | `You give mine pass to Fujin.` | `Fujin gives you mine pass.` |
+  | `give 2 darkwood ring to fuj` | `You give 2 darkwood ring to Fujin.` | `Fujin gives you 2 darkwood ring.` |
+  | `give 2 black star to fuj` | `You give 2 black star key to Fujin.` | `Fujin gives you 2 black star key.` |
+  | `give 1 black star to fuj` | `You give black star key to Fujin.` | (not captured) |
+  | `give black star key to raij` (sent by the client, `/fuj @do give black star key to raij`) | (not captured) | `Fujin gives you black star key.` |
+
+  - **A count of 1 prints no number**: `give 1 <item>` and a `give` with no count print the same line. A count above 1 prints the number, then the item's name in the singular.
+  - The item is its record name as the Items table spells it, with no article, even when the giver typed part of it (`black star` → `black star key`). `magical quartz rod` is item 996, `titanium fork` item 983.
+  - Each player is named by first name only, in full even when typed in part (`fuj` → `Fujin`; a two-word name showed its first word).
+  - Item lines end in a full stop.
+  - The receiver's lines in the table come from the other character's gives in the same session, not from the giver's rows beside them; that character also gave `Fujin gives you loop of infinite shadow.` The receiver's line for a typed `give 1` was not captured; the last row is a give with no count, from a screenshot the user took on 2026-10-07.
+- **[OBSERVED] Paradigm's `give`, both sides, coins** (same two reports): `give 2 runic to fuj` → `You give 2 runic coins to Fujin`; `give 35 plat to fuj` → `You give 35 platinum pieces to Fujin`; the receiver sees `Fujin gives you 2 runic coins` and `Fujin gives you 30 platinum pieces`.
+  - The coin is printed as its full noun, whatever short form was typed.
+  - **Coin lines carry no full stop**, on either side (checked on the raw wire), where item lines do.
+  - **One coin still prints its count, with the noun in the singular**: `give 1 gold crown to fuj` → `You give 1 gold crown to Fujin`, and the receiver sees `Raijin gives you 1 gold crown` (two screenshots from the user, 2026-10-07; an earlier note said a single-coin give was not captured, superseded the same day). An item prints no number for a count of 1; a coin does.
+- **[OBSERVED] Paradigm has also printed `<Player> just gave you <item>.`** (report `paradigm-20260926-102406`, a party leader handing recovered gear back: `<Player> just gave you shimmering white robes.`, as quoted when the parser for it was written; the capture was not re-read on 2026-10-07).
+- **[NEEDS CONFIRMATION] Why Paradigm has shown both item wordings.** The user's idea (2026-10-07, "probably"): the counted item commands (see *Item batching: Paradigm counted commands vs Stock one-per-command*). The 2026-10-07 captures show the count is not what picks the wording: a `give` with no count, with a count of 1 and with a count of 2 all print `gives you` / `You give`. That leaves the reworked command having replaced the older line, which would make `just gave you` a line from before the change; nothing on record dates it. Question for the user: can Paradigm still print `just gave you`, and from what? (An earlier note asked whether one command prints both or two commands print one each; superseded 2026-10-07.)
+- **[OBSERVED] `gives you` is not a Stock engine line** (2026-10-07, `wccmmud.dll` 1.11p and its message table `wccmsg2`). The engine has no such string, and the table holds it only as NPC flavour naming one giver and one item (`Dhelvanen gives you a green potion.`). So the Stock engine cannot say why Paradigm prints two item wordings.
+- **[OBSERVED] Stock: the item lines are `You just gave %s to %s.` to the giver, `%s just gave you %s.` to the one given, and `%s just gave %s something.` to the room** (`wccmmud.dll` 1.11p strings, in that order; all three are printed by `_cmd_give`, which has no other item wording). Next to them: `You may not give that item away!`, `%s cannot accept your offer.`, `%s refuses your offer.`, `Why would you want to give to that?`, `You do not have %s left unequipped.`
+- **[OBSERVED] Stock: a coin give has its own lines, one pair per denomination**: `You gave %s %d copper` / `%s gave you %d copper` (and `silver`, `gold`, `platinum`, then `You gave %s %d %s` / `%s gave you %d %s`), with `%s just gave %s some coins.` to the room and `You do not have that much copper!` / `You do not have that many %s!` as the refusals.
+  - Each string ends at the denomination: there is no `just`, no coin noun and no full stop (the bytes after `copper` are a carriage return and the string's end; an earlier note said what follows the denomination was not recorded, superseded 2026-10-07).
+  - The fifth pair prints the fifth coin's name from a pointer the engine fills at start-up, so its text is whatever the board named that coin.
+  - The syntax line is `Syntax: GIVE {amount} {currency} TO {someone}`.
+  - The count printed is what the recipient kept. `_cmd_give` moves the whole amount, then hands coins back one at a time, up to 500, while a weight check on the recipient fails, and prints the remainder.
+- **[OBSERVED] Stock: `share` prints the same shape with the coin's full name**: `You gave %s %d %s` / `%s gave you %d %s`, the last `%s` from `_proper_currency_name` (the engine's name tables read `copper farthings`, `silver nobles`, `gold crowns`, `platinum pieces`, and the singulars `copper farthing` … `platinum piece`), and `%s just gave %s some coins.` to the room (`_share_currency`).
+- **[NEEDS CONFIRMATION]** the client also reads a coin hand-over worded like the Stock item line, `<Player> just gave you <N> <coin noun>.` and `You just gave <N> <coin noun> to <player>.`, which is none of the Stock strings and none of the Paradigm captures. Question for the user: does any realm print a coin give that way? (An earlier note asked how Paradigm words a coin give; answered by the 2026-10-07 captures.)
+- **An NPC's give is a different thing**: its line is textblock flavour and proves nothing (see *NPC keyword hand-over detection*). `Dhelvanen gives you a green potion.` and `The gnome commander gives you the heavy bloodstone orb.` (Stock message table) have the shape of the Paradigm player line, and differ from it in wording the item their own way rather than by its record name.
+- **Client policy** (user, 2026-10-07): both item wordings and the coin lines are read on every realm, whichever realm they were first seen on.
+- **Client policy** (user, 2026-10-07): in the Stock coin line, any single word that isn't `copper`, `silver`, `gold` or `platinum` is counted as the fifth coin, since a board names that coin itself.
+- **Client policy** (user, 2026-10-07): a key moves on the key ring on every line that moves an item: handed over either way, `You took`, `You dropped`, `You hid`, a buy and a sell.
+
+**Client use:**
+- `InventoryManager.ProcessIncremental` files a received item in the carried list, moves the weight estimate and raises `ItemReceived` (which `DeathRecoveryManager.OnItemReceived` uses for gear handed back) on either receiving wording. For `<Player> gives you <item>.` it takes a one-word giver and an item that is a record name word for word, alone or under a count (`TryMatchHandedItem`, `TryReadHandedName`, `ItemNameStore.IsRecordName`), so an NPC's flavour line files nothing; a counted line adds every copy. Report `paradigm-20261007-164408`: a gate item handed over 25 seconds earlier was still missing from the pack when the route picker asked for it.
+- The giver's line in that wording, `You give <item> to <player>.`, takes the copies out of the pack under the same record-name check.
+- It reads the Stock coin lines on both sides, `You gave <player> <N> <coin>` and `<Player> gave you <N> <coin>`, into the purse and not the pack (`TryApplyCoinHandOver`). The coin is a bare metal (`give`), a full coin noun (`share`), or any other single word, taken as the fifth coin under a board's own name (`HandOverCoinNoun`).
+- It reads the Paradigm coin lines on both sides, `<Player> gives you <N> <coin noun>` and `You give <N> <coin noun> to <player>`, the same way. Those need the full coin noun and no full stop, which is what keeps a counted item line out of the purse.
+- A key handed over moves on the key ring, in either wording: one received goes onto `InventorySnapshot.Keys` (an item of type 7, or a name already on the ring), and one given away comes off the pack first, then the ring (`AddHeld`, `RemoveHeld`, `PatchKeyRing`). Held keys are counted from the ring (`AppServices.CountItemHeld`), so a key that stayed on it after a give kept its door passable to the route planner. The other lines that move an item do the same for a key: `You took`, `You dropped`, `You hid`, a buy and a sell (user asked for get and drop, 2026-10-07; hide, buy and sell follow the same two helpers).
+- None of the parsing is gated on the realm.
+- The client's own party hand-over of a path item sends the uncounted form, `give <item> to <recipient>` (`PartyPathItemGate`). That form prints `<Player> gives you <item>.` on Paradigm (user's screenshot, 2026-10-07: a relayed `@do give black star key to <recipient>`).
+- `InventoryManager.IsReceivedHandOverLine` tells the unrecognized-line watcher that the receiving lines, item or coins, are read. The giver's Stock coin line is already skipped as an engine reply (`EngineReplyLines`, `You gave %s`).
 
 ### NPC keyword hand-over detection
 *Status: CONFIRMED 2026-09-11 (user, reports `paradigm-20260911-103025`, `-103315`)*

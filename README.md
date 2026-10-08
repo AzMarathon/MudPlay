@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.8**
+> **Version 3.149.12**
 > - A monster that needs a magical weapon is judged by the weapon in your hand when the combat profile names one you no longer carry, instead of being skipped as unhittable
 > - After killing a monster that turns into or summons another as it dies (the Champion of Blood's greater hellion), the next target is picked once the room shows the newcomer
 > - A follower who walks off by themselves (sent on with `@do`, say) is no longer gone back for as if your move had left them behind

@@ -54,6 +54,20 @@ public sealed class ItemNameStoreTests : IDisposable
         Assert.Equal("ancient brass key", s.GetName(1980));
     }
 
+    // A record name passes as written; the loose wordings FindByName accepts
+    // (an article, a count) do not.
+    [Fact]
+    public void IsRecordName_TakesOnlyTheNameAsRecorded()
+    {
+        ItemNameStore s = NewStore();
+        Assert.True(s.IsRecordName("black star key"));
+        Assert.True(s.IsRecordName("Black Star Key"));
+        Assert.NotNull(s.FindByName("a black star key"));
+        Assert.False(s.IsRecordName("a black star key"));
+        Assert.False(s.IsRecordName("2 black star key"));
+        Assert.False(s.IsRecordName("silver key"));
+    }
+
     [Fact]
     public void GetName_UnknownItemId_ReturnsNull()
     {

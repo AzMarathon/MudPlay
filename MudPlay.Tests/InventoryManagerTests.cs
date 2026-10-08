@@ -25,10 +25,13 @@ public sealed class InventoryManagerTests
 
         public Harness(
             Func<string, int?>? itemWeight = null,
-            Func<string, string?>? slotResolver = null)
+            Func<string, string?>? slotResolver = null,
+            Func<string, bool>? isItemRecordName = null,
+            Func<string, bool>? isKey = null)
         {
             Inv = new InventoryManager(
-                log: null, itemWeightResolver: itemWeight, slotResolver: slotResolver);
+                log: null, itemWeightResolver: itemWeight, slotResolver: slotResolver,
+                isItemRecordName: isItemRecordName, isKey: isKey);
             Lines = new LineExtractor(new TerminalEmulator(80, 24));
             Inv.AttachLineExtractor(Lines);
             Inv.Changed += () => ChangedCount++;
@@ -1135,6 +1138,244 @@ public sealed class InventoryManagerTests
         Assert.Equal(new[] { ("shimmering white robes", "Nineteen") }, got);
     }
 
+    // Paradigm also words a player's hand-over "<Player> gives you <item>.", naming
+    // the item as its record does (report paradigm-20261007-164408: a handed-over
+    // gate item was unknown to the route picker until the next `i`).
+    private static bool IsTestRecordName(string name)
+        => name is "magical quartz rod" or "torch" or "darkwood ring" or "lantern" or "black star key";
+
+    private static bool IsTestKey(string name) => name is "black star key";
+
+    private static void FeedWithKeyRing(Harness h)
+    {
+        h.Feed("You are carrying lantern.");
+        h.Feed("You have the following keys:  2 black star key, gate key.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+    }
+
+    [Fact]
+    public void HandedItem_AddsItemToCarried_AndRaisesItemReceived()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+        List<(string Item, string Giver)> got = new();
+        h.Inv.ItemReceived += (item, giver) => got.Add((item, giver));
+
+        h.Feed("Bob gives you magical quartz rod.");
+
+        Assert.Contains("magical quartz rod", Carried(h));
+        Assert.Contains("lantern", Carried(h));   // baseline item untouched
+        Assert.Equal(new[] { ("magical quartz rod", "Bob") }, got);
+        Assert.True(h.Inv.IsReceivedHandOverLine("Bob gives you magical quartz rod."));
+    }
+
+    [Fact]
+    public void HandedItem_MovesTheWeightEstimate()
+    {
+        using Harness h = new(itemWeight: TestWeight, isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);   // 50/2880
+
+        h.Feed("Bob gives you torch.");
+
+        Assert.Equal(90, Weight(h));   // 50 + 40
+    }
+
+    // More than one copy arrives under a count, the name still singular (report
+    // paradigm-20261007-182345: "Fujin gives you 2 darkwood ring.").
+    [Fact]
+    public void HandedItem_UnderACount_AddsEveryCopy()
+    {
+        using Harness h = new(itemWeight: TestWeight, isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);   // 50/2880
+        List<string> got = new();
+        h.Inv.ItemReceived += (item, _) => got.Add(item);
+
+        h.Feed("Fujin gives you 2 torch.");
+
+        Assert.Contains("2 torch", Carried(h));
+        Assert.Equal(130, Weight(h));   // 50 + 2 x 40
+        Assert.Equal(new[] { "torch", "torch" }, got);
+        Assert.True(h.Inv.IsReceivedHandOverLine("Fujin gives you 2 torch."));
+    }
+
+    // The giver's side of the same wording (report paradigm-20261007-182434:
+    // "You give 2 darkwood ring to Fujin.", "You give mine pass to Fujin.").
+    [Fact]
+    public void HandedAway_RemovesTheCopiesGiven()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        h.Feed("You are carrying lantern, 3 darkwood ring.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed("You give 2 darkwood ring to Fujin.");
+        Assert.Contains("darkwood ring", Carried(h));
+        Assert.DoesNotContain("3 darkwood ring", Carried(h));
+
+        h.Feed("You give darkwood ring to Fujin.");
+        Assert.DoesNotContain(Carried(h), c => c.Contains("darkwood ring"));
+
+        h.Feed("You give lantern to Fujin.");
+        Assert.DoesNotContain("lantern", Carried(h));
+    }
+
+    // Keys sit on their own ring in the dump. A key given away must leave it, or the
+    // character still "holds" the key and a door it opens stays passable to the planner.
+    [Fact]
+    public void HandedAway_Key_LeavesTheKeyRing()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName, isKey: IsTestKey);
+        FeedWithKeyRing(h);
+
+        h.Feed("You give black star key to Fujin.");
+        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain("2 black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You give black star key to Fujin.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+        Assert.Contains("gate key", h.Inv.Snapshot.Keys!);
+        Assert.Contains("lantern", Carried(h));
+    }
+
+    [Fact]
+    public void HandedItem_Key_GoesOnTheKeyRing()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName, isKey: IsTestKey);
+        FeedCarriedBaseline(h);   // no ring yet
+
+        h.Feed("Fujin gives you 2 black star key.");
+        h.Feed("Fujin gives you black star key.");
+
+        Assert.Contains("3 black star key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("black star key"));
+    }
+
+    // The engine's own wording moves the ring too; a key already on it is known to
+    // be one without asking the game data.
+    [Fact]
+    public void JustGave_Key_MovesOnTheKeyRing()
+    {
+        using Harness h = new();
+        FeedWithKeyRing(h);
+
+        h.Feed("Bob just gave you gate key.");
+        Assert.Contains("2 gate key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You just gave black star key to Bob.");
+        h.Feed("You just gave black star key to Bob.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+        Assert.DoesNotContain(Carried(h), c => c.Contains("key"));
+    }
+
+    // Picking a key up, dropping it, hiding it, buying and selling it move the ring
+    // the same way a hand-over does.
+    [Fact]
+    public void Key_GotDroppedHiddenBoughtSold_MovesOnTheKeyRing()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName, isKey: IsTestKey);
+        FeedWithKeyRing(h);   // 2 black star key, gate key
+
+        h.Feed("You took black star key.");
+        Assert.Contains("3 black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You dropped 2 black star key.");
+        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain("3 black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You hid black star key.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+
+        h.Feed("You just bought black star key for 10 copper farthings.");
+        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You sold black star key for 5 copper farthings.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+
+        Assert.Contains("gate key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("black star key"));
+    }
+
+    // With nothing to say an item is a key it is filed in the pack, and leaves from
+    // there: the pack gives up its copy before the ring is asked.
+    [Fact]
+    public void Key_NotKnownToBeOne_IsHandledInThePack()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+
+        h.Feed("You took black star key.");
+        Assert.Contains("black star key", Carried(h));
+
+        h.Feed("You give black star key to Fujin.");
+        Assert.DoesNotContain(Carried(h), c => c.Contains("black star key"));
+    }
+
+    // Flavour in the giver's shape names no record, so nothing leaves the pack.
+    [Fact]
+    public void HandedAway_IgnoresFlavourThatNamesNoRecord()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+        IReadOnlyList<string> before = Carried(h);
+
+        h.Feed("You give the lantern to the old man.");
+        h.Feed("You give her the news of Commander Markus, and hand her the darkwood box.");
+
+        Assert.Equal(before, Carried(h));
+    }
+
+    // Coins in this wording print the coin's full noun and no full stop (reports
+    // paradigm-20261007-182345 and -182434).
+    [Fact]
+    public void HandedCoins_MoveThePurseBothWays()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+
+        h.Feed("Fujin gives you 2 runic coins");
+        h.Feed("Fujin gives you 30 platinum pieces");
+        Assert.Equal(2, h.Inv.Snapshot.Currency.Runic);
+        Assert.Equal(30, h.Inv.Snapshot.Currency.Platinum);
+        Assert.True(h.Inv.IsReceivedHandOverLine("Fujin gives you 30 platinum pieces"));
+
+        h.Feed("You give 2 runic coins to Fujin");
+        h.Feed("You give 25 platinum pieces to Fujin");
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Runic);
+        Assert.Equal(5, h.Inv.Snapshot.Currency.Platinum);
+
+        // One coin still prints its count, with the noun in the singular.
+        h.Feed("Raijin gives you 1 gold crown");
+        Assert.Equal(1, h.Inv.Snapshot.Currency.Gold);
+        h.Feed("You give 1 gold crown to Fujin");
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Gold);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("platinum") || c.Contains("runic"));
+    }
+
+    // An NPC's keyword give and a spell line share the shape. Their wording isn't a
+    // record name, and isn't proof an item arrived, so nothing is filed.
+    [Theory]
+    [InlineData("Dhelvanen gives you a green potion.")]
+    [InlineData("The gnome commander gives you the heavy bloodstone orb.")]
+    [InlineData("A glowing flame gives you magical sight.")]
+    [InlineData("The black cat gives you an evil eye before dying.")]
+    [InlineData("Bob gives you 30 gold crowns.")]
+    public void HandedItem_IgnoresLinesThatNameNoRecord(string line)
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+        IReadOnlyList<string> before = Carried(h);
+        bool raised = false;
+        h.Inv.ItemReceived += (_, _) => raised = true;
+
+        h.Feed(line);
+
+        Assert.Equal(before, Carried(h));
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Gold);
+        Assert.False(raised);
+        Assert.False(h.Inv.IsReceivedHandOverLine(line));
+    }
+
     // Giving coins adjusts the purse, not the pack — no phantom carried item.
     [Fact]
     public void GiveAway_Coins_AdjustsCurrencyNotCarried()
@@ -1160,6 +1401,60 @@ public sealed class InventoryManagerTests
 
         Assert.Equal(30, h.Inv.Snapshot.Currency.Gold);
         Assert.DoesNotContain(Carried(h), c => c.Contains("gold"));
+    }
+
+    // The engine words a coin hand-over apart from an item's: no "just", no full
+    // stop, and `give` names the bare metal where `share` prints the coin's noun.
+    [Theory]
+    [InlineData("Bob gave you 30 gold", 30, 0, 0)]
+    [InlineData("Bob gave you 30 gold crowns", 30, 0, 0)]
+    [InlineData("Bob gave you 1 gold crown", 1, 0, 0)]
+    [InlineData("Bob gave you 7 platinum", 0, 7, 0)]
+    [InlineData("Bob gave you 2 runic", 0, 0, 2)]
+    [InlineData("Bob gave you 2 quatloos", 0, 0, 2)]   // a board's own name for the fifth coin
+    public void Receive_Coins_EngineCoinWording_AdjustsCurrency(string line, int gold, int platinum, int runic)
+    {
+        using Harness h = new();
+        FeedCarriedBaseline(h);
+        bool raised = false;
+        h.Inv.ItemReceived += (_, _) => raised = true;
+
+        h.Feed(line);
+
+        Assert.Equal(gold, h.Inv.Snapshot.Currency.Gold);
+        Assert.Equal(platinum, h.Inv.Snapshot.Currency.Platinum);
+        Assert.Equal(runic, h.Inv.Snapshot.Currency.Runic);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("gold") || c.Contains("Bob"));
+        Assert.False(raised);
+        Assert.True(h.Inv.IsReceivedHandOverLine(line));
+    }
+
+    [Theory]
+    [InlineData("You gave Bob 10 gold")]
+    [InlineData("You gave Bob 10 gold crowns")]
+    public void GiveAway_Coins_EngineCoinWording_AdjustsCurrency(string line)
+    {
+        using Harness h = new();
+        h.Feed("You are carrying lantern, 30 gold crowns.");
+        h.Feed("Wealth:    3000 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Feed(line);
+
+        Assert.Equal(20, h.Inv.Snapshot.Currency.Gold);
+    }
+
+    // The count-then-words shape with more than one unknown word names no coin.
+    [Fact]
+    public void Receive_Coins_IgnoresALineThatNamesNoCoin()
+    {
+        using Harness h = new();
+        FeedCarriedBaseline(h);
+
+        h.Feed("Bob gave you 5 dirty looks");
+
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Runic);
+        Assert.False(h.Inv.IsReceivedHandOverLine("Bob gave you 5 dirty looks"));
     }
 
     // "You don't have X to give." is a bounced give — nothing changes.
