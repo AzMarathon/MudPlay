@@ -1,10 +1,11 @@
 # Version history
 
-## 3.149.4
+## 3.149.5
 
 - An item another player hands you (`<Player> gives you <item>.`), one or several at once, is added to your carried items straight away, so route gates and other "do you carry it" checks no longer wait for the next `i`
 - Items you hand over in that wording (`You give 2 darkwood ring to <player>.`) leave your carried items straight away
 - Coins given, shared or received (`<Player> gave you 30 gold`, `<Player> gives you 30 platinum pieces`) reach or leave your purse straight away, on every realm
+- A key you give away or are handed leaves or joins your key list straight away
 - The receiving lines are no longer flagged as unrecognized
 - bug reports addressed: paradigm-20261007-164408, paradigm-20261007-182345, paradigm-20261007-182434
 

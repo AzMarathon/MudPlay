@@ -26,11 +26,12 @@ public sealed class InventoryManagerTests
         public Harness(
             Func<string, int?>? itemWeight = null,
             Func<string, string?>? slotResolver = null,
-            Func<string, bool>? isItemRecordName = null)
+            Func<string, bool>? isItemRecordName = null,
+            Func<string, bool>? isKey = null)
         {
             Inv = new InventoryManager(
                 log: null, itemWeightResolver: itemWeight, slotResolver: slotResolver,
-                isItemRecordName: isItemRecordName);
+                isItemRecordName: isItemRecordName, isKey: isKey);
             Lines = new LineExtractor(new TerminalEmulator(80, 24));
             Inv.AttachLineExtractor(Lines);
             Inv.Changed += () => ChangedCount++;
@@ -1141,7 +1142,17 @@ public sealed class InventoryManagerTests
     // the item as its record does (report paradigm-20261007-164408: a handed-over
     // gate item was unknown to the route picker until the next `i`).
     private static bool IsTestRecordName(string name)
-        => name is "magical quartz rod" or "torch" or "darkwood ring" or "lantern";
+        => name is "magical quartz rod" or "torch" or "darkwood ring" or "lantern" or "black star key";
+
+    private static bool IsTestKey(string name) => name is "black star key";
+
+    private static void FeedWithKeyRing(Harness h)
+    {
+        h.Feed("You are carrying lantern.");
+        h.Feed("You have the following keys:  2 black star key, gate key.");
+        h.Feed("Wealth:    0 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+    }
 
     [Fact]
     public void HandedItem_AddsItemToCarried_AndRaisesItemReceived()
@@ -1209,6 +1220,71 @@ public sealed class InventoryManagerTests
         Assert.DoesNotContain("lantern", Carried(h));
     }
 
+    // Keys sit on their own ring in the dump. A key given away must leave it, or the
+    // character still "holds" the key and a door it opens stays passable to the planner.
+    [Fact]
+    public void HandedAway_Key_LeavesTheKeyRing()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName, isKey: IsTestKey);
+        FeedWithKeyRing(h);
+
+        h.Feed("You give black star key to Fujin.");
+        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain("2 black star key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You give black star key to Fujin.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+        Assert.Contains("gate key", h.Inv.Snapshot.Keys!);
+        Assert.Contains("lantern", Carried(h));
+    }
+
+    [Fact]
+    public void HandedItem_Key_GoesOnTheKeyRing()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName, isKey: IsTestKey);
+        FeedCarriedBaseline(h);   // no ring yet
+
+        h.Feed("Fujin gives you 2 black star key.");
+        h.Feed("Fujin gives you black star key.");
+
+        Assert.Contains("3 black star key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain(Carried(h), c => c.Contains("black star key"));
+    }
+
+    // The engine's own wording moves the ring too; a key already on it is known to
+    // be one without asking the game data.
+    [Fact]
+    public void JustGave_Key_MovesOnTheKeyRing()
+    {
+        using Harness h = new();
+        FeedWithKeyRing(h);
+
+        h.Feed("Bob just gave you gate key.");
+        Assert.Contains("2 gate key", h.Inv.Snapshot.Keys!);
+
+        h.Feed("You just gave black star key to Bob.");
+        h.Feed("You just gave black star key to Bob.");
+        Assert.DoesNotContain(h.Inv.Snapshot.Keys!, k => k.Contains("black star key"));
+        Assert.DoesNotContain(Carried(h), c => c.Contains("key"));
+    }
+
+    // A key picked up since the last inventory read is still in the pack: the pack
+    // gives up its copy before the ring does.
+    [Fact]
+    public void HandedAway_Key_TakesThePackCopyFirst()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName, isKey: IsTestKey);
+        FeedWithKeyRing(h);
+        h.Feed("You took black star key.");
+        Assert.Contains("black star key", Carried(h));
+
+        h.Feed("You give 2 black star key to Fujin.");
+
+        Assert.DoesNotContain(Carried(h), c => c.Contains("black star key"));
+        Assert.Contains("black star key", h.Inv.Snapshot.Keys!);
+        Assert.DoesNotContain("2 black star key", h.Inv.Snapshot.Keys!);
+    }
+
     // Flavour in the giver's shape names no record, so nothing leaves the pack.
     [Fact]
     public void HandedAway_IgnoresFlavourThatNamesNoRecord()
@@ -1241,6 +1317,12 @@ public sealed class InventoryManagerTests
         h.Feed("You give 25 platinum pieces to Fujin");
         Assert.Equal(0, h.Inv.Snapshot.Currency.Runic);
         Assert.Equal(5, h.Inv.Snapshot.Currency.Platinum);
+
+        // One coin still prints its count, with the noun in the singular.
+        h.Feed("Raijin gives you 1 gold crown");
+        Assert.Equal(1, h.Inv.Snapshot.Currency.Gold);
+        h.Feed("You give 1 gold crown to Fujin");
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Gold);
         Assert.DoesNotContain(Carried(h), c => c.Contains("platinum") || c.Contains("runic"));
     }
 

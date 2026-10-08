@@ -5460,16 +5460,18 @@ public sealed class AppServices
         // the slot resolver labels a freshly-worn piece with its real slot (the
         // wear line names none) so "Snapshot Current" files it correctly (both
         // read ItemNames, already loaded above); the record-name check tells a
-        // player's "gives you" hand-over from an NPC's flavour line. MarkStale on
-        // profile swap so the new character's first gate evaluation waits for a
-        // fresh `i`.
+        // player's "gives you" hand-over from an NPC's flavour line, and the key
+        // check sends a handed-over key to the key ring. MarkStale on profile swap
+        // so the new character's first gate evaluation waits for a fresh `i`.
         Inventory = new Game.Inventory.InventoryManager(
             Log,
             ItemNames.WeightOf,
             name => ItemNames.WornCodeOf(name) is int worn
                 ? Game.Inventory.EquipmentSlotMap.InventorySlotForWornCode(worn)
                 : null,
-            ItemNames.IsRecordName);
+            ItemNames.IsRecordName,
+            name => ItemNames.FindByName(name) is int number
+                && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
         Profile.ProfileLoaded += _ => Inventory.MarkStale();
         HpRegenExpected = new Game.HpRegenExpectationSource(PlayerStats, Inventory, GameData,
             () => Game.Quests.CompletedQuestBonuses.Resolve(GameData,

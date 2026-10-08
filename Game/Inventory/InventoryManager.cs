@@ -57,6 +57,15 @@ public sealed partial class InventoryManager : IDisposable
     // hand-over form then goes unread and the next 'i' picks the item up.
     private readonly Func<string, bool>? _isItemRecordName;
 
+    // True when a named item is a key. The game lists keys on a ring of their own
+    // in the 'i' dump, apart from the pack, so a key handed over lands there. Null
+    // in tests / when no game data is loaded: only a key already on the ring is
+    // then known to be one.
+    private readonly Func<string, bool>? _isKey;
+
+    // The Items table's ItemType for a key.
+    public const int KeyItemType = 7;
+
     private LineExtractor? _lines;
     private bool _disposed;
 
@@ -121,8 +130,10 @@ public sealed partial class InventoryManager : IDisposable
         LogService? log = null,
         Func<string, int?>? itemWeightResolver = null,
         Func<string, string?>? slotResolver = null,
-        Func<string, bool>? isItemRecordName = null)
+        Func<string, bool>? isItemRecordName = null,
+        Func<string, bool>? isKey = null)
     {
+        _isKey = isKey;
         _log = log;
         _itemWeight = itemWeightResolver;
         _slotResolver = slotResolver;
@@ -692,7 +703,7 @@ public sealed partial class InventoryManager : IDisposable
         if (TryMatchHandedItem(line, out string handedItem, out int handedCount, out string handedBy))
         {
             _log?.Debug(LogCategory, $"handed {handedCount} '{handedItem}' by {handedBy}");
-            AddCarried(handedItem, handedCount);
+            AddHeld(handedItem, handedCount);
             AdjustItemWeight(handedItem, +handedCount);
             for (int i = 0; i < handedCount; i++)
                 ItemReceived?.Invoke(handedItem, handedBy);
@@ -704,7 +715,7 @@ public sealed partial class InventoryManager : IDisposable
         if (handedAway.Success
             && TryReadHandedName(handedAway.Groups[1].Value, out string awayItem, out int awayCount))
         {
-            RemoveCarried(awayItem, awayCount);
+            RemoveHeld(awayItem, awayCount);
             AdjustItemWeight(awayItem, -awayCount);
             return;
         }
@@ -1048,9 +1059,66 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
-        if (sign > 0) AddCarried(name);
-        else RemoveCarried(name);
+        if (sign > 0) AddHeld(name, 1);
+        else RemoveHeld(name, 1);
         AdjustItemWeight(name, sign);
+    }
+
+    // An item handed to us: a key goes on the key ring, anything else in the pack.
+    private void AddHeld(string name, int count)
+    {
+        if (IsKey(name)) PatchKeyRing(name, +count);
+        else AddCarried(name, count);
+    }
+
+    // An item we handed over. A key picked up since the last 'i' is still in the
+    // pack, so the pack gives up its copies first and the ring the rest. Without
+    // the ring a given-away key stayed "held", and a door it opens stayed passable
+    // to the route planner.
+    private void RemoveHeld(string name, int count)
+    {
+        int fromPack;
+        lock (_lock)
+        {
+            int idx = FindCarriedIndex(_carried, name);
+            int inPack = idx < 0 ? 0 : CountedCommand.SplitLeadingCount(_carried[idx]).Count;
+            fromPack = Math.Min(count, inPack);
+        }
+        RemoveCarried(name, fromPack);
+        PatchKeyRing(name, -(count - fromPack));
+    }
+
+    private bool IsKey(string name)
+    {
+        if (_isKey?.Invoke(name) == true) return true;
+        lock (_lock) return FindCarriedIndex(_keys, name) >= 0;
+    }
+
+    // Add (or, negative, take) copies of a key on the ring, stacked the way the 'i'
+    // dump lists them. Gated on a loaded baseline, as PatchCarried is.
+    private void PatchKeyRing(string name, int delta)
+    {
+        if (delta == 0) return;
+        bool changed = false;
+        lock (_lock)
+        {
+            if (_loaded)
+            {
+                var ring = new List<string>(_keys);
+                int idx = FindCarriedIndex(ring, name);
+                int have = idx < 0 ? 0 : CountedCommand.SplitLeadingCount(ring[idx]).Count;
+                int now = Math.Max(0, have + delta);
+                if (now != have)
+                {
+                    if (now == 0) ring.RemoveAt(idx);
+                    else if (idx < 0) ring.Add(FormatStack(name, now));
+                    else ring[idx] = FormatStack(name, now);
+                    _keys = ring;
+                    changed = true;
+                }
+            }
+        }
+        if (changed) Changed?.Invoke();
     }
 
     // "<Player> gives you <item>." is a player's hand-over only when the item is a
@@ -1111,7 +1179,7 @@ public sealed partial class InventoryManager : IDisposable
     // Index of the carried entry whose SINGULAR name equals `name`, ignoring any
     // leading stack count ("43 black diamond" matches "black diamond"), or -1. So a
     // get/drop of a single item finds and updates the stacked row instead of missing it.
-    private static int FindCarriedIndex(List<string> list, string name)
+    private static int FindCarriedIndex(IReadOnlyList<string> list, string name)
     {
         for (int i = 0; i < list.Count; i++)
             if (string.Equals(CountedCommand.SplitLeadingCount(list[i]).Name, name,
