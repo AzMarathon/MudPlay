@@ -1,5 +1,11 @@
 # Version history
 
+## 3.149.1
+
+- An item another player hands you (`<Player> gives you <item>.`) is added to your carried items at once, so route gates and other "do you carry it" checks no longer wait for the next `i`
+- That line is no longer flagged as unrecognized
+- bug reports addressed: paradigm-20261007-164408
+
 ## 3.149.0
 
 - New Settings → Teleports tab: Allow automatic walks to use the following teleports, one line per teleport spot from your game data with both ends' map/room numbers; none are ticked by default

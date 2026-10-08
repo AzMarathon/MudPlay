@@ -25,10 +25,12 @@ public sealed class InventoryManagerTests
 
         public Harness(
             Func<string, int?>? itemWeight = null,
-            Func<string, string?>? slotResolver = null)
+            Func<string, string?>? slotResolver = null,
+            Func<string, bool>? isItemRecordName = null)
         {
             Inv = new InventoryManager(
-                log: null, itemWeightResolver: itemWeight, slotResolver: slotResolver);
+                log: null, itemWeightResolver: itemWeight, slotResolver: slotResolver,
+                isItemRecordName: isItemRecordName);
             Lines = new LineExtractor(new TerminalEmulator(80, 24));
             Inv.AttachLineExtractor(Lines);
             Inv.Changed += () => ChangedCount++;
@@ -1133,6 +1135,62 @@ public sealed class InventoryManagerTests
         h.Feed("Nineteen just gave you 30 gold crowns.");
 
         Assert.Equal(new[] { ("shimmering white robes", "Nineteen") }, got);
+    }
+
+    // Paradigm also words a player's hand-over "<Player> gives you <item>.", naming
+    // the item as its record does (report paradigm-20261007-164408: a handed-over
+    // gate item was unknown to the route picker until the next `i`).
+    private static bool IsTestRecordName(string name) => name is "magical quartz rod" or "torch";
+
+    [Fact]
+    public void HandedItem_AddsItemToCarried_AndRaisesItemReceived()
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+        List<(string Item, string Giver)> got = new();
+        h.Inv.ItemReceived += (item, giver) => got.Add((item, giver));
+
+        h.Feed("Bob gives you magical quartz rod.");
+
+        Assert.Contains("magical quartz rod", Carried(h));
+        Assert.Contains("lantern", Carried(h));   // baseline item untouched
+        Assert.Equal(new[] { ("magical quartz rod", "Bob") }, got);
+        Assert.True(h.Inv.IsReceivedItemLine("Bob gives you magical quartz rod."));
+    }
+
+    [Fact]
+    public void HandedItem_MovesTheWeightEstimate()
+    {
+        using Harness h = new(itemWeight: TestWeight, isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);   // 50/2880
+
+        h.Feed("Bob gives you torch.");
+
+        Assert.Equal(90, Weight(h));   // 50 + 40
+    }
+
+    // An NPC's keyword give and a spell line share the shape. Their wording isn't a
+    // record name, and isn't proof an item arrived, so nothing is filed.
+    [Theory]
+    [InlineData("Dhelvanen gives you a green potion.")]
+    [InlineData("The gnome commander gives you the heavy bloodstone orb.")]
+    [InlineData("A glowing flame gives you magical sight.")]
+    [InlineData("The black cat gives you an evil eye before dying.")]
+    [InlineData("Bob gives you 30 gold crowns.")]
+    public void HandedItem_IgnoresLinesThatNameNoRecord(string line)
+    {
+        using Harness h = new(isItemRecordName: IsTestRecordName);
+        FeedCarriedBaseline(h);
+        IReadOnlyList<string> before = Carried(h);
+        bool raised = false;
+        h.Inv.ItemReceived += (_, _) => raised = true;
+
+        h.Feed(line);
+
+        Assert.Equal(before, Carried(h));
+        Assert.Equal(0, h.Inv.Snapshot.Currency.Gold);
+        Assert.False(raised);
+        Assert.False(h.Inv.IsReceivedItemLine(line));
     }
 
     // Giving coins adjusts the purse, not the pack — no phantom carried item.

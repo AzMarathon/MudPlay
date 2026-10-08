@@ -1,10 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.149.0**
-> - New Settings → Teleports tab: Allow automatic walks to use the following teleports, one line per teleport spot from your game data with both ends' map/room numbers; none are ticked by default
-> - Automatic walks (bank and sell trips, training trips, Auto-Lair, events, remote commands) use only the teleports you tick; a trip that needs another stops and names it
-> - Starting a loop from off the loop is now a walk-to to it, with every route card a walk-to shows; the loop begins when you arrive. Recover Now goes through the route cards too
+> **Version 3.149.1**
+> - An item another player hands you (`<Player> gives you <item>.`) is added to your carried items at once, so route gates and other "do you carry it" checks no longer wait for the next `i`
+> - That line is no longer flagged as unrecognized
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

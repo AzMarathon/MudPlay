@@ -51,6 +51,12 @@ public sealed partial class InventoryManager : IDisposable
     // — the handler falls back to the generic slot.
     private readonly Func<string, string?>? _slotResolver;
 
+    // True when a text is an item's record name exactly as the game data spells
+    // it. Gates the "<Player> gives you <item>." hand-over, whose shape NPC give
+    // flavour text shares. Null in tests / when no game data is loaded: that
+    // hand-over form then goes unread and the next 'i' picks the item up.
+    private readonly Func<string, bool>? _isItemRecordName;
+
     private LineExtractor? _lines;
     private bool _disposed;
 
@@ -114,11 +120,13 @@ public sealed partial class InventoryManager : IDisposable
     public InventoryManager(
         LogService? log = null,
         Func<string, int?>? itemWeightResolver = null,
-        Func<string, string?>? slotResolver = null)
+        Func<string, string?>? slotResolver = null,
+        Func<string, bool>? isItemRecordName = null)
     {
         _log = log;
         _itemWeight = itemWeightResolver;
         _slotResolver = slotResolver;
+        _isItemRecordName = isItemRecordName;
     }
 
     // Fired (outside the lock) whenever the snapshot changes.
@@ -169,6 +177,12 @@ public sealed partial class InventoryManager : IDisposable
     // hand-off isn't raised. Lets death recovery treat gear a party member recovered
     // for us and gave back as our deathpile coming home.
     public event Action<string, string>? ItemReceived;
+
+    // True for another character's hand-over line this parser reads. It reads the
+    // wire directly and registers no router pattern, so the unrecognized-line
+    // watcher asks here rather than restate the shapes.
+    public bool IsReceivedItemLine(string line)
+        => ReceivedItemRegex().IsMatch(line) || TryMatchHandedItem(line, out _, out _);
 
     // True after at least one successful full 'i' parse.
     public bool IsLoaded
@@ -667,6 +681,17 @@ public sealed partial class InventoryManager : IDisposable
             return;
         }
 
+        // Receive, second wording: "Bob gives you magical quartz rod." — one item,
+        // named as its record names it.
+        if (TryMatchHandedItem(line, out string handedItem, out string handedBy))
+        {
+            _log?.Debug(LogCategory, $"handed '{handedItem}' by {handedBy}");
+            AddCarried(handedItem);
+            AdjustItemWeight(handedItem, +1);
+            ItemReceived?.Invoke(handedItem, handedBy);
+            return;
+        }
+
         // Failed give: "You don't have a torch to give." — no state change (we
         // never held it), logged so a give-driven flow can see the attempt bounced.
         if (GiveFailedRegex().IsMatch(line))
@@ -984,6 +1009,21 @@ public sealed partial class InventoryManager : IDisposable
         if (sign > 0) AddCarried(name);
         else RemoveCarried(name);
         AdjustItemWeight(name, sign);
+    }
+
+    // "<Player> gives you <item>." is a player's hand-over only when the item is a
+    // record name word for word. An NPC's keyword give prints the same shape as
+    // flavour text ("Dhelvanen gives you a green potion."), which names the item
+    // its own way and is no proof the give landed, so it must not add a row.
+    private bool TryMatchHandedItem(string line, out string item, out string giver)
+    {
+        item = giver = string.Empty;
+        if (_isItemRecordName is null) return false;
+        Match m = HandedItemRegex().Match(line);
+        if (!m.Success || !_isItemRecordName(m.Groups[2].Value)) return false;
+        giver = m.Groups[1].Value;
+        item = m.Groups[2].Value;
+        return true;
     }
 
     // Index of the carried entry whose SINGULAR name equals `name`, ignoring any
@@ -1376,6 +1416,12 @@ public sealed partial class InventoryManager : IDisposable
 
     [GeneratedRegex(@"^(.+?) just gave you (.+)\.$")]
     private static partial Regex ReceivedItemRegex();
+
+    // The other receive wording seen on Paradigm. Only the one-item form is on
+    // record (first name, record name, no article), so the giver is a single word
+    // and TryMatchHandedItem checks the item; coins and counts are not read.
+    [GeneratedRegex(@"^(\S+) gives you (.+)\.$")]
+    private static partial Regex HandedItemRegex();
 
     [GeneratedRegex(@"^You don't have (.+) to give\.$")]
     private static partial Regex GiveFailedRegex();

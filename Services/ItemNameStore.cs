@@ -124,6 +124,15 @@ public sealed class ItemNameStore
         return null;
     }
 
+    // True when the text is an item's record name as it stands: no article, no
+    // count, nothing reworded. The engine's own lines print that name verbatim,
+    // where a textblock's flavour text ("a green potion", "the heavy bloodstone
+    // orb") words the item its own way, so this tells the two apart where
+    // FindByName's loose match would accept both.
+    public bool IsRecordName(string text)
+        => FindByName(text) is int number
+           && string.Equals(GetName(number), text, StringComparison.OrdinalIgnoreCase);
+
     // Carry weight (MDB Encum) of the item a game display name refers to, or
     // null when nothing in the active set matches. Name matching reuses
     // FindByName's article/count normalization, so "a torch" / "torch" both

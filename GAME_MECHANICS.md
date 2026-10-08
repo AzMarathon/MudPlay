@@ -5427,6 +5427,24 @@ There is no room to drop amethyst pendant here.
 - The loot readout shows items only, because chest coin amounts aren't in the data.
 - `ChestOpenTracker` diffs a fresh `i` taken just before each `open` (window button or typed) against one taken after it (`ChestLootLedger`), so items already carried or picked up between chests are never counted as chest loot. The list is saved on the profile (`CharacterProfile.ChestLoot`) and stays until sold, dropped or removed, and, when the character has the window's **Say loot to the room** box ticked (`CharacterProfile.SayChestLootToRoom`, off by default), each open's contents are said to the room with the undirected say `.` (*Talk & chat channels → Directed say vs undirected say*).
 
+### Giving an item to another player (`give`)
+*Status: OBSERVED 2026-10-07 (reports `paradigm-20261007-164408`, `paradigm-20260926-102406`; Stock `wccmmud.dll` 1.11p strings) · Realm: differs — tagged per bullet*
+
+- **[OBSERVED] Paradigm prints `<Player> gives you <item>.` to the one handed an item** (report `paradigm-20261007-164408`, two captures in one session from a party member in the same room: `<Player> gives you magical quartz rod.` and `<Player> gives you titanium fork.`).
+  - The giver is named by first name only (a two-word name showed its first word).
+  - The item is its record name as the Items table spells it, with no article and no count (`magical quartz rod` is item 996, `titanium fork` item 983).
+  - Only this one-item, receiving-side form is captured. The giver's own line, a counted give (`give <N> <item>`, see *Item batching: Paradigm counted commands vs Stock one-per-command*) and a coin give in this wording are not recorded.
+- **[OBSERVED] Paradigm has also printed `<Player> just gave you <item>.`** (report `paradigm-20260926-102406`, a party leader handing recovered gear back: `<Player> just gave you shimmering white robes.`, as quoted when the parser for it was written; the capture was not re-read on 2026-10-07).
+- **[NEEDS CONFIRMATION] Why Paradigm shows two wordings for a hand-over is not known.** Question for the user: does one command print both (a change between server versions), or do two different ways of handing an item over each print their own?
+- **[OBSERVED] Stock: the item lines are `You just gave %s to %s.` to the giver, `%s just gave you %s.` to the one given, and `%s just gave %s something.` to the room** (`wccmmud.dll` 1.11p strings, in that order). Next to them: `You may not give that item away!`, `%s cannot accept your offer.`, `%s refuses your offer.`, `Why would you want to give to that?`, `You do not have %s left unequipped.`
+- **[OBSERVED] Stock: a coin give has its own lines, one pair per denomination**: `You gave %s %d copper` / `%s gave you %d copper` (and `silver`, `gold`, `platinum`, then `You gave %s %d %s` / `%s gave you %d %s`), with `%s just gave %s some coins.` to the room and `You do not have that much copper!` / `You do not have that many %s!` as the refusals. The strings end where shown; whatever follows the denomination on the wire is not recorded.
+  - **[NEEDS CONFIRMATION]** the client's coin branch reads `<Player> just gave you <N> <coin noun>.` and `You just gave <N> <coin noun> to <player>.`, which none of these strings is. Question for the user: does any realm print a coin give that way?
+- **An NPC's give is a different thing**: its line is textblock flavour and proves nothing (see *NPC keyword hand-over detection*). `Dhelvanen gives you a green potion.` and `The gnome commander gives you the heavy bloodstone orb.` (Stock message table) have the shape of the Paradigm player line, and differ from it in wording the item their own way rather than by its record name.
+
+**Client use:**
+- `InventoryManager.ProcessIncremental` files a received item in the carried list, moves the weight estimate and raises `ItemReceived` (which `DeathRecoveryManager.OnItemReceived` uses for gear handed back) on either receiving wording. For `<Player> gives you <item>.` it takes a one-word giver and an item that is a record name word for word (`TryMatchHandedItem`, `ItemNameStore.IsRecordName`), so an NPC's flavour line files nothing; coins and counts in that wording are not read. Report `paradigm-20261007-164408`: a gate item handed over 25 seconds earlier was still missing from the pack when the route picker asked for it.
+- `InventoryManager.IsReceivedItemLine` tells the unrecognized-line watcher that both receiving lines are read.
+
 ### NPC keyword hand-over detection
 *Status: CONFIRMED 2026-09-11 (user, reports `paradigm-20260911-103025`, `-103315`)*
 
