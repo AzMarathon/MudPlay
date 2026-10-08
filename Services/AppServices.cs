@@ -286,6 +286,7 @@ public sealed class AppServices
     // "what did the server just say" diagnostic.
     public WireBuffer Wire { get; }
     public Game.InGameCapture InGameCapture { get; private set; } = null!;
+    private const string BoardMenuHold = "at the board's menu";
 
     // Which Wire Inspector panes are currently visible — read by BugReportBuilder to
     // decide whether to attach the raw / classified wire. Updated by the inspector VM.
@@ -5677,6 +5678,19 @@ public sealed class AppServices
         // A bug report copies the terminal only from the time spent in the game, so a
         // login screen never rides along in one.
         InGameCapture = new Game.InGameCapture(Router, PromptScanner, Wire, Log);
+        // Out to the board's menu with the link still up: nothing automatic may be
+        // sent (it would be a menu selection), a typed selection isn't a move, the
+        // menu's lines aren't unknown game lines, and its prompt isn't a broken
+        // statline to repair. Re-arming the statline check makes it wait for the
+        // next room display, as it does at login.
+        OutboundMovement.AtBoardMenu = () => InGameCapture.AtBoardMenu;
+        InGameCapture.AtBoardMenuChanged += atMenu =>
+        {
+            if (!atMenu) { EngineGate.Release(BoardMenuHold); return; }
+            EngineGate.Hold(BoardMenuHold);
+            MessageCandidateWatcher.NotifyLeftForMenu();
+            StatlineReconcile.Arm();
+        };
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
         PromptScanner.PromptObserved += _ => MessageCandidateWatcher.NotifyInGame();

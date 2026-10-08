@@ -506,9 +506,14 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **No Y/N confirm prompt fires on the exit path.**
 - **Where you land after that depends on the board.** Some boards drop straight to MajorMUD's own entry menu (`[E] . Enter the Realm`). Others nest the realm under extra door/games menus, so a second `x` is needed to walk back out. Example: the door post-game screen with a `[MAJORMUD]:` prompt, then the BBS games menu `[M]...MajorMUD! …` with a `Fujin, your selection or ? for help:` prompt. The entry-menu row does NOT appear on the nested boards.
 - **"Your character has been saved." is the board-agnostic "we're out of the realm" signal**, not the entry menu.
+- **Paradigm: `exit` went from the meditation line straight to the entry menu, with no "Your character has been saved." in between** *([OBSERVED] 2026-10-08, report `paradigm-20261008-125639`)*. The capture, in order: `exit` → `You will exit after a period of silent meditation.` → about seven seconds → the party lines (`<Name> is no longer following you.`, `Your party has been disbanded.`) → the banner and `[E] . Enter the Realm`. `[NEEDS CONFIRMATION]` Does Paradigm ever print the saved line on exit, or was it only missing here?
+- **A command sent during the wait is refused: `You may not perform any commands while waiting to exit!`** *([OBSERVED] same report, a `par` sent three seconds in)*. `[NEEDS CONFIRMATION]` Does anything cancel the exit once the wait has started?
+- **The entry menu takes whatever is sent next as a selection and redraws itself**, under a `[PARADIGM]:` prompt on that board *([OBSERVED] same report)*. `e` enters the realm, in either case: `e` and `E` work the same *([CONFIRMED] 2026-10-08, user)*.
 
 **Client use:**
 - The cleanup-logoff orchestrator keys its carrier-drop on that line (`KnownPatterns.RealmExitSaved`). The entry-menu row and a wait-timeout remain secondary fallbacks.
+- `InGameCapture.AtBoardMenu` is set when the saved line or the entry-menu row is seen after the character has been in the game, and cleared by the next statline prompt or the link ending. While it is set `EngineSendGate` holds every automatic command, `OutboundMovementObserver` doesn't read a typed selection as a move, `MessageCandidateWatcher` stages nothing, and `StatlineReconciler` is re-armed so it waits for a room display. Before this the party poll, a buff, `sn` and `set statline full` were each sent into the menu, and the `e` typed to re-enter was tracked as a step east (report `paradigm-20261008-125639`).
+- The two wait lines are router patterns (`KnownPatterns.RealmExitMeditation`, `RealmExitWaiting`) only so they aren't staged as unrecognized lines.
 
 ### MegaMUD `messages.md` format
 *Status: CONFIRMED 2026-08-17 (user + decode of both stock/paramud files)*

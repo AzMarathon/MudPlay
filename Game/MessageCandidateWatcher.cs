@@ -211,6 +211,25 @@ public sealed class MessageCandidateWatcher : IDisposable
         EndBlocks();
     }
 
+    // The character left for the board's menu, which is only known once the menu's
+    // own telltale row arrives. The banner lines drawn above that row came first and
+    // were staged as game lines; take back the rows this session created in the
+    // moments before, then hold as NotifyLeftGame does. A game line first seen in
+    // that same moment goes with them and is staged again the next time it shows.
+    public void NotifyLeftForMenu()
+    {
+        DateTimeOffset since = DateTimeOffset.UtcNow - MenuBannerWindow;
+        foreach ((string id, DateTimeOffset at) in _newlyStaged)
+            if (at >= since) _candidates.Remove(id);
+        _newlyStaged.Clear();
+        NotifyLeftGame();
+    }
+
+    // A menu is drawn in one burst; its banner sits a few lines above the row that
+    // gives it away.
+    private static readonly TimeSpan MenuBannerWindow = TimeSpan.FromSeconds(2);
+    private readonly List<(string Id, DateTimeOffset At)> _newlyStaged = new();
+
     // Note a command the user just sent so its echo (the server bounces typed input
     // back) isn't staged as an unrecognized line. Called from SendUserInput next to
     // the other outbound observers. Latin-1 to match the wire; each CR/LF-split piece
@@ -617,9 +636,15 @@ public sealed class MessageCandidateWatcher : IDisposable
         _pending = null;
         (_, bool isNew) = _candidates.RecordSighting(p.Text, p.When, p.Map, p.Room);
         if (isNew)
+        {
+            // Remembered briefly in case the next lines show this was a menu's banner.
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            _newlyStaged.RemoveAll(s => now - s.At > MenuBannerWindow);
+            _newlyStaged.Add((MessageCandidateRecord.ComputeId(p.Text), now));
             _log?.Warn(LogCategory,
                 $"unrecognized line — double-click to review: '{Truncate(p.Text, 80)}'",
                 context: p.Text);
+        }
     }
 
     // The held line turned out to be death flavour. Drop it, and also un-stage any

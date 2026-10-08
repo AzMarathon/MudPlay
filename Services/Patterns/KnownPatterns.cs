@@ -507,6 +507,11 @@ public static class KnownPatterns
     // on a menu that never shows that row).
     public const string RealmExitSaved = "realm.exit-saved";      // "Your character has been saved." — realm-exit confirmation
 
+    // The exit command's wait. Recognised so neither line is staged as an unknown
+    // game line; nothing acts on them.
+    public const string RealmExitMeditation = "realm.exit-meditation";   // "You will exit after a period of silent meditation."
+    public const string RealmExitWaiting = "realm.exit-waiting";         // "You may not perform any commands while waiting to exit!"
+
     // ----- Trainer menu marker -------------------------------------------
     // The "train stats" trainer screen has a "Point Cost Chart" panel
     // header in the upper-right that doesn't appear in any other

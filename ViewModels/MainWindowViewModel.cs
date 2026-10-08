@@ -1256,6 +1256,9 @@ public partial class MainWindowViewModel : ObservableObject
         // backscroll tail it snapshots at each death ("How did I Die?").
         AppServices.Current.DeathRecovery.AttachTranscriptTail(
             () => TranscriptSnapshot.Tail(Emulator, 200, withCells: true));
+        // The chunk now being drawn is where a bug report stops copying when the
+        // board's menu arrives in it.
+        AppServices.Current.InGameCapture.FeedTime = () => Emulator.Screen.FeedTimestamp;
         // Every engine wire-sender is routed through EngineGate's
         // wrapper. The wrapper short-circuits while
         // EngineGate.IsLocked is true (today: while

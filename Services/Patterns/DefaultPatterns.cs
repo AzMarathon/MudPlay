@@ -838,6 +838,13 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.RealmExitSaved,
             @"^Your character has been saved\b");
 
+        // The exit command's wait, and what the game answers a command sent during
+        // it (GAME_MECHANICS "Realm exit / logoff sequence").
+        yield return new RegexPattern(KnownPatterns.RealmExitMeditation,
+            @"^You will exit after a period of silent meditation\.");
+        yield return new RegexPattern(KnownPatterns.RealmExitWaiting,
+            @"^You may not perform any commands while waiting to exit!");
+
         // Marker for the train-stats menu's "Point Cost Chart" panel
         // header. NOT anchored to line start/end — the panel sits in the
         // upper-right of the menu and shares its terminal row with the

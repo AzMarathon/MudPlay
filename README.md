@@ -1,10 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.151.8**
+> **Version 3.151.9**
 > - Bosses tab: **Hit magic** and **Spell level** dropdowns filter the table to the bosses a weapon of that hit-magic level can hit and a spell of that level lands on
 > - Hovering a boss's name shows the hit magic and spell level it takes to hurt it
-> - A bug report no longer copies the board's login screen: its Scrollback and raw-wire sections take only what was written while in the game, from the first game prompt until a disconnect or an exit to the menus. The terminal, Backscroll and Wire Inspector still show everything
+> - A bug report no longer copies the board's login screen: its Scrollback and raw-wire sections take only what was written while in the game, from the first game prompt until a disconnect or an exit to the menus, the menu itself left out. The terminal, Backscroll and Wire Inspector still show everything
+> - Exiting to the board's menu without disconnecting no longer leaves the client sending into it: the party poll, buffs, `sn`, statline repair and loop steps are held until you're back in the game
+> - A selection typed at the board's menu (`e` to enter the realm) is no longer tracked as a move
+> - The board's menu and the exit wait lines are no longer listed as unrecognized lines
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

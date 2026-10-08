@@ -88,37 +88,128 @@ public sealed class InGameCaptureTests
 
     private static byte[] Bytes(string s) => Encoding.Latin1.GetBytes(s);
 
+    private sealed class Rig : IDisposable
+    {
+        public MessageRouter Router { get; } = new();
+        public WirePromptScanner Scanner { get; } = new();
+        public WireBuffer Wire { get; } = new();
+        public InGameCapture Gate { get; }
+        public List<bool> MenuChanges { get; } = new();
+
+        public Rig()
+        {
+            DefaultPatterns.Seed(Router);
+            Gate = new InGameCapture(Router, Scanner, Wire);
+            Gate.AtBoardMenuChanged += MenuChanges.Add;
+        }
+
+        public void Prompt() => Scanner.Append(Bytes("[HP=100/MA=50]:"));
+        public void Line(string text) => Router.Dispatch(
+            new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        public void Dispose() => Gate.Dispose();
+    }
+
     [Fact]
     public void Gate_OpensOnAGamePrompt_AndClosesOnExitMenuOrDrop()
     {
-        MessageRouter router = new();
-        DefaultPatterns.Seed(router);
-        WirePromptScanner scanner = new();
-        WireBuffer wire = new();
-        using InGameCapture gate = new(router, scanner, wire);
-        void Line(string text) => router.Dispatch(
-            new LineExtractor.EmittedLine(text, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
+        using Rig rig = new();
+        InGameCapture gate = rig.Gate;
 
         // The board's login: not in the game, and no wire a report may take.
-        wire.Append(Bytes("Enter your user-ID: bobthegreat\r\n"));
+        rig.Wire.Append(Bytes("Enter your user-ID: bobthegreat\r\n"));
         Assert.False(gate.InGame);
         Assert.Null(gate.WireMark);
 
-        scanner.Append(Bytes("[HP=100/MA=50]:"));
+        rig.Prompt();
         Assert.True(gate.InGame);
-        Assert.Equal(wire.TotalBytes, gate.WireMark);
+        Assert.Equal(rig.Wire.TotalBytes, gate.WireMark);
 
-        Line("Your character has been saved.  Please leave any comments in E-mail to Sysop.");
+        rig.Line("Your character has been saved.  Please leave any comments in E-mail to Sysop.");
         Assert.False(gate.InGame);
         Assert.Null(gate.WireMark);
 
-        scanner.Append(Bytes("[HP=100/MA=50]:"));
+        rig.Prompt();
         Assert.True(gate.InGame);
-        Line("[E] . Enter the Realm");
+        rig.Line("[E] . Enter the Realm");
         Assert.False(gate.InGame);
 
-        scanner.Append(Bytes("[HP=100/MA=50]:"));
+        rig.Prompt();
         gate.NotifyDisconnected();
         Assert.False(gate.InGame);
+    }
+
+    // Report paradigm-20261008-125639: after `exit` the party poll, a buff, `sn` and
+    // `set statline full` were all sent into the board's menu as selections.
+    [Fact]
+    public void AtBoardMenu_OnlyAfterLeavingTheGame_UntilTheNextGamePrompt()
+    {
+        using Rig rig = new();
+        InGameCapture gate = rig.Gate;
+
+        // A fresh login shows the same menu, and the entry automation has to answer it.
+        rig.Line("[E] . Enter the Realm");
+        Assert.False(gate.AtBoardMenu);
+
+        rig.Prompt();
+        rig.Line("[E] . Enter the Realm");
+        Assert.True(gate.AtBoardMenu);
+
+        // The menu redraws on every selection; it is still one stay.
+        rig.Line("[E] . Enter the Realm");
+        Assert.Equal(new[] { true }, rig.MenuChanges);
+
+        rig.Prompt();
+        Assert.False(gate.AtBoardMenu);
+        Assert.Equal(new[] { true, false }, rig.MenuChanges);
+    }
+
+    [Fact]
+    public void AtBoardMenu_EndsWithTheLink()
+    {
+        using Rig rig = new();
+        rig.Prompt();
+        rig.Line("[E] . Enter the Realm");
+        Assert.True(rig.Gate.AtBoardMenu);
+
+        rig.Gate.NotifyDisconnected();
+
+        Assert.False(rig.Gate.AtBoardMenu);
+    }
+
+    // The menu arrives in one chunk with the lines before it; a report stops at the
+    // start of that chunk so the menu drawn with it isn't copied.
+    [Fact]
+    public void LeavingForTheMenus_EndsTheStretchWhereThatChunkBegan()
+    {
+        using Rig rig = new();
+        DateTimeOffset chunk = DateTimeOffset.Now.AddSeconds(-1);
+        rig.Gate.FeedTime = () => chunk;
+        rig.Prompt();
+
+        rig.Line("[E] . Enter the Realm");
+
+        Assert.False(rig.Gate.Window.Covers(chunk));
+    }
+
+    // While the engine gate holds for the menu nothing automatic reaches the wire;
+    // a typed selection isn't an engine send and is untouched.
+    [Fact]
+    public void BoardMenuHold_DropsEngineSends_UntilTheGameIsEnteredAgain()
+    {
+        using Rig rig = new();
+        EngineSendGate engines = new();
+        rig.Gate.AtBoardMenuChanged += at => { if (at) engines.Hold("menu"); else engines.Release("menu"); };
+        List<string> wire = new();
+        Action<byte[]> send = engines.WrapEngineSender(b => wire.Add(Encoding.Latin1.GetString(b)));
+
+        rig.Prompt();
+        send(Bytes("par\r"));
+        rig.Line("[E] . Enter the Realm");
+        send(Bytes("par\r"));
+        send(Bytes("set statline full\r"));
+        rig.Prompt();
+        send(Bytes("sn\r"));
+
+        Assert.Equal(new[] { "par\r", "sn\r" }, wire);
     }
 }
