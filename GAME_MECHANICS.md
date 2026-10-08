@@ -5355,7 +5355,7 @@ There is no room to drop amethyst pendant here.
 - `Your <item> has been removed.` makes `AlignmentGearCheck` send a `who` to learn the new alignment.
 
 ### Abilities of carried items
-*Status: mixed (per-bullet tags) · Realm: differs in what is recorded*
+*Status: mixed (per-bullet tags) · Realm: both for the Stealth penalty of a carried item; the engine internals are Stock only*
 
 - **Stock totals a carried item's abilities when it is not a weapon and has no wear slot** *([OBSERVED] 2026-10-07, `wccmmud.dll` 1.11p `_get_user_ability_value` @ `0x43d038`)*. The routine adds an ability up over the class and race, the active spells, the 20 worn slots (`0x62c`), one further item slot (`0x624`, not identified), and the 100 pack slots (`0xd8`). A pack item is skipped when its `ItemType` is 1 (weapon; item field `0x2f4`) or it has a wear slot (`Worn`, item field `0x398`, not 0). Keys aren't in the pack slots: `_add_item_to_inventory` files an `ItemType` 7 item on the key ring (`0x334`, 50 at most).
 - **So the Stealth stat itself drops while such an item is carried** *([OBSERVED] 2026-10-07, `_calculate_secondary_stats` @ `0x41a424`, Stock)*: Stealth (`0x5fa`) is the base (see *Character stats & progression → Stealth base*) plus the ability 27 total, floored at 0.
@@ -5371,7 +5371,7 @@ There is no room to drop amethyst pendant here.
   | `wooden ladder` (2040, 2047) | −50 |
 
 - **Paradigm: carrying a log raft stops a sneak from taking** *([CONFIRMED] 2026-10-07, user; report `paradigm-20261007-213809`)*. In the capture the raft was bought at Stealth 131 and 76% encumbrance, and the next 14 `sn` in a row answered `Attempting to sneak...You don't think you're sneaking.` That is the Stock arithmetic: 131 − 125 = 6, less 10 for the load (see *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*).
-- `[NEEDS CONFIRMATION]` On Paradigm, does `stat` show Stealth already lowered while the raft is in the pack, as the Stock engine's stored figure would? The client assumes it does.
+- **Paradigm's `stat` shows Stealth already lowered while the raft is in the pack** *([CONFIRMED] 2026-10-07, user: "if you have a log raft in your pack and you type stat, you see the raft subtracting from your stealth")*, the same as the Stock engine's stored figure.
 
 **Client use:**
 - `ItemNameStore.PackStealthOf` reads the modifier with the engine's rule (not a weapon, no wear slot).
