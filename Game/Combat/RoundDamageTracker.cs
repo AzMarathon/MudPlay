@@ -107,7 +107,9 @@ public sealed class RoundDamageTracker : IDisposable
     private Func<bool>? _ownSpellRepeating;
     private DateTimeOffset _lastOwnCastAt = DateTimeOffset.MinValue;
     // The last hit that named both sides — a proc right after it is the hitter's.
-    private (string Source, string Target, DateTimeOffset At)? _lastHit;
+    private (string Source, string Target, DateTimeOffset At, string Line)? _lastHit;
+    // The room's monsters by the name on their lines → game-data number.
+    private Dictionary<string, int> _foeNumbers = new(StringComparer.OrdinalIgnoreCase);
     // The line before the one being read — a room spell's caster announce.
     private string? _previousLine;
 
@@ -206,20 +208,32 @@ public sealed class RoundDamageTracker : IDisposable
         if (capAtHp is not null) _capAtHp = capAtHp;
     }
 
+    // Whether a monster (by game-data number) carries a damage shield, the Shockshield
+    // Message ability. Lets a struck-back line in wording never seen before go to the
+    // monster just hit. Unbound, only the known wordings count.
+    private Func<int, bool>? _wearsDamageShield;
+    public void SetDamageShieldCheck(Func<int, bool> wears) => _wearsDamageShield = wears;
+
     // The room's occupants changed (a fresh "Also here:", an arrival, a death).
     public void NoteRoomEntities(RoomEntitiesObservation obs)
     {
         Dictionary<string, string> names = new(StringComparer.OrdinalIgnoreCase);
         List<string> foes = new();
+        Dictionary<string, int> numbers = new(StringComparer.OrdinalIgnoreCase);
         foreach (RoomEntity e in obs.Entities)
         {
             if (string.IsNullOrWhiteSpace(e.RawName)) continue;
             names[e.RawName] = e.RawName;
-            if (e.Kind == EntityKind.Monster) foes.Add(e.RawName);
+            if (e.Kind == EntityKind.Monster)
+            {
+                foes.Add(e.RawName);
+                if (e.MonsterNumber is int number) numbers[e.RawName] = number;
+            }
             if (!string.IsNullOrWhiteSpace(e.ResolvedName)) names.TryAdd(e.ResolvedName, e.RawName);
         }
         _rosterNames = names;
         _foes = foes;
+        _foeNumbers = numbers;
         // Someone arriving mid-round is in the room for the rest of it.
         if (_current is { } round)
         {
@@ -285,10 +299,16 @@ public sealed class RoundDamageTracker : IDisposable
         // that monster's (report: a priest's hellfire shield credited to unknown).
         // "You are scorched …" reads like a condition's damage with no attacker; a
         // shield's is the struck monster's.
+        // A shield whose wording isn't known still shows itself when the monster just hit
+        // is one the game data gives a shield and this line directly follows that hit.
         bool reflect = false;
         if (source is null && target is not null
             && _lastHit is { } struck && now - struck.At <= ProcWindow
-            && ShieldReflectLines.IsReflect(text))
+            && (ShieldReflectLines.IsReflect(text)
+                || (string.Equals(previous, struck.Line, StringComparison.Ordinal)
+                    && ShieldReflectLines.HasStruckBackShape(text)
+                    && _foeNumbers.TryGetValue(struck.Target, out int struckNumber)
+                    && _wearsDamageShield?.Invoke(struckNumber) == true)))
         {
             if (target == DamageLineAttributor.Self ? struck.Source == DamageLineAttributor.Self
                     : struck.Source.Equals(target, StringComparison.OrdinalIgnoreCase))
@@ -298,7 +318,7 @@ public sealed class RoundDamageTracker : IDisposable
                 a = a with { NoDealer = false };
             }
         }
-        if (source is not null && target is not null && !a.NoDealer && !reflect) _lastHit = (source, target, now);
+        if (source is not null && target is not null && !a.NoDealer && !reflect) _lastHit = (source, target, now, text);
 
         bool roomSpell = (source == DamageLineAttributor.Self || othersRoomSpell) && target is null && !a.NoDealer
             && _foes.Count > 0 && (ownRoomSpell || HitsTheRoom(text));

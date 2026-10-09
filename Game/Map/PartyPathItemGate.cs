@@ -19,13 +19,13 @@ namespace MudPlay.Game.Map;
 // The per-person quota q comes from the item's carry policy (MaxToGet target,
 // MinToKeep floor) — 1 for a rope/grapple, 2–3 for a buff item like waterskin,
 // and 1 for any item with no policy set (the historical one-per-member default).
-// Times the head-count (self + everyone who replied) it gives the total the pool
+// Times the head-count (self + every joined member) it gives the total the pool
 // must hold.
 //
 // Leader — provision the whole party. The leader is the one walking a party
 // route (followers are held by the movement gate), so it owns getting everyone
 // across the gate. For each gated item it probes the party for a count, then
-// treats the party (self + everyone who replied) as one pool that needs q copies
+// treats the party (self + every joined member) as one pool that needs q copies
 // each. Members keep whatever they're holding — nothing is redistributed early.
 // If the pool already holds enough (totalHeld >= q * partySize), the leader
 // immediately coordinates the hand-off so every member reaches q: it gives its
@@ -49,6 +49,24 @@ namespace MudPlay.Game.Map;
 // each way), so the decision is deferred off the walker's WalkTo call stack
 // through _post.
 //
+// The walk waits for the count, when the answer can turn it aside. The answer
+// decides whether the walk goes to a shop or a giver first, and a walker that set
+// off during the round trip headed for the gate and then turned round (report
+// paradigm-20261009-011133). So the walk is held from the announce, before its
+// first step, until every count it waits on has made its decision and the detour
+// that decision asked for has been started. Only the round trip holds it: the
+// leader's wait for copies to arrive afterwards does not. A walk nothing would
+// turn aside (no fetch order on its journey, or an errand that owns the walker)
+// is not held for that: its count runs for the hand-offs while it walks on. The
+// one exception is a leader carrying spares of the item. The count is then what
+// hands them out, and a leader that walked on meanwhile reached the gate and
+// crossed it ahead of the gives, leaving the party behind.
+//
+// A journey asks once. The answer stands for the journey's later legs and its
+// re-plans, which decide again from it without asking, until the numbers move
+// (our own copies change, a hand-off is made, the party changes) or it is two
+// minutes old: a member's own copies can change unseen.
+//
 // Substitutes. A hazard counter is an any-of group (any boat crosses the river),
 // but the route announces one representative item. Every count here is COVERAGE
 // — copies of the item or any of its route substitutes (PathItemSubstitutes) —
@@ -60,15 +78,25 @@ namespace MudPlay.Game.Map;
 // Scope: multiple copies are acquired by the forwarded shortfall count — a shop
 // detour buys that many, and auto-search stays armed (until the pool is whole)
 // to reveal the rest off the floor. Monster-drop reroute remains single-copy
-// best-effort. Non-responders are treated as outside the pool — the leader
-// provisions only itself and the members that answered, leaving a silent member
-// to its own per-member pipeline.
+// best-effort.
+//
+// A member who doesn't answer. A joined member who never answers the count is in
+// the pool and holds none: the leader's shortfall includes their copies, and the
+// hand-off gives them theirs (user, 2026-10-09: "if a member doesnt answer an
+// @have count, assume they dont have it and fetch them one"). They used to be left
+// out of the pool, so a leader holding its own copy with nobody answering was a
+// party of one, found whole, and nothing was fetched for anyone. The leader hands
+// such a member a copy itself, or tells a member who did answer to; nothing can
+// be asked of the silent one. A member invited and not yet joined is not asked
+// and not in the pool.
 public sealed class PartyPathItemGate
 {
     private const string LogCategory = "AutoSearch";
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> NoHoldings =
         new Dictionary<string, IReadOnlyDictionary<int, int>>();
+
+    private static readonly IReadOnlyDictionary<int, int> NoneHeld = new Dictionary<int, int>();
 
     // A route item the leader is provisioning: its name and what each member
     // that replied holds of it and its substitutes (given name → item id → copies).
@@ -91,10 +119,47 @@ public sealed class PartyPathItemGate
     private readonly Action<IReadOnlyList<int>, int> _forward;
     private readonly Action<Action> _post;
     private readonly Func<int, IReadOnlyList<int>> _substitutes;
+    private readonly Func<int, bool> _agreedTrade;
+    private readonly Action<string>? _holdWalk;
+    private readonly Action<string>? _releaseWalk;
+    private readonly Func<bool> _canTurnWalkAside;
+    private readonly Func<Action, IDisposable>? _armHoldCap;
+    private readonly Func<object?> _journey;
+    private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
     private readonly object _gate = new();
     private readonly Dictionary<int, Pending> _pending = new();
+    // Items whose party count is in flight, by name. One count per item at a time.
+    private readonly Dictionary<int, string> _counting = new();
+    // What a journey's count of an item came to, and our own copies then.
+    private readonly Dictionary<int, Counted> _counted = new();
+    // The counts the held walk waits on, and the names it has waited on since the
+    // hold went up (kept to the release, so the chip doesn't lose its item early).
+    private readonly HashSet<int> _waitingOn = new();
+    private readonly List<string> _heldFor = new();
+    private bool _holdingWalk;
+    // Moves each time a walk asks for the hold, so a release queued for the walk
+    // before it can't take the hold from the walk after.
+    private int _holdEpoch;
+    private IDisposable? _holdCap;
+    // Bumped when counts are dropped, so one of them can't finish into what came after.
+    private int _generation;
     private Action<byte[]>? _wireSender;
+
+    // Forward is the shortfall the count sent on to the demand pipeline, 0 when
+    // the party held enough and nothing was handed out.
+    private sealed record Counted(
+        object Journey, int SelfTotal, int Forward, DateTimeOffset At, IReadOnlyList<string> Unanswered);
+
+    // The party as one count found it: what each joined member holds of the item
+    // and its substitutes, and who of them never answered (they are in Members
+    // too, holding nothing).
+    private sealed record PartyPool(
+        Dictionary<string, IReadOnlyDictionary<int, int>> Members, IReadOnlyList<string> Unanswered);
+
+    // How long a journey's count stands. Only our own copies and our own hand-offs
+    // are seen from here; a member using up or picking up a copy is not.
+    private static readonly TimeSpan CountStandsFor = TimeSpan.FromMinutes(2);
 
     public PartyPathItemGate(
         Func<int, bool> isCarried,
@@ -110,7 +175,20 @@ public sealed class PartyPathItemGate
         Action<IReadOnlyList<int>, int> forward,
         Action<Action> post,
         LogService? log = null,
-        Func<int, IReadOnlyList<int>>? substitutes = null)
+        Func<int, IReadOnlyList<int>>? substitutes = null,
+        Func<int, bool>? agreedTrade = null,
+        // Hold and release the walk for a party count, each with the reason to log.
+        Action<string>? holdWalk = null,
+        Action<string>? releaseWalk = null,
+        // Whether the answer could send the walk being announced somewhere else
+        // first. A walk it can't is never held.
+        Func<bool>? canTurnWalkAside = null,
+        // Arms a one-shot that fires if the hold outlives the party probe's reply
+        // window; disposing the handle cancels it.
+        Func<Action, IDisposable>? armHoldCap = null,
+        // The trip the walk being announced belongs to, by reference.
+        Func<object?>? journey = null,
+        Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(isCarried);
         ArgumentNullException.ThrowIfNull(selfCount);
@@ -137,6 +215,13 @@ public sealed class PartyPathItemGate
         _forward = forward;
         _post = post;
         _substitutes = substitutes ?? (static id => new[] { id });
+        _agreedTrade = agreedTrade ?? (static _ => false);
+        _holdWalk = holdWalk;
+        _releaseWalk = releaseWalk;
+        _canTurnWalkAside = canTurnWalkAside ?? (static () => true);
+        _armHoldCap = armHoldCap;
+        _journey = journey ?? (static () => null);
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         _log = log;
     }
 
@@ -221,6 +306,7 @@ public sealed class PartyPathItemGate
         }
 
         bool leader = _selfIsLeader();
+        object? journey = _journey();
         var considered = new HashSet<int>();
         List<int>? passthrough = null;   // items not flagged for party provisioning
         foreach (int id in itemIds)
@@ -231,51 +317,355 @@ public sealed class PartyPathItemGate
                 (passthrough ??= new()).Add(id);   // self-only demand, per-item routers handle it
                 continue;
             }
+            // A trade the user agreed to on the route card is fetched at once. The
+            // card already said where the item comes from and what it costs, and
+            // the party count is a telepath round trip: for those seconds the walker
+            // headed for the gate instead of the giver, and the map drew that line.
+            if (_agreedTrade(id) && !_isCarried(id))
+            {
+                _log?.Info(LogCategory,
+                    $"path item {id}: its trade was agreed on the route card, so the party isn't asked first");
+                (passthrough ??= new()).Add(id);
+                continue;
+            }
             if (leader)
             {
                 // The leader provisions even for an item it already carries —
                 // a follower may still lack it, and only the leader coordinates
-                // the hand-off. Skip only when one is already in flight.
-                bool inFlight;
-                lock (_gate) inFlight = _pending.ContainsKey(id);
-                if (inFlight) continue;
-                _post(() => _ = ProvisionAsync(id));
+                // the hand-off. Skip only when the count is already in and the
+                // copies are still on their way: that wait holds nobody.
+                bool acquiring;
+                lock (_gate) acquiring = _pending.ContainsKey(id) && !_counting.ContainsKey(id);
+                if (acquiring) continue;
             }
-            else
+            else if (Total(SelfHoldings(id)) >= PerPersonFor(id)) continue;   // already hold our quota
+
+            // Nothing to ask the party about by name: a single copy for self.
+            if (_itemName(id) is not { } name || string.IsNullOrWhiteSpace(name))
             {
-                if (Total(SelfHoldings(id)) >= PerPersonFor(id)) continue;   // already hold our quota
-                _post(() => _ = TryBorrowSpareAsync(id));
+                (passthrough ??= new()).Add(id);
+                continue;
             }
+
+            if (ReusesJourneyCount(id, name, journey)) continue;
+
+            // A count already in flight (the second leg of a boat route, a walk
+            // started over the one that asked) is the one this walk waits for.
+            if (!BeginCount(id, name, leader, out int generation)) continue;
+            _post(() => _ = CountAsync(id, name, leader, journey, generation));
         }
         if (passthrough is not null) _forward(passthrough, 1);
+    }
+
+    // ----- One count per journey -----------------------------------------------
+
+    // A journey asks the party about an item once. A later leg or a re-plan of the
+    // same journey decides again from that answer without asking: it forwards the
+    // same shortfall (so a router that had to stand down is offered it again), or
+    // nothing when the party held enough. The answer stops standing when our own
+    // copies of the item have changed or it has grown old, and it is dropped when
+    // a hand-off is made or the party changes: the numbers have moved, or may
+    // have, so the next leg asks afresh.
+    private bool ReusesJourneyCount(int id, string name, object? journey)
+    {
+        Counted? known;
+        lock (_gate) known = _counted.GetValueOrDefault(id);
+        if (known is null) return false;
+        if (journey is null || !ReferenceEquals(known.Journey, journey)
+            || Total(SelfHoldings(id)) != known.SelfTotal
+            || _now() - known.At > CountStandsFor)
+        {
+            lock (_gate) _counted.Remove(id);
+            return false;
+        }
+        _log?.Info(LogCategory, known.Forward > 0
+            ? $"path item {id} ('{name}'): this trip's party count stands — still {known.Forward} to get, not asking again"
+            : $"path item {id} ('{name}'): this trip's party count stands — the party holds enough, not asking again");
+        if (known.Forward > 0) _forward(new[] { id }, known.Forward);
+        return true;
+    }
+
+    private void RememberCount(int id, object? journey, int forward, IReadOnlyList<string> unanswered)
+    {
+        if (journey is null) return;
+        int selfTotal = Total(SelfHoldings(id));
+        lock (_gate) _counted[id] = new Counted(journey, selfTotal, forward, _now(), unanswered);
+    }
+
+    // The party changed: every count was of the roster that was.
+    public void ForgetCounts()
+    {
+        lock (_gate) _counted.Clear();
+    }
+
+    // The answers the trip under way is deciding from without asking again (bug report).
+    public string JourneyCountsSummary
+    {
+        get
+        {
+            lock (_gate)
+                return _counted.Count == 0 ? "(none)" : string.Join("; ", _counted.Select(kv =>
+                    (kv.Value.Forward > 0
+                        ? $"item {kv.Key}: {kv.Value.Forward} to get"
+                        : $"item {kv.Key}: the party holds enough")
+                    + (kv.Value.Unanswered.Count == 0 ? ""
+                        : $" (no answer from {string.Join(", ", kv.Value.Unanswered)}: counted as holding none)")));
+        }
+    }
+
+    // ----- Holding the walk for a count ---------------------------------------
+
+    // The items whose party count a walk is waiting on, empty when none is. For the
+    // Navigation hold chip and the bug report.
+    public IReadOnlyList<string> HoldingWalkFor
+    {
+        get
+        {
+            lock (_gate) return _holdingWalk ? _heldFor.ToArray() : Array.Empty<string>();
+        }
+    }
+
+    // Another item joined a hold already in force. The coordinator says nothing
+    // then (its gate didn't change), so the chip is told from here.
+    public event Action? HoldingWalkForChanged;
+
+    // Start the count of an item for the walk being announced, and hold that walk
+    // for it when the answer can turn it aside, or when a leader has spares that
+    // the count will hand out. False when the count is already in flight, so the
+    // caller starts no second one: the walk waits on that one.
+    private bool BeginCount(int id, string name, bool leader, out int generation)
+    {
+        bool turnsAside = _canTurnWalkAside();
+        // Spares in a leader's pack: bought for the party a moment ago, most often.
+        // Walking on while the party is asked took the leader through the gate
+        // before the gives went out, and the gate carries only those holding one.
+        bool spares = leader && Total(SelfHoldings(id)) > PerPersonFor(id);
+        bool fresh;
+        lock (_gate)
+        {
+            generation = _generation;
+            fresh = _counting.TryAdd(id, name);
+            if (fresh) _counted.Remove(id);
+        }
+        _log?.Info(LogCategory,
+            (fresh ? $"asking the party who holds {name} (path item {id})"
+                   : $"the party is already being asked who holds {name} (path item {id})")
+            + (turnsAside ? " — the walk waits for the answer"
+                : spares ? " — the walk waits: there are spares to hand out first"
+                : " — nothing would turn this walk aside, so it goes on meanwhile"));
+        if (turnsAside || spares) HoldWalk(id, name, fresh);
+        return fresh;
+    }
+
+    private void HoldWalk(int id, string name, bool freshCount)
+    {
+        bool assert, waits, joined;
+        lock (_gate)
+        {
+            _holdEpoch++;
+            assert = !_holdingWalk;
+            _holdingWalk = true;
+            waits = _waitingOn.Add(id);
+            joined = !_heldFor.Contains(name);
+            if (joined) _heldFor.Add(name);
+        }
+        try
+        {
+            if (assert) _holdWalk?.Invoke($"asking the party who holds {name}");
+            ArmHoldCap();
+        }
+        catch
+        {
+            // The count that would take this hold down is not posted yet, so what
+            // was put up here is taken back, or the walk stands for good and so does
+            // every later walk that needs this item. The coordinator puts its gate up
+            // before it tells its listeners, so one that threw has left the gate up.
+            // A hold that was already in force stays: other counts are behind it,
+            // and its own limit is still armed.
+            lock (_gate)
+            {
+                if (freshCount) _counting.Remove(id);
+                if (waits) _waitingOn.Remove(id);
+                if (joined) _heldFor.Remove(name);
+                if (assert)
+                {
+                    _waitingOn.Clear();
+                    _heldFor.Clear();
+                    _holdingWalk = false;
+                }
+            }
+            if (assert) _releaseWalk?.Invoke("the hold could not be raised");
+            throw;
+        }
+        if (!assert && joined) HoldingWalkForChanged?.Invoke();
+    }
+
+    // The hold's own limit, past the party probe's reply window. The release
+    // otherwise rests on that window's timer and on every count reaching its end,
+    // and a walk held with nothing coming to release it never moves again.
+    private void ArmHoldCap()
+    {
+        if (_armHoldCap is null) return;
+        IDisposable armed = _armHoldCap(OnHoldCapElapsed);
+        IDisposable? previous;
+        lock (_gate)
+        {
+            previous = _holdCap;
+            _holdCap = armed;
+        }
+        previous?.Dispose();
+    }
+
+    private void OnHoldCapElapsed()
+    {
+        string items;
+        lock (_gate)
+        {
+            if (!_holdingWalk) return;
+            items = string.Join(", ", _heldFor);
+            // The counts still out are given up on. Their slots go with them, so
+            // the next walk asks again, and a late answer finds nothing to decide.
+            foreach (int id in _counting.Keys) _pending.Remove(id);
+            _counting.Clear();
+            _generation++;
+        }
+        _log?.Warn(LogCategory,
+            $"the party's count of {items} did not come back in time — the walk goes on without it");
+        ReleaseWalk("the party count did not come back in time");
+    }
+
+    // One count, from the announce to its decision. Nothing awaits it, so a fault
+    // is caught here rather than lost, and the walk it holds is let go whatever
+    // happened: a hold that outlived its count would strand the walk for good.
+    private async Task CountAsync(int id, string name, bool leader, object? journey, int generation)
+    {
+        try
+        {
+            if (IsStale(generation)) return;
+            if (leader) await ProvisionAsync(id, name, journey, generation).ConfigureAwait(true);
+            else await TryBorrowSpareAsync(id, name, journey, generation).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // Drop the slot the count reserved, so the next announce asks again.
+            lock (_gate)
+            {
+                if (generation == _generation) _pending.Remove(id);
+            }
+            _log?.Warn(LogCategory,
+                $"party count of path item {id} ('{name}') failed ({ex.Message}) — the walk goes on without it");
+        }
+        finally
+        {
+            EndCount(id, generation);
+        }
+    }
+
+    private bool IsStale(int generation)
+    {
+        lock (_gate) return generation != _generation;
+    }
+
+    // The count has made its decision. The release is posted, not made here: a
+    // router the decision woke has only queued its detour walk, and a hold lifted
+    // now would send the walk's own first step ahead of it.
+    private void EndCount(int id, int generation)
+    {
+        lock (_gate)
+        {
+            if (generation != _generation) return;   // dropped, and its hold with it
+            _counting.Remove(id);
+            if (!_waitingOn.Remove(id) || _waitingOn.Count > 0) return;
+        }
+        _post(() => ReleaseWalkIfSettled(generation));
+    }
+
+    private void ReleaseWalkIfSettled(int generation)
+    {
+        lock (_gate)
+        {
+            // The detour's own walk-start may have begun another count meanwhile.
+            if (generation != _generation || _waitingOn.Count > 0) return;
+        }
+        ReleaseWalk("the party count is in");
+    }
+
+    private void ReleaseWalk(string reason)
+    {
+        IDisposable? cap;
+        lock (_gate)
+        {
+            if (!_holdingWalk) return;
+            _holdingWalk = false;
+            _waitingOn.Clear();
+            _heldFor.Clear();
+            cap = _holdCap;
+            _holdCap = null;
+        }
+        cap?.Dispose();
+        _releaseWalk?.Invoke(reason);
+    }
+
+    // The walk a count was holding has ended (stopped, failed, replaced by another
+    // the user started), so there is nothing left to hold. The counts run on to
+    // their decisions. Posted: the walker says a walk failed before it resets it,
+    // and a release made inside that would resume a walk about to be thrown away.
+    // A walk announced meanwhile that waits on a count has asked for the hold
+    // again, and keeps it.
+    public void OnWalkEnded()
+    {
+        int epoch;
+        lock (_gate)
+        {
+            if (!_holdingWalk) return;
+            epoch = _holdEpoch;
+        }
+        _post(() =>
+        {
+            lock (_gate)
+            {
+                if (epoch != _holdEpoch) return;
+            }
+            ReleaseWalk("the walk it held is over");
+        });
+    }
+
+    // Reset States, or another character loaded: forget the party provisioning in
+    // flight and let go of the walk it held.
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _pending.Clear();
+            _counting.Clear();
+            _counted.Clear();
+            _generation++;
+        }
+        ReleaseWalk("party provisioning reset");
     }
 
     // Inventory-change callback (wired to InventoryManager.Changed): re-checks
     // each in-flight provisioning and coordinates the hand-off the moment the
     // pool becomes whole. A no-op when the leader isn't provisioning anything.
-    // Reset States: forget the party provisioning probes in flight.
-    public void Clear()
-    {
-        lock (_gate) _pending.Clear();
-    }
-
     public void OnInventoryChanged()
     {
         int[] ids;
         lock (_gate)
         {
             if (_pending.Count == 0) return;
-            ids = new int[_pending.Count];
-            _pending.Keys.CopyTo(ids, 0);
+            // A slot whose count is still out has nobody's answer in it yet. Settled
+            // now it reads as a party of one: a leader carrying its own copy was
+            // found whole, and the answer then came back to a slot that was gone.
+            ids = _pending.Keys.Where(id => !_counting.ContainsKey(id)).ToArray();
         }
-        foreach (int id in ids) TryComplete(id);
+        foreach (int id in ids) TryComplete(id, out _);
     }
 
     // Ask the party about the item and every substitute at once — the probe keeps
     // concurrent queries apart by item name — and fold the replies into what each
-    // member holds. A member who answered any of the queries is in the pool; one
-    // who answered none is a non-responder, as before.
-    private async Task<Dictionary<string, IReadOnlyDictionary<int, int>>> QueryHoldingsAsync(int id)
+    // member holds. A member who answered none of the queries holds none of any
+    // of them, and is in the pool like the rest.
+    private async Task<PartyPool> QueryHoldingsAsync(int id)
     {
         var asks = new List<Task<PartyInventoryProbe.PartyItemResult>>();
         var askedNames = new List<string>();
@@ -300,14 +690,20 @@ public sealed class PartyPathItemGate
 
         var holdings = new Dictionary<string, IReadOnlyDictionary<int, int>>(StringComparer.OrdinalIgnoreCase);
         foreach (KeyValuePair<string, Dictionary<int, int>> kv in byMember) holdings[kv.Key] = kv.Value;
-        return holdings;
+
+        // Unanswered is null on a default result, which has nobody in it.
+        var unanswered = new List<string>();
+        foreach (PartyInventoryProbe.PartyItemResult r in results)
+            foreach (string member in r.Unanswered ?? Array.Empty<string>())
+                if (holdings.TryAdd(member, NoneHeld)) unanswered.Add(member);
+        if (unanswered.Count > 0)
+            _log?.Info(LogCategory,
+                $"path item {id}: {string.Join(", ", unanswered)} didn't answer: counted as holding none");
+        return new PartyPool(holdings, unanswered);
     }
 
-    private async Task ProvisionAsync(int id)
+    private async Task ProvisionAsync(int id, string name, object? journey, int generation)
     {
-        string? name = _itemName(id);
-        if (string.IsNullOrWhiteSpace(name)) { _forward(new[] { id }, 1); return; }
-
         // Reserve the slot up-front so a re-announce mid-probe doesn't kick off
         // a second probe / double-give for the same item.
         lock (_gate)
@@ -315,14 +711,19 @@ public sealed class PartyPathItemGate
             if (!_pending.TryAdd(id, new Pending(id, name, NoHoldings))) return;
         }
 
-        Dictionary<string, IReadOnlyDictionary<int, int>> others = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        PartyPool pool = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        Dictionary<string, IReadOnlyDictionary<int, int>> others = pool.Members;
         lock (_gate)
         {
-            if (!_pending.ContainsKey(id)) return;   // cleared while probing
+            if (generation != _generation || !_pending.ContainsKey(id)) return;   // cleared while probing
             _pending[id] = new Pending(id, name, others);
         }
 
-        if (TryComplete(id)) return;
+        if (TryComplete(id, out bool handedOut))
+        {
+            if (!handedOut) RememberCount(id, journey, 0, pool.Unanswered);
+            return;
+        }
 
         // Genuine shortfall: feed the demand pipeline (search / shop per the
         // user's checked options) with the count the leader must acquire so the
@@ -340,13 +741,17 @@ public sealed class PartyPathItemGate
         if (!_searchEnabled())
             lock (_gate) _pending.Remove(id);
         _forward(new[] { id }, target);
+        RememberCount(id, journey, target, pool.Unanswered);
     }
 
-    // Redistributes if the pool (self + responders) now holds at least the
+    // Redistributes if the pool (self + every joined member) now holds at least the
     // per-person quota for every member; returns true when the slot is settled
-    // (either handed out or nothing to do), false while still short.
-    private bool TryComplete(int id)
+    // (either handed out or nothing to do), false while still short. handedOut
+    // says the settling moved copies about, or may have: the count no longer
+    // describes the party.
+    private bool TryComplete(int id, out bool handedOut)
     {
+        handedOut = false;
         Pending? p;
         lock (_gate) p = _pending.TryGetValue(id, out Pending? found) ? found : null;
         if (p is null) return false;
@@ -355,15 +760,18 @@ public sealed class PartyPathItemGate
         int othersTotal = 0;
         foreach (IReadOnlyDictionary<int, int> held in p.Others.Values) othersTotal += Total(held);
         int q = PerPersonFor(id);
-        int partySize = 1 + p.Others.Count;      // self + everyone who replied
+        int partySize = 1 + p.Others.Count;      // self + every joined member, answered or not
         int totalHeld = Total(self) + othersTotal;
         if (totalHeld < q * partySize) return false; // not enough yet — keep acquiring
 
+        handedOut = true;
         lock (_gate)
         {
             if (!_pending.Remove(id)) return true;   // another pass already handled it
         }
-        Redistribute(p.Name, p.Others, self, id, q);
+        handedOut = !Redistribute(p.Name, p.Others, self, id, q);
+        if (handedOut)
+            lock (_gate) _counted.Remove(id);
         Provisioned?.Invoke(id);
         return true;
     }
@@ -389,11 +797,12 @@ public sealed class PartyPathItemGate
     private string NameOf(int itemId, string fallback) =>
         _itemName(itemId) is { Length: > 0 } n ? n : fallback;
 
-    private void Redistribute(
+    // True when every member already held the quota and nothing was sent.
+    private bool Redistribute(
         string name, IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> others,
         IReadOnlyDictionary<int, int> self, int id, int q)
     {
-        if (_wireSender is null) { _forward(new[] { id }, 1); return; }
+        if (_wireSender is null) { _forward(new[] { id }, 1); return false; }
 
         // null giver / sink == self. Each member's copies above the quota q are
         // giveable; its deficit below q is that many sink slots (a member two
@@ -411,11 +820,11 @@ public sealed class PartyPathItemGate
             for (int i = 0; i < q - held; i++) sinks.Add(kv.Key);
             sources.AddRange(SparesOf(kv.Key, kv.Value, id, q));
         }
-        if (sinks.Count == 0) return;   // everyone already holds the quota
+        if (sinks.Count == 0) return true;   // everyone already holds the quota
 
         string? selfName = _selfGivenName();
         bool selfInvolved = sinks.Contains(null) || sources.Any(static s => s.Giver is null);
-        if (selfInvolved && string.IsNullOrEmpty(selfName)) { _forward(new[] { id }, 1); return; }
+        if (selfInvolved && string.IsNullOrEmpty(selfName)) { _forward(new[] { id }, 1); return false; }
 
         int sent = 0;
         int si = 0;
@@ -433,15 +842,17 @@ public sealed class PartyPathItemGate
         }
         _log?.Info(LogCategory,
             $"party provisioning {name}: issued {sent} give(s) so each member holds {q}.");
+        return false;
     }
 
-    private async Task TryBorrowSpareAsync(int id)
+    private async Task TryBorrowSpareAsync(int id, string name, object? journey, int generation)
     {
-        string? name = _itemName(id);
-        if (string.IsNullOrWhiteSpace(name)) { _forward(new[] { id }, 1); return; }
-
         int q = PerPersonFor(id);
-        Dictionary<string, IReadOnlyDictionary<int, int>> holdings = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        // A member who didn't answer is in the pool holding nothing, so can't be
+        // borrowed from: for a follower the party is, as before, those with a spare.
+        PartyPool pool = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        Dictionary<string, IReadOnlyDictionary<int, int>> holdings = pool.Members;
+        if (IsStale(generation)) return;   // reset while probing: ask for nothing
 
         // Might have arrived between the announce and the reply window (an
         // earlier give, a floor pickup) — nothing left to do once we hold quota.
@@ -462,10 +873,20 @@ public sealed class PartyPathItemGate
 
         // No member has a spare to give — post the need (quota copies) so
         // demand-driven search / shop take over.
-        if (holders.Count == 0) { _forward(new[] { id }, q); return; }
+        if (holders.Count == 0)
+        {
+            _forward(new[] { id }, q);
+            RememberCount(id, journey, q, pool.Unanswered);
+            return;
+        }
 
         string self = _selfGivenName() ?? string.Empty;
-        if (self.Length == 0 || _wireSender is null) { _forward(new[] { id }, q); return; }
+        if (self.Length == 0 || _wireSender is null)
+        {
+            _forward(new[] { id }, q);
+            RememberCount(id, journey, q, pool.Unanswered);
+            return;
+        }
 
         holders.Sort((a, b) => b.Spares.Count.CompareTo(a.Spares.Count));
         int borrowed = 0;

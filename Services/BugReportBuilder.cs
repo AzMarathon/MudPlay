@@ -1876,7 +1876,14 @@ public static class BugReportBuilder
         sb.Append("\n**Path-item detours**\n\n");
         Kv(sb, "Path-item search demand", svc.PathItemDemand.SearchDemandActive.ToString());
         Kv(sb, "Party path-item search demand", svc.PartyPathItemGate.SearchDemandActive.ToString());
+        // "Paused by" above names the gate; this says which items' counts hold it.
+        IReadOnlyList<string> counting = svc.PartyPathItemGate.HoldingWalkFor;
+        Kv(sb, "Walk held for the party's count of", counting.Count == 0 ? "(nothing)" : string.Join(", ", counting));
         Kv(sb, "Party count of per-member gate items", svc.PartyGateCountSummary);
+        // Why a walk did or didn't ask the party: a count it is still deciding
+        // from, or a route card's count waiting for the walk that card starts.
+        Kv(sb, "Party counts standing for this trip", svc.PartyPathItemGate.JourneyCountsSummary);
+        Kv(sb, "Route card counts not yet taken by a walk", svc.CardCountSummary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
