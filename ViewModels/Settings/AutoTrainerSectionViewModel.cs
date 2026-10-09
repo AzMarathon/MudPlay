@@ -74,6 +74,14 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     // would otherwise keep training.
     [ObservableProperty] private int _doNotTrainAbove;
 
+    // Stock: seconds a train run waits at the trainer for an altered stat to clear
+    // before leaving the CP plan for later (0 = don't wait).
+    [ObservableProperty] private int _alteredStatsWaitSeconds;
+
+    // The wait only does anything on a Stock realm: Paradigm trains with a stat
+    // altered. Drives whether its control is enabled.
+    public bool IsStockRealm => _gameData.ActiveRealm == RealmType.Stock;
+
     // Broadcast "I can now train to level: N" when a live exp gain makes a new level trainable.
     [ObservableProperty] private bool _announceLevelUps;
     // Channel the level-up announce is sent on (enabled only with AnnounceLevelUps).
@@ -142,6 +150,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         Title, "trainer", "train", "guild", "level up",
         "announce level-ups", "announce channel", "levels to keep", "keep banked", "buffer",
         "do not train above", "level ceiling", "max level", "stop at level",
+        "wait for altered stats", "stats altered", "unnaturally altered", "buff wait",
         "levels stacked", "train once stacked", "fire at banked levels", "batch training",
         "party", "party train", "auto-train party", "members ready", "quorum", "power level", "level gap", "level 11",
         "short on cash", "funding", "withdraw", "bank", "stash", "keep looping",
@@ -216,6 +225,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
             FireAtBankedLevels = Math.Max(0, FireAtBankedLevels),
             LevelsToKeep = Math.Max(0, LevelsToKeep),
             DoNotTrainAbove = Math.Max(0, DoNotTrainAbove),
+            AlteredStatsWaitSeconds = Math.Clamp(AlteredStatsWaitSeconds, 0, AutoTrainerSettings.MaxAlteredStatsWaitSeconds),
             AnnounceLevelUps = AnnounceLevelUps,
             AnnounceChannel = AnnounceChannel,
             DisabledTrainers = disabled.Count == 0 ? null : disabled,
@@ -255,6 +265,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         _suppressDirty = false;
         ClearDirty();
         OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(IsStockRealm));
     }
 
     private void LoadFromProfile()
@@ -263,6 +274,7 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
         FireAtBankedLevels = Math.Max(0, dto.FireAtBankedLevels);
         LevelsToKeep = Math.Max(0, dto.LevelsToKeep);
         DoNotTrainAbove = Math.Max(0, dto.DoNotTrainAbove);
+        AlteredStatsWaitSeconds = Math.Clamp(dto.AlteredStatsWaitSeconds, 0, AutoTrainerSettings.MaxAlteredStatsWaitSeconds);
         AnnounceLevelUps = dto.AnnounceLevelUps;
         AnnounceChannel = dto.AnnounceChannel;
         PartyMinReady = Math.Clamp(dto.PartyMinReady, 1, 6);
@@ -468,6 +480,17 @@ public sealed partial class AutoTrainerSectionViewModel : SettingsSectionViewMod
     partial void OnDoNotTrainAboveChanged(int value)
     {
         if (value < 0) { DoNotTrainAbove = 0; return; }   // re-enters with 0, marks dirty there
+        MarkDirty();
+    }
+
+    partial void OnAlteredStatsWaitSecondsChanged(int value)
+    {
+        if (value < 0) { AlteredStatsWaitSeconds = 0; return; }   // re-enters clamped, marks dirty there
+        if (value > AutoTrainerSettings.MaxAlteredStatsWaitSeconds)
+        {
+            AlteredStatsWaitSeconds = AutoTrainerSettings.MaxAlteredStatsWaitSeconds;
+            return;
+        }
         MarkDirty();
     }
 

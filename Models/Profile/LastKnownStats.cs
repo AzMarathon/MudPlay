@@ -64,4 +64,13 @@ public sealed class LastKnownStats
     public int MartialArts { get; set; }
     public int MagicRes { get; set; }
     public int Spellcasting { get; set; }
+
+    // ----- What the screen said about its own numbers ---------------------
+    // Which of the six trainable stats that `stat` screen marked as modified, as
+    // Game.StatSet bits. Null when the screen's marks weren't read (and in every
+    // snapshot saved before marks were kept): the numbers above then can't be told
+    // from buffed ones.
+    public int? ModifiedStats { get; set; }
+    // The active effects that screen listed under the stats.
+    public List<SavedEffectLine>? ActiveEffects { get; set; }
 }
