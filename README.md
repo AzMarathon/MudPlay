@@ -1,14 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.27**
-> - A monster set to **Hangup** (Game Data → the monster's record → Fighting it) now hangs the client up as soon as it is seen in the room
-> - It is the Health tab's hang-up: Disable hangups stops it, it follows Allow hangup in all-off mode, and it is not dialled back
-> - After reconnecting from such a hang-up the watch is off for a minute, counted down beside the status bar's connection light
-> - The room's list of who is here no longer outlives a disconnect
-> - Hang-ups called for in the same moment (low HP, a PvP enemy, a Hangup monster) send one exit command, not one each
-> - During a fight with a player the PvP actions come first: a Hangup monster is hung up on when the fight ends
-> - With Disable hangups on, or in the minute after a reconnect, a Hangup monster that attacks is fought back
+> **Version 3.159.30**
+> - A route whose only way there needs a key or other item goes round hazard rooms you hold no counter for when it can, and asks for the key alone (the walk to the Hidden Study no longer crossed Crystal Lake's teleport rooms or sent for a log raft)
+> - Crystal Lake: a log raft or wooden skiff counts as protection from level 50 only, as the game data has it; below that the lake's teleport rooms are walked round even with a boat, and a boat is no longer offered as a shortcut across
+> - When the lake's teleport rooms are the only way for a character under level 50, the route card says the boats are no help and crosses on your pick
+> - The program log says when a walk goes the longer way round hazard rooms, and a route card's log line and the bug report count the hazard rooms a route crosses or goes round
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

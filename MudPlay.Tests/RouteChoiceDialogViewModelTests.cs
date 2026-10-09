@@ -734,6 +734,31 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(noCounter.ShowGatedCard);      // "walk to the hazard and stop"
     }
 
+    // A sole route through a hazard whose counter does nothing at the crosser's level
+    // (Crystal Lake below level 50): one card, the route itself, saying the boats are
+    // no help. Nothing to obtain, nothing to search for, no "take the damage".
+    [Fact]
+    public void SoleHazard_NoItemProtectsAtThisLevel_OffersTheRouteAndNothingToFetch()
+    {
+        var choice = SoleChoice(
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }) { NoProtection = true });
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Crystal Lake (17/1201)", id => id == 690 ? "log raft" : "wooden skiff",
+            hazardCounterSource: null, hazardSurvivable: false);
+
+        Assert.True(vm.ShowGatedCard);
+        Assert.False(vm.HazardObtain);
+        Assert.False(vm.ShowSearchCard);
+        Assert.False(vm.ShowSendItCard);
+        Assert.StartsWith("Route — ", vm.GatedSummary);
+        Assert.Contains("nothing protects you from at your level", vm.FreeSummary);
+        Assert.Equal(
+            "Requires nothing that helps: at your level log raft or wooden skiff does not protect you "
+            + "in the hazard rooms on this route",
+            vm.RequirementSummary);
+    }
+
     // A MIXED route — a survivable hazard (raft) AND a hard gate past it (a door key)
     // — with no sourceable counter: base card "walk to the hazard and stop" + "cross
     // unprotected", and the heading names both the hazard and the gate.

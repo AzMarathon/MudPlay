@@ -30,6 +30,11 @@ public sealed record RouteRequirement(RouteRequirementKind Kind, IReadOnlyList<i
     // silently dropped as "not blocked") so the requirement list is complete — the
     // route genuinely crosses this gate, the crosser just already satisfies it.
     public bool Carried { get; init; }
+
+    // True for a hazard whose counter does nothing for this crosser (Crystal Lake
+    // below level 50, boat or no boat). Listed so the card says the rooms are crossed
+    // unprotected; nothing is fetched for it.
+    public bool NoProtection { get; init; }
 }
 
 // Which kind of route fork the picker is presenting. ItemGate: a shorter direct
@@ -160,7 +165,12 @@ public sealed record RouteChoice(
     RoomKey? BossRoom = null,
     IReadOnlyList<RoomKey>? BossWaitPath = null,
     // "pharaoh rastep's room (12/2250)", filled in by the caller for the cards.
-    string? BossRoomLabel = null)
+    string? BossRoomLabel = null,
+    // For a sole route that goes round hazard rooms: how many the shortest way
+    // through every gate would have walked into, and that way's length. Zero when
+    // the route crosses its hazards (there is no way round) or meets none.
+    int RoundedHazardRooms = 0,
+    int ThroughHazardsStepCount = 0)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
     // so the direct route is the ONLY way there (empty FreePath is the sentinel).
@@ -219,28 +229,52 @@ public static class RouteChoicePlanner
         // destination crosses an acquirable gate.
         IReadOnlyList<Direction>? free = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
 
-        // Direct route: acquirable gates suspended so BFS crosses them. No direct
-        // route either → genuinely disconnected (or blocked by a non-acquirable
-        // level/toll/class gate), so there's nothing to offer.
-        IReadOnlyList<Direction>? gated;
-        using (filter.SuspendAcquirableGates())
-            gated = bfs.FindPath(source, destination, filter);
-        if (gated is null || gated.Count == 0) return null;
-
         bool hasFree = free is { Count: > 0 };
 
-        // A SOLE route (no gate-free way there) must cross the gate/hazard, but a
-        // trap on one approach may be dodgeable by taking another (e.g. a hazard room
-        // reachable from several sides, only one of which is trapped). Prefer the
-        // fewest-traps approach so the forced crossing doesn't also eat a trap it
-        // could have avoided — the walk commits this route with avoidTraps to match,
-        // and the card's route is planned by that walk's own search so the two are
-        // one route and not two of the same length.
+        // Direct route: acquirable gates suspended so BFS crosses them. Beside a free
+        // route it is the route obtaining something would open, so a hazard room no
+        // item protects this crosser from stays closed: a boat is not offered for a
+        // lake it does nothing on (report paradigm-20261009-123349). With no free
+        // route the hazards are dealt with below.
+        IReadOnlyList<Direction>? gated = null;
+        if (hasFree)
+            using (filter.SuspendAcquirableGatesButUnprotectableHazards())
+                gated = bfs.FindPath(source, destination, filter);
+
+        // A SOLE route (no gate-free way there) goes round every hazard room the
+        // crosser has no counter for when a way round exists. Standing every gate
+        // down at once made a route that needed only a door key walk the lake's
+        // teleport rooms as open ground, for a way no shorter than the one beside
+        // them, and ask for a boat to do it (reports paradigm-20261009-135049,
+        // paradigm-20261009-135314). Only when there is no way round does the route
+        // cross them, as it always has.
+        //
+        // Either way a trap on one approach may be dodgeable by taking another (e.g.
+        // a hazard room reachable from several sides, only one of which is trapped).
+        // Prefer the fewest-traps approach so the forced crossing doesn't also eat a
+        // trap it could have avoided — the walk commits this route with avoidTraps
+        // to match, and the card's route is planned by that walk's own search so the
+        // two are one route and not two of the same length.
         // A genuine shortcut (a free route exists) keeps the shortest-by-hops gated
         // route so the step-saving comparison below stays meaningful.
+        bool roundsHazards = false;
+        IReadOnlyList<Direction>? through = null;
         if (!hasFree)
+        {
+            using (filter.SuspendAcquirableGatesButUncounteredHazards())
+                gated = PlanAsTheWalkWill(bfs, graph, filter, source, destination, avoidTraps: true);
+            roundsHazards = gated is { Count: > 0 };
+            // No route through every gate either → genuinely disconnected (or blocked
+            // by a non-acquirable level/toll/class gate), so there's nothing to offer.
             using (filter.SuspendAcquirableGates())
-                gated = PlanAsTheWalkWill(bfs, graph, filter, source, destination, avoidTraps: true) ?? gated;
+            {
+                through = bfs.FindPath(source, destination, filter);
+                if (through is not { Count: > 0 }) return null;
+                if (!roundsHazards)
+                    gated = PlanAsTheWalkWill(bfs, graph, filter, source, destination, avoidTraps: true) ?? through;
+            }
+        }
+        if (gated is null || gated.Count == 0) return null;
 
         List<RouteRequirement> reqs = CollectRequirements(graph, filter, source, gated);
         if (reqs.Count == 0) return null;   // needs nothing acquirable → not a gated choice
@@ -261,13 +295,19 @@ public static class RouteChoicePlanner
             // (so the walk takes the reliable way and its carried gates surface), and
             // offer the shortcut as an alternative rather than mislabelling its item as
             // required (report paradigm-20260913-100733).
-            GateClassification gc = ClassifyGates(bfs, filter, graph, source, destination, gated);
+            GateClassification gc = ClassifyGates(bfs, filter, graph, source, destination, gated, roundsHazards);
+            IReadOnlyList<RoomKey> committedKeys = BuildKeyPath(graph, source, gc.CommittedPath);
+            int rounded = roundsHazards
+                ? UncounteredHazardRooms(filter, BuildKeyPath(graph, source, through!)).Except(committedKeys).Count()
+                : 0;
             RouteChoice sole = new(
                 0, gc.CommittedPath.Count, gc.Requirements,
                 Array.Empty<RoomKey>(),
-                BuildKeyPath(graph, source, gc.CommittedPath))
+                committedKeys)
             {
                 ClosedGateItems = gc.ClosedGateItems.Count > 0 ? gc.ClosedGateItems : null,
+                RoundedHazardRooms = rounded,
+                ThroughHazardsStepCount = rounded > 0 ? through!.Count : 0,
             };
             if (gc.ShortcutPath is { } scp)
                 sole = sole with
@@ -415,7 +455,7 @@ public static class RouteChoicePlanner
         // one drops the teleport question altogether, and the item fork's picks commit
         // teleport-free — the walk then goes the long way round a portal nobody was
         // asked about.
-        using (filter.SuspendAcquirableGates())
+        using (filter.SuspendAcquirableGatesButUnprotectableHazards())
             if (bfs.FindPath(source, destination, filter, refuseTeleports: true) is { Count: > 0 } obtainable
                 && obtainable.Count < tele.Count)
                 return null;
@@ -474,7 +514,7 @@ public static class RouteChoicePlanner
         // trap-free, that beats trusting a step-time disarm — defer to Evaluate so it
         // surfaces the obtain/cross options. Require trap-free: an obtainable route that
         // still crosses a trap must keep this warning, so only a clean route defers.
-        using (filter.SuspendAcquirableGates())
+        using (filter.SuspendAcquirableGatesButUnprotectableHazards())
             if (bfs.FindPath(source, destination, filter) is { Count: > 0 } obtainable
                 && obtainable.Count < shortest.Count
                 && bfs.CountTrapsOnPath(source, obtainable) == 0)
@@ -561,7 +601,7 @@ public static class RouteChoicePlanner
             // paradigm-20260907-212758: a raft-crossable river route existed, but the
             // picker offered only "no route respects your avoids" because this case
             // jumped straight to the override without weighing an obtainable counter.)
-            using (filter.SuspendAcquirableGates())
+            using (filter.SuspendAcquirableGatesButUnprotectableHazards())
                 if (bfs.FindPath(source, destination, filter) is { Count: > 0 })
                     return null;
 
@@ -589,7 +629,7 @@ public static class RouteChoicePlanner
         // 423-step avoid-honouring detour vs a 421-step through-avoids route, and never
         // the far shorter "buy a boat and sail the river" route, because this fork
         // returned before Evaluate could weigh the obtainable water counter.)
-        using (filter.SuspendAcquirableGates())
+        using (filter.SuspendAcquirableGatesButUnprotectableHazards())
             if (bfs.FindPath(source, destination, filter) is { Count: > 0 } obtainable
                 && obtainable.Count < overrideRoute.Count)
                 return null;
@@ -971,9 +1011,12 @@ public static class RouteChoicePlanner
     // requirements, and (when a real saving exists) the shortcut route + the optional
     // items it needs. Optionality is a topology fact (does a route avoiding the gate
     // exist?), independent of what the crosser currently carries.
+    // roundHazards: the route goes round the hazard rooms the crosser has no counter
+    // for, so every probe here keeps them closed too. A gate is then optional only
+    // when the way round it also stays out of them.
     private static GateClassification ClassifyGates(
         BfsMapper bfs, MovementFilter filter, RoomGraphManager graph,
-        RoomKey source, RoomKey destination, IReadOnlyList<Direction> gated)
+        RoomKey source, RoomKey destination, IReadOnlyList<Direction> gated, bool roundHazards)
     {
         // Distinct item-gate ids on the shortest all-suspended route that actually
         // stop the crosser. A locked door they can pick or bash is no gate: its key
@@ -991,7 +1034,7 @@ public static class RouteChoicePlanner
         foreach (int id in unheld)
         {
             IReadOnlyList<Direction>? around;
-            using (filter.SuspendAcquirableGatesExcept(new[] { id }))
+            using (filter.SuspendAcquirableGatesExcept(new[] { id }, keepUncounteredHazards: roundHazards))
                 around = bfs.FindPath(source, destination, filter);
             if (around is not null) optional.Add(id);
         }
@@ -1005,7 +1048,7 @@ public static class RouteChoicePlanner
         // Planned as the walk the card starts will plan it (fewest traps: a sole
         // route's commit passes avoidTraps).
         IReadOnlyList<Direction>? committed;
-        using (filter.SuspendAcquirableGatesExcept(optional))
+        using (filter.SuspendAcquirableGatesExcept(optional, keepUncounteredHazards: roundHazards))
             committed = PlanAsTheWalkWill(bfs, graph, filter, source, destination, avoidTraps: true);
         if (committed is null || committed.Count == 0)
             return new(gated, TaggedRequirements(graph, filter, source, gated), null, Array.Empty<int>());
@@ -1196,7 +1239,32 @@ public static class RouteChoicePlanner
         IReadOnlyList<int> items = hazard.ProtectingItems;
         return items.Count > 0
             ? new RouteRequirement(RouteRequirementKind.HazardProtection, items)
+                { NoProtection = !filter.HazardCounterProtects(hazard) }
             : null;
+    }
+
+    // What a walk taking its default route goes round: the hazard rooms the shortest
+    // way with every gate open would walk into, with both lengths. Null when that
+    // way meets none the crosser has no counter for, or there is no default route.
+    // For the log and the bug report: a walk that quietly goes the longer way is
+    // otherwise indistinguishable from one that never saw the shorter.
+    public static (int HazardRooms, int ThroughSteps, int Steps)? HazardDetour(
+        BfsMapper bfs, MovementFilter filter, RoomGraphManager graph,
+        RoomKey source, RoomKey destination, Func<IReadOnlyList<Direction>?>? baseRoute = null)
+    {
+        ArgumentNullException.ThrowIfNull(bfs);
+        ArgumentNullException.ThrowIfNull(filter);
+        ArgumentNullException.ThrowIfNull(graph);
+
+        IReadOnlyList<Direction>? taken = baseRoute is { } bp ? bp() : bfs.FindPath(source, destination, filter);
+        if (taken is not { Count: > 0 }) return null;
+        IReadOnlyList<Direction>? through;
+        using (filter.SuspendAcquirableGates())
+            through = bfs.FindPath(source, destination, filter);
+        if (through is not { Count: > 0 }) return null;
+
+        int rooms = UncounteredHazardRooms(filter, BuildKeyPath(graph, source, through)).Count;
+        return rooms > 0 ? (rooms, through.Count, taken.Count) : null;
     }
 
     private static bool AlreadyHave(List<RouteRequirement> reqs, RouteRequirement candidate) =>

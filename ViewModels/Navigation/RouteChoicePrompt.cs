@@ -160,7 +160,7 @@ public static class RouteChoicePrompt
 
         // Nav lifecycle stays Info for a fork that surfaces; a plain no-fork walk is
         // Debug so an ordinary GOTO doesn't spam the log.
-        if (plan.Kind == RoutePlanKind.PlainWalk)
+        if (plan.Kind == RoutePlanKind.PlainWalk && !plan.RoundsHazards)
             services.Log.Debug(LogCat, plan.LogMessage);
         else
             services.Log.Info(LogCat, plan.LogMessage);
@@ -268,7 +268,10 @@ public static class RouteChoicePrompt
     // The outcome of route planning: which fork (if any) to surface, the resolved
     // choice for the picker, and the ready-to-log decision line. Pure computation —
     // no UI, no logging, no network — so WalkAsync can run it off the UI thread.
-    private readonly record struct RoutePlan(RoutePlanKind Kind, RouteChoice? Choice, string LogMessage);
+    // RoundsHazards: a plain walk whose route is the longer way round hazard rooms,
+    // which is logged where the user sees it.
+    private readonly record struct RoutePlan(
+        RoutePlanKind Kind, RouteChoice? Choice, string LogMessage, bool RoundsHazards = false);
 
     // Run the fork evaluations in priority order and decide the outcome. The forks
     // each need the same two full-graph pathfinds — the plain default route (gates +
@@ -371,6 +374,16 @@ public static class RouteChoicePrompt
                 return new(RoutePlanKind.BossRoom, boss,
                     $"route pick {src} -> {destination}: boss-room fork — the route passes through stop-before boss room "
                     + $"{boss.BossRoom} ({boss.GatedStepCount} step(s)); a way around is {boss.FreeStepCount}; showing picker");
+            // A plain walk that goes the longer way to stay out of hazard rooms says
+            // so: nothing else tells it from a walk that never saw the shorter one.
+            if (RouteChoicePlanner.HazardDetour(
+                    services.Bfs, services.Movement, services.RoomGraph, src, destination, BaseRoute)
+                is { } detour)
+                return new(RoutePlanKind.PlainWalk, null,
+                    $"route pick {src} -> {destination}: no fork; walking {detour.Steps} step(s) round "
+                    + $"{detour.HazardRooms} hazard room(s) you hold no working counter for "
+                    + $"(the shortest way through them is {detour.ThroughSteps} step(s))",
+                    RoundsHazards: true);
             return new(RoutePlanKind.PlainWalk, null,
                 $"route pick {src} -> {destination}: no fork (free route needs nothing acquirable); plain walk");
         }
@@ -393,7 +406,8 @@ public static class RouteChoicePrompt
         }
 
         static string Summarize(IReadOnlyList<RouteRequirement> reqs) => string.Join(", ", reqs.Select(r =>
-            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"));
+            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"
+            + (r.NoProtection ? " (does not protect at this level)" : "")));
         string reqSummary = Summarize(choice.Requirements);
         if (choice.GatedWalk is not null)
             avoidAltNote += " (the gates are on a lever detour, not the route itself)";
@@ -401,6 +415,14 @@ public static class RouteChoicePrompt
         // cards offered rather than one route and a saving.
         if (!choice.HasFreeRoute)
             reqSummary += $" over {choice.GatedStepCount} step(s)";
+        // Whether the route offered keeps out of hazard rooms or walks into them,
+        // and how many: the first thing asked of a route that goes near a lake.
+        if (choice.RoundedHazardRooms > 0)
+            reqSummary += $", going round {choice.RoundedHazardRooms} hazard room(s) the shortest way through "
+                + $"every gate ({choice.ThroughHazardsStepCount} step(s)) crosses";
+        else if (RouteChoicePlanner.UncounteredHazardRooms(services.Movement, choice.GatedPath) is { Count: > 0 } crossed)
+            reqSummary += $", crossing {crossed.Count} hazard room(s)"
+                + (choice.Requirements.Any(r => r.NoProtection) ? " no item protects you in at your level" : "");
         if (choice.ClosedGateItems is { Count: > 0 } closed)
             reqSummary += $", going round the gates that need item(s) {string.Join("/", closed)}";
         string shortcutNote = choice.ShortcutItems is { Count: > 0 } sc
@@ -505,7 +527,8 @@ public static class RouteChoicePrompt
         if (crossesHazard)
             foreach (RouteRequirement req in choice.Requirements)
             {
-                if (req.Kind != RouteRequirementKind.HazardProtection) continue;
+                // A counter that does nothing at this level is not fetched or searched for.
+                if (req.Kind != RouteRequirementKind.HazardProtection || req.NoProtection) continue;
                 foreach (int cid in req.ItemIds)
                     if (!hazardCounterIds.Contains(cid)) hazardCounterIds.Add(cid);
                 // A counter already chosen for an earlier hazard that also appears in

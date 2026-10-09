@@ -550,5 +550,69 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.Equal(new[] { 690, 691 }, lake.RequirementGroups.Single().OrderBy(i => i));
         Assert.True(river.IsSatisfiedBy(id => id == 1181));
         Assert.False(lake.IsSatisfiedBy(id => id == 1181));
+        // Neither script splits its item holders by level, so a boat protects at any.
+        Assert.Empty(river.UnprotectedLevels);
+        Assert.True(lake.CounterProtectsAt(1));
+    }
+
+    // Crystal Lake's script as the game data has it on both realms (reports
+    // paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314):
+    // no boat rolls 9357 (a teleport 70 rolls in 100); a boat under level 50 rolls
+    // 9445, which teleports outright on half its roll and hands a quarter back to
+    // 9357 (67.5 in 100); a boat from level 50 rolls 9361, whose only teleport is 3
+    // in 100 of a table reached 70 times in 100 (2.1 in 100). So a boat counters the
+    // lake from level 50 and does next to nothing below it.
+    internal const string LakeTbInfoJson = """
+        [ { "Number": 9358, "Action": "failitem 690:failitem 691:random 9357 \nmaxlevel 49:checkitem 690:random 9445\nmaxlevel 49:checkitem 691:random 9445\nminlevel 50:checkitem 690:random 9361\nminlevel 50:checkitem 691:random 9361\n" },
+          { "Number": 9357, "Action": "30:addexp 0\n100:random 9383\n\n" },
+          { "Number": 9383, "Action": "50:teleport 3 1\n100:teleport 4 1\n" },
+          { "Number": 9445, "Action": "25:random 9363\n50:random 9357\n100:message 2906:random 9396\n\n" },
+          { "Number": 9396, "Action": "100:teleport 5 1\n" },
+          { "Number": 9361, "Action": "30:addexp 0\n100:nomonsters:random 9388\n\n" },
+          { "Number": 9363, "Action": "50:addexp 0\n100:nomonsters:random 9390\n\n" },
+          { "Number": 9388, "Action": "50:addexp 0\n53:message 2906:random 9396\n70:message 3071:summon 904:summon 904\n100:message 2909:summon 891\n\n" },
+          { "Number": 9390, "Action": "50:addexp 0\n97:summon 904:nomonsters:message 2910:summon 880\n100:random 9394\n\n" },
+          { "Number": 9394, "Action": "5:message 2906:random 9396\n10:random 9390\n75:random 9388\n100:summon 874\n\n" } ]
+        """;
+
+    [Fact]
+    public void LakeBoat_ProtectsFromLevel50Only()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(1076),
+            """ [ { "Number": 1076, "Abil-0": 115, "AbilVal-0": 66, "Abil-1": 148, "AbilVal-1": 9358 } ] """,
+            itemsJson: null,
+            tbInfoJson: LakeTbInfoJson);
+
+        RoomHazardIndex.RoomHazard lake = idx.HazardForSpell(1076)!;
+        Assert.Equal(new[] { 690, 691 }, lake.RequirementGroups.Single().OrderBy(i => i));
+        Assert.False(lake.IsSurvivableDamage);   // a teleport is never "take the damage"
+        Assert.Equal(new[] { new RoomHazardIndex.LevelBand(0, 49) }, lake.UnprotectedLevels);
+        Assert.False(lake.CounterProtectsAt(1));
+        Assert.False(lake.CounterProtectsAt(49));
+        Assert.True(lake.CounterProtectsAt(50));
+        Assert.True(lake.CounterProtectsAt(75));
+    }
+
+    // A holder's branch that rolls its way back to a table already on the path (9390
+    // and 9394 name each other) is followed once and no further.
+    [Fact]
+    public void HolderBranch_ThatLoopsBackOnItself_StillResolves()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(700),
+            """ [ { "Number": 700, "Abil-0": 148, "AbilVal-0": 50 } ] """,
+            itemsJson: null,
+            tbInfoJson: """
+            [ { "Number": 50, "Action": "failitem 55:teleport 12 1\nmaxlevel 9:checkitem 55:random 51\nminlevel 10:checkitem 55:random 53\n" },
+              { "Number": 51, "Action": "60:teleport 12 1\n100:random 52\n" },
+              { "Number": 52, "Action": "100:random 51\n" },
+              { "Number": 53, "Action": "90:addexp 0\n100:random 52\n" } ]
+            """);
+
+        RoomHazardIndex.RoomHazard h = idx.HazardForSpell(700)!;
+        // Under level 10 the holder is moved 60 rolls in 100 against a certain move
+        // with no item; from level 10, 6 in 100.
+        Assert.Equal(new[] { new RoomHazardIndex.LevelBand(0, 9) }, h.UnprotectedLevels);
     }
 }

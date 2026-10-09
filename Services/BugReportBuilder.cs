@@ -1761,8 +1761,14 @@ public static class BugReportBuilder
         MovementFilter filter = svc.Movement;
         Game.Map.RoomGraphManager graph = svc.RoomGraph;
 
-        bool direct = bfs.FindPath(here, target, filter) is { Count: > 0 };
-        Kv(sb, "Direct route (gates honoured)", direct ? "reachable" : "none — blocked");
+        IReadOnlyList<Game.Map.Direction>? honoured = bfs.FindPath(here, target, filter);
+        bool direct = honoured is { Count: > 0 };
+        Kv(sb, "Direct route (gates honoured)", direct ? $"reachable, {honoured!.Count} step(s)" : "none — blocked");
+        // A "why did it go the long way" / "why through the lake" report turns on this.
+        Kv(sb, "Hazard rooms the direct route goes round",
+            RouteChoicePlanner.HazardDetour(bfs, filter, graph, here, target, () => honoured) is { } detour
+                ? $"{detour.HazardRooms} with no working counter held, on the shortest way through every gate ({detour.ThroughSteps} step(s))"
+                : direct ? "none" : "(no direct route)");
         if (direct) return;
 
         IReadOnlyList<Game.Map.Direction>? physical =
@@ -1772,13 +1778,22 @@ public static class BugReportBuilder
 
         // The gates the route card named, and what the client makes of each: whether
         // a pick of the card would fetch a door key, and any trade that yields it.
-        if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs })
+        if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs } gatedChoice)
         {
+            IReadOnlyList<Game.Map.RoomKey> entered = RouteChoicePlanner.UncounteredHazardRooms(filter, gatedChoice.GatedPath);
+            Kv(sb, "Hazard rooms on the route through gates",
+                $"{entered.Count} walked into with no working counter held"
+                + (entered.Count > 0 ? $" ({string.Join(", ", entered.Take(20).Select(k => $"{k.Map}/{k.Room}"))})" : string.Empty)
+                + (gatedChoice.RoundedHazardRooms > 0
+                    ? $"; goes round {gatedChoice.RoundedHazardRooms} the shortest way through every gate "
+                      + $"({gatedChoice.ThroughHazardsStepCount} step(s)) crosses"
+                    : string.Empty));
             IReadOnlyList<int> fetchable = svc.SourceableGateItems(reqs);
             Kv(sb, "Gate items on the route through gates", string.Join("; ", reqs.Select(r =>
             {
                 string items = string.Join("/", r.ItemIds.Select(id => $"{id} {svc.ItemNames.GetName(id) ?? "?"}"));
                 if (r.Carried) return $"{r.Kind} {items} (carried)";
+                if (r.NoProtection) return $"{r.Kind} {items} (does not protect at this level)";
                 if (r.Kind != RouteRequirementKind.DoorKey) return $"{r.Kind} {items}";
                 string source = fetchable.Contains(r.ItemIds[0])
                     ? " — a route card's pick fetches it" : " — nothing fetches it";

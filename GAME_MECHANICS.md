@@ -4918,6 +4918,34 @@ Among protectable hazards, a further split governs whether the navigator may off
 **Client use:**
 - Encoded as `RoomHazard.IsSurvivableDamage`; classifier `RoomHazardIndex.IsSurvivableHazardDamage`.
 
+### Crystal Lake: the sea room spells
+*Status: [OBSERVED] 2026-10-09 (game data: `data-Paradigm-1.9.1` and `data-v1.11p`; reports `paradigm-20261009-123349`, `paradigm-20261009-135049`, `paradigm-20261009-135314`) · Realm: both (the data is the same shape on each; not seen on the wire)*
+
+- **Most of Crystal Lake's rooms cast a room spell that can teleport whoever walks in.** `Rooms.Spell` is `1076` "sea 1", `1077` "sea 2" or `1078` "sea 3": 116 / 149 / 125 rooms on Paradigm 1.9.1 (all on map 17; all named `Crystal Lake` but two of the `1077` rooms, `Damp Cave Entrance` and `trina`), 181 / 194 / 206 on Stock 1.11p. Each spell's ability 148 names its textblock: `9358`, `9359`, `9360`.
+- **Some Crystal Lake rooms carry no spell at all**, and a walk crosses the lake through them untouched. On Paradigm 1.9.1 the lane `17/1014` → `1051` → `1050` → `1049` → `1056` → `1068` → `1067` → `1066` → `1065` → `1064` → `1062` → `1041` → `17/1026` is as long as the way through the `1076` rooms `17/1015`–`17/1025` beside it.
+- **The three textblocks differ only in their last two lines** (`9361` for sea 1, `9362` for sea 2, `9363` for sea 3):
+  - `failitem 690:failitem 691:random 9357`
+  - `maxlevel 49:checkitem 690:random 9445`
+  - `maxlevel 49:checkitem 691:random 9445`
+  - `minlevel 50:checkitem 690:random 9361`
+  - `minlevel 50:checkitem 691:random 9361`
+  - Items `690` *log raft* and `691` *wooden skiff* are the only boats named: a silverbark canoe (`1181`) does nothing here.
+  - Read by the rules in *Room-command refusals* (`failitem`, `checkitem`, `minlevel`, `maxlevel`), the line order in *Cast-on-walk exits and random teleports* (the first line whose action succeeds ends the scan) and the roll-table rule in *Monsters, lairs & spawns → Room-spell monster summons*. Those were read from the Stock engine; Paradigm is not recorded.
+- **With no boat: teleported on 7 entries in 10.** `9357` is `30:addexp 0` / `100:random 9383`, and `9383` is a table of `teleport <room> 17` lines: 89 different rooms on Paradigm 1.9.1, nearly all `Crystal Lake` (with and without a sea spell), plus `Crystal Lake, Inlet`, `Crystal Lake, Near Docks` and `White Forest, Landing`.
+- **With a boat at level 49 or under: still teleported on about 2 entries in 3.** `9445` is `25:random 9363` / `50:random 9357` / `100:message 2906:random 9396`. Half the roll is `9396`, five equal bands of `teleport 981 17` … `teleport 985 17` (the `Ancient Galleon` rooms); a quarter is the no-boat table `9357`. That is 0.50 + 0.25 × 0.70 = 67.5% (67.55% on Stock), against 70% with no boat.
+- **With a boat at level 50 or over: hardly ever.** Every branch is behind `nomonsters`, so nothing fires with a monster in the room.
+  - sea 1, `9361`: `30:addexp 0` / `100:nomonsters:random 9388`; `9388` is `50:addexp 0` / `53:message 2906:random 9396` / `70:message 3071:summon 904:summon 904` / `100:message 2909:summon 891:summon 891:summon 891:summon 891`. The Galleon on 0.70 × 0.03 = 2.1% of entries.
+  - sea 2, `9362`: `40:addexp 0` / `100:nomonsters:random 9389`; `9389` only summons. No teleport.
+  - sea 3, `9363`: `50:addexp 0` (Stock: `10:addexp 0`) / `100:nomonsters:random 9390`; `9390` summons, and on 3 rolls in 100 goes to `9394` (`5:message 2906:random 9396` / `10:random 9390` / `75:random 9388` / `100:random 9389`). About 0.1% (Stock 0.2%).
+- *[NEEDS CONFIRMATION]*: does a boat really leave a character under level 50 teleported two entries in three (half of them to the Ancient Galleon)? The data on both realms says so; no capture shows a lake crossing. The text of message `2906` is not recorded either.
+- **Client policy** (2026-10-09, not yet put to the user): a counter counts as protection at a character's level only where holding it at least halves the room's chance of harming them (`RoomHazardIndex.CounterMustCutHarmTo`). The lake is the only hazard in either data set whose textblock splits item holders by level, and it is far from the line on both sides (67.5% against 70% under level 50; 2.1% at most from level 50). A `nomonsters` step is counted as passed, the worst case.
+
+**Client use:**
+- `RoomHazardIndex.UnprotectedHolderLevels` reads the bands off the textblock into `RoomHazard.UnprotectedLevels` (`level 49 and under` for all three sea spells), and `MovementFilter.HazardCounterProtects` judges them against the character's own level (an unknown level refuses nothing).
+- `MovementFilter.IsHazardEntryBlocked`: below level 50 a sea room is closed to every plan, boat carried or not, but for a walk that agreed to that room on a route card. So walk-to, a loop's approach, Auto-Lair travel and the automatic trips all go round the lake's teleport rooms. From level 50 a carried boat opens them, as before.
+- `RouteChoicePlanner.Evaluate`: beside a free route, the "acquire, then go" route is planned with `SuspendAcquirableGatesButUnprotectableHazards`, so no boat is offered for a shortcut it would not make safe (report `paradigm-20261009-123349`: level 25, 84 steps round against 82 through 11 teleport rooms; the walk now takes the 84 with no card). A sole route goes round every hazard room the crosser holds no counter for when a way round exists (reports `paradigm-20261009-135049`, `paradigm-20261009-135314`: the loop walk to `17/9781` needs only the jagged bone key, and was planned through 8 to 13 sea rooms and asked for a log raft, for a way no shorter). With no way round it crosses them, and `RouteRequirement.NoProtection` makes the card say the boats are no help instead of fetching one.
+- `RouteChoicePlanner.HazardDetour` feeds the program log's "walking N step(s) round M hazard room(s)" line and the bug report's "Hazard rooms the direct route goes round".
+
 ### Door and gate barriers in the room display
 *Status: CONFIRMED 2026-07-14 (capture, report 091244)*
 

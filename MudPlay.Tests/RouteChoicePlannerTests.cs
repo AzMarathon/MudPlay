@@ -2321,4 +2321,233 @@ public sealed class RouteChoicePlannerTests
             filter.ItemCarriedProbe = id => id == 42;
         });
     }
+
+    // Reports paradigm-20261009-135049 / paradigm-20261009-135314: the only way to
+    // 1/9 is a keyed door out of 1/8, and 1/8 is reached through hazard room 1/5 or
+    // round it. Planned with every gate stood down, the route took 1/5 as open
+    // ground and the card asked for the hazard's counter as well as the key.
+    // Through: 1/1 ─E─ 1/5 (Spell 700) ─E─ 1/8 ─E (Key: 7)─ 1/9          (3 hops).
+    // Round:   1/1 ─N─ 1/2 ─N─ 1/3 ─E─ 1/8 ─E (Key: 7)─ 1/9             (4 hops).
+    private const string KeyedDoorPastAHazardJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Hazard", "Spell": 700,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/8", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Mid1", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Mid2", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/8", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 8, "Name": "Door", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9 (Key: 7)", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Vault", "Spell": 0,
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/8",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static void WireHazard700(RoomHazardIndex index, MovementFilter filter)
+    {
+        filter.Hazards = index;
+        filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 5) ? 700 : 0;
+        filter.InventoryReadyProbe = () => true;
+        filter.ItemCarriedProbe = _ => false;
+    }
+
+    [Fact]
+    public void SoleKeyRoute_GoesRoundAHazardRoom_ItHasNoCounterFor()
+    {
+        WithGraph(KeyedDoorPastAHazardJson, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3), new RoomKey(1, 8), new RoomKey(1, 9) },
+                choice.GatedPath);
+            // The key is all the route needs: no counter is asked for, or fetched.
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.DoorKey, req.Kind);
+            Assert.Equal(new[] { 7 }, req.ItemIds);
+            Assert.Empty(RouteChoicePlanner.UncounteredHazardRooms(filter, choice.GatedPath));
+            // What it went round, for the log and the bug report.
+            Assert.Equal(1, choice.RoundedHazardRooms);
+            Assert.Equal(3, choice.ThroughHazardsStepCount);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: WireHazard700);
+    }
+
+    // Holding the counter, the hazard room is ordinary ground and the shorter way.
+    [Fact]
+    public void SoleKeyRoute_CrossesTheHazardRoom_WithItsCounterInHand()
+    {
+        WithGraph(KeyedDoorPastAHazardJson, (bfs, graph, filter) =>
+        {
+            filter.ItemCarriedProbe = id => id == 42;
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(3, choice!.GatedStepCount);
+            Assert.Contains(new RoomKey(1, 5), choice.GatedPath);
+            Assert.Equal(RouteRequirementKind.DoorKey, Assert.Single(choice.Requirements).Kind);
+            Assert.Equal(0, choice.RoundedHazardRooms);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: WireHazard700);
+    }
+
+    // With no way round, the route crosses the hazard room as it always has, and
+    // lists its counter beside the key.
+    [Fact]
+    public void SoleKeyRoute_StillCrossesAHazardRoom_ThereIsNoWayRound()
+    {
+        string noWayRound = KeyedDoorPastAHazardJson.Replace("\"E\": \"1/8\", \"W\": \"0\"", "\"E\": \"0\", \"W\": \"0\"");
+        WithGraph(noWayRound, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(
+                new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 8), new RoomKey(1, 9) },
+                choice!.GatedPath);
+            Assert.Equal(
+                new[] { RouteRequirementKind.HazardProtection, RouteRequirementKind.DoorKey },
+                choice.Requirements.Select(r => r.Kind));
+            Assert.Equal(new[] { new RoomKey(1, 5) }, RouteChoicePlanner.UncounteredHazardRooms(filter, choice.GatedPath));
+            Assert.Equal(0, choice.RoundedHazardRooms);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: WireHazard700);
+    }
+
+    // Crystal Lake: a room spell that teleports, whose boats protect from level 50
+    // only (RoomHazardIndexTests.LakeTbInfoJson). The two layouts are the hazard
+    // shortcut (2 hops through 1/5, 3 round it) and the hazard-only route.
+    private const string LakeSpellsJson =
+        """[ { "Number": 1076, "Abil-0": 115, "AbilVal-0": 66, "Abil-1": 148, "AbilVal-1": 9358 } ]""";
+
+    private static void WithLake(
+        string roomsJson, int? level, Func<int, bool> carries,
+        Action<BfsMapper, RoomGraphManager, MovementFilter> body)
+        => WithGraph(roomsJson.Replace("\"Spell\": 700", "\"Spell\": 1076"), body,
+            spellsJson: LakeSpellsJson,
+            wireHazards: (index, filter) =>
+            {
+                filter.Hazards = index;
+                filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 5) ? 1076 : 0;
+                filter.InventoryReadyProbe = () => true;
+                filter.ItemCarriedProbe = carries;
+                filter.LevelProvider = () => level;
+            },
+            tbInfoJson: RoomHazardIndexTests.LakeTbInfoJson);
+
+    // Report paradigm-20261009-123349: a level 25 character was offered "Direct —
+    // acquire then go" through the lake's teleport rooms to save two steps, with a
+    // boat to fetch. Below level 50 a boat stops nothing there, so there is nothing
+    // to acquire and no offer: the walk goes round.
+    [Fact]
+    public void LakeShortcut_IsNotOfferedBelowLevel50()
+    {
+        WithLake(HazardShortcutRoomsJson, level: 25, carries: _ => false, (bfs, graph, filter) =>
+        {
+            Assert.Null(RouteChoicePlanner.Evaluate(bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+            Assert.Equal(3, bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), filter)!.Count);
+            // One teleport room gone round: 2 steps through it, 3 walked.
+            (int HazardRooms, int ThroughSteps, int Steps)? detour =
+                RouteChoicePlanner.HazardDetour(bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            Assert.NotNull(detour);
+            Assert.Equal((1, 2, 3), (detour!.Value.HazardRooms, detour.Value.ThroughSteps, detour.Value.Steps));
+        });
+    }
+
+    // A boat in the pack changes nothing below level 50: the default route still
+    // goes round, where it used to take the lake as safe.
+    [Fact]
+    public void LakeWithABoat_IsWalkedRoundBelowLevel50_AndCrossedFromLevel50()
+    {
+        WithLake(HazardShortcutRoomsJson, level: 49, carries: id => id == 690, (bfs, graph, filter) =>
+        {
+            Assert.Equal(3, bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), filter)!.Count);
+            Assert.True(filter.IsUncounteredHazardRoom(new RoomKey(1, 5)));
+            Assert.Null(RouteChoicePlanner.Evaluate(bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+        });
+        WithLake(HazardShortcutRoomsJson, level: 50, carries: id => id == 690, (bfs, graph, filter) =>
+        {
+            Assert.Equal(2, bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), filter)!.Count);
+            Assert.False(filter.IsUncounteredHazardRoom(new RoomKey(1, 5)));
+            Assert.Null(RouteChoicePlanner.HazardDetour(bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9)));
+        });
+        // A level not read yet refuses nothing, as for every other gate.
+        WithLake(HazardShortcutRoomsJson, level: null, carries: id => id == 690, (bfs, graph, filter) =>
+            Assert.Equal(2, bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), filter)!.Count));
+    }
+
+    // From level 50 the boat is a counter like any other, and the shortcut is offered.
+    [Fact]
+    public void LakeShortcut_IsOfferedFromLevel50_WithTheBoatToAcquire()
+    {
+        WithLake(HazardShortcutRoomsJson, level: 58, carries: _ => false, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Equal(3, choice!.FreeStepCount);
+            Assert.Equal(2, choice.GatedStepCount);
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+            Assert.Equal(new[] { 690, 691 }, req.ItemIds.OrderBy(i => i));
+            Assert.False(req.NoProtection);
+        });
+    }
+
+    // When the lake is the only way, a character under level 50 still gets the route
+    // through it, as before. The card names the boats as no help rather than as
+    // something to fetch, and the rooms stay ones the pick must agree to even with
+    // a boat in the pack.
+    [Fact]
+    public void LakeOnlyRoute_BelowLevel50_IsCrossedWithNothingToFetch()
+    {
+        foreach (Func<int, bool> carries in new Func<int, bool>[] { _ => false, id => id == 691 })
+            WithLake(HazardOnlyRoomsJson, level: 25, carries, (bfs, graph, filter) =>
+            {
+                RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                    bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+                Assert.NotNull(choice);
+                Assert.False(choice!.HasFreeRoute);
+                Assert.Equal(2, choice.GatedStepCount);
+                RouteRequirement req = Assert.Single(choice.Requirements);
+                Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+                Assert.True(req.NoProtection);
+                Assert.Equal(new[] { new RoomKey(1, 5) }, RouteChoicePlanner.UncounteredHazardRooms(filter, choice.GatedPath));
+
+                // The walk the card commits opens the rooms agreed to, and those only.
+                using (filter.SuspendAcquirableGatesExcept(
+                    Array.Empty<int>(), keepUncounteredHazards: true, openHazardRooms: new[] { new RoomKey(1, 5) }))
+                    Assert.Equal(2, bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), filter)!.Count);
+                using (filter.SuspendAcquirableGatesButUncounteredHazards())
+                    Assert.Null(bfs.FindPath(new RoomKey(1, 1), new RoomKey(1, 9), filter));
+            });
+    }
 }

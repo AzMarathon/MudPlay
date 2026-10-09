@@ -417,7 +417,9 @@ public sealed partial class RouteChoiceDialogViewModel
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
         _crossesSurvivableHazard = hazardSurvivable;
         _mixedHazard = hazardSurvivable && !soleHazardOnly;
-        _hazardCounterNeeded = choice.Requirements.Any(r => r.Kind == RouteRequirementKind.HazardProtection);
+        // A counter that does nothing at the crosser's level isn't one to go looking for.
+        _hazardCounterNeeded = choice.Requirements.Any(
+            r => r.Kind == RouteRequirementKind.HazardProtection && !r.NoProtection);
         SearchSummary = _hazardCounterNeeded
             ? $"Search en route — {StepsEta(choice.GatedStepCount, gatedEta)}"
             : string.Empty;
@@ -550,7 +552,9 @@ public sealed partial class RouteChoiceDialogViewModel
             }
             else if (soleHazardOnly)
             {
-                FreeSummary = "No hazard-free route — every path there crosses a hazard you must counter";
+                FreeSummary = choice.Requirements.All(r => r.NoProtection)
+                    ? "No hazard-free route — every path there crosses a hazard nothing protects you from at your level"
+                    : "No hazard-free route — every path there crosses a hazard you must counter";
                 if (HazardObtain)
                 {
                     GatedSummary = $"Obtain, then cross — {StepsEta(choice.GatedStepCount, gatedEta)}";
@@ -704,6 +708,9 @@ public sealed partial class RouteChoiceDialogViewModel
             // A gate the crosser already satisfies — surfaced so the route's real
             // requirements read completely, not silently dropped as "not needed".
             if (r.Carried) return $"{carriedItems} (you have it)";
+            // Named so the player isn't left to find out by buying one.
+            if (r.NoProtection)
+                return $"nothing that helps: at your level {carriedItems} does not protect you in the hazard rooms on this route";
 
             // A resolved hazard counter names the SPECIFIC item the run will obtain +
             // how ("log raft (buy at Pier)") — the picker already chose the cheapest
