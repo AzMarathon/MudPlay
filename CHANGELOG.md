@@ -1,6 +1,6 @@
 # Version history
 
-## 3.160.0
+## 3.161.0
 
 - Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
 - With items still missing, it searches the rooms walked before the death (never a stash room)
@@ -10,6 +10,19 @@
 - Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
 - Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
 - Bug report: the pile's missing items and the sweep's plan, state and blockers
+
+## 3.160.1
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
+- In that mode the room tooltip and the Legend name the colours
+
+## 3.160.0
+
+- Items a hang-up penalty dropped are picked up on re-entering the game
+- Only on a realm set to drop items, and never more than it drops
+- The gear set last equipped is applied again for pieces that came back
+- Loops and walks wait for the check
+- Never changes when the client hangs up
 
 ## 3.159.27
 

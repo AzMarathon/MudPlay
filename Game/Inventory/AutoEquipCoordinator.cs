@@ -660,6 +660,69 @@ public sealed class AutoEquipCoordinator : IDisposable
         return EquipTriggerType.Default;
     }
 
+    // ----- gear that came back to the pack --------------------------------
+
+    // Pieces were taken off the character by something that was no gear swap and
+    // are back in the pack: a hang-up penalty dropped them and they were picked up
+    // again (HangupItemRecheck). There is no recovery rule of its own for that
+    // (user, 2026-10-09): the set that was on is applied again, and the equipment
+    // manager works out what to wear under the rules every automatic apply has.
+    //   lastSetId — EquipmentManager.CurrentSetId, the set last applied. It is kept
+    //               in memory only, so it is known after a reconnect and not after
+    //               the client restarts; then the set automation would have on
+    //               right now stands in for it.
+    //   returned  — the item names that came back. With none of them in the set no
+    //               equip is sent: a torch back in the pack is no gear change, and
+    //               a piece of some other set goes on when that set next does.
+    // The name of the set an apply went out for, else null.
+    public string? ReapplySetAfterItemsReturned(string? lastSetId, IReadOnlyCollection<string> returned)
+    {
+        ArgumentNullException.ThrowIfNull(returned);
+        if (returned.Count == 0) return null;
+        if (!_isAutoEnabled())
+        {
+            _log?.Info(EquipmentManager.LogCategory, "gear came back to the pack, but Auto-All is off — no set applied");
+            return null;
+        }
+
+        EquipmentSettings cfg = _readEquipment();
+        // The set that was on was put there by automation or by hand, so its
+        // Enabled switch isn't asked again; a stand-in is automation's own pick,
+        // and takes only a set automation may equip.
+        EquipmentSet? set = string.IsNullOrEmpty(lastSetId)
+            ? null
+            : cfg.Sets.FirstOrDefault(s => string.Equals(s.Id, lastSetId, StringComparison.Ordinal));
+        bool standIn = set is null;
+        if (standIn && ResolveTarget(cfg, WantedNow()) is { } wantedId)
+            set = cfg.Sets.FirstOrDefault(s => string.Equals(s.Id, wantedId, StringComparison.Ordinal));
+        if (set is null || string.IsNullOrEmpty(set.Id))
+        {
+            _log?.Info(EquipmentManager.LogCategory, "gear came back to the pack, but no gear set is on or enabled — nothing applied");
+            return null;
+        }
+
+        var back = new HashSet<string>(returned, StringComparer.OrdinalIgnoreCase);
+        if (!set.Slots.Any(e => e.ItemName?.Trim() is { Length: > 0 } item && back.Contains(item)))
+        {
+            _log?.Info(EquipmentManager.LogCategory,
+                $"gear came back to the pack, none of it part of gear set '{set.Name}' — no equip sent");
+            return null;
+        }
+        if (!_wornLoadoutKnown())
+        {
+            _log?.Info(EquipmentManager.LogCategory,
+                $"gear came back to the pack, but the worn loadout isn't known — gear set '{set.Name}' not applied");
+            return null;
+        }
+
+        EquipResult result = _applyBySetId(set.Id);
+        _log?.Info(EquipmentManager.LogCategory,
+            $"gear came back to the pack — gear set '{set.Name}' "
+            + (standIn ? "(what automation wants on now; the set last applied isn't known) " : "(the set last applied) ")
+            + (result == EquipResult.Applied ? "applied again" : $"not applied again ({result})"));
+        return result == EquipResult.Applied ? set.Name : null;
+    }
+
     // About to send a step INTO `next`. Swap BEFORE the wire move so we land already
     // geared — the swap's wear/eq commands queue ahead of the move on the serialized
     // wire (same ordering the pre-move backstab prep relies on). A boss room wears the

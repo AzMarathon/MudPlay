@@ -163,10 +163,17 @@ public sealed class CharacterProfile
     // lairs the way they left it. Serialized by name, defaults to Uniform.
     public LairDisplayMode NavLairMode { get; set; } = LairDisplayMode.Uniform;
 
-    // The Navigation map's room-spell overlay mode (the "Spells" chip cycle:
-    // mono → by name → off). Persisted per-character like NavLairMode. Serialized by
-    // name, defaults to Mono (the original flat-purple "has a room spell" cue).
+    // The Navigation map's room-spell overlay mode (the "Spells" chip cycle), as
+    // every client reads it: mono, by name or off. Persisted per-character like
+    // NavLairMode. Serialized by name, defaults to Mono (the original flat-purple
+    // "has a room spell" cue). Read and written through SpellDisplayModes, which
+    // keeps a later mode out of this key.
     public SpellDisplayMode NavSpellMode { get; set; } = SpellDisplayMode.Mono;
+
+    // The name of a room-spell overlay mode NavSpellMode can't hold (by teleport),
+    // or null when NavSpellMode is the whole answer. A plain string so a client
+    // that doesn't know the name skips it instead of failing the profile load.
+    public string? NavSpellOverlay { get; set; }
 
     // How the Navigation map draws a running loop (the "Loop lines" chip cycle:
     // line + numbered steps → line only → off). Persisted per-character like
@@ -213,6 +220,13 @@ public sealed class CharacterProfile
     // calibrator / Workshop start the next session with the last-known
     // encumbrance bracket instead of Unknown. null until the first `i` capture.
     public LastKnownEncumbrance? LastKnownEncumbrance { get; set; }
+
+    // The items held the last time the character was known to be in the game.
+    // Written by Game.Inventory.HangupItemRecheck on ProfileSaving and read by it
+    // on the next connect, on a realm that drops items for a hang-up. null until
+    // an inventory has been read in the game, and again from a death to the next
+    // inventory read.
+    public HeldAtDisconnect? HeldAtDisconnect { get; set; }
 
     // Full names of the spells this character has learned — the persisted Spell
     // Book obtained set, so the learned checkmarks survive across sessions

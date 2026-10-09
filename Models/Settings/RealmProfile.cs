@@ -54,9 +54,11 @@ public sealed class RealmProfile
     // ----- Hang-up penalty -----
     // What this board does to a character who hangs up in a fight (GAME_MECHANICS
     // "Hang-up / lost carrier"). The board sets it and nothing the game prints
-    // says what it is, so the user records it here. It is a record only: the
-    // program log and the bug report show it (Game.Health.HangupPenaltyNotice),
-    // and no hang-up is sent, held or skipped because of it.
+    // says what it is, so the user records it here. The program log and the bug
+    // report show it (Game.Health.HangupPenaltyNotice), and where an item count is
+    // set the client looks for what was dropped on the way back into the game
+    // (Game.Inventory.HangupItemRecheck). No hang-up is sent, held or skipped
+    // because of it.
     //
     // Persisted with the realm in the BBS file (BBS/{bbs}/bbs.json → Realms), the
     // tier the death floor is on: a board's PvE and PvP realms are separate game

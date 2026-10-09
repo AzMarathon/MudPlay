@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.0**
+> **Version 3.161.0**
 > - Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
 > - With items still missing, it searches the rooms walked before the death (never a stash room)
 > - The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door

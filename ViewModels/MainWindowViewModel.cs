@@ -1176,6 +1176,8 @@ public partial class MainWindowViewModel : ObservableObject
         // Ends the walker hold a summon-on-death kill put up, when the room came
         // back empty.
         _roomDisplayParser.RoomParsed += _ => AppServices.Current.SummonSettle.NoteRoomDisplayed();
+        // Tells the hang-up item check that the room, floor list included, has been read.
+        _roomDisplayParser.RoomParsed += _ => AppServices.Current.HangupItems.NoteRoomDisplayed();
         _movementRefusalDetector = new Game.Map.MovementRefusalDetector(Lines,
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine,
@@ -1496,6 +1498,9 @@ public partial class MainWindowViewModel : ObservableObject
         // AutoGetItemsManager's `get <name>` commands ride the same
         // gate-wrapped pipeline.
         AppServices.Current.AutoGetItems.SetWireSender(engineSend);
+        // The hang-up item check's own two sends, `i` and a room redisplay; its
+        // gets go out through the auto-get engine above.
+        AppServices.Current.HangupItems.SetWireSender(engineSend);
         // The loot-automation engines — AutoDiscard's `drop`, AutoBuy's `buy`,
         // AutoSell's `sell` — all ride the same gate-wrapped pipeline.
         AppServices.Current.AutoDiscard.SetWireSender(engineSend);
@@ -3315,6 +3320,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // A new link starts at the board's login: nothing from here is
                 // copied into a bug report until the game is entered.
                 AppServices.Current.InGameCapture.NotifyConnected();
+                // On a realm that drops items for a hang-up, holds movement from here
+                // until what was held before the link dropped has been checked for.
+                AppServices.Current.HangupItems.NoteConnected();
                 // Same lifecycle signal to the default-task runner — it resets its
                 // per-connection latches and fires the configured startup task on
                 // the first in-game prompt with a known room.
@@ -3494,6 +3502,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
                 AppServices.Current.InGameCapture.NotifyDisconnected();
+                // After the line above: leaving the game is what saves the list of
+                // what was held, and that has to see a check still under way.
+                AppServices.Current.HangupItems.NoteDisconnected();
                 // A drop we didn't ask for plays the Disconnected sound, and arms the
                 // Reconnected one for when the link comes back.
                 if (_lastDisconnectCause is DisconnectCause.CarrierLost or DisconnectCause.NoResponse)

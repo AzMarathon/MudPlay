@@ -93,6 +93,35 @@ public sealed class DefaultProfilePersistenceTests
         finally { DeleteDefaultProfileFile(); }
     }
 
+    // The default profile is the template a new character is made from. A list of
+    // what some character held, left on it, must not be handed to the new one.
+    [Fact]
+    public void CreateProfile_FromATemplateCarryingAHeldList_StartsWithNone()
+    {
+        string board = "defprof-test-" + Path.GetRandomFileName();
+        DeleteDefaultProfileFile();
+        try
+        {
+            ProfileService writer = new();
+            writer.LoadDefaultProfile();
+            writer.Current!.HeldAtDisconnect = new Models.Profile.HeldAtDisconnect
+            {
+                Items = { new Models.Profile.HeldItem("silver chalice", 1) },
+            };
+            writer.Save();
+
+            new ProfileService().CreateProfile(board, "Newcomer");
+
+            Assert.Null(JsonStore.Load<Models.Profile.CharacterProfile>(
+                AppPaths.CharacterProfileFile(board, "Newcomer"))!.HeldAtDisconnect);
+        }
+        finally
+        {
+            DeleteDefaultProfileFile();
+            if (Directory.Exists(AppPaths.BbsFolder(board))) Directory.Delete(AppPaths.BbsFolder(board), recursive: true);
+        }
+    }
+
     private static void DeleteDefaultProfileFile()
     {
         if (File.Exists(AppPaths.DefaultProfileFile)) File.Delete(AppPaths.DefaultProfileFile);
