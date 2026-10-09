@@ -436,6 +436,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         _tracker.StateChanged += OnTrackerStateChanged;
         _tracker.CommandMoveRefused += OnCommandMoveRefused;
+        _tracker.CastCrossingStarted += OnCastCrossingStarted;
         _coordinator.PauseStateChanged += OnCoordinatorPauseChanged;
         _coordinator.GatesChanged += OnGatesChangedForAbandon;
         if (_promptScanner is not null)
@@ -2152,7 +2153,27 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
-        _expectedAfterCurrentMove = exit.Target;
+        // An exit whose spell puts us on the routed side only with an item in hand:
+        // without it the step goes through all the same and lands somewhere else.
+        // The planner closes it, but a walk planned through gates has it open (the
+        // item was to be fetched on the way), and a re-plan after the wrong landing
+        // keeps that choice: the walk came round to the exit and stepped through
+        // again, for good. So at the exit itself, the inventory decides. Not while
+        // an acquisition is still under way (HeldForGateItem holds the step then),
+        // nor while the inventory is unread.
+        if (exit.CastGateItemId > 0 && _tracker.HoldsItem(exit.CastGateItemId) == false)
+        {
+            string obstacle = BlockedExitDescriber.Describe(current.Key, step.Direction, in exit,
+                k => _graph.GetRoom(k)?.Name, id => _itemNameResolver?.Invoke(id));
+            _log?.Info("Walker", $"step {_index + 1}/{_path!.Count}: not taking {obstacle}");
+            Raise(new WalkEvent(WalkEventKind.Failed, $"stopped at {obstacle}", _destination));
+            Reset();
+            return;
+        }
+
+        // An exit whose spell teleports us on ends in its landing, not in the room it
+        // names (and the route beyond is planned from).
+        _expectedAfterCurrentMove = exit.Landing;
         _stepInFlight = true;
         ArmStallWatchdog($"step {_index + 1} sent ({step.Direction})");
 
@@ -2340,7 +2361,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 _recovery?.NoteEngineStepSent(step.Direction);
 
         byte[] bytes = EncodeMove(step.Direction);
-        EmitMoveBytes(bytes, $"move {step.Direction} → {exit.Target}");
+        EmitMoveBytes(bytes, $"move {step.Direction} → {exit.Target}"
+            + (exit.CastLandings is null ? "" : $", whose spell teleports us on to {exit.Landing}"));
     }
 
     private void OnHiddenRevealReply(HiddenSearchResult result)
@@ -3220,6 +3242,28 @@ public sealed class AutoWalkManager : IRecoverableEngine
         ClearGreetTeleportWait();
     }
 
+    // Our step in flight has gone through an exit whose spell teleports everyone on
+    // by themselves: the followers are dragged in behind us and dropped from the
+    // party one by one as the spell takes them (GAME_MECHANICS "Jungle to the Lost
+    // City: the Vine Bridge trap and the golden idol"). There is no keyword to
+    // relay; the party only has to be re-formed where it lands.
+    //
+    // Announced here, once the crossing is seen, and not when the step's bytes go
+    // out: a step the game refused or dropped splits nobody, and a regroup hold put
+    // up for it ran its full window and then uninvited followers who had never left.
+    //
+    // Ours when the step in flight is the one expected to end in that landing,
+    // whatever the walk's run state: a hold that lands between the step going out
+    // and the crossing showing (a party member's @wait, a held cast) leaves the
+    // walk Paused with the step still in flight, and the split is no less ours.
+    private void OnCastCrossingStarted(RoomKey landing)
+    {
+        if (!_stepInFlight || _expectedAfterCurrentMove is not { } expected || !expected.Equals(landing)) return;
+        if (_isLeaderWithFollowers?.Invoke() != true) return;
+        _log?.Info("Walker", $"step {_index + 1}: the exit's spell is taking the party through one by one — re-forming it on landing");
+        _onLeaderPartySplit?.Invoke();
+    }
+
     // ----- Stopping before a boss room on the way ----------------------------
     //
     // ApplyStopBefore covers a walk that ENDS in a boss room flagged "stop before
@@ -3712,7 +3756,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // a manual long-traverse would surface as off-path further down.)
         for (int i = _index; !stillHere && i < _path.Count; i++)
         {
-            if (_path[i] is MoveStep move && move.ExpectedTarget.Equals(hereKey))
+            // The step in flight may end somewhere other than the room the path
+            // names for it: an exit whose spell teleports us on ends in its landing.
+            bool inFlightLanded = i == _index && hadStepInFlight
+                && _expectedAfterCurrentMove is { } landing && landing.Equals(hereKey);
+            if (_path[i] is MoveStep move && (move.ExpectedTarget.Equals(hereKey) || inFlightLanded))
             {
                 _index = i + 1;
                 _expectedAfterCurrentMove = null;

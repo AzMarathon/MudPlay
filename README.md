@@ -1,15 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.155.0**
-> - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
-> - A card whose route uses a teleport (a hole, a hatch, a vortex) takes it and says so on the card; picking it no longer walked a far longer way on foot
-> - The Shortcut card lists everything its route needs, and no longer names the key of a door you can pick or bash
-> - A walk you start keeps its route for the whole trip: through a re-plan, a detour to fetch an item or buy a light, and picking up again after a sell trip, a flee, a party comeback or an event's Resume
-> - Crossing a hazard is agreed for the hazard rooms on the card you picked: a walk picked up from somewhere else never enters a different one
-> - Side trips to fetch an item for such a walk go on foot when they can, and aren't held to the automatic-walk teleport list
-> - Stopping or redirecting a walk while it is opening a door no longer reports the walk as failed
-> - Stop while a walk waits at a giver, shop or item source between two legs ends it; nothing walks on afterwards, and a Stop in a PvP flee room calls off the walk back
+> **Version 3.156.0**
+> - The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
+> - That passage needs the golden idol: a walk-to through it says so (and offers it on the route card) instead of circling round to it again, and a loop through it won't run without one
+> - Your position follows the passage to the room you really land in, which is then shown with one Enter; nothing is fought, picked up or invited in the room it only passes you through
+> - Going back for a party member ends as soon as they are following you again, and never starts for a move you made yourself
+> - After a reconnect, a loop holds its first step until the party re-invite has seen the room
+> - Players seen through a `look <direction>` are no longer invited, and no longer count as arrived for a party re-invite
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

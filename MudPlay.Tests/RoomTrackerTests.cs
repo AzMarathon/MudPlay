@@ -234,6 +234,77 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.Equal(0, tracker.State.SuspectStrikes);
     }
 
+    // `n` then `l e` typed quickly: the consumers that act on a room display before
+    // its exits line (the party invites, the combat roster) ask whether the display
+    // is a peek. The move was sent before the look and the game has echoed it, so
+    // the display arriving is the room just entered; the one after it is the peek.
+    [Fact]
+    public void PeekArmedDuringPendingMove_TheMovesOwnDisplayIsNotThePeek()
+    {
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E), t0);
+        tracker.NoteMoveSent(Direction.N, t0.AddMilliseconds(10));
+        tracker.NoteLookSent(t0.AddMilliseconds(20));
+        tracker.NoteInboundMoveEcho("n", t0.AddMilliseconds(900));
+
+        Assert.False(tracker.IsPeekSuppressed(t0.AddMilliseconds(1000)));   // the entered room's lines
+
+        tracker.NoteRoomObserved(Obs("North Square", Direction.S), t0.AddMilliseconds(1100));
+
+        Assert.True(tracker.IsPeekSuppressed(t0.AddMilliseconds(1200)));    // now the peek's
+    }
+
+    // A move the game hasn't echoed says nothing: it may never have been answered
+    // (a stalled step with a look-sweep peeking past it), so the peek reading stands.
+    [Fact]
+    public void PeekArmedDuringPendingMove_MoveNotEchoed_StillReadsAsAPeek()
+    {
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E), t0);
+        tracker.NoteMoveSent(Direction.N, t0.AddMilliseconds(10));
+        tracker.NoteLookSent(t0.AddMilliseconds(20));
+
+        Assert.True(tracker.IsPeekSuppressed(t0.AddMilliseconds(1000)));
+    }
+
+    // A look sent before the move is answered before it.
+    [Fact]
+    public void PeekArmedBeforeAMove_ThePeekComesFirst()
+    {
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E), t0);
+        tracker.NoteLookSent(t0.AddMilliseconds(10));
+        tracker.NoteMoveSent(Direction.N, t0.AddMilliseconds(20));
+        tracker.NoteInboundMoveEcho("n", t0.AddMilliseconds(30));
+
+        Assert.True(tracker.IsPeekSuppressed(t0.AddMilliseconds(100)));
+    }
+
+    // The engines' own steps are not manual; a keystroke is (as is anything else
+    // that reaches the wire without an engine announcing it), and a party leader's
+    // drag is neither.
+    [Fact]
+    public void LastMoveWasManual_TellsAKeystrokeFromAnEngineStepOrADrag()
+    {
+        RoomTracker tracker = NewTracker();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+        tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E), t0);
+
+        tracker.NoteMoveSent(Direction.N, t0);
+        Assert.False(tracker.LastMoveWasManual);
+        tracker.NoteMoveSentByObserver(Direction.N, t0.AddMilliseconds(5));     // that step's own echo
+        Assert.False(tracker.LastMoveWasManual);
+
+        tracker.NoteMoveSentByObserver(Direction.S, t0.AddSeconds(5));
+        Assert.True(tracker.LastMoveWasManual);
+
+        tracker.NoteFollowMove(Direction.N, t0.AddSeconds(6));
+        Assert.False(tracker.LastMoveWasManual);
+    }
+
     // ----- manual-move signal (pauses navigation) --------------------
 
     [Fact]

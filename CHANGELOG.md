@@ -1,5 +1,15 @@
 # Version history
 
+## 3.156.0
+
+- The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
+- That passage needs the golden idol: a walk-to through it says so (and offers it on the route card) instead of circling round to it again, and a loop through it won't run without one
+- Your position follows the passage to the room you really land in, which is then shown with one Enter; nothing is fought, picked up or invited in the room it only passes you through
+- Going back for a party member ends as soon as they are following you again, and never starts for a move you made yourself
+- After a reconnect, a loop holds its first step until the party re-invite has seen the room
+- Players seen through a `look <direction>` are no longer invited, and no longer count as arrived for a party re-invite
+- bug reports addressed: paradigm-20260923-092317, paradigm-20260929-221642, paradigm-20261007-134305, paradigm-20261007-134824
+
 ## 3.155.0
 
 - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
