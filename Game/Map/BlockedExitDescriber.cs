@@ -35,6 +35,10 @@ public static class BlockedExitDescriber
                 => $"a paid transport from {where} ({CurrencyFormat.Full(exit.FareCopper)} per person)",
             _ when exit.HasClassGate => $"a class-restricted exit {way} from {where}",
             _ when exit.HasRaceGate => $"a race-restricted exit {way} from {where}",
+            // Last of the named gates: the caller can't say whether the item is in
+            // hand, so any other gate the exit carries is the likelier obstacle.
+            _ when exit.CastGateItemId > 0
+                => $"a passage {way} from {where} that sends you elsewhere without {ItemText(exit.CastGateItemId, itemName)}",
             _ => $"a blocked exit {way} from {where}",
         };
     }

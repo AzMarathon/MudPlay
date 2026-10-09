@@ -1146,6 +1146,32 @@ public sealed class AutoPartyManagerTests
         Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
     }
 
+    // The reform looks at the room once, two seconds in. A look the game answered
+    // with no room leaves the peek reading up for a few seconds, and that one
+    // redisplay was then passed over as a peek with nothing to follow it. A listing
+    // passed over while members are still waited for asks for another look.
+    [Fact]
+    public void LeaderReconnectReform_ItsRedisplayReadAsAPeek_LooksAgain()
+    {
+        var (engine, router, _, _) = Setup();
+        bool peeking = true;
+        engine.SetPeekProbe(() => peeking);
+        engine.NoteLeaderReconnectReform(new[] { "Raijin" });
+        engine.FireReformRedisplayForTests();                // the one redisplay goes out
+        Assert.False(engine.ReformRedisplayArmedForTests);
+
+        Dispatch(router, "Also here: Raijin.");             // its answer, read as a peek
+
+        Assert.DoesNotContain(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
+        Assert.True(engine.ReformRedisplayArmedForTests);
+
+        peeking = false;
+        engine.FireReformRedisplayForTests();
+        Dispatch(router, "Also here: Raijin.");
+
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
+    }
+
     // The same goes for the everyday invite-on-seen: a flagged player seen through a
     // look is a room away.
     [Fact]

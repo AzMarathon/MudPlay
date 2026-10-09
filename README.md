@@ -1,11 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.19**
-> - A bash the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever
-> - A door attempt is dropped once the map shows you in another room than the door's
-> - A pause that comes and goes while a door is being opened (a party `@wait` / `@ok`) no longer restarts the walk underneath it
-> - A Paradigm `rm` answered before a move sent just after it has landed no longer cancels that move
+> **Version 3.155.0**
+> - The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
+> - That passage needs the golden idol: a walk-to through it says so (and offers it on the route card) instead of circling round to it again, and a loop through it won't run without one
+> - Your position follows the passage to the room you really land in, and nothing is fought, picked up or invited in the room it only passes you through
+> - Going back for a party member ends as soon as they are following you again, and never starts for a move you typed yourself
+> - After a reconnect, a loop holds its first step until the party re-invite has seen the room
+> - Players seen through a `look <direction>` are no longer invited, and no longer count as arrived for a party re-invite
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

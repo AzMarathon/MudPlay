@@ -436,6 +436,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         _tracker.StateChanged += OnTrackerStateChanged;
         _tracker.CommandMoveRefused += OnCommandMoveRefused;
+        _tracker.CastCrossingStarted += OnCastCrossingStarted;
         _coordinator.PauseStateChanged += OnCoordinatorPauseChanged;
         _coordinator.GatesChanged += OnGatesChangedForAbandon;
         if (_promptScanner is not null)
@@ -2181,7 +2182,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         byte[] bytes = EncodeMove(step.Direction);
         EmitMoveBytes(bytes, $"move {step.Direction} → {exit.Target}"
             + (exit.CastLandings is null ? "" : $", whose spell teleports us on to {exit.Landing}"));
-        SpecialExitDispatch.NoteCastTeleportCrossing(in exit, _isLeaderWithFollowers, _onLeaderPartySplit);
     }
 
     private void OnHiddenRevealReply(HiddenSearchResult result)
@@ -3059,6 +3059,23 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _log?.Info("Walker",
             $"greet teleport '{_greetTeleportCommand}' refused by the NPC; not re-asking.");
         ClearGreetTeleportWait();
+    }
+
+    // Our step in flight has gone through an exit whose spell teleports everyone on
+    // by themselves: the followers are dragged in behind us and dropped from the
+    // party one by one as the spell takes them (GAME_MECHANICS "Jungle to the Lost
+    // City: the Vine Bridge trap and the golden idol"). There is no keyword to
+    // relay; the party only has to be re-formed where it lands.
+    //
+    // Announced here, once the crossing is seen, and not when the step's bytes go
+    // out: a step the game refused or dropped splits nobody, and a regroup hold put
+    // up for it ran its full window and then uninvited followers who had never left.
+    private void OnCastCrossingStarted()
+    {
+        if (State != WalkState.Walking || !_stepInFlight) return;
+        if (_isLeaderWithFollowers?.Invoke() != true) return;
+        _log?.Info("Walker", $"step {_index + 1}: the exit's spell is taking the party through one by one — re-forming it on landing");
+        _onLeaderPartySplit?.Invoke();
     }
 
     // ----- Stopping before a boss room on the way ----------------------------

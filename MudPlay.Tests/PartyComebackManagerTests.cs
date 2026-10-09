@@ -678,22 +678,120 @@ public sealed class PartyComebackManagerTests : IDisposable
     // on by hand, leaving a follower a room back. That move was theirs, so the
     // pickup is too — a recovery started here is a walk born paused.
     [Fact]
-    public void LeftBehind_WhileTheUserHasMovementPaused_IsLeftToThem()
+    public void LeftBehind_ByAMoveTypedByHand_IsLeftToThem()
     {
         using Harness h = NewHarness();
         h.Comeback.SetWireSender(_ => { });
-        h.Comeback.MovementPausedByUser =
-            () => h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate);
         h.Tracker.SetLocated(new RoomKey(1, 2));
         StartLair(h);
         h.Router.Dispatch(Line("Tank started to follow you."));
-        h.Coordinator.AssertGate(MovementCoordinator.UserGate);
+        h.Coordinator.AssertGate(MovementCoordinator.UserGate);     // the user's pause
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        // Their own step, a moment later (clear of the echo the engine's last step
+        // is still owed, which a same-direction keystroke would be taken for).
+        DateTimeOffset typedAt = DateTimeOffset.UtcNow.AddSeconds(3);
+        h.Tracker.NoteMoveSentByObserver(Direction.N, typedAt);
+        h.Comeback.NowProvider = () => typedAt.AddSeconds(1);
 
         h.Router.Dispatch(Line("Tank is no longer following you."));
 
         Assert.Null(h.Comeback.RecoveringMember);
         Assert.True(h.Lair.IsActive);
         Assert.False(Sent(h, "/Tank {backtracking"));
+    }
+
+    // A leader back from a dropped link has its loop restarted but held until the
+    // party reform has seen the room. A follower asking to be fetched in those
+    // seconds finds a run to interrupt, not an idle leader, and the hold doesn't
+    // park the walk to them.
+    [Fact]
+    public void Comeback_WhileTheLoopIsHeldAfterAReconnect_IsAnsweredAndWalked()
+    {
+        using Harness h = NewHarness();
+        SeatFollower(h, "Tank");
+        h.Loop.SetReconnectReformProbe(() => true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("circuit", [new RoomKey(1, 1), new RoomKey(1, 3)])));
+        h.Loop.NotifyDisconnected();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Loop.FirePromptObservedForTests();
+        Assert.Equal(LoopState.Paused, h.Loop.State);
+        Assert.True(h.Loop.ReconnectResumeHeldForReform);
+
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+
+        Assert.Contains("coming to your location for pickup", h.LastReply);
+        Assert.False(h.Loop.ReconnectResumeHeldForReform);
+        Assert.False(h.Coordinator.IsPaused);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+    }
+
+    // The pause alone decides nothing. The same gate is raised by a party member's
+    // remote stop, an errand, the route picker: a member the engine's own step left
+    // behind just as one of those landed is still ours to go back for.
+    [Fact]
+    public void LeftBehind_ByAnEngineStepAsAPauseLands_IsStillGoneBackFor()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);                                               // the engine's step is on the wire
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Coordinator.AssertGate(MovementCoordinator.UserGate);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.True(Sent(h, "/Tank {backtracking"));
+    }
+
+    // The recovery interrupted a loop; a rejoin while the walk back is still under
+    // way puts that loop back, as the same session.
+    [Fact]
+    public void LeftBehind_RejoinsWhileWeStillWalk_PutsTheLoopBack()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        int loopStarts = 0;
+        h.Loop.Event += e => { if (e.Kind == LoopEventKind.ReachedFirstWaypoint) loopStarts++; };
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Loop.Start(new Loop("circuit", [new RoomKey(1, 1), new RoomKey(1, 3)])));
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(LoopState.Idle, h.Loop.State);
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.NotEqual(LoopState.Idle, h.Loop.State);
+        Assert.Equal(1, loopStarts);
+    }
+
+    // An @ok sent just before being left behind is distrusted because the member
+    // then failed to move. One who has come to us while we were still on the way
+    // back has moved: their @ok counts, and they are told we're waiting for it.
+    [Fact]
+    public void LeftBehind_RightAfterTheirOk_RejoinsWhileWeStillWalk_TheirOkCounts()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        List<(string, bool)> held = new();
+        h.Comeback.LeftBehindRejoined = (g, ignoreOk) => held.Add((g, ignoreOk));
+        h.Comeback.OkedWithin = (_, _) => true;
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Equal(new[] { ("Tank", false) }, held);
+        Assert.True(Sent(h, "/Tank @waiting"));
+        Assert.False(Sent(h, "too early"));
     }
 
     [Fact]

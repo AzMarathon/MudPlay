@@ -8123,10 +8123,6 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
-        // A member left behind by a move typed while the user holds movement paused
-        // is theirs to fetch.
-        PartyComeback.MovementPausedByUser =
-            () => MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate);
         // A dropped member's reconnect hold (or their @wait) would park the walk to
         // pick them up — the leader never moves while they wait on it.
         PartyComeback.ReleaseHolds = (given, reason) =>
@@ -8488,7 +8484,9 @@ public sealed class AppServices
         // Settings → Other "Only auto-invite while navigation is running": a walk,
         // loop or auto-lair (running or paused), or an auto-deposit / train trip.
         // A split-teleport reform waits for the leader to leave the room it started in.
-        AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
+        // Partway through an exit whose spell teleports us on, the tracker still
+        // names the room we left; for the reform that is "already out of it".
+        AutoParty.SetRoomProbe(() => RoomTracker.IsCrossingCastExit ? null : RoomTracker.State.CurrentRoom?.Key);
         // Players listed by a `look <direction>` peek stand in the next room.
         AutoParty.SetPeekProbe(() => RoomTracker.IsPeekSuppressed());
         AutoParty.SetNavigationProbe(() =>

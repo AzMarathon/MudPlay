@@ -207,9 +207,10 @@ public sealed class AutoPartyManager : IDisposable
     private Func<Map.RoomKey?>? _currentRoom;
     public void SetRoomProbe(Func<Map.RoomKey?> currentRoom) => _currentRoom = currentRoom;
 
-    // Whether the room display now arriving is a `look <direction>` peek into the
-    // next room (RoomTracker.IsPeekSuppressed). Unset in tests / before wiring →
-    // never.
+    // Whether the room display now arriving is of a room we aren't standing in: a
+    // `look <direction>` peek into the next room, or the room an exit's spell only
+    // passes us through (RoomTracker.IsPeekSuppressed). Unset in tests / before
+    // wiring → never.
     private Func<bool>? _isPeekedDisplay;
     public void SetPeekProbe(Func<bool> isPeekedDisplay) => _isPeekedDisplay = isPeekedDisplay;
 
@@ -530,10 +531,20 @@ public sealed class AutoPartyManager : IDisposable
         // paradigm-20260923-092317).
         if (_isPeekedDisplay?.Invoke() == true)
         {
-            _log?.Log(_reformPendingInvite.Count > 0 ? LogSeverity.Info : LogSeverity.Debug, "AutoParty",
-                "Players listed by a look into the next room aren't here — no invite"
-                + (_reformPendingInvite.Count > 0
-                    ? $" (party reform still waiting to see {string.Join(", ", _reformPendingInvite)})." : "."));
+            if (_reformPendingInvite.Count == 0)
+            {
+                _log?.Log(LogSeverity.Debug, "AutoParty",
+                    "Players listed by a look into the next room aren't here — no invite.");
+                return;
+            }
+            // The listing passed over may have been the reform's own redisplay: a
+            // look the game answered with no room leaves the peek reading up for a
+            // few seconds, and the redisplay fires once. Ask for another, so the
+            // members still waited for are seen in a display of our own room.
+            _log?.Log(LogSeverity.Info, "AutoParty",
+                "Players listed by a look into the next room aren't here — no invite; the party reform will look "
+                + $"at our room again for {string.Join(", ", _reformPendingInvite)}.");
+            ScheduleReformRedisplay();
             return;
         }
 
@@ -1091,6 +1102,9 @@ public sealed class AutoPartyManager : IDisposable
 
     // Test seam — runs the redisplay backstop without waiting on a real timer.
     internal void FireReformRedisplayForTests() => FireReformRedisplay();
+
+    // Test seam — whether a redisplay is waiting to fire.
+    internal bool ReformRedisplayArmedForTests => _reformRedisplayTimer is not null;
 
     private void FireReformRedisplay()
     {

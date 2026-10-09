@@ -1429,13 +1429,13 @@ public static class BugReportBuilder
             Kv(sb, "Loop command held for an empty room", svc.LoopRunner.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         }
         // A loop set aside by a dropped link restarts on the first prompt back in the
-        // game, or after the party reform has seen the room when one is pending: a
+        // game, held until the party reform has seen the room when one is pending: a
         // "walked off without the party after a relog" report needs which it was.
         Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
-            ? (svc.LoopRunner.ReconnectResumeHeldForReform
-                ? $"'{pendingLoop}' — held until the party reform has seen the room"
-                : $"'{pendingLoop}' — on the next in-game prompt")
-            : "(none pending)");
+            ? $"'{pendingLoop}' — on the next in-game prompt"
+            : svc.LoopRunner.ReconnectResumeHeldForReform
+                ? "restarted — held until the party reform has seen the room"
+                : "(none pending)");
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
@@ -1578,6 +1578,9 @@ public static class BugReportBuilder
         Kv(sb, "Last cast-on-walk teleport", svc.RoomTracker.LastCastLanding is { } cast
             ? $"{cast.From} → {cast.Landing} at {cast.At.ToLocalTime():HH:mm:ss} ({cast.Basis})"
             : "(none this session)");
+        // Between the room such an exit passes through and its landing, the tracker
+        // still names the room left; a move stuck there reads as a stall otherwise.
+        Kv(sb, "Mid cast-on-walk crossing (landing not shown yet)", svc.RoomTracker.IsCrossingCastExit.ToString());
         // RoomTracker anchors its timestamps in UTC (DateTimeOffset.UtcNow); the
         // rest of the report uses local .Now. The two are the same absolute
         // instant so all the tracker's comparisons work either way, but printing

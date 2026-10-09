@@ -203,10 +203,6 @@ public sealed class PartyComebackManager : IDisposable
     // is waiting on that walk. AppServices wires it; null in tests.
     public Action<string, string>? ReleaseHolds { get; set; }
 
-    // Whether the user has movement paused (the coordinator's User gate). AppServices
-    // wires it; null in tests.
-    public Func<bool>? MovementPausedByUser { get; set; }
-
     // Test seam — every outbound wire buffer, in order.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
@@ -441,14 +437,18 @@ public sealed class PartyComebackManager : IDisposable
             _log?.Info(LogCategory, $"{given} was left behind, but no engine is running — leaving the pickup to you.");
             return;
         }
-        // A walk or loop the user has paused isn't running either: the move that left
-        // the member behind was typed by hand (typing one is itself a pause). A
-        // recovery started now is a walk born paused, which wakes on Resume long
-        // after the player has fetched the member themselves (report
-        // paradigm-20260929-221642: six rooms walked back to where they had stood).
-        if (MovementPausedByUser?.Invoke() == true)
+        // An engine can be up without having made the move: the one that left the
+        // member behind was typed by hand, over a walk the user had paused (typing a
+        // move is itself a pause). A recovery started for it is a walk born paused,
+        // which wakes on Resume long after the player has fetched the member
+        // themselves (report paradigm-20260929-221642: six rooms walked back to
+        // where they had stood). Judged on the move, not on the pause: the same
+        // pause gate is raised by a remote stop, an errand or the route picker, and
+        // a member an engine step left behind under one of those is still ours to
+        // go back for.
+        if (_tracker.LastMoveWasTyped)
         {
-            _log?.Info(LogCategory, $"{given} was left behind while you have movement paused — leaving the pickup to you.");
+            _log?.Info(LogCategory, $"{given} was left behind by a move you typed — leaving the pickup to you.");
             return;
         }
         _log?.Info(LogCategory, $"{given} was left behind by our move — going back for them.");
@@ -851,7 +851,8 @@ public sealed class PartyComebackManager : IDisposable
 
         if (!_busy || _phase == ComebackPhase.Idle) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
-        if (_phase is ComebackPhase.WalkingToRoom or ComebackPhase.WalkingBacktrack)
+        bool midWalk = _phase is ComebackPhase.WalkingToRoom or ComebackPhase.WalkingBacktrack;
+        if (midWalk)
         {
             // They are following us again before the walk reached them: they caught
             // up, or were invited by hand. Nobody is left to fetch, and a walk kept
@@ -868,8 +869,12 @@ public sealed class PartyComebackManager : IDisposable
             // Whatever held them may still hold them: wait the full window for their
             // @ok, and tell them so — a hold that cleared while they were out of the
             // party never sent one.
-            LeftBehindRejoined?.Invoke(_senderGiven, _okPremature);
-            if (_okPremature)
+            // An @ok sent just before they were left behind is distrusted because
+            // they then failed to move with us. One who has since come to us while
+            // we were still on the way back has moved, so theirs is taken as usual.
+            bool distrustOk = _okPremature && !midWalk;
+            LeftBehindRejoined?.Invoke(_senderGiven, distrustOk);
+            if (distrustOk)
             {
                 // Their @ok came a moment before they were left behind, so another
                 // one proves nothing — sit out the whole window instead.

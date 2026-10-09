@@ -116,6 +116,8 @@ public sealed class RoomTracker
     // a future genuine observation.
     private DateTimeOffset? _suppressObservationUntil;
     private const int LookSuppressWindowMs = 3000;
+    // When that look went out, so a move sent before it can be told from one sent after.
+    private DateTimeOffset _lookSentAt;
 
     // Wall-clock time the most recent move command was enqueued, or null before
     // the first move this session. Lets observers tell a post-move room display
@@ -124,6 +126,11 @@ public sealed class RoomTracker
     // freshly-parsed occupants on the move-confirming transition (the occupants
     // line arrives before the exits line that confirms the move).
     public DateTimeOffset? LastMoveSentAt { get; private set; }
+
+    // Whether that move was typed by hand rather than sent by an engine or dragged
+    // by a party leader. A follower left behind by a typed move is the player's to
+    // fetch, however many holds the engines happen to be under at the time.
+    public bool LastMoveWasTyped { get; private set; }
 
     // Diagnostics: the most recent server move-echo the tracker recorded (the
     // command + when), or null if none this session. The echo gate confirms a
@@ -408,6 +415,8 @@ public sealed class RoomTracker
         {
             _cardinalEchoClaim = (direction, when + EchoClaimExpiry);
         }
+        LastMoveWasTyped = !isEngineAnnouncement && !isFollowDrag;
+        SettleCastCrossingInFlight(when);
         EnqueuePending(isFollowDrag
             ? PendingMove.FromFollowDrag(direction, when)
             : PendingMove.FromDirection(direction, when));
@@ -480,6 +489,7 @@ public sealed class RoomTracker
             && when < engineExpiry)
         {
             _engineCommandClaim = null;
+            LastMoveWasTyped = false;
             _log?.Log(LogSeverity.Debug, "RoomTracker",
                 $"Move '{command}' was an engine's own command; not a typed move.");
             return;
@@ -538,6 +548,8 @@ public sealed class RoomTracker
         {
             _textEchoClaim = (command, when + EchoClaimExpiry);
         }
+        LastMoveWasTyped = !isEngineAnnouncement;
+        SettleCastCrossingInFlight(when);
         EnqueuePending(new PendingMove(cardinal, command, when));
         AppendStep(new DirectionDto(cardinal, command));
         // Only a cardinal advances the passive footprint. A text-exit ("go path")
@@ -560,6 +572,7 @@ public sealed class RoomTracker
     {
         DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
         _suppressObservationUntil = when.AddMilliseconds(LookSuppressWindowMs);
+        _lookSentAt = when;
         _log?.Log(LogSeverity.Info, "RoomTracker",
             "Look-direction sent — next observation will be ignored as a peek.");
     }
@@ -638,6 +651,7 @@ public sealed class RoomTracker
         // landing in ReconcileFromPending).
         _pending.TryDequeue(out _);
         State.SuspectStrikes = 0;
+        if (exit.CastLandings is not null && expected.Key != exit.Target) CastCrossingStarted?.Invoke();
         string moveLabel = DescribeMove(head);
         RoomConfidence target = _pending.IsEmpty
             ? RoomConfidence.Confirmed
@@ -724,6 +738,7 @@ public sealed class RoomTracker
         // RecentSteps intact for replay recovery).
         _pending.TryDequeue(out _);
         State.SuspectStrikes = 0;
+        if (exit.CastLandings is not null && expected.Key != exit.Target) CastCrossingStarted?.Invoke();
         string moveLabel = DescribeMove(head);
         RoomConfidence target = _pending.IsEmpty
             ? RoomConfidence.Confirmed
@@ -731,20 +746,79 @@ public sealed class RoomTracker
         SetRoom(expected, target, when, $"blind-move advance via {moveLabel}", isStrictAnchor: false);
     }
 
-    // Read-only peek check: true when a look-direction peek is currently armed
-    // (a look <dir> was sent within the suppression window and its preview
-    // display hasn't been consumed yet). Unlike NoteRoomObserved, this does NOT
-    // consume the flag — the room-display consumers that fire BEFORE the exits
-    // line (cash pickup, auto-get, the room-entity classifier that drives the
-    // combat gate) call this to skip acting on a peeked room, while the flag
-    // stays armed until NoteRoomObserved fires on "Obvious exits:" and consumes
-    // it. Without this, a `look <dir>` peek renders a full room display and the
-    // engines fire get / equip / combat against a room the player never entered.
+    // Read-only peek check: true when the room display now arriving is not a room
+    // we are standing in. Unlike NoteRoomObserved, this does NOT consume the flag —
+    // the room-display consumers that fire BEFORE the exits line (cash pickup,
+    // auto-get, the room-entity classifier that drives the combat gate, the party
+    // invites) call this to skip acting on such a room, while the flag stays armed
+    // until NoteRoomObserved fires on "Obvious exits:" and consumes it. Without
+    // this, a `look <dir>` peek renders a full room display and the engines fire
+    // get / equip / combat against a room the player never entered.
+    //
+    // Two displays qualify:
+    //   - a look-direction peek: a look <dir> was sent within the suppression
+    //     window and its preview hasn't been consumed yet. A move sent before that
+    //     look is answered first, so once the server has echoed that move the
+    //     display arriving is the move's own and not the peek (`e` then `l e` typed
+    //     quickly). A move it hasn't echoed says nothing either way — it may be
+    //     one the game never answered — so the peek reading stands;
+    //   - the room a cast-on-walk exit only passes through, shown before its spell
+    //     sends us on (CastTransitIsNext).
     public bool IsPeekSuppressed(DateTimeOffset? whenUtc = null)
     {
+        if (CastTransitIsNext()) return true;
         if (_suppressObservationUntil is not { } until) return false;
         DateTimeOffset when = whenUtc ?? DateTimeOffset.UtcNow;
-        return when <= until;
+        if (when > until) return false;
+        return !(_pending.TryPeek(out PendingMove head) && head.SentAt <= _lookSentAt && HeadMoveEchoed(head));
+    }
+
+    // The pending move (told by when it was sent) whose cast-on-walk exit has shown
+    // the room it passes through: the next display for that move is its landing.
+    private DateTimeOffset? _castTransitSeenFor;
+
+    // True between the display of the room a cast-on-walk exit passes through and
+    // the display of its landing: we have left the room State still names and
+    // aren't yet where the spell is sending us.
+    public bool IsCrossingCastExit =>
+        _castTransitSeenFor is { } seenFor && _pending.TryPeek(out PendingMove head) && head.SentAt == seenFor;
+
+    // A step through an exit whose spell teleports everyone on by themselves is
+    // seen to have happened: the room it passes through was shown, or its landing
+    // was. Raised before the room change it leads to, and not at all for a step
+    // the game refused or dropped. A leader's engine takes it as the moment its
+    // party is split (GAME_MECHANICS "Jungle to the Lost City: the Vine Bridge trap
+    // and the golden idol").
+    public event Action? CastCrossingStarted;
+
+    // The move in flight goes through a cast-on-walk exit that will send us on, and
+    // the room it passes through hasn't been shown yet: the game shows that room
+    // first (GAME_MECHANICS, same topic), so the display now arriving is it.
+    private bool CastTransitIsNext() =>
+        State.Confidence == RoomConfidence.Pending
+        && State.CurrentRoom is { } source
+        && _pending.TryPeek(out PendingMove head)
+        && _castTransitSeenFor != head.SentAt
+        && TryResolvePendingExit(source, head, out RoomExit exit)
+        && exit.CastLandings is not null
+        && InferCastLanding(exit, out _) is not null;
+
+    // A move goes out while a cast-on-walk crossing still waits for its landing to
+    // be shown. Wherever the spell put us is where this move starts, so the
+    // crossing is settled at the landing our inventory points to instead of being
+    // left at the head of the queue, where every later display would be read
+    // against it.
+    private void SettleCastCrossingInFlight(DateTimeOffset when)
+    {
+        if (_castTransitSeenFor is not { } seenFor) return;
+        _castTransitSeenFor = null;
+        if (!_pending.TryPeek(out PendingMove head) || head.SentAt != seenFor) return;
+        if (State.CurrentRoom is not { } source || !TryResolvePendingExit(source, head, out RoomExit exit)) return;
+        if (InferCastLanding(exit, out string basis) is not { } landing) return;
+        _pending.TryDequeue(out _);
+        LastCastLanding = (source.Key, landing.Key, $"{basis}; moved on before the landing was shown", when);
+        SetRoom(landing, RoomConfidence.Pending, when,
+            $"move {DescribeMove(head)} settled at its landing ({basis}): another move went out before the landing was shown");
     }
 
     // ----- A move the connection swallowed ----------------------------
@@ -773,8 +847,9 @@ public sealed class RoomTracker
         Room? target = null;
         if (_pending.Count == 1 && _pending.TryPeek(out PendingMove head) && source is not null
             && TryResolvePendingExit(source, head, out RoomExit exit))
-            target = _graph.GetRoom(exit.Target);
+            target = PredictedLanding(exit);
         while (_pending.TryDequeue(out _)) { /* drain */ }
+        _castTransitSeenFor = null;
         _passivePendingMove = null;
         _cardinalEchoClaim = null;
 
@@ -1329,31 +1404,46 @@ public sealed class RoomTracker
             string confirmed = $"move {moveLabel} confirmed";
             string? castBasis = null;
 
-            // A cast-on-walk teleport shows the exit's own target first and then
-            // wherever its spell sends us, so the room the display fits is settled
-            // here before the ordinary checks run against it. The target is only
-            // passed through: the move stays in flight there unless nothing we hold
-            // lets the spell move us on.
+            // A cast-on-walk teleport is shown as two rooms: the exit's own target,
+            // which is only passed through, and then wherever its spell sends us.
+            // The first display for the move is therefore never the landing, even
+            // when it reads exactly like one (the golden idol's passage, where the
+            // room passed through and both landings are the same one-exit room):
+            // booking it as the landing would hand that room's occupants to the
+            // room we end up in. The move stays in flight until the second display,
+            // unless nothing we hold lets the spell move us on, or the first display
+            // fits a landing and not the room passed through.
             bool castAmbiguous = false;
+            bool sentOn = false;
             if (exit.CastLandings is not null)
             {
-                if (PickCastLanding(exit, observation, out castAmbiguous, out string basis) is { } landing)
+                bool transitSeen = _castTransitSeenFor == head.SentAt;
+                bool showsTransit = expected is not null && MatchesPredicted(expected, observation);
+                Room? onward = InferCastLanding(exit, out string held);
+                if (showsTransit && onward is not null
+                    && (!transitSeen || PickCastLanding(exit, observation, out _, out _) is null))
+                {
+                    if (!transitSeen && !LooksLikeSourceRelook(source, head, observation, when))
+                    {
+                        _castTransitSeenFor = head.SentAt;
+                        _log?.Log(LogSeverity.Info, "RoomTracker",
+                            $"Move {moveLabel} reached {expected!.Key}, the room its spell teleports us on from; waiting for the landing.");
+                        CastCrossingStarted?.Invoke();
+                    }
+                    State.LastUpdatedAt = when;
+                    return;
+                }
+                if (showsTransit && onward is null)
+                {
+                    castBasis = $"left where the exit leads: {held}";
+                    confirmed += $", and its spell leaves us here ({held})";
+                }
+                else if (PickCastLanding(exit, observation, out castAmbiguous, out string basis) is { } landing)
                 {
                     expected = landing;
                     castBasis = basis;
+                    sentOn = true;
                     confirmed += $", sent on by the exit's spell ({basis})";
-                }
-                else if (expected is not null && MatchesPredicted(expected, observation))
-                {
-                    if (InferCastLanding(exit, out string staying) is not null)
-                    {
-                        _log?.Log(LogSeverity.Info, "RoomTracker",
-                            $"Move {moveLabel} reached {expected.Key}, the room its spell teleports us on from; waiting for the landing.");
-                        State.LastUpdatedAt = when;
-                        return;
-                    }
-                    castBasis = $"left where the exit leads: {staying}";
-                    confirmed += $", and its spell leaves us here ({staying})";
                 }
             }
 
@@ -1406,13 +1496,7 @@ public sealed class RoomTracker
                 // for a statline the scanner can't parse — fall back to the old 400ms
                 // timing floor, which is no worse than the pre-echo behaviour. The common
                 // default "[HP=..]:" prompts flip the latch on the first move.
-                bool notEchoedOrTimingHold = _everReceivedEcho
-                    ? !HeadMoveEchoed(head)                             // echo-capable statline: causal, timing-independent
-                    : (when - head.SentAt < AmbiguousRedisplayFloor);  // never echoed (custom statline): timing fallback
-                if (!head.IsFollowDrag
-                    && MatchesPredicted(source, observation)
-                    && notEchoedOrTimingHold
-                    && RedisplayExitsUnchanged(observation))
+                if (LooksLikeSourceRelook(source, head, observation, when))
                 {
                     _log?.Log(LogSeverity.Debug, "RoomTracker",
                         $"Redisplay matches source '{source.Name}' AND predicted {moveLabel} target; " +
@@ -1426,7 +1510,15 @@ public sealed class RoomTracker
 
                 _pending.TryDequeue(out _);
                 State.SuspectStrikes = 0;
-                if (castBasis is not null) LastCastLanding = (source.Key, expected.Key, castBasis, when);
+                if (castBasis is not null)
+                {
+                    LastCastLanding = (source.Key, expected.Key, castBasis, when);
+                    // Sent on without the room passed through ever being shown for
+                    // this move: this is the first sign the crossing happened.
+                    bool unannounced = sentOn && _castTransitSeenFor != head.SentAt;
+                    _castTransitSeenFor = null;
+                    if (unannounced) CastCrossingStarted?.Invoke();
+                }
                 // Predicted-neighbour is a deduction — only strict (i.e.
                 // worth persisting to LastKnownRoom) when the landing
                 // room is also a 1-of-1 graph match for the observation.
@@ -1698,7 +1790,9 @@ public sealed class RoomTracker
                 return false;
             }
 
-            Room? next = _graph.GetRoom(exit.Target);
+            // A cast-on-walk exit's target is only passed through: the trail goes on
+            // from where its spell put us.
+            Room? next = PredictedLanding(exit);
             if (next is null)
             {
                 _log?.Debug("RoomTracker",
@@ -1856,6 +1950,21 @@ public sealed class RoomTracker
             return TryResolveTextExit(source, command, out exit);
         exit = default;
         return false;
+    }
+
+    // A display that also fits the room a move is leaving, with nothing to say the
+    // move has been carried out: a passive re-look of that room, not the move's
+    // outcome. The reasoning is set out at the ambiguity guard in
+    // ReconcileFromPending.
+    private bool LooksLikeSourceRelook(Room source, PendingMove head, RoomObservation observation, DateTimeOffset when)
+    {
+        bool notEchoedOrTimingHold = _everReceivedEcho
+            ? !HeadMoveEchoed(head)                             // echo-capable statline: causal, timing-independent
+            : (when - head.SentAt < AmbiguousRedisplayFloor);  // never echoed (custom statline): timing fallback
+        return !head.IsFollowDrag
+            && MatchesPredicted(source, observation)
+            && notEchoedOrTimingHold
+            && RedisplayExitsUnchanged(observation);
     }
 
     // The landing a cast-on-walk teleport should take going by what we have: the
@@ -2270,6 +2379,7 @@ public sealed class RoomTracker
         // candidates. Cheap no-op when it wasn't running.
         ClearPassiveGrid();
         while (_pending.TryDequeue(out _)) { /* drain */ }
+        _castTransitSeenFor = null;
         _stepsAnchor = null;
         if (_recentSteps.Count == 0) return;
         _recentSteps.Clear();

@@ -694,6 +694,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _postToUi = postToUi ?? (a => Dispatcher.UIThread.Post(a));
 
         _tracker.StateChanged += OnTrackerStateChanged;
+        _tracker.CastCrossingStarted += OnCastCrossingStarted;
         _coordinator.PauseStateChanged += OnPauseChanged;
         if (_promptScanner is not null)
             _promptScanner.PromptObserved += OnPromptObserved;
@@ -928,9 +929,6 @@ public sealed class LoopRunner : IRecoverableEngine
         }
         else
         {
-            // A run started by anyone replaces the one still waiting to restart
-            // after a reconnect.
-            ClearReconnectResume();
             _recoverAttempts = 0;
             _lastRecoveryAttemptAt = DateTimeOffset.MinValue;
             if (State is LoopState.Running or LoopState.Paused
@@ -938,7 +936,11 @@ public sealed class LoopRunner : IRecoverableEngine
             {
                 _log?.Info("LoopRunner",
                     $"Start: superseding active loop '{_loop?.Name ?? "?"}' (state={State}) with '{loop.Name}'");
+                // Stopping ends a reconnect hold, but the run that replaces this one
+                // must wait for the party reform just the same.
+                bool heldForReform = ReconnectResumeHeldForReform;
                 Stop("superseded by new loop");
+                if (heldForReform && _reformAwaitsRoom?.Invoke() == true) BeginReconnectReformHold();
             }
             else
             {
@@ -1429,6 +1431,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // is needed on our side for the approach phase.
         if (State == LoopState.Approaching) _walker?.Stop("loop stopped");
         Reset();
+        EndReconnectReformHold("the loop was stopped");
         Raise(new LoopEvent(LoopEventKind.Stopped, $"{name}: {reason}"));
     }
 
@@ -1720,7 +1723,18 @@ public sealed class LoopRunner : IRecoverableEngine
         // Plain passage — the cardinal.
         EmitCardinal(step.Direction, exit.Target, exit.CastLandings is null
             ? null : $"→ {exit.Target}, whose spell teleports us on to {exit.Landing}");
-        SpecialExitDispatch.NoteCastTeleportCrossing(in exit, _isLeaderWithFollowers, _onLeaderPartySplit);
+    }
+
+    // The loop's step in flight has gone through an exit whose spell teleports
+    // everyone on by themselves, which drops the party apart on the way. Announced
+    // once the crossing is seen rather than when the step is sent, as the walker
+    // does (AutoWalkManager.OnCastCrossingStarted has the reasoning).
+    private void OnCastCrossingStarted()
+    {
+        if (State != LoopState.Running || !_stepInFlight) return;
+        if (_isLeaderWithFollowers?.Invoke() != true) return;
+        _log?.Info("LoopRunner", $"step {_index + 1}: the exit's spell is taking the party through one by one — re-forming it on landing");
+        _onLeaderPartySplit?.Invoke();
     }
 
     // Emit a plain cardinal move for the circuit, notifying the tracker + recovery
@@ -2418,7 +2432,7 @@ public sealed class LoopRunner : IRecoverableEngine
     private Loop? _pendingReconnectResume;
 
     // Reset States: don't restart the loop on the next prompt after a reconnect.
-    public void ClearPendingReconnectResume() => ClearReconnectResume();
+    public void ClearPendingReconnectResume() => _pendingReconnectResume = null;
 
     // Torn down by a connection drop (wired from MainWindowViewModel's
     // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
@@ -2434,19 +2448,19 @@ public sealed class LoopRunner : IRecoverableEngine
     // no stale recovery state left to misread.
     public void NotifyDisconnected()
     {
-        // Dropped again while the restart still waited on the reform: the wait
-        // starts over with the next reconnect, and its timer mustn't start the loop
-        // on a dead link.
-        ReconnectResumeHeldForReform = false;
-        _reconnectHoldTimer?.Stop();
-        if (State == LoopState.Idle) return;
-        _pendingReconnectResume = _loop;
-        Stop("disconnected — will resume on reconnect");
+        if (State != LoopState.Idle)
+        {
+            _pendingReconnectResume = _loop;
+            Stop("disconnected — will resume on reconnect");
+        }
+        // A reform hold belongs to the connection that just ended. Dropped after the
+        // stop, which drops it too: lifting it first would let the held loop step.
+        EndReconnectReformHold("disconnected");
     }
 
     // Reports whether a leader's party reform is still waiting for the first room
     // display after a reconnect (PartyReformCoordinator.PendingReform). Unset in
-    // tests / before wiring → no reform, so the loop resumes on the first prompt.
+    // tests / before wiring → no reform, so the restarted loop steps at once.
     private Func<bool>? _reformAwaitsRoom;
 
     public void SetReconnectReformProbe(Func<bool> reformAwaitsRoom)
@@ -2456,7 +2470,7 @@ public sealed class LoopRunner : IRecoverableEngine
     }
 
     // For the bug report: the loop waiting to restart after a reconnect, and whether
-    // that restart is waiting for the party reform to see the room.
+    // the restarted loop is being held until the party reform has seen the room.
     public string? PendingReconnectResumeName => _pendingReconnectResume?.Name;
     public bool ReconnectResumeHeldForReform { get; private set; }
 
@@ -2470,11 +2484,28 @@ public sealed class LoopRunner : IRecoverableEngine
     {
         // The first genuine in-game prompt after a reconnect restarts the loop
         // NotifyDisconnected set aside.
-        if (_pendingReconnectResume is not null)
+        //
+        // A leader's party reform fires off the first room display, and the prompt
+        // that came with that display is read off the wire before its lines are
+        // handled: started bare, the loop sent its first step before the reform's
+        // hold went up and walked the leader out on the followers (report
+        // paradigm-20260923-092317). So when a reform has yet to see the room, the
+        // loop is started behind a hold of its own, dropped once the reform has
+        // had its look, by which time the reform's own holds are up. Started and
+        // held, rather than left waiting to start, the loop is a paused run like
+        // any other: Stop stops it, and a member's @comeback finds an engine to
+        // resume.
+        if (_pendingReconnectResume is { } loop)
         {
-            TryResumeAfterReconnect(linesStillToCome: true);
+            _pendingReconnectResume = null;
+            if (_reformAwaitsRoom?.Invoke() == true) BeginReconnectReformHold();
+            _log?.Info("LoopRunner",
+                $"reconnect: resuming loop '{loop.Name}' on first in-game prompt");
+            Start(loop);
+            ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
             return;
         }
+        ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
         if (!_awaitingCommandReplies || _commandPromptsOwed == 0 || State != LoopState.Running) return;
         if (--_commandPromptsOwed > 0) return;
         // Prompts are read off the wire ahead of the lines that came with them, so
@@ -2484,60 +2515,44 @@ public sealed class LoopRunner : IRecoverableEngine
         _postToUi(() => { if (_index == step) FinishCommandWaitIfAnswered(); });
     }
 
-    // Restart the loop set aside at the disconnect, unless a party reform has yet to
-    // see the room. The reform fires off the first room display, and the prompt
-    // that came with that display is read off the wire before its lines are
-    // handled, so starting on the prompt sent the first step before the reform's
-    // hold went up and walked the leader out on the followers (report
-    // paradigm-20260923-092317). While the reform waits, so does the start: it is
-    // looked at again once this prompt's lines are in, on every later prompt, and
-    // when the hold runs out. Started after the reform, the loop finds the reform's
-    // gates up and holds before its first step.
-    //
-    // linesStillToCome: called from a prompt, whose lines haven't been handled yet.
-    private void TryResumeAfterReconnect(bool linesStillToCome)
+    private void BeginReconnectReformHold()
     {
-        if (_pendingReconnectResume is not { } loop) return;
-        if (_reformAwaitsRoom?.Invoke() == true)
+        if (ReconnectResumeHeldForReform) return;
+        ReconnectResumeHeldForReform = true;
+        _log?.Info("LoopRunner", "reconnect: holding movement until the party reform has seen the room");
+        _coordinator.AssertGate(MovementCoordinator.ReconnectReformGate, nameof(LoopRunner),
+            "the party reform has yet to see the room");
+        _reconnectHoldTimer ??= new DispatcherTimer { Interval = ReconnectReformHoldMax };
+        _reconnectHoldTimer.Tick -= OnReconnectHoldElapsed;
+        _reconnectHoldTimer.Tick += OnReconnectHoldElapsed;
+        _reconnectHoldTimer.Stop();
+        _reconnectHoldTimer.Start();
+    }
+
+    // linesStillToCome: called from a prompt, whose lines (the room display the
+    // reform is waiting for among them) haven't been handled yet, so the hold is
+    // looked at again once they have.
+    private void ReleaseReconnectHoldOnceReformSawRoom(bool linesStillToCome)
+    {
+        if (!ReconnectResumeHeldForReform) return;
+        if (_reformAwaitsRoom?.Invoke() != true)
         {
-            if (!ReconnectResumeHeldForReform)
-            {
-                ReconnectResumeHeldForReform = true;
-                _log?.Info("LoopRunner",
-                    $"reconnect: holding loop '{loop.Name}' until the party reform has seen the room");
-                _reconnectHoldTimer ??= new DispatcherTimer { Interval = ReconnectReformHoldMax };
-                _reconnectHoldTimer.Tick -= OnReconnectHoldElapsed;
-                _reconnectHoldTimer.Tick += OnReconnectHoldElapsed;
-                _reconnectHoldTimer.Stop();
-                _reconnectHoldTimer.Start();
-            }
-            if (linesStillToCome) _postToUi(() => TryResumeAfterReconnect(linesStillToCome: false));
+            EndReconnectReformHold("the party reform has seen the room");
             return;
         }
-        ResumeAfterReconnect(loop, ReconnectResumeHeldForReform
-            ? "the party reform has seen the room" : "first in-game prompt");
+        if (linesStillToCome) _postToUi(() => ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: false));
     }
 
-    private void OnReconnectHoldElapsed(object? sender, EventArgs e)
-    {
-        _reconnectHoldTimer?.Stop();
-        if (_pendingReconnectResume is not { } loop || !ReconnectResumeHeldForReform) return;
-        ResumeAfterReconnect(loop,
-            $"no room display for the party reform within {ReconnectReformHoldMax.TotalSeconds:0}s");
-    }
+    private void OnReconnectHoldElapsed(object? sender, EventArgs e) =>
+        EndReconnectReformHold($"no room display for the party reform within {ReconnectReformHoldMax.TotalSeconds:0}s");
 
-    private void ResumeAfterReconnect(Loop loop, string why)
+    private void EndReconnectReformHold(string why)
     {
-        ClearReconnectResume();
-        _log?.Info("LoopRunner", $"reconnect: resuming loop '{loop.Name}' ({why})");
-        Start(loop);
-    }
-
-    private void ClearReconnectResume()
-    {
-        _pendingReconnectResume = null;
+        if (!ReconnectResumeHeldForReform) return;
         ReconnectResumeHeldForReform = false;
         _reconnectHoldTimer?.Stop();
+        _log?.Info("LoopRunner", $"reconnect: movement hold for the party reform dropped ({why})");
+        _coordinator.ClearGate(MovementCoordinator.ReconnectReformGate, nameof(LoopRunner), why);
     }
 
     // Test seam — pretend the prompt scanner fired.

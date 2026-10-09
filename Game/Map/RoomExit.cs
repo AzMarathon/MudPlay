@@ -91,11 +91,13 @@ namespace MudPlay.Game.Map;
 //     post-cast spell teleports through a textblock (GAME_MECHANICS "Cast-on-walk
 //     exits and random teleports"). The step first lands in Target, the room the
 //     exit cell names, and the spell then moves the character on. CastLandings
-//     lists where to, in the order the game tries them: an entry with an ItemId is
-//     taken when the character has that item, an entry with ItemId 0 always.
-//     Target is left alone — routes, the map and saved loops go on naming the room
-//     the cell names — and RoomTracker settles the landing each character really
-//     gets. Everyone crosses on their own, so a party is split on the way through.
+//     lists where to, in the order of the spell's textblock lines: an entry with
+//     an ItemId is taken when the character has that item, an entry with ItemId 0
+//     always. Target is left alone — routes, the map and saved loops go on naming
+//     the room the cell names — and RoomTracker settles the landing each character
+//     really gets. When the first landing takes an item, the exit is an item gate
+//     for routing (CastGateItemId). Everyone crosses on their own, so a party is
+//     split on the way through.
 public readonly partial record struct RoomExit(
     RoomKey Target,
     RoomExitHint Hint,
@@ -126,6 +128,12 @@ public readonly partial record struct RoomExit(
     // cast-on-walk teleport the first landing, which is the one the route beyond
     // it counts on.
     public RoomKey Landing => CastLandings is { Count: > 0 } landings ? landings[0].Room : Target;
+
+    // The item a cast-on-walk teleport asks for to reach that first landing, or 0.
+    // Without it the spell sends the character somewhere else, so for routing the
+    // exit is an item gate like any other: the way beyond it isn't there for a
+    // character who lacks the item.
+    public int CastGateItemId => CastLandings is { Count: > 0 } landings ? landings[0].ItemId : 0;
 
     // True when this exit carries a character-level window (either a floor, a
     // cap, or both).
