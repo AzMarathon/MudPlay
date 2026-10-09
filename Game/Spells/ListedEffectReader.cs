@@ -9,7 +9,10 @@ namespace MudPlay.Game.Spells;
 // cast it, so this is also how a buff from another player is recognised: its line
 // is matched to the spells whose applied text it is, and each spell's Strength /
 // Intellect / Willpower / Agility / Health / Charm abilities are read off the
-// Spells table.
+// Spells table. A record that prints the line but leads to no spell row (a spell
+// missing from the game data, or a record tied to an item) is kept as a reading
+// that could be doing anything: dropping it would let the spells that do resolve
+// pass for the whole answer.
 public static class ListedEffectReader
 {
     // Ability code of each stat, in STR/INT/WIL/AGL/HEA/CHM order.
@@ -23,13 +26,13 @@ public static class ListedEffectReader
         ArgumentNullException.ThrowIfNull(messages);
         ArgumentNullException.ThrowIfNull(spellRow);
 
-        List<(string Text, string Key, List<int> Spells)> wanted = new();
+        List<(string Text, string Key, List<GameDataLink> Sources)> wanted = new();
         foreach (StatusEffectLine line in lines)
         {
             // Paradigm puts a countdown on every effect; a line without one came from
             // somewhere else and landed inside the screen.
             if (realm == RealmType.ParaMud && !line.Timed) continue;
-            wanted.Add((line.Text, Normalize(line.Text), new List<int>()));
+            wanted.Add((line.Text, Normalize(line.Text), new List<GameDataLink>()));
         }
         if (wanted.Count == 0) return Array.Empty<ListedEffect>();
 
@@ -38,26 +41,33 @@ public static class ListedEffectReader
             if (record.Flags.HasFlag(MessageFlags.Disabled) || record.Links is null) continue;
             if (MessageRecord.IsBlankOrAbsent(record.AppliedMessage)) continue;
             string applied = Normalize(record.AppliedMessage);
-            foreach ((_, string key, List<int> spells) in wanted)
+            foreach ((_, string key, List<GameDataLink> sources) in wanted)
             {
                 if (!string.Equals(key, applied, StringComparison.Ordinal)) continue;
                 foreach (GameDataLink link in record.Links)
-                    if (string.Equals(link.Table, "Spells", StringComparison.OrdinalIgnoreCase)
-                        && !spells.Contains(link.Number))
-                        spells.Add(link.Number);
+                    if (!sources.Contains(link)) sources.Add(link);
             }
         }
 
         List<ListedEffect> effects = new(wanted.Count);
-        foreach ((string text, _, List<int> spells) in wanted)
+        foreach ((string text, _, List<GameDataLink> sources) in wanted)
         {
             List<EffectStatReading> readings = new();
-            foreach (int number in spells)
-                if (spellRow(number) is { } row) readings.Add(StatModifiers(row));
+            foreach (GameDataLink source in sources)
+            {
+                bool isSpell = string.Equals(source.Table, "Spells", StringComparison.OrdinalIgnoreCase);
+                readings.Add(isSpell && spellRow(source.Number) is { } row
+                    ? StatModifiers(row)
+                    : Unreadable(isSpell ? $"spell {source.Number} (not in the game data)"
+                                         : $"{source.Table} record {source.Number}"));
+            }
             effects.Add(new ListedEffect(text, readings));
         }
         return effects;
     }
+
+    private static EffectStatReading Unreadable(string what) =>
+        new(what, new int[StatAbility.Length], StatSet.All);
 
     // A spell's stat abilities. A non-zero ability value is the modifier itself. A
     // zero takes the spell's own magnitude, which is only a known number when the

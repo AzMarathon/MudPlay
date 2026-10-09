@@ -73,6 +73,13 @@ public sealed class AutoTrainerSettings
     // character stops at 10 in party mode and takes the step to 11 solo.
     public bool PartySkipLevel11 { get; set; } = true;
 
+    // Stock only: how long a train run standing at the trainer waits for an
+    // altered stat to clear before it leaves the CP plan for later. Stock refuses
+    // `train stats` while a spell or item is on a stat; Paradigm trains through
+    // one, so nothing there waits. 0 = don't wait.
+    public int AlteredStatsWaitSeconds { get; set; } = 120;
+    public const int MaxAlteredStatsWaitSeconds = 600;
+
     // Trainer rows the user has switched OFF for auto-train, keyed by
     // Game.GameData.TrainerShop.RowKey (shop/map/room) so a multi-room shop's
     // rooms toggle independently. Storing the disabled set (rather than the

@@ -78,8 +78,8 @@ public sealed partial class PlayerStats : ObservableObject
     // while ModifiedMarksRead is true.
     [ObservableProperty] [field: Owner(typeof(StatParser))] private StatSet _modifiedStats;
     // The last `stat` screen was read whole and every one of the six carried a
-    // readable mark. False from a profile's saved snapshot, while a screen is still
-    // printing, and for a screen with no colour to read.
+    // readable mark. False while a screen is still printing, for a screen with no
+    // colour to read, and from a saved snapshot that predates the marks being kept.
     [ObservableProperty] [field: Owner(typeof(StatParser))] private bool _modifiedMarksRead;
     // The active effects that same screen listed under the stats.
     [ObservableProperty] [field: Owner(typeof(StatParser))]

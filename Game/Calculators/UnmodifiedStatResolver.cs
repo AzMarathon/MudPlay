@@ -1,16 +1,17 @@
 namespace MudPlay.Game.Calculators;
 
-// Works the trained stats back from a `stat` screen: the value shown, less worn
-// gear, less what the effects listed on that same screen add. The screen's own
-// modified mark is the check on the sum (GAME_MECHANICS "How `stat` marks a
-// modified stat"):
-//   * an unmarked stat is the trained value plus gear, whatever the effect list
-//     says, so only the gear comes off;
-//   * a marked stat must be explained. Each listed effect offers the modifiers of
-//     every spell that prints its line; the stat is explained only when all those
-//     readings, added to the gear, leave exactly one non-zero total. A line no
-//     spell matches, a modifier the data can't pin down, or two totals that both
-//     fit leave the stat unexplained, and nothing may be planned from it.
+// Works the trained stats back from a `stat` screen, using the screen's own
+// modified mark (GAME_MECHANICS "How `stat` marks a modified stat"):
+//   * an unmarked stat is the trained value as it stands. Stock gear never moves
+//     the shown number, and Paradigm gear turns it red, so nothing comes off;
+//   * a marked stat must be explained. On Paradigm worn gear is part of the total;
+//     on Stock it never is. Each listed effect offers the modifiers of every spell
+//     that prints its line, and the stat is explained only when all those readings
+//     leave exactly one total. A line no spell matches, a modifier the data can't
+//     pin down, or two totals that both fit leave the stat unexplained, and nothing
+//     may be planned from it;
+//   * with no marks on record nothing can be checked, and worn gear comes off the
+//     shown value as it always did.
 public static class UnmodifiedStatResolver
 {
     private const int StatCount = 6;
@@ -18,7 +19,7 @@ public static class UnmodifiedStatResolver
     // More distinct totals than this for one stat is not something to reason through.
     private const int MaxTotals = 64;
 
-    public static UnmodifiedStats Resolve(int[] shown, int[] equipment, bool marksRead,
+    public static UnmodifiedStats Resolve(int[] shown, int[] equipment, RealmType realm, bool marksRead,
                                           StatSet modified, IReadOnlyList<ListedEffect> effects)
     {
         ArgumentNullException.ThrowIfNull(shown);
@@ -28,12 +29,19 @@ public static class UnmodifiedStatResolver
             throw new ArgumentException($"Expected {StatCount} stats.", nameof(shown));
 
         int[] baseStats = new int[StatCount];
+        int[] fromGear = new int[StatCount];
         int[] fromEffects = new int[StatCount];
-        for (int i = 0; i < StatCount; i++) baseStats[i] = shown[i] - equipment[i];
 
         if (!marksRead)
-            return new UnmodifiedStats(StatReadingState.Unverified, baseStats, equipment, fromEffects,
+        {
+            for (int i = 0; i < StatCount; i++)
+            {
+                fromGear[i] = equipment[i];
+                baseStats[i] = shown[i] - equipment[i];
+            }
+            return new UnmodifiedStats(StatReadingState.Unverified, baseStats, fromGear, fromEffects,
                                        StatSet.None, StatSet.None, Array.Empty<string>());
+        }
 
         bool everyLineKnown = true;
         foreach (ListedEffect e in effects)
@@ -42,11 +50,15 @@ public static class UnmodifiedStatResolver
         StatSet unexplained = StatSet.None;
         for (int i = 0; i < StatCount; i++)
         {
+            baseStats[i] = shown[i];
             StatSet bit = (StatSet)(1 << i);
             if ((modified & bit) == 0) continue;
-            if (everyLineKnown && SingleTotal(i, equipment[i], effects) is { } total)
+
+            int gear = realm == RealmType.ParaMud ? equipment[i] : 0;
+            if (everyLineKnown && SingleTotal(i, gear, realm, effects) is { } total)
             {
-                fromEffects[i] = total - equipment[i];
+                fromGear[i] = gear;
+                fromEffects[i] = total - gear;
                 baseStats[i] = shown[i] - total;
             }
             else
@@ -55,35 +67,46 @@ public static class UnmodifiedStatResolver
 
         return new UnmodifiedStats(
             unexplained == StatSet.None ? StatReadingState.Accounted : StatReadingState.Unexplained,
-            baseStats, equipment, fromEffects, modified, unexplained,
+            baseStats, fromGear, fromEffects, modified, unexplained,
             modified == StatSet.None ? Array.Empty<string>() : Notes(effects, modified));
     }
 
-    // The one non-zero total the gear and the listed effects can come to for a
-    // stat, or null when there is none or more than one. Zero is ruled out by the
-    // mark itself: a stat whose modifiers cancel is not marked.
-    private static int? SingleTotal(int stat, int equipment, IReadOnlyList<ListedEffect> effects)
+    // The one total the gear and the listed effects can come to for a marked stat,
+    // or null when there is none or more than one.
+    //
+    // A way of reading the effects that puts nothing at all on the stat can't be
+    // the marked one, so it is dropped. One where modifiers are on it and cancel is
+    // another matter: Stock marks a stat only when its value differs from the
+    // trained one, so there it is dropped too, but whether Paradigm leaves such a
+    // stat unmarked isn't known, and there it leaves the stat unexplained.
+    private static int? SingleTotal(int stat, int gear, RealmType realm, IReadOnlyList<ListedEffect> effects)
     {
         StatSet bit = (StatSet)(1 << stat);
-        HashSet<int> totals = new() { equipment };
+        HashSet<(int Total, bool Touched)> ways = new() { (gear, gear != 0) };
         foreach (ListedEffect effect in effects)
         {
-            HashSet<int> next = new();
+            HashSet<(int, bool)> next = new();
             foreach (EffectStatReading reading in effect.Readings)
             {
                 if ((reading.Unknown & bit) != 0) return null;
-                foreach (int t in totals) next.Add(t + reading.Modifiers[stat]);
+                int by = reading.Modifiers[stat];
+                foreach ((int total, bool touched) in ways) next.Add((total + by, touched || by != 0));
             }
             if (next.Count > MaxTotals) return null;
-            totals = next;
+            ways = next;
         }
 
         int? only = null;
-        foreach (int t in totals)
+        foreach ((int total, bool touched) in ways)
         {
-            if (t == 0) continue;
-            if (only is not null) return null;
-            only = t;
+            if (!touched) continue;
+            if (total == 0)
+            {
+                if (realm == RealmType.ParaMud) return null;
+                continue;
+            }
+            if (only is { } seen && seen != total) return null;
+            only = total;
         }
         return only;
     }

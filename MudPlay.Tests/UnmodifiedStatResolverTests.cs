@@ -9,12 +9,13 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// Working the trained stats back from a `stat` screen: equipment, the effects the
-// screen listed, and the rule that a marked stat nothing explains is never used.
-// Arrays are STR/INT/WIL/AGL/HEA/CHM.
+// Working the trained stats back from a `stat` screen: what the screen's own
+// modified mark says, worn gear, the effects the screen listed, and the rule that a
+// marked stat nothing explains is never used. Arrays are STR/INT/WIL/AGL/HEA/CHM.
 public sealed class UnmodifiedStatResolverTests
 {
     private static readonly int[] NoGear = new int[6];
+    private static readonly int[] StrGear = { 10, 0, 0, 0, 0, 0 };
 
     private static int[] Stats(int str, int agl) => new[] { str, 40, 30, agl, 60, 30 };
 
@@ -24,27 +25,57 @@ public sealed class UnmodifiedStatResolverTests
     private static ListedEffect Effect(string text, params EffectStatReading[] readings) => new(text, readings);
 
     private static readonly ListedEffect Unrelated = Effect("You feel powerful!", Spell("bless"));
+    private static readonly ListedEffect Bear =
+        Effect("You feel strong, but clumsy!", Spell("way of the bear", str: 20, agl: -10));
+
+    private static UnmodifiedStats Paradigm(int[] shown, int[] gear, StatSet marked, params ListedEffect[] effects) =>
+        UnmodifiedStatResolver.Resolve(shown, gear, RealmType.ParaMud, marksRead: true, marked, effects);
+
+    private static UnmodifiedStats Stock(int[] shown, int[] gear, StatSet marked, params ListedEffect[] effects) =>
+        UnmodifiedStatResolver.Resolve(shown, gear, RealmType.Stock, marksRead: true, marked, effects);
 
     [Fact]
-    public void EquipmentOnly_ComesOffAnUnmarkedStat()
+    public void AnUnmarkedStat_IsTheTrainedValue_GearOrNoGear()
     {
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(143, 100), new[] { 10, 0, 0, 0, 0, 0 }, marksRead: true, StatSet.None, Array.Empty<ListedEffect>());
-
-        Assert.Equal(StatReadingState.Accounted, r.State);
-        Assert.Equal(133, r.Base[0]);
-        Assert.Equal(100, r.Base[3]);
+        // Paradigm turns a gear-boosted stat red and Stock gear never moves the
+        // number, so an unmarked one has nothing in it on either realm.
+        Assert.Equal(133, Paradigm(Stats(133, 100), StrGear, StatSet.None).Base[0]);
+        Assert.Equal(133, Stock(Stats(133, 100), StrGear, StatSet.None).Base[0]);
+        Assert.Equal(StatReadingState.Accounted, Paradigm(Stats(133, 100), StrGear, StatSet.None).State);
     }
 
     [Fact]
-    public void EquipmentOnly_ExplainsAMarkedStat()
+    public void Paradigm_EquipmentOnly_ExplainsAMarkedStat_AndSaysNothingOfIt()
     {
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(143, 100), new[] { 10, 0, 0, 0, 0, 0 }, marksRead: true, StatSet.Strength, new[] { Unrelated });
+        UnmodifiedStats r = Paradigm(Stats(143, 100), StrGear, StatSet.Strength, Unrelated);
 
         Assert.Equal(StatReadingState.Accounted, r.State);
         Assert.Equal(133, r.Base[0]);
+        Assert.Equal(10, r.Equipment[0]);
         Assert.Equal(0, r.Effects[0]);
+        // A character with stat gear reads like this on every screen.
+        Assert.True(r.GearAlone);
+        Assert.Null(r.Describe());
+    }
+
+    [Fact]
+    public void Stock_GearNeverExplainsAMark()
+    {
+        // Stock gear doesn't move the shown value, so a mark is a spell's doing.
+        UnmodifiedStats r = Stock(Stats(143, 100), StrGear, StatSet.Strength, Unrelated);
+
+        Assert.Equal(StatReadingState.Unexplained, r.State);
+        Assert.Equal(StatSet.Strength, r.Unexplained);
+    }
+
+    [Fact]
+    public void Stock_ABuffComesOff_WithoutTheGear()
+    {
+        UnmodifiedStats r = Stock(Stats(153, 90), StrGear, StatSet.Strength | StatSet.Agility, Bear);
+
+        Assert.Equal(StatReadingState.Accounted, r.State);
+        Assert.Equal(133, r.Base[0]);
+        Assert.Equal(0, r.Equipment[0]);
     }
 
     [Fact]
@@ -52,9 +83,7 @@ public sealed class UnmodifiedStatResolverTests
     {
         // Strength 153 and Agility 90 in red under "You feel strong, but clumsy!";
         // the trainer showed 133 and 100.
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(153, 90), NoGear, marksRead: true, StatSet.Strength | StatSet.Agility,
-            new[] { Unrelated, Effect("You feel strong, but clumsy!", Spell("way of the bear", str: 20, agl: -10)) });
+        UnmodifiedStats r = Paradigm(Stats(153, 90), NoGear, StatSet.Strength | StatSet.Agility, Unrelated, Bear);
 
         Assert.Equal(StatReadingState.Accounted, r.State);
         Assert.Equal(new[] { 133, 40, 30, 100, 60, 30 }, r.Base);
@@ -64,26 +93,27 @@ public sealed class UnmodifiedStatResolverTests
     }
 
     [Fact]
-    public void BuffAndEquipment_BothComeOff()
+    public void Paradigm_BuffAndEquipment_BothComeOff_AndBothAreNamed()
     {
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(163, 100), new[] { 10, 0, 0, 0, 0, 0 }, marksRead: true, StatSet.Strength,
-            new[] { Effect("You feel strong, but clumsy!", Spell("way of the bear", str: 20)) });
+        UnmodifiedStats r = Paradigm(Stats(163, 100), StrGear, StatSet.Strength,
+            Effect("You feel strong, but clumsy!", Spell("way of the bear", str: 20)));
 
         Assert.Equal(StatReadingState.Accounted, r.State);
         Assert.Equal(133, r.Base[0]);
         Assert.Equal(10, r.Equipment[0]);
         Assert.Equal(20, r.Effects[0]);
+        Assert.Contains("worn gear: STR +10", r.Describe());
+        Assert.Contains("effects: STR +20", r.Describe());
     }
 
     [Fact]
-    public void MarkedStat_NothingExplains_IsUnexplained()
+    public void MarkedStat_NothingExplains_IsUnexplained_AndIsLeftAsShown()
     {
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(153, 100), NoGear, marksRead: true, StatSet.Strength, new[] { Unrelated });
+        UnmodifiedStats r = Paradigm(Stats(153, 100), NoGear, StatSet.Strength, Unrelated);
 
         Assert.Equal(StatReadingState.Unexplained, r.State);
         Assert.Equal(StatSet.Strength, r.Unexplained);
+        Assert.Equal(153, r.Base[0]);
         Assert.Contains("STR can't be accounted for", r.Describe());
     }
 
@@ -92,9 +122,8 @@ public sealed class UnmodifiedStatResolverTests
     {
         // The bear explains Strength, but an unknown effect is on the list too:
         // nothing says it isn't adding to Strength as well.
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(153, 100), NoGear, marksRead: true, StatSet.Strength,
-            new[] { Effect("You feel strong, but clumsy!", Spell("way of the bear", str: 20)), Effect("You feel odd!") });
+        UnmodifiedStats r = Paradigm(Stats(153, 100), NoGear, StatSet.Strength,
+            Effect("You feel strong, but clumsy!", Spell("way of the bear", str: 20)), Effect("You feel odd!"));
 
         Assert.Equal(StatReadingState.Unexplained, r.State);
         Assert.Contains("matches no spell on record", r.Describe());
@@ -103,9 +132,8 @@ public sealed class UnmodifiedStatResolverTests
     [Fact]
     public void AModifierTheDataCannotPinDown_IsUnexplained()
     {
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(153, 100), NoGear, marksRead: true, StatSet.Strength,
-            new[] { Effect("Your strength is enhanced!", Spell("giant strength", unknown: StatSet.Strength)) });
+        UnmodifiedStats r = Paradigm(Stats(153, 100), NoGear, StatSet.Strength,
+            Effect("Your strength is enhanced!", Spell("giant strength", unknown: StatSet.Strength)));
 
         Assert.Equal(StatReadingState.Unexplained, r.State);
     }
@@ -114,36 +142,49 @@ public sealed class UnmodifiedStatResolverTests
     public void ASharedLine_IsSettledByTheMark()
     {
         // "You feel strong" is song of might (+5) or song of force (nothing). A
-        // marked Strength with nothing else on it can only be the first.
+        // reading that puts nothing on Strength can't be the marked one.
         ListedEffect shared = Effect("You feel strong!", Spell("song of might", str: 5), Spell("song of force"));
 
-        UnmodifiedStats marked = UnmodifiedStatResolver.Resolve(
-            Stats(138, 100), NoGear, marksRead: true, StatSet.Strength, new[] { shared });
+        UnmodifiedStats marked = Paradigm(Stats(138, 100), NoGear, StatSet.Strength, shared);
         Assert.Equal(StatReadingState.Accounted, marked.State);
         Assert.Equal(133, marked.Base[0]);
 
-        // Unmarked, it is the other one, and nothing comes off.
-        UnmodifiedStats unmarked = UnmodifiedStatResolver.Resolve(
-            Stats(133, 100), NoGear, marksRead: true, StatSet.None, new[] { shared });
-        Assert.Equal(133, unmarked.Base[0]);
+        // Unmarked, the shown value stands.
+        Assert.Equal(133, Paradigm(Stats(133, 100), NoGear, StatSet.None, shared).Base[0]);
     }
 
     [Fact]
     public void TwoTotalsThatBothFit_AreUnexplained()
     {
         // Gear already explains the mark, so the shared line could be either spell.
-        UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(148, 100), new[] { 10, 0, 0, 0, 0, 0 }, marksRead: true, StatSet.Strength,
-            new[] { Effect("You feel strong!", Spell("song of might", str: 5), Spell("song of force")) });
+        UnmodifiedStats r = Paradigm(Stats(148, 100), StrGear, StatSet.Strength,
+            Effect("You feel strong!", Spell("song of might", str: 5), Spell("song of force")));
 
         Assert.Equal(StatReadingState.Unexplained, r.State);
     }
 
     [Fact]
-    public void WithoutMarks_OnlyGearComesOff_AndTheReadingIsUnverified()
+    public void ModifiersThatCancel_AreInDoubtOnParadigm_AndRuledOutOnStock()
+    {
+        // The line is one of two spells: +5, or -5 (which would cancel the other +5).
+        ListedEffect up = Effect("You feel strong!", Spell("song of might", str: 5));
+        ListedEffect either = Effect("You feel odd!", Spell("a second song", str: 5), Spell("a curse", str: -5));
+
+        // Stock marks a stat only when it differs from the trained value, so the
+        // cancelling reading can't be the marked one: +10 it is.
+        UnmodifiedStats stock = Stock(Stats(143, 100), NoGear, StatSet.Strength, up, either);
+        Assert.Equal(StatReadingState.Accounted, stock.State);
+        Assert.Equal(133, stock.Base[0]);
+
+        // Whether Paradigm leaves a cancelled stat unmarked isn't known.
+        Assert.Equal(StatReadingState.Unexplained, Paradigm(Stats(143, 100), NoGear, StatSet.Strength, up, either).State);
+    }
+
+    [Fact]
+    public void WithoutMarks_GearComesOffAsItAlwaysDid_AndTheReadingIsUnverified()
     {
         UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(153, 90), new[] { 10, 0, 0, 0, 0, 0 }, marksRead: false, StatSet.None, Array.Empty<ListedEffect>());
+            Stats(153, 90), StrGear, RealmType.ParaMud, marksRead: false, StatSet.None, Array.Empty<ListedEffect>());
 
         Assert.Equal(StatReadingState.Unverified, r.State);
         Assert.Equal(143, r.Base[0]);
@@ -224,6 +265,34 @@ public sealed class UnmodifiedStatResolverTests
     }
 
     [Fact]
+    public void Reader_ASourceThatLeadsToNoSpellRow_IsKeptAsAnUnknownReading()
+    {
+        // The line is song of might, or a spell missing from the game data, or
+        // whatever an item record stands for: dropping the last two would leave
+        // song of might looking like the only answer.
+        MessageRecord[] catalogue =
+        {
+            Record("song of might", "You feel strong", 47),
+            Record("a spell not imported", "You feel strong", 9999),
+            new MessageRecord(
+                Id: "belt", Name: "belt of might", Flags: MessageFlags.None, RawFlagsHex: 0,
+                CasterMessage: string.Empty, TargetMessage: string.Empty, WitnessMessage: string.Empty,
+                AppliedMessage: "You feel strong", AppliedEndsWith: string.Empty,
+                Links: new[] { new GameDataLink("Items", 438) }),
+        };
+
+        ListedEffect effect = Assert.Single(ListedEffectReader.Read(
+            new[] { new StatusEffectLine("You feel strong!", true) }, RealmType.ParaMud, catalogue, SpellRow));
+
+        Assert.Equal(3, effect.Readings.Count);
+        Assert.Equal(StatSet.None, effect.Readings[0].Unknown);
+        Assert.Equal(StatSet.All, effect.Readings[1].Unknown);
+        Assert.Equal(StatSet.All, effect.Readings[2].Unknown);
+        Assert.Equal(StatReadingState.Unexplained,
+            Paradigm(Stats(138, 100), NoGear, StatSet.Strength, effect).State);
+    }
+
+    [Fact]
     public void Reader_AnUnknownLine_HasNoReadings()
     {
         Assert.Empty(Assert.Single(Read(RealmType.ParaMud, new StatusEffectLine("You feel odd!", true))).Readings);
@@ -245,7 +314,7 @@ public sealed class UnmodifiedStatResolverTests
             new StatusEffectLine("You feel strong, but clumsy!", true));
 
         UnmodifiedStats r = UnmodifiedStatResolver.Resolve(
-            Stats(153, 90), NoGear, marksRead: true, StatSet.Strength | StatSet.Agility, effects);
+            Stats(153, 90), NoGear, RealmType.ParaMud, marksRead: true, StatSet.Strength | StatSet.Agility, effects);
 
         Assert.Equal(StatReadingState.Accounted, r.State);
         Assert.Equal(133, r.Base[0]);

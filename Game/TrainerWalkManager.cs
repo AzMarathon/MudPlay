@@ -118,11 +118,13 @@ public sealed class TrainerWalkManager : IDisposable
     public TimeSpan TrainConfirmTimeout { get; } = TimeSpan.FromSeconds(8);
     // How long to wait for the post-train stat refresh before giving up on CP.
     public TimeSpan StatRefreshTimeout { get; } = TimeSpan.FromSeconds(8);
-    // How often, and how many times, a run parked at the trainer reads `stat` again
-    // while a stat is altered, before it leaves the CP plan for later.
-    public TimeSpan AlteredStatsRereadDelay { get; } = TimeSpan.FromSeconds(20);
-    private const int MaxAlteredStatsRereads = 6;
-    private int _alteredStatsRereads;
+    // How often a run parked at the trainer reads `stat` again while a stat is
+    // altered. How long it keeps at it is AutoTrainerSettings.AlteredStatsWaitSeconds.
+    public TimeSpan AlteredStatsRereadDelay { get; set; } = TimeSpan.FromSeconds(20);
+    private readonly Game.Train.AlteredStatsWait _alteredStats = new();
+    // The user's setting for how long that wait may last (0 = don't wait).
+    public int AlteredStatsWaitSeconds =>
+        Math.Clamp(ReadSettings().AlteredStatsWaitSeconds, 0, AutoTrainerSettings.MaxAlteredStatsWaitSeconds);
 
     // Raised when IsBusy / CanTrainNow may have changed.
     public event Action? StateChanged;
@@ -363,8 +365,7 @@ public sealed class TrainerWalkManager : IDisposable
         {
             int banked = CountBankableAbove(_stats.Level);   // only the reserve message needs it
             _log?.Info("AutoTrain",
-                _autoTrain.HoldReason is { } hold ? hold
-                : banked > 0 && !TrainBudgetCalculator.WithinCeiling(_stats.Level, ceiling)
+                banked > 0 && !TrainBudgetCalculator.WithinCeiling(_stats.Level, ceiling)
                     ? $"Nothing to train — at the level ceiling ({ceiling}); {banked} banked level{(banked == 1 ? "" : "s")} held."
                 : banked > 0
                     ? $"Nothing to train — keeping {banked} banked level{(banked == 1 ? "" : "s")} in reserve."
@@ -934,7 +935,7 @@ public sealed class TrainerWalkManager : IDisposable
         _spellTripTried = false;
         _spellsOnly = false;
         _fundingWithSpells = false;
-        _alteredStatsRereads = 0;
+        _alteredStats.Reset();
     }
 
     private void OnWalkEvent(WalkEvent e)
@@ -1202,23 +1203,25 @@ public sealed class TrainerWalkManager : IDisposable
         FinishWithReport();
     }
 
-    // Stock refuses `train stats` while a stat is altered (GAME_MECHANICS "Trainers:
-    // level band, class restriction, and `train stats`"), so a run standing at the
-    // trainer with one marked on its `stat` screen waits there and reads `stat`
-    // again, rather than send a command the game will bounce. The wait is bounded:
-    // a buff something keeps recasting would otherwise park the run for good. False
-    // once the tries are used up; the plan row stays for a later pass.
+    // The run is at the trainer and its fresh `stat` still marks a stat as altered,
+    // which Stock won't train through: wait there and read `stat` again, for as
+    // long as the user's setting allows. False once that is used up (or set to no
+    // wait at all); the plan row stays for a later pass.
     private bool WaitOutAlteredStats(string hold)
     {
-        if (_alteredStatsRereads >= MaxAlteredStatsRereads)
+        int waitSeconds = AlteredStatsWaitSeconds;
+        int rereads = Game.Train.AlteredStatsWait.Rereads(waitSeconds, AlteredStatsRereadDelay);
+        if (!_alteredStats.TryClaimReread(rereads))
         {
-            _log?.Info("AutoTrain", "Stats are still altered — leaving the CP plan for later; plan rows kept.");
+            _log?.Info("AutoTrain", waitSeconds == 0
+                ? $"{hold} Not waiting (the wait for altered stats is set to 0) — plan rows kept for later."
+                : $"Stats are still altered after {waitSeconds}s at the trainer — giving the CP plan up for this run; plan rows kept.");
             return false;
         }
-        if (_alteredStatsRereads++ == 0)
+        if (_alteredStats.JustBegan)
             _log?.Info("AutoTrain",
-                $"{hold} Waiting at the trainer and re-reading `stat` every "
-                + $"{AlteredStatsRereadDelay.TotalSeconds:0}s, up to {MaxAlteredStatsRereads} times.");
+                $"{hold} Waiting at the trainer for up to {waitSeconds}s, reading `stat` again every "
+                + $"{AlteredStatsRereadDelay.TotalSeconds:0}s; after that the plan row is left for later.");
         int session = ++_sessionId;   // retires the read timeout of the screen just parsed
         _ = RereadStatAfterAsync(session);
         return true;

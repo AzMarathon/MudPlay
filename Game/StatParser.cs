@@ -234,9 +234,19 @@ public sealed partial class StatParser : IDisposable
         Stats.MartialArts = snapshot.MartialArts;
         Stats.MagicRes = snapshot.MagicRes;
         Stats.Spellcasting = snapshot.Spellcasting;
-        // A saved snapshot keeps the numbers only. Whether they were read with a
-        // buff up isn't known until the next live screen.
-        ForgetScreenMarks();
+        // The marks and effect list belong to the same screen as the numbers, so
+        // they come back with them. A snapshot saved without them says nothing
+        // about whether its numbers were read with a buff up.
+        if (snapshot.ModifiedStats is { } marked)
+        {
+            Stats.ModifiedStats = (StatSet)marked & StatSet.All;
+            Stats.ActiveEffects = snapshot.ActiveEffects is { Count: > 0 } saved
+                ? saved.Select(e => new StatusEffectLine(e.Text, e.Timed)).ToArray()
+                : Array.Empty<StatusEffectLine>();
+            Stats.ModifiedMarksRead = true;
+        }
+        else
+            ForgetScreenMarks();
         // Flip the gate true so consumers (e.g. RemoteCommandManager's
         // LivesProvider) trust the hydrated values immediately — the
         // next live stat will reconfirm them.
@@ -296,6 +306,10 @@ public sealed partial class StatParser : IDisposable
         MartialArts = Stats.MartialArts,
         MagicRes = Stats.MagicRes,
         Spellcasting = Stats.Spellcasting,
+        ModifiedStats = Stats.ModifiedMarksRead ? (int)Stats.ModifiedStats : null,
+        ActiveEffects = Stats.ModifiedMarksRead && Stats.ActiveEffects.Count > 0
+            ? Stats.ActiveEffects.Select(e => new Models.Profile.SavedEffectLine { Text = e.Text, Timed = e.Timed }).ToList()
+            : null,
     };
 
     // True when text is a line of the stat / exp / health readout — the header
@@ -947,7 +961,7 @@ public sealed partial class StatParser : IDisposable
             : Array.Empty<StatusEffectLine>();
         Stats.ModifiedMarksRead = whole && _marksKnownThisArm == StatSet.All;
         if (Stats.ModifiedStats != StatSet.None)
-            _log?.Log(LogSeverity.Info, "StatParser",
+            _log?.Log(LogSeverity.Debug, "StatParser",
                 $"Stat screen marks {Stats.ModifiedStats} as modified; {Stats.ActiveEffects.Count} effect line(s) listed.");
         ResetArmMarks();
     }
@@ -988,7 +1002,9 @@ public sealed partial class StatParser : IDisposable
         RegexOptions.CultureInvariant)] private static partial Regex HealthCommandRx();
 
     // Plain N fields — `\*?` between the colon and the digits
-    // tolerates the altered-stat marker.
+    // tolerates the altered-stat marker. Stock prints three of the six stats with
+    // no space after the colon (`Intellect:`, `Willpower:`, `Agility:`), so a
+    // modified one reads `Agility:*50`: the six stat labels take `\s*` there.
     [GeneratedRegex(@"\bLevel:\s+(\d+)",                                RegexOptions.CultureInvariant)] private static partial Regex LevelRx();
     [GeneratedRegex(@"\bExp:\s+(\d+)",                                  RegexOptions.CultureInvariant)] private static partial Regex ExpRx();
     [GeneratedRegex(@"\bPerception:\s+\*?\s*(\d+)",                     RegexOptions.CultureInvariant)] private static partial Regex PerceptionRx();
@@ -997,12 +1013,12 @@ public sealed partial class StatParser : IDisposable
     [GeneratedRegex(@"\bTraps:\s+\*?\s*(\d+)",                          RegexOptions.CultureInvariant)] private static partial Regex TrapsRx();
     [GeneratedRegex(@"\bPicklocks:\s+\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex PicklocksRx();
     [GeneratedRegex(@"\bTracking:\s+\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex TrackingRx();
-    [GeneratedRegex(@"\bStrength:\s+\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex StrengthRx();
-    [GeneratedRegex(@"\bIntellect:\s+\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex IntellectRx();
-    [GeneratedRegex(@"\bWillpower:\s+\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex WillpowerRx();
-    [GeneratedRegex(@"\bAgility:\s+\*?\s*(\d+)",                        RegexOptions.CultureInvariant)] private static partial Regex AgilityRx();
-    [GeneratedRegex(@"\bHealth:\s+\*?\s*(\d+)",                         RegexOptions.CultureInvariant)] private static partial Regex HealthRx();
-    [GeneratedRegex(@"\bCharm:\s+\*?\s*(\d+)",                          RegexOptions.CultureInvariant)] private static partial Regex CharmRx();
+    [GeneratedRegex(@"\bStrength:\s*\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex StrengthRx();
+    [GeneratedRegex(@"\bIntellect:\s*\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex IntellectRx();
+    [GeneratedRegex(@"\bWillpower:\s*\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex WillpowerRx();
+    [GeneratedRegex(@"\bAgility:\s*\*?\s*(\d+)",                        RegexOptions.CultureInvariant)] private static partial Regex AgilityRx();
+    [GeneratedRegex(@"\bHealth:\s*\*?\s*(\d+)",                         RegexOptions.CultureInvariant)] private static partial Regex HealthRx();
+    [GeneratedRegex(@"\bCharm:\s*\*?\s*(\d+)",                          RegexOptions.CultureInvariant)] private static partial Regex CharmRx();
     [GeneratedRegex(@"\bMartial Arts:\s+\*?\s*(\d+)",                   RegexOptions.CultureInvariant)] private static partial Regex MartialArtsRx();
     [GeneratedRegex(@"\bMagicRes:\s+\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex MagicResRx();
     [GeneratedRegex(@"\bSpellcasting:\s+\*?\s*(\d+)",                   RegexOptions.CultureInvariant)] private static partial Regex SpellcastingRx();
@@ -1032,7 +1048,7 @@ public sealed partial class StatParser : IDisposable
     // stats). Every stat row carries at least one numeric label, so this catches
     // all of them without needing to re-list the value-capturing shapes above.
     [GeneratedRegex(
-        @"^\s*(?:Name|Race|Class):\s+\S|\b(?:Lives/CP|Hits|Kai|Mana|Armour Class|Level|Exp|Perception|Stealth|Thievery|Traps|Picklocks|Tracking|Strength|Intellect|Willpower|Agility|Health|Charm|Martial Arts|MagicRes|Spellcasting):\s+\*?\s*\d",
+        @"^\s*(?:Name|Race|Class):\s+\S|\b(?:Lives/CP|Hits|Kai|Mana|Armour Class|Level|Exp|Perception|Stealth|Thievery|Traps|Picklocks|Tracking|Strength|Intellect|Willpower|Agility|Health|Charm|Martial Arts|MagicRes|Spellcasting):\s*\*?\s*\d",
         RegexOptions.CultureInvariant)]
     private static partial Regex StatRowRx();
 

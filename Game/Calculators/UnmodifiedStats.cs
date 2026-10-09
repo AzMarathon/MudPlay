@@ -4,8 +4,8 @@ namespace MudPlay.Game.Calculators;
 
 // The trained stats worked back from a `stat` screen, with what was taken off to
 // get there. Arrays are STR/INT/WIL/AGL/HEA/CHM. Base is the shown value less
-// Equipment and Effects; for a stat in Unexplained only the gear came off, and the
-// figure is not to be trusted.
+// Equipment and Effects, which hold only what was actually taken off. For a stat
+// in Unexplained nothing came off, and the figure is not to be trusted.
 public sealed record UnmodifiedStats(
     StatReadingState State,
     int[] Base,
@@ -34,15 +34,29 @@ public sealed record UnmodifiedStats(
         return sb.ToString();
     }
 
+    // Whether the screen's marks are all down to worn gear, which is how a
+    // character with stat gear always reads on Paradigm. Nothing worth a notice.
+    public bool GearAlone
+    {
+        get
+        {
+            if (State != StatReadingState.Accounted || Modified == StatSet.None) return false;
+            foreach (int e in Effects) if (e != 0) return false;
+            return true;
+        }
+    }
+
     // One line for the program log, the CP Allocation tab and a bug report: what the
     // screen marked, what came off for it, and what couldn't be explained. Null when
-    // the screen marked nothing.
+    // the screen marked nothing, or nothing but worn gear.
     public string? Describe()
     {
-        if (State == StatReadingState.Unverified || Modified == StatSet.None) return null;
+        if (State == StatReadingState.Unverified || Modified == StatSet.None || GearAlone) return null;
         StringBuilder sb = new();
         sb.Append("`stat` marked ").Append(Names(Modified)).Append(" as modified");
-        string taken = Offsets(Effects);
+        string gear = Offsets(Equipment, Modified);
+        if (gear.Length > 0) sb.Append("; taken off for worn gear: ").Append(gear);
+        string taken = Offsets(Effects, Modified);
         if (taken.Length > 0) sb.Append("; taken off for effects: ").Append(taken);
         if (EffectNotes.Count > 0) sb.Append(" (").Append(string.Join("; ", EffectNotes)).Append(')');
         if (Unexplained != StatSet.None)
@@ -50,12 +64,12 @@ public sealed record UnmodifiedStats(
         return sb.Append('.').ToString();
     }
 
-    private static string Offsets(int[] values)
+    private static string Offsets(int[] values, StatSet among)
     {
         StringBuilder sb = new();
         for (int i = 0; i < values.Length; i++)
         {
-            if (values[i] == 0) continue;
+            if (values[i] == 0 || ((int)among & (1 << i)) == 0) continue;
             if (sb.Length > 0) sb.Append(", ");
             sb.Append(Labels[i]).Append(' ').Append(values[i] > 0 ? "+" : string.Empty).Append(values[i]);
         }

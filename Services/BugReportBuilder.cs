@@ -1371,7 +1371,7 @@ public static class BugReportBuilder
     private static void AppendPlanBaseline(StringBuilder sb, AppServices svc)
     {
         var ctx = Game.Calculators.CharacterPlanContext.Resolve(
-            svc.PlayerStats, svc.GameData, svc.Inventory, svc.Messages);
+            svc.PlayerStats, svc.GameData, svc.Inventory, svc.ListedEffects);
         sb.Append("\n**CP plan baseline (worked back from the last `stat` screen)**\n\n");
         if (!ctx.HasCharacter)
         {
@@ -1385,6 +1385,7 @@ public static class BugReportBuilder
           .Append(s.ModifiedMarksRead ? " (modified marks read)" : " (no modified marks on record)").Append('\n');
         sb.Append("- marked modified: ").Append(r.Modified).Append('\n');
         sb.Append("- shown: ").Append(Row(new[] { s.Strength, s.Intellect, s.Willpower, s.Agility, s.Health, s.Charm })).Append('\n');
+        sb.Append("- baseline may be acted on (rows clamped / pruned by it): ").Append(ctx.BaselineTrusted).Append('\n');
         sb.Append("- taken off for worn gear: ").Append(Row(r.Equipment)).Append('\n');
         sb.Append("- taken off for listed effects: ").Append(Row(r.Effects)).Append('\n');
         sb.Append("- unmodified (before the race floor): ").Append(Row(r.Base)).Append('\n');
@@ -1395,6 +1396,9 @@ public static class BugReportBuilder
             ? "(none)"
             : string.Join(" | ", s.ActiveEffects.Select(e => e.Timed ? e.Text + " (timed)" : e.Text))).Append('\n');
         sb.Append("- auto-train hold: ").Append(svc.AutoTrain.HoldReason ?? "(none)").Append('\n');
+        sb.Append("- Stock wait at the trainer for altered stats: ")
+          .Append(svc.TrainerWalk.AlteredStatsWaitSeconds).Append("s, `stat` read again every ")
+          .Append(svc.TrainerWalk.AlteredStatsRereadDelay.TotalSeconds.ToString("0")).Append("s\n");
         sb.Append("- last CP pass not applied because: ").Append(svc.AutoTrain.LastApplyNote ?? "(n/a)").Append('\n');
     }
 

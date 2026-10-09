@@ -8,11 +8,11 @@ using MudPlay.Services;
 namespace MudPlay.Game.Calculators;
 
 // The live inputs a CP plan is computed against: the raw-base baseline (the `stat`
-// screen's values less equipment and the effects that screen listed, floored at
-// the race minimum), how far that reading can be trusted, the race min/max bounds,
-// and the realm. Resolved from PlayerStats + game data + equipment + the message
-// catalogue; shared by the CP Allocation tab and the auto-train engine so the
-// baseline math lives in exactly one place.
+// screen's values with whatever the screen marked as modified worked back out,
+// floored at the race minimum), how far that reading can be trusted, the race
+// min/max bounds, and the realm. Resolved from PlayerStats + game data + equipment
+// + the listed effects; shared by the CP Allocation tab and the auto-train engine
+// so the baseline math lives in exactly one place.
 public readonly record struct CharacterPlanContext(
     bool HasCharacter,
     CpPlanEntry Baseline,
@@ -21,16 +21,26 @@ public readonly record struct CharacterPlanContext(
     RealmType Realm,
     UnmodifiedStats Reading)
 {
+    // The baseline may be acted on by itself: plan rows rewritten against it,
+    // rows pruned as trained, keystrokes worked out from it. Every marked stat
+    // has to be accounted for, and on Stock none may be marked at all: what a
+    // Stock cast adds to a stat is not settled (GAME_MECHANICS "How `stat` marks
+    // a modified stat"), and Stock never trains with a stat altered anyway.
+    public bool BaselineTrusted =>
+        HasCharacter
+        && Reading.State == StatReadingState.Accounted
+        && !(Realm == RealmType.Stock && Reading.Modified != StatSet.None);
+
     // Resolve the plan context for the live character. HasCharacter is false
     // (entries defaulted) when no race resolves — no character or no game-data
     // set loaded.
     public static CharacterPlanContext Resolve(PlayerStats stats, GameDataCache gameData,
-                                               InventoryManager inventory, MessageStore messages)
+                                               InventoryManager inventory, ListedEffectCatalog listedEffects)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(inventory);
-        ArgumentNullException.ThrowIfNull(messages);
+        ArgumentNullException.ThrowIfNull(listedEffects);
 
         RealmType realm = gameData.ActiveRealm;
         JsonElement? raceOpt = gameData.FindRowByName("Races", stats.Race);
@@ -50,14 +60,12 @@ public readonly record struct CharacterPlanContext(
         int[] shown = { stats.Strength, stats.Intellect, stats.Willpower, stats.Agility, stats.Health, stats.Charm };
         int[] gear = { eq.PlusStrength, eq.PlusIntellect, eq.PlusWillpower, eq.PlusAgility, eq.PlusHealth, eq.PlusCharm };
 
-        // The effect list only matters when the screen marked something, and
-        // matching it walks the whole message catalogue.
+        // The effect list only matters when the screen marked something.
         IReadOnlyList<ListedEffect> effects = stats.ModifiedMarksRead && stats.ModifiedStats != StatSet.None
-            ? ListedEffectReader.Read(stats.ActiveEffects, realm, messages.Messages,
-                                      number => gameData.FindRowByNumber("Spells", number))
+            ? listedEffects.Read(stats.ActiveEffects)
             : Array.Empty<ListedEffect>();
         UnmodifiedStats reading = UnmodifiedStatResolver.Resolve(
-            shown, gear, stats.ModifiedMarksRead, stats.ModifiedStats, effects);
+            shown, gear, realm, stats.ModifiedMarksRead, stats.ModifiedStats, effects);
 
         int[] b = reading.Base;
         var baseline = new CpPlanEntry(stats.Level,

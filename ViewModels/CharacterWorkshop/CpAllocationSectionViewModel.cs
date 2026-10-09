@@ -16,8 +16,8 @@ using MudPlay.Views.CharacterWorkshop;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // CP ALLOCATION section — the editable per-level character-point plan. The
-// baseline is the live raw-base stats (the `stat` screen's values minus equipment
-// and the effects that screen listed, with a note when one can't be accounted for);
+// baseline is the live raw-base stats (the `stat` screen's values with whatever
+// it marked as modified worked back out, and a note when that can't be done);
 // each grid row is a planned future level whose target STR/INT/WIL/AGL/HEA/CHM
 // the user edits, with Total CP earned / CP Left recomputed live via
 // CpPlanCalculator (race-min cost curve, race-max clamp, cumulative carryover).
@@ -35,7 +35,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private readonly CpPlanState _planState;
     private readonly TrainerWalkManager _trainerWalk;
     private readonly AutoTrainManager _autoTrain;
-    private readonly MessageStore _messages;
+    private readonly Game.Spells.ListedEffectCatalog _listedEffects;
     private Control? _view;
     private bool _suppress;
     // The cell most recently edited by the user, so an overspend trims that cell
@@ -113,12 +113,14 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private CpPlanEntry _raceMin = new();
     private CpPlanEntry _raceMax = new();
     private RealmType _realm;
-    private UnmodifiedStats _reading = UnmodifiedStats.None;
+    // The baseline may be acted on: rows rewritten against it and pruned by it.
+    private bool _baselineTrusted;
 
     public CpAllocationSectionViewModel(PlayerStats stats, GameDataCache gameData,
                                         InventoryManager inventory, ProfileService profile,
                                         CpPlanState planState, TrainerWalkManager trainerWalk,
-                                        AutoTrainManager autoTrain, MessageStore messages)
+                                        AutoTrainManager autoTrain,
+                                        Game.Spells.ListedEffectCatalog listedEffects)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -127,8 +129,8 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         ArgumentNullException.ThrowIfNull(planState);
         ArgumentNullException.ThrowIfNull(trainerWalk);
         ArgumentNullException.ThrowIfNull(autoTrain);
-        ArgumentNullException.ThrowIfNull(messages);
-        _messages = messages;
+        ArgumentNullException.ThrowIfNull(listedEffects);
+        _listedEffects = listedEffects;
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
@@ -173,6 +175,13 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     [RelayCommand]
     private void AddLevel()
     {
+        // The first row starts from the trained stats, so they have to be known:
+        // seeded from a buffed reading, the buff would be saved as the plan.
+        if (Rows.Count == 0 && !_baselineTrusted)
+        {
+            ActionMessage = "Read `stat` with no buff or curse on your stats first — the first row starts from your trained stats.";
+            return;
+        }
         int level = Rows.Count > 0 ? Rows[^1].Level + 1 : Math.Max(2, _stats.Level + 1);
         CpPlanEntry seed = Rows.Count > 0 ? Rows[^1].ToEntry() : _baseline;
         _lastEditedStat = null;
@@ -358,19 +367,19 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     [RelayCommand(CanExecute = nameof(CanApplyLevel))]
     private void ApplyLevel()
     {
-        if (!TryResolveSelectedTargets(out int[] current, out int[] target, out string reason))
+        if (!TryResolveSelectedRow(out int[] row, out string reason))
         {
             ActionMessage = reason;
             return;
         }
         ActionMessage = "Applying at the trainer…";
-        _autoTrain.ApplyTargets(current, target);   // fires StateChanged → SyncAutoTrain disables the buttons
+        _autoTrain.ApplyTargets(row);   // fires StateChanged → SyncAutoTrain disables the buttons
         SyncAutoTrain();
     }
 
     // Enabled the moment a plan row is selected and no train run is in flight; the
     // CP-lines-up / has-a-raise validation runs on click so the refusal reasons in
-    // TryResolveSelectedTargets actually reach the user instead of a silently-dead
+    // TryResolveSelectedRow actually reach the user instead of a silently-dead
     // button.
     private bool CanApplyLevel() =>
         !AutoTrainBusy && !_autoTrain.IsBusy && HasCharacter && SelectedRow is not null;
@@ -391,39 +400,43 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         else if (!ok)
         {
             ActionMessage = _autoTrain.LastApplyNote is { } why
-                ? $"Nothing cleared — {why}."
+                ? $"Nothing cleared — {why.TrimEnd('.')}."
                 : "Couldn't confirm the training — nothing cleared (are you at a trainer?).";
         }
         SyncAutoTrain();
     }
 
-    // Resolve the selected row to (current raw baseline, affordable clamped targets),
-    // with a user-facing `reason` when it can't: no row / no character, the row's full
-    // spend doesn't fit live CP (the budget clamp trimmed it), or there's nothing left
-    // to raise (already trained). Order matters — a trim outranks "already trained" so a
-    // CP shortfall never masquerades as a fully-trained level.
-    private bool TryResolveSelectedTargets(out int[] current, out int[] target, out string reason)
+    // Resolve the selected row to the plan row to apply, with a user-facing
+    // `reason` when it can't be: no row / no character, the row's full spend doesn't
+    // fit live CP (the budget clamp trimmed it), or there's nothing left to raise
+    // (already trained). Order matters — a trim outranks "already trained" so a CP
+    // shortfall never masquerades as a fully-trained level.
+    //
+    // The row handed over is the saved plan's, never the grid's copy of it. And
+    // when the baseline can't be trusted neither check means anything, so the row
+    // goes as it is: the trainer screen shows the real values and settles both.
+    private bool TryResolveSelectedRow(out int[] row, out string reason)
     {
-        current = target = Array.Empty<int>();
+        row = Array.Empty<int>();
         reason = string.Empty;
         if (!HasCharacter || SelectedRow is null)
         {
             reason = "Select a plan row to apply.";
             return false;
         }
-        int[] prev = ToArr(_baseline);
-        int[] rowTargets = ToArr(SelectedRow.ToEntry());
-        // With a modified stat the baseline can't vouch for, neither check below
-        // means anything. The trainer form shows the real values and settles both.
-        if (_reading.State == StatReadingState.Unexplained)
+        int level = SelectedRow.Level;
+        if (_profile.Current?.CharacterPlan?.FirstOrDefault(e => e.Level == level) is not { } saved)
         {
-            current = prev;
-            target = rowTargets;
-            return true;
+            reason = "This row isn't in the saved plan yet.";
+            return false;
         }
+        row = ToArr(saved);
+        if (!_baselineTrusted) return true;
+
+        int[] prev = ToArr(_baseline);
         int[] clamped = CpPlanCalculator.ClampRowToBudget(
-            prev, rowTargets, ToArr(_raceMin), ToArr(_raceMax), _stats.Cp, _realm, null, out _);
-        if (!clamped.SequenceEqual(rowTargets))
+            prev, row, ToArr(_raceMin), ToArr(_raceMax), _stats.Cp, _realm, null, out _);
+        if (!clamped.SequenceEqual(row))
         {
             reason = "This level's CP doesn't line up with the CP you have available.";
             return false;
@@ -433,8 +446,6 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
             reason = "This level's stats are already trained — nothing to raise.";
             return false;
         }
-        current = prev;
-        target = clamped;
         return true;
     }
 
@@ -445,9 +456,9 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     private void RefreshBaseline()
     {
-        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory, _messages);
+        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory, _listedEffects);
         HasCharacter = ctx.HasCharacter;
-        _reading = ctx.Reading;
+        _baselineTrusted = ctx.BaselineTrusted;
         BaselineNote = DescribeReading(ctx);
         if (!ctx.HasCharacter) return;
 
@@ -463,17 +474,24 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     }
 
     // The note under the toggles: what the screen marked, and what that means for
-    // training here. Stock won't open the trainer while a stat is altered; Paradigm
-    // will, and its form shows the real values whatever the baseline says.
-    private static string? DescribeReading(CharacterPlanContext ctx)
+    // the grid and for training here. Stock won't open the trainer while a stat is
+    // altered; Paradigm will, and its form shows the real values whatever the
+    // baseline says. Nothing is said for a mark that is only worn gear.
+    internal static string? DescribeReading(CharacterPlanContext ctx)
     {
-        if (!ctx.HasCharacter || ctx.Reading.Describe() is not { } said) return null;
+        if (!ctx.HasCharacter) return null;
+        if (ctx.Reading.State == StatReadingState.Unverified)
+            return "No `stat` screen is on record that says whether these stats were read with a buff up. "
+                 + "Rows aren't checked against your stats until one is read.";
+        if (ctx.Reading.Describe() is not { } said) return null;
         if (ctx.Realm == RealmType.Stock)
-            return said + " The game won't open `train stats` until that is gone.";
-        return ctx.Reading.State == StatReadingState.Unexplained
-            ? said + " The baseline below may be off until a `stat` is read without it; Train now and "
-                   + "Apply this level take the real values from the trainer screen."
-            : said;
+            return said + " The game won't open `train stats` while a stat is altered: Train now and Apply this "
+                        + "level read `stat` again first, and wait for it to show the stats back to normal. "
+                        + "Rows aren't checked against your stats meanwhile.";
+        return ctx.BaselineTrusted
+            ? said
+            : said + " Rows aren't checked against your stats until a `stat` is read without it; Train now and "
+                   + "Apply this level take the real values from the trainer screen.";
     }
 
     // Rebuild the six column tooltips from the live raw-base stats + realm. Anchored
@@ -511,12 +529,13 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
                 CpPlanRowViewModel row = Rows[i];
                 // Write back the clamped target stats so the grid reflects
                 // race-max / can't-untrain limits the user may have typed past.
-                row.Strength = res.Strength;
-                row.Intellect = res.Intellect;
-                row.Willpower = res.Willpower;
-                row.Agility = res.Agility;
-                row.Health = res.Health;
-                row.Charm = res.Charm;
+                CpPlanEntry shown = RowToShow(row.ToEntry(), res, _baselineTrusted);
+                row.Strength = shown.Strength;
+                row.Intellect = shown.Intellect;
+                row.Willpower = shown.Willpower;
+                row.Agility = shown.Agility;
+                row.Health = shown.Health;
+                row.Charm = shown.Charm;
                 row.CpEarnedTotal = res.CpEarnedTotal;
                 row.CpLeft = res.CpLeft;
             }
@@ -534,6 +553,17 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
                 r.Level, r.Strength, r.Intellect, r.Willpower, r.Agility, r.Health, r.Charm))
             .ToList());
     }
+
+    // The stats a grid row should hold after a recalc: the clamped ones when the
+    // baseline can be trusted, else the row as it stands. Clamping raises a target
+    // to the baseline ("can't untrain") and trims it to the CP the baseline leaves,
+    // so against a baseline read with a buff up it would rewrite the plan to the
+    // buffed numbers, which are then saved and typed at the trainer.
+    internal static CpPlanEntry RowToShow(CpPlanEntry row, CpRowResult clamped, bool baselineTrusted) =>
+        baselineTrusted
+            ? new CpPlanEntry(row.Level, clamped.Strength, clamped.Intellect, clamped.Willpower,
+                              clamped.Agility, clamped.Health, clamped.Charm)
+            : row;
 
     // A user cell edit: remember which stat so an overspend trims that cell, then
     // re-total. Suppressed during seeding / write-back (those aren't user edits).
@@ -587,10 +617,10 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private void ReconcileTrainedRows()
     {
         if (_suppress || !HasCharacter || Rows.Count == 0) return;
-        // Rows are deleted here on the baseline's word alone, so it has to be a
-        // reading that checked out: a buffed Strength can meet a row's target while
-        // the row's CP is still unspent.
-        if (_reading.State != StatReadingState.Accounted) return;
+        // Rows are deleted here on the baseline's word alone, so it has to be one
+        // that can be trusted: a buffed Strength can meet a row's target while the
+        // row's CP is still unspent.
+        if (!_baselineTrusted) return;
         int level = _stats.Level;
 
         List<CpPlanRowViewModel> fulfilled =

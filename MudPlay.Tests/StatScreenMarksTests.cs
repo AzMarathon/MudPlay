@@ -195,14 +195,62 @@ public sealed class StatScreenMarksTests
     }
 
     [Fact]
-    public void ASavedSnapshot_CarriesNoMarks()
+    public void Stock_TheMarkSitsRightAfterTheColon_OnIntellectWillpowerAndAgility()
+    {
+        // Those three rows have no space between the colon and the value's colour
+        // (`%sIntellect:%s%-5d`), so a modified one reads `Intellect:*40`.
+        FeedHeader();
+        Feed(("Strength: ", Green), (" 80   ", Cyan), ("  Agility:", Green), ("*50   ", Red), ("       Tracking:    ", Green), ("    0", Cyan));
+        Feed(("Intellect:", Green), ("*40   ", Red), ("  Health: ", Green), (" 60   ", Cyan), ("       Martial Arts:", Green), ("    0", Cyan));
+        Feed(("Willpower:", Green), ("*30   ", Red), ("  Charm:  ", Green), (" 30   ", Cyan), ("       MagicRes:    ", Green), ("   47", Cyan));
+        ClosePrompt();
+
+        Assert.Equal(50, _stats.Agility);
+        Assert.Equal(40, _stats.Intellect);
+        Assert.Equal(30, _stats.Willpower);
+        Assert.True(_stats.ModifiedMarksRead);
+        Assert.Equal(StatSet.Intellect | StatSet.Willpower | StatSet.Agility, _stats.ModifiedStats);
+    }
+
+    [Theory]
+    [InlineData("Intellect:*40     Health:   60          Martial Arts:    0")]
+    [InlineData("Willpower:*30     Charm:    30          MagicRes:       47")]
+    [InlineData("Strength:  80     Agility:*50          Tracking:        0")]
+    public void Stock_AMarkedRowIsStillRecognisedAsAStatRow(string row)
+    {
+        Assert.True(StatParser.IsStatScreenLine(row));
+    }
+
+    [Fact]
+    public void ASavedSnapshot_BringsItsMarksAndEffectsBack()
     {
         FeedHeader();
         FeedParadigmStats(153, Red, 90, Red);
         _parser.FeedTestLine("You feel strong, but clumsy! (96s)");
         ClosePrompt();
 
-        _parser.Hydrate(_parser.Snapshot());
+        // Through JSON, as the profile keeps it.
+        var saved = System.Text.Json.JsonSerializer.Deserialize<MudPlay.Models.Profile.LastKnownStats>(
+            System.Text.Json.JsonSerializer.Serialize(_parser.Snapshot()))!;
+        var stats = new PlayerStats();
+        using var parser = new StatParser(stats);
+        parser.Hydrate(saved);
+
+        Assert.True(stats.ModifiedMarksRead);
+        Assert.Equal(StatSet.Strength | StatSet.Agility, stats.ModifiedStats);
+        Assert.Equal(new[] { new StatusEffectLine("You feel strong, but clumsy!", true) }, stats.ActiveEffects);
+    }
+
+    [Fact]
+    public void ASnapshotSavedWithoutMarks_CarriesNone()
+    {
+        FeedHeader();
+        FeedParadigmStats(153, Red, 90, Red);
+        ClosePrompt();
+
+        var old = _parser.Snapshot();
+        old.ModifiedStats = null;   // as every snapshot was before marks were kept
+        _parser.Hydrate(old);
 
         Assert.False(_stats.ModifiedMarksRead);
         Assert.Equal(StatSet.None, _stats.ModifiedStats);
