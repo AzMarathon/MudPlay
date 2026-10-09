@@ -1,5 +1,9 @@
 # Version history
 
+## 3.159.20
+
+- A buff is no longer recast because the game refused something you typed in the same round (`You have already cast a spell this round!` answering your own `use` or cast, not the client's)
+
 ## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
