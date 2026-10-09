@@ -1,9 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.2**
-> - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor
-> - A look at a player's corpse is no longer listed as an unrecognized line
+> **Version 3.158.6**
+> - A route card's trade trip starts with the first step, in a party too
+> - A party walk sent to fetch an item waits for the party's count before setting off
+> - An invited member who hasn't joined is no longer waited on for item counts
+> - A party member who doesn't answer an item count is fetched a copy too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
