@@ -64,6 +64,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
         "AcDr",          // synthesised "AC/DR"
         "Dodge",         // synthesised from ability code 34
         "MagicRes",      // "MR"
+        "BSDefense",     // "BS Def" — what a backstab's to-hit meets on top of AC/4
         "Accuracy",      // synthesised majority/max attack accuracy
         "Damage",        // rounded AvgDmg
         "Efficiency",    // synthesised "Exp/(Dmg+HP)" exp-per-effort metric
@@ -88,6 +89,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["EXP"]        = "Exp",
             ["AcDr"]       = "AC/DR",
             ["MagicRes"]   = "Magic Res",
+            ["BSDefense"]  = "BS Def",
             ["Accuracy"]   = "Acc (typ/max)",
             ["Damage"]      = "Avg Damage",
             ["Mag"]         = "Mag-wpn req",
@@ -130,6 +132,8 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
             ["HP"]         = FormatThousands,
             ["AvgLairExp"] = FormatThousands,
             ["Efficiency"] = FormatThousands,
+            // Most monsters have none; blank reads better than a column of zeros.
+            ["BSDefense"]  = static raw => raw is null or "" or "0" ? "" : raw,
             // Undead monsters render an "✗"; living monsters read blank.
             ["Undead"]     = static raw => raw is null or "" or "0" ? "" : "✗",
             // Filter-only columns: format so the Alignment / Type dropdowns read
@@ -194,6 +198,7 @@ public sealed class MonstersSectionViewModel : JsonTableSectionViewModel, IEdita
                 new RangeFilter("DR", "DamageResist", "Damage Resist — flat reduction to physical damage it takes"),
                 new RangeFilter("Dodge", "Dodge"),
                 new RangeFilter("Magic Resist", "MagicRes", "Cuts spell damage once above 50; never fully immune"),
+                new RangeFilter("BS Defense", "BSDefense", "Backstab defence — added to AC/4 against a backstab's to-hit"),
             }));
 
         FilterGroups.Add(new FilterGroup("Elemental defenses",

@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.0**
-> - Game Data Browser → Quest Flags: one row per script line, with **Command**, **Level**, **Class**, **Race** and **Items** columns
-> - Double-click a Quest Flags row for **Quest Flag Steps**: that flag's steps in walking order, with what to type or kill and what each needs and gives
-> - A flag number typed in the Quest Flags filter shows that flag only
-> - Quest tab: a drafted step that happens on a monster's death now reads **kill <monster>** with its room, instead of *obtain <item>* or nothing
-> - A saved column layout no longer hides new columns on a table without a column picker
+> **Version 3.159.1**
+> - Game Data Browser → Monsters: new **BS Def** column (backstab defence) in the column picker, with a range filter
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

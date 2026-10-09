@@ -1,5 +1,9 @@
 # Version history
 
+## 3.159.1
+
+- Game Data Browser → Monsters: new **BS Def** column (backstab defence) in the column picker, with a range filter
+
 ## 3.159.0
 
 - Game Data Browser → Quest Flags: one row per script line, with **Command**, **Level**, **Class**, **Race** and **Items** columns
