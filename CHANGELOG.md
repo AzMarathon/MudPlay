@@ -1,5 +1,9 @@
 # Version history
 
+## 3.158.7
+
+- A `bank` reply taken while standing in a bank, which shows that bank alone, no longer counts as the full list of your deposits; train funding and the route picker ask again from outside one
+
 ## 3.158.6
 
 - A route card's trade trip starts with the first step, in a party too
