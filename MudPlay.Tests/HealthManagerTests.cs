@@ -3443,6 +3443,260 @@ public sealed class HealthManagerTests
         Assert.Equal(0, asked);
     }
 
+    // A Hangup-relationship monster in the room takes the low-HP trigger's escape,
+    // whatever our HP: the sight is the trigger.
+    [Fact]
+    public void HangUpForMonster_HangsUp_AtFullHealth_WithNoHostileCounted()
+    {
+        using Harness h = new() { HostileInRoom = false };
+        List<bool> asked = new();
+        h.Health.SetHangupPenaltyLog(pvp =>
+        {
+            Assert.Contains("=x", h.SentLines);
+            asked.Add(pvp);
+        });
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Contains("=x", h.SentLines);
+        Assert.Equal(1, h.HangupDisconnectCount);
+        Assert.True(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.Equal(new[] { false }, asked);
+    }
+
+    // Disable Hangups stops all of it, as it does for the low-HP trigger: no
+    // carrier drop, no wimpy jump in its place, no penalty line.
+    [Fact]
+    public void HangUpForMonster_DisableHangups_SendsNothing()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.General.DisableHangups = true;
+        int asked = 0;
+        h.Health.SetHangupPenaltyLog(_ => asked++);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(EscapeOutcome.HangupsDisabled, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Null(h.WimpyFiredWith);
+        Assert.Equal(0, h.HangupDisconnectCount);
+        Assert.False(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.Equal(0, asked);
+    }
+
+    // The all-off rule the low-HP hang-up follows (user, 2026-10-09): with the
+    // autos off nothing responds unless Allow hangup in all-off mode is ticked.
+    [Theory]
+    [InlineData(false, EscapeOutcome.AllOff)]
+    [InlineData(true, EscapeOutcome.HungUp)]
+    public void HangUpForMonster_AllOff_FollowsAllowHangupInAllOffMode(bool allowed, EscapeOutcome expected)
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { AutoHealRestEnabled = false };
+        h.General.AllowHangupInAllOffMode = allowed;
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(expected, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal(allowed, h.SentLines.Contains("=x"));
+        Assert.Equal(allowed ? 1 : 0, h.HangupDisconnectCount);
+        // Held, it is all held: the wimpy jump is not tried either.
+        Assert.Equal(allowed ? "wimpy-room" : null, h.WimpyFiredWith);
+    }
+
+    // Disable Hangups outranks the all-off carve-out here as it does for low HP.
+    [Fact]
+    public void HangUpForMonster_DisableHangups_OutranksAllowHangupInAllOffMode()
+    {
+        using Harness h = new() { AutoHealRestEnabled = false };
+        h.General.AllowHangupInAllOffMode = true;
+        h.General.DisableHangups = true;
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(EscapeOutcome.HangupsDisabled, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.DoesNotContain("=x", h.SentLines);
+    }
+
+    [Fact]
+    public void HangUpForMonster_WimpyJumps_WhenConfigured()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(EscapeOutcome.Jumped, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal("wimpy-room", h.WimpyFiredWith);
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void HangUpForMonster_NoExitCommand_ReportsNothingSent()
+    {
+        using Harness h = new() { HangupCommand = null };
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(EscapeOutcome.NotSent, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    // ----- one escape answers the danger --------------------------------
+    //
+    // Low HP, a Hangup monster and a PvP enemy can all be read off one room
+    // roster. Whichever asks first sends the escape; one asked for a moment later
+    // sends nothing more and is told the danger is already answered.
+
+    [Fact]
+    public void LowHp_RightAfterAMonsterHangUp_SendsNothingMore()
+    {
+        using Harness h = new()
+        {
+            SelfIsLeader = true,
+            Party = new PartySettings { UsePanicWhileLeading = true },
+        };
+        List<bool> penaltyAsked = new();
+        h.Health.SetHangupPenaltyLog(penaltyAsked.Add);
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        // The same roster, read by the low-HP re-check, with HP through the trigger.
+        h.SetPrompt(hp: 5, maxHp: 200);
+        h.Health.ReevaluateEmergencyHangup();
+
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+        Assert.Equal(1, h.HangupDisconnectCount);
+        Assert.Equal(new[] { false }, penaltyAsked);
+        Assert.DoesNotContain(".@panic", h.SentLines);
+    }
+
+    // The repeat is skipped, not the hang-up: still here and still in danger once
+    // the moment has passed, the low-HP trigger fires as normal.
+    [Fact]
+    public void LowHp_ThreeSecondsAfterAMonsterHangUp_HangsUp()
+    {
+        using Harness h = new();
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        h.SetPrompt(hp: 5, maxHp: 200);
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+
+        h.Clock += TimeSpan.FromSeconds(3);
+        h.Health.ReevaluateEmergencyHangup();
+
+        Assert.Equal(2, h.SentLines.Count(line => line == "=x"));
+        Assert.Equal(2, h.HangupDisconnectCount);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PvpHangUpAndLowHp_Together_SendOneEscape(bool pvpFirst)
+    {
+        using Harness h = new();
+        List<bool> penaltyAsked = new();
+        h.Health.SetHangupPenaltyLog(penaltyAsked.Add);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        if (pvpFirst)
+        {
+            Assert.True(h.Health.HangUpForPvp("Bob is here"));
+            h.SetPrompt(hp: 5, maxHp: 200);
+        }
+        else
+        {
+            h.SetPrompt(hp: 5, maxHp: 200);
+            // Told the danger is answered, so the PvP response counts it as hung up.
+            Assert.True(h.Health.HangUpForPvp("Bob is here"));
+        }
+
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+        Assert.Equal(1, h.HangupDisconnectCount);
+        Assert.Equal(new[] { pvpFirst }, penaltyAsked);
+    }
+
+    [Fact]
+    public void AnEscapeThreeSecondsAfterAnother_GoesOut()
+    {
+        using Harness h = new();
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.True(h.Health.HangUpForPvp("Bob is here"));
+        Assert.Equal(EscapeOutcome.AlreadyEscaping, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        h.Clock += TimeSpan.FromSeconds(3);
+
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(2, h.SentLines.Count(line => line == "=x"));
+    }
+
+    // A jump has answered the danger as much as a hang-up has: a hang-up asked for
+    // on its heels is not sent after it.
+    [Fact]
+    public void AHangUpAskedForRightAfterAWimpyJump_SendsNothingMore()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.Jumped, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        h.WimpyFireResult = false;   // a second jump would be refused and fall through to the hang-up
+        Assert.True(h.Health.RespondToReceivedPanic("Bob"));
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Equal(0, h.HangupDisconnectCount);
+
+        h.Clock += TimeSpan.FromSeconds(3);
+        Assert.True(h.Health.RespondToReceivedPanic("Bob"));
+        Assert.Contains("=x", h.SentLines);
+    }
+
+    // Only an escape that went out counts. One that could not be sent leaves
+    // nothing to repeat, so the hang-up asked for right after it goes out.
+    [Fact]
+    public void AnEscapeThatWasNotSent_HoldsOffNothing()
+    {
+        using Harness h = new() { HangupCommand = null };
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.NotSent, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        h.HangupCommand = "=x";
+
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+    }
+
+    // A clock set back must not stretch the moment into a held-off hang-up.
+    [Fact]
+    public void AClockSetBack_DoesNotHoldOffTheNextEscape()
+    {
+        using Harness h = new();
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.True(h.Health.HangUpForPvp("Bob is here"));
+
+        h.Clock -= TimeSpan.FromHours(1);
+
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+    }
+
     [Fact]
     public void WimpyGoto_Enabled_AndFires_SkipsHangup()
     {
@@ -3983,6 +4237,7 @@ public sealed class HealthManagerTests
         Assert.Equal(1, h.SentLines.Count(l => l == "=x"));
 
         h.State.Hp = 180;          // recovered above the trigger → re-arm
+        h.Clock += TimeSpan.FromSeconds(30);   // recovering took longer than a moment
         h.State.Hp = 5;            // dropped again with a hostile present
         Assert.Equal(2, h.SentLines.Count(l => l == "=x"));
     }
@@ -4001,6 +4256,7 @@ public sealed class HealthManagerTests
         h.Health.ReevaluateEmergencyHangup();
         Assert.Equal(1, h.SentLines.Count(l => l == "=x"));   // re-armed, no fire
 
+        h.Clock += TimeSpan.FromSeconds(30);  // the reconnect took longer than a moment
         h.HostileInRoom = true;               // a hostile wanders in
         h.Health.ReevaluateEmergencyHangup();
         Assert.Equal(2, h.SentLines.Count(l => l == "=x"));
