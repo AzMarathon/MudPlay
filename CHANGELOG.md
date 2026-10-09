@@ -1,5 +1,10 @@
 # Version history
 
+## 3.155.1
+
+- Profile lists no longer fail when another client renames or removes a BBS at that moment
+- Test suite: the Conversation window tests and the profile-listing tests no longer fail at random in a full run
+
 ## 3.155.0
 
 - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have

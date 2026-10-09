@@ -808,9 +808,7 @@ public sealed class ProfileService
         {
             string bbs = Path.GetFileName(bbsFolder);
             if (string.IsNullOrEmpty(bbs)) continue;
-            string profilesDir = AppPaths.BbsProfilesDir(bbs);
-            if (!Directory.Exists(profilesDir)) continue;
-            foreach (string charFolder in Directory.EnumerateDirectories(profilesDir))
+            foreach (string charFolder in ProfileFoldersIn(AppPaths.BbsProfilesDir(bbs)))
             {
                 string name = Path.GetFileName(charFolder);
                 if (string.IsNullOrEmpty(name)) continue;
@@ -818,6 +816,15 @@ public sealed class ProfileService
                 yield return new ProfileRef(bbs, name);
             }
         }
+    }
+
+    // A BBS with no profiles folder has no profiles. Read rather than checked for first:
+    // another client sharing the data folder can rename or remove a BBS between a
+    // check and the read, and the listing must not throw into the window asking.
+    private static string[] ProfileFoldersIn(string profilesDir)
+    {
+        try { return Directory.GetDirectories(profilesDir); }
+        catch (DirectoryNotFoundException) { return Array.Empty<string>(); }
     }
 
     // True if a saved profile with the given name already exists under the BBS.
