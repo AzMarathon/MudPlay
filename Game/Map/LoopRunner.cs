@@ -1810,10 +1810,18 @@ public sealed class LoopRunner : IRecoverableEngine
                 return;
 
             case DoorOpenResult.NotHere notHere:
+                // Re-routing came straight back to the same door and the game said
+                // the same thing: the map calls this exit a door and the game
+                // doesn't. Recovery would take a second entry this soon for an echo
+                // of the first and drop it, leaving the step with nothing on the
+                // wire and nothing to wake it, so the step ends here instead.
+                if (RecoveryWouldDeclineAsEcho())
+                {
+                    FailStep($"door isn't here ({notHere.Reason}), and re-routing came straight back to it");
+                    return;
+                }
                 // The step was planned from a room we aren't standing in — re-sync
                 // and re-route from where we actually are rather than failing the lap.
-                // The step stays in flight: if recovery declines (an attempt too soon
-                // after the last), the next room display still settles it.
                 EnterRecovery($"step {_index + 1} door isn't here ({notHere.Reason})");
                 return;
         }
@@ -2457,6 +2465,12 @@ public sealed class LoopRunner : IRecoverableEngine
     // send a bare `look` and let the echo (re)confirm the room in
     // OnRecoveringTransition. Bounded by MaxRecoverAttempts so a persistent block
     // eventually surfaces as Failed instead of looping forever.
+    // Whether EnterRecovery would drop an entry made now as the previous attempt
+    // echoing, rather than act on it.
+    private bool RecoveryWouldDeclineAsEcho() =>
+        !_resumingAfterFlee && _recoverAttempts > 0
+        && DateTimeOffset.UtcNow - _lastRecoveryAttemptAt < _recoveryAttemptSpacing;
+
     private void EnterRecovery(string reason)
     {
         // Recovery owns position resolution now — the in-flight stall wait is over.
@@ -2485,8 +2499,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // next block or mismatch re-enters, by which time a resync may have landed
         // or the character may actually have moved.
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        if (!_resumingAfterFlee
-            && _recoverAttempts > 0 && now - _lastRecoveryAttemptAt < _recoveryAttemptSpacing)
+        if (RecoveryWouldDeclineAsEcho())
         {
             _log?.Debug("LoopRunner",
                 $"recovery re-entered {(now - _lastRecoveryAttemptAt).TotalMilliseconds:F0}ms after the "

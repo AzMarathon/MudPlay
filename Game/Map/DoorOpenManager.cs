@@ -524,25 +524,22 @@ public sealed class DoorOpenManager : IDisposable
         TryFallbackOrFail($"can't bash ('{m.Text.Trim()}')");
     }
 
-    // "Your command had no effect." to a bash, pick or open: the exit that way is
-    // not a door in the room the character is standing in (GAME_MECHANICS "Locked
-    // doors — picking, opening and bashing"). Either the character isn't in the
+    // "Your command had no effect." to a bash: the exit that way is not a door in
+    // the room the character is standing in (GAME_MECHANICS "Locked doors — picking,
+    // opening and bashing"). Only a bash has been seen to draw it; what a pick or an
+    // open at a non-door prints isn't known, so those keep their own retries and
+    // fallbacks. Either the character isn't in the
     // room the request was planned from or the map has the exit wrong, and the same
     // verb can only draw the same answer — unrecognised, it read as silence and the
     // watchdog re-bashed without end (report paradigm-20260924-053941). The line
-    // answers any command the game refuses, so it is the door's only while a door
-    // verb is the one awaiting a reply, and never when the command echoed ahead of
+    // answers any command the game refuses, so it is the door's only while a bash
+    // is the one awaiting a reply, and never when the command echoed ahead of
     // it is some other one (a cast or an attack sent meanwhile).
     private void OnNoEffect(MatchResult _)
     {
         if (_current is not { } cur) return;
-        string? awaited = _state switch
-        {
-            DoorState.WaitingBash or DoorState.WaitingPick => $"{_verb} {cur.DirectionShort}",
-            DoorState.WaitingOpen => $"open {cur.DirectionShort}",
-            _ => null,
-        };
-        if (awaited is null) return;
+        if (_state != DoorState.WaitingBash) return;
+        string awaited = $"{_verb} {cur.DirectionShort}";
         if (_router.ReplyIsForCommandNotNaming(awaited))
         {
             _log?.Debug("Door",
@@ -735,11 +732,22 @@ public sealed class DoorOpenManager : IDisposable
         if (_current is not { } cur) return;
         _log?.Info("Door",
             $"door {cur.DirectionShort} abandoned — {reason}; handing back for a re-check of the room.");
+        // The request is cleared before the caller hears of it: the caller re-plans
+        // from inside the reply and may ask for a door the same way at once, and a
+        // request still standing would have the duplicate guard swallow the new one,
+        // leaving the caller waiting on a reply that never comes.
+        ClearCurrent();
         cur.Reply(new DoorOpenResult.NotHere(reason));
-        Reset();
+        TryStartNext();
     }
 
     private void Reset()
+    {
+        ClearCurrent();
+        TryStartNext();
+    }
+
+    private void ClearCurrent()
     {
         DisarmWatchdog();
         _current = null;
@@ -748,7 +756,6 @@ public sealed class DoorOpenManager : IDisposable
         _verb = null;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
-        TryStartNext();
     }
 
     // ----- helpers ----------------------------------------------------

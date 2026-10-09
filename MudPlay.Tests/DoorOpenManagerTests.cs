@@ -702,8 +702,10 @@ public sealed class DoorOpenManagerTests
         Assert.Single(h.AllSent);
     }
 
+    // Only a bash has been seen to draw the line at a non-door exit. A pick or an
+    // open that draws it keeps waiting, with its own retries and fallbacks.
     [Fact]
-    public void Pick_NoEffect_EndsAsNotHere()
+    public void Pick_NoEffect_IsNotTakenForTheDoor()
     {
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
@@ -712,12 +714,12 @@ public sealed class DoorOpenManagerTests
 
         h.Line("Your command had no effect.");
 
-        Assert.IsType<DoorOpenResult.NotHere>(result);
-        Assert.Single(h.AllSent);
+        Assert.Null(result);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingPick, h.Mgr.CurrentState);
     }
 
     [Fact]
-    public void Open_NoEffect_EndsAsNotHere()
+    public void Open_NoEffect_IsNotTakenForTheDoor()
     {
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
@@ -727,7 +729,32 @@ public sealed class DoorOpenManagerTests
 
         h.Line("Your command had no effect.");
 
-        Assert.IsType<DoorOpenResult.NotHere>(result);
+        Assert.Null(result);
+    }
+
+    // The caller re-plans from inside the reply and may ask for a door the same way
+    // at once. That request has to start, not be dropped as a duplicate of the one
+    // just abandoned (which left the caller waiting for good).
+    [Fact]
+    public void NotHere_ARequestMadeFromInsideTheReply_ForTheSameWay_IsStarted()
+    {
+        using Harness h = new();
+        var results = new List<DoorOpenResult>();
+        h.Mgr.Enqueue(Direction.SE, 11, canBash: true, "walker", first =>
+        {
+            results.Add(first);
+            h.Mgr.Enqueue(Direction.SE, 11, canBash: true, "walker", results.Add);
+        });
+        Assert.Equal("bash se", h.LastSent);
+
+        h.Line("Your command had no effect.");
+
+        Assert.IsType<DoorOpenResult.NotHere>(Assert.Single(results));
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, h.Mgr.CurrentState);
+        Assert.Equal(2, h.AllSent.Count);               // the second request's own bash
+
+        h.Line("Your command had no effect.");
+        Assert.Equal(2, results.Count);                 // and it gets its answer too
     }
 
     // The same line answers any command the game refuses. With the door's own echo

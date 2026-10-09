@@ -3470,20 +3470,22 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
 
-            // A door / trap / hidden-exit / winch sub-FSM was mid-flight when the
-            // pause hit. No move has gone out for this step — the sub-FSM's own
-            // reply sends it — so the tracker rightly still reads the source room.
+            // A door or winch request was mid-flight when the pause hit. No move has
+            // gone out for this step — the request's own reply sends it — so the
+            // tracker rightly still reads the source room.
             // The reconciliation below would take that for a move refused while
             // paused and replan (asking rm first) while the sub-FSM kept running:
             // its reply then sent the move behind the rm, the rm's answer named the
             // room being left, and the replan bashed a door that wasn't there
             // (report paradigm-20260924-053941, an @wait / @ok in the middle of a
-            // bash). Wait for the reply instead, as LoopRunner's resume does.
-            if (_stepInFlight
-                && (_awaitingDoorOpen || _awaitingTrapDisarm || _awaitingHiddenReveal || _awaitingWinch))
+            // bash). Wait for the reply instead. Only these two: each has a watchdog
+            // of its own, so the wait is bounded. A hidden-exit search or a trap
+            // handed to a party member has none, and for those the replan below is
+            // what restarts one whose answer was lost.
+            if (_stepInFlight && (_awaitingDoorOpen || _awaitingWinch))
             {
                 _log?.Info("Walker",
-                    $"resume: step {_index + 1} has a door/trap/hidden/winch sub-FSM in flight; awaiting its reply, not replanning or resending");
+                    $"resume: step {_index + 1} has a door or winch request in flight; awaiting its reply, not replanning or resending");
                 return;
             }
 
