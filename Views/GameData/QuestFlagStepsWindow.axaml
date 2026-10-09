@@ -1,0 +1,175 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels.GameData"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="780" d:DesignHeight="720"
+        x:Class="MudPlay.Views.GameData.QuestFlagStepsWindow"
+        x:DataType="vm:QuestFlagStepsViewModel"
+        Title="Quest Flag Steps"
+        Width="780" Height="720"
+        MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <!-- The name of a step's part, in the narrow left column. -->
+        <Style Selector="TextBlock.Part">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Margin" Value="0,2,8,0"/>
+        </Style>
+        <Style Selector="SelectableTextBlock.Body">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <!-- Raw script text: exactly what the game data holds. -->
+        <Style Selector="SelectableTextBlock.Raw">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgSecBrush}"/>
+            <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="TextBlock.Note">
+            <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style Selector="Border.Step">
+            <Setter Property="Background" Value="{StaticResource ChromeBgElevBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ChromeBorderSoftBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <!-- Another flag; activating it shows that flag in this window. -->
+        <Style Selector="Button.FlagLink">
+            <Setter Property="Foreground" Value="{StaticResource AccentCyanBrush}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,14,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.FlagLink:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="TextBlock.TextDecorations" Value="Underline"/>
+        </Style>
+    </Window.Styles>
+
+    <Window.Resources>
+        <DataTemplate x:Key="StepTemplate" x:DataType="vm:QuestFlagStepRow">
+            <Border Classes="Step">
+                <StackPanel Spacing="5">
+                    <SelectableTextBlock Text="{Binding Heading}"
+                                         Foreground="{StaticResource AccentAmberBrush}"
+                                         FontSize="13" FontWeight="SemiBold"
+                                         TextWrapping="Wrap"/>
+
+                    <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasDo}">
+                        <TextBlock Classes="Part" Text="Do"/>
+                        <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Do}"/>
+                    </Grid>
+                    <!-- Conditions and gives, as runs in the order the line goes through them. -->
+                    <ItemsControl ItemsSource="{Binding Parts}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:QuestFlagStepPartRow">
+                                <Grid ColumnDefinitions="118,*" Margin="0,0,0,5">
+                                    <TextBlock Classes="Part" Text="{Binding Label}" TextWrapping="Wrap"/>
+                                    <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Text}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasAlso}">
+                        <TextBlock Classes="Part" Text="Also in the script"
+                                   ToolTip.Tip="Steps shown exactly as the game data writes them: what they do isn't established, so they aren't put into words."/>
+                        <SelectableTextBlock Grid.Column="1" Classes="Raw" Text="{Binding Also}"/>
+                    </Grid>
+                    <!-- The rest of a line that checks an ability it has itself just changed. -->
+                    <StackPanel IsVisible="{Binding HasLater}" Spacing="2">
+                        <SelectableTextBlock Classes="Body" Text="{Binding LaterLabel}"
+                                             Foreground="{StaticResource ChromeFgSecBrush}"/>
+                        <SelectableTextBlock Classes="Raw" Text="{Binding Later}" Margin="118,0,0,0"/>
+                    </StackPanel>
+                    <Grid ColumnDefinitions="118,*">
+                        <TextBlock Classes="Part" Text="Script"/>
+                        <SelectableTextBlock Grid.Column="1" Classes="Raw" Text="{Binding Script}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border Background="{StaticResource ChromeBgBrush}" Padding="14">
+        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+
+            <!-- The flag, the quest it belongs to, and what the quest list knows of it. -->
+            <StackPanel Grid.Row="0" Spacing="3">
+                <SelectableTextBlock Text="{Binding Heading}"
+                                     Foreground="{StaticResource ChromeFgBrush}"
+                                     FontSize="18" FontWeight="SemiBold"/>
+                <SelectableTextBlock Classes="Body" Text="{Binding QuestNames}"
+                                     IsVisible="{Binding HasQuestNames}"/>
+                <SelectableTextBlock Classes="Body" Text="{Binding CompleteText}"/>
+                <SelectableTextBlock Classes="Body" Text="{Binding RestrictionText}"
+                                     IsVisible="{Binding HasRestriction}"/>
+                <TextBlock Classes="Note" Text="{Binding CountText}"/>
+
+                <StackPanel IsVisible="{Binding HasOtherFlags}" Margin="0,6,0,0" Spacing="2">
+                    <TextBlock Classes="Note" Text="Other flags these steps touch (click one to see its steps):"/>
+                    <ItemsControl ItemsSource="{Binding OtherFlags}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:QuestFlagLinkRow">
+                                <Button Classes="FlagLink" Content="{Binding Label}"
+                                        Command="{Binding OpenCommand}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+
+            <ScrollViewer Grid.Row="1" x:Name="StepsScroll"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,12,0">
+                    <ItemsControl ItemsSource="{Binding Steps}"
+                                  ItemTemplate="{StaticResource StepTemplate}"
+                                  IsVisible="{Binding HasSteps}"/>
+
+                    <!-- Lines that only run without the flag and leave it alone sit apart and
+                         closed until asked for, so they don't crowd the steps that move it.
+                         When a flag has no other lines they are the main list instead. -->
+                    <Expander IsVisible="{Binding HasWithoutFlagSteps}"
+                              Header="{Binding WithoutFlagHeader}"
+                              HorizontalAlignment="Stretch"
+                              Margin="0,0,0,8">
+                        <ItemsControl ItemsSource="{Binding WithoutFlagSteps}"
+                                      ItemTemplate="{StaticResource StepTemplate}"/>
+                    </Expander>
+
+                    <TextBlock Classes="Note"
+                               Text="Steps are ordered by the value the flag must hold going in, then by the value the step leaves; a line that sets the flag without checking it sits just ahead of the steps for that value. A script line runs left to right and stops at the first condition that fails, so each step lists what it needs and gives in the order the line goes through them: something given ahead of a condition is given whatever that condition says. On Stock, a step that sets a flag keeps the higher value when the character already holds more. “Also in the script” lists the steps exactly as the game data writes them."/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Content="Back"
+                        Command="{Binding BackCommand}"
+                        IsEnabled="{Binding CanGoBack}"
+                        MinWidth="80"
+                        ToolTip.Tip="Return to the flag shown before this one."/>
+                <Button Grid.Column="2" Content="Close"
+                        Command="{Binding CloseCommand}"
+                        IsCancel="True" MinWidth="80"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

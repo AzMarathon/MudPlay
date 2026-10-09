@@ -93,7 +93,7 @@ internal static partial class QuestTextFormatter
     //   (map/room) `command` (item note)
     // The Called-From location's rooms become clickable (map/room) links (all of
     // them, for a multi-room list); a player command is backtick-wrapped as the
-    // literal to type; a command-less step sourced from a monster's textblock is
+    // literal to type; a command-less step whose script a monster's death runs is
     // narrated "kill <monster> (<drop>)" and a bare item grant "obtain <item>",
     // matching how the seed guides read. Items the step needs / turns in trail as
     // a parenthetical note. Falls back to a bare "Step N" label when the crawl
@@ -112,9 +112,15 @@ internal static partial class QuestTextFormatter
     // player never directly triggers (Called-From another textblock/spell, no room,
     // no command, no item). Those carry nothing to do, so the auto-draft omits them
     // rather than listing an opaque "Step 31" the player can't act on.
+    //
+    // sameStep is every drafted step that lands on the same give-step: when several
+    // monsters' deaths run it (two records of one boss), the kill names each and
+    // links every room one of them stands in, so an unplaced record listed first
+    // doesn't leave the step with nowhere to go.
     public static string? StepOrNull(GameDataCache gameData, QuestStep s,
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms = null,
-        ItemSourceIndex? itemSources = null)
+        ItemSourceIndex? itemSources = null,
+        IEnumerable<QuestStep>? sameStep = null)
     {
         var segments = new List<string>();
 
@@ -122,22 +128,36 @@ internal static partial class QuestTextFormatter
 
         int monster = 0;
         bool monsterLoc = TryMonsterRef(s.Location, out monster);
-        bool isKill = monsterLoc && string.IsNullOrWhiteSpace(s.Command);
+        bool hasCommand = !string.IsNullOrWhiteSpace(s.Command);
+        List<int> killTargets = hasCommand ? new List<int>() : KillTargets(gameData, s.Location);
+        if (killTargets.Count > 0 && sameStep is not null)
+            foreach (QuestStep other in sameStep)
+                if (string.IsNullOrWhiteSpace(other.Command))
+                    foreach (int id in KillTargets(gameData, other.Location))
+                        if (!killTargets.Contains(id)) killTargets.Add(id);
 
-        // Room link(s): a monster-anchored step (a kill target, or an NPC the step
-        // asks) links that monster's placement room; a room-anchored step links its
-        // own Called-From room.
-        string rooms = monsterLoc ? MonsterRoomLinks(monster, monsterRooms) : RoomLinks(s.Location);
+        // Room link(s): a kill step links where its target stands, an ask step the NPC
+        // it asks, and a room-anchored step its own Called-From room. A step that hangs
+        // off an NPC with nothing to ask (a keyword the NPC shows by itself) has no room
+        // to send the player to.
+        string rooms = killTargets.Count > 0
+                ? string.Join(" ", killTargets
+                    .SelectMany(m => monsterRooms is not null && monsterRooms.TryGetValue(m, out IReadOnlyList<RoomKey>? keys)
+                        ? keys : Array.Empty<RoomKey>())
+                    .Distinct()
+                    .Select(k => string.Create(CultureInfo.InvariantCulture, $"({k.Map}/{k.Room})")))
+            : monsterLoc ? (hasCommand ? MonsterRoomLinks(monster, monsterRooms) : string.Empty)
+            : RoomLinks(s.Location);
         if (rooms.Length > 0) segments.Add(rooms);
 
-        if (!string.IsNullOrWhiteSpace(s.Command))
+        if (hasCommand)
         {
             segments.Add($"`{s.Command!.Trim()}`");
             if (granted.Length > 0) segments.Add($"(get {granted})");
         }
-        else if (isKill)
+        else if (killTargets.Count > 0)
         {
-            string name = MonsterName(gameData, monster);
+            string name = string.Join(" or ", killTargets.Select(m => MonsterName(gameData, m)).Distinct());
             segments.Add(granted.Length > 0 ? $"kill {name} ({granted})" : $"kill {name}");
         }
         else if (granted.Length > 0)
@@ -194,7 +214,7 @@ internal static partial class QuestTextFormatter
             : string.Join(" ", RoomRef().Matches(location)
                 .Select(m => string.Create(CultureInfo.InvariantCulture, $"({m.Groups[1].Value}/{m.Groups[2].Value})")));
 
-    // A kill step's room link(s): every room the quest places the target monster in,
+    // A kill or ask step's room link(s): every room the quest places the monster in,
     // as space-joined (map/room) tokens, drawn from the pre-built placement map so no
     // per-step room scan happens. Empty when the monster has no resolved placement —
     // the kill step then renders room-less rather than offering a dead link.
@@ -205,8 +225,23 @@ internal static partial class QuestTextFormatter
                 string.Create(CultureInfo.InvariantCulture, $"({k.Map}/{k.Room})")))
             : string.Empty;
 
-    // The step's monster anchor, if any: a "Monster #N" location. A command-less
-    // monster step is a kill (narrated "kill <monster> (<drop>)"); a monster step
+    // The monsters whose death runs the step's script: its Called-From names the spell
+    // at the end of their death-spell chain. Empty for any other step — a script that
+    // hangs off a monster itself is that NPC's dialogue, not its death (GAME_MECHANICS
+    // "Quest kill steps & monster placement").
+    private static List<int> KillTargets(GameDataCache gameData, string? location)
+    {
+        List<int> targets = new();
+        if (string.IsNullOrWhiteSpace(location)) return targets;
+        IReadOnlyDictionary<int, IReadOnlyList<int>> deaths = QuestDeathSpells.For(gameData);
+        foreach (Match m in SpellRef().Matches(location))
+            if (int.TryParse(m.Groups[1].Value, out int spell) && deaths.TryGetValue(spell, out IReadOnlyList<int>? monsters))
+                foreach (int id in monsters)
+                    if (!targets.Contains(id)) targets.Add(id);
+        return targets;
+    }
+
+    // The step's monster anchor, if any: a "Monster #N" location. A monster step
     // carrying an "ask <npc> ..." command is an NPC dialogue step re-anchored on that
     // NPC by QuestStepGraph so the guide can link its room.
     private static bool TryMonsterRef(string? location, out int number)
@@ -245,21 +280,60 @@ internal static partial class QuestTextFormatter
         ItemSourceIndex? itemSources = null)
     {
         var lines = new List<(int Order, string Line)>();
+        foreach ((int order, string? body, _) in DraftSteps(gameData, q, monsterRooms, itemSources))
+        {
+            // A pure flag-advance (no room, command, kill or item) carries nothing the
+            // player can act on, so it's dropped from the draft rather than listed as an
+            // opaque "Step N" — the seed guides list actions, not narrative ticks.
+            if (body is null) continue;
+            lines.Add((order, string.Create(CultureInfo.InvariantCulture, $"[] {body}")));
+        }
+        return lines;
+    }
+
+    // Every step the draft considers for a quest, in checklist order: its body (null
+    // when it has nothing followable) and whether the draft had a line for it before
+    // kill steps were read off the death-spell chain.
+    private static IEnumerable<(int Order, string? Body, bool HadLineBefore)> DraftSteps(GameDataCache gameData,
+        CrawledQuest q, IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms, ItemSourceIndex? itemSources)
+    {
+        IReadOnlyList<QuestStep> steps = QuestStepGraph.Build(gameData, q.Flag, q.ProgressByValue);
         var seenOrders = new HashSet<int>();
-        foreach (QuestStep s in QuestStepGraph.Build(gameData, q.Flag, q.ProgressByValue))
+        foreach (QuestStep s in steps)
         {
             // Value-laddered bands legitimately carry several distinct steps that all
             // land on the same ability value, so the give-step-order dedup (which folds
             // one give-step echoed from many rooms) only applies on the give-step axis.
             if (!q.ProgressByValue && !seenOrders.Add(s.Order)) continue;
             if (q.StepRangeEnd > 0 && (s.Order < q.StepRangeStart || s.Order > q.StepRangeEnd)) continue;
-            // A pure flag-advance (no room, command, kill or item) carries nothing the
-            // player can act on, so it's dropped from the draft rather than listed as an
-            // opaque "Step N" — the seed guides list actions, not narrative ticks.
-            if (StepOrNull(gameData, s, monsterRooms, itemSources) is not { } body) continue;
-            lines.Add((s.Order, string.Create(CultureInfo.InvariantCulture, $"[] {body}")));
+            IEnumerable<QuestStep>? sameStep = q.ProgressByValue ? null : steps.Where(o => o.Order == s.Order);
+            yield return (s.Order, StepOrNull(gameData, s, monsterRooms, itemSources, sameStep), HadLineBeforeKillSteps(s));
         }
-        return lines;
+    }
+
+    // Whether the draft listed this step when a kill was only told from a "Monster #N"
+    // location: anything with a command, a room or monster to link, or an item changing
+    // hands. A step off a death spell with none of those was left out then.
+    private static bool HadLineBeforeKillSteps(QuestStep s) =>
+        !string.IsNullOrWhiteSpace(s.Command)
+        || TryMonsterRef(s.Location, out _)
+        || RoomLinks(s.Location).Length > 0
+        || s.GrantedItems.Count > 0 || s.TurnInItems.Count > 0 || s.RequiredItems.Count > 0;
+
+    // For step ticks saved before then: where each checkbox of that draft sits in
+    // today's — the entry at an old checkbox number is its number now, or -1 when the
+    // step no longer has a line. A quest whose draft didn't change maps each number to
+    // itself.
+    public static IReadOnlyList<int> CheckboxesSinceKillSteps(GameDataCache gameData, CrawledQuest q)
+    {
+        var map = new List<int>();
+        int now = 0;
+        foreach ((_, string? body, bool hadLineBefore) in DraftSteps(gameData, q, null, null))
+        {
+            if (hadLineBefore) map.Add(body is null ? -1 : now);
+            if (body is not null) now++;
+        }
+        return map;
     }
 
     // Parse user-or-crawler step markdown into render rows. Each non-blank line is one
@@ -341,6 +415,10 @@ internal static partial class QuestTextFormatter
     // "Room 9/1259" inside a Called-From string — a location's room reference.
     [GeneratedRegex(@"Room\s+(\d+)/(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex RoomRef();
+
+    // "Spell #604" inside a Called-From string — a script a spell runs.
+    [GeneratedRegex(@"Spell\s+#(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex SpellRef();
 
     // "Monster #39" inside a Called-From string — a monster-sourced chain.
     [GeneratedRegex(@"Monster\s+#(\d+)", RegexOptions.IgnoreCase)]

@@ -236,7 +236,7 @@ public static class QuestCrawler
 
     // Every distinct giveability target across the data — the discovered quest-flag
     // set, used to tell stat rewards (addability off-set) from progress (on-set).
-    private static HashSet<int> DiscoverGrantedFlags(IEnumerable<string> rawChains)
+    internal static HashSet<int> DiscoverGrantedFlags(IEnumerable<string> rawChains)
     {
         var flags = new HashSet<int>();
         foreach (string raw in rawChains)
@@ -862,7 +862,7 @@ public static class QuestCrawler
     // `minlevel 27 … minlevel 23` and the game refuses below 27; Stock's Meditate chains
     // read `minlevel 20 … minlevel 27`, an intro gate under the class's own.
     // GAME_MECHANICS "Quest level gates".
-    private static int HighestGate(int? soFar, int gate) => soFar is int g && g > gate ? g : gate;
+    internal static int HighestGate(int? soFar, int gate) => soFar is int g && g > gate ? g : gate;
 
     // Scratch record for one parsed chain; never escapes the crawl.
     private sealed record ParsedChain(

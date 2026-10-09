@@ -96,6 +96,19 @@ public static class ProfileMigrations
             changed = true;
         }
 
+        // v8 → v9: the drafted quest checklists gained a line for each step that
+        // happens on a monster's death. A step tick is kept as the number of its
+        // checkbox, so ticks saved before would slide onto the wrong steps. Where the
+        // new lines fall depends on the game data, which isn't here, so the profile
+        // is only marked; QuestTickMigration moves the ticks when the Quest tab loads.
+        if (profile.SchemaVersion < 9)
+        {
+            profile.QuestTicksPredateKillSteps =
+                profile.QuestLog?.Any(p => p.CheckedSteps is { Count: > 0 }) == true;
+            profile.SchemaVersion = 9;
+            changed = true;
+        }
+
         return changed;
     }
 
