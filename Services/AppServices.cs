@@ -2539,6 +2539,10 @@ public sealed class AppServices
     // per Settings → Other. Registered by the main window's view-model.
     public Action? NoteUserStoppedRun { get; set; }
 
+    // A remote @stop paused movement. Set by MainWindowViewModel, which resets the
+    // auto toggles to the character's base modes as it does for the Stop button.
+    public Action? NoteRemoteStop { get; set; }
+
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
     // / delete folders; reloads both catalogues after a filesystem
@@ -8091,6 +8095,7 @@ public sealed class AppServices
         MoveRemote = new Game.Remote.MovePlayerHandler(
             RemoteCommands, RoomSearch, RoomGraph, RoomTracker, Walker, Loops, LoopRunner,
             Lairs, AutoLair, MovementCoordinator, MovementControl, Favorites, Bosses, Bfs, LoopShare);
+        MoveRemote.Stopped = () => NoteRemoteStop?.Invoke();
 
         // Leader-side @comeback. Snapshots the running movement
         // engine, stops it (stop-and-restart, NOT a coordinator gate —
