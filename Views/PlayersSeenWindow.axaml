@@ -40,15 +40,22 @@
                 BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                 BorderThickness="0,1,0,0"
                 Padding="10,6">
-            <Button Content="Clear history"
-                    HorizontalAlignment="Right"
-                    Command="{Binding ClearCommand}"
-                    IsEnabled="{Binding !IsEmpty}"/>
+            <DockPanel LastChildFill="True">
+                <Button DockPanel.Dock="Right"
+                        Content="Clear history"
+                        Command="{Binding ClearCommand}"
+                        IsEnabled="{Binding !IsEmpty}"/>
+                <TextBlock Text="Double-click a row to show its room on the map."
+                           Foreground="{StaticResource ChromeFgMutedBrush}"
+                           FontSize="11"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
         </Border>
 
         <!-- ============ Entries list (+ empty placeholder) ============ -->
         <Grid Background="{StaticResource ChromeBgSunkenBrush}">
-            <ListBox ItemsSource="{Binding Rows}"
+            <ListBox x:Name="RowsList"
+                     ItemsSource="{Binding Rows}"
                      Background="Transparent"
                      BorderThickness="0"
                      SelectionMode="Multiple">
