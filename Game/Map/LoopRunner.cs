@@ -1808,6 +1808,14 @@ public sealed class LoopRunner : IRecoverableEngine
             case DoorOpenResult.Failed failed:
                 FailStep($"door open failed: {failed.Reason}");
                 return;
+
+            case DoorOpenResult.NotHere notHere:
+                // The step was planned from a room we aren't standing in — re-sync
+                // and re-route from where we actually are rather than failing the lap.
+                // The step stays in flight: if recovery declines (an attempt too soon
+                // after the last), the next room display still settles it.
+                EnterRecovery($"step {_index + 1} door isn't here ({notHere.Reason})");
+                return;
         }
     }
 

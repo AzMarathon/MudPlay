@@ -43,11 +43,29 @@ public sealed class ParadigmPositionResolverTests : IDisposable
         EngineRecoveryGate Gate,
         List<byte[]> Sent);
 
-    private Harness Build(bool paradigm)
+    // Gaol -> Dungeon -> Vault in a line, southeast each time.
+    private const string ThreeRoomGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Gaol",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "1/2", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Dungeon",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "1/1", "SE": "1/3", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 5,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "1/2", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private Harness Build(bool paradigm, string graphJson = GraphJson)
     {
         string dir = Path.Combine(_root, "alpha");
         Directory.CreateDirectory(dir);
-        File.WriteAllText(Path.Combine(dir, "Rooms.json"), GraphJson);
+        File.WriteAllText(Path.Combine(dir, "Rooms.json"), graphJson);
         // Legit == 2 flags the set as ParaMud; omit it for a stock realm.
         if (paradigm)
             File.WriteAllText(Path.Combine(dir, "Info.json"), "[{\"Legit\":2}]");
@@ -187,6 +205,65 @@ public sealed class ParadigmPositionResolverTests : IDisposable
 
         Assert.Equal(0, resolved);
         Assert.Equal(1, failed);
+    }
+
+    // Report paradigm-20260924-053941: a move went out behind the `rm`, and the answer
+    // (the room that move was leaving) was taken as where the character stood — the
+    // move was forgotten and the walk replanned from the room it had just left. The
+    // answer agrees with the tracker here, so the move stays in flight and its own
+    // room display confirms it.
+    [Fact]
+    public void AnswerToAnRmAskedBeforeAMoveStillInFlight_KeepsTheMove()
+    {
+        Harness h = Build(paradigm: true, ThreeRoomGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        RoomKey? resolved = null;
+        Assert.True(h.Resolver.RequestResyncOnce("desync", k => resolved = k, () => { }));
+        h.Tracker.NoteMoveSent(Direction.SE);
+
+        h.Resolver.FeedLocationForTests(1, 1);
+
+        Assert.Equal(new RoomKey(1, 1), resolved);
+        Assert.False(h.Resolver.RequestInFlight);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Dungeon",
+            new HashSet<Direction> { Direction.NW, Direction.SE }));
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 2), h.Tracker.State.CurrentRoom?.Key);
+    }
+
+    // The stall case the resync exists for: the move went out first, never
+    // confirmed, and the `rm` asked afterwards says we never left. That answer is
+    // newer than the move, so it settles it.
+    [Fact]
+    public void AnswerToAnRmAskedAfterTheMove_StillLocates()
+    {
+        Harness h = Build(paradigm: true, ThreeRoomGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Tracker.NoteMoveSent(Direction.SE, DateTimeOffset.UtcNow.AddSeconds(-10));
+        h.Resolver.TryRequestResync("in-flight stall");
+
+        h.Resolver.FeedLocationForTests(1, 1);
+
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 1), h.Tracker.State.CurrentRoom?.Key);
+    }
+
+    // An answer naming a room the tracker doesn't hold means the tracker was wrong,
+    // whatever is in flight.
+    [Fact]
+    public void AnswerNamingAnotherRoom_LocatesEvenWithAMoveInFlight()
+    {
+        Harness h = Build(paradigm: true, ThreeRoomGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Resolver.TryRequestResync("desync");
+        h.Tracker.NoteMoveSent(Direction.SE);
+
+        h.Resolver.FeedLocationForTests(1, 3);
+
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
     }
 
     [Fact]

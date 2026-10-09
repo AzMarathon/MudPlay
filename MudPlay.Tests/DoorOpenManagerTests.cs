@@ -88,12 +88,24 @@ public sealed class DoorOpenManagerTests
             Router.Dispatch(emitted);
         }
 
+        // A command as the server echoes it: the prompt row, then its trailing text
+        // as a second line carrying the same timestamp.
+        public void Echoed(string command)
+        {
+            DateTimeOffset at = DateTimeOffset.UtcNow;
+            Router.Dispatch(new LineExtractor.EmittedLine("[HP=185/KAI=10]:", [], at, true));
+            Router.Dispatch(new LineExtractor.EmittedLine(command, [], at, false));
+        }
+
         public string LastSent => Sent.Count == 0
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
 
         public void Dispose() => Mgr.Dispose();
     }
+
+    private static readonly RoomKey DoorRoom = new(7, 1247);
+    private static readonly RoomKey NextRoom = new(7, 1246);
 
     // ----- happy paths ----------------------------------------------
 
@@ -667,5 +679,185 @@ public sealed class DoorOpenManagerTests
 
         Assert.IsType<DoorOpenResult.Opened>(result);
         Assert.Empty(h.AllSent);
+    }
+
+    // ----- the door isn't here ---------------------------------------
+
+    // Report paradigm-20260924-053941: `bash se` at an exit that is no door drew
+    // "Your command had no effect." sixteen times, each read as silence and re-bashed
+    // on the watchdog. The line ends the request so the caller can re-plan.
+    [Fact]
+    public void Bash_NoEffect_EndsAsNotHere_AndStopsBashing()
+    {
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.SE, 11, canBash: true, "walker", r => result = r);
+        Assert.Equal("bash se", h.LastSent);
+
+        h.Line("Your command had no effect.");
+
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+        Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
+        Assert.False(h.HasWatchdogArmed);
+        Assert.Single(h.AllSent);
+    }
+
+    [Fact]
+    public void Pick_NoEffect_EndsAsNotHere()
+    {
+        using Harness h = new() { PicklocksOverBash = true };
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.W, 0, canBash: true, "walker", r => result = r);
+        Assert.Equal("pick w", h.LastSent);
+
+        h.Line("Your command had no effect.");
+
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+        Assert.Single(h.AllSent);
+    }
+
+    [Fact]
+    public void Open_NoEffect_EndsAsNotHere()
+    {
+        using Harness h = new() { PicklocksOverBash = true };
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.W, 0, canBash: true, "walker", r => result = r);
+        h.Line("You successfully unlocked the door.");
+        Assert.Equal("open w", h.LastSent);
+
+        h.Line("Your command had no effect.");
+
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+    }
+
+    // The same line answers any command the game refuses. With the door's own echo
+    // ahead of it, it is the door's.
+    [Fact]
+    public void NoEffect_AfterTheBashEcho_IsTheDoors()
+    {
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.SE, 0, canBash: true, "walker", r => result = r);
+
+        h.Echoed("bash se");
+        h.Line("Your command had no effect.");
+
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+    }
+
+    // With another command's echo ahead of it (a buff cast sent while the bash was
+    // out), it says nothing about the door.
+    [Fact]
+    public void NoEffect_AfterAnotherCommandsEcho_LeavesTheBashWaiting()
+    {
+        using Harness h = new();
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.SE, 0, canBash: true, "walker", r => result = r);
+
+        h.Echoed("tige");
+        h.Line("Your command had no effect.");
+
+        Assert.Null(result);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, h.Mgr.CurrentState);
+
+        h.Line("You bashed the door open.");
+        Assert.IsType<DoorOpenResult.Opened>(result);
+    }
+
+    // No door verb is on the wire while a bash waits out a rest, so the line belongs
+    // to something else.
+    [Fact]
+    public void NoEffect_WhileNoDoorVerbAwaitsAReply_IsIgnored()
+    {
+        using Harness h = new() { BashRestNeeded = true };
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.N, 0, canBash: true, "walker", r => result = r);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBashRest, h.Mgr.CurrentState);
+
+        h.Line("Your command had no effect.");
+
+        Assert.Null(result);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBashRest, h.Mgr.CurrentState);
+    }
+
+    // The tracker confirmed another room while the bash was out: the next swing would
+    // be at that room's exit, so the request ends instead.
+    [Fact]
+    public void LeftTheRoom_NextBashIsNotSent_EndsAsNotHere()
+    {
+        using Harness h = new();
+        RoomKey? confirmed = DoorRoom;
+        h.Mgr.SetConfirmedRoomProbe(() => confirmed);
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.SE, 0, canBash: true, "walker", r => result = r);
+        Assert.Equal("bash se", h.LastSent);
+
+        confirmed = NextRoom;
+        h.Line("Your attempts to bash through fail!");
+
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+        Assert.Single(h.AllSent);
+        Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
+    }
+
+    [Fact]
+    public void LeftTheRoom_WatchdogExpiry_EndsAsNotHere_InsteadOfReBashing()
+    {
+        using Harness h = new();
+        RoomKey? confirmed = DoorRoom;
+        h.Mgr.SetConfirmedRoomProbe(() => confirmed);
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.SE, 0, canBash: true, "walker", r => result = r);
+
+        confirmed = NextRoom;
+        h.FireTimeout();
+
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+        Assert.Single(h.AllSent);
+        Assert.False(h.HasWatchdogArmed);
+    }
+
+    // An "opened" line read after the room changed is about some other door.
+    [Fact]
+    public void LeftTheRoom_OpenedLine_IsNotReportedAsOpened()
+    {
+        using Harness h = new();
+        RoomKey? confirmed = DoorRoom;
+        h.Mgr.SetConfirmedRoomProbe(() => confirmed);
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.SE, 0, canBash: true, "walker", r => result = r);
+
+        confirmed = NextRoom;
+        h.Line("You bashed the door open.");
+
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+    }
+
+    // The tracker merely losing its certainty (a move in flight, a suspect room) is
+    // not a different room, and neither is a request started while it was unsure.
+    [Fact]
+    public void RoomUnsure_NowOrAtTheStart_KeepsBashing()
+    {
+        using Harness h = new();
+        RoomKey? confirmed = DoorRoom;
+        h.Mgr.SetConfirmedRoomProbe(() => confirmed);
+        DoorOpenResult? first = null;
+        h.Mgr.Enqueue(Direction.SE, 0, canBash: true, "walker", r => first = r);
+
+        confirmed = null;
+        h.Line("Your attempts to bash through fail!");
+        Assert.Null(first);
+        Assert.Equal(new[] { "bash se", "bash se" }, h.AllSent);
+        h.Line("You bashed the door open.");
+        Assert.IsType<DoorOpenResult.Opened>(first);
+
+        // Started unsure: a room confirmed later is no evidence of having left.
+        DoorOpenResult? second = null;
+        h.Mgr.Enqueue(Direction.N, 0, canBash: true, "maze", r => second = r);
+        confirmed = NextRoom;
+        h.Line("Your attempts to bash through fail!");
+        Assert.Null(second);
+        Assert.Equal("bash n", h.LastSent);
+        Assert.Equal(4, h.AllSent.Count);
     }
 }

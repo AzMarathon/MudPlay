@@ -2272,6 +2272,18 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     $"door open failed: {failed.Reason}", _destination));
                 Reset();
                 return;
+
+            case DoorOpenResult.NotHere notHere:
+                // The step was planned from a room we aren't standing in (a move
+                // already on the wire landed, or the tracker was a room behind).
+                // Nothing is wrong with the door, so re-plan on the walk's bounded
+                // replan budget (which leans on rm first) instead of failing the walk.
+                _log?.Info("Walker",
+                    $"step {_index + 1}: door isn't here ({notHere.Reason}); re-checking the room and replanning");
+                DisarmStallWatchdog();
+                _stepInFlight = false;
+                TryReplanOrFail(RoomConfidence.Suspect);
+                return;
         }
     }
 
@@ -3455,6 +3467,23 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // Bound the wait: if whatever interrupted us swallowed the move, this
                 // confirmation never arrives and the walk would hang indefinitely.
                 ArmStallWatchdog($"resume with step {_index + 1} still in flight (Pending)");
+                return;
+            }
+
+            // A door / trap / hidden-exit / winch sub-FSM was mid-flight when the
+            // pause hit. No move has gone out for this step — the sub-FSM's own
+            // reply sends it — so the tracker rightly still reads the source room.
+            // The reconciliation below would take that for a move refused while
+            // paused and replan (asking rm first) while the sub-FSM kept running:
+            // its reply then sent the move behind the rm, the rm's answer named the
+            // room being left, and the replan bashed a door that wasn't there
+            // (report paradigm-20260924-053941, an @wait / @ok in the middle of a
+            // bash). Wait for the reply instead, as LoopRunner's resume does.
+            if (_stepInFlight
+                && (_awaitingDoorOpen || _awaitingTrapDisarm || _awaitingHiddenReveal || _awaitingWinch))
+            {
+                _log?.Info("Walker",
+                    $"resume: step {_index + 1} has a door/trap/hidden/winch sub-FSM in flight; awaiting its reply, not replanning or resending");
                 return;
             }
 

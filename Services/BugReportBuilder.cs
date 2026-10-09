@@ -1735,6 +1735,7 @@ public static class BugReportBuilder
         Game.Map.DoorOpenManager door = svc.Door;
         Kv(sb, "Door FSM", $"{door.CurrentState}"
             + (door.CurrentDirection is { } dd ? $", dir={dd}" : string.Empty)
+            + (door.CurrentDoorRoom is { } dr ? $", door in {dr}" : string.Empty)
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy
