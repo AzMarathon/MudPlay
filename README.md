@@ -1,8 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.25**
-> - Settings → Party: "Help leader open doors" says it only works while the leader bashes (a leader picking a lock shows the room nothing)
+> **Version 3.159.26**
+> - A trap handed to a party member: their client now says it has accepted, and every result it reports is understood (a "No trap" or "Couldn't disarm" answer no longer leaves the walk waiting)
+> - A sneaking member's telepathed trap answer is read
+> - If nobody accepts a handed-over trap in 10 seconds, the walk goes through it instead of waiting forever
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

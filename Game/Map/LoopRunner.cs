@@ -1899,14 +1899,19 @@ public sealed class LoopRunner : IRecoverableEngine
         if (!_awaitingTrapDisarm) return;
         _awaitingTrapDisarm = false;
 
-        if (reply.Contains("flow stopped", StringComparison.OrdinalIgnoreCase))
+        TrapReplyOutcome? outcome = TrapReply.Read(reply);
+        if (outcome == TrapReplyOutcome.Stopped)
         {
             FailStep("trap disarm cancelled");
             return;
         }
-        bool clear = reply.Contains("disarmed", StringComparison.OrdinalIgnoreCase)
-                     || reply.StartsWith("No trap", StringComparison.OrdinalIgnoreCase);
-        if (!clear)
+        // Asked of the party and nobody took it: as with nobody able, the exit is
+        // walked through with the trap still set.
+        if (outcome == TrapReplyOutcome.Unanswered)
+        {
+            _log?.Info("LoopRunner", "no party member took the trap: walking through it");
+        }
+        else if (outcome != TrapReplyOutcome.Clear)
         {
             FailStep($"trap disarm failed: {reply}");
             return;

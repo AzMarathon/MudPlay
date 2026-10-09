@@ -3308,16 +3308,16 @@ public sealed class AppServices
         // handler owns the @-command auth boundary. Wire-sender +
         // OtherSettings cadence knobs bind in MainWindowVM /
         // ApplyOtherFromActiveProfile.
-        TrapDisarm = new Game.TrapDisarmManager(Router, PlayerStats, GameData, Log,
-            // UI-thread one-shot, same as the door FSM's response watchdog below.
-            scheduleDelay: (delay, callback) =>
-            {
-                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
-                timer.Tick += (_, _) => { timer.Stop(); callback(); };
-                timer.Start();
-                return new DispatcherTimerHandle(timer);
-            });
-        TrapDelegation = new Game.TrapDelegationManager(Party, Players, GameData, Router, Log);
+        // UI-thread one-shot, same as the door FSM's response watchdog below.
+        Func<TimeSpan, Action, IDisposable> trapDelay = (delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+            return new DispatcherTimerHandle(timer);
+        };
+        TrapDisarm = new Game.TrapDisarmManager(Router, PlayerStats, GameData, Log, scheduleDelay: trapDelay);
+        TrapDelegation = new Game.TrapDelegationManager(Party, Players, GameData, Router, Log, trapDelay);
         // Suppress the race-probe look while a party-splitting-teleport reform is
         // settling — no member looks during that evolution (AutoParty owns the
         // reform lifecycle; a stray look re-strands the resuming walk).
