@@ -1,5 +1,11 @@
 # Version history
 
+## 3.157.8
+
+- Globe of darkness is no longer taken for a blindness: no `@blind` call to the party and no cure blindness cast for it
+- The desert's and two dungeon room spells' flavor lines, and the hordeling's death screech, are recognised
+- bug reports addressed: unrecognized-lines-20261008-214608
+
 ## 3.157.6
 
 - The golden idol's passage: the room you land in is read from the game's own second display; MudPlay sends an Enter only when that display doesn't come

@@ -71,6 +71,11 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
     [Theory]
     [InlineData(918, "9659da50fba38d23")]
     [InlineData(925, "fcb53fe4cc8969b9")]
+    [InlineData(683, "209f6f20ceaeecf8")]
+    [InlineData(684, "fa93443ae526ab2f")]
+    [InlineData(427, "8ab76dc53b852768")]
+    [InlineData(692, "ecf9cc2e00987fa6")]
+    [InlineData(700, "12209f7fec678ced")]
     public void EditedRoomSpellRecord_KeepsItsShippedId(int spell, string id)
         => Assert.Equal(id, Find(spell).Id);
 
@@ -118,6 +123,21 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
     [InlineData("\"The Angel indicates that you are being watched over. Protection is yours,")]
     [InlineData("\"The Chariot symbolizes mastery over movement. Speed and endurance are its")]
     [InlineData("The fanatic screams \"Death to those who oppose the Blood God!\"")]
+    // The desert's room spells (683 / 684) and the hordeling's death, from the
+    // 2026-10-08 export: wording from the game's own message table.
+    [InlineData("Vultures circle high overhead.")]
+    [InlineData("A shimmering image appears to the north!")]
+    [InlineData("A shimmering image appears to the east!")]
+    [InlineData("A shimmering image appears to the south!")]
+    [InlineData("A shimmering image appears to the west!")]
+    [InlineData("The howl of some awful beast can be heard far over the dunes.")]
+    [InlineData("The hordeling screeches violently!")]
+    // Two more room spells of the same kind in that export (692, 700).
+    [InlineData("A heated wind howls through the passageway, kicking up sand and dust.")]
+    [InlineData("Beast-like screams echo unnervingly throughout the passageways.")]
+    [InlineData("The clicking sound of scrabbling claws can be heard from down the passage.")]
+    [InlineData("Eerie lights dance about further down the passageway.")]
+    [InlineData("Doors on this level creak and thump!")]
     public void AttributedLine_IsRecognized_NotStaged(string line)
     {
         MessageStore messages = new();

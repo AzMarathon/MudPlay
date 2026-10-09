@@ -1,5 +1,6 @@
 using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Game.Spells;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 using MudPlay.Terminal;
@@ -69,6 +70,20 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
     // user manually re-sent it (report paradigm-20260908-211659: "sit here and get
     // beat on"). Rebuilt with the other indexes on every MessageStore change.
     private List<(string Norm, MessageRecord Record)> _confuseFumbleIndex = new();
+
+    // Several spells can print the same applied line and differ in what they do:
+    // "You are enveloped in darkness" is globe of darkness (which takes the light
+    // away, and is no blindness) and blind globe (which is one). Read off the
+    // applied line alone, all of them latched, and the globe set Blinded and had
+    // the party asked to cure a blindness nobody had. The spell's own cast line,
+    // printed just ahead, says which it was. Indexed only for records whose shared
+    // applied text carries more than one set of flags; everything else latches as
+    // it always did.
+    private List<(Func<string, bool> Matches, string RecordId)> _castLineIndex = new();
+    private HashSet<string> _ambiguousApplied = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _castSeenAt = new(StringComparer.Ordinal);
+    // The cast lines and the applied line arrive in one burst.
+    private static readonly TimeSpan CastLineWindow = TimeSpan.FromSeconds(3);
 
     private LineExtractor? _lines;
     private bool _disposed;
@@ -294,6 +309,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         _appliedIndex = applied;
         _endsIndex = ends;
         _appliedAliases = aliases;
+        BuildCastLineIndex(applied);
         _longerApplied = BuildLongerApplied(aliases.Keys);
         _confuseFumbleIndex = fumbles;
         _log?.Debug(LogCategory,
@@ -313,11 +329,92 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         }
     }
 
+    // The same message with or without its closing punctuation ("You are enveloped
+    // in darkness" / "…darkness!").
+    private static string ApplyTextKey(string applied) => applied.Trim().TrimEnd('!', '.', ' ');
+
+    // Index the cast lines of the records whose applied text is shared by records
+    // that don't all carry the same flags.
+    private void BuildCastLineIndex(List<(string Pattern, MessageRecord Record)> applied)
+    {
+        var byText = new Dictionary<string, List<MessageRecord>>(StringComparer.Ordinal);
+        foreach ((string pattern, MessageRecord r) in applied)
+        {
+            string key = ApplyTextKey(pattern);
+            if (!byText.TryGetValue(key, out List<MessageRecord>? group)) byText[key] = group = new List<MessageRecord>();
+            group.Add(r);
+        }
+
+        List<(Func<string, bool>, string)> lines = new();
+        HashSet<string> ambiguous = new(StringComparer.Ordinal);
+        foreach (List<MessageRecord> group in byText.Values)
+        {
+            bool mixed = false;
+            foreach (MessageRecord r in group)
+                if (r.Flags != group[0].Flags) { mixed = true; break; }
+            if (!mixed) continue;
+            foreach (MessageRecord r in group)
+            {
+                ambiguous.Add(r.Id);
+                foreach (string template in new[] { r.TargetMessage, r.WitnessMessage, r.CasterMessage })
+                {
+                    if (MessageRecord.IsBlankOrAbsent(template) || MessageRecord.IsTooShortToMatch(template)) continue;
+                    if (CasterMessageMatcher.TryCreate(template, compiled: false) is { } matcher)
+                        lines.Add((text => matcher.TryMatch(text, out _), r.Id));
+                    else
+                    {
+                        string literal = template.Trim();
+                        lines.Add((text => text.Contains(literal, StringComparison.Ordinal), r.Id));
+                    }
+                }
+            }
+        }
+        _castLineIndex = lines;
+        _ambiguousApplied = ambiguous;
+        _castSeenAt.Clear();
+    }
+
+    // Of the records one applied line matched, the ones to leave unlatched: a record
+    // sharing its applied text with another whose cast line was just seen, when its
+    // own was not. Null when no cast line was seen, and every match latches.
+    private HashSet<string>? OutrankedByAnnouncedCast(List<MessageRecord> matched, DateTimeOffset when)
+    {
+        List<MessageRecord>? announced = null;
+        foreach (MessageRecord r in matched)
+            if (_ambiguousApplied.Contains(r.Id)
+                && _castSeenAt.TryGetValue(r.Id, out DateTimeOffset seen) && when - seen <= CastLineWindow)
+                (announced ??= new List<MessageRecord>()).Add(r);
+        if (announced is null) return null;
+
+        HashSet<string>? outranked = null;
+        foreach (MessageRecord r in matched)
+        {
+            if (!_ambiguousApplied.Contains(r.Id) || announced.Contains(r)) continue;
+            string key = ApplyTextKey(r.AppliedMessage);
+            foreach (MessageRecord a in announced)
+                if (ApplyTextKey(a.AppliedMessage) == key)
+                {
+                    (outranked ??= new HashSet<string>(StringComparer.Ordinal)).Add(r.Id);
+                    break;
+                }
+        }
+        if (outranked is not null)
+        {
+            _log?.Info(LogCategory,
+                $"applied line shared by several spells — its cast line says {string.Join(" / ", announced.ConvertAll(a => $"'{a.Name}'"))}; "
+                + $"not applying {string.Join(", ", matched.FindAll(m => outranked.Contains(m.Id)).ConvertAll(m => $"'{m.Name}' ({m.Flags})"))}");
+        }
+        return outranked;
+    }
+
     private void OnLine(LineExtractor.EmittedLine line)
     {
         if (line.IsPromptLine) return;
         string text = line.Text;
         if (string.IsNullOrEmpty(text)) return;
+
+        foreach ((Func<string, bool> matches, string recordId) in _castLineIndex)
+            if (matches(text)) _castSeenAt[recordId] = line.Timestamp;
 
         // EndsWith first — if a condition both starts and ends with
         // overlapping text on the same line (rare but possible), the
@@ -408,10 +505,18 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         MessageRecord? actionFailed = null;
         if (!StatusEffectLine.HasCountdown(text) && _inStatScreen?.Invoke() != true)
         {
+            List<MessageRecord> matched = new();
             foreach ((string pattern, MessageRecord r) in _appliedIndex)
             {
                 if (!text.Contains(pattern, StringComparison.Ordinal)) continue;
                 if (IsPartOfALongerMessage(text, pattern)) continue;
+                matched.Add(r);
+            }
+            HashSet<string>? outranked = matched.Count > 1 && _ambiguousApplied.Count > 0
+                ? OutrankedByAnnouncedCast(matched, line.Timestamp) : null;
+            foreach (MessageRecord r in matched)
+            {
+                if (outranked?.Contains(r.Id) == true) continue;
                 // Capture a LastActionFailed match BEFORE the active-set dedup below —
                 // a failure line can recur while its record stays "applied" only once,
                 // so ActionFailed must ride the raw line, not the deduped apply. First
