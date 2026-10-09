@@ -1679,7 +1679,7 @@ public static class BugReportBuilder
             physical is { Count: > 0 } ? $"{physical.Count} step(s)" : "none — graph-disconnected");
 
         // The gates the route card named, and what the client makes of each: whether
-        // a door key has a source a walk would use, and any trade that yields the item.
+        // a pick of the card would fetch a door key, and any trade that yields it.
         if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs })
         {
             IReadOnlyList<int> fetchable = svc.SourceableGateItems(reqs);
@@ -1687,11 +1687,10 @@ public static class BugReportBuilder
             {
                 string items = string.Join("/", r.ItemIds.Select(id => $"{id} {svc.ItemNames.GetName(id) ?? "?"}"));
                 if (r.Carried) return $"{r.Kind} {items} (carried)";
-                string source = r.Kind != RouteRequirementKind.DoorKey ? string.Empty
-                    : fetchable.Contains(r.ItemIds[0]) ? " — key has a reliable source"
-                    : " — key has no reliable source";
-                string trade = r.ItemIds.Count == 1 && svc.PathItemTradeHint(r.ItemIds[0]) is { } hint
-                    ? $" — {hint}" : string.Empty;
+                if (r.Kind != RouteRequirementKind.DoorKey) return $"{r.Kind} {items}";
+                string source = fetchable.Contains(r.ItemIds[0])
+                    ? " — a route card's pick fetches it" : " — nothing fetches it";
+                string trade = svc.GiveSources.TradeNote(r.ItemIds[0]) is { } note ? $" — {note}" : string.Empty;
                 return $"{r.Kind} {items}{source}{trade}";
             })));
         }
@@ -1803,6 +1802,9 @@ public static class BugReportBuilder
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
+        Kv(sb, "Trades agreed to on the route card (this walk)",
+            svc.AgreedPathItemTrades.Count == 0 ? "(none)" : string.Join(", ", svc.AgreedPathItemTrades.Select(id =>
+                $"{id} {svc.ItemNames.GetName(id) ?? "?"} ({svc.GiveSources.TradeNote(id) ?? "no trade on offer now"})")));
         Kv(sb, "Shop-buy detour active", svc.PathItemShopRouter.DetourActive.ToString());
         Kv(sb, "Monster-drop hunt detour active", svc.MonsterDropRouter.DetourActive.ToString());
         Kv(sb, "Summon detour active", svc.PathItemSummonRouter.DetourActive.ToString()

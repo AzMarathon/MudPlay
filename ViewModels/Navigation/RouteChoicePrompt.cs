@@ -265,8 +265,11 @@ public static class RouteChoicePrompt
     // each need the same two full-graph pathfinds — the plain default route (gates +
     // avoids on, teleports allowed) and the avoids-lifted route — so compute each ONCE
     // behind a memoized closure (caches the result, null included) rather than
-    // re-running per fork. Reads the graph / movement filter and settings only; does
-    // no UI or logging, so it's safe to call from a background thread.
+    // re-running per fork. Reads the graph, the movement filter, settings, the
+    // inventory snapshot (taken under the inventory's lock) and the per-set indexes
+    // of where items come from (givers, shop stock, monster drops), which are
+    // rebuilt only when the game-data set is swapped. It does no UI or logging, so
+    // it's safe to call from a background thread.
     private static RoutePlan PlanRouteChoice(
         AppServices services, RoomKey src, RoomKey destination, IReadOnlySet<RoomKey> bossStopRooms)
     {
@@ -380,12 +383,8 @@ public static class RouteChoicePrompt
                 + $"{RouteChoicePlanner.ListAvoided(alt.AvoidedNames)}, no counter)";
         }
 
-        // A gate item someone trades for another the character lacks carries the
-        // trade, so the log says why a key reads as not obtainable.
         string reqSummary = string.Join(", ", choice.Requirements.Select(r =>
-            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"
-            + (!r.Carried && r.ItemIds.Count == 1 && services.PathItemTradeHint(r.ItemIds[0]) is { } trade
-                ? $" ({trade})" : "")));
+            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"));
         if (choice.GatedWalk is not null)
             avoidAltNote += " (the gates are on a lever detour, not the route itself)";
         string shortcutNote = choice.ShortcutItems is { Count: > 0 } sc
@@ -407,7 +406,7 @@ public static class RouteChoicePrompt
                     $"route pick {src} -> {destination}: sole route needs {reqSummary}, all auto-obtainable "
                     + $"— arming acquisition and walking, no prompt{shortcutNote}");
             return new(RoutePlanKind.ItemGate, choice,
-                $"route pick {src} -> {destination}: sole route needs {reqSummary} (not auto-obtainable); showing picker{shortcutNote}{avoidAltNote}");
+                $"route pick {src} -> {destination}: sole route needs {reqSummary} (not fetched unasked: {services.GatePickLogNote(choice.Requirements)}); showing picker{shortcutNote}{avoidAltNote}");
         }
 
         return new(RoutePlanKind.ItemGate, choice,
@@ -532,16 +531,14 @@ public static class RouteChoicePrompt
         //   • resolvedCounter: the specific counter the run resolved per hazard
         //     requirement (item + "buy at Pier" / "ask X" / …), so the clause names
         //     that one, not the whole any-of set.
-        //   • trade: an item the run won't fetch, but which someone trades for another
-        //     the character lacks. Names the trade; arranges nothing.
-        // The gate items Go fetches whatever their flag says get their giver named
-        // too, so a trade shows what it costs before it is picked.
-        IReadOnlyList<int> armedByPick = services.SourceableGateItems(choice.Requirements);
-        Func<int, string?> giveName = itemId =>
-            services.PathItemGiveName(itemId, source, destination, armedByPick.Contains(itemId));
-        Func<int, string?> tradeHint = services.PathItemTradeHint;
-        Func<int, string?> shopName = itemId => services.PathItemShopName(itemId, source, destination);
-        Func<int, string?> dropName = itemId => services.PathItemDropName(itemId, source);
+        // Each of the three says what this card's main pick itself does about the
+        // item (AppServices.PlanGatePick), so a pick that fetches an unflagged item
+        // names its source and one that only walks somewhere and stops names none.
+        // Worked out below, once it is known which of those this pick is.
+        GatePickSources? gatePick = null;
+        Func<int, string?> giveName = itemId => gatePick?.GiverName(itemId);
+        Func<int, string?> shopName = itemId => gatePick?.BuyOrTradeNote(itemId);
+        Func<int, string?> dropName = itemId => gatePick?.DropperName(itemId);
         Func<RouteRequirement, (int ItemId, string Source)?> resolvedCounter =
             req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v) ? v : ((int, string)?)null;
 
@@ -574,6 +571,9 @@ public static class RouteChoicePrompt
 
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
+        gatePick = services.PlanGatePick(
+            choice.Requirements, source, destination,
+            pickFetches: choice.Kind == RouteChoiceKind.ItemGate && hazardEdge is null && buyPauseRoom is null);
         if (calcVm is not null && calcDialogTask is not null)
         {
             // Idle path: the "Calculating…" window is already open and painted — fill
@@ -582,8 +582,7 @@ public static class RouteChoicePrompt
             dialogTask = calcDialogTask;
             vm.Populate(
                 choice, services.RouteItemLabel, giveName, shopName, dropName,
-                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote,
-                tradeHint);
+                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote);
         }
         else
         {
@@ -592,7 +591,7 @@ public static class RouteChoicePrompt
             vm = new RouteChoiceDialogViewModel(
                 choice, destLabel, services.RouteItemLabel, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
-                economyNote, sourceLabel: DestinationLabel(services, source), tradeHintForItem: tradeHint);
+                economyNote, sourceLabel: DestinationLabel(services, source));
             dialogTask = services.Dialogs
                 .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
         }
@@ -793,6 +792,10 @@ public static class RouteChoicePrompt
                 // yet at plan time) and crosses safely once it's in hand. A SOLE
                 // route (the gate is unavoidable) also plans avoidTraps, so the
                 // forced crossing takes the fewest-traps approach the planner chose.
+                //
+                // A trade hands an item of the user's over. Picking this card agrees
+                // to the trades it named, and to no others.
+                services.AgreeToPathItemTrades(gatePick.Trades);
                 foreach (int id in floorCounters)
                     if (services.ItemNames.GetName(id) is { Length: > 0 } n)
                         services.SendGameCommand($"get {n}");

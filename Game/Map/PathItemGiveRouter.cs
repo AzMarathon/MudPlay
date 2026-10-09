@@ -15,31 +15,35 @@ namespace MudPlay.Game.Map;
 // RefusalLines are what this giver says when a condition on the hand-over isn't
 // met (the old hermit's "You can't serve your cause like that!"), so a refused ask
 // is recognised at once instead of by the item never arriving.
+//
+// TakesItemId is the item a trade takes in exchange, zero for a free hand-over.
+// GiverName then says so ("sleazy shopkeeper, in trade for your opal brooch").
 public readonly record struct GiveSource(
-    RoomKey Room, string Command, string GiverName, IReadOnlyList<string>? RefusalLines = null);
+    RoomKey Room, string Command, string GiverName, IReadOnlyList<string>? RefusalLines = null,
+    int TakesItemId = 0);
 
-// Active fulfiller for NeedKind.PathItem needs an NPC / room hands over for
-// free: when a one-shot walk crosses an (Item: N) / (Ticket: N) gate whose item
-// we're not carrying and a deterministic textblock `giveitem` supplies it (an
+// Active fulfiller for NeedKind.PathItem needs an NPC / room hands over on a
+// keyword: when a one-shot walk crosses an (Item: N) / (Ticket: N) gate whose item
+// we're not carrying and a textblock `giveitem` supplies it (an
 // `ask <npc> <keyword>` dialogue give, or a room-CMD keyword give), detour to
 // the giver that adds the fewest steps, issue the command, and resume once the
 // item lands. Backs the item record's "Auto-obtain for path" flag
 // (ItemOverlay.AutoObtainForPath).
 //
-// Preempts the shop and drop routers. A deterministic give is free and needs
-// no RNG — strictly better than buying or hunting — so both of those stand down
-// whenever one exists (deterministicGiveExists). Only the give's keyword-carrying,
-// ungated awards reach here: AppServices filters ItemSourceIndex to
-// Deterministic givers with a non-empty keyword and resolves each to a concrete
-// room, so a candidate list is always something we can actually walk to and ask
-// for. A gated give (purchase / quest-reward / conditioned turn-in) or a `random`
-// roll is excluded upstream — those aren't a reliable one-command hand-over. The
-// one turn-in let through is a plain trade whose single item is already carried;
-// its GiverName then says what the ask costs.
+// The candidates come from PathItemGiveSources, already resolved to a room and a
+// command, so a list is always something we can walk to and ask for. They are of
+// two kinds:
+//   - A free hand-over: keyword-carrying and ungated. It costs nothing and needs
+//     no RNG, so the shop and drop routers stand down whenever one exists.
+//   - A plain trade, which hands over one item of the user's for the wanted one.
+//     It reaches here only for a door key nothing else yields, with the item to
+//     hand over in the pack, after the user picked a route card that named the
+//     trade. It never stands in for a free give, a purchase or a summon.
+// A purchase, a quest reward, a conditioned turn-in or a `random` roll is excluded
+// upstream — none is a reliable one-command hand-over.
 //
-// Auto-detour, don't prompt. Like the shop buy and unlike the drop hunt, a
-// deterministic give is cheap, certain, and a single command, so it runs
-// silently rather than asking.
+// Auto-detour, don't prompt. A free give is cheap, certain and a single command,
+// so it runs without asking. A trade was asked about already, on the card.
 //
 // Giver selection. Among the candidate rooms, pick the one minimising
 // dist(cur, giver) + dist(giver, dest) — the fewest steps added to the trip,

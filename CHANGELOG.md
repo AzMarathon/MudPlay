@@ -2,9 +2,12 @@
 
 ## 3.155.2
 
-- A door key an NPC trades for an item you carry is fetched on the way: with the opal brooch in hand, a walk into the dark-elf archmage's tower trades it to the sleazy shopkeeper for the glowing key
-- Without that item the route card names the trade and what drops the item, in place of the bare key name
+- A door key an NPC trades for an item in your pack can be fetched from the route card: with the opal brooch, the card for the dark-elf archmage's tower reads "glowing key (ask sleazy shopkeeper, in trade for your opal brooch)", and picking it makes the trade on the way
+- A trade is only ever made from a card that names it, only for a door key nothing else yields, and never with an item you are wearing
+- Without that item the card names the trade and what drops the item, in place of the bare key name
+- Route cards say what their pick will do about each item (ask / buy / dropped by), ticked Auto-obtain or not; a pick that only walks somewhere and stops names no source
 - A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window
+- A walk that stops at a locked door for want of its key names the key
 - bug reports addressed: paradigm-20261008-175938
 
 ## 3.153.19

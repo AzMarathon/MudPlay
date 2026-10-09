@@ -41,21 +41,15 @@ public enum ItemGiverKind { Monster, Room }
 // TradeItemId is the one item a plain exchange takes: an award line that does
 // nothing but take a single item and hand its award over ("takeitem 811
 // 1368:giveitem 808:text 843", the sleazy shopkeeper's glowing key for an opal
-// brooch). Such a give isn't Deterministic, since it costs the item, but it is as
-// certain as a free one for a character carrying that item. Zero for every other
-// give, a line that takes more than one item or carries any other condition
-// included.
+// brooch), and is the only line its keyword runs. Such a give isn't Deterministic,
+// since it costs the item, but it is as certain as a free one for a character
+// holding that item. Zero for every other give: a line that takes more than one
+// item, takes one twice, carries any other condition, or shares its keyword with
+// another line (which of several lines the game runs isn't something to assume).
 public readonly record struct ItemGiver(
     ItemGiverKind Kind, int Number, int Map, int Room, string Name, string Requirement,
     string Keyword, bool Deterministic, IReadOnlyList<int>? RefusalMessages = null,
-    int TradeItemId = 0)
-{
-    // Whether a walk can go to this giver, issue its keyword and count on the item:
-    // a free hand-over always, a plain trade only while what it takes is carried.
-    // Without that item the ask can only be refused.
-    public bool IsReliableFor(Func<int, bool> carries) =>
-        Keyword.Length > 0 && (Deterministic || (TradeItemId > 0 && carries(TradeItemId)));
-}
+    int TradeItemId = 0);
 
 // One monster a room command summons on demand, which drops an item at a
 // guaranteed rate. This is the deterministic corner of monster drops, and the
@@ -289,7 +283,8 @@ public sealed class ItemSourceIndex
             ResolveRoots(entry, roots);
             if (roots.Count == 0) continue;   // orphaned block — nothing to attribute to.
 
-            foreach (string rawLine in action.Split('\n'))
+            string[] lines = action.Split('\n');
+            foreach (string rawLine in lines)
             {
                 string line = rawLine.Trim();
                 if (line.Length == 0) continue;
@@ -346,10 +341,14 @@ public sealed class ItemSourceIndex
                 // command producing the item every time.
                 bool deterministic = takeId == 0 && !hasPrice && !hasAbility && !hasRandom;
 
-                // One item taken, once, and nothing else asked of the character. A
-                // line that takes several, or the same one more than once, is left
-                // out: how the game counts those isn't something to assume here.
-                int tradeItemId = takes == 1 && plainExchange ? takeId : 0;
+                // One item taken, once, nothing else asked of the character, and no
+                // other line under the same keyword. A line that takes several, or
+                // the same one more than once, is left out, and so is one of several
+                // alternatives: how the game counts the first and picks among the
+                // second isn't something to assume here.
+                int tradeItemId = takes == 1 && plainExchange && LinesSharingTrigger(lines, lineKeyword) == 1
+                    ? takeId
+                    : 0;
 
                 foreach (int itemId in giveItems)
                 {
@@ -629,8 +628,11 @@ public sealed class ItemSourceIndex
                     e = e with { Keyword = giver.Keyword };
                 if (!e.Deterministic && giver.Deterministic)
                     e = e with { Deterministic = true };
-                if (e.TradeItemId == 0 && giver.TradeItemId > 0)
-                    e = e with { TradeItemId = giver.TradeItemId };
+                // A plain trade only while every line merged into the row is the
+                // same one. A conditioned line under the keyword may be the one the
+                // game runs, so it voids the trade whichever order they arrive in.
+                if (e.TradeItemId != giver.TradeItemId)
+                    e = e with { TradeItemId = 0 };
                 if (giver.RefusalMessages is { Count: > 0 } more)
                     e = e with { RefusalMessages = (e.RefusalMessages ?? Array.Empty<int>()).Union(more).ToList() };
                 list[i] = e;
@@ -768,6 +770,22 @@ public sealed class ItemSourceIndex
         int space = tok.IndexOf(' ');
         string head = space < 0 ? tok : tok[..space];
         return TBInfoActionResolver.IsDirectiveHead(head);
+    }
+
+    // How many of a block's lines one trigger runs: the lines led by that keyword,
+    // or for the empty keyword the directive-led lines the block's menu key reaches.
+    private static int LinesSharingTrigger(string[] lines, string keyword)
+    {
+        int count = 0;
+        foreach (string raw in lines)
+        {
+            string line = raw.Trim();
+            if (line.Length == 0) continue;
+            string head = line.Split(':', 2)[0].Trim();
+            string trigger = LooksLikeDirective(head) ? string.Empty : head;
+            if (string.Equals(trigger, keyword, StringComparison.OrdinalIgnoreCase)) count++;
+        }
+        return count;
     }
 
     // What an award line may hold and still be a plain exchange: the take, the

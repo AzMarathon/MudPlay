@@ -309,14 +309,13 @@ public sealed partial class RouteChoiceDialogViewModel
         // The room the walk starts from, for the "From X to Y" title. Optional (defaults
         // empty → a plain "Route to Y") so the picker's many unit tests, which don't
         // exercise the heading, construct the VM without it.
-        string sourceLabel = "",
-        Func<int, string?>? tradeHintForItem = null)
+        string sourceLabel = "")
     {
         Heading = ComposeHeading(destinationLabel, sourceLabel);
         Populate(
             choice, itemName, giveNameForItem, shopBuyPhraseForItem,
             dropNameForItem, freeEta, gatedEta, hazardCounterSource, hazardSurvivable,
-            resolvedHazardCounter, economyNote, tradeHintForItem);
+            resolvedHazardCounter, economyNote);
     }
 
     // "Calculating…" construction: the idle (off-thread) path opens the picker with
@@ -352,10 +351,7 @@ public sealed partial class RouteChoiceDialogViewModel
         string? hazardCounterSource = null,
         bool hazardSurvivable = false,
         Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null,
-        string? economyNote = null,
-        // How a gate item nothing will fetch is come by: the trade an NPC makes for
-        // it. Information only; picking the card arranges nothing for such an item.
-        Func<int, string?>? tradeHintForItem = null)
+        string? economyNote = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -591,7 +587,7 @@ public sealed partial class RouteChoiceDialogViewModel
             RequirementSummary = "Requires "
                 + DescribeRequirements(
                     choice.Requirements, itemName, giveNameForItem, shopBuyPhraseForItem,
-                    dropNameForItem, resolvedHazardCounter, tradeHintForItem)
+                    dropNameForItem, resolvedHazardCounter)
                 + (string.IsNullOrEmpty(economyNote) ? "" : $" — {economyNote}");
 
             // An optional shortcut avoids the committed (reliable) route: offer it as
@@ -661,17 +657,13 @@ public sealed partial class RouteChoiceDialogViewModel
     // an any-of hazard group posts no single auto-obtain path-item need. The order mirrors the routers' precedence (free give >
     // shop buy > drop hunt) so the tail names exactly what the run will do —
     // the name helpers return null when a higher-priority router preempts.
-    // Last comes an item the run will not fetch but which someone trades for
-    // another: the tail then says how it is come by ("glowing key (sleazy
-    // shopkeeper trades one for opal brooch, which captain of the guard drops)").
     private static string DescribeRequirements(
         IReadOnlyList<RouteRequirement> reqs,
         Func<int, string?> itemName,
         Func<int, string?>? giveNameForItem,
         Func<int, string?>? shopBuyPhraseForItem,
         Func<int, string?>? dropNameForItem,
-        Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null,
-        Func<int, string?>? tradeHintForItem = null)
+        Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null)
     {
         IEnumerable<string> clauses = reqs.Select(r =>
         {
@@ -712,8 +704,6 @@ public sealed partial class RouteChoiceDialogViewModel
                 return $"{items} ({buyPhrase})";
             if (dropNameForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } monster)
                 return $"{items} (dropped by {monster})";
-            if (tradeHintForItem?.Invoke(r.ItemIds[0]) is { Length: > 0 } trade)
-                return $"{items} ({trade})";
             return items;
         });
         return string.Join("; ", clauses);

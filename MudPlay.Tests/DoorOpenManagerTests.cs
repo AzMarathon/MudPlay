@@ -504,7 +504,8 @@ public sealed class DoorOpenManagerTests
         h.Mgr.Enqueue(Direction.E, 0, canBash: false, keyItemId: 172, "walker", r => result = r);
 
         h.Line("You have no black star key.");
-        Assert.IsType<DoorOpenResult.Failed>(result);
+        // The reason is what the walk fails with, so it names the key.
+        Assert.Contains("black star key", Assert.IsType<DoorOpenResult.Failed>(result).Reason);
     }
 
     [Fact]

@@ -82,28 +82,6 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Equal("Requires the iron key", vm.RequirementSummary);
     }
 
-    // Report paradigm-20261008-175938: the card said "requires glowing key" and
-    // nothing about how one is come by. A key nothing fetches, but which someone
-    // trades for another item, says so; a source the run will use still leads.
-    [Fact]
-    public void DoorKeyGate_NothingFetchesIt_NamesTheTradeThatYieldsIt()
-    {
-        var choice = SoleChoice(new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 808 }));
-        const string hint = "sleazy shopkeeper trades one for opal brooch, which captain of the guard drops";
-
-        var vm = new RouteChoiceDialogViewModel(
-            choice, "Spiral Stairway (8/557)", id => "glowing key", tradeHintForItem: id => hint);
-        Assert.Equal($"Requires glowing key ({hint})", vm.RequirementSummary);
-
-        var withBrooch = new RouteChoiceDialogViewModel(
-            choice, "Spiral Stairway (8/557)", id => "glowing key",
-            giveNameForItem: id => "sleazy shopkeeper, in trade for your opal brooch",
-            tradeHintForItem: id => hint);
-        Assert.Equal(
-            "Requires glowing key (ask sleazy shopkeeper, in trade for your opal brooch)",
-            withBrooch.RequirementSummary);
-    }
-
     [Fact]
     public void HazardGate_NeverGetsBuyTail()
     {
