@@ -1747,11 +1747,15 @@ public sealed class HealthManager : IDisposable
     public void ReevaluateEmergencyHangup()
     {
         if (!_state.HasPromptData) return;
-        if (!_isEnabled()
-            && _readGeneralSettings?.Invoke() is not { AllowHangupInAllOffMode: true })
-            return;
+        if (HangupHeldByAllOff()) return;
         TryEmergencyHangup(_readSettings());
     }
+
+    // The all-off rule for a hang-up: with the health engine off (Auto-Heal and
+    // Auto-Rest both off) nothing hangs up on its own unless the user opted into
+    // AllowHangupInAllOffMode.
+    private bool HangupHeldByAllOff() =>
+        !_isEnabled() && _readGeneralSettings?.Invoke() is not { AllowHangupInAllOffMode: true };
 
     // Hangup-on-emergency: HP at or below HealthSettings.HangIfBelowHp WITH a
     // hostile in the room triggers a hard disconnect via the configured Game-Exit
@@ -1780,10 +1784,11 @@ public sealed class HealthManager : IDisposable
     // A trigger resolved at or below the floor yields an empty window (never
     // fires) — the natural "never hang up" position at the bottom of the scale.
     //
-    // Returns true only when it actually sent the disconnect this call, so the
-    // Evaluate caller can short-circuit the rest of the recovery machinery. A
-    // couldn't-send (no exit command configured) still latches _hangFired but
-    // returns false, letting normal rest / flee run as a fallback.
+    // Returns true only when it actually sent the disconnect this call, or another
+    // escape went out a moment ago (EscapeJustWentOut), so the Evaluate caller can
+    // short-circuit the rest of the recovery machinery. A couldn't-send (no exit
+    // command configured) still latches _hangFired but returns false, letting
+    // normal rest / flee run as a fallback.
     private bool TryEmergencyHangup(HealthSettings s)
     {
         // Master kill-switch: the user has declared only an explicit local
@@ -1813,6 +1818,18 @@ public sealed class HealthManager : IDisposable
         }
         if (_hangFired) return false;
 
+        // Another escape has only just gone out (a Hangup monster or a PvP enemy in
+        // the same room roster): the danger is answered, so no second exit command
+        // and no @panic behind it. Not latched: if we are still here and still in
+        // danger once the moment has passed, this fires as normal.
+        // Debug: this is asked on every prompt and roster change inside the window.
+        if (EscapeJustWentOut(out TimeSpan since))
+        {
+            _log?.Debug(LogCategory,
+                $"low-HP hang-up (HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}) not sent: an escape went out {since.TotalMilliseconds:0} ms ago");
+            return true;
+        }
+
         _hangFired = true;
 
         // @panic broadcast (MegaMUD parity): when we're leading a party and opted
@@ -1822,14 +1839,37 @@ public sealed class HealthManager : IDisposable
         // the room first.
         MaybeBroadcastPanic(s);
 
-        return ExecuteEscape(s, $"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}",
-            allowCarrierDrop: true, pvpResponse: false);
+        return Acted(ExecuteEscape(s, $"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}",
+            allowCarrierDrop: true, pvpResponse: false));
+    }
+
+    private static bool Acted(EscapeOutcome outcome) =>
+        outcome is EscapeOutcome.HungUp or EscapeOutcome.Jumped or EscapeOutcome.AlreadyEscaping;
+
+    // An escape that went out this recently has answered the danger. A second one
+    // asked for inside the window (low HP, a Hangup monster and a PvP enemy can all
+    // be read off one room roster) would only repeat the exit command, the carrier
+    // drop and the penalty line. Time alone ends it, so it cannot go stale and hold
+    // back a later hang-up.
+    private static readonly TimeSpan EscapeRepeatWindow = TimeSpan.FromSeconds(2);
+    private DateTimeOffset? _escapeSentAt;
+
+    private bool EscapeJustWentOut(out TimeSpan since)
+    {
+        since = default;
+        if (_escapeSentAt is not { } at) return false;
+        since = _now() - at;
+        // A clock set back must not stretch the window.
+        return since >= TimeSpan.Zero && since < EscapeRepeatWindow;
     }
 
     // The low-HP escape action, shared by our own emergency hangup
-    // (TryEmergencyHangup) and a received @panic (RespondToReceivedPanic): sys-goto-
-    // wimpy if the character opted in with a location AND the jump dispatched, else
-    // drop the carrier via the Game-Exit command. Returns true when it acted.
+    // (TryEmergencyHangup), a received @panic (RespondToReceivedPanic), the PvP
+    // response (HangUpForPvp) and a Hangup-relationship monster
+    // (HangUpForMonster): the sysop wimpy jump if the character opted in with a
+    // location AND the jump dispatched, else drop the carrier via the Game-Exit
+    // command. Returns which of the two went out, NotSent, or AlreadyEscaping when
+    // either kind went out a moment ago (EscapeJustWentOut).
     //
     // The wimpy jump is tried first: rather than drop the carrier, break combat and
     // jump to the configured escape location. Only when opted in with a location AND
@@ -1847,22 +1887,30 @@ public sealed class HealthManager : IDisposable
     // drop) but is never force-disconnected by someone else's panic.
     //
     // pvpResponse only words the hang-up penalty log line (SetHangupPenaltyLog).
-    private bool ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop, bool pvpResponse)
+    private EscapeOutcome ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop, bool pvpResponse)
     {
+        if (EscapeJustWentOut(out TimeSpan since))
+        {
+            _log?.Info(LogCategory,
+                $"escape ({reason}) not repeated: one went out {since.TotalMilliseconds:0} ms ago");
+            return EscapeOutcome.AlreadyEscaping;
+        }
+
         if (s.SysGotoWimpyInsteadOfHanging
             && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
             && _tryWimpyGoto?.Invoke(s.SysGotoWimpyLocation.Trim()) == true)
         {
             _log?.Warn(LogCategory,
                 $"WIMPY GOTO instead of hangup ({reason}) → break + 'sys goto {s.SysGotoWimpyLocation.Trim()}'");
-            return true;
+            _escapeSentAt = _now();
+            return EscapeOutcome.Jumped;
         }
 
         if (!allowCarrierDrop)
         {
             _log?.Warn(LogCategory,
                 $"escape ({reason}) — carrier-drop suppressed (DisableHangups) and no wimpy location set; staying put.");
-            return false;
+            return EscapeOutcome.NotSent;
         }
 
         string? hangCmd = _readHangupCommand?.Invoke();
@@ -1870,10 +1918,11 @@ public sealed class HealthManager : IDisposable
         {
             _log?.Warn(LogCategory,
                 $"HANGUP ({reason}) but no hangup command configured — set Settings → Other → Game Exit.");
-            return false;
+            return EscapeOutcome.NotSent;
         }
 
         _log?.Warn(LogCategory, $"HANGUP ({reason}) cmd='{hangCmd}' (sending exit, then closing carrier)");
+        _escapeSentAt = _now();
         // Declare the drop intentional before it lands so MainWindowViewModel's
         // reactive-reconnect path stands down — otherwise the very disconnect we
         // just triggered gets classified as unexpected and immediately dialled back.
@@ -1889,7 +1938,7 @@ public sealed class HealthManager : IDisposable
         // Last, so nothing the penalty line reads can come between the trigger
         // and the hang-up.
         _logHangupPenalty?.Invoke(pvpResponse);
-        return true;
+        return EscapeOutcome.HungUp;
     }
 
     // Broadcast a bare '.@panic' on say when we're the party leader and the user
@@ -1921,7 +1970,7 @@ public sealed class HealthManager : IDisposable
         HealthSettings s = _readSettings();
         bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"received @panic from {fromWhom} — bailing (wimpy-or-hang)");
-        return ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop, pvpResponse: false);
+        return Acted(ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop, pvpResponse: false));
     }
 
     // The PvP response's hang-up: the same escape a received @panic takes, so the
@@ -1930,7 +1979,20 @@ public sealed class HealthManager : IDisposable
     {
         bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"PvP — bailing (wimpy-or-hang): {reason}");
-        return ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true);
+        return Acted(ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true));
+    }
+
+    // A monster whose Game Data relationship is Hangup is in the room
+    // (MonsterHangupWatcher). It takes the escape our own low-HP trigger takes, at
+    // any HP: the sight is the trigger. The two switches that stop the low-HP
+    // trigger stop this the same way, the wimpy jump included: Disable Hangups,
+    // and the all-off rule (user, 2026-10-09: with the autos off and Allow hangup
+    // in all-off mode not ticked, "none of our auto systems should respond").
+    public EscapeOutcome HangUpForMonster(string reason)
+    {
+        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return EscapeOutcome.HangupsDisabled;
+        if (HangupHeldByAllOff()) return EscapeOutcome.AllOff;
+        return ExecuteEscape(_readSettings(), reason, allowCarrierDrop: true, pvpResponse: false);
     }
 
     // The PvP response's flee: the retreat a low-HP run makes, but `rooms` long, and

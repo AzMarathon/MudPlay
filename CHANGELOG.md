@@ -1,5 +1,15 @@
 # Version history
 
+## 3.159.27
+
+- A monster set to **Hangup** (Game Data → the monster's record → Fighting it) now hangs the client up as soon as it is seen in the room
+- It is the Health tab's hang-up: Disable hangups stops it, it follows Allow hangup in all-off mode, and it is not dialled back
+- After reconnecting from such a hang-up the watch is off for a minute, counted down beside the status bar's connection light
+- The room's list of who is here no longer outlives a disconnect
+- Hang-ups called for in the same moment (low HP, a PvP enemy, a Hangup monster) send one exit command, not one each
+- During a fight with a player the PvP actions come first: a Hangup monster is hung up on when the fight ends
+- With Disable hangups on, or in the minute after a reconnect, a Hangup monster that attacks is fought back
+
 ## 3.159.26
 
 - A trap handed to a party member: their client now says it has accepted, and every result it reports is understood (a "No trap" or "Couldn't disarm" answer no longer leaves the walk waiting)
