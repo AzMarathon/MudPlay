@@ -4098,15 +4098,30 @@ public sealed class AppServices
         GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
         // Built ahead of the combat tracker and engine, like PvpRoom: a monster whose
         // relationship is Hangup is answered before their handlers can start a fight
-        // in the room. Health is built further down, so it is reached through a
-        // lambda; a method group would be read here, while it is still null.
+        // in the room. Health and InGameCapture are built further down, so they are
+        // reached through lambdas; a method group would be read here, while they
+        // are still null.
         MonsterHangup = new Game.Combat.MonsterHangupWatcher(
             RoomClassifier,
             resolveOverlay: ResolveMonsterOverlay,
-            hangupsDisabled: ReadDisableHangups,
             hangUp: reason => Health.HangUpForMonster(reason),
+            atBoardMenu: () => InGameCapture.AtBoardMenu,
             describeRoom: DescribeRosterRoom,
+            // UI-thread one-shot, for the once-a-second countdown of the hold.
+            schedule: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+            },
             log: Log);
+        // The minute's hold after a hang-up from here starts at the first game
+        // prompt once the character is back, and belongs to the character that
+        // hung up.
+        PromptScanner.PromptObserved += _ => MonsterHangup.NoteInGamePrompt();
+        Profile.ProfileLoaded += _ => MonsterHangup.Reset();
+        Profile.ProfileClosed += () => MonsterHangup.Reset();
+        MonsterHangup.HoldNotice += text => WriteTerminalNotice($"[{text}]");
         // Another player's room attack shows as a line, not a room observation, so
         // nothing re-asks the combat gate on its own. Posted: the line is still being
         // dispatched, and the re-check can send a break.
@@ -9941,9 +9956,9 @@ public sealed class AppServices
     // Live read of the master "Disable hangups" kill-switch from the
     // char-tier General section — the same store the toolbar toggle
     // writes. Wired into every automatic-hangup site (HangupHandler,
-    // RelogHandler, CleanupLogout, MonsterHangupWatcher; HealthManager reads it
-    // through its own General-settings provider) so flipping the toggle takes
-    // effect without restarting an engine.
+    // RelogHandler, CleanupLogout; HealthManager reads it through its own
+    // General-settings provider) so flipping the toggle takes effect
+    // without restarting an engine.
     private bool ReadDisableHangups() =>
         ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups;
 

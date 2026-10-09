@@ -3955,8 +3955,10 @@ public sealed partial class CombatManager : IDisposable
     // line — each carries the attacker's name in group 0). When auto-combat is
     // engaging this room (so _isEnabled: auto-combat on AND not a do-not-attack /
     // combat-suppressed room) and the attacker's relationship lets us fight back —
-    // Friend, Enemy, or Neutral, but NOT Flee / Hangup, which have their own run /
-    // hangup response — mark its instance user-engaged so the engine takes it over,
+    // Friend, Enemy, or Neutral, but NOT Flee / Hangup: a Hangup monster is answered
+    // with a hang-up on sight (MonsterHangupWatcher), and a Flee monster is only
+    // kept out of the fight, with no run of its own — mark its instance
+    // user-engaged so the engine takes it over,
     // even a Friend it would normally leave alone or a neutral we never provoked.
     // Report paradigm-20260921-132800: a hand-attacked Friend (a Friend-relationship
     // NPC) kept hitting the player every round while the engine sat idle, because a

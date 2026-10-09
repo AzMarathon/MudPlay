@@ -3444,11 +3444,11 @@ public sealed class HealthManagerTests
     }
 
     // A Hangup-relationship monster in the room takes the low-HP trigger's escape,
-    // whatever our HP and with the health engine off: the sight is the trigger.
+    // whatever our HP: the sight is the trigger.
     [Fact]
-    public void HangUpForMonster_HangsUp_AtFullHealth_WithTheEngineOff()
+    public void HangUpForMonster_HangsUp_AtFullHealth_WithNoHostileCounted()
     {
-        using Harness h = new() { AutoHealRestEnabled = false, HostileInRoom = false };
+        using Harness h = new() { HostileInRoom = false };
         List<bool> asked = new();
         h.Health.SetHangupPenaltyLog(pvp =>
         {
@@ -3457,7 +3457,7 @@ public sealed class HealthManagerTests
         });
         h.SetPrompt(hp: 200, maxHp: 200);
 
-        Assert.True(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
 
         Assert.Contains("=x", h.SentLines);
         Assert.Equal(1, h.HangupDisconnectCount);
@@ -3481,13 +3481,51 @@ public sealed class HealthManagerTests
         h.Health.SetHangupPenaltyLog(_ => asked++);
         h.SetPrompt(hp: 200, maxHp: 200);
 
-        Assert.False(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(EscapeOutcome.HangupsDisabled, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
 
         Assert.DoesNotContain("=x", h.SentLines);
         Assert.Null(h.WimpyFiredWith);
         Assert.Equal(0, h.HangupDisconnectCount);
         Assert.False(h.Hangup.PeekForTests().DisconnectExpected);
         Assert.Equal(0, asked);
+    }
+
+    // The all-off rule the low-HP hang-up follows (user, 2026-10-09): with the
+    // autos off nothing responds unless Allow hangup in all-off mode is ticked.
+    [Theory]
+    [InlineData(false, EscapeOutcome.AllOff)]
+    [InlineData(true, EscapeOutcome.HungUp)]
+    public void HangUpForMonster_AllOff_FollowsAllowHangupInAllOffMode(bool allowed, EscapeOutcome expected)
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { AutoHealRestEnabled = false };
+        h.General.AllowHangupInAllOffMode = allowed;
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(expected, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal(allowed, h.SentLines.Contains("=x"));
+        Assert.Equal(allowed ? 1 : 0, h.HangupDisconnectCount);
+        // Held, it is all held: the wimpy jump is not tried either.
+        Assert.Equal(allowed ? "wimpy-room" : null, h.WimpyFiredWith);
+    }
+
+    // Disable Hangups outranks the all-off carve-out here as it does for low HP.
+    [Fact]
+    public void HangUpForMonster_DisableHangups_OutranksAllowHangupInAllOffMode()
+    {
+        using Harness h = new() { AutoHealRestEnabled = false };
+        h.General.AllowHangupInAllOffMode = true;
+        h.General.DisableHangups = true;
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.Equal(EscapeOutcome.HangupsDisabled, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.DoesNotContain("=x", h.SentLines);
     }
 
     [Fact]
@@ -3501,7 +3539,7 @@ public sealed class HealthManagerTests
         using Harness h = new(s) { WimpyFireResult = true };
         h.SetPrompt(hp: 200, maxHp: 200);
 
-        Assert.True(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(EscapeOutcome.Jumped, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
 
         Assert.Equal("wimpy-room", h.WimpyFiredWith);
         Assert.DoesNotContain("=x", h.SentLines);
@@ -3514,9 +3552,25 @@ public sealed class HealthManagerTests
         using Harness h = new() { HangupCommand = null };
         h.SetPrompt(hp: 200, maxHp: 200);
 
-        Assert.False(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(EscapeOutcome.NotSent, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
 
         Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    // The monster's hang-up leaves the low-HP trigger as it was: armed. If the
+    // line has not dropped and HP then falls through the trigger, it still fires.
+    [Fact]
+    public void LowHpHangup_StillFires_AfterAMonsterHangUp()
+    {
+        using Harness h = new();
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(1, h.HangupDisconnectCount);
+
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        Assert.Equal(2, h.SentLines.Count(line => line == "=x"));
+        Assert.Equal(2, h.HangupDisconnectCount);
     }
 
     [Fact]

@@ -288,6 +288,27 @@ public sealed class RoomEntityClassifierTests
         Assert.Empty(h.Observations);
     }
 
+    // The roster does not outlive the link: it is dropped without an observation
+    // (nothing can act on one offline), a re-emit has nothing to replay, and the
+    // first arrival after the reconnect starts a roster of its own.
+    [Fact]
+    public void NoteConnectionLost_DropsTheRoster_WithoutAnObservation()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+
+        h.Classifier.NoteConnectionLost();
+        h.Classifier.ReemitCurrent();
+
+        Assert.Null(h.Classifier.Current);
+        Assert.Single(h.Observations);
+
+        h.Classifier.AppendArrivalEntity(
+            new RoomEntity("orc", "orc", EntityKind.Monster, 2), "An orc walks into the room from north.");
+        Assert.Equal("orc", Assert.Single(h.Observations[1].Entities).ResolvedName);
+    }
+
     // ----- player lookup ---------------------------------------------
 
     [Fact]

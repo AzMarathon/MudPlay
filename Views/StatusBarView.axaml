@@ -100,7 +100,8 @@
 
                 <!-- Connection stoplight: red idle · yellow connecting · green
                      connected, with the reconnect countdown beside it when a
-                     long-delay reconnect is armed. -->
+                     long-delay reconnect is armed, and the Hangup-watch hold's
+                     countdown for the minute after a reconnect. -->
                 <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
                             IsVisible="{Binding IsConnectionLight}"
                             ToolTip.Tip="{Binding Main.ConnectionStatusText}">
@@ -117,6 +118,11 @@
                                Foreground="{StaticResource AccentAmberBrush}"
                                Text="{Binding Main.ReconnectCountdownText}"
                                IsVisible="{Binding Main.IsReconnectCountdownVisible}"/>
+                    <TextBlock Classes="StatusSlot"
+                               Foreground="{StaticResource AccentAmberBrush}"
+                               Text="{Binding Main.HangupWatchHoldText}"
+                               IsVisible="{Binding Main.IsHangupWatchHoldVisible}"
+                               ToolTip.Tip="You reconnected after MudPlay hung up for a monster whose relationship is Hangup. Such monsters are not hung up on until this runs out."/>
                 </StackPanel>
             </Panel>
         </DataTemplate>

@@ -1749,11 +1749,15 @@ public sealed class HealthManager : IDisposable
     public void ReevaluateEmergencyHangup()
     {
         if (!_state.HasPromptData) return;
-        if (!_isEnabled()
-            && _readGeneralSettings?.Invoke() is not { AllowHangupInAllOffMode: true })
-            return;
+        if (HangupHeldByAllOff()) return;
         TryEmergencyHangup(_readSettings());
     }
+
+    // The all-off rule for a hang-up: with the health engine off (Auto-Heal and
+    // Auto-Rest both off) nothing hangs up on its own unless the user opted into
+    // AllowHangupInAllOffMode.
+    private bool HangupHeldByAllOff() =>
+        !_isEnabled() && _readGeneralSettings?.Invoke() is not { AllowHangupInAllOffMode: true };
 
     // Hangup-on-emergency: HP at or below HealthSettings.HangIfBelowHp WITH a
     // hostile in the room triggers a hard disconnect via the configured Game-Exit
@@ -1824,16 +1828,19 @@ public sealed class HealthManager : IDisposable
         // the room first.
         MaybeBroadcastPanic(s);
 
-        return ExecuteEscape(s, $"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}",
-            allowCarrierDrop: true, pvpResponse: false);
+        return Acted(ExecuteEscape(s, $"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}",
+            allowCarrierDrop: true, pvpResponse: false));
     }
+
+    private static bool Acted(EscapeOutcome outcome) =>
+        outcome is EscapeOutcome.HungUp or EscapeOutcome.Jumped;
 
     // The low-HP escape action, shared by our own emergency hangup
     // (TryEmergencyHangup), a received @panic (RespondToReceivedPanic), the PvP
     // response (HangUpForPvp) and a Hangup-relationship monster
-    // (HangUpForMonster): sys-goto-
-    // wimpy if the character opted in with a location AND the jump dispatched, else
-    // drop the carrier via the Game-Exit command. Returns true when it acted.
+    // (HangUpForMonster): the sysop wimpy jump if the character opted in with a
+    // location AND the jump dispatched, else drop the carrier via the Game-Exit
+    // command. Returns which of the two went out, or NotSent.
     //
     // The wimpy jump is tried first: rather than drop the carrier, break combat and
     // jump to the configured escape location. Only when opted in with a location AND
@@ -1851,7 +1858,7 @@ public sealed class HealthManager : IDisposable
     // drop) but is never force-disconnected by someone else's panic.
     //
     // pvpResponse only words the hang-up penalty log line (SetHangupPenaltyLog).
-    private bool ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop, bool pvpResponse)
+    private EscapeOutcome ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop, bool pvpResponse)
     {
         if (s.SysGotoWimpyInsteadOfHanging
             && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
@@ -1859,14 +1866,14 @@ public sealed class HealthManager : IDisposable
         {
             _log?.Warn(LogCategory,
                 $"WIMPY GOTO instead of hangup ({reason}) → break + 'sys goto {s.SysGotoWimpyLocation.Trim()}'");
-            return true;
+            return EscapeOutcome.Jumped;
         }
 
         if (!allowCarrierDrop)
         {
             _log?.Warn(LogCategory,
                 $"escape ({reason}) — carrier-drop suppressed (DisableHangups) and no wimpy location set; staying put.");
-            return false;
+            return EscapeOutcome.NotSent;
         }
 
         string? hangCmd = _readHangupCommand?.Invoke();
@@ -1874,7 +1881,7 @@ public sealed class HealthManager : IDisposable
         {
             _log?.Warn(LogCategory,
                 $"HANGUP ({reason}) but no hangup command configured — set Settings → Other → Game Exit.");
-            return false;
+            return EscapeOutcome.NotSent;
         }
 
         _log?.Warn(LogCategory, $"HANGUP ({reason}) cmd='{hangCmd}' (sending exit, then closing carrier)");
@@ -1893,7 +1900,7 @@ public sealed class HealthManager : IDisposable
         // Last, so nothing the penalty line reads can come between the trigger
         // and the hang-up.
         _logHangupPenalty?.Invoke(pvpResponse);
-        return true;
+        return EscapeOutcome.HungUp;
     }
 
     // Broadcast a bare '.@panic' on say when we're the party leader and the user
@@ -1925,7 +1932,7 @@ public sealed class HealthManager : IDisposable
         HealthSettings s = _readSettings();
         bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"received @panic from {fromWhom} — bailing (wimpy-or-hang)");
-        return ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop, pvpResponse: false);
+        return Acted(ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop, pvpResponse: false));
     }
 
     // The PvP response's hang-up: the same escape a received @panic takes, so the
@@ -1934,17 +1941,19 @@ public sealed class HealthManager : IDisposable
     {
         bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"PvP — bailing (wimpy-or-hang): {reason}");
-        return ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true);
+        return Acted(ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true));
     }
 
     // A monster whose Game Data relationship is Hangup is in the room
     // (MonsterHangupWatcher). It takes the escape our own low-HP trigger takes, at
-    // any HP and whether or not the health engine is on: the sight is the trigger.
-    // Disable Hangups stops all of it, the wimpy jump included, as it does for the
-    // low-HP trigger. Returns true when the escape went out.
-    public bool HangUpForMonster(string reason)
+    // any HP: the sight is the trigger. The two switches that stop the low-HP
+    // trigger stop this the same way, the wimpy jump included: Disable Hangups,
+    // and the all-off rule (user, 2026-10-09: with the autos off and Allow hangup
+    // in all-off mode not ticked, "none of our auto systems should respond").
+    public EscapeOutcome HangUpForMonster(string reason)
     {
-        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return false;
+        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return EscapeOutcome.HangupsDisabled;
+        if (HangupHeldByAllOff()) return EscapeOutcome.AllOff;
         return ExecuteEscape(_readSettings(), reason, allowCarrierDrop: true, pvpResponse: false);
     }
 

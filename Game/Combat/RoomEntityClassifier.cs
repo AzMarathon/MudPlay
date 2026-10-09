@@ -807,6 +807,24 @@ public sealed class RoomEntityClassifier : IDisposable
         EntitiesObserved?.Invoke(wiped);
     }
 
+    // The link dropped: whoever was in the room is not known to be there when we are
+    // back, so the roster goes back to what it is at the start of a session, none.
+    // Left standing, it was re-issued by anything that re-emits it (the Auto-Combat
+    // toggle, a PvP fight ending) while offline or at the login, and an arrival after
+    // the reconnect was appended to monsters that had long since left.
+    //
+    // Dropped WITHOUT raising EntitiesObserved, and to null, not to an empty roster:
+    // an empty one raised now, or re-emitted later, is a room found clear, and every
+    // subscriber would act on that while offline (the combat tracker drops its gate,
+    // or reads a fight walked out on and halts the walk the reconnect is meant to
+    // resume). The room display on the way back in rebuilds it.
+    public void NoteConnectionLost()
+    {
+        _alsoHereBuffer = null;
+        _alsoHereRawFirst = null;
+        Current = null;
+    }
+
     // Look again at the names the roster couldn't place. A player we had no record
     // of reads as unknown until `who` (or the top list, or a look) supplies one;
     // once it has, they are a player here and now, not at the next room display.

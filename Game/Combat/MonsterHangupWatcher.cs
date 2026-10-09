@@ -1,3 +1,4 @@
+using MudPlay.Game.Health;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
 
@@ -20,118 +21,309 @@ namespace MudPlay.Game.Combat;
 // the combat engine reads it. A name it could not pin to a record has no
 // relationship to read and is left alone.
 //
-// One answer per sighting. A sighting lasts while some Hangup monster stays on the
-// roster, so the death, arrival and re-issued rosters that follow while the line is
-// dropping send nothing more. A dropped connection ends it: the same monster in the
-// same room after a reconnect is a new sighting. That can't loop on its own, since
-// the hang-up is never dialled back and the next connect stops at the menu
-// (HangupSignal).
+// One answer per sighting. A sighting is one room display's roster: it begins with
+// an "Also here:" line and runs through the arrivals, deaths and re-issues that
+// follow, so those send nothing more; the next "Also here:" line (the next room, or
+// this one displayed again) begins another. Inside one, only a Hangup monster that
+// was not there when it was answered is answered again.
 //
-// While Disable Hangups is on nothing is sent and the sighting stays open, so the
-// first roster after it is turned off is answered.
+// What is asked for is HealthManager's escape, so what stops the low-HP hang-up
+// stops this: Disable Hangups, and the all-off rule. Those, and the board's menu,
+// leave the sighting open, so the first roster after they lift is answered. With
+// the sysop wimpy jump set up the escape is a jump and the session goes on: nothing
+// here stops a running loop from walking back to the monster and jumping again,
+// just as nothing does after a low-HP jump.
+//
+// After a hang-up from here, the watch is off for a minute once the character is
+// back in the game (user, 2026-10-09: "the auto-hang feature should be suppressed
+// for a minute with a countdown timer visible somewhere"), so a manual reconnect
+// into the same room is not hung up on at once. The minute starts at the first game
+// prompt after the reconnect, so the login does not eat it, and when it ends the
+// roster is read again.
 public sealed class MonsterHangupWatcher : IDisposable
 {
     public const string LogCategory = "MonsterHangup";
 
+    // How long the watch stays off after a reconnect that follows our own hang-up.
+    public static readonly TimeSpan HoldLength = TimeSpan.FromSeconds(60);
+
+    // The client closes the line itself within a second of the exit command. A
+    // hang-up with no disconnect this long after it did not take, and the watch
+    // goes back on.
+    private static readonly TimeSpan DropLimit = TimeSpan.FromSeconds(10);
+
+    private static readonly TimeSpan Second = TimeSpan.FromSeconds(1);
+
     private readonly RoomEntityClassifier _classifier;
     private readonly Func<int, MonsterOverlay> _resolveOverlay;
-    private readonly Func<bool> _hangupsDisabled;
-    private readonly Func<string, bool> _hangUp;
+    private readonly Func<string, EscapeOutcome> _hangUp;
+    private readonly Func<bool> _atBoardMenu;
     private readonly Func<string> _describeRoom;
+    private readonly Action<TimeSpan, Action> _schedule;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
 
-    private bool _answered;
-    private bool _heldLogged;
+    // The sighting: the room display it began with, the Hangup records on the
+    // roster when it was answered, and the reason last logged for not answering.
+    private DateTimeOffset? _displayAt;
+    private readonly HashSet<int> _answered = new();
+    private string? _heldFor;
+
+    private DateTimeOffset? _hungUpAt;      // our exit command went out; the drop is awaited
+    private bool _holdArmed;                // dropped by our hang-up; the minute starts at the next game prompt
+    private DateTimeOffset? _holdUntil;     // the minute is running
+    private bool _holdSightingLogged;
+    private int _holdTicks;                 // outdates the ticks of a hold that has ended
+    private bool _unreadableWarned;
 
     // The last sighting and what came of it, for the bug report.
-    public string LastSighting { get; private set; } = "(none this session)";
+    public string LastSighting { get; private set; } = NoSighting;
+    private const string NoSighting = "(none this session)";
 
-    // hangUp is HealthManager.HangUpForMonster: true when the escape went out.
-    // describeRoom words where the roster was read, for the log.
+    // Whole seconds left of the minute, or null when it is not running.
+    public int? HoldSecondsLeft =>
+        _holdUntil is { } until ? Math.Max(0, (int)Math.Ceiling((until - _now()).TotalSeconds)) : null;
+
+    // "Hangup watch off 0:59" while the minute runs, for the status bar.
+    public string? HoldText =>
+        HoldSecondsLeft is { } left ? $"Hangup watch off {left / 60}:{left % 60:00}" : null;
+
+    // The hold started, ticked down a second, or ended.
+    public event Action? HoldChanged;
+
+    // A line for the terminal when the hold starts and when it ends.
+    public event Action<string>? HoldNotice;
+
+    // hangUp is HealthManager.HangUpForMonster. atBoardMenu is true while the
+    // character has left the game for the board's menu with the link up, where an
+    // exit command would be a menu selection. describeRoom words where the roster
+    // was read, for the log. schedule runs a callback after a delay, for the
+    // countdown.
     public MonsterHangupWatcher(
         RoomEntityClassifier classifier,
         Func<int, MonsterOverlay> resolveOverlay,
-        Func<bool> hangupsDisabled,
-        Func<string, bool> hangUp,
+        Func<string, EscapeOutcome> hangUp,
+        Func<bool> atBoardMenu,
         Func<string> describeRoom,
+        Action<TimeSpan, Action> schedule,
         LogService? log = null,
         Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(resolveOverlay);
-        ArgumentNullException.ThrowIfNull(hangupsDisabled);
         ArgumentNullException.ThrowIfNull(hangUp);
+        ArgumentNullException.ThrowIfNull(atBoardMenu);
         ArgumentNullException.ThrowIfNull(describeRoom);
+        ArgumentNullException.ThrowIfNull(schedule);
         _classifier = classifier;
         _resolveOverlay = resolveOverlay;
-        _hangupsDisabled = hangupsDisabled;
         _hangUp = hangUp;
+        _atBoardMenu = atBoardMenu;
         _describeRoom = describeRoom;
+        _schedule = schedule;
         _log = log;
         _now = now ?? (() => DateTimeOffset.Now);
 
         _classifier.EntitiesObserved += OnEntitiesObserved;
     }
 
-    // The connection dropped. The roster outlives it, so without this the monster
-    // still standing there after a reconnect would read as the sighting already
-    // answered.
+    // The hold, for the bug report.
+    public string DescribeHold() =>
+        HoldSecondsLeft is { } left ? $"watch off, {left}s left"
+        : _holdArmed ? "watch off: the minute starts at the first game prompt after the reconnect"
+        : "none";
+
+    // The connection dropped. If it was our hang-up that dropped it, the watch is
+    // off until a minute into the next stay in the game.
     public void NoteDisconnected()
     {
-        _answered = false;
-        _heldLogged = false;
+        bool ours = _hungUpAt is { } at && _now() - at < DropLimit;
+        _hungUpAt = null;
+        EndSighting();
+        _displayAt = null;
+        if (!ours || _holdArmed) return;
+        _holdArmed = true;
+        _holdSightingLogged = false;
+        _log?.Info(LogCategory,
+            $"the line dropped for a Hangup monster: the watch is off until {HoldLength.TotalSeconds:0}s after the next game prompt");
+    }
+
+    // A game prompt: the character is in the game. The first one after our hang-up
+    // dropped the line starts the minute.
+    public void NoteInGamePrompt()
+    {
+        if (!_holdArmed) return;
+        _holdArmed = false;
+        _holdUntil = _now() + HoldLength;
+        int ticks = ++_holdTicks;
+        string note = $"Hangup watch off for {HoldLength.TotalSeconds:0} seconds: this character hung up for a Hangup monster before reconnecting";
+        _log?.Info(LogCategory, note);
+        HoldNotice?.Invoke(note);
+        HoldChanged?.Invoke();
+        _schedule(Second, () => Tick(ticks));
+    }
+
+    // Another character: none of this is theirs.
+    public void Reset()
+    {
+        bool held = _holdUntil is not null;
+        _holdTicks++;
+        _hungUpAt = null;
+        _holdArmed = false;
+        _holdUntil = null;
+        _holdSightingLogged = false;
+        _displayAt = null;
+        EndSighting();
+        LastSighting = NoSighting;
+        if (held) HoldChanged?.Invoke();
+    }
+
+    private void Tick(int ticks)
+    {
+        if (ticks != _holdTicks || _holdUntil is not { } until) return;
+        if (_now() < until)
+        {
+            HoldChanged?.Invoke();
+            _schedule(Second, () => Tick(ticks));
+            return;
+        }
+
+        _holdUntil = null;
+        _holdSightingLogged = false;
+        const string note = "Hangup watch back on";
+        _log?.Info(LogCategory, note);
+        HoldNotice?.Invoke(note);
+        HoldChanged?.Invoke();
+        // Whatever stood in the room through the minute is seen now.
+        EndSighting();
+        if (_classifier.Current is { } roster) OnEntitiesObserved(roster);
     }
 
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
-        if (FindHangupMonster(obs) is not { } seen)
+        if (obs.Source == RoomObservationSource.AlsoHere && obs.At != _displayAt)
         {
-            _answered = false;
-            _heldLogged = false;
+            _displayAt = obs.At;
+            EndSighting();
+        }
+
+        List<RoomEntity> hangups = HangupMonsters(obs);
+        if (hangups.Count == 0)
+        {
+            EndSighting();
             return;
         }
-        if (_answered) return;
+        // One that left and came back inside the same display is seen afresh.
+        _answered.IntersectWith(hangups.Select(e => e.MonsterNumber!.Value));
+        RoomEntity? unanswered = null;
+        foreach (RoomEntity e in hangups)
+        {
+            if (_answered.Contains(e.MonsterNumber!.Value)) continue;
+            unanswered = e;
+            break;
+        }
+        if (unanswered is not { } seen) return;
 
         string what = $"{seen.RawName} (#{seen.MonsterNumber})";
-        string where = _describeRoom();
 
-        if (_hangupsDisabled())
+        if (DropAwaited()) return;
+        if (_holdArmed || _holdUntil is not null)
         {
-            // Once per sighting: a fight in the room re-issues the roster every round.
-            if (_heldLogged) return;
-            _heldLogged = true;
-            Record($"{what} seen {where}: its relationship is Hangup, but Disable Hangups is on, so no hang-up");
+            // Once per hold: a fight in the room re-issues the roster every round.
+            if (_holdSightingLogged) return;
+            _holdSightingLogged = true;
+            Record($"{what} seen {_describeRoom()}: its relationship is Hangup, but the watch is off after the reconnect ({DescribeHold()})");
+            return;
+        }
+        if (_atBoardMenu())
+        {
+            Hold("menu", what, "the character is at the board's menu, not in the game");
             return;
         }
 
-        _answered = true;
-        Record($"{what} seen {where}: its relationship is Hangup, hanging up");
-        if (_hangUp($"{what} is here, relationship Hangup")) return;
+        EscapeOutcome outcome = _hangUp($"{what} is here, relationship Hangup");
+        switch (outcome)
+        {
+            case EscapeOutcome.HangupsDisabled:
+                Hold("disabled", what, "Disable Hangups is on, so no hang-up");
+                return;
+            case EscapeOutcome.AllOff:
+                Hold("all-off", what,
+                    "Auto-Heal and Auto-Rest are off and Allow hangup in all-off mode is not ticked, so no hang-up");
+                return;
+        }
 
-        // HealthManager has said why in its own line (no exit command is set).
-        LastSighting += "; the hang-up did not go out";
-        _log?.Warn(LogCategory, $"{what}: the hang-up did not go out");
+        foreach (RoomEntity e in hangups) _answered.Add(e.MonsterNumber!.Value);
+        _heldFor = null;
+        switch (outcome)
+        {
+            case EscapeOutcome.HungUp:
+                _hungUpAt = _now();
+                Record($"{what} seen {_describeRoom()}: its relationship is Hangup, hung up");
+                break;
+            case EscapeOutcome.Jumped:
+                Record($"{what} seen {_describeRoom()}: its relationship is Hangup, jumped to the wimpy location in place of the hang-up");
+                break;
+            default:
+                // HealthManager has said why in its own line (no exit command is set).
+                Record($"{what} seen {_describeRoom()}: its relationship is Hangup, but the hang-up did not go out");
+                _log?.Warn(LogCategory, $"{what}: the hang-up did not go out");
+                break;
+        }
     }
 
-    private RoomEntity? FindHangupMonster(RoomEntitiesObservation obs)
+    // Our exit command is on the wire and the line has not dropped yet: whatever
+    // the roster does in that moment sends nothing more.
+    private bool DropAwaited()
     {
+        if (_hungUpAt is not { } at) return false;
+        if (_now() - at < DropLimit) return true;
+        _hungUpAt = null;
+        _log?.Warn(LogCategory,
+            $"the line did not drop within {DropLimit.TotalSeconds:0}s of the hang-up: the watch is back on");
+        return false;
+    }
+
+    // Not answered and not latched: said once per sighting for each reason, since a
+    // fight in the room re-issues the roster every round.
+    private void Hold(string key, string what, string why)
+    {
+        if (_heldFor == key) return;
+        _heldFor = key;
+        Record($"{what} seen {_describeRoom()}: its relationship is Hangup, but {why}");
+    }
+
+    private void EndSighting()
+    {
+        _answered.Clear();
+        _heldFor = null;
+    }
+
+    private List<RoomEntity> HangupMonsters(RoomEntitiesObservation obs)
+    {
+        List<RoomEntity> found = new();
         foreach (RoomEntity e in obs.Entities)
         {
             if (e.Kind != EntityKind.Monster || e.MonsterNumber is not int number) continue;
-            if (RelationshipOf(number) == MonsterRelationship.Hangup) return e;
+            if (RelationshipOf(number) == MonsterRelationship.Hangup) found.Add(e);
         }
-        return null;
+        return found;
     }
 
+    // A record that can't be read (no active set, a malformed override file) is no
+    // instruction to hang up, and a throw here would stop the combat handlers queued
+    // behind this one. Said once: it would otherwise repeat on every roster.
     private MonsterRelationship? RelationshipOf(int number)
     {
         try { return _resolveOverlay(number)?.Relationship; }
-        catch
+        catch (Exception ex)
         {
-            // A record that can't be read (no active set, a malformed override
-            // file) is no instruction to hang up, and a throw here would stop the
-            // combat handlers queued behind this one.
+            if (!_unreadableWarned)
+            {
+                _unreadableWarned = true;
+                _log?.Warn(LogCategory,
+                    $"monster #{number}'s relationship could not be read ({ex.Message}); it is treated as not Hangup. Further failures are not logged");
+            }
             return null;
         }
     }

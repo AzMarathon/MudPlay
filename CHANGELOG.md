@@ -3,7 +3,9 @@
 ## 3.159.20
 
 - A monster set to **Hangup** (Game Data → the monster's record → Fighting it) now hangs the client up as soon as it is seen in the room
-- It is the Health tab's hang-up: Disable hangups stops it, and it is not dialled back
+- It is the Health tab's hang-up: Disable hangups stops it, it follows Allow hangup in all-off mode, and it is not dialled back
+- After reconnecting from such a hang-up the watch is off for a minute, counted down beside the status bar's connection light
+- The room's list of who is here no longer outlives a disconnect
 
 ## 3.159.19
 

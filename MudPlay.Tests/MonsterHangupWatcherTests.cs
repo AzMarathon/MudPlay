@@ -12,11 +12,13 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // MonsterHangupWatcher: a monster whose relationship is Hangup, on the room
-// roster, is answered with the health settings' hang-up, once per sighting.
+// roster, is answered with the health settings' hang-up, once per sighting, and
+// the watch is off for a minute after a reconnect that follows such a hang-up.
 public sealed class MonsterHangupWatcherTests
 {
     private const int Ogre = 7;
     private const int Rat = 8;
+    private const int Troll = 9;
 
     private sealed class Harness : IDisposable
     {
@@ -28,28 +30,42 @@ public sealed class MonsterHangupWatcherTests
         public MonsterHangupWatcher Watcher { get; }
 
         public Dictionary<int, MonsterRelationship> Relationships { get; } = new();
-        public bool HangupsDisabled { get; set; }
         public bool OverlayUnreadable { get; set; }
-        public bool HangUpWorks { get; set; } = true;
+        public bool AtBoardMenu { get; set; }
+
+        // What HealthManager.HangUpForMonster answers. Jumped by default: an
+        // escape that went out and left the session up, so a test of sightings is
+        // not also a test of the drop that follows a hang-up.
+        public EscapeOutcome Outcome { get; set; } = EscapeOutcome.Jumped;
         public List<string> HangUps { get; } = new();
+
+        public DateTimeOffset Clock { get; set; } = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
+        public List<Action> Scheduled { get; } = new();
+        public List<string> Notices { get; } = new();
+        public int HoldChanges { get; private set; }
         public List<LogEntry> Logged { get; } = new();
 
-        public Harness(Func<string, bool>? hangUp = null, Func<bool>? hangupsDisabled = null)
+        public Harness(Func<string, EscapeOutcome>? hangUp = null)
         {
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, new PlayerDatabase(), Log);
             Watcher = new MonsterHangupWatcher(
                 Classifier,
                 resolveOverlay: ResolveOverlay,
-                hangupsDisabled: hangupsDisabled ?? (() => HangupsDisabled),
-                hangUp: hangUp ?? (reason => { HangUps.Add(reason); return HangUpWorks; }),
+                hangUp: hangUp ?? (reason => { HangUps.Add(reason); return Outcome; }),
+                atBoardMenu: () => AtBoardMenu,
                 describeRoom: () => "in Town Square (1/5)",
-                log: Log);
+                schedule: (_, callback) => Scheduled.Add(callback),
+                log: Log,
+                now: () => Clock);
+            Watcher.HoldNotice += Notices.Add;
+            Watcher.HoldChanged += () => HoldChanges++;
             Arrivals = new RoomEntryWatcher(Router, Classifier, Log);
             Log.EntryAdded += Logged.Add;
 
             AddMonster(Ogre, "ogre");
             AddMonster(Rat, "giant rat");
+            AddMonster(Troll, "troll");
         }
 
         private MonsterOverlay ResolveOverlay(int number)
@@ -67,8 +83,34 @@ public sealed class MonsterHangupWatcherTests
         public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
             line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
 
+        // One second passes and the countdown's timer fires.
+        public void Tick(int seconds = 1)
+        {
+            for (int i = 0; i < seconds; i++)
+            {
+                Clock += TimeSpan.FromSeconds(1);
+                List<Action> due = new(Scheduled);
+                Scheduled.Clear();
+                foreach (Action callback in due) callback();
+            }
+        }
+
+        // The watcher hangs up for the ogre, and the line drops for it.
+        public void HangUpAndDrop()
+        {
+            Outcome = EscapeOutcome.HungUp;
+            Relationships[Ogre] = MonsterRelationship.Hangup;
+            Feed("Also here: ogre.");
+            Classifier.NoteConnectionLost();
+            Watcher.NoteDisconnected();
+        }
+
         public IEnumerable<string> InfoLines =>
             Logged.Where(e => e.Source == MonsterHangupWatcher.LogCategory && e.Severity == LogSeverity.Info)
+                  .Select(e => e.Message);
+
+        public IEnumerable<string> WarnLines =>
+            Logged.Where(e => e.Source == MonsterHangupWatcher.LogCategory && e.Severity == LogSeverity.Warn)
                   .Select(e => e.Message);
 
         public void Dispose()
@@ -79,21 +121,20 @@ public sealed class MonsterHangupWatcherTests
         }
     }
 
-    // ----- what is a sighting -------------------------------------------
+    // ----- what is seen --------------------------------------------------
 
     [Fact]
     public void HangupMonsterOnTheRoomDisplay_HangsUp_AndSaysWhichAndWhere()
     {
-        using Harness h = new();
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp };
         h.Relationships[Ogre] = MonsterRelationship.Hangup;
 
         h.Feed("Also here: giant rat, ogre.");
 
         Assert.Equal("ogre (#7) is here, relationship Hangup", Assert.Single(h.HangUps));
         string line = Assert.Single(h.InfoLines);
-        Assert.Contains("ogre (#7)", line);
-        Assert.Contains("in Town Square (1/5)", line);
-        Assert.Contains("hanging up", line);
+        Assert.Contains("ogre (#7) seen in Town Square (1/5)", line);
+        Assert.Contains("hung up", line);
         Assert.Contains("ogre (#7) seen in Town Square (1/5)", h.Watcher.LastSighting);
     }
 
@@ -159,38 +200,84 @@ public sealed class MonsterHangupWatcherTests
         using Harness h = new();
         h.Relationships[Ogre] = MonsterRelationship.Hangup;
 
-        h.Feed("Also here: troll.");
+        h.Feed("Also here: gorgon.");
 
         Assert.Empty(h.HangUps);
     }
 
     [Fact]
-    public void AnOverlayThatCannotBeRead_DrawsNothing()
+    public void AnOverlayThatCannotBeRead_DrawsNothing_AndIsSaidOnce()
     {
         using Harness h = new() { OverlayUnreadable = true };
         h.Relationships[Ogre] = MonsterRelationship.Hangup;
 
         h.Feed("Also here: ogre.");
+        h.Feed("Also here: ogre, giant rat.");
 
         Assert.Empty(h.HangUps);
+        Assert.Contains("could not be read", Assert.Single(h.WarnLines));
     }
 
     // ----- once per sighting --------------------------------------------
 
     [Fact]
-    public void OneHangUpPerSighting_WhateverReissuesTheRoster()
+    public void OneAnswerPerRoomDisplay_WhateverReissuesItsRoster()
     {
         using Harness h = new();
         h.Relationships[Ogre] = MonsterRelationship.Hangup;
 
         h.Feed("Also here: giant rat, ogre.");
         h.Classifier.ReemitCurrent();
-        h.Feed("Also here: giant rat, ogre.");
         h.Feed("A giant rat scurries into the room from north.");
         h.Classifier.RemoveDeadEntity("giant rat");
+        h.Classifier.ReemitCurrent();
 
         Assert.Single(h.HangUps);
         Assert.Single(h.InfoLines);
+    }
+
+    // The next room's roster replaces this one's with no empty roster between
+    // (its "Also here:" line is read before the move is confirmed), and an escape
+    // that left the session up has to be asked for again there.
+    [Fact]
+    public void TheNextRoomsDisplay_IsANewSighting_WithNoEmptyRosterBetween()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Equal(2, h.HangUps.Count);
+    }
+
+    [Fact]
+    public void TwoHangupMonsters_OneDying_IsStillTheSameSighting()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Hangup;
+
+        h.Feed("Also here: ogre, troll.");
+        h.Classifier.RemoveDeadEntity("ogre");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Equal("ogre (#7) is here, relationship Hangup", Assert.Single(h.HangUps));
+    }
+
+    [Fact]
+    public void AHangupMonsterThatWasNotThereWhenAnswered_IsAnswered()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Feed("A troll lumbers into the room from north.");
+
+        Assert.Equal(2, h.HangUps.Count);
+        Assert.StartsWith("troll (#9)", h.HangUps[1]);
     }
 
     [Fact]
@@ -198,88 +285,320 @@ public sealed class MonsterHangupWatcherTests
     {
         using Harness h = new();
         h.Relationships[Ogre] = MonsterRelationship.Hangup;
-        h.Feed("Also here: ogre.");
+        h.Feed("Also here: giant rat, ogre.");
 
-        h.Classifier.NoteRoomChanged();
-        h.Feed("Also here: ogre.");
-
-        Assert.Equal(2, h.HangUps.Count);
-    }
-
-    // The roster outlives a dropped connection, so the drop itself has to end the
-    // sighting: back in the same room with the same monster, it is seen afresh.
-    [Fact]
-    public void AfterADisconnect_TheSameMonsterIsANewSighting()
-    {
-        using Harness h = new();
-        h.Relationships[Ogre] = MonsterRelationship.Hangup;
-        h.Feed("Also here: ogre.");
-        h.Feed("Also here: ogre.");
-        Assert.Single(h.HangUps);
-
-        h.Watcher.NoteDisconnected();
-        h.Feed("Also here: ogre.");
+        h.Classifier.RemoveDepartedEntity("ogre");
+        h.Feed("An ogre stomps into the room from southeast.");
 
         Assert.Equal(2, h.HangUps.Count);
     }
-
-    // ----- Disable Hangups ----------------------------------------------
-
-    [Fact]
-    public void DisableHangups_NoHangUp_SaidOncePerSighting()
-    {
-        using Harness h = new() { HangupsDisabled = true };
-        h.Relationships[Ogre] = MonsterRelationship.Hangup;
-
-        h.Feed("Also here: ogre.");
-        h.Feed("Also here: ogre.");
-
-        Assert.Empty(h.HangUps);
-        string line = Assert.Single(h.InfoLines);
-        Assert.Contains("ogre (#7)", line);
-        Assert.Contains("in Town Square (1/5)", line);
-        Assert.Contains("Disable Hangups is on", line);
-        Assert.Contains("Disable Hangups is on", h.Watcher.LastSighting);
-    }
-
-    [Fact]
-    public void DisableHangupsTurnedOff_TheNextRosterIsAnswered()
-    {
-        using Harness h = new() { HangupsDisabled = true };
-        h.Relationships[Ogre] = MonsterRelationship.Hangup;
-        h.Feed("Also here: ogre.");
-
-        h.HangupsDisabled = false;
-        h.Feed("Also here: ogre.");
-
-        Assert.Single(h.HangUps);
-    }
-
-    // ----- the hang-up itself -------------------------------------------
 
     [Fact]
     public void AHangUpThatDidNotGoOut_IsSaid_AndNotRetriedThisSighting()
     {
-        using Harness h = new() { HangUpWorks = false };
+        using Harness h = new() { Outcome = EscapeOutcome.NotSent };
         h.Relationships[Ogre] = MonsterRelationship.Hangup;
 
         h.Feed("Also here: ogre.");
-        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
 
         Assert.Single(h.HangUps);
         Assert.Contains("did not go out", h.Watcher.LastSighting);
-        Assert.Contains(h.Logged, e =>
-            e.Source == MonsterHangupWatcher.LogCategory && e.Severity == LogSeverity.Warn);
+        Assert.Single(h.WarnLines);
     }
 
-    // The whole path: the sight sends the exit command through HealthManager, the
-    // penalty line is asked for after it, and Disable Hangups stops both.
-    [Theory]
-    [InlineData(false, 1)]
-    [InlineData(true, 0)]
-    public void SightGoesThroughTheHealthHangUp_UnlessHangupsAreDisabled(bool disabled, int expected)
+    // ----- while the line is dropping -----------------------------------
+
+    [Fact]
+    public void WhileTheLineIsDropping_NothingMoreIsSent()
     {
-        GeneralSettings general = new() { DisableHangups = disabled };
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Feed("A troll lumbers into the room from north.");
+        h.Feed("Also here: ogre, troll.");
+
+        Assert.Single(h.HangUps);
+    }
+
+    // The client closes the line itself, so this is the hang-up that did not
+    // take: the watch cannot stay off for good on the strength of it.
+    [Fact]
+    public void AHangUpWithNoDropAfterIt_PutsTheWatchBackOn()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Clock += TimeSpan.FromSeconds(11);
+        h.Feed("Also here: ogre.");
+
+        Assert.Equal(2, h.HangUps.Count);
+        Assert.Contains("did not drop", Assert.Single(h.WarnLines));
+    }
+
+    // ----- a dropped connection -----------------------------------------
+
+    // The roster used to outlive the link, and anything that re-issued it while
+    // offline or at the login (the Auto-Combat toggle, a PvP fight ending) was
+    // read as the monster seen again.
+    [Fact]
+    public void AfterOurHangUpDropsTheLine_AReissuedRosterSendsNothing()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Watcher.NoteDisconnected();
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.HangUps);
+    }
+
+    [Fact]
+    public void NothingIsSeenWhileDisconnected()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HangupsDisabled };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+        h.HangUps.Clear();
+
+        h.Classifier.NoteConnectionLost();
+        h.Watcher.NoteDisconnected();
+        h.Outcome = EscapeOutcome.HungUp;
+        h.Classifier.ReemitCurrent();
+
+        Assert.Null(h.Classifier.Current);
+        Assert.Empty(h.HangUps);
+    }
+
+    // The monster left while we were away and the room is empty, so no "Also
+    // here:" line rebuilds the roster: the first arrival must not be added to it.
+    [Fact]
+    public void AnArrivalAfterTheReconnect_IsNotAddedToTheOldRoster()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HangupsDisabled };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+        h.HangUps.Clear();
+
+        h.Classifier.NoteConnectionLost();
+        h.Watcher.NoteDisconnected();
+        h.Outcome = EscapeOutcome.HungUp;
+        h.Feed("A giant rat scurries into the room from north.");
+
+        Assert.Equal("giant rat", Assert.Single(h.Classifier.Current!.Value.Entities).ResolvedName);
+        Assert.Empty(h.HangUps);
+    }
+
+    // ----- the minute after a reconnect ---------------------------------
+
+    [Fact]
+    public void AfterReconnecting_TheWatchIsOffForAMinute_FromTheFirstGamePrompt()
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+        Assert.Equal("watch off: the minute starts at the first game prompt after the reconnect", h.Watcher.DescribeHold());
+        Assert.Null(h.Watcher.HoldText);
+
+        // Back in the same room, the monster still there: the room is displayed
+        // ahead of the first prompt.
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+        Assert.Single(h.HangUps);
+        Assert.Single(h.InfoLines, line => line.Contains("the watch is off after the reconnect"));
+
+        h.Clock += TimeSpan.FromMinutes(5);   // however long the login took
+        h.Watcher.NoteInGamePrompt();
+        Assert.Equal("Hangup watch off 1:00", h.Watcher.HoldText);
+        Assert.Equal(60, h.Watcher.HoldSecondsLeft);
+        Assert.Contains("Hangup watch off for 60 seconds", Assert.Single(h.Notices));
+        Assert.Equal(1, h.HoldChanges);
+
+        h.Tick();
+        Assert.Equal("Hangup watch off 0:59", h.Watcher.HoldText);
+        Assert.Equal("watch off, 59s left", h.Watcher.DescribeHold());
+        Assert.Equal(2, h.HoldChanges);
+
+        h.Feed("Also here: ogre.");
+        h.Tick(58);
+        Assert.Equal("Hangup watch off 0:01", h.Watcher.HoldText);
+        Assert.Single(h.HangUps);
+    }
+
+    [Fact]
+    public void WhenTheMinuteEnds_AMonsterStillThereIsAnswered()
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+        h.Feed("Also here: ogre.");
+        h.Watcher.NoteInGamePrompt();
+
+        h.Tick(60);
+
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Equal("none", h.Watcher.DescribeHold());
+        Assert.Equal(new[] { "Hangup watch back on" }, h.Notices.Skip(1));
+        Assert.Equal(2, h.HangUps.Count);
+        Assert.Empty(h.Scheduled);
+    }
+
+    [Fact]
+    public void WhenTheMinuteEnds_AnEmptyRoomSendsNothing()
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+        h.Watcher.NoteInGamePrompt();
+
+        h.Tick(60);
+
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Single(h.HangUps);
+    }
+
+    // A second hang-up and reconnect starts a minute of its own.
+    [Fact]
+    public void EachHangUpAndReconnect_StartsItsOwnMinute()
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+        h.Feed("Also here: ogre.");
+        h.Watcher.NoteInGamePrompt();
+        h.Tick(60);
+        Assert.Equal(2, h.HangUps.Count);
+
+        h.Classifier.NoteConnectionLost();
+        h.Watcher.NoteDisconnected();
+        h.Feed("Also here: ogre.");
+        h.Watcher.NoteInGamePrompt();
+
+        Assert.Equal("Hangup watch off 1:00", h.Watcher.HoldText);
+        Assert.Equal(2, h.HangUps.Count);
+    }
+
+    // A prompt between the exit command and the drop is not the reconnect.
+    [Fact]
+    public void APromptBeforeTheLineDrops_DoesNotStartTheMinute()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Watcher.NoteInGamePrompt();
+
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Empty(h.Notices);
+    }
+
+    [Theory]
+    [InlineData(EscapeOutcome.Jumped)]
+    [InlineData(EscapeOutcome.NotSent)]
+    [InlineData(EscapeOutcome.HangupsDisabled)]
+    public void ADropThatWasNotOurHangUp_TurnsNothingOff(EscapeOutcome outcome)
+    {
+        using Harness h = new() { Outcome = outcome };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+        h.HangUps.Clear();
+
+        h.Classifier.NoteConnectionLost();
+        h.Watcher.NoteDisconnected();
+        h.Watcher.NoteInGamePrompt();
+        h.Outcome = EscapeOutcome.HungUp;
+        h.Feed("Also here: ogre.");
+
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Equal("none", h.Watcher.DescribeHold());
+        Assert.Single(h.HangUps);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnotherCharacter_HasNoHold_AndNoLastSighting(bool minuteRunning)
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+        if (minuteRunning) h.Watcher.NoteInGamePrompt();
+        int changes = h.HoldChanges;
+
+        h.Watcher.Reset();
+
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Equal("none", h.Watcher.DescribeHold());
+        Assert.Equal("(none this session)", h.Watcher.LastSighting);
+        Assert.Equal(minuteRunning ? changes + 1 : changes, h.HoldChanges);
+
+        // The old minute's timer has nothing left to do, and the next prompt
+        // starts none.
+        h.Tick(60);
+        h.Watcher.NoteInGamePrompt();
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Equal(minuteRunning ? 1 : 0, h.Notices.Count);
+
+        h.Feed("Also here: ogre.");
+        Assert.Equal(2, h.HangUps.Count);
+    }
+
+    // ----- what stops it -------------------------------------------------
+
+    [Theory]
+    [InlineData(EscapeOutcome.HangupsDisabled, "Disable Hangups is on")]
+    [InlineData(EscapeOutcome.AllOff, "Allow hangup in all-off mode is not ticked")]
+    public void HeldByASwitch_SaidOncePerSighting_AndAnsweredOnceItIsLifted(EscapeOutcome held, string why)
+    {
+        using Harness h = new() { Outcome = held };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+        h.Feed("A giant rat scurries into the room from north.");
+
+        string line = Assert.Single(h.InfoLines);
+        Assert.Contains("ogre (#7) seen in Town Square (1/5)", line);
+        Assert.Contains(why, line);
+        Assert.Contains(why, h.Watcher.LastSighting);
+
+        h.HangUps.Clear();
+        h.Outcome = EscapeOutcome.HungUp;
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.HangUps);
+        Assert.Contains("hung up", h.InfoLines.Last());
+    }
+
+    // At the board's menu the exit command would be a menu selection.
+    [Fact]
+    public void AtTheBoardsMenu_NothingIsAskedFor()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HangupsDisabled };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+        h.HangUps.Clear();
+
+        h.AtBoardMenu = true;
+        h.Outcome = EscapeOutcome.HungUp;
+        h.Classifier.ReemitCurrent();
+        h.Classifier.ReemitCurrent();
+
+        Assert.Empty(h.HangUps);
+        Assert.Single(h.InfoLines, line => line.Contains("board's menu"));
+    }
+
+    // The whole path through HealthManager: the exit command, the carrier drop and
+    // the penalty line after it, and the two switches that stop the low-HP hang-up
+    // stopping this one.
+    [Theory]
+    [InlineData(true, false, false, 1)]    // an Auto on
+    [InlineData(true, true, false, 0)]     // Disable Hangups
+    [InlineData(false, false, false, 0)]   // all off
+    [InlineData(false, false, true, 1)]    // all off, Allow hangup in all-off mode
+    [InlineData(false, true, true, 0)]     // Disable Hangups outranks it
+    public void SightGoesThroughTheHealthHangUp(bool healthEngineOn, bool hangupsDisabled, bool allowInAllOff, int expected)
+    {
+        GeneralSettings general = new() { DisableHangups = hangupsDisabled, AllowHangupInAllOffMode = allowInAllOff };
         LogService log = new();
         List<string> wire = new();
         List<bool> penaltyAsked = new();
@@ -288,7 +607,7 @@ public sealed class MonsterHangupWatcherTests
         using HealthManager health = new(
             new PlayerState(), new MovementCoordinator(log),
             readSettings: () => new HealthSettings(),
-            isEnabled: () => false,
+            isEnabled: () => healthEngineOn,
             readHangupCommand: () => "=x",
             getActiveMovementEngine: null,
             getLastSentDirection: null,
@@ -304,16 +623,16 @@ public sealed class MonsterHangupWatcherTests
             Assert.Contains("=x", wire);
             penaltyAsked.Add(pvp);
         });
-        using Harness h = new(hangUp: health.HangUpForMonster, hangupsDisabled: () => general.DisableHangups);
+        using Harness h = new(hangUp: health.HangUpForMonster);
         h.Relationships[Ogre] = MonsterRelationship.Hangup;
 
         h.Feed("Also here: ogre.");
-        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
 
         Assert.Equal(expected, wire.Count(w => w == "=x"));
         Assert.Equal(expected, carrierDrops);
         Assert.Equal(expected, penaltyAsked.Count);
         Assert.DoesNotContain(true, penaltyAsked);
-        Assert.Equal(!disabled, signal.PeekForTests().DisconnectExpected);
+        Assert.Equal(expected == 1, signal.PeekForTests().DisconnectExpected);
     }
 }
