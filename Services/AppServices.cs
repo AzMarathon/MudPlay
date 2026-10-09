@@ -2073,6 +2073,11 @@ public sealed class AppServices
     // GameDataCache.ActiveSetChanged.
     public RoomBuffStripIndex RoomBuffStrip { get; private set; } = null!;
 
+    // The active set's room-entry spells classed by whether they teleport. Feeds
+    // the Navigation map's by-teleport overlay; rebuilt on
+    // GameDataCache.ActiveSetChanged.
+    public RoomSpellTeleportIndex RoomSpellTeleports { get; private set; } = null!;
+
     // Active fulfiller for NeedKind.PathItem needs no shop can
     // satisfy: on a one-shot walk-to that needs an uncarried item no shop
     // sells, prompts to reroute to the nearest room a monster that drops it
@@ -3763,6 +3768,14 @@ public sealed class AppServices
         GameData.ActiveSetChanged += RoomBuffStrip.OnActiveSetChanged;
         if (GameData.ActiveSet is not null)
             RoomBuffStrip.OnActiveSetChanged(GameData.ActiveSet);
+
+        // RoomSpellTeleportIndex — room-entry Spell → teleports / may / doesn't, for
+        // the map's by-teleport overlay. Subscribed after TBInfo and RoomGraph above:
+        // it reads the set's rooms and textblocks through them.
+        RoomSpellTeleports = new RoomSpellTeleportIndex(GameData, RoomGraph, SpellCatalog, TBInfo, Log);
+        GameData.ActiveSetChanged += RoomSpellTeleports.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            RoomSpellTeleports.OnActiveSetChanged(GameData.ActiveSet);
 
         // Room tracker. Resets to Unknown on every
         // graph reload because per-room references are invalidated

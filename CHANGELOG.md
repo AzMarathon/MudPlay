@@ -1,5 +1,10 @@
 # Version history
 
+## 3.160.1
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
+- In that mode the room tooltip and the Legend name the colours
+
 ## 3.160.0
 
 - Items a hang-up penalty dropped are picked up on re-entering the game
