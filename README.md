@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.20**
-> - Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you, yellow when it may, green when it doesn't
-> - In that mode the room tooltip and the Legend name the three
+> **Version 3.159.22**
+> - Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you outright or on a random roll, yellow when it does so only under a condition (an item, your class or level, an empty room), green when it doesn't
+> - In that mode the room tooltip and the Legend name the colours
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

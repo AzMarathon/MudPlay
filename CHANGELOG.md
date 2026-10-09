@@ -1,9 +1,18 @@
 # Version history
 
+## 3.159.22
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you outright or on a random roll, yellow when it does so only under a condition (an item, your class or level, an empty room), green when it doesn't
+- In that mode the room tooltip and the Legend name the colours
+
+## 3.159.21
+
+- The inventory is read again after a death, so gear handed back afterwards can be put on with a gear set (it used to read as already worn until you typed `i`)
+- bug reports addressed: paradigm-20261009-105244
+
 ## 3.159.20
 
-- Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you, yellow when it may, green when it doesn't
-- In that mode the room tooltip and the Legend name the three
+- A buff is no longer recast because the game refused something you typed in the same round (`You have already cast a spell this round!` answering your own `use` or cast, not the client's)
 
 ## 3.159.19
 

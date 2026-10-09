@@ -592,6 +592,9 @@ public sealed class AppServices
 
     // Recognises an @where reply telepath and flashes its room on the nav map.
     public Game.Remote.WhereReplyTracker WhereReply { get; private set; } = null!;
+
+    // Sends one `i` after a death, when the character stands in a room again.
+    public Game.Inventory.PostDeathInventoryRefresh InventoryAfterDeath { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
@@ -8156,6 +8159,23 @@ public sealed class AppServices
         // its next server line. Wired here (not in PlayerDeathMovementHalt, whose
         // concern is the movement engines) since the reset spans all conditions.
         RoomTracker.PlayerDeathObserved += () => Conditions.ClearAll("death");
+
+        // The death record has taken its copy of the pile by the time this is raised,
+        // so the inventory record can be marked stale here and re-read at the graveyard.
+        InventoryAfterDeath = new Game.Inventory.PostDeathInventoryRefresh(
+            markStale: Inventory.MarkStale,
+            requestInventory: () =>
+            {
+                Log.Info(Game.Inventory.InventoryManager.LogCategory,
+                    "Re-reading the inventory after a death: what was worn and carried went with the pile.");
+                SendGameCommand("i");
+            });
+        RoomTracker.PlayerDeathObserved += InventoryAfterDeath.OnDeath;
+        RoomTracker.StateChanged += _ =>
+        {
+            if (RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
+        };
+        Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
 
         // A held or knocked-down character can't walk and isn't dragged by a leader,
         // so a move that lands proves a latched hold is stale (its wear-off line was
