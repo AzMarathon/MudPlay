@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 using MudPlay.Terminal;
@@ -45,10 +46,22 @@ public sealed class AutoDiscardManagerTests
         public void Map(string name, int number, bool discard, int keep = 0)
             => _map[name] = (number, discard, keep);
 
+        // Like the live resolver, reads past a stack's leading count ("3 moonstone").
         private AutoDiscardManager.ResolvedDiscard? Resolve(string entry)
-            => _map.TryGetValue(entry.Trim(), out (int Number, bool Discard, int Keep) v)
-                ? new AutoDiscardManager.ResolvedDiscard(v.Number, entry.Trim(), v.Discard, v.Keep)
+        {
+            string name = CountedCommand.SplitLeadingCount(entry.Trim()).Name;
+            return _map.TryGetValue(name, out (int Number, bool Discard, int Keep) v)
+                ? new AutoDiscardManager.ResolvedDiscard(v.Number, name, v.Discard, v.Keep)
                 : null;
+        }
+
+        // The game's "You hid …" as both listeners see it: the router line, and the
+        // transaction-history forwarder asking whether the hide was a discard.
+        public bool Hid(string token)
+        {
+            Feed($"You hid {token}.");
+            return Discard.TryConsumeSuppressedHide(token);
+        }
 
         public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
             line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
@@ -286,16 +299,33 @@ public sealed class AutoDiscardManagerTests
 
     // ----- discards sent by hand (Chest Offload's Drop buttons) ----------
 
+    private static readonly RoomKey RoomA = new(1, 100);
+    private static readonly RoomKey RoomB = new(1, 101);
+    private static readonly RoomKey RoomC = new(1, 102);
+
+    // Hide mode on, standing in RoomA, carrying `copies` moonstones that are not
+    // flagged for auto-discard (chest loot never is).
+    private static Harness HidingMoonstones(int copies)
+    {
+        Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("moonstone", 7, discard: false);
+        for (int i = 0; i < copies; i++) h.Carried.Add("moonstone");
+        h.Discard.OnRoomEntered(RoomA);
+        return h;
+    }
+
     [Fact]
     public void EmitDiscard_DropMode_SendsDropPerCopy()
     {
         using Harness h = new();   // HideMode defaults off
         h.Map("moonstone", 7, discard: false);
+        h.Carried.AddRange(new[] { "moonstone", "moonstone" });
         List<string> sent = new();
 
-        string verb = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
+        (string verb, int count) = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
 
-        Assert.Equal("drop", verb);
+        Assert.Equal(("drop", 2), (verb, count));
         Assert.Equal(new[] { "drop moonstone", "drop moonstone" }, sent);
         Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
     }
@@ -307,15 +337,13 @@ public sealed class AutoDiscardManagerTests
         // "Hide items when discarding" ticked. Chest loot isn't flagged for
         // auto-discard, and the engine's own switch can be off: neither is part of
         // the hide-or-drop choice.
-        using Harness h = new();
+        using Harness h = HidingMoonstones(2);
         h.Enabled = false;
-        h.Discard.HideMode = true;
-        h.Map("moonstone", 7, discard: false);
         List<string> sent = new();
 
-        string verb = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
+        (string verb, int count) = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
 
-        Assert.Equal("hide", verb);
+        Assert.Equal(("hide", 2), (verb, count));
         Assert.Equal(new[] { "hide moonstone", "hide moonstone" }, sent);
         Assert.Empty(h.Sent);   // nothing goes out on the engine's own sender
     }
@@ -327,25 +355,14 @@ public sealed class AutoDiscardManagerTests
         h.Paradigm = true;
         h.Discard.HideMode = true;
         h.Map("moonstone", 7, discard: false);
+        h.Carried.Add("3 moonstone");   // an `i` lists the stack as one counted entry
         List<string> sent = new();
 
         h.Discard.EmitDiscard(sent.Add, "moonstone", 3);
 
         Assert.Equal(new[] { "hide 3 moonstone" }, sent);
-    }
-
-    [Fact]
-    public void EmitDiscard_HideMode_KeepsItsHidesOutOfTheStashLedger()
-    {
-        using Harness h = new();
-        h.Paradigm = true;
-        h.Discard.HideMode = true;
-        h.Map("moonstone", 7, discard: false);
-
-        h.Discard.EmitDiscard(_ => { }, "moonstone", 3);
-
         // Paradigm confirms the pile in one counted line; it claims all three.
-        Assert.True(h.Discard.TryConsumeSuppressedHide("3 moonstone"));
+        Assert.True(h.Hid("3 moonstone"));
         Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
     }
 
@@ -353,41 +370,316 @@ public sealed class AutoDiscardManagerTests
     public void EmitDiscard_NoName_SendsNothing()
     {
         // A bare `hide` would hide the character.
-        using Harness h = new();
-        h.Discard.HideMode = true;
+        using Harness h = HidingMoonstones(1);
         List<string> sent = new();
 
-        h.Discard.EmitDiscard(sent.Add, " ", 1);
-
+        Assert.Equal(0, h.Discard.EmitDiscard(sent.Add, " ", 1).Sent);
         Assert.Empty(sent);
     }
 
+    // Stock answers a hide for an item that isn't held with nothing at all, and the
+    // line is then taken for speech. So a second Drop before the first is answered,
+    // or a Drop for more copies than are carried, must not reach the wire.
     [Fact]
-    public void RefusedHide_ReleasesItsLedgerClaim_AndIsAnnounced()
+    public void EmitDiscard_SecondPressBeforeTheAnswer_SendsNothing()
+    {
+        using Harness h = HidingMoonstones(2);
+        List<string> sent = new();
+
+        Assert.Equal(2, h.Discard.EmitDiscard(sent.Add, "moonstone", 2).Sent);
+        Assert.Equal(0, h.Discard.EmitDiscard(sent.Add, "moonstone", 2).Sent);
+
+        Assert.Equal(2, sent.Count);
+    }
+
+    [Fact]
+    public void EmitDiscard_SendsOnlyForCopiesCarried()
+    {
+        using Harness h = HidingMoonstones(1);
+        List<string> sent = new();
+
+        Assert.Equal(1, h.Discard.EmitDiscard(sent.Add, "moonstone", 3).Sent);
+
+        h.Hid("moonstone");
+        h.Carried.Clear();
+        Assert.Equal(0, h.Discard.EmitDiscard(sent.Add, "moonstone", 3).Sent);
+        Assert.Equal(new[] { "hide moonstone" }, sent);
+    }
+
+    // A repeated drop only earns the game's private "You don't have X to drop!",
+    // so a by-hand drop is not counted and a room that refused one doesn't block
+    // the next press.
+    [Fact]
+    public void EmitDiscard_DropMode_ARepeatIsNotHeldBack()
     {
         using Harness h = new();
-        h.Discard.HideMode = true;
         h.Map("moonstone", 7, discard: false);
+        h.Carried.Add("moonstone");
+        List<string> sent = new();
+
+        h.Discard.EmitDiscard(sent.Add, "moonstone", 1);
+        h.Feed("There is no room to drop moonstone here.");
+        h.Discard.EmitDiscard(sent.Add, "moonstone", 1);
+
+        Assert.Equal(new[] { "drop moonstone", "drop moonstone" }, sent);
+    }
+
+    // ----- a hide the room has no room for ---------------------------------
+
+    [Fact]
+    public void StockPartial_TwoHidden_OneRefused_HoldsOne_NoLedgerResidue()
+    {
+        using Harness h = HidingMoonstones(3);
         List<string> refused = new();
         h.Discard.HideRefused += refused.Add;
 
-        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 3);
+        Assert.True(h.Hid("moonstone"));
+        Assert.True(h.Hid("moonstone"));
+        h.Carried.RemoveRange(0, 2);
         h.Feed("There is no room to hide moonstone here.");
 
         Assert.Equal(new[] { "moonstone" }, refused);
-        // The hide never happened, so a later stash of the item still records.
+        Assert.Equal(1, h.Discard.HeldFor("moonstone"));
+        Assert.Equal(0, h.Discard.UnansweredHides);
+        // The refused hide's ledger claim went with it: a stash of the item now
+        // would still record.
         Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
+        // The held copy is spoken for: another press in this room sends nothing.
+        Assert.Equal(0, h.Discard.EmitDiscard(_ => { }, "moonstone", 1).Sent);
+    }
+
+    [Fact]
+    public void RefusedHide_IsSentAgainOnceInTheNextRoom_AndSettlesWhenItLands()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+        Assert.Empty(h.Sent);
+
+        h.Discard.OnRoomEntered(RoomB);
+        h.Discard.OnRoomEntered(RoomB);   // the room shown again
+
+        Assert.Equal(new[] { "hide moonstone" }, h.SentText);
+        Assert.Equal(0, h.Discard.HeldFor("moonstone"));
+        Assert.Equal(1, h.Discard.UnansweredHides);
+
+        // It lands: still a discard to the ledger, and nothing is left counted.
+        Assert.True(h.Hid("moonstone"));
+        h.Carried.Clear();
+        Assert.Equal(0, h.Discard.UnansweredHides);
+        Assert.Empty(h.Discard.HeldHides);
+        Assert.Contains(h.Log.Snapshot(), e => e.Message.Contains("held hide of moonstone landed"));
+    }
+
+    [Fact]
+    public void HeldHide_RefusedAgain_WaitsForTheRoomAfter()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Discard.OnRoomEntered(RoomB);
+        h.Feed("There is no room to hide moonstone here.");
+        Assert.Equal(1, h.Discard.HeldFor("moonstone"));
+        Assert.Single(h.Sent);            // one try per room
+
+        h.Discard.OnRoomEntered(RoomC);
+        Assert.Equal(2, h.Sent.Count);
+    }
+
+    [Fact]
+    public void HeldHide_IsNotRetriedOnARedisplayOfTheSameRoom()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Discard.OnRoomEntered(RoomA);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(1, h.Discard.HeldFor("moonstone"));
+    }
+
+    [Fact]
+    public void HeldHide_NoLongerCarried_IsForgotten()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Carried.Clear();   // sold, dropped or given away meanwhile
+        h.Discard.OnRoomEntered(RoomB);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(0, h.Discard.HeldFor("moonstone"));
+    }
+
+    [Fact]
+    public void RefusalOfAHideNeverRegistered_HoldsNothing_AndLeavesAnotherItemsClaimAlone()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Map("ruby", 8, discard: false);
+        h.Carried.Add("ruby");
+        List<string> refused = new();
+        h.Discard.HideRefused += refused.Add;
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+
+        h.Feed("There is no room to hide ruby here.");   // a typed hide, or Hide All's
+
+        Assert.Empty(refused);
+        Assert.Equal(0, h.Discard.HeldFor("ruby"));
+        Assert.Equal(1, h.Discard.UnansweredHides);
+        Assert.True(h.Discard.TryConsumeSuppressedHide("moonstone"));
+    }
+
+    [Fact]
+    public void HeldHide_WaitsOutARoombaSweep()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        bool sweeping = true;
+        h.Discard.SuppressDuringSweep = () => sweeping;
+        h.Discard.OnRoomEntered(RoomB);
+        Assert.Empty(h.Sent);
+        Assert.Equal(1, h.Discard.HeldFor("moonstone"));
+
+        sweeping = false;
+        h.Discard.OnRoomEntered(RoomC);
+        Assert.Equal(new[] { "hide moonstone" }, h.SentText);
+    }
+
+    [Fact]
+    public void HeldHides_GoOutThroughThePacer_WhenOneIsBound()
+    {
+        using Harness h = HidingMoonstones(2);
+        List<IReadOnlyList<string>> batches = new();
+        h.Discard.PacedSender = batches.Add;
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 2);
+        h.Feed("There is no room to hide moonstone here.");
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Discard.OnRoomEntered(RoomB);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(new[] { "hide moonstone", "hide moonstone" }, Assert.Single(batches));
+    }
+
+    [Fact]
+    public void HideModeTurnedOff_GivesUpHeldHides()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Discard.HideMode = false;
+        h.Discard.OnRoomEntered(RoomB);
+
+        Assert.Empty(h.Sent);
+        Assert.Empty(h.Discard.HeldHides);
+    }
+
+    [Fact]
+    public void EngineHide_Refused_WaitsForTheNextRoom()
+    {
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("dagger", 1, discard: true);
+        h.Carried.Add("dagger");
+        h.Discard.OnRoomEntered(RoomA);
+
+        h.Discard.OnInventoryChanged();
+        h.Feed("There is no room to hide dagger here.");
+        h.Discard.OnInventoryChanged();   // this room has refused it already
+        Assert.Single(h.Sent);
+
+        h.Discard.OnRoomEntered(RoomB);
+        Assert.Equal(new[] { "hide dagger", "hide dagger" }, h.SentText);
+
+        // Turned off while a copy waits: it is the engine's item, so it is let go.
+        h.Feed("There is no room to hide dagger here.");
+        h.Enabled = false;
+        h.Discard.OnRoomEntered(RoomC);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Empty(h.Discard.HeldHides);
+    }
+
+    // ----- nothing unanswered is counted forever ----------------------------
+
+    [Fact]
+    public void FullInventoryRead_ForgetsAHideForACopyNoLongerCarried()
+    {
+        using Harness h = HidingMoonstones(2);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 2);
+
+        h.Carried.RemoveAt(0);   // the read shows one left
+        h.Discard.OnFullInventoryRead();
+
+        Assert.Equal(1, h.Discard.UnansweredHides);
+        Assert.True(h.Discard.TryConsumeSuppressedHide("moonstone"));
+        Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
+    }
+
+    [Fact]
+    public void QuietInventoryReads_ForgetAHideTheGameNeverAnswered()
+    {
+        // `You may not hide that item!` names no item, a dark room answers with its
+        // own line, a command sent too fast is dropped: none settles the count.
+        using Harness h = HidingMoonstones(1);
+        List<string> sent = new();
+        h.Discard.EmitDiscard(sent.Add, "moonstone", 1);
+
+        h.Discard.OnFullInventoryRead();   // may have been asked for before the hide
+        Assert.Equal(0, h.Discard.EmitDiscard(sent.Add, "moonstone", 1).Sent);
+
+        h.Discard.OnFullInventoryRead();   // nothing sent or answered since the last
+        Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
+        Assert.Equal(1, h.Discard.EmitDiscard(sent.Add, "moonstone", 1).Sent);
+    }
+
+    [Fact]
+    public void InventoryReads_KeepCountingWhileAnswersStillArrive()
+    {
+        using Harness h = HidingMoonstones(3);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 3);
+
+        h.Discard.OnFullInventoryRead();
+        h.Hid("moonstone");                // a paced batch still draining
+        h.Carried.RemoveAt(0);
+        h.Discard.OnFullInventoryRead();
+
+        Assert.Equal(2, h.Discard.UnansweredHides);
+    }
+
+    [Fact]
+    public void Reset_ForgetsUnansweredAndHeldHides()
+    {
+        using Harness h = HidingMoonstones(2);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 2);
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Discard.Reset("death");
+
+        Assert.Equal(0, h.Discard.UnansweredHides);
+        Assert.Empty(h.Discard.HeldHides);
+        Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
+        h.Discard.OnRoomEntered(RoomB);
+        Assert.Empty(h.Sent);
     }
 
     [Fact]
     public void RefusedDrop_IsNotAHideRefusal()
     {
-        using Harness h = new();
+        using Harness h = HidingMoonstones(1);
         List<string> refused = new();
         h.Discard.HideRefused += refused.Add;
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
 
         h.Feed("There is no room to drop moonstone here.");
 
         Assert.Empty(refused);
+        Assert.Equal(1, h.Discard.UnansweredHides);
     }
 }

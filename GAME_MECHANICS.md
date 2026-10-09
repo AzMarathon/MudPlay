@@ -353,8 +353,8 @@ What the game prints on the wire, including the prompt/statline, the command rat
 - **How Stock's limit works** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_execute_input` / `_add_delayed_command` / `_add_delay` / `_fast_update_character`)*:
   - It is a **queue length, not a time window.** Input runs at once unless the character has an action delay running or commands already waiting; then it joins a per-character queue. With **8** waiting the game prints the nudge; from **12** it drops the new command with the "command ignored" line.
   - The delay is a counter that the fast character update counts down by one per pass; the waiting commands run when it reaches zero. A pass is the engine's fast tick, whose interval is a constant in the DLL (*Timing & rounds → The engine clock — one fast tick drives every timer*). (An earlier note said the pass's length is a sysop timer setting, not in the DLL; superseded 2026-10-09.)
-  - **Commands that add a delay:** `move` (each step), `search` 1, `sneak` 1, `hide` 1, `track` 1, `rob` 1, `open` / `close` / `lock` 1, `picklock` 2, `bash` 1–2, `drag` 1, `quit` 6, and a confusion fumble 1.
-  - **`drop`, `get`, `sell` and `buy` add none.** A burst of them only queues when a delay is already running (right after a move or a sneak) or other commands are waiting. That is how the 26-get Roomba batch above was lost, after a move. A `hide` sweep queues behind itself.
+  - **Commands that add a delay:** `move` (each step), `search` 1, `sneak` 1, the bare `hide` 1 (an item or coin hide adds none: *Items, inventory & equipment → Hiding items in a room (stashing)*), `track` 1, `rob` 1, `open` / `close` / `lock` 1, `picklock` 2, `bash` 1–2, `drag` 1, `quit` 6, and a confusion fumble 1.
+  - **`drop`, `get`, `sell` and `buy` add none.** A burst of them only queues when a delay is already running (right after a move or a sneak) or other commands are waiting. That is how the 26-get Roomba batch above was lost, after a move. A sweep of `hide <item>` commands is in the same case. (An earlier note said a `hide` sweep queues behind itself; superseded 2026-10-09, see the delay list.)
 - **How Stock's typed-ahead queue drains** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_fast_update_character` @0x4232c6 / @0x423149 / @0x423280, `_execute_pending_command` @0x450f24, `_cleanup_pending_commands`; Realm: Stock, Paradigm not recorded)*:
   - **One waiting command runs per fast tick.** A tick that starts with the delay at 0 runs one waiting command; the tick on which a delay runs out performs the deferred move and then runs one. So ten `get`s sent behind a move take ten ticks to answer, and anything sent meanwhile joins the back of the same queue. A line typed while the delay is 0 and the queue is empty runs at once (`_execute_input` @0x450171–0x4501a6).
   - **The game prints a queued command itself when it runs it**: the command text and a line break (`%s` + CR, @0x450f24), then the command's own output. So a command run from the queue is echoed at the time it runs, not when it was typed.
@@ -6078,7 +6078,7 @@ A `get <item>` that can't succeed replies with one of these shapes:
   - **Had the collision landed on something droppable, the wrong item would have been dropped with no complaint at all.**
   - So a drop for an item you may no longer hold is never safe to send blind. Either confirm you hold it, or be ready to treat any refusal as "verify against a real `i` before doing anything else".
 - **A worn item drops with a plain `drop <item>`** *([CONFIRMED] 2026-09-26, user)*: no `rem` first. The game takes it off and drops it in one command.
-- **What the game refuses to drop or hide** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_drop` and `_cmd_hide`, the same two checks in each; Realm: Stock; the no-drop part CONFIRMED on both realms by the user 2026-10-02)*. Either one answers `You may not drop that item!`:
+- **What the game refuses to drop or hide** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_drop` and `_cmd_hide`, the same two checks in each; Realm: Stock; the no-drop part CONFIRMED on both realms by the user 2026-10-02)*. `drop` answers `You may not drop that item!` and `hide` answers `You may not hide that item!` *([OBSERVED] 2026-10-09, `_cmd_hide` @0x466d74 and @0x466df3; an earlier note said either one answers `You may not drop that item!`, superseded 2026-10-09)*:
   - an item with the no-drop flag (game data `Not Droppable` = 1). Both realms' data flag Paradigm's tokens of (place), the Gypsy's deck of cards and the Mercy / Balance / Hate tokens;
   - a cursed item (ability 82 Cursed or 83 CursedMajor) **while it is worn**. A carried cursed item drops. (If two worn slots hold the same item number the check is skipped; an edge case.)
 - **A loyal item (ability 100) can't be dropped, on either realm** *([CONFIRMED] 2026-10-02, user)*. Nor can a no-drop item, on either realm (same confirmation). (An earlier note said Stock's `_cmd_drop` / `_cmd_hide` don't check ability 100, and the data has loyal items without the no-drop flag, e.g. the emblems; the user's confirmation stands, superseded 2026-10-02. The refusal must come from somewhere this reading missed.)
@@ -6092,7 +6092,13 @@ A `get <item>` that can't succeed replies with one of these shapes:
 ### Hiding items in a room (stashing)
 *Status: CONFIRMED 2026-09-26 (user) · Realm: both; the counted form is Paradigm-only*
 
-- **`hide` refuses the same items `drop` does, and each hide adds a 1-unit action delay** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_hide`; Realm: Stock)*. See *`drop`: targeting, refusals and worn items* and *Wire, prompt & command output → Command rate limit (typing/sending too fast)*.
+- **`hide <item>` refuses the same items `drop` does, in its own words: `You may not hide that item!`** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p `_cmd_hide`; the wording 2026-10-09, @0x466d74 and @0x466df3; Realm: Stock)*. See *`drop`: targeting, refusals and worn items*.
+- **The 1-unit action delay belongs to the bare `hide`, not to `hide <item>` or a coin hide** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_hide`: its two `_add_delay` calls @0x466bd5 and @0x466c4b both sit in the no-argument branch @0x466b63–0x466cfb; the branch with an argument, @0x466d00–0x467115, makes none; Realm: Stock, Paradigm not recorded)*. The same branch holds the test for a fight (`_is_inside_autocombat` @0x466b75), so an item or coin hide makes none. (An earlier note said each hide adds a 1-unit action delay; superseded 2026-10-09.) See *Wire, prompt & command output → Command rate limit (typing/sending too fast)*.
+- **Stock: `hide <item>` for an item you don't hold prints nothing and is not a command** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_hide` @0x466b1f; Realm: Stock, Paradigm not recorded)*. With no held item matching, the routine returns 0 without a line: at once when the command is two words (@0x466d53 → @0x466eff → @0x46711e), and with more words when the first is not a positive number (@0x466f19 → @0x467117). `_handle_commands` hands that 0 back (@0x413cbe → @0x414b28) exactly as it does for the words that do nothing, so the line is treated as unrecognised: with talk fast it is **said to the room** (*Wire, prompt & command output → Command words and abbreviations*). With a positive number first it is read as a coin hide: `You hid <N> <coin>.`, `You don't have <N> <coin> to hide!`, or `Syntax: HIDE <N> {Currency}` when the next word is no coin (@0x4670fe).
+  - `drop` on the same miss answers privately: `You don't have <word> to drop!` (@0x466ac9–0x466af2), or `Syntax: DROP {Amount} {Currency}` with more words (@0x466aa2). So a stale `drop` is harmless and a stale `hide` is not.
+- **Stock: hiding an item needs sight; dropping one doesn't** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_hide` @0x466e1d–0x466e2c; Realm: Stock, Paradigm not recorded)*. `_cmd_hide` calls `_can_see` before it moves the item; blind or in a room too dark, that routine prints its one line (`You are blind.` / `The room is … - you can't see anything`) and nothing is hidden. `_cmd_drop` makes no such call.
+- **Stock: a full room refuses the hide with `There is no room to hide <item> here.`, naming the item's record name** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_hide` @0x466e8b–0x466ef4)*. When `_add_item_to_room` fails the item is put back in the pack (@0x466ec3) and the line is printed with the item record's name (record + 0xad, @0x466ed6–0x466edd), the same pointer `You hid %s.` prints (@0x466e96–0x466e9d). So the refusal carries the full name whatever was typed, as the drop refusal does. The cap itself is in *Room item capacity: drop refusal*.
+- **A refused hide only happens on Stock** *([CONFIRMED] 2026-10-09, user: "a hide being refused only applies to a stock realm")*. It agrees with Paradigm rooms having no item cap.
 - **`hide <item>` stashes an item in the room; a bare `hide` hides the player instead.** A stashed item
   can't be seen again until someone actively searches the room for it. `hid <item>` is the shorthand.
 - **Worn gear hides directly**, like `drop`: `hide <item>` on a worn piece takes it off and stashes it
@@ -6113,6 +6119,22 @@ A `get <item>` that can't succeed replies with one of these shapes:
   (`ChestOffloadViewModel`, through `AutoDiscardManager.EmitDiscard`; the offload sent a plain `drop`
   until 2026-10-09). The `You hid …` confirmation takes the item off the Chest Offload list
   (`ChestOpenTracker`), as `You dropped …` does.
+- **No hide goes out for a copy that isn't in the pack** (`AutoDiscardManager.EmitDiscard`, 2026-10-09),
+  because Stock would say it aloud. A discard's hide is sent only for copies carried and not already on
+  their way or held for a room, so a second Drop before the first is answered sends nothing, and Chest
+  Offload's simulated rows send nothing at all. Hides still unanswered are forgotten on a death, a
+  disconnect and a profile swap, capped at what a full `i` shows carried, and dropped once two `i` reads
+  pass with no discard sent or answered between them (`OnFullInventoryRead`): `You may not hide that
+  item!` names no item, and the dark-room line isn't the hide's own.
+- **Client policy** (user, 2026-10-09: "if it does happen, hold the item until we enter a new room and try
+  again... and repeat this until we successfully hide it"): a discard's hide the room refuses for want of
+  room keeps the item and is sent again on arriving in each different, confirmed room until `You hid …`
+  lands. One try a room; never a `drop` instead. Built once in `AutoDiscardManager` (`OnHideRefusedLine`,
+  `OnRoomEntered`), so it covers the engine's own hides and Chest Offload's. A held copy that is no longer
+  carried is forgotten; a Roomba sweep puts the retry off to the room after it; turning *Hide items when
+  discarding* off gives the held copies up; a held copy of an item flagged for auto-discard is given up
+  when that engine is off. Only a hide sent as a discard is carried on with: a typed hide, a stash room's
+  and Hide All's are left alone.
 
 ### Room item capacity: drop refusal
 *Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user); capacity + stacking rule [OBSERVED] `wccmmud.dll` 1.11p `_add_item_to_room`, CONFIRMED 2026-09-27 (user); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
@@ -6146,9 +6168,8 @@ There is no room to drop amethyst pendant here.
 - **The stacking retry isn't built yet.** Now that the rule is known, the sweep could retry an item that already has a pile in that room's survey (and carries no uses value) before re-targeting it.
 
 **Client use (discards that hide):**
-- `There is no room to hide <item> here.` is matched as `KnownPatterns.RoomHideRefused`. `AutoDiscardManager` raises `HideRefused` on it and releases that hide's Transaction-history exemption, since no `You hid …` will come to claim it.
-- **Client policy:** a refused hide is never re-sent as a `drop` (2026-10-09; not yet put to the user). Chest Offload keeps the row, leaves the item in the pack, and names the refusal on its status line and in the program log (`ChestOffloadViewModel.OnHideRefused`).
-- `[NEEDS CONFIRMATION]` Whether the hide refusal names the item's full canonical name, as the drop refusal does, isn't recorded. The client sends the full name, so its own hides match either way.
+- `There is no room to hide <item> here.` is matched as `KnownPatterns.RoomHideRefused`. `AutoDiscardManager` holds the refused copy for the next room and raises `HideRefused`; the retry rule and the user's ruling are in *Hiding items in a room (stashing)*.
+- Chest Offload keeps the row and says on its status line that the hide will be tried again in the next room (`ChestOffloadViewModel.OnHideRefused`); the line comes down when the item is hidden. The bug report lists the held hides.
 
 ### The `i` listing and carried weight
 *Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*

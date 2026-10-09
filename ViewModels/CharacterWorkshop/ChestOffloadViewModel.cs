@@ -69,12 +69,15 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private CurrencyHoldings _simCoin = CurrencyHoldings.Empty;
 
     private bool _simulating;
+    // The refused-hide note on the status line, and the item it is about.
+    private string _hideNote = "";
+    private string? _hideNoteItem;
     private Dictionary<int, Room> _shopRoom = new();               // shop id → serving room (first found), rebuilt each render
 
     [ObservableProperty] private int _charm;
     [ObservableProperty] private string _sellTotal = "—";
     // What a Sell is doing when it isn't instant: walking to the shop, or why it
-    // stopped. Also where a refused hide is named.
+    // stopped. Also where a refused hide, or a Drop that sent nothing, is named.
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSellStatus))] private string _sellStatus = "";
     public bool HasSellStatus => SellStatus.Length > 0;
     [ObservableProperty] private bool _isTourRunning;
@@ -214,16 +217,28 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, Departure.Hidden));
     }
 
-    // A full room refused a hide. The row is left as it is (nothing confirmed, so
-    // the item is still carried) and nothing is dropped in its place: a plain drop
-    // would leave in the open what the player asked to have concealed.
+    // A full room refused a discard's hide. The row is left as it is (nothing
+    // confirmed, so the item is still carried); AutoDiscardManager holds the copy
+    // and sends the hide again in each new room until it lands. A running tour
+    // keeps the status line for itself.
     private void OnHideRefused(string name) => Dispatcher.UIThread.Post(() =>
     {
         if (_simulating || FindRow(name) is null) return;
-        SellStatus = $"No room to hide {name} here — this room can't hold any more hidden items. " +
-                     "It's still in your pack; try again in another room.";
-        _log?.Info(LogCategory, $"hide of {name} refused (no room to hide it here) — row kept, not dropped instead");
+        _log?.Info(LogCategory, $"hide of {name} refused (no room to hide it here) — row kept, tried again in the next room");
+        if (_tour.IsRunning) return;
+        _hideNoteItem = name;
+        _hideNote = $"No room to hide {name} here — it stays in your pack and is tried again in the next room you enter.";
+        SellStatus = _hideNote;
     });
+
+    // The refusal note is about one item's hide: it comes down once that item has
+    // left the pack, unless something else has taken the line since.
+    private void ClearHideNote(string name)
+    {
+        if (!string.Equals(_hideNoteItem, name, StringComparison.OrdinalIgnoreCase)) return;
+        _hideNoteItem = null;
+        if (SellStatus == _hideNote) SellStatus = "";
+    }
 
     // How a listed item left the pack, by the game's own confirmation.
     private enum Departure { Sold, Dropped, Hidden }
@@ -231,6 +246,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private void ReconcileConfirmed(string name, int count, Departure how)
     {
         if (_simulating || count <= 0) return;
+        ClearHideNote(name);
         string did = how.ToString().ToLowerInvariant();
         if (FindRow(name) is not (ChestOffloadShopGroup group, ChestOffloadItemRow row))
         {
@@ -656,18 +672,38 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // (ReconcileConfirmed), so a blocked discard leaves the plan intact.
     private void DropItem(ChestOffloadItemRow item)
     {
-        if (item.Gained <= 0) return;
+        if (item.Gained <= 0 || RefuseSimulatedDiscard()) return;
         List<string> commands = new();
         QueueDiscard(commands, item);
         _sendPaced(commands);
     }
 
+    // A simulated row stands for nothing in the pack, and a hide for an item that
+    // isn't held is not refused by the game but spoken to the room.
+    private bool RefuseSimulatedDiscard()
+    {
+        if (!_simulating) return false;
+        SellStatus = "Simulated chests can't be dropped — Clear list first.";
+        return true;
+    }
+
     // Word one row's discard, hide or drop as the auto-discard engine would send
-    // it, and log which it was.
+    // it, and log which it was. Only copies still carried and not already on their
+    // way go out, so a second press before the game answers the first sends nothing.
     private void QueueDiscard(List<string> commands, ChestOffloadItemRow item)
     {
-        string verb = _discard.EmitDiscard(commands.Add, item.Name, item.Gained);
-        _log?.Info(LogCategory, $"discard {item.Gained} {item.Name} via {verb} (whole stack)");
+        (string verb, int sent) = _discard.EmitDiscard(commands.Add, item.Name, item.Gained);
+        if (sent > 0)
+        {
+            _log?.Info(LogCategory, $"discard {sent} {item.Name} via {verb}" +
+                (sent < item.Gained ? $" (of {item.Gained}; the rest already sent or not carried)" : " (whole stack)"));
+            return;
+        }
+        string why = _discard.HeldFor(item.Name) > 0
+            ? "it is waiting for the next room to be hidden"
+            : "it was already sent, or is no longer in your pack";
+        _log?.Info(LogCategory, $"discard of {item.Name} not sent: {why}");
+        if (!_tour.IsRunning) SellStatus = $"{item.Name}: nothing sent — {why}.";
     }
 
     // Alternate shops that also buy this item, nearest first, minus the one it's in.
@@ -726,6 +762,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // confirms, so a blocked discard stays visible.
     private void DropAllGroup(ChestOffloadShopGroup group)
     {
+        if (RefuseSimulatedDiscard()) return;
         _log?.Info(LogCategory, $"Drop All '{group.ShopName}' — {group.Items.Count} item(s)");
         List<string> commands = new();
         foreach (ChestOffloadItemRow item in group.Items) QueueDiscard(commands, item);

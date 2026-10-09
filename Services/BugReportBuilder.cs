@@ -1365,6 +1365,17 @@ public static class BugReportBuilder
             foreach ((string name, int count) in chestLoot)
                 sb.Append("- ").Append(count).Append(' ').Append(name).Append('\n');
 
+        // Discard hides a full room refused (AutoDiscardManager), each sent again in
+        // the next room entered, and how many hides are out with no answer yet.
+        var heldHides = svc.AutoDiscard.HeldHides;
+        sb.Append("\n**Discard hides held for the next room** (").Append(heldHides.Count)
+          .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" sent and unanswered)\n\n");
+        if (heldHides.Count == 0)
+            sb.Append("_(none)_\n");
+        else
+            foreach ((string name, int count) in heldHides)
+                sb.Append("- ").Append(count).Append(' ').Append(name).Append('\n');
+
         var plan = profile.CharacterPlan;
         sb.Append("\n**CP allocation plan (CharacterPlan)** (").Append(plan?.Count ?? 0).Append(")\n\n");
         sb.Append(plan is { Count: > 0 } ? Json(plan) : "_(none)_\n");

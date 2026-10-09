@@ -142,7 +142,7 @@
             <CheckBox Content="Hide items when discarding"
                       IsChecked="{Binding HideWhenDiscarding, Mode=TwoWay}"
                       Margin="0,8,0,0"
-                      ToolTip.Tip="When checked: a discard uses `hide &lt;item&gt;` instead of `drop &lt;item&gt;` — the item still leaves your pack, but lands concealed on the ground rather than in plain view. It covers the auto-discard engine's offload of each excess flagged item, and the Drop and Drop All buttons on the Workshop's Chest Offload tab. These hides are kept out of the Transaction history (a discard isn't a stash), while your manual hides and stash-room hides are still logged. The Action menu's Drop entries always drop; its Hide entries are there for hiding. Applies only for this character."/>
+                      ToolTip.Tip="When checked: a discard uses `hide &lt;item&gt;` instead of `drop &lt;item&gt;` — the item still leaves your pack, but lands concealed on the ground rather than in plain view. It covers the auto-discard engine's offload of each excess flagged item, and the Drop and Drop All buttons on the Workshop's Chest Offload tab. These hides are kept out of the Transaction history (a discard isn't a stash), while your manual hides and stash-room hides are still logged. A hide a full room refuses (Stock only) keeps the item and is sent again in each new room you enter until it lands; it is never dropped instead. The Action menu's Drop entries always drop; its Hide entries are there for hiding. Applies only for this character."/>
 
             <!-- Note: the former Buy/Hunt/Defer path-item checkboxes moved to
                  per-item game-data flags on the item record (item-edit dialog:

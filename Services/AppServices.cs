@@ -6709,6 +6709,21 @@ public sealed class AppServices
         // Auto-discard re-evaluates the pack on every inventory change — the
         // seam that surfaces chest dumps and freshly collected loot.
         Inventory.Changed += AutoDiscard.OnInventoryChanged;
+        Inventory.FullInventoryParsed += AutoDiscard.OnFullInventoryRead;
+        // A hide the room had no room for is sent again on arriving somewhere
+        // else. Only a confirmed room counts: a pending move still shows the room
+        // being left, and a suspect reading may not be a move at all.
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
+                AutoDiscard.OnRoomEntered(arrived.Key);
+        };
+        AutoDiscard.PacedSender = cmds => InventoryAction.SendPaced(cmds);
+        // Discards sent to another character's game, or before a death emptied
+        // the pack, will never be answered. (A dropped connection is the main
+        // window's to report.)
+        Profile.ProfileLoaded += _ => AutoDiscard.Reset("profile loaded");
+        RoomTracker.PlayerDeathObserved += () => AutoDiscard.Reset("death");
 
         AutoBuy = new Game.Inventory.AutoBuyManager(Router,
             resolve: ResolveAutoBuyItem,

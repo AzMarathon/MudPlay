@@ -150,7 +150,7 @@
                                                     Margin="0,0,6,0"
                                                     ToolTip.Tip="Sell every item's quantity below at this shop — walks there first when you aren't standing in it. Never sells more than the chests gave."/>
                                             <Button Grid.Column="3" Content="Drop All" Command="{Binding DropAllCommand}"
-                                                    ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan. With Settings → Other → Hide items when discarding ticked, they are hidden in the room instead of dropped."/>
+                                                    ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan. With Settings → Other → Hide items when discarding ticked, they are hidden in the room instead of dropped; one the room has no room for is tried again in the next room you enter."/>
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
@@ -213,7 +213,7 @@
                                                                 ToolTip.Tip="Sell the quantity picked above at this item's shop — walks there first when you aren't standing in it. The row updates when the game confirms the sale — a refused sale changes nothing."/>
                                                         <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
                                                                 Margin="0,0,6,0"
-                                                                ToolTip.Tip="Drop this item's whole held stack — hidden in the room instead when Settings → Other → Hide items when discarding is ticked. The row updates when the game confirms the drop or the hide; a refused one changes nothing."/>
+                                                                ToolTip.Tip="Drop this item's whole held stack — hidden in the room instead when Settings → Other → Hide items when discarding is ticked. The row updates when the game confirms the drop or the hide. A hide the room has no room for keeps the item and is tried again in the next room you enter."/>
                                                         <Button Grid.Column="7" Content="✕" Command="{Binding RemoveCommand}"
                                                                 ToolTip.Tip="Take this item off the list — it stays in your pack"/>
                                                     </Grid>
