@@ -438,17 +438,18 @@ public sealed class PartyComebackManager : IDisposable
             return;
         }
         // An engine can be up without having made the move: the one that left the
-        // member behind was typed by hand, over a walk the user had paused (typing a
-        // move is itself a pause). A recovery started for it is a walk born paused,
+        // member behind was a manual one (a keystroke, a macro, a relayed command),
+        // made over a walk the user had paused, or pausing it there and then, as
+        // every manual move does. A recovery started for it is a walk born paused,
         // which wakes on Resume long after the player has fetched the member
         // themselves (report paradigm-20260929-221642: six rooms walked back to
         // where they had stood). Judged on the move, not on the pause: the same
         // pause gate is raised by a remote stop, an errand or the route picker, and
         // a member an engine step left behind under one of those is still ours to
         // go back for.
-        if (_tracker.LastMoveWasTyped)
+        if (_tracker.LastMoveWasManual)
         {
-            _log?.Info(LogCategory, $"{given} was left behind by a move you typed — leaving the pickup to you.");
+            _log?.Info(LogCategory, $"{given} was left behind by a move of your own, not an engine's — leaving the pickup to you.");
             return;
         }
         _log?.Info(LogCategory, $"{given} was left behind by our move — going back for them.");

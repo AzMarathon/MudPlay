@@ -108,10 +108,10 @@ public static class TBInfoCastTeleportResolver
     // Where a spell sends its caster when it teleports through a textblock instead
     // of its own TeleportRoom ability: its TextBlock ability names a TBInfo chain,
     // and each line of that chain carrying `teleport <room> <map>` is one landing.
-    // The lines are read as tried in order, the first whose conditions pass being
-    // the one that runs (unconfirmed as an engine rule — GAME_MECHANICS "Cast-on-walk
-    // exits and random teleports"), so a line gated on `checkitem <item>` followed
-    // by a bare one reads "with the item land here, otherwise there". The list
+    // The game tries the lines in order and stops at the first whose action goes
+    // through (GAME_MECHANICS "Cast-on-walk exits and random teleports"), so a line
+    // gated on `checkitem <item>` followed by a bare one reads "with the item land
+    // here, otherwise there". The list
     // keeps that order, ItemId 0 marking a line with no item check, and stops at
     // the first such line since nothing after it is reached.
     //

@@ -746,6 +746,16 @@ public sealed class LoopRunner : IRecoverableEngine
         _isLeaderWithFollowers = isLeaderWithFollowers;
     }
 
+    // Item-name lookup for a leg the loop refuses for want of an item. Mirrors
+    // AutoWalkManager.SetItemNameResolver.
+    private Func<int, string?>? _itemNameResolver;
+
+    public void SetItemNameResolver(Func<int, string?> resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+        _itemNameResolver = resolver;
+    }
+
     // Wire the Confused check (AppServices binds this to Conditions.IsConfused) so
     // EnterRecovery can tell a confusion fumble apart from a genuine block.
     public void SetConfusedCheck(Func<bool> isConfused)
@@ -1574,6 +1584,16 @@ public sealed class LoopRunner : IRecoverableEngine
             return;
         }
 
+        // An exit whose spell lands us on the loop's side only with an item in hand
+        // isn't stepped through without it, however the loop came to hold a leg
+        // through it (AutoWalkManager.SendMoveStep has the reasoning).
+        if (exit.CastGateItemId > 0 && _tracker.HoldsItem(exit.CastGateItemId) == false)
+        {
+            FailStep("stopped at " + BlockedExitDescriber.Describe(current.Key, step.Direction, in exit,
+                k => _graph?.GetRoom(k)?.Name, id => _itemNameResolver?.Invoke(id)));
+            return;
+        }
+
         // Set the landing prediction first so OnTrackerStateChanged
         // confirms the step regardless of HOW we cross the exit (plain
         // cardinal, text command, teleport keyword, or post-action
@@ -1727,11 +1747,12 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // The loop's step in flight has gone through an exit whose spell teleports
     // everyone on by themselves, which drops the party apart on the way. Announced
-    // once the crossing is seen rather than when the step is sent, as the walker
-    // does (AutoWalkManager.OnCastCrossingStarted has the reasoning).
-    private void OnCastCrossingStarted()
+    // once the crossing is seen rather than when the step is sent, and whatever
+    // hold has landed on the loop since, as the walker does
+    // (AutoWalkManager.OnCastCrossingStarted has the reasoning).
+    private void OnCastCrossingStarted(RoomKey landing)
     {
-        if (State != LoopState.Running || !_stepInFlight) return;
+        if (!_stepInFlight || _expectedMoveTarget is not { } expected || !expected.Equals(landing)) return;
         if (_isLeaderWithFollowers?.Invoke() != true) return;
         _log?.Info("LoopRunner", $"step {_index + 1}: the exit's spell is taking the party through one by one — re-forming it on landing");
         _onLeaderPartySplit?.Invoke();

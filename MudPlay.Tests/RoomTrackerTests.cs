@@ -283,25 +283,26 @@ public sealed class RoomTrackerTests : IDisposable
         Assert.True(tracker.IsPeekSuppressed(t0.AddMilliseconds(100)));
     }
 
-    // The engines' own steps are not typed; a keystroke is, and a party leader's
+    // The engines' own steps are not manual; a keystroke is (as is anything else
+    // that reaches the wire without an engine announcing it), and a party leader's
     // drag is neither.
     [Fact]
-    public void LastMoveWasTyped_TellsAKeystrokeFromAnEngineStepOrADrag()
+    public void LastMoveWasManual_TellsAKeystrokeFromAnEngineStepOrADrag()
     {
         RoomTracker tracker = NewTracker();
         DateTimeOffset t0 = DateTimeOffset.UtcNow;
         tracker.NoteRoomObserved(Obs("Town Gates", Direction.N, Direction.E), t0);
 
         tracker.NoteMoveSent(Direction.N, t0);
-        Assert.False(tracker.LastMoveWasTyped);
+        Assert.False(tracker.LastMoveWasManual);
         tracker.NoteMoveSentByObserver(Direction.N, t0.AddMilliseconds(5));     // that step's own echo
-        Assert.False(tracker.LastMoveWasTyped);
+        Assert.False(tracker.LastMoveWasManual);
 
         tracker.NoteMoveSentByObserver(Direction.S, t0.AddSeconds(5));
-        Assert.True(tracker.LastMoveWasTyped);
+        Assert.True(tracker.LastMoveWasManual);
 
         tracker.NoteFollowMove(Direction.N, t0.AddSeconds(6));
-        Assert.False(tracker.LastMoveWasTyped);
+        Assert.False(tracker.LastMoveWasManual);
     }
 
     // ----- manual-move signal (pauses navigation) --------------------

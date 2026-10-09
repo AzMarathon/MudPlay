@@ -1990,6 +1990,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
+        // An exit whose spell puts us on the routed side only with an item in hand:
+        // without it the step goes through all the same and lands somewhere else.
+        // The planner closes it, but a walk planned through gates has it open (the
+        // item was to be fetched on the way), and a re-plan after the wrong landing
+        // keeps that choice: the walk came round to the exit and stepped through
+        // again, for good. So at the exit itself, the inventory decides. Not while
+        // an acquisition is still under way (HeldForGateItem holds the step then),
+        // nor while the inventory is unread.
+        if (exit.CastGateItemId > 0 && _tracker.HoldsItem(exit.CastGateItemId) == false)
+        {
+            string obstacle = BlockedExitDescriber.Describe(current.Key, step.Direction, in exit,
+                k => _graph.GetRoom(k)?.Name, id => _itemNameResolver?.Invoke(id));
+            _log?.Info("Walker", $"step {_index + 1}/{_path!.Count}: not taking {obstacle}");
+            Raise(new WalkEvent(WalkEventKind.Failed, $"stopped at {obstacle}", _destination));
+            Reset();
+            return;
+        }
+
         // An exit whose spell teleports us on ends in its landing, not in the room it
         // names (and the route beyond is planned from).
         _expectedAfterCurrentMove = exit.Landing;
@@ -3070,9 +3088,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // Announced here, once the crossing is seen, and not when the step's bytes go
     // out: a step the game refused or dropped splits nobody, and a regroup hold put
     // up for it ran its full window and then uninvited followers who had never left.
-    private void OnCastCrossingStarted()
+    //
+    // Ours when the step in flight is the one expected to end in that landing,
+    // whatever the walk's run state: a hold that lands between the step going out
+    // and the crossing showing (a party member's @wait, a held cast) leaves the
+    // walk Paused with the step still in flight, and the split is no less ours.
+    private void OnCastCrossingStarted(RoomKey landing)
     {
-        if (State != WalkState.Walking || !_stepInFlight) return;
+        if (!_stepInFlight || _expectedAfterCurrentMove is not { } expected || !expected.Equals(landing)) return;
         if (_isLeaderWithFollowers?.Invoke() != true) return;
         _log?.Info("Walker", $"step {_index + 1}: the exit's spell is taking the party through one by one — re-forming it on landing");
         _onLeaderPartySplit?.Invoke();
