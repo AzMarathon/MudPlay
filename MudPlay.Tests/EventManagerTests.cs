@@ -100,6 +100,7 @@ public sealed class EventManagerTests
     [InlineData("look^Msit", new[] { "look", "sit" })]
     [InlineData("look; sit; abil 145^M", new[] { "look", "sit", "abil 145" })]
     [InlineData("look;;sit", new[] { "look", "sit" })]
+    [InlineData("look; ;o", new[] { "look", ";o" })]
     [InlineData("", new string[0])]
     [InlineData("  ", new string[0])]
     public void SplitCommand_HandlesSeparators(string input, string[] expected)

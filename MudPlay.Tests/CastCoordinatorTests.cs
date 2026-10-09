@@ -39,6 +39,17 @@ public sealed class CastCoordinatorTests
                 DateTimeOffset.UtcNow, IsPromptLine: false));
         }
 
+        // A prompt row with a command typed on it, the way the game shows it: the
+        // prompt and its echo share the row's timestamp.
+        public void FeedEcho(string command)
+        {
+            DateTimeOffset at = DateTimeOffset.UtcNow;
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                "[HP=609/MA=330]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
+            Router.Dispatch(new LineExtractor.EmittedLine(
+                command, Array.Empty<CellAttributes>(), at, IsPromptLine: false));
+        }
+
         public string LastSent => Sent.Count == 0
             ? string.Empty
             : Encoding.Latin1.GetString(Sent[^1]).TrimEnd('\r');
@@ -179,6 +190,50 @@ public sealed class CastCoordinatorTests
 
         Assert.True(h.Cast.IsCastBlocked);
         Assert.Contains(h.Failures, f => f.Reason == CastFailureReason.AlreadyCastThisRound);
+    }
+
+    // The refusal names no spell. A flux of ours had landed; two seconds later the user
+    // typed `use coin` into the same round and the game refused THAT. Pinned on flux, the
+    // buff's timer was dropped and a good roll was recast.
+    [Fact]
+    public void AlreadyCastThisRound_AnsweringAnotherCommand_IsNotOurCast()
+    {
+        using Harness h = new();
+        h.Cast.TryCast("flux");
+        h.FeedEcho("use coin");
+        h.Feed("You have already cast a spell this round!");
+
+        (CastFailureReason reason, _, string? spell) = Assert.Single(h.Failures);
+        Assert.Equal(CastFailureReason.AlreadyCastThisRound, reason);
+        Assert.Equal("use coin", spell);
+        // The round's attack is a slot of its own and still goes out.
+        Assert.True(h.Cast.TryCast("hsto", bypassRoundCooldown: true));
+    }
+
+    [Theory]
+    [InlineData("flux")]
+    [InlineData("FLUX")]
+    [InlineData("glac nasty granite colossus")]
+    public void AlreadyCastThisRound_AnsweringOurOwnCast_IsOurs(string echoed)
+    {
+        using Harness h = new();
+        string code = echoed.Split(' ')[0].ToLowerInvariant();
+        h.Cast.TryCast(code);
+        h.FeedEcho(echoed);
+        h.Feed("You have already cast a spell this round!");
+
+        Assert.Equal(code, Assert.Single(h.Failures).Spell);
+    }
+
+    [Fact]
+    public void AlreadyCastThisRound_AnsweringAnotherCommand_DoesNotBlockTheAttackSlot()
+    {
+        using Harness h = new();
+        h.Cast.TryCast("blast", bypassRoundCooldown: true);
+        h.FeedEcho("use coin");
+        h.Feed("You have already cast a spell this round!");
+
+        Assert.False(h.Cast.IsCastBlocked);
     }
 
     // The attack + between-round slots are independent server-side, so a between-round cast

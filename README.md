@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.20**
+> **Version 3.159.26**
 > - A trap handed to a party member: their client now says it has accepted, and every result it reports is understood (a "No trap" or "Couldn't disarm" answer no longer leaves the walk waiting)
 > - A sneaking member's telepathed trap answer is read
 > - If nobody accepts a handed-over trap in 10 seconds, the walk goes through it instead of waiting forever

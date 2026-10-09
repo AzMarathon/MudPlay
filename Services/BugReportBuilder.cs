@@ -1301,7 +1301,11 @@ public static class BugReportBuilder
     private static string BuildInventory(AppServices svc)
     {
         InventorySnapshot snapshot = svc.Inventory.Snapshot;
-        return Json(snapshot);
+        // A record not read since a death or a login is not to be believed, whatever it lists.
+        string state = svc.Inventory.IsLoaded
+            ? "read"
+            : svc.InventoryAfterDeath.Due ? "stale since a death; a re-read is owed" : "not read yet";
+        return $"- **Inventory record**: {state}\n\n" + Json(snapshot);
     }
 
     // The Character Workshop's persisted, per-character artifacts — the gear
