@@ -1,5 +1,12 @@
 # Version history
 
+## 3.153.12
+
+- Fixed: a Mystic attacking with punch, kick or jumpkick walked past monsters that need hit magic (and didn't fight back when they attacked): the client judged the strike by the weapon in hand, which a strike doesn't use
+- A class's own hit magic now counts: a Mystic's strikes and a Witchunter's swings hurt magical monsters whatever the weapon
+- A `Your fists / feet have no effect` line from a strike writes that monster off, like the weapon line does
+- bug reports addressed: paradigm-20260928-164335, paradigm-20260929-220653, paradigm-20260930-182409, paradigm-20261002-192542, paradigm-20261007-150934, paradigm-20261008-113129, paradigm-20261008-181821, paradigm-20261008-181901, paradigm-20261008-182349, paradigm-20261008-182456, paradigm-20261008-183736, paradigm-20261008-183931
+
 ## 3.153.0
 
 - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder

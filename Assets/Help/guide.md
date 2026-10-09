@@ -2995,7 +2995,14 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 
 **Default:** `a` (both)
 **What it does:** The literal command word MudPlay sends each round to attack — `a` is the standard MajorMUD attack alias. The Alternate command is used instead whenever you're swinging your configured alternate weapon, since some off-hand or two-handed weapons want a different verb.
-**When you might change it:** Only if your class or realm uses a non-standard attack word.
+**When you might change it:** Only if your class or realm uses a non-standard attack word. A Mystic sets it to a martial-arts strike: `punch`, `kick` or `jumpkick`, usually typed short (`pu`, `ki`, `ju`).
+
+**Monsters that need magic to hit.** Some monsters can only be hurt by an attack with enough *hit magic*. Before it fights one, MudPlay checks whether your attack can hurt it, and leaves alone (walks past) a monster nothing you have can damage. What it weighs:
+
+- **A weapon attack** (`a`, `bash`, `smash`): the weapon's hit magic together with your class's own. A **Witchunter** carries enough of its own to hurt a magical monster with any weapon it can use.
+- **A martial-arts strike** (`punch`, `kick`, `jumpkick`): your class's own hit magic only. A strike doesn't use the weapon, so whatever you are holding makes no difference. A **Mystic's** strikes hurt magical monsters this way, whatever weapon is in hand.
+- If neither attack can hurt it, your attack spells are tried instead; with none that can land, the monster is skipped. The Program Log says why on a `skip un-actionable` line, with the level the monster needs and what each attack lands with.
+- The game has the last word: a `Your weapon has no effect…`, `Your fists have no effect…` or `Your feet have no effect…` line writes that monster off for that attack for the rest of the room.
 
 ### Weapon slots (Normal / Alternate / Backstab weapon)
 
