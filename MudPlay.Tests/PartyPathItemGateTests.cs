@@ -38,6 +38,8 @@ public sealed class PartyPathItemGateTests
         public readonly List<string> Sent = new();
         public int QueryCount;
         public Func<int, string, Task<PartyInventoryProbe.PartyItemResult>>? QueryOverride;
+        // Items whose trade the user agreed to on a route card.
+        public readonly HashSet<int> AgreedTrades = new();
         public readonly PartyPathItemGate Gate;
 
         public Harness(bool bindWire = true)
@@ -66,7 +68,8 @@ public sealed class PartyPathItemGateTests
                 },
                 post: a => a(),
                 log: null,
-                substitutes: id => Subs.TryGetValue(id, out int[]? s) ? s : new[] { id });
+                substitutes: id => Subs.TryGetValue(id, out int[]? s) ? s : new[] { id },
+                agreedTrade: id => AgreedTrades.Contains(id));
             if (bindWire)
                 Gate.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b)));
         }
@@ -99,6 +102,53 @@ public sealed class PartyPathItemGateTests
         h.Gate.OnPathItemsRequired(new[] { 7 });
         Assert.Equal(new[] { 7 }, h.Forwarded);
         Assert.Equal(0, h.QueryCount);
+    }
+
+    // ----- A trade agreed on the route card -----------------------------------
+
+    // Report paradigm-20261009-011133: a picked route card named a trade for the
+    // door's key, and the party leader walked four rooms toward the door while the
+    // party was asked who held one, before turning for the trader.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AgreedTrade_IsForwardedAtOnce_WithoutAskingTheParty(bool leader)
+    {
+        var h = new Harness { IsLeader = leader };
+        h.Names[808] = "glowing key";
+        h.AgreedTrades.Add(808);
+
+        h.Gate.OnPathItemsRequired(new[] { 808 });
+
+        Assert.Equal(new[] { (808, 1) }, h.ForwardedReq);
+        Assert.Equal(0, h.QueryCount);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void AgreedTrade_ForAKeyAlreadyHeld_GoesThroughThePartyAsBefore()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[808] = "glowing key";
+        h.AgreedTrades.Add(808);
+        h.Carried.Add(808);
+        h.SetResult(808, ("Member", 1));
+
+        h.Gate.OnPathItemsRequired(new[] { 808 });
+
+        Assert.Equal(1, h.QueryCount);
+    }
+
+    [Fact]
+    public void WithNoTradeAgreed_TheLeaderStillAsksThePartyFirst()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[808] = "glowing key";
+        h.SetResult(808, ("Member", 0));
+
+        h.Gate.OnPathItemsRequired(new[] { 808 });
+
+        Assert.Equal(1, h.QueryCount);
     }
 
     // ----- Follower self-borrow (E1 behaviour, IsLeader = false) --------------

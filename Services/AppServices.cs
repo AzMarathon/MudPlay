@@ -6800,7 +6800,8 @@ public sealed class AppServices
             forward: PathItemDemand.OnPathItemsRequired,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log,
-            substitutes: PathItemSubstitutes.For);
+            substitutes: PathItemSubstitutes.For,
+            agreedTrade: id => AgreedTradeFor(id) is not null);
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;

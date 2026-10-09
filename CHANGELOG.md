@@ -1,5 +1,10 @@
 # Version history
 
+## 3.158.3
+
+- A route card that names a trade starts the trip to the trader with the first step; in a party the walker no longer heads for the gate while it asks who holds the item
+- bug reports addressed: paradigm-20261009-011133
+
 ## 3.158.2
 
 - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor

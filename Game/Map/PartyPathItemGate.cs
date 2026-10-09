@@ -91,6 +91,7 @@ public sealed class PartyPathItemGate
     private readonly Action<IReadOnlyList<int>, int> _forward;
     private readonly Action<Action> _post;
     private readonly Func<int, IReadOnlyList<int>> _substitutes;
+    private readonly Func<int, bool> _agreedTrade;
     private readonly LogService? _log;
     private readonly object _gate = new();
     private readonly Dictionary<int, Pending> _pending = new();
@@ -110,7 +111,8 @@ public sealed class PartyPathItemGate
         Action<IReadOnlyList<int>, int> forward,
         Action<Action> post,
         LogService? log = null,
-        Func<int, IReadOnlyList<int>>? substitutes = null)
+        Func<int, IReadOnlyList<int>>? substitutes = null,
+        Func<int, bool>? agreedTrade = null)
     {
         ArgumentNullException.ThrowIfNull(isCarried);
         ArgumentNullException.ThrowIfNull(selfCount);
@@ -137,6 +139,7 @@ public sealed class PartyPathItemGate
         _forward = forward;
         _post = post;
         _substitutes = substitutes ?? (static id => new[] { id });
+        _agreedTrade = agreedTrade ?? (static _ => false);
         _log = log;
     }
 
@@ -229,6 +232,17 @@ public sealed class PartyPathItemGate
             if (!_isEnabled(id))
             {
                 (passthrough ??= new()).Add(id);   // self-only demand, per-item routers handle it
+                continue;
+            }
+            // A trade the user agreed to on the route card is fetched at once. The
+            // card already said where the item comes from and what it costs, and
+            // the party count is a telepath round trip: for those seconds the walker
+            // headed for the gate instead of the giver, and the map drew that line.
+            if (_agreedTrade(id) && !_isCarried(id))
+            {
+                _log?.Info(LogCategory,
+                    $"path item {id}: its trade was agreed on the route card, so the party isn't asked first");
+                (passthrough ??= new()).Add(id);
                 continue;
             }
             if (leader)
