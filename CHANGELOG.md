@@ -1,5 +1,14 @@
 # Version history
 
+## 3.159.24
+
+- A `;` that starts a word is sent to the game as typed (`;o`, `/name @do ;o`, a `;)` in chat) instead of splitting the line; `n;s` still sends two commands
+- Typing `;;` before a word keeps one `;` for the game: `;;time` sends `;time`
+- Sending `;o` drops the connection and reconnects; sending `=x` drops it and stays off
+- `@hangup` and `@relog` are obeyed with Disable Hangups on
+- Events and the pre-/post-rest commands split their commands by the same rule as macros, aliases and triggers
+- bug reports addressed: paradigm-20261009-081205
+
 ## 3.159.21
 
 - The inventory is read again after a death, so gear handed back afterwards can be put on with a gear set (it used to read as already worn until you typed `i`)
