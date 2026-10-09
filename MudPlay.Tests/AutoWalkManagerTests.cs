@@ -2439,6 +2439,36 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.NotEmpty(h.Sent);
     }
 
+    // The party is asked who holds a route item when the walk announces its items,
+    // and the answer may turn the walk aside for a shop. The announce comes before
+    // the first step, so the hold it raises keeps that step back (report
+    // paradigm-20261009-011133: four rooms toward the gate, then back for the item).
+    [Fact]
+    public void HoldRaisedByTheItemAnnounce_KeepsTheFirstStepBack()
+    {
+        Harness h = NewHarness(ItemGatedLineJson);
+        List<int> announced = new();
+        h.Walker.SetPathItemAnnouncer(ids =>
+        {
+            announced.AddRange(ids);
+            h.Coordinator.AssertGate(MovementCoordinator.PartyItemCountGate, "test", "asking the party");
+        });
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        bool started = h.Walker.WalkTo(new RoomKey(1, 2));
+
+        Assert.True(started);
+        Assert.Equal(new[] { 807 }, announced);
+        Assert.Empty(h.Sent);
+        Assert.Equal(WalkState.Paused, h.Walker.State);
+        Assert.Single(h.Events, e => e.Kind == WalkEventKind.Paused);   // said once, not twice
+
+        h.Coordinator.ClearGate(MovementCoordinator.PartyItemCountGate, "test", "the count is in");
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.NotEmpty(h.Sent);
+    }
+
     // A key gate is NOT a carry gate — pick and bash open it — so ExitGateItems
     // omits it. But a key with an acquisition behind it still has to hold, or the
     // door FSM arrives first and burns its one use-key attempt on a key that hasn't

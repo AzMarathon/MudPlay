@@ -1,8 +1,20 @@
 # Version history
 
-## 3.158.3
+## 3.158.8
 
 - Players Seen: double-click a row to open the map on the room that player was last seen in, flashed green like an `@where` reply
+
+## 3.158.7
+
+- A `bank` reply taken while standing in a bank, which shows that bank alone, no longer counts as the full list of your deposits; train funding and the route picker ask again from outside one
+
+## 3.158.6
+
+- A route card's trade trip starts with the first step, in a party too
+- A party walk sent to fetch an item waits for the party's count before setting off
+- An invited member who hasn't joined is no longer waited on for item counts
+- A party member who doesn't answer an item count is fetched a copy too
+- bug reports addressed: paradigm-20261009-011133
 
 ## 3.158.2
 

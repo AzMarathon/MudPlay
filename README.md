@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.3**
+> **Version 3.158.8**
 > - Players Seen: double-click a row to open the map on the room that player was last seen in, flashed green like an `@where` reply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
