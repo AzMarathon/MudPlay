@@ -263,7 +263,7 @@ public sealed partial class GameDataBrowserViewModel : ObservableObject, IDispos
         // Derived views over the MDB tables (not backed by their own JSON): the unobtainable
         // Items and the quest-flag → source index.
         Sections.Add(new UnobtainableSectionViewModel(_gameData, _resolver, _roomGraph));
-        Sections.Add(new QuestFlagsSectionViewModel(_questFlags, _gameData));
+        Sections.Add(new QuestFlagsSectionViewModel(_questFlags, _gameData, _dialogs));
 
         // Hook every section's NavigationRequested event so cross-section
         // jumps (e.g. Shops → Rooms double-click) can route through the

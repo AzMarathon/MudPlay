@@ -217,10 +217,16 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
         ColumnsChanged?.Invoke();
     }
 
+    // A saved layout counts only on a table whose columns the user can still change. The
+    // picker once sat on every tab, so a profile can hold a layout for a table that has since
+    // lost it; honouring that would hide every column added later with no way to bring it back.
+    private bool HonoursSavedLayout => ShowColumnPicker || AllowColumnReorder;
+
     private HashSet<string> LoadSavedVisible()
     {
         HashSet<string> set = new(StringComparer.OrdinalIgnoreCase);
-        if (AppServices.Current?.Profile.Current?.TableColumnLayouts is { } map
+        if (HonoursSavedLayout
+            && AppServices.Current?.Profile.Current?.TableColumnLayouts is { } map
             && map.TryGetValue(ColumnLayoutKey, out List<string>? cols) && cols is not null)
             foreach (string c in cols) set.Add(c);
         return set;
@@ -228,7 +234,8 @@ public abstract partial class GameDataTableSectionViewModel : GameDataSectionVie
 
     private List<string> LoadSavedOrder()
     {
-        if (AppServices.Current?.Profile.Current?.TableColumnLayouts is { } map
+        if (HonoursSavedLayout
+            && AppServices.Current?.Profile.Current?.TableColumnLayouts is { } map
             && map.TryGetValue(ColumnLayoutKey, out List<string>? cols) && cols is not null)
             return cols.ToList();
         return new List<string>();

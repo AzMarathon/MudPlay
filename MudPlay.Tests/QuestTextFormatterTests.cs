@@ -172,32 +172,56 @@ public sealed class QuestTextFormatterTests
             QuestTextFormatter.Step(NoSet, MakeStep(1, "ask old man phoenix", "Room 9/1259")));
     }
 
-    [Fact]
-    public void Step_MonsterSourcedGrant_NarratesKillWithDrop()
+    // A set where monster 39 dies into spell 610, which ends by casting 611 — the spell a
+    // kill step's textblock is called from. Monster 40 is an NPC with nothing of the kind.
+    private static GameDataCache KillSet()
     {
-        // No placement map → the kill narrates room-less (backward-compatible default).
-        Assert.Equal("kill monster #39 (#100)",
-            QuestTextFormatter.Step(NoSet, MakeStep(2, null, "Monster #39", granted: new[] { 100 })));
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-questtext-tests-" + Path.GetRandomFileName());
+        string dir = Path.Combine(root, "alpha");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), """
+            [
+              { "Number": 39, "Name": "queen ant", "DeathSpell": 610 },
+              { "Number": 40, "Name": "old hermit", "DeathSpell": 0 }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), """
+            [
+              { "Number": 610, "Name": "ant queen temp", "Targets": 12, "Abil-0": 151, "AbilVal-0": 611 },
+              { "Number": 611, "Name": "ant queen text", "Targets": 1, "Abil-0": 148, "AbilVal-0": 1444 }
+            ]
+            """);
+        GameDataCache cache = new(root);
+        cache.SwitchSet("alpha");
+        return cache;
     }
 
     private static IReadOnlyDictionary<int, IReadOnlyList<RoomKey>> Placement(int monster, params RoomKey[] keys) =>
         new Dictionary<int, IReadOnlyList<RoomKey>> { [monster] = keys };
 
     [Fact]
+    public void Step_ScriptOffAMonstersDeathSpell_NarratesKillWithDrop()
+    {
+        // No placement map → the kill narrates room-less.
+        Assert.Equal("kill queen ant (#100)",
+            QuestTextFormatter.Step(KillSet(), MakeStep(2, null, "Spell #611", granted: new[] { 100 })));
+    }
+
+    [Fact]
     public void Step_KillStep_PrependsMonsterPlacementRoomLink()
     {
-        // A kill step's location is the monster; its room link comes from where the
-        // quest places that monster, resolved into the threaded-in placement map.
-        Assert.Equal("(9/717) kill monster #39 (#100)",
-            QuestTextFormatter.Step(NoSet, MakeStep(2, null, "Monster #39", granted: new[] { 100 }),
+        // The room link comes from where the quest places the monster whose death runs
+        // the step, resolved into the threaded-in placement map.
+        Assert.Equal("(9/717) kill queen ant (#100)",
+            QuestTextFormatter.Step(KillSet(), MakeStep(2, null, "Spell #611", granted: new[] { 100 }),
                 Placement(39, new RoomKey(9, 717))));
     }
 
     [Fact]
     public void Step_KillStep_MultiplePlacements_ListEveryRoomAsItsOwnLink()
     {
-        Assert.Equal("(1/2) (3/4) kill monster #39",
-            QuestTextFormatter.Step(NoSet, MakeStep(2, null, "Monster #39"),
+        Assert.Equal("(1/2) (3/4) kill queen ant",
+            QuestTextFormatter.Step(KillSet(), MakeStep(2, null, "Spell #611"),
                 Placement(39, new RoomKey(1, 2), new RoomKey(3, 4))));
     }
 
@@ -206,9 +230,66 @@ public sealed class QuestTextFormatterTests
     {
         // Monster absent from the map (nothing places it) → no dead link, the kill
         // narration stands alone.
-        Assert.Equal("kill monster #39",
-            QuestTextFormatter.Step(NoSet, MakeStep(2, null, "Monster #39"),
+        Assert.Equal("kill queen ant",
+            QuestTextFormatter.Step(KillSet(), MakeStep(2, null, "Spell #611"),
                 Placement(99, new RoomKey(1, 2))));
+    }
+
+    [Fact]
+    public void Step_KillStep_TwoRecordsOfOneMonster_NamesItOnceWithEachPlacedRoomOnce()
+    {
+        // Two spells off two records of the same boss run the step; the first has no
+        // placement, the second stands in two rooms, one of them shared with a third record.
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-questtext-tests-" + Path.GetRandomFileName());
+        string dir = Path.Combine(root, "alpha");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), """
+            [
+              { "Number": 2203, "Name": "dark phoenix", "DeathSpell": 5272 },
+              { "Number": 700, "Name": "dark phoenix", "DeathSpell": 871 },
+              { "Number": 701, "Name": "dark phoenix", "DeathSpell": 871 }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), """
+            [
+              { "Number": 5272, "Name": "phoenix text a", "Targets": 1 },
+              { "Number": 871, "Name": "phoenix text b", "Targets": 1 }
+            ]
+            """);
+        GameDataCache set = new(root);
+        set.SwitchSet("alpha");
+        QuestStep first = MakeStep(18, null, "Spell #5272");
+        QuestStep second = MakeStep(18, null, "Spell #871");
+        var placement = new Dictionary<int, IReadOnlyList<RoomKey>>
+        {
+            [700] = new[] { new RoomKey(16, 2160), new RoomKey(16, 2161) },
+            [701] = new[] { new RoomKey(16, 2160) },
+        };
+
+        Assert.Equal("(16/2160) (16/2161) kill dark phoenix",
+            QuestTextFormatter.StepOrNull(set, first, placement, sameStep: new[] { first, second }));
+        // On its own the unplaced record still narrates, room-less.
+        Assert.Equal("kill dark phoenix", QuestTextFormatter.StepOrNull(set, first, placement));
+    }
+
+    [Fact]
+    public void Step_SpellThatIsNoMonstersDeath_IsNotAKill()
+    {
+        Assert.Equal("obtain #100",
+            QuestTextFormatter.Step(KillSet(), MakeStep(2, null, "Spell #999", granted: new[] { 100 })));
+    }
+
+    [Fact]
+    public void Step_CommandlessStepOffAnNpc_IsNotAKill()
+    {
+        // A script that hangs off a monster with no command is that NPC's dialogue (a
+        // keyword it shows by itself), not its death: nothing to kill and no room to walk to.
+        GameDataCache set = KillSet();
+        Assert.Equal("obtain #100",
+            QuestTextFormatter.Step(set, MakeStep(2, null, "Monster #40", granted: new[] { 100 }),
+                Placement(40, new RoomKey(2, 340))));
+        Assert.Null(QuestTextFormatter.StepOrNull(set, MakeStep(2, null, "Monster #40"),
+            Placement(40, new RoomKey(2, 340))));
     }
 
     [Fact]

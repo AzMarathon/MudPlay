@@ -1,9 +1,21 @@
 # Version history
 
-## 3.158.10
+## 3.159.2
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
 - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+
+## 3.159.1
+
+- Game Data Browser → Monsters: new **BS Def** column (backstab defence) in the column picker, with a range filter
+
+## 3.159.0
+
+- Game Data Browser → Quest Flags: one row per script line, with **Command**, **Level**, **Class**, **Race** and **Items** columns
+- Double-click a Quest Flags row for **Quest Flag Steps**: that flag's steps in walking order, with what to type or kill and what each needs and gives
+- A flag number typed in the Quest Flags filter shows that flag only
+- Quest tab: a drafted step that happens on a monster's death now reads **kill <monster>** with its room, instead of *obtain <item>* or nothing
+- A saved column layout no longer hides new columns on a table without a column picker
 
 ## 3.158.9
 
