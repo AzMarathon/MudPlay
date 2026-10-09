@@ -3648,6 +3648,7 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 
 **Default:** Off
 **What it does:** When you see your party leader failing to bash a locked door, you automatically pitch in (bashing or picking, depending on your own door-preference setting).
+**Important notes:** It only works while the leader **bashes**. The game shows the room each bash attempt, and that line is what this reacts to. A leader who picks the lock instead shows the room nothing while they try, so there is nothing to pitch in on.
 
 ### Ignore @wait when leading
 

@@ -1,5 +1,9 @@
 # Version history
 
+## 3.159.20
+
+- Settings → Party: "Help leader open doors" says it only works while the leader bashes (a leader picking a lock shows the room nothing)
+
 ## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
