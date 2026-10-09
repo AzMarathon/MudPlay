@@ -636,6 +636,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
   - **The same `[MAJORMUD]: ` prompt follows the other ways out:** running out of BBS credits (`You have run out of credits for Major Mud.`, `_slow_update_character` @0x4225b6, with the `just left the Realm.` line to the game) and a death with no lives left (*Death & corpse recovery → Death lines & the miracle-save*).
 - **A Stock login starts with the character's state flags cleared** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_load_player` @0x41543a, @0x4153de; Realm: Stock, Paradigm not recorded)*. The whole flag word that holds sneaking, dragging, resting and the exit wait is zeroed and following is cleared, so none of them survives a login.
 - **The entry menu takes whatever is sent next as a selection and redraws itself**, under a `[PARADIGM]:` prompt on that board *([OBSERVED] same report)*. `e` enters the realm, in either case: `e` and `E` work the same *([CONFIRMED] 2026-10-08, user)*.
+- **Paradigm runs its cleanup live, with the game up; Stock cannot** *([CONFIRMED] 2026-10-09, user: "it does a live cleanup which stock cannot do")*. A Stock board goes down for its cleanup, so players are put out of the game for it; a Paradigm realm stays up through it. So logging off ahead of a cleanup is a Stock matter only.
 
 **Client use:**
 - The cleanup-logoff orchestrator keys its carrier-drop on that line (`KnownPatterns.RealmExitSaved`). The entry-menu row and a wait-timeout remain secondary fallbacks.
