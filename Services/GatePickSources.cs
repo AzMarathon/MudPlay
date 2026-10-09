@@ -12,12 +12,13 @@ public sealed class GatePickSources
     private readonly Dictionary<int, string> _givers = new();
     private readonly Dictionary<int, string> _notes = new();
     private readonly Dictionary<int, string> _droppers = new();
-    private readonly List<int> _trades = new();
+    private readonly List<(int KeyId, int TakesItemId)> _trades = new();
 
     private GatePickSources() { }
 
-    // The door keys this pick fetches by handing an item over.
-    public IReadOnlyList<int> Trades => _trades;
+    // The door keys this pick fetches by handing an item over, each with the item
+    // the card said it would cost.
+    public IReadOnlyList<(int KeyId, int TakesItemId)> Trades => _trades;
 
     // The three tails a requirement clause can carry; at most one is set per item.
     public string? GiverName(int itemId) => _givers.GetValueOrDefault(itemId);
@@ -28,18 +29,20 @@ public sealed class GatePickSources
     // edge, to a shop the leader can't pay at): it arranges nothing, so its card
     // names no source.
     //
-    // A gate item is sourced by this pick when the pick force-obtains it
-    // (RouteChoicePlanner.SourceableGateItems), whatever its Auto-obtain flag says.
-    // A hazard counter the picker didn't resolve keeps the flag as its rule.
+    // A gate item is sourced by this pick when the pick force-obtains it, whatever
+    // its Auto-obtain flag says: every required item, and a door key when something
+    // other than a trade yields it (keyHasOtherSource) or its trader can be reached
+    // on this walk. A hazard counter the picker didn't resolve keeps the flag as
+    // its rule.
     //
     // The source helpers answer for the walk this pick would start, ignoring the
-    // flag: giver(id, tradeAgreed), buyPhrase(id), dropper(id). tradeNote(id) says
+    // flag: giver(id, offerTrades), buyPhrase(id), dropper(id). tradeNote(id) says
     // how a key is come by when nothing fetches it. Trades are for door keys only:
     // other gate items are quest pieces the walk never goes after on its own.
     public static GatePickSources Build(
         IReadOnlyList<RouteRequirement> requirements,
         bool pickFetches,
-        Func<int, bool> keyFetchableIfPicked,
+        Func<int, bool> keyHasOtherSource,
         Func<int, bool> flaggedAutoObtain,
         Func<int, bool, GiveSource?> giver,
         Func<int, string?> buyPhrase,
@@ -47,7 +50,7 @@ public sealed class GatePickSources
         Func<int, string?> tradeNote)
     {
         ArgumentNullException.ThrowIfNull(requirements);
-        ArgumentNullException.ThrowIfNull(keyFetchableIfPicked);
+        ArgumentNullException.ThrowIfNull(keyHasOtherSource);
         ArgumentNullException.ThrowIfNull(flaggedAutoObtain);
         ArgumentNullException.ThrowIfNull(giver);
         ArgumentNullException.ThrowIfNull(buyPhrase);
@@ -55,9 +58,6 @@ public sealed class GatePickSources
         ArgumentNullException.ThrowIfNull(tradeNote);
 
         var pick = new GatePickSources();
-        IReadOnlyList<int> fetched = pickFetches
-            ? RouteChoicePlanner.SourceableGateItems(requirements, keyFetchableIfPicked)
-            : Array.Empty<int>();
         var seen = new HashSet<int>();
 
         foreach (RouteRequirement req in requirements)
@@ -67,16 +67,20 @@ public sealed class GatePickSources
             if (id <= 0 || !seen.Add(id)) continue;
 
             bool isKey = req.Kind == RouteRequirementKind.DoorKey;
-            bool sourced = req.Kind == RouteRequirementKind.HazardProtection
-                ? pickFetches && flaggedAutoObtain(id)
-                : fetched.Contains(id);
+            bool wanted = pickFetches
+                && (req.Kind == RouteRequirementKind.HazardProtection ? flaggedAutoObtain(id) : !req.Optional);
+            GiveSource? source = wanted ? giver(id, isKey) : null;
+            // A key only a trade yields is fetched when its trader can be reached;
+            // otherwise the walk arranges nothing for it and the card must not say
+            // it will.
+            bool sourced = wanted && (!isKey || source is not null || keyHasOtherSource(id));
 
             if (sourced)
             {
-                if (giver(id, isKey) is { } source)
+                if (source is { } from)
                 {
-                    pick._givers[id] = source.GiverName;
-                    if (source.TakesItemId > 0) pick._trades.Add(id);
+                    pick._givers[id] = from.GiverName;
+                    if (from.TakesItemId > 0) pick._trades.Add((id, from.TakesItemId));
                     continue;
                 }
                 if (buyPhrase(id) is { Length: > 0 } buy) { pick._notes[id] = buy; continue; }

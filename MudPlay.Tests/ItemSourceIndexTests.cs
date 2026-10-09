@@ -305,6 +305,8 @@ public sealed class ItemSourceIndexTests : IDisposable
         Assert.False(key.Deterministic);
         Assert.Equal(33, key.TradeItemId);
         Assert.Equal("turn in opal brooch", key.Requirement);
+        // The message `takeitem` names is what he says to someone without a brooch.
+        Assert.Equal(new[] { 1368 }, key.RefusalMessages);
         Assert.Equal(new[] { new RoomKey(8, 486) }, index.GiverMonsterRoomsOf(305));
 
         // One hand-in, two keys back.

@@ -3,7 +3,8 @@
 <!-- current-version:start -->
 > **Version 3.155.2**
 > - A door key an NPC trades for an item in your pack can be fetched from the route card: with the opal brooch, the card for the dark-elf archmage's tower reads "glowing key (ask sleazy shopkeeper, in trade for your opal brooch)", and picking it makes the trade on the way
-> - A trade is only ever made from a card that names it, only for a door key nothing else yields, and never with an item you are wearing
+> - A trade is only ever made from a card that names it, for the one walk that card starts: only for a door key nothing else yields, only the item the card named, and never one you are wearing
+> - Picking a route card during another walk no longer loses what the card was to fetch; a card with both a hazard counter and a gate item fetches both
 > - Without that item the card names the trade and what drops the item, in place of the bare key name
 > - Route cards say what their pick will do about each item (ask / buy / dropped by), ticked Auto-obtain or not; a pick that only walks somewhere and stops names no source
 > - A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window

@@ -4673,13 +4673,18 @@ Among protectable hazards, a further split governs whether the navigator may off
     picker's human-readable "(ask …)" promise keeps the full name.
 
 ### Room-command refusals
-*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07, level conditions 2026-10-08 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
+*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07, level conditions, `takeitem` / `checkitem` and line order 2026-10-08 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
 
 - **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
-  - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
+  - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `takeitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
   - On failure the engine prints the message's line 1 to you and line 2 to the room (@0x46f360), and the rest of that line doesn't run. With no message number the refusal is silent.
-  - **`takeitem` is written with a second number too in some lines** *([OBSERVED] 2026-10-08, Paradigm 1.9.1 TBInfo)*: `takeitem 811 1368:giveitem 808:text 843` (textblock 842), `takeitem 490 467:message 468:…` (textblock 211), beside the bare `takeitem 1183` of textblock 4041. `[NEEDS CONFIRMATION]`: is that number the message printed when the item isn't carried, as for `checkitem`? The client does not read it.
-  - **Whether `takeitem` takes an item that is being worn is not recorded.** `[NEEDS CONFIRMATION]`: with the opal brooch (item 811, wearable) worn and none in the pack, does `ask sleazy shopkeeper brooch` (textblock 842) take it and hand over the key, or refuse? Until it is answered the client offers a trade only for a copy in the pack or on the key ring (*Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*).
+- **`takeitem <N> [msg]` takes the item from wherever it is held, worn included, and its second number is the message for not having it** *([OBSERVED] 2026-10-08, `_perform_matched_action` @0x470209 in the Stock 1.11p `wccmmud.dll`; Realm: Stock, Paradigm not recorded)*.
+  - It calls `_remove_item_from_inventory` (@0x41b2c8), which takes the first matching slot of the 100-slot inventory, **worn or not**, and unequips the item if that was the last copy (a worn slot holds an item id, not a separate object). Failing that it takes from the 50-slot key ring. So a worn item is taken.
+  - When the item is missing, the items that line had already taken are given back, the second number is printed as a message (@0x470942 → 0x46f360) and the line fails. In `takeitem 811 1368:giveitem 808:text 843` (textblock 842), `1368` is the message for having no opal brooch. The wording of messages `1368` and `1369` is not recorded.
+  - The data writes it both ways *([OBSERVED] 2026-10-08, Paradigm 1.9.1 TBInfo)*: with a message in `takeitem 811 1368` and `takeitem 490 467:message 468:…` (textblock 211), bare in `takeitem 1183` (textblock 4041). (An earlier note asked whether the second number was a message and whether a worn item is taken; both answered from the Stock DLL 2026-10-08.)
+  - **Client policy:** MudPlay offers a trade only for a copy in the pack or on the key ring, never a worn one, on both realms. The game itself would take a worn one from a player who types the `ask` (Stock; not recorded on Paradigm). See *Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*.
+- **`checkitem <N> [msg]` looks through the same 100-slot inventory and then the 50-slot key ring** *([OBSERVED] 2026-10-08, the `checkitem` branch at 0x470f35; Realm: Stock, Paradigm not recorded)*. A worn item passes. A missing one prints the message and fails the line.
+- **A textblock's lines are tried in order, and the first whose action succeeds ends the scan** *([OBSERVED] 2026-10-08, `_perform_special_command` @0x471a30 and `_perform_text_block_as_special_command` @0x471d55; Realm: Stock, Paradigm not recorded)*. A line that fails a check falls through to the next matching line.
 - **`minlevel <N> [msg]` passes at level `N` or higher, and every one in a line is enforced** *([OBSERVED] 2026-10-08, `_perform_matched_action` @0x470209 in the Stock 1.11p `wccmmud.dll`, the `minlevel` branch at 0x470df4)*.
   - The interpreter takes a line one `:` step at a time. At a `minlevel` step it compares the character's level (the word at player+0x94) with `N` and goes on to the next step when the level is `N` or more (`cmp edx,[ebp-0x8]` / `jge 0x471a07`). Below `N` it prints the message if one is named, drops the rest of the line and returns 2.
   - It keeps nothing from one step to the next, so a line with two `minlevel` steps checks both, and running the whole line takes the **highest** of them. A later, lower number never relaxes an earlier one.
@@ -5026,16 +5031,23 @@ Among protectable hazards, a further split governs whether the navigator may off
   - **Client policy** (report `paradigm-20261008-175938`): a walk trades for a door key, and only for a
     door key, from a route card that names the trade.
     - A plain trade is an award line that takes one item, once, asks nothing else of the character and
-      is the only line its keyword runs (`ItemGiver.TradeItemId`, `ItemSourceIndex`).
+      is the only line its keyword runs (`ItemGiver.TradeItemId`, `ItemSourceIndex`). The message its
+      `takeitem` names is taken as the giver's refusal (`GiveRefusalLines`), which ends the wait at once
+      where the wording is known; for `1368` and `1369` it isn't, so a refused trade there waits out
+      its 8 s.
     - It is used only when nothing else certain yields the key: no free give, no shop, no guaranteed
       summon. A trade never stands in for one of those (`PathItemGiveSources.Trades`).
-    - The item it takes must be in the pack or on the key ring. A worn one doesn't count: whether
-      `takeitem` takes a worn item is the open question in *Room-command refusals*.
+    - The item it takes must be in the pack or on the key ring. A worn one is never offered, though
+      the game would take it (*Room-command refusals*): the walk doesn't strip gear the user is wearing.
     - With the opal brooch in the pack the route card reads `glowing key (ask sleazy shopkeeper, in
       trade for your opal brooch)`; picking it agrees to that trade
       (`AppServices.AgreeToPathItemTrades`), walks to `8/486` and sends `ask sleazy shopkeeper brooch`.
       A walk with no card (an item flagged **Auto-obtain for path** on a sole route, a loop's approach)
       never trades (`AppServices.ShouldAutoObtainSoleRoute`).
+    - The agreement is for that key, that item and that one walk (`RouteCardFetch.AgreedTradeFor`): it
+      comes into force when the walk the card committed starts, and ends when that walk arrives,
+      fails, is stopped or is replaced by another, and on death, a dropped connection, a profile
+      change and an engine reset. No later walk can trade on it.
     - Without the brooch nothing is fetched and the card names the trade instead
       (`PathItemGiveSources.TradeNote`): `glowing key (sleazy shopkeeper trades one for opal brooch,
       which captain of the guard drops)`. Killing a boss for the item a trade takes is left to the

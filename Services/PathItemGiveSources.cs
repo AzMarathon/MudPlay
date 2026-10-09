@@ -9,11 +9,13 @@ namespace MudPlay.Services;
 // plain trade hands the item over for one other item (the sleazy shopkeeper's
 // glowing key for an opal brooch). It spends something of the user's, so it ranks
 // below every other certain source (a free give, a shop, a guaranteed summon) and
-// is a source only while what it takes sits unworn in the pack: whether the game
-// takes a worn item in a trade isn't known.
+// is a source only while what it takes sits unworn in the pack: the game would
+// take a worn item too, and a walk doesn't strip what the user has on. Only a key
+// is ever traded for.
 //
 // When a trade may be used is the caller's decision. The give router is handed one
-// only for a door key whose trade the user agreed to on a route card that named it.
+// only for a door key whose trade the user agreed to on the route card that
+// started the walk now running, and only the trade for the item that card named.
 public sealed class PathItemGiveSources
 {
     private readonly ItemSourceIndex _index;
@@ -21,18 +23,21 @@ public sealed class PathItemGiveSources
     private readonly MovementFilter _filter;
     private readonly Func<int, int> _unwornCount;
     private readonly Func<int, string?> _itemName;
+    private readonly Func<int, bool> _isKey;
     private readonly Func<int, bool> _soldOrSummoned;
     private readonly Func<int, string?> _alwaysDroppedBy;
 
     // unwornCount: copies in the pack or on the key ring, worn ones left out.
-    // soldOrSummoned: a shop sells the item or a room command summons its
-    // guaranteed dropper. alwaysDroppedBy: a monster that drops the item every time.
+    // isKey: the item is a key by its record. soldOrSummoned: a shop sells the item
+    // or a room command summons its guaranteed dropper. alwaysDroppedBy: a monster
+    // that drops the item every time.
     public PathItemGiveSources(
         ItemSourceIndex index,
         BfsMapper bfs,
         MovementFilter filter,
         Func<int, int> unwornCount,
         Func<int, string?> itemName,
+        Func<int, bool> isKey,
         Func<int, bool> soldOrSummoned,
         Func<int, string?> alwaysDroppedBy)
     {
@@ -41,6 +46,7 @@ public sealed class PathItemGiveSources
         ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(unwornCount);
         ArgumentNullException.ThrowIfNull(itemName);
+        ArgumentNullException.ThrowIfNull(isKey);
         ArgumentNullException.ThrowIfNull(soldOrSummoned);
         ArgumentNullException.ThrowIfNull(alwaysDroppedBy);
         _index = index;
@@ -48,6 +54,7 @@ public sealed class PathItemGiveSources
         _filter = filter;
         _unwornCount = unwornCount;
         _itemName = itemName;
+        _isKey = isKey;
         _soldOrSummoned = soldOrSummoned;
         _alwaysDroppedBy = alwaysDroppedBy;
     }
@@ -59,30 +66,37 @@ public sealed class PathItemGiveSources
     // shows ("(ask Gnome Commander)").
     public IReadOnlyList<GiveSource> Free(int itemId) => Resolve(itemId, trades: false);
 
-    // The trades for itemId the character could make right now. Empty while any
-    // other certain source exists, so a trade never stands in for a free give, a
-    // purchase or a summon.
+    // The trades for itemId the character could make right now. Only a key is ever
+    // traded for, and only while no other certain source exists, so a trade never
+    // stands in for a free give, a purchase or a summon.
     public IReadOnlyList<GiveSource> Trades(int itemId) =>
-        _soldOrSummoned(itemId) || Free(itemId).Count > 0
+        !_isKey(itemId) || _soldOrSummoned(itemId) || Free(itemId).Count > 0
             ? Array.Empty<GiveSource>()
             : Resolve(itemId, trades: true);
 
     // What the give router may act on: the free hand-overs, or failing those the
-    // trades when one was agreed to.
-    public IReadOnlyList<GiveSource> ForRouter(int itemId, bool tradeAgreed)
+    // one trade agreed to. agreedTakes is the item the user agreed to hand over;
+    // a trade that takes anything else is not offered, though it buys the same key.
+    public IReadOnlyList<GiveSource> ForRouter(int itemId, int? agreedTakes)
     {
         IReadOnlyList<GiveSource> free = Free(itemId);
-        return free.Count > 0 || !tradeAgreed ? free : Trades(itemId);
+        if (free.Count > 0 || agreedTakes is not int takes) return free;
+        return Trades(itemId).Where(t => t.TakesItemId == takes).ToList();
     }
 
-    // The source the give router would detour to on a walk from source to
-    // destination, or null when it has none it can reach. Shares the router's
-    // selection and its distances, so a route card names the giver the run visits.
-    public GiveSource? Choose(int itemId, RoomKey source, RoomKey destination, bool tradeAgreed) =>
-        PathItemGiveRouter.TrySelectGiver(
-            ForRouter(itemId, tradeAgreed), source, destination, DetourDistance, out GiveSource best)
+    // The source a route card names for a walk from source to destination, or null
+    // when none can be reached: a free hand-over, or failing those (and with
+    // offerTrades) the trade it would ask the user to agree to. Shares the give
+    // router's selection and its distances, so the card names the giver the run
+    // visits.
+    public GiveSource? Choose(int itemId, RoomKey source, RoomKey destination, bool offerTrades)
+    {
+        IReadOnlyList<GiveSource> candidates = Free(itemId);
+        if (candidates.Count == 0 && offerTrades) candidates = Trades(itemId);
+        return PathItemGiveRouter.TrySelectGiver(candidates, source, destination, DetourDistance, out GiveSource best)
             ? best
             : null;
+    }
 
     // Distance used to score a detour for a path item. The acquirable gates are
     // suspended: the walk is priced with the fetched item in hand, and the
@@ -100,17 +114,22 @@ public sealed class PathItemGiveSources
     // item with any other certain source, or no trade.
     public string? TradeNote(int itemId)
     {
-        if (_soldOrSummoned(itemId) || Free(itemId).Count > 0) return null;
+        if (!_isKey(itemId) || _soldOrSummoned(itemId) || Free(itemId).Count > 0) return null;
+
+        // Of several trades, the one the character can make now; failing that, one
+        // whose item has a sure source to send them to.
+        string? droppedNote = null, plainNote = null;
         foreach (ItemGiver g in _index.GiversOf(itemId))
         {
             if (!IsTrade(g)) continue;
             string wanted = _itemName(g.TradeItemId) ?? $"item #{g.TradeItemId}";
             if (_unwornCount(g.TradeItemId) > 0) return $"{g.Name} trades one for your {wanted}";
-            return _alwaysDroppedBy(g.TradeItemId) is { Length: > 0 } monster
-                ? $"{g.Name} trades one for {wanted}, which {monster} drops"
-                : $"{g.Name} trades one for {wanted}";
+            if (_alwaysDroppedBy(g.TradeItemId) is { Length: > 0 } monster)
+                droppedNote ??= $"{g.Name} trades one for {wanted}, which {monster} drops";
+            else
+                plainNote ??= $"{g.Name} trades one for {wanted}";
         }
-        return null;
+        return droppedNote ?? plainNote;
     }
 
     private static bool IsTrade(ItemGiver g) =>

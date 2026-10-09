@@ -45,7 +45,8 @@ public enum ItemGiverKind { Monster, Room }
 // since it costs the item, but it is as certain as a free one for a character
 // holding that item. Zero for every other give: a line that takes more than one
 // item, takes one twice, carries any other condition, or shares its keyword with
-// another line (which of several lines the game runs isn't something to assume).
+// another line. Stock tries a keyword's lines in order and moves on from one that
+// fails a check; what Paradigm does isn't recorded, so several lines are left alone.
 public readonly record struct ItemGiver(
     ItemGiverKind Kind, int Number, int Map, int Room, string Name, string Requirement,
     string Keyword, bool Deterministic, IReadOnlyList<int>? RefusalMessages = null,
@@ -344,8 +345,7 @@ public sealed class ItemSourceIndex
                 // One item taken, once, nothing else asked of the character, and no
                 // other line under the same keyword. A line that takes several, or
                 // the same one more than once, is left out, and so is one of several
-                // alternatives: how the game counts the first and picks among the
-                // second isn't something to assume here.
+                // alternatives: a simple swap is all a walk should make unasked for.
                 int tradeItemId = takes == 1 && plainExchange && LinesSharingTrigger(lines, lineKeyword) == 1
                     ? takeId
                     : 0;
@@ -803,11 +803,12 @@ public sealed class ItemSourceIndex
     }
 
     // The conditions whose last argument is the message printed when they fail
-    // (GAME_MECHANICS "TBInfo directive fail messages").
+    // (GAME_MECHANICS "Room-command refusals"). `takeitem` prints its own when
+    // the item isn't held.
     private static readonly HashSet<string> s_refusingVerbs = new(StringComparer.OrdinalIgnoreCase)
     {
         "minlevel", "maxlevel", "goodaligned", "evilaligned", "checkitem", "failitem",
-        "failability",
+        "failability", "takeitem",
     };
 
     // The fail-message number a condition token carries ("goodaligned -51 3075" →

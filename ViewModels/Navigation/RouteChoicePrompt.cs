@@ -794,8 +794,9 @@ public static class RouteChoicePrompt
                 // forced crossing takes the fewest-traps approach the planner chose.
                 //
                 // A trade hands an item of the user's over. Picking this card agrees
-                // to the trades it named, and to no others.
-                services.AgreeToPathItemTrades(gatePick.Trades);
+                // to the trades it named, and to no others, for this walk alone. It
+                // also opens the pick's fetch order, which the two calls below add to.
+                services.AgreeToPathItemTrades(destination, gatePick.Trades);
                 foreach (int id in floorCounters)
                     if (services.ItemNames.GetName(id) is { Length: > 0 } n)
                         services.SendGameCommand($"get {n}");

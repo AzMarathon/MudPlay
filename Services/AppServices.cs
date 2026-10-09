@@ -3903,6 +3903,7 @@ public sealed class AppServices
             ItemSources, Bfs, Movement,
             unwornCount: CountItemUnworn,
             itemName: id => ItemNames.GetName(id),
+            isKey: id => ItemNames.ItemTypeOf(id) == Game.Inventory.InventoryManager.KeyItemType,
             soldOrSummoned: id => ShopStock.AnyShopSells(id) || SummonSourcesForItem(id).Count > 0,
             alwaysDroppedBy: AlwaysDroppedBy);
         // GH room labels + the Roomba item-sighting log are BBS-tier (not
@@ -6744,7 +6745,7 @@ public sealed class AppServices
             // fulfillers (the reliable acquire path), so it must stay open on a forced
             // obtain even with master auto-search off — that's what lets the buy-at-shop
             // fallback fire when searching is off or turns nothing up.
-            isEnabled: () => _forcedPathObtain.Count > 0,
+            isEnabled: () => CardFetch.HasItems,
             // Searching is only a plausible way to get an item nobody hands over on
             // demand. An NPC keyword give (free, or a trade agreed to) or a guaranteed
             // room-command summon is already being walked to, so a `sea` in every
@@ -6807,7 +6808,7 @@ public sealed class AppServices
         // the walker is constructed (see below).
         // An item the party is short of stays forced though the leader holds a copy:
         // the copies still to come are for the members.
-        Inventory.Changed += () => _forcedPathObtain.RemoveWhere(
+        Inventory.Changed += () => CardFetch.DropCovered(
             id => IsPathItemCovered(id) && !IsPartyShortOfGateItem(id));
 
         // Registered AFTER the forced-obtain draining handler above so the set is
@@ -7198,7 +7199,7 @@ public sealed class AppServices
             // The hazard resolver below staged this pass's substitutes room by
             // room; commit them before anything counts coverage. An item still
             // being obtained keeps its substitutes across a detour's own announce.
-            PathItemSubstitutes.Commit(keep: _forcedPathObtain.Contains);
+            PathItemSubstitutes.Commit(keep: CardFetch.Fetches);
             PartyPathItemGate.OnPathItemsRequired(ids);
         });
 
@@ -7245,21 +7246,23 @@ public sealed class AppServices
                 || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive)
             && HasOutstandingPathItemNeed(id));
 
-        // Clear the per-walk forced-obtain override when a walk is abandoned, so a
-        // forced flag never leaks into a later unrelated walk. (The per-item drop
-        // on acquisition is wired to Inventory.Changed above.)
-        Walker.Event += e =>
+        // What a route card's pick ordered lives and dies with the walk that pick
+        // started, so neither a forced fetch nor a trade leaks into a later unrelated
+        // walk (RouteCardFetch has the rules). The per-item drop on acquisition is
+        // wired to Inventory.Changed above.
+        Walker.Event += CardFetch.OnWalkEvent;
+        CardFetch.Ended += why =>
         {
-            if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed)
-            {
-                _forcedPathObtain.Clear();
-                _agreedTrades.Clear();
-                PathItemSubstitutes.Clear();
-                // Walk abandoned before the counter landed — undo a "search en route"
-                // auto-search flip so it doesn't leak on past the leg it was for.
-                RestoreRouteSearchAutoSearchIfDone("walk ended");
-            }
+            Log.Info(Game.Map.AutoSearchManager.LogCategory,
+                $"route card's fetch order dropped — {why}");
+            PathItemSubstitutes.Clear();
+            // Walk over before the counter landed — undo a "search en route"
+            // auto-search flip so it doesn't leak on past the leg it was for.
+            RestoreRouteSearchAutoSearchIfDone("walk ended");
         };
+        // These can come with the walker standing idle, where no walk event tells.
+        Profile.ProfileLoaded += _ => CardFetch.End("another character was loaded");
+        Profile.ProfileClosed += () => CardFetch.End("the character was closed");
 
         // Search the room a walk / loop / auto-lair STARTS from. Auto-search fires on
         // room entry, but the room the walker steps out of at the start of a run was
@@ -7909,6 +7912,7 @@ public sealed class AppServices
         Walker.Event += LoopHandoff.OnWalkerEvent;
         LoopRunner.Event += LoopHandoff.OnLoopEvent;
         MovementControl.Stopping += () => LoopHandoff.Cancel("stopped");
+        MovementControl.Stopping += () => CardFetch.End("stopped");
         Profile.ProfileLoaded += _ => LoopHandoff.Cancel("another character was loaded");
         Profile.ProfileClosed += () => LoopHandoff.Cancel("the character was closed");
         // A pyramid climb or an asylum maze solve counts as navigation running: the
@@ -8033,6 +8037,7 @@ public sealed class AppServices
         {
             LoopRunner.Stop("player died — halting in graveyard");
             Walker.Stop("player died — halting in graveyard");
+            CardFetch.End("the player died");
             AutoLair.Stop("player died — halting in graveyard");
             MovementControl.DropQueuedRun();
         });
@@ -11712,8 +11717,8 @@ public sealed class AppServices
         CountItemCarried(itemId) + CountOnKeyRing(Inventory.Snapshot, itemId);
 
     // Copies in the pack or on the key ring, worn ones left out: what there is to
-    // hand over in a trade. Whether the game's `takeitem` takes an item off the
-    // body isn't known, so a worn copy is never offered.
+    // hand over in a trade. The game would take a worn copy too (GAME_MECHANICS
+    // "Room-command refusals"); a walk doesn't strip what the user has on.
     private int CountItemUnworn(int itemId)
     {
         Game.Inventory.InventorySnapshot snap = Inventory.Snapshot;
@@ -11799,9 +11804,9 @@ public sealed class AppServices
         Game.Map.RoomKey source, Game.Map.RoomKey destination, bool pickFetches)
         => GatePickSources.Build(
             requirements, pickFetches,
-            keyFetchableIfPicked: DoorKeyFetchableIfPicked,
+            keyHasOtherSource: DoorKeyHasUntradedSource,
             flaggedAutoObtain: IsAutoObtainForPath,
-            giver: (id, tradeAgreed) => GiveSources.Choose(id, source, destination, tradeAgreed),
+            giver: (id, offerTrades) => GiveSources.Choose(id, source, destination, offerTrades),
             buyPhrase: id => PathItemShopPhrase(id, source, destination),
             dropper: id => PathItemDropName(id, source),
             tradeNote: GiveSources.TradeNote);
@@ -12276,13 +12281,12 @@ public sealed class AppServices
     }
 
     // What the give router may detour to for itemId (PathItemGiveSources): the free
-    // hand-overs, or failing those a trade, and a trade only for an item this walk
-    // is fetching whose trade the user agreed to on the route card that named it.
-    // Computed when a path-item need fires, so the fan-out is never materialised at
-    // load time.
+    // hand-overs, or failing those the one trade the user agreed to on the route
+    // card that started the walk now running (RouteCardFetch.AgreedTradeFor, the
+    // only place a trade is ever allowed from). Computed when a path-item need
+    // fires, so the fan-out is never materialised at load time.
     private System.Collections.Generic.IReadOnlyList<Game.Map.GiveSource> GiveSourcesForItem(int itemId)
-        => GiveSources.ForRouter(
-            itemId, tradeAgreed: _forcedPathObtain.Contains(itemId) && _agreedTrades.Contains(itemId));
+        => GiveSources.ForRouter(itemId, agreedTakes: CardFetch.AgreedTradeFor(itemId));
 
     // True when a free deterministic give can supply itemId at a resolved room —
     // the precedence gate the shop and summon routers stand down on. A trade never
@@ -12427,36 +12431,29 @@ public sealed class AppServices
             number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             ItemOverlaySeed.GetOverlay(number));
 
-    // Items the user explicitly chose to obtain for the current walk via the route
-    // picker's "obtain then cross" option — a per-walk override of the persistent
-    // AutoObtainForPath flag. An explicit pick is consent, so these source through
-    // the same give/shop/drop pipeline without needing the item pre-flagged.
-    // Entries are removed as they're acquired and cleared on a Stop (see the wiring
-    // in the ctor); replaced wholesale on each fresh obtain-pick.
-    private readonly HashSet<int> _forcedPathObtain = new();
-
-    // The door keys whose trade the user agreed to by picking a route card that
-    // named it. A trade hands an item of the user's over, so nothing else may
+    // What the pick of a route card ordered for the one walk it starts. The items
+    // are those the user chose to obtain via the picker's "obtain then cross"
+    // option: a per-walk override of the persistent AutoObtainForPath flag, since
+    // an explicit pick is consent, so they source through the same give/shop/drop
+    // pipeline without needing the item pre-flagged. The trades are the ones the
+    // card named. A trade hands an item of the user's over, so nothing else may
     // start one: not the Auto-obtain flag, not a loop's approach, not a walk with
-    // no card. Honoured only for a key the same walk is fetching, and dropped
-    // when the walk is abandoned.
-    private readonly HashSet<int> _agreedTrades = new();
+    // no card. Everything in it ends with its walk (RouteCardFetch).
+    public Game.Map.RouteCardFetch CardFetch { get; } = new();
 
-    // The pick of a route card that named these trades (replacing any earlier
-    // agreement). Called before the pick's walk is committed.
-    public void AgreeToPathItemTrades(IReadOnlyList<int> keyIds)
+    // The pick of a route card that named these trades, for the walk to destination
+    // it is about to commit. Opens the pick's order, replacing any earlier one; the
+    // ForcePathObtain calls that follow add to it.
+    public void AgreeToPathItemTrades(
+        Game.Map.RoomKey destination, IReadOnlyList<(int KeyId, int TakesItemId)> trades)
     {
-        ArgumentNullException.ThrowIfNull(keyIds);
-        _agreedTrades.Clear();
-        foreach (int id in keyIds) if (id > 0) _agreedTrades.Add(id);
-        if (_agreedTrades.Count > 0)
+        ArgumentNullException.ThrowIfNull(trades);
+        CardFetch.AgreeTrades(destination, trades);
+        if (trades.Count > 0)
             Log.Info(Game.Map.AutoSearchManager.LogCategory,
-                "route card picked — trade agreed for " + string.Join("; ", _agreedTrades.Select(id =>
-                    $"item {id} ({GiveSources.TradeNote(id) ?? "no trade on offer now"})")));
+                $"route card picked for {destination} — trade agreed: " + string.Join("; ", trades.Select(t =>
+                    $"item {t.KeyId} for item {t.TakesItemId} ({GiveSources.TradeNote(t.KeyId) ?? "no trade on offer now"})")));
     }
-
-    // The agreed trades of the walk under way, for the bug report.
-    public IReadOnlyCollection<int> AgreedPathItemTrades => _agreedTrades;
 
     // The route's any-of substitutes for each forced hazard counter — a canoe
     // stands in for the raft the picker chose on the river, but not on Crystal
@@ -12593,15 +12590,17 @@ public sealed class AppServices
         return ids;
     }
 
-    // Set (replacing any prior) the items the next walk should obtain for its path
-    // regardless of their AutoObtainForPath flag. Called by RouteChoicePrompt when
-    // the user picks the hazard "obtain then cross" route.
+    // The items the next walk should obtain for its path regardless of their
+    // AutoObtainForPath flag. Called by RouteChoicePrompt when the user picks an
+    // "obtain then cross" route. It replaces any prior order, except within one
+    // card pick (opened by AgreeToPathItemTrades), where the calls add up: that
+    // pick orders its hazard counters and its gate items separately, and the second
+    // call used to wipe the first, so the walk crossed the hazard uncountered.
     public void ForcePathObtain(IEnumerable<int> itemIds)
     {
         ArgumentNullException.ThrowIfNull(itemIds);
-        _forcedPathObtain.Clear();
         PathItemSubstitutes.Clear();
-        foreach (int id in itemIds) if (id > 0) _forcedPathObtain.Add(id);
+        CardFetch.Fetch(itemIds);
     }
 
     // True only while WE enabled auto-search for a route picker's "Search en route"
@@ -12616,7 +12615,7 @@ public sealed class AppServices
 
     // Picking the route picker's "Search en route" card turns Auto-Search on for the
     // leg so the card always actually searches — even when the user had it off. The
-    // counter's arrival (found on the floor OR bought) drains _forcedPathObtain, which
+    // counter's arrival (found on the floor OR bought) drains the card's fetch order, which
     // flips it back off (RestoreRouteSearchAutoSearchIfDone); an abandoned walk clears
     // the same way. Only flips when it was OFF, so a user who already had Auto-Search
     // on keeps it on afterward.
@@ -12635,7 +12634,7 @@ public sealed class AppServices
     // outstanding (obtained, or the walk was abandoned and the forced set cleared).
     private void RestoreRouteSearchAutoSearchIfDone(string reason)
     {
-        if (!_autoSearchFlippedForRouteSearch || _forcedPathObtain.Count > 0) return;
+        if (!_autoSearchFlippedForRouteSearch || CardFetch.HasItems) return;
         _autoSearchFlippedForRouteSearch = false;
         SetAutoSearchEnabled?.Invoke(false);
         Log.Info(Game.Map.AutoSearchManager.LogCategory,
@@ -12650,7 +12649,7 @@ public sealed class AppServices
     private bool IsAutoObtainForPath(int itemId)
     {
         if (itemId <= 0) return false;
-        if (_forcedPathObtain.Contains(itemId)) return true;
+        if (CardFetch.Fetches(itemId)) return true;
         return ResolveItemOverlay(itemId).AutoObtainForPath ?? false;
     }
 
@@ -12823,13 +12822,13 @@ public sealed class AppServices
         RoomHazardIndex.RoomHazard? hazard =
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
         if (hazard is null) return System.Array.Empty<int>();
-        if (_forcedPathObtain.Count == 0) return hazard.MandatoryItems;
+        if (!CardFetch.HasItems) return hazard.MandatoryItems;
 
         System.Collections.Generic.List<int> items = new(hazard.MandatoryItems);
         foreach (System.Collections.Generic.IReadOnlyList<int> group in hazard.RequirementGroups)
             if (group.Count > 1)
                 foreach (int id in group)
-                    if (_forcedPathObtain.Contains(id))
+                    if (CardFetch.Fetches(id))
                     {
                         // Every hazard room the forced counter is announced for
                         // narrows what may stand in for it on this route.
@@ -12881,7 +12880,7 @@ public sealed class AppServices
             // hunting. A key that is only traded for is never fetched from here:
             // this path shows no card, and a trade is made only from a card that
             // names it. Returning false sends that route to the picker.
-            if (req.Kind == RouteRequirementKind.DoorKey && !DoorKeyHasFreeSource(req.ItemIds[0]))
+            if (req.Kind == RouteRequirementKind.DoorKey && !DoorKeyHasUntradedSource(req.ItemIds[0]))
                 return false;
             obtainable++;
         }
@@ -12907,10 +12906,14 @@ public sealed class AppServices
     // Silent supersede: the redirect is our own, not an external abort, so it must
     // not fire a Stopped back into the routers' own OnWalkEvent.
     private void WalkToForPathItemDetour(Game.Map.RoomKey key)
-        => Walker.WalkTo(
+    {
+        // A leg of the walk the card's order belongs to, not a walk replacing it.
+        CardFetch.NoteOwnLeg(key);
+        Walker.WalkTo(
             key,
             planThroughAcquirableGates: Needs.Outstanding(NeedKind.PathItem).Count > 0,
             supersedeSilently: true);
+    }
 
     // Reset States: put every engine back where it would be if the player were
     // standing idle in a room. Stops the running movement engines and every detour,
@@ -12957,6 +12960,7 @@ public sealed class AppServices
         DeathRecovery.CancelTrip();
 
         // Outstanding needs and deferred pickups / searches.
+        CardFetch.End(reason);
         Needs.Clear();
         PartyPathItemGate.Clear();
         Cash.CancelDeferredCollect(reason);
@@ -13013,13 +13017,13 @@ public sealed class AppServices
     public IReadOnlyList<int> SourceableGateItems(IReadOnlyList<RouteRequirement> requirements)
         => RouteChoicePlanner.SourceableGateItems(requirements, DoorKeyFetchableIfPicked);
 
-    // A door key the walk can go and get at no cost the user would miss: a room
+    // A door key the walk can go and get without trading an item for it: a room
     // command summons a monster that always drops it, an NPC hands it over for the
     // asking (the old hermit's jagged bone key for the Library), or a shop sells
     // it (the Thieves' Guild's skeleton key). A shop was left out, so a route
     // through a door the character could neither pick nor bash walked up to it
     // keyless and failed there (report paradigm-20261007-192215).
-    private bool DoorKeyHasFreeSource(int itemId)
+    private bool DoorKeyHasUntradedSource(int itemId)
         => SummonSourcesForItem(itemId).Count > 0 || DeterministicGiveExists(itemId)
            || ShopStock.ShopsSelling(itemId).Count > 0;
 
@@ -13028,12 +13032,12 @@ public sealed class AppServices
     // brooch; report paradigm-20261008-175938). The card names the trade and the
     // pick agrees to it (AgreeToPathItemTrades).
     private bool DoorKeyFetchableIfPicked(int itemId)
-        => DoorKeyHasFreeSource(itemId) || GiveSources.Trades(itemId).Count > 0;
+        => DoorKeyHasUntradedSource(itemId) || GiveSources.Trades(itemId).Count > 0;
 
     // Whether the walk under way should post a need for a locked door's key: a
     // free source, or a trade agreed to for this walk.
     private bool DoorKeyIsFetchable(int itemId)
-        => DoorKeyHasFreeSource(itemId) || GiveRouterHasSource(itemId);
+        => DoorKeyHasUntradedSource(itemId) || GiveRouterHasSource(itemId);
 
     // A loop is about to approach through gates because nothing on it can be
     // reached as things stand. Arm the fetch for what the way in needs, exactly as
@@ -13045,8 +13049,6 @@ public sealed class AppServices
         if (RouteChoicePlanner.Evaluate(Bfs, Movement, RoomGraph, from, entry) is not { } route) return;
         if (!ShouldAutoObtainSoleRoute(route.Requirements)) return;
         if (SourceableGateItems(route.Requirements) is not { Count: > 0 } items) return;
-        // No card is shown here, so no trade may ride along from an earlier pick.
-        _agreedTrades.Clear();
         ForcePathObtain(items);
         Log.Info(Game.Map.AutoSearchManager.LogCategory,
             $"loop approach {from} -> {entry} needs item(s) {string.Join(", ", items)} — fetching on the way in");

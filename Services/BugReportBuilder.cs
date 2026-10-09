@@ -1840,9 +1840,14 @@ public static class BugReportBuilder
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
-        Kv(sb, "Trades agreed to on the route card (this walk)",
-            svc.AgreedPathItemTrades.Count == 0 ? "(none)" : string.Join(", ", svc.AgreedPathItemTrades.Select(id =>
-                $"{id} {svc.ItemNames.GetName(id) ?? "?"} ({svc.GiveSources.TradeNote(id) ?? "no trade on offer now"})")));
+        Game.Map.RouteCardFetch card = svc.CardFetch;
+        Kv(sb, "Route card's fetch order", !card.HasItems && card.Trades.Count == 0 ? "(none)"
+            : $"item(s) {(card.HasItems ? string.Join(", ", card.Items) : "none")}; "
+              + (card.WalkStarted ? "its walk is under way" : "waiting for its walk to start"));
+        Kv(sb, "Trades agreed to on the route card",
+            card.Trades.Count == 0 ? "(none)" : string.Join(", ", card.Trades.Select(t =>
+                $"{t.Key} {svc.ItemNames.GetName(t.Key) ?? "?"} for {t.Value} {svc.ItemNames.GetName(t.Value) ?? "?"}"
+                + (card.AgreedTradeFor(t.Key) is null ? " (not in force)" : " (in force for the walk now running)"))));
         Kv(sb, "Shop-buy detour active", svc.PathItemShopRouter.DetourActive.ToString());
         Kv(sb, "Monster-drop hunt detour active", svc.MonsterDropRouter.DetourActive.ToString());
         Kv(sb, "Summon detour active", svc.PathItemSummonRouter.DetourActive.ToString()

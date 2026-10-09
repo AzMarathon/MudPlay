@@ -26,6 +26,7 @@ public sealed class PathItemGiveSourcesTests
     private const int GlowingKey = 808;
     private const int OpalBrooch = 811;
     private const int SpareKey = 60;
+    private const int RedGem = 62;
 
     private static string Room(int number, string name, string exits) =>
         $$"""{ "Map Number": 8, "Room Number": {{number}}, "Name": "{{name}}", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, {{exits}} }""";
@@ -49,7 +50,9 @@ public sealed class PathItemGiveSourcesTests
         [
           { "Number": 808, "Name": "glowing key", "ItemType": 7 },
           { "Number": 811, "Name": "opal brooch", "ItemType": 0 },
-          { "Number": 60, "Name": "spare key", "ItemType": 7 }
+          { "Number": 60, "Name": "spare key", "ItemType": 7 },
+          { "Number": 62, "Name": "red gem", "ItemType": 0 },
+          { "Number": 63, "Name": "lucky charm", "ItemType": 0 }
         ]
         """;
 
@@ -57,15 +60,20 @@ public sealed class PathItemGiveSourcesTests
         [
           { "Number": 346, "Name": "captain of the guard", "Summoned By": "Room 8/530",
             "DropItem-0": 811, "DropItem%-0": 100 },
-          { "Number": 348, "Name": "sleazy shopkeeper", "Summoned By": "Room 8/486" }
+          { "Number": 348, "Name": "sleazy shopkeeper", "Summoned By": "Room 8/486" },
+          { "Number": 349, "Name": "fence", "Summoned By": "Room 8/524" }
         ]
         """;
 
     // The shopkeeper's menu as the data has it, plus a key he both hands over for
-    // nothing (`spare`) and trades for the brooch (`deal`).
+    // nothing (`spare`) and trades for the brooch (`deal`), and a charm that isn't a
+    // key (`charm`). A fence nearer the walk trades the same glowing key for a gem.
     private const string TBInfoJson = """
         [
-          { "Number": 838, "LinkTo": 839, "Action": "help:840\nbrooch:841\nspare:850\ndeal:852\n", "Called From": "Monster #348" },
+          { "Number": 838, "LinkTo": 839, "Action": "help:840\nbrooch:841\nspare:850\ndeal:852\ncharm:854\n", "Called From": "Monster #348" },
+          { "Number": 854, "LinkTo": 0, "Action": "takeitem 811:giveitem 63\n", "Called From": "Textblock #838" },
+          { "Number": 870, "LinkTo": 0, "Action": "gem:871\n", "Called From": "Monster #349" },
+          { "Number": 871, "LinkTo": 0, "Action": "takeitem 62:giveitem 808\n", "Called From": "Textblock #870" },
           { "Number": 841, "LinkTo": 842, "Action": "", "Called From": "Textblock #838" },
           { "Number": 842, "LinkTo": 0, "Action": "takeitem 811 1368:giveitem 808:text 843\n", "Called From": "Textblock #841" },
           { "Number": 850, "LinkTo": 0, "Action": "giveitem 60\n", "Called From": "Textblock #838" },
@@ -121,7 +129,11 @@ public sealed class PathItemGiveSourcesTests
                 Sources = new PathItemGiveSources(
                     new ItemSourceIndex(cache, tb), bfs, filter,
                     unwornCount: id => world!.Pack.Contains(id) ? 1 : 0,
-                    itemName: id => id switch { GlowingKey => "glowing key", OpalBrooch => "opal brooch", _ => null },
+                    itemName: id => id switch
+                    {
+                        GlowingKey => "glowing key", OpalBrooch => "opal brooch", RedGem => "red gem", _ => null,
+                    },
+                    isKey: id => id is GlowingKey or SpareKey,
                     soldOrSummoned: id => world!.SoldOrSummoned.Contains(id),
                     alwaysDroppedBy: id => id == OpalBrooch ? "captain of the guard" : null),
             };
@@ -147,7 +159,7 @@ public sealed class PathItemGiveSourcesTests
             Assert.Null(w.Bfs.DistanceBetween(Store, Stairway, w.Filter));
             Assert.NotNull(w.Sources.DetourDistance(Store, Stairway));
 
-            GiveSource? chosen = w.Sources.Choose(GlowingKey, Quarters, Stairway, tradeAgreed: true);
+            GiveSource? chosen = w.Sources.Choose(GlowingKey, Quarters, Stairway, offerTrades: true);
 
             Assert.True(chosen.HasValue);
             GiveSource source = chosen.Value;
@@ -170,16 +182,16 @@ public sealed class PathItemGiveSourcesTests
             var requirements = new[] { new RouteRequirement(RouteRequirementKind.DoorKey, new[] { GlowingKey }) };
             GatePickSources Plan(bool pickFetches) => GatePickSources.Build(
                 requirements, pickFetches,
-                keyFetchableIfPicked: id => w.Sources.Trades(id).Count > 0,
+                keyHasOtherSource: _ => false,
                 flaggedAutoObtain: _ => false,
-                giver: (id, tradeAgreed) => w.Sources.Choose(id, Quarters, Stairway, tradeAgreed),
+                giver: (id, offerTrades) => w.Sources.Choose(id, Quarters, Stairway, offerTrades),
                 buyPhrase: _ => null,
                 dropper: _ => null,
                 tradeNote: w.Sources.TradeNote);
 
             GatePickSources fetching = Plan(pickFetches: true);
             Assert.Equal("sleazy shopkeeper, in trade for your opal brooch", fetching.GiverName(GlowingKey));
-            Assert.Equal(new[] { GlowingKey }, fetching.Trades);
+            Assert.Equal(new[] { (GlowingKey, OpalBrooch) }, fetching.Trades);
             Assert.Null(fetching.BuyOrTradeNote(GlowingKey));
 
             GatePickSources stopping = Plan(pickFetches: false);
@@ -197,9 +209,9 @@ public sealed class PathItemGiveSourcesTests
         {
             w.Pack.Add(OpalBrooch);
 
-            Assert.Empty(w.Sources.ForRouter(GlowingKey, tradeAgreed: false));
-            Assert.Null(w.Sources.Choose(GlowingKey, Quarters, Stairway, tradeAgreed: false));
-            Assert.Single(w.Sources.ForRouter(GlowingKey, tradeAgreed: true));
+            Assert.Empty(w.Sources.ForRouter(GlowingKey, agreedTakes: null));
+            Assert.Null(w.Sources.Choose(GlowingKey, Quarters, Stairway, offerTrades: false));
+            Assert.Single(w.Sources.ForRouter(GlowingKey, agreedTakes: OpalBrooch));
         });
     }
 
@@ -211,7 +223,7 @@ public sealed class PathItemGiveSourcesTests
         WithWorld(w =>
         {
             Assert.Empty(w.Sources.Trades(GlowingKey));
-            Assert.Empty(w.Sources.ForRouter(GlowingKey, tradeAgreed: true));
+            Assert.Empty(w.Sources.ForRouter(GlowingKey, agreedTakes: OpalBrooch));
             Assert.Equal(
                 "sleazy shopkeeper trades one for opal brooch, which captain of the guard drops",
                 w.Sources.TradeNote(GlowingKey));
@@ -228,7 +240,7 @@ public sealed class PathItemGiveSourcesTests
             w.SoldOrSummoned.Add(GlowingKey);
 
             Assert.Empty(w.Sources.Trades(GlowingKey));
-            Assert.Empty(w.Sources.ForRouter(GlowingKey, tradeAgreed: true));
+            Assert.Empty(w.Sources.ForRouter(GlowingKey, agreedTakes: OpalBrooch));
             Assert.Null(w.Sources.TradeNote(GlowingKey));
         });
     }
@@ -241,11 +253,51 @@ public sealed class PathItemGiveSourcesTests
         {
             w.Pack.Add(OpalBrooch);
 
-            GiveSource free = Assert.Single(w.Sources.ForRouter(SpareKey, tradeAgreed: true));
+            GiveSource free = Assert.Single(w.Sources.ForRouter(SpareKey, agreedTakes: OpalBrooch));
             Assert.Equal("ask sleazy shopkeeper spare", free.Command);
             Assert.Equal(0, free.TakesItemId);
             Assert.Empty(w.Sources.Trades(SpareKey));
             Assert.Null(w.Sources.TradeNote(SpareKey));
+        });
+    }
+
+    // Two traders sell the same key for different items and both items are in the
+    // pack. The card names one trade; the walk may make that one and no other,
+    // though the other trader is nearer.
+    [Fact]
+    public void ForRouter_TwoTradesForOneKey_OnlyTheAgreedItemIsHandedOver()
+    {
+        WithWorld(w =>
+        {
+            w.Pack.Add(OpalBrooch);
+            w.Pack.Add(RedGem);
+            Assert.Equal(2, w.Sources.Trades(GlowingKey).Count);
+
+            GiveSource brooch = Assert.Single(w.Sources.ForRouter(GlowingKey, agreedTakes: OpalBrooch));
+            Assert.Equal("ask sleazy shopkeeper brooch", brooch.Command);
+            Assert.Equal(OpalBrooch, brooch.TakesItemId);
+
+            GiveSource gem = Assert.Single(w.Sources.ForRouter(GlowingKey, agreedTakes: RedGem));
+            Assert.Equal("ask fence gem", gem.Command);
+
+            // An item nobody trades the key for buys nothing.
+            Assert.Empty(w.Sources.ForRouter(GlowingKey, agreedTakes: SpareKey));
+        });
+    }
+
+    // Only a key is ever traded for, whoever would make the swap.
+    [Fact]
+    public void Trades_ItemThatIsNotAKey_None()
+    {
+        WithWorld(w =>
+        {
+            w.Pack.Add(OpalBrooch);
+            const int charm = 63;
+
+            Assert.Empty(w.Sources.Trades(charm));
+            Assert.Empty(w.Sources.ForRouter(charm, agreedTakes: OpalBrooch));
+            Assert.Null(w.Sources.Choose(charm, Quarters, Stairway, offerTrades: true));
+            Assert.Null(w.Sources.TradeNote(charm));
         });
     }
 }

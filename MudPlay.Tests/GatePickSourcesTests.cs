@@ -17,7 +17,7 @@ public sealed class GatePickSourcesTests
 
     private sealed class Sources
     {
-        public readonly HashSet<int> FetchableKeys = new();
+        public readonly HashSet<int> KeysWithOtherSource = new();
         public readonly HashSet<int> Flagged = new();
         public readonly Dictionary<int, GiveSource> Free = new();
         public readonly Dictionary<int, GiveSource> Trade = new();
@@ -28,11 +28,11 @@ public sealed class GatePickSourcesTests
         public GatePickSources Build(bool pickFetches, params RouteRequirement[] requirements) =>
             GatePickSources.Build(
                 requirements, pickFetches,
-                keyFetchableIfPicked: FetchableKeys.Contains,
+                keyHasOtherSource: KeysWithOtherSource.Contains,
                 flaggedAutoObtain: Flagged.Contains,
-                giver: (id, tradeAgreed) =>
+                giver: (id, offerTrades) =>
                     Free.TryGetValue(id, out GiveSource f) ? f
-                    : tradeAgreed && Trade.TryGetValue(id, out GiveSource t) ? t
+                    : offerTrades && Trade.TryGetValue(id, out GiveSource t) ? t
                     : null,
                 buyPhrase: id => Shops.GetValueOrDefault(id),
                 dropper: id => Droppers.GetValueOrDefault(id),
@@ -105,7 +105,6 @@ public sealed class GatePickSourcesTests
     public void Trade_IsForDoorKeysOnly()
     {
         var s = new Sources();
-        s.FetchableKeys.Add(Key);
         var trader = new GiveSource(Somewhere, "ask trader deal", "trader, in trade for your brooch", TakesItemId: 33);
         s.Trade[Key] = trader;
         s.Trade[Raft] = trader;
@@ -114,7 +113,7 @@ public sealed class GatePickSourcesTests
         GatePickSources pick = s.Build(pickFetches: true, DoorKey(Key), Carry(Raft));
 
         Assert.Equal("trader, in trade for your brooch", pick.GiverName(Key));
-        Assert.Equal(new[] { Key }, pick.Trades);
+        Assert.Equal(new[] { (Key, 33) }, pick.Trades);
         Assert.Null(pick.GiverName(Raft));
         Assert.Null(pick.BuyOrTradeNote(Raft));
     }
@@ -124,7 +123,7 @@ public sealed class GatePickSourcesTests
     public void FreelyGivenKey_IsNotListedAsATrade()
     {
         var s = new Sources();
-        s.FetchableKeys.Add(Key);
+        s.KeysWithOtherSource.Add(Key);
         s.Free[Key] = new GiveSource(Somewhere, "ask hermit remind", "old hermit");
 
         GatePickSources pick = s.Build(pickFetches: true, DoorKey(Key));
@@ -153,5 +152,35 @@ public sealed class GatePickSourcesTests
 
         // A pick that stops short fetches no counter either.
         Assert.Null(s.Build(pickFetches: false, hazard).BuyOrTradeNote(Counter));
+    }
+
+    // The trade item is in the pack but the trader can't be reached on this walk:
+    // the walk will fetch nothing for the key, so the card promises no source, not
+    // even a lair the key also drops in, and keeps only the note of the trade.
+    [Fact]
+    public void KeyWhoseOnlyTraderIsOutOfReach_NamesNoSource()
+    {
+        var s = new Sources();
+        s.Droppers[Key] = "dark cultist";
+        s.TradeNotes[Key] = "a trader trades one for your brooch";
+
+        GatePickSources pick = s.Build(pickFetches: true, DoorKey(Key));
+
+        Assert.Null(pick.GiverName(Key));
+        Assert.Null(pick.DropperName(Key));
+        Assert.Equal("a trader trades one for your brooch", pick.BuyOrTradeNote(Key));
+        Assert.Empty(pick.Trades);
+    }
+
+    // A key with a shop or a summon behind it is fetched whether or not a giver
+    // resolves, and says where from.
+    [Fact]
+    public void KeyWithAnUntradedSource_NamesItsShop()
+    {
+        var s = new Sources();
+        s.KeysWithOtherSource.Add(Key);
+        s.Shops[Key] = "buy at Thieves' Guild";
+
+        Assert.Equal("buy at Thieves' Guild", s.Build(pickFetches: true, DoorKey(Key)).BuyOrTradeNote(Key));
     }
 }
