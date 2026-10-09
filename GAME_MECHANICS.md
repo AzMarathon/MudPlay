@@ -7594,6 +7594,23 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
   - **With no lives left** the character record is deleted, `You have no lives remaining!` prints (@0x41a27d) and the player is at the game's main menu, behind the `[MAJORMUD]: ` prompt.
   - **Lives: a new character has 9, and each level trained adds 5, capped at 9** (`_create_player` @0x416581, `_train_level` @0x41eac6–0x41ead3; the 5 is set at start-up with no board option). So the count only ever reads 1 to 9.
   - **Logging in on the last life prints `You feel your life-force ebbing.`** (@0x416208–0x416212).
+- **Paradigm: a party leader's death, line by line** *([OBSERVED] 2026-10-09, the user's Paradigm capture; Realm: Paradigm)*. A leader with two followers, killed by a monster's swings from above 0 HP:
+  ```
+  *Combat Off*
+  You drop to the ground!
+  You have been killed!
+  But, due to a miracle, you have been saved.
+  <Follower> is no longer following you.
+  <Follower> is no longer following you.
+  Your party has been disbanded.
+  Your party has been disbanded.
+  You have 7 lives left.
+  Temple, Halls of the Dead
+  Obvious exits: up
+  ```
+  - **`*Combat Off*` and `You drop to the ground!` come first**, ahead of `You have been killed!`, when the killing round takes the character from standing past the death threshold.
+  - **The party lines sit between the miracle line and the lives readout.** One `<Name> is no longer following you.` per follower, then `Your party has been disbanded.`, which printed twice with two followers. So when a leader dies the three lines of the miracle sequence above are not consecutive. (The lines themselves: *Party → A follower who can't move is left behind*.)
+  - **`You have N lives left.` comes after the party lines**, and the death room's display follows it (room name and the exits line), then the prompt.
 
 ### Deathpile — where the items go
 *Status: CONFIRMED 2026-08-24 (user); Stock spill mechanics CONFIRMED 2026-09-26 (user) · Realm: differs — Stock spills loose, Paradigm uses a corpse*
