@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.155.1**
+> **Version 3.155.2**
 > - A party buff whose cast line doesn't name the member (angelic halo) is timed from the cast, so it is no longer recast on the same member every round while the others go without
+> - Paradigm: frenzy's cast line is read with its target's name in the right place
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
