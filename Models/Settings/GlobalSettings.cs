@@ -77,6 +77,12 @@ public sealed class GlobalSettings
     // which pushes it to MapControl.
     public NavLineStyles? NavLines { get; set; }
 
+    // Which colours the 16 base ANSI colours are drawn in: the standard ones, a
+    // scheme for a kind of colour blindness, or the user's own (Settings → General).
+    // Null means the standard colours. Install-wide (Global tier), and pushed to
+    // Terminal.AnsiPalette at launch and on every save.
+    public TerminalColorSettings? TerminalColors { get; set; }
+
     // The Program Log window's switches (Debug / Combat channels, Auto-collect
     // logs, Hop timing, Capture unrecognized messages). Null until first set, which
     // lets the first character loaded after they moved here hand over its own.

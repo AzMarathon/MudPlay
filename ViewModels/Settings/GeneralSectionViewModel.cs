@@ -39,6 +39,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         "Auto-connect", "Default task", "Do nothing",
         "Begin loop", "Begin Auto-Lair", "Backup profile",
         "Terminal font", "Font", "Font family", "Font size",
+        "Visual impairment", "Colour blindness", "Color blindness", "Colour blind", "Color blind",
+        "Terminal colours", "Terminal colors", "ANSI colours", "ANSI colors",
+        "Deuteranopia", "Protanopia", "Tritanopia", "Custom colours", "Accessibility", "Contrast",
         "Navigation tooltip font", "Navigation tooltip", "Map tooltip font",
         "Scale terminal to window",
         "Check for updates automatically", "Check for updates", "Updates",
@@ -211,6 +214,12 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
     // GlobalSettings on every LoadFromProfile, written back in Apply.
     public ObservableCollection<NavLineStyleRowViewModel> NavLineRows { get; } = new();
 
+    // The terminal's 16 base colours: the standard ones, a scheme for a kind of
+    // colour blindness, or the user's own (Global tier). Seeded from GlobalSettings
+    // on every LoadFromProfile, written back in Apply; the terminal repaints off
+    // GlobalSettingsChanged.
+    public TerminalColorsEditorViewModel TerminalColors { get; }
+
     // ----- Terminal font (char-tier) -----
     // Font family + size the terminal canvas renders with. Both used to live in
     // the per-BBS Display settings; they moved here so the choice follows the
@@ -347,6 +356,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
 
         foreach (NavLineKind kind in NavLineDefaults.All)
             NavLineRows.Add(new NavLineStyleRowViewModel(kind, Dirty));
+        TerminalColors = new TerminalColorsEditorViewModel(Dirty);
 
         LoadFromProfile();
         _suppressDirty = false;
@@ -478,6 +488,9 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         // Save fires GlobalSettingsChanged, so the live map (NavigationViewModel
         // listens) repaints with the new colours / thickness immediately.
         _globalSettings.Current.NavLines = SnapshotNavLines();
+        // Terminal colours are install-global too; AppServices pushes them to the
+        // palette off the same GlobalSettingsChanged, and the terminal repaints.
+        _globalSettings.Current.TerminalColors = TerminalColors.ToSettings();
         // Window snapping is install-global too; WindowSnapManager reads it live off
         // the same GlobalSettings, so this is all the wiring the toggle needs.
         _globalSettings.Current.SnapWindows = SnapWindows;
@@ -563,6 +576,7 @@ public sealed partial class GeneralSectionViewModel : SettingsSectionViewModel
         NavLineStyles? navLines = _globalSettings.Current.NavLines;
         foreach (NavLineStyleRowViewModel row in NavLineRows)
             row.Load(navLines?.Get(row.Kind));
+        TerminalColors.Load(_globalSettings.Current.TerminalColors);
 
         // Window snapping is Global-tier — reflect the live GlobalSettings value.
         SnapWindows = _globalSettings.Current.SnapWindows;
