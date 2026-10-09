@@ -31,6 +31,8 @@ public static class TBInfoCastTeleportResolver
     // Spells.Targets scope the engine moves as a group on a teleport.
     private const int FullPartyAreaTargets = 13;
     private const int TeleportMapCode  = 141;
+    // A spell that runs a TBInfo chain; the ability's value is the chain's number.
+    private const int TextBlockCode = 148;
 
     // Defensive ceiling on a random range's size. A real teleport range
     // is a handful of rooms; a wildly larger span is a misparse (or a
@@ -101,6 +103,68 @@ public static class TBInfoCastTeleportResolver
         var pool = new List<RoomKey>(hi - lo + 1);
         for (int r = lo; r <= hi; r++) pool.Add(new RoomKey(map, r));
         return pool;
+    }
+
+    // Where a spell sends its caster when it teleports through a textblock instead
+    // of its own TeleportRoom ability: its TextBlock ability names a TBInfo chain,
+    // and each line of that chain carrying `teleport <room> <map>` is one landing.
+    // The game tries the lines in order and stops at the first whose action goes
+    // through (GAME_MECHANICS "Cast-on-walk exits and random teleports"), so a line
+    // gated on `checkitem <item>` followed by a bare one reads "with the item land
+    // here, otherwise there". The list
+    // keeps that order, ItemId 0 marking a line with no item check, and stops at
+    // the first such line since nothing after it is reached.
+    //
+    // Null when the spell runs no textblock, or the chain holds anything this can't
+    // judge: a line that doesn't teleport, a condition other than one checkitem, a
+    // continuation block. A landing nobody can predict is left to the tracker's
+    // ordinary mismatch handling rather than guessed at.
+    public static IReadOnlyList<(int ItemId, RoomKey Room)>? TextblockLandings(SpellFormulaInput spell, TBInfoStore store)
+    {
+        ArgumentNullException.ThrowIfNull(store);
+
+        int block = 0;
+        foreach (SpellAbility ab in spell.Abilities)
+            if (ab.Code == TextBlockCode && ab.Value > 0) { block = ab.Value; break; }
+        if (block == 0) return null;
+        if (store.GetEntry(block) is not { } entry || string.IsNullOrWhiteSpace(entry.Action)) return null;
+        if (entry.LinkTo > 0) return null;
+
+        List<(int ItemId, RoomKey Room)> landings = new();
+        foreach (string raw in entry.Action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0) continue;
+
+            int itemId = 0;
+            RoomKey? landing = null;
+            foreach (string token in line.Split(':', StringSplitOptions.TrimEntries))
+            {
+                if (TBInfoTeleportResolver.TryParseTeleport(token, out RoomKey dest))
+                {
+                    if (landing is not null) return null;
+                    landing = dest;
+                }
+                else if (token.StartsWith("checkitem ", StringComparison.OrdinalIgnoreCase))
+                {
+                    // The check has to come before the teleport it gates, and only
+                    // one of them fits the (item, landing) shape.
+                    string[] args = token[10..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (landing is not null || itemId != 0) return null;
+                    if (args.Length == 0 || !int.TryParse(args[0], out itemId) || itemId <= 0) return null;
+                }
+                else if (!token.StartsWith("text ", StringComparison.OrdinalIgnoreCase)
+                      && !token.StartsWith("message ", StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
+            }
+            if (landing is not { } room) return null;
+
+            landings.Add((itemId, room));
+            if (itemId == 0) break;
+        }
+        return landings.Count > 0 ? landings : null;
     }
 
     // Walk every cast <spell> directive in the CMD's Action chain whose spell

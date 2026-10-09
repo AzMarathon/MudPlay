@@ -69,6 +69,7 @@ public sealed class DoorOpenManager : IDisposable
     private readonly IDisposable _keyOkSub;
     private readonly IDisposable _keyUnknownSub;
     private readonly IDisposable _noEffectSub;
+    private readonly IDisposable _notADoorSub;
     private readonly WireSender _wire = new();
     private bool _disposed;
 
@@ -157,6 +158,7 @@ public sealed class DoorOpenManager : IDisposable
         _keyOkSub       = _router.Subscribe(KnownPatterns.DoorKeyUnlockSuccess, OnKeyUnlockSuccess);
         _keyUnknownSub  = _router.Subscribe(KnownPatterns.DoorKeyUnknown,       OnKeyUnknown);
         _noEffectSub    = _router.Subscribe(KnownPatterns.CommandNoEffect,      OnNoEffect);
+        _notADoorSub    = _router.Subscribe(KnownPatterns.NotADoorOrGate,       OnNotADoor);
     }
 
     // Bind the wire-sender. Same shape as TrapDisarmManager.SetWireSender
@@ -183,6 +185,7 @@ public sealed class DoorOpenManager : IDisposable
         _keyOkSub.Dispose();
         _keyUnknownSub.Dispose();
         _noEffectSub.Dispose();
+        _notADoorSub.Dispose();
     }
 
     // Queue a door-open request. The walker normalises direction to short
@@ -524,21 +527,22 @@ public sealed class DoorOpenManager : IDisposable
         TryFallbackOrFail($"can't bash ('{m.Text.Trim()}')");
     }
 
-    // "Your command had no effect." to a bash: the exit that way is not a door in
-    // the room the character is standing in (GAME_MECHANICS "Locked doors — picking,
-    // opening and bashing"). Only a bash has been seen to draw it; what a pick or an
-    // open at a non-door prints isn't known, so those keep their own retries and
-    // fallbacks. Either the character isn't in the
-    // room the request was planned from or the map has the exit wrong, and the same
-    // verb can only draw the same answer — unrecognised, it read as silence and the
-    // watchdog re-bashed without end (report paradigm-20260924-053941). The line
-    // answers any command the game refuses, so it is the door's only while a bash
-    // is the one awaiting a reply, and never when the command echoed ahead of
-    // it is some other one (a cast or an attack sent meanwhile).
+    // The game saying the exit that way is no door in the room the character is
+    // standing in (GAME_MECHANICS "Locked doors — picking, opening and bashing"):
+    //   * "Your command had no effect." to a bash or a pick;
+    //   * "That is not a door or a gate!" to an open.
+    // Either the character isn't in the room the request was planned from or the
+    // map has the exit wrong, and the same verb can only draw the same answer —
+    // unrecognised, it read as silence and the watchdog re-bashed without end
+    // (report paradigm-20260924-053941).
+    //
+    // The first line answers any command the game refuses, so it is the door's only
+    // while a bash or a pick is the one awaiting a reply, and never when the command
+    // echoed ahead of it is some other one (a cast or an attack sent meanwhile).
     private void OnNoEffect(MatchResult _)
     {
         if (_current is not { } cur) return;
-        if (_state != DoorState.WaitingBash) return;
+        if (_state is not (DoorState.WaitingBash or DoorState.WaitingPick)) return;
         string awaited = $"{_verb} {cur.DirectionShort}";
         if (_router.ReplyIsForCommandNotNaming(awaited))
         {
@@ -547,6 +551,17 @@ public sealed class DoorOpenManager : IDisposable
             return;
         }
         AbandonCurrent($"'{awaited}' had no effect, so that exit is not a door here");
+    }
+
+    // Only an open or a close prints this one, so it needs no echo to tell whose
+    // it is beyond an open being what the request is waiting on. An open the user
+    // typed for some other way while the request waits is told apart by its echo.
+    private void OnNotADoor(MatchResult _)
+    {
+        if (_current is not { } cur || _state != DoorState.WaitingOpen) return;
+        string awaited = $"open {cur.DirectionShort}";
+        if (_router.ReplyIsForCommandNotNaming(awaited)) return;
+        AbandonCurrent($"'{awaited}' was answered \"That is not a door or a gate!\"");
     }
 
     private void OnPickSuccess(MatchResult _)
@@ -626,8 +641,11 @@ public sealed class DoorOpenManager : IDisposable
         if (_state != DoorState.WaitingUseKey) return;
         if (_current is null) return;
         // "You have no <key>" / "You don't have" — terminal failure.
-        // Keys are single-shot; no retry on the use verb.
-        FailCurrent("use-key failed (key missing or wrong)");
+        // Keys are single-shot; no retry on the use verb. The key is named: this
+        // reason is what the walk fails with, and it is all the user is told about
+        // why a walk that went to fetch a key stopped at the door.
+        string key = _itemNameLookup(_current.KeyItemId) is { Length: > 0 } name ? name : $"item #{_current.KeyItemId}";
+        FailCurrent($"use-key failed (the {key} is missing or wrong)");
     }
 
     private void OnIsLocked(MatchResult _)

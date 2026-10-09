@@ -192,6 +192,11 @@ public sealed class MovementFilter : IRoomFilter
     // Set/cleared through SuspendAcquirableGatesButUncounteredHazards' scope.
     private bool _keepUncounteredHazards;
 
+    // The hazard rooms that open anyway while uncountered hazards are kept closed:
+    // the ones on a route card's path, which the user saw and agreed to walk into.
+    // Set/cleared through SuspendAcquirableGatesExcept's scope.
+    private IReadOnlyCollection<RoomKey>? _openHazardRooms;
+
     // The counter items a walk will obtain on its own for entering a hazard room.
     // Wired by AppServices to the same list the walk-start announce posts needs for.
     public Func<RoomKey, IReadOnlyList<int>>? HazardProvisionProbe { get; set; }
@@ -272,6 +277,12 @@ public sealed class MovementFilter : IRoomFilter
         // whether it's genuinely required (then fall through to the live check).
         if (_acquirableGateSuspended && !ExitGatesOnAny(in exit, _keepClosedGateItems)) return false;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
+
+        // An exit whose spell teleports the crosser on, and to the side routes are
+        // planned through only when they have an item: without it the step still
+        // goes through but lands somewhere else, so the way beyond is closed. Judged
+        // on our own pack — a follower is checked by the game on theirs.
+        if (exit.CastGateItemId > 0 && !carries(exit.CastGateItemId)) return true;
 
         switch (exit.Hint)
         {
@@ -360,7 +371,9 @@ public sealed class MovementFilter : IRoomFilter
     // the gated-route planning pass and skipped while inventory is unknown.
     private bool IsHazardEntryBlocked(in RoomExit exit)
     {
-        if (_acquirableGateSuspended && !_keepUncounteredHazards) return false;
+        if (_acquirableGateSuspended
+            && (!_keepUncounteredHazards || _openHazardRooms?.Contains(exit.Target) == true))
+            return false;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
         if (Hazards is null || RoomEntrySpellProbe is not { } spellOf) return false;
 
@@ -394,25 +407,41 @@ public sealed class MovementFilter : IRoomFilter
     // crosser still reach the destination WITHOUT relying on those items?" — reachable
     // means they merely unlock an optional shortcut; unreachable means one is a genuine
     // requirement. Single-threaded planning use; dispose to restore gating.
-    public IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed) =>
-        new GateSuspensionScope(this, keepClosed);
+    // keepUncounteredHazards adds SuspendAcquirableGatesButUncounteredHazards' rule,
+    // for a leg of such a walk that nobody was shown; openHazardRooms are the hazard
+    // rooms that rule leaves open, because the user agreed to them on a route card.
+    public IDisposable SuspendAcquirableGatesExcept(
+        IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false,
+        IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
+        new GateSuspensionScope(this, keepClosed, keepUncounteredHazards, openHazardRooms);
+
+    // Whether stepping into this room is refused, as things stand, for want of a
+    // counter to its cast-on-enter hazard. What a route card's "cross it" asks the
+    // user to agree to, room by room.
+    public bool IsUncounteredHazardRoom(RoomKey room)
+    {
+        RoomExit into = new(room, RoomExitHint.None, RawHint: null);
+        return IsHazardEntryBlocked(in into);
+    }
 
     public readonly struct GateSuspensionScope : IDisposable
     {
         private readonly MovementFilter _filter;
         internal GateSuspensionScope(MovementFilter filter, IReadOnlyCollection<int>? keepClosed,
-            bool keepUncounteredHazards = false)
+            bool keepUncounteredHazards = false, IReadOnlyCollection<RoomKey>? openHazardRooms = null)
         {
             _filter = filter;
             _filter._acquirableGateSuspended = true;
             _filter._keepClosedGateItems = keepClosed;
             _filter._keepUncounteredHazards = keepUncounteredHazards;
+            _filter._openHazardRooms = openHazardRooms;
         }
         public void Dispose()
         {
             _filter._acquirableGateSuspended = false;
             _filter._keepClosedGateItems = null;
             _filter._keepUncounteredHazards = false;
+            _filter._openHazardRooms = null;
         }
     }
 

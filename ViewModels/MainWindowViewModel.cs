@@ -1581,6 +1581,7 @@ public partial class MainWindowViewModel : ObservableObject
                 && AppServices.Current.Party.State.Members.Any(m => !m.IsSelf);
         AppServices.Current.Walker.SetTeleportResolver(teleportResolver);
         AppServices.Current.Walker.SetItemNameResolver(id => AppServices.Current.ItemNames.GetName(id));
+        AppServices.Current.LoopRunner.SetItemNameResolver(id => AppServices.Current.ItemNames.GetName(id));
         AppServices.Current.Walker.SetPartyLeaderCheck(isLeaderWithFollowers);
         AppServices.Current.LoopRunner.SetTeleportResolver(teleportResolver);
         AppServices.Current.LoopRunner.SetPartyLeaderCheck(isLeaderWithFollowers);
@@ -1626,6 +1627,10 @@ public partial class MainWindowViewModel : ObservableObject
         // Paradigm position resolver — its `rm` re-sync ride the same
         // gate-wrapped pipeline so it can't land mid-password-prompt.
         AppServices.Current.ParadigmResync.SetWireSender(engineSend);
+        // The tracker asks the game to show the room a teleporting exit's spell
+        // put us in, which the game doesn't: a bare Enter, through the same gate.
+        AppServices.Current.RoomTracker.SetRoomRedisplay(
+            () => engineSend(System.Text.Encoding.Latin1.GetBytes("\r")));
         // Teleport-maze solver — its look-peeks + reshuffle moves ride the same
         // gate-wrapped pipeline. The RoomParsed feed that drives its relocalize
         // is subscribed below beside the RoomDisplayParser.
@@ -3360,6 +3365,10 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.LoopRunner.NotifyDisconnected();
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
+                // A trade agreed to on a route card is not made after a drop: where
+                // the character stands and how far the trade had got can't be vouched
+                // for. A walk still standing fetches as before, and trades nothing.
+                AppServices.Current.EndTradeSession();
                 // A fight with a player can't outlive the connection; left standing
                 // it would keep the combat engine stood down after the reconnect.
                 AppServices.Current.PvpFight.Stop("disconnected", resume: false, connected: false);

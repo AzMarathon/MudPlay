@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.154.1**
+> **Version 3.157.2**
 > - Closing MudPlay or restarting for an update with Settings open saves the changes you hadn't applied yet
 > - A change Settings would have warned about first (a statline missing HP, mana or resting) is left unsaved on the way out, and logged
 >

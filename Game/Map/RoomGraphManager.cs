@@ -795,6 +795,11 @@ public sealed class RoomGraphManager
     // where this lands" signal the planar map and the router key off. A fixed
     // (single-room) cast-teleport stays an ordinary cardinal that happens to
     // cast. No-op without a catalog (parameterless / test construction).
+    //
+    // A post-cast spell that teleports through a textblock is read here too: the
+    // room the exit cell names is only passed through, and the exit is given the
+    // rooms its spell sends on to (see RoomExit CastLandings). Left as a plain
+    // cardinal when a landing isn't in the graph.
     private void PromoteCastTeleportExits()
     {
         if (_spellCatalog is null) return;
@@ -808,14 +813,25 @@ public sealed class RoomGraphManager
             {
                 if (exit.PostCastSpell <= 0) continue;
                 if (_spellCatalog.GetFormulaByNumber(exit.PostCastSpell) is not { } spell) continue;
-                if (!TBInfoCastTeleportResolver.IsRandomTeleport(spell)) continue;
+                if (TBInfoCastTeleportResolver.IsRandomTeleport(spell))
+                {
+                    IReadOnlyList<RoomKey>? pool = TBInfoCastTeleportResolver.RandomTeleportTargets(spell, key.Map);
+                    (rebuilt ??= new(room.Exits))[dir] =
+                        exit with { CastTeleportRandom = true, CastTeleportTargets = pool };
+                    _log?.Log(LogSeverity.Debug, "RoomGraph",
+                        $"Room {key} {dir} → {exit.Target}: cast-on-walk spell {exit.PostCastSpell} is a random teleport "
+                        + $"(pool of {pool?.Count ?? 0}) — marked non-routable.");
+                    continue;
+                }
 
-                IReadOnlyList<RoomKey>? pool = TBInfoCastTeleportResolver.RandomTeleportTargets(spell, key.Map);
-                (rebuilt ??= new(room.Exits))[dir] =
-                    exit with { CastTeleportRandom = true, CastTeleportTargets = pool };
+                if (_tbinfo is null) continue;
+                if (TBInfoCastTeleportResolver.TextblockLandings(spell, _tbinfo) is not { } landings) continue;
+                if (landings.Any(l => !_rooms.ContainsKey(l.Room))) continue;
+                (rebuilt ??= new(room.Exits))[dir] = exit with { CastLandings = landings };
                 _log?.Log(LogSeverity.Debug, "RoomGraph",
-                    $"Room {key} {dir} → {exit.Target}: cast-on-walk spell {exit.PostCastSpell} is a random teleport "
-                    + $"(pool of {pool?.Count ?? 0}) — marked non-routable.");
+                    $"Room {key} {dir} → {exit.Target}: cast-on-walk spell {exit.PostCastSpell} teleports on to "
+                    + string.Join(", ", landings.Select(l => l.ItemId > 0 ? $"{l.Room} (with item {l.ItemId})" : l.Room.ToString()))
+                    + " — a party is split on the way through.");
             }
             if (rebuilt is not null) _rooms[key] = room with { Exits = rebuilt };
         }
