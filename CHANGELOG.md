@@ -1,5 +1,11 @@
 # Version history
 
+## 3.159.20
+
+- A trap handed to a party member: their client now says it has accepted, and every result it reports is understood (a "No trap" or "Couldn't disarm" answer no longer leaves the walk waiting)
+- A sneaking member's telepathed trap answer is read
+- If nobody accepts a handed-over trap in 10 seconds, the walk goes through it instead of waiting forever
+
 ## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters

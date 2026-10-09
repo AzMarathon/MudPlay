@@ -258,9 +258,166 @@ public sealed class TrapDelegationManagerTests : IDisposable
 
         string? reply = null;
         mgr.Delegate("n", t => reply = t);
-        h.router.Dispatch(Line("Helper says \"Couldn't find trap to the n (5 attempts).\""));
+        h.router.Dispatch(Line("Helper says \"Couldn't disarm the trap to the n (5 attempts).\""));
 
-        Assert.Equal("Couldn't find trap to the n (5 attempts).", reply);
+        Assert.Equal("Couldn't disarm the trap to the n (5 attempts).", reply);
+    }
+
+    // ===== The acceptance, the result, and nobody answering ==============
+
+    // A one-shot timer the test fires by hand.
+    private sealed class FakeDelay : IDisposable
+    {
+        public Action? Callback;
+        public TimeSpan Delay;
+        public bool Disposed;
+        public IDisposable Schedule(TimeSpan delay, Action callback)
+        {
+            Delay = delay;
+            Callback = callback;
+            Disposed = false;
+            return this;
+        }
+        public void Dispose() => Disposed = true;
+        public void Fire() { if (!Disposed) Callback?.Invoke(); }
+    }
+
+    private static (TrapDelegationManager mgr, FakeDelay delay) NewTimedManager(
+        (MessageRouter router, PartyManager party, PlayerDatabase players, GameDataCache gameData) h)
+    {
+        FakeDelay delay = new();
+        return (new TrapDelegationManager(h.party, h.players, h.gameData, h.router, null, delay.Schedule), delay);
+    }
+
+    // Every line the disarming client can end a request with is read by the asker,
+    // in the { } a remote reply arrives in: a wording the asker didn't know left
+    // its walk waiting on an answer it had been given.
+    [Theory]
+    [InlineData("{Trap to the n disarmed.}")]
+    [InlineData("{Trap to the n disarmed 12s ago.}")]
+    [InlineData("{Trap to the n already disarmed.}")]
+    [InlineData("{No trap to the n to disarm.}")]
+    [InlineData("{No trap to the n to disarm (failed 5 times; taking it as clear).}")]
+    [InlineData("{Couldn't disarm the trap to the n (5 attempts).}")]
+    [InlineData("{Trap flow stopped.}")]
+    public void EveryEndingTheDisarmerSends_EndsTheWait(string said)
+    {
+        var h = Harness();
+        h.router.Dispatch(Line("Helper started to follow you."));
+        TrapDelegationManager mgr = NewManager(h);
+
+        string? reply = null;
+        mgr.Delegate("n", t => reply = t);
+        h.router.Dispatch(Line($"Helper says (to Forged) \"{said}\""));
+
+        Assert.Equal(said, reply);
+    }
+
+    // A sneaking member answers by telepath so its sneak holds.
+    [Fact]
+    public void ATelepathedResult_EndsTheWait()
+    {
+        var h = Harness();
+        h.router.Dispatch(Line("Helper started to follow you."));
+        TrapDelegationManager mgr = NewManager(h);
+
+        string? reply = null;
+        mgr.Delegate("n", t => reply = t);
+        h.router.Dispatch(Line("Helper telepaths: {Attempting to disarm trap n.}"));
+        Assert.Null(reply);
+        h.router.Dispatch(Line("Helper telepaths: {Trap to the n disarmed.}"));
+
+        Assert.Equal("{Trap to the n disarmed.}", reply);
+    }
+
+    [Fact]
+    public void AnAcceptance_IsNotAResult_AndStopsTheNobodyAnsweredTimer()
+    {
+        var h = Harness();
+        h.router.Dispatch(Line("Helper started to follow you."));
+        var (mgr, delay) = NewTimedManager(h);
+
+        string? reply = null;
+        mgr.Delegate("n", t => reply = t);
+        Assert.Equal(TrapDelegationManager.AcceptWindow, delay.Delay);
+
+        h.router.Dispatch(Line("Helper says (to Forged) \"{Attempting to disarm trap n.}\""));
+        Assert.Null(reply);
+        Assert.True(delay.Disposed);
+        Assert.Contains("Helper", mgr.Describe());
+
+        // However long the disarm takes (a rest, several tries), the wait goes on.
+        delay.Callback!();
+        Assert.Null(reply);
+
+        h.router.Dispatch(Line("Helper says (to Forged) \"{Trap to the n disarmed.}\""));
+        Assert.Equal("{Trap to the n disarmed.}", reply);
+        Assert.Equal("idle", mgr.Describe());
+    }
+
+    [Fact]
+    public void NobodyAccepting_TellsTheWalkSo()
+    {
+        var h = Harness();
+        h.router.Dispatch(Line("Helper started to follow you."));
+        var (mgr, delay) = NewTimedManager(h);
+
+        string? reply = null;
+        mgr.Delegate("n", t => reply = t);
+        delay.Fire();
+
+        Assert.Equal(TrapReply.Unanswered, reply);
+        Assert.Equal(TrapReplyOutcome.Unanswered, TrapReply.Read(reply));
+    }
+
+    [Fact]
+    public void WithTwoAtTheTrap_OneGivingUpDoesNotEndIt_TheFirstClearDoes()
+    {
+        var h = Harness();
+        h.router.Dispatch(Line("Helper started to follow you."));
+        h.router.Dispatch(Line("Second started to follow you."));
+        var (mgr, _) = NewTimedManager(h);
+
+        string? reply = null;
+        mgr.Delegate("n", t => reply = t);
+        h.router.Dispatch(Line("Helper says (to Forged) \"{Attempting to disarm trap n.}\""));
+        h.router.Dispatch(Line("Second says (to Forged) \"{Attempting to disarm trap n.}\""));
+
+        h.router.Dispatch(Line("Helper says (to Forged) \"{Couldn't disarm the trap to the n (5 attempts).}\""));
+        Assert.Null(reply);
+
+        h.router.Dispatch(Line("Second says (to Forged) \"{Trap to the n disarmed.}\""));
+        Assert.Equal("{Trap to the n disarmed.}", reply);
+    }
+
+    [Fact]
+    public void TheOnlyOneAtTheTrapGivingUp_EndsIt()
+    {
+        var h = Harness();
+        h.router.Dispatch(Line("Helper started to follow you."));
+        var (mgr, _) = NewTimedManager(h);
+
+        string? reply = null;
+        mgr.Delegate("n", t => reply = t);
+        h.router.Dispatch(Line("Helper says (to Forged) \"{Attempting to disarm trap n.}\""));
+        h.router.Dispatch(Line("Helper says (to Forged) \"{Couldn't disarm the trap to the n (5 attempts).}\""));
+
+        Assert.Equal(TrapReplyOutcome.Failed, TrapReply.Read(reply));
+    }
+
+    [Fact]
+    public void Cancel_StopsTheTimer_AndALateFireDoesNothing()
+    {
+        var h = Harness();
+        var (mgr, delay) = NewTimedManager(h);
+
+        string? reply = null;
+        mgr.Delegate("n", t => reply = t);
+        mgr.Cancel();
+
+        Assert.True(delay.Disposed);
+        delay.Callback!();
+        Assert.Null(reply);
     }
 
     [Fact]

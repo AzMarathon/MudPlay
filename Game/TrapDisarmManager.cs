@@ -272,14 +272,14 @@ public sealed class TrapDisarmManager : IDisposable
     {
         if (_current is { } cur)
         {
-            cur.Reply("Trap flow stopped.");
+            cur.Reply(TrapReply.Stopped);
             _current = null;
             _currentRoomKey = null;
         }
         while (_queue.Count > 0)
         {
             TrapRequest q = _queue.Dequeue();
-            q.Reply("Trap flow stopped.");
+            q.Reply(TrapReply.Stopped);
         }
         _state = State.Idle;
         _heldForRest = false;
@@ -304,7 +304,7 @@ public sealed class TrapDisarmManager : IDisposable
                 _log?.Log(LogSeverity.Info, "Trap",
                     $"We disarmed the trap to the {next.Direction} {ago.TotalSeconds:0}s ago "
                     + $"(re-arms after {RearmTime.TotalMinutes:0} min) — crossing without a disarm.");
-                next.Reply($"Trap to the {next.Direction} disarmed {ago.TotalSeconds:0}s ago.");
+                next.Reply(TrapReply.DisarmedEarlier(next.Direction, ago));
                 continue;
             }
             _current = next;
@@ -365,7 +365,7 @@ public sealed class TrapDisarmManager : IDisposable
         ConfirmFailures();
         DisarmAttempted?.Invoke(true);
         NoteExitState(disarmed: true);
-        cur.Reply($"Trap to the {cur.Direction} disarmed.");
+        cur.Reply(TrapReply.Disarmed(cur.Direction));
         CompleteCurrent();
     }
 
@@ -389,7 +389,7 @@ public sealed class TrapDisarmManager : IDisposable
         {
             _log?.Log(LogSeverity.Info, "Trap",
                 $"Disarm {cur.Direction} set the trap off {_disarmAttempts} time(s) — giving up.");
-            cur.Reply($"Couldn't disarm the trap to the {cur.Direction} ({_disarmAttempts} attempts).");
+            cur.Reply(TrapReply.CouldNotDisarm(cur.Direction, _disarmAttempts));
             CompleteCurrent();
             return;
         }
@@ -417,7 +417,7 @@ public sealed class TrapDisarmManager : IDisposable
         }
         _log?.Log(LogSeverity.Info, "Trap",
             $"Disarm {cur.Direction} failed {_disarmAttempts} time(s) — taking it as no trap there.");
-        cur.Reply($"No trap to the {cur.Direction} to disarm (failed {_disarmAttempts} times; taking it as clear).");
+        cur.Reply(TrapReply.NoTrapAfterFailures(cur.Direction, _disarmAttempts));
         CompleteCurrent();
     }
 
@@ -430,7 +430,7 @@ public sealed class TrapDisarmManager : IDisposable
         if (_state != State.DisarmPending) return;
         if (_current is not { } cur) return;
         _log?.Log(LogSeverity.Info, "Trap", $"No trap to the {cur.Direction} — nothing to disarm.");
-        cur.Reply($"No trap to the {cur.Direction} to disarm.");
+        cur.Reply(TrapReply.NoTrap(cur.Direction));
         CompleteCurrent();
     }
 
@@ -442,7 +442,7 @@ public sealed class TrapDisarmManager : IDisposable
         if (_state != State.DisarmPending) return;
         if (_current is not { } cur) return;
         _log?.Log(LogSeverity.Info, "Trap", $"Trap to the {cur.Direction} is already disarmed — crossing.");
-        cur.Reply($"Trap to the {cur.Direction} already disarmed.");
+        cur.Reply(TrapReply.AlreadyDisarmed(cur.Direction));
         CompleteCurrent();
     }
 
