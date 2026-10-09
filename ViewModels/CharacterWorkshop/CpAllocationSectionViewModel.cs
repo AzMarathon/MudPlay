@@ -115,6 +115,10 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private RealmType _realm;
     // The baseline may be acted on: rows rewritten against it and pruned by it.
     private bool _baselineTrusted;
+    // The last `stat` marked a stat the baseline couldn't work back. Narrower than
+    // "not trusted": a screen whose marks couldn't be read at all says nothing
+    // either way, and a realm that never shows them must still be able to plan.
+    private bool _baselineKnownOff;
 
     public CpAllocationSectionViewModel(PlayerStats stats, GameDataCache gameData,
                                         InventoryManager inventory, ProfileService profile,
@@ -177,7 +181,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     {
         // The first row starts from the trained stats, so they have to be known:
         // seeded from a buffed reading, the buff would be saved as the plan.
-        if (Rows.Count == 0 && !_baselineTrusted)
+        if (Rows.Count == 0 && _baselineKnownOff)
         {
             ActionMessage = "Read `stat` with no buff or curse on your stats first — the first row starts from your trained stats.";
             return;
@@ -459,6 +463,8 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory, _listedEffects);
         HasCharacter = ctx.HasCharacter;
         _baselineTrusted = ctx.BaselineTrusted;
+        _baselineKnownOff = ctx.HasCharacter && !ctx.BaselineTrusted
+            && ctx.Reading.State != StatReadingState.Unverified;
         BaselineNote = DescribeReading(ctx);
         if (!ctx.HasCharacter) return;
 

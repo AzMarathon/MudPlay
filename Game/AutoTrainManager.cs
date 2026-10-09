@@ -183,6 +183,7 @@ public sealed class AutoTrainManager : IDisposable
     public void TrainNow()
     {
         if (IsBusy || !_wire.IsBound) return;
+        if (FormAlreadyOpen()) return;
         if (CurrentRow(out CharacterPlanContext ctx) is not { } row || !HasWork(ctx, row)) return;
         if (StatsAlteredHold(ctx) is { } hold)
         {
@@ -211,12 +212,29 @@ public sealed class AutoTrainManager : IDisposable
         CharacterPlanContext ctx = ResolveContext();
         if (!ctx.HasCharacter) return;
         LastApplyNote = null;
+        if (FormAlreadyOpen())
+        {
+            LastApplyNote = "a trainer screen is already open; finish or leave it first";
+            ApplyTargetsCompleted?.Invoke(false);
+            StateChanged?.Invoke();
+            return;
+        }
         if (StatsAlteredHold(ctx) is not null)
         {
             _ = RereadStatThenApplyAsync(rowTargets);
             return;
         }
         BeginExplicit(ctx, rowTargets);
+    }
+
+    // A form on screen takes `train stats` as text for whichever box the cursor is
+    // in, and every keystroke after it lands a box further on, with SAVE reached
+    // one Enter early. A pass that stopped before SAVE leaves exactly that form up.
+    private bool FormAlreadyOpen()
+    {
+        if (!_trainer.MenuOwnsKeyboard) return false;
+        _log?.Info("AutoTrain", "A trainer screen is already open — `train stats` is not sent into it.");
+        return true;
     }
 
     private async Task RereadStatThenApplyAsync(int[] rowTargets)
@@ -499,29 +517,26 @@ public sealed class AutoTrainManager : IDisposable
         _verifying = true;
         try
         {
+            // The form is checked twice. First once the stat boxes are done, with
+            // the three appearance boxes still between the cursor and Exit: a cursor
+            // that started a box or two on (a key the user pressed, text already
+            // typed into the form) shows there as a value in the wrong box while no
+            // Enter left to send can reach SAVE.
+            int afterStats = 1 + AutoTrainSequenceBuilder.StatCount;
             for (int i = 0; i < _sequence.Count - 1; i++)
             {
                 if (FormLost(session)) return;
+                if (i == afterStats && !(await FormShowsTargetAsync(session)).Ok) return;
                 _wire.Send(_sequence[i]);
                 await Task.Delay(KeystrokeDelayMs);
             }
             if (FormLost(session)) return;
 
-            // Every field has been entered and only SAVE is left. What it would
-            // keep can't be taken back, so the form has to show exactly what was
-            // meant first; a value in the wrong box, or one the form refused (which
-            // leaves the cursor a field short), stops the pass here.
-            TrainStatsScreen? shown = null;
-            if (_formBefore is not null)
-            {
-                shown = await ReadSettledFormAsync(session);
-                if (FormLost(session)) return;
-                if (shown is null || !shown.Stats.SequenceEqual(_target))
-                {
-                    StopBeforeSave(shown);
-                    return;
-                }
-            }
+            // And again with only SAVE left. What it would keep can't be taken
+            // back, so the form has to show exactly what was meant; a value the
+            // form refused (which leaves the cursor a field short) stops the pass.
+            (bool ok, TrainStatsScreen? shown) = await FormShowsTargetAsync(session);
+            if (!ok) return;
 
             _wire.Send(_sequence[^1]);
             await Task.Delay(KeystrokeDelayMs);
@@ -581,6 +596,19 @@ public sealed class AutoTrainManager : IDisposable
         }
     }
 
+    // Whether the form shows what the pass typed, and the form as read. A form the
+    // pass could never read has nothing to check, and passes. When it doesn't show
+    // it, the pass has been stopped (or found the form gone) and must send no more.
+    private async Task<(bool Ok, TrainStatsScreen? Shown)> FormShowsTargetAsync(int session)
+    {
+        if (_formBefore is null) return (true, null);
+        TrainStatsScreen? shown = await ReadSettledFormAsync(session);
+        if (FormLost(session)) return (false, shown);
+        if (shown is not null && shown.Stats.SequenceEqual(_target)) return (true, shown);
+        StopBeforeSave(shown);
+        return (false, shown);
+    }
+
     // The form doesn't show what the pass meant to save. Nothing more is typed:
     // the form stays open for the user to put right or leave, and the pass lets go
     // of it without forcing the keyboard free.
@@ -589,7 +617,7 @@ public sealed class AutoTrainManager : IDisposable
         LastApplyNote = shown is null
             ? "the trainer screen could no longer be read before SAVE"
             : $"the trainer screen shows {Describe(shown.Stats)} where the plan typed {Describe(_target)}";
-        _log?.Info("AutoTrain",
+        _log?.Warn("AutoTrain",
             $"Stopped before SAVE — {LastApplyNote}. The trainer screen is left open: finish or leave it by hand. "
             + "Plan row kept; automation waits on the screen.");
         _phase = Phase.Idle;

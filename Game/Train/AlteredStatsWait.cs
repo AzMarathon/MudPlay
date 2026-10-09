@@ -14,6 +14,9 @@ public sealed class AlteredStatsWait
 {
     private int _rereads;
 
+    // True once the run has started waiting.
+    public bool Waiting => _rereads > 0;
+
     // True for the first re-read of a run, the one worth announcing.
     public bool JustBegan => _rereads == 1;
 

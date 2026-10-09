@@ -1164,6 +1164,10 @@ public sealed class TrainerWalkManager : IDisposable
     private void OnStatScreenParsed(LastKnownStats snapshot)
     {
         if (_phase != Phase.RefreshingStats) return;
+        // While waiting out an altered stat only a `stat` screen counts. An `exp`
+        // screen closing carries the marks of the `stat` before it, and would
+        // spend one of the wait's re-reads without anything having been read.
+        if (_alteredStats.Waiting && !_statParser.LastCaptureReadHits) return;
         // A post-train settle must match the level we just attained (filters stray
         // stat screens mid-run); the CP-only reconcile has no attained level and
         // trusts whatever current level the refreshed screen reports.

@@ -69,6 +69,7 @@
                  trains through one. -->
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0" VerticalAlignment="Center"
                         IsEnabled="{Binding IsStockRealm}"
+                        ToolTip.ShowOnDisabled="True"
                         ToolTip.Tip="Stock won't open `train stats` while a spell or item is altering one of your stats (&quot;Your stats are unnaturally altered!&quot;). When a train trip reaches the trainer and finds one altered, it waits there this long, reading `stat` again every 20 seconds, and applies your CP plan as soon as the stats are back to normal. If they haven't cleared by then the plan row is left for a later trip. 0 = don't wait.&#10;&#10;Stock realms only: Paradigm lets you train with a stat altered, so nothing waits there and this is greyed out.">
                 <TextBlock Text="Wait for altered stats at the trainer (Stock)" VerticalAlignment="Center"/>
                 <NumericUpDown MinWidth="110" VerticalAlignment="Center"

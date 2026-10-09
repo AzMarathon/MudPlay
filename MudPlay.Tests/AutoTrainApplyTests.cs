@@ -221,8 +221,9 @@ public sealed class AutoTrainApplyTests : IDisposable
         await WaitUntil(() => !manager.IsBusy);
 
         Assert.Equal(new[] { "136" }, Typed());
-        // `train stats` and ten fields; the SAVE return and the one after never went.
-        Assert.Equal(FormPayloads - 1, Sent().Length);
+        // `train stats`, Family Name and the six stat boxes: the pass stopped with
+        // the appearance boxes and Exit still ahead of the cursor.
+        Assert.Equal(8, Sent().Length);
         Assert.Equal(0, _committed);
         Assert.Contains("where the plan typed", manager.LastApplyNote);
         // The form is still the user's to finish or leave.
@@ -276,6 +277,30 @@ public sealed class AutoTrainApplyTests : IDisposable
         Assert.Equal(new[] { "136" }, Typed());
         Assert.Equal(new[] { true }, _explicitResults);
         Assert.Equal(1, _committed);
+    }
+
+    [Fact]
+    public async Task ATrainerScreenAlreadyOpen_IsNeverSentTrainStats()
+    {
+        // The first pass stops before SAVE and leaves the form up. A second click
+        // would type `train stats` into a box and run every keystroke a box on,
+        // reaching SAVE with the values the first pass had just refused to save.
+        AutoTrainManager manager = Build(paradigm: true);
+        CleanStat();
+        _screen = FormText(133, 26);   // takes nothing typed into it
+
+        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
+        await WaitUntil(() => !manager.IsBusy);
+        Assert.True(_trainer.IsInputMenuActive);
+        int sent = Sent().Length;
+
+        manager.ApplyTargets(new[] { 136, 40, 30, 100, 60, 30 });
+        manager.TrainNow();
+
+        Assert.False(manager.IsBusy);
+        Assert.Equal(sent, Sent().Length);
+        Assert.Equal(new[] { false, false }, _explicitResults);
+        Assert.Contains("already open", manager.LastApplyNote);
     }
 
     [Fact]

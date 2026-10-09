@@ -4,6 +4,7 @@
 
 - CP plan is typed from the trained stats and CP Left on the `train stats` screen, so a buff on `stat` no longer throws it off
 - The trainer screen must show what was typed before it is saved; if it doesn't, MudPlay stops and leaves the screen open
+- `train stats` is never sent into a trainer screen that is already open
 - A plan row is cleared only once the game shows its CP was spent
 - `stat` values marked as modified are worked back to the trained ones (the listed effects, and worn gear on Paradigm); one that can't be accounted for is flagged on the CP Allocation tab, and rows aren't rewritten or pruned from it
 - Stock: the CP plan waits while a stat is altered, as the game refuses `train stats` then; new **Wait for altered stats at the trainer** setting on the Auto-Trainer tab (120 s by default, 0 = don't wait)
