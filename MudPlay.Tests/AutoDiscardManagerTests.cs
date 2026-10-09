@@ -323,7 +323,7 @@ public sealed class AutoDiscardManagerTests
         h.Carried.AddRange(new[] { "moonstone", "moonstone" });
         List<string> sent = new();
 
-        (string verb, int count) = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
+        (string verb, int count, _) = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
 
         Assert.Equal(("drop", 2), (verb, count));
         Assert.Equal(new[] { "drop moonstone", "drop moonstone" }, sent);
@@ -341,7 +341,7 @@ public sealed class AutoDiscardManagerTests
         h.Enabled = false;
         List<string> sent = new();
 
-        (string verb, int count) = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
+        (string verb, int count, _) = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
 
         Assert.Equal(("hide", 2), (verb, count));
         Assert.Equal(new[] { "hide moonstone", "hide moonstone" }, sent);
@@ -679,6 +679,217 @@ public sealed class AutoDiscardManagerTests
         Assert.Empty(h.Discard.HeldHides);
     }
 
+    // The inventory announces the copy gone (Changed) before it names the sale, so
+    // the hides are looked at again with the hold still in place and the count
+    // already down. Kept back on arrival, that look must not send.
+    [Fact]
+    public void HeldHide_SoldWhileKeptBack_IsNotSentByTheInventoryChangeBeforeTheRelease()
+    {
+        using Harness h = OwnTwoAndAHeldChestMoonstone();
+        bool sweeping = true;
+        h.Discard.SuppressDuringSweep = () => sweeping;
+        h.Discard.OnRoomEntered(RoomB);           // kept back
+        sweeping = false;
+
+        h.Carried.RemoveAt(0);
+        h.Discard.OnInventoryChanged();           // Changed, from inside the sale
+        h.Discard.ReleaseHeld("moonstone", 1);    // ItemSold, after it
+
+        Assert.Empty(h.Sent);
+        Assert.Empty(h.Discard.HeldHides);
+    }
+
+    [Fact]
+    public void HeldHide_CopyGivenAway_IsNotRetriedIntoThePlayersOwn()
+    {
+        using Harness h = OwnTwoAndAHeldChestMoonstone();
+
+        h.Carried.RemoveAt(0);                    // "You just gave moonstone to Bob."
+        h.Discard.OnInventoryChanged();
+        h.Discard.OnRoomEntered(RoomB);
+
+        Assert.Empty(h.Sent);
+        Assert.Empty(h.Discard.HeldHides);
+    }
+
+    [Fact]
+    public void EngineHeldHide_LeavesTheKeepAmount_WhenACopyIsGivenAway()
+    {
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("dagger", 1, discard: true, keep: 1);
+        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Discard.OnRoomEntered(RoomA);
+        h.Discard.OnInventoryChanged();           // two go out, one is kept
+        h.Feed("There is no room to hide dagger here.");
+        h.Feed("There is no room to hide dagger here.");
+
+        h.Carried.RemoveAt(0);                    // one given away: two left
+        h.Discard.OnRoomEntered(RoomB);
+
+        Assert.Equal(3, h.Sent.Count);            // one retry, not two
+    }
+
+    [Fact]
+    public void CallOff_WhileARetryIsOut_ARefusalOfItHoldsNothing()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+        h.Discard.OnRoomEntered(RoomB);           // the retry is out
+
+        h.Discard.ReleaseHeld("moonstone", int.MaxValue, byHandOnly: true);   // ✕, or a Sell
+        Assert.Empty(h.Discard.HeldHides);
+        h.Feed("There is no room to hide moonstone here.");
+        h.Discard.OnRoomEntered(RoomC);
+
+        Assert.Single(h.Sent);
+        Assert.Empty(h.Discard.HeldHides);
+    }
+
+    [Fact]
+    public void CallOff_WhileARetryIsOut_ALandingIsStillADiscard()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+        h.Discard.OnRoomEntered(RoomB);
+
+        h.Discard.ReleaseHeld("moonstone", int.MaxValue, byHandOnly: true);
+
+        Assert.True(h.Hid("moonstone"));          // kept out of the stash ledger
+    }
+
+    // With its switch off the engine's held copies would wait for good, and still
+    // count as spoken for.
+    [Fact]
+    public void ByHandDiscard_TakesOverAnEngineHold_WhenTheSwitchIsOff()
+    {
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("dagger", 1, discard: true);
+        h.Carried.Add("dagger");
+        h.Discard.OnRoomEntered(RoomA);
+        h.Discard.OnInventoryChanged();
+        h.Feed("There is no room to hide dagger here.");
+        h.Enabled = false;
+        List<string> byHand = new();
+
+        (_, int sent, int held) = h.Discard.EmitDiscard(byHand.Add, "dagger", 1);
+
+        Assert.Equal((0, 1), (sent, held));       // this room refused it: still waiting
+        Assert.Empty(byHand);
+        h.Discard.OnRoomEntered(RoomB);           // and now it goes, switch or no switch
+        Assert.Equal(new[] { "hide dagger", "hide dagger" }, h.SentText);
+    }
+
+    [Fact]
+    public void RefusalBeforeTheRoomIsKnown_TreatsTheFirstConfirmedRoomAsTheOneThatRefused()
+    {
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("moonstone", 7, discard: false);
+        h.Carried.Add("moonstone");
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Discard.OnRoomEntered(RoomA);           // where it has been standing all along
+        Assert.Empty(h.Sent);
+
+        h.Discard.OnRoomEntered(RoomB);
+        Assert.Equal(new[] { "hide moonstone" }, h.SentText);
+    }
+
+    [Fact]
+    public void ByHandHide_ThatCouldNotBeAnswered_IsHeldInsteadOfSent()
+    {
+        using Harness h = HidingMoonstones(1);
+        bool canHide = false;
+        h.Discard.CanHideHere = () => canHide;
+        List<string> byHand = new();
+
+        (_, int sent, int held) = h.Discard.EmitDiscard(byHand.Add, "moonstone", 1);
+
+        Assert.Equal((0, 1), (sent, held));
+        Assert.Empty(byHand);
+        Assert.Equal(0, h.Discard.UnansweredHides);
+
+        // Nothing refused it, so it needn't wait for another room.
+        canHide = true;
+        h.Discard.RecheckHeldHides();
+        Assert.Equal(new[] { "hide moonstone" }, h.SentText);
+    }
+
+    [Fact]
+    public void KeptBack_IsLoggedOncePerReasonPerRoom()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+        h.Discard.SuppressDuringSweep = () => true;
+
+        h.Discard.OnRoomEntered(RoomB);
+        h.Discard.OnInventoryChanged();
+        h.Discard.OnInventoryChanged();
+        h.Discard.OnRoomEntered(RoomC);
+
+        Assert.Equal(2, h.Log.Snapshot().Count(e => e.Message.Contains("held hides kept back")));
+    }
+
+    // The by-hand and engine copies of one item through every way a count moves.
+    [Fact]
+    public void MixedByHandAndEngineCopies_ThroughLandingRefusalReleaseAndRead()
+    {
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("dagger", 1, discard: true, keep: 1);
+        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger", "dagger" });
+        h.Discard.OnRoomEntered(RoomA);
+
+        h.Discard.EmitDiscard(_ => { }, "dagger", 1);   // one by hand
+        h.Discard.OnInventoryChanged();                 // the engine: 4 - 1 out - keep 1 = 2
+        Assert.Equal(3, h.Discard.UnansweredHides);
+
+        h.Hid("dagger");                                // one lands
+        h.Carried.RemoveAt(0);
+        h.Feed("There is no room to hide dagger here.");
+        h.Feed("There is no room to hide dagger here.");
+        AutoDiscardManager.HeldHideInfo held = Assert.Single(h.Discard.HeldHides);
+        Assert.Equal(2, held.Count);
+        Assert.Equal(0, h.Discard.UnansweredHides);
+
+        h.Discard.ReleaseHeld("dagger", 1, byHandOnly: true);   // nothing by hand is left held
+        Assert.Equal(2, Assert.Single(h.Discard.HeldHides).Engine);
+
+        h.Carried.RemoveAt(0);                          // a read finds two
+        h.Discard.OnFullInventoryRead();
+        Assert.Equal(1, Assert.Single(h.Discard.HeldHides).Count);
+
+        h.Discard.OnRoomEntered(RoomB);                 // 2 carried, keep 1: one goes
+        Assert.Equal(3, h.Sent.Count);
+    }
+
+    // A recheck and the engine's own evaluation run in the one inventory change.
+    [Fact]
+    public void RecheckAndEvaluation_InOneCall_SendOnce()
+    {
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("dagger", 1, discard: true);
+        h.Carried.Add("dagger");
+        h.Discard.OnRoomEntered(RoomA);
+        h.Discard.OnInventoryChanged();
+        h.Feed("There is no room to hide dagger here.");
+        bool sweeping = true;
+        h.Discard.SuppressDuringSweep = () => sweeping;
+        h.Discard.OnRoomEntered(RoomB);
+        sweeping = false;
+
+        h.Discard.OnInventoryChanged();
+
+        Assert.Equal(2, h.Sent.Count);
+    }
+
     [Fact]
     public void ReleaseHeld_ByHandOnly_LeavesTheEnginesOwnHold()
     {
@@ -811,10 +1022,46 @@ public sealed class AutoDiscardManagerTests
         h.Discard.Reset("disconnected", keepHeld: true);
         h.Discard.OnRoomEntered(RoomA);           // back in, the same room
         h.Discard.OnInventoryChanged();
+        h.Discard.OnFullInventoryRead();          // the login `i`
         Assert.Single(h.Sent);                    // not sent into the full room again
 
         h.Discard.OnRoomEntered(RoomB);
         Assert.Equal(2, h.Sent.Count);
+    }
+
+    // The carried list is the one from before the drop until the login `i` lands.
+    // A hide for a copy lost while away would not be refused but said aloud.
+    [Fact]
+    public void Reconnect_IntoAnotherRoom_SendsNothingUntilThePackIsRead()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        h.Discard.Reset("disconnected", keepHeld: true);
+        h.Discard.OnRoomEntered(RoomB);
+        h.Discard.OnInventoryChanged();
+        Assert.Empty(h.Sent);
+        Assert.Contains(h.Log.Snapshot(), e => e.Message.Contains("hasn't been read since the reconnect"));
+
+        h.Discard.OnFullInventoryRead();          // still carried: now it goes
+        Assert.Equal(new[] { "hide moonstone" }, h.SentText);
+    }
+
+    [Fact]
+    public void DisconnectWhileARetryIsOut_ThatHadLanded_DoesNotHideAnOwnCopy()
+    {
+        using Harness h = OwnTwoAndAHeldChestMoonstone();
+        h.Discard.OnRoomEntered(RoomB);           // the retry goes out, and lands unseen
+        Assert.Single(h.Sent);
+
+        h.Discard.Reset("disconnected", keepHeld: true);
+        h.Carried.RemoveAt(0);                    // the login `i`: two left, the player's own
+        h.Discard.OnFullInventoryRead();
+        h.Discard.OnRoomEntered(RoomC);
+
+        Assert.Single(h.Sent);
+        Assert.Empty(h.Discard.HeldHides);
     }
 
     [Fact]

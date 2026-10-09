@@ -6773,10 +6773,16 @@ public sealed class AppServices
         };
         AutoDiscard.PacedSender = cmds => InventoryAction.SendPaced(cmds);
         AutoDiscard.SendsQueued = () => InventoryAction.HasPacedCommandsQueued;
+        AutoDiscard.CancelQueuedSends = () => InventoryAction.CancelPaced();
         // A hide gets no answer of its own while the send gate is up, and on Stock
-        // none in the dark or blind (GAME_MECHANICS "Hiding items in a room").
+        // none in the dark or blind (GAME_MECHANICS "Hiding items in a room";
+        // Paradigm isn't recorded, so sight doesn't hold its hides back).
         AutoDiscard.CanHideHere = () =>
-            !EngineGate.IsLocked && !RoomTracker.IsInDarkRoom && !Conditions.IsBlinded;
+            !EngineGate.IsLocked
+            && (onParadigm() || (!RoomTracker.IsInDarkRoom && !Conditions.IsBlinded));
+        // Either clearing may be what a held hide was waiting on.
+        EngineGate.Released += AutoDiscard.RecheckHeldHides;
+        Conditions.ConditionEnded += _ => AutoDiscard.RecheckHeldHides();
         // A held hide is for a copy still to be got rid of; sold, it is gone.
         Inventory.ItemSold += (name, count, _) => AutoDiscard.ReleaseHeld(name, count);
         // Discards sent to another character's game, or before a death emptied

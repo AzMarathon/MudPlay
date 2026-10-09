@@ -738,20 +738,30 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // way go out, so a second press before the game answers the first sends nothing.
     private void QueueDiscard(List<string> commands, ChestOffloadItemRow item)
     {
-        (string verb, int sent) = _discard.EmitDiscard(commands.Add, item.Name, item.Gained);
+        (string verb, int sent, int held) = _discard.EmitDiscard(commands.Add, item.Name, item.Gained);
         if (sent > 0)
-        {
             _log?.Info(LogCategory, $"discard {sent} {item.Name} via {verb}" +
-                (sent < item.Gained ? $" (of {item.Gained}; the rest already sent or not carried)" : " (whole stack)"));
+                (sent < item.Gained ? $" (of {item.Gained}; the rest held, already sent or not carried)" : " (whole stack)"));
+        if (held > 0)
+        {
+            // A hide that could get no answer where the character stands (the dark,
+            // blind, the game busy with a menu), or one auto-discard had waiting.
+            _log?.Info(LogCategory, $"hide of {held} {item.Name} held: it goes out when a room can take it");
+            if (!_tour.IsRunning)
+                ShowNote($"{item.Name}: can't be hidden here right now — it stays in your pack and is hidden as soon as it can be.", item.Name);
             return;
         }
+        if (sent > 0) return;
+
         // Until an `i` has been read the pack is unknown, and nothing is sent for a
         // copy that can't be shown to be carried.
+        bool waiting = _inventory.IsLoaded && _discard.HeldFor(item.Name) > 0;
         string why = !_inventory.IsLoaded ? "your inventory hasn't been read yet (type i)"
-            : _discard.HeldFor(item.Name) > 0 ? "it is waiting for the next room to be hidden"
+            : waiting ? "it is waiting for the next room to be hidden"
             : "it was already sent, or is no longer in your pack";
         _log?.Info(LogCategory, $"discard of {item.Name} not sent: {why}");
-        if (!_tour.IsRunning) ShowNote($"{item.Name}: nothing sent — {why}.");
+        // A waiting hide's note comes down with the hide; any other on the next press.
+        if (!_tour.IsRunning) ShowNote($"{item.Name}: nothing sent — {why}.", waiting ? item.Name : null);
     }
 
     // Alternate shops that also buy this item, nearest first, minus the one it's in.

@@ -485,9 +485,13 @@ public sealed class InventoryManagerTests
     // counted echo of one names no coin metal either.
     [Theory]
     [InlineData("iron crown")]
+    [InlineData("storm crown")]
+    [InlineData("fiery crown")]
     [InlineData("woven ivy crown")]
     [InlineData("sack of coins")]
     [InlineData("3 iron crown")]
+    [InlineData("2 woven ivy crown")]
+    [InlineData("4 sack of coins")]
     public void ItemNamedAfterACoin_Hidden_FiresItemHidden(string echo)
     {
         using Harness h = new();

@@ -622,6 +622,8 @@ public sealed class CashManager : IDisposable
     {
         (string? currency, int count) = ParseCashLine(m);
         if (currency is null) return;
+        // As for a hide: "You dropped 3 iron crown." is an item, not coin.
+        if (!IsCashWord(currency)) return;
 
         AdjustHeld(currency, -count);
         DecayInFlight(currency, -count);

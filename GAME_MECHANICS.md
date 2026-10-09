@@ -6121,7 +6121,7 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - **Stock: `hide <item>` for an item you don't hold prints nothing and is not a command** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_hide` @0x466b1f; Realm: Stock, Paradigm not recorded)*. With no held item matching, the routine returns 0 without a line: at once when the command is two words (@0x466d53 → @0x466eff → @0x46711e), and with more words when the first is not a positive number (@0x466f19 → @0x467117). `_handle_commands` hands that 0 back (@0x413cbe → @0x414b28) exactly as it does for the words that do nothing, so the line is treated as unrecognised: with talk fast it is **said to the room** (*Wire, prompt & command output → Command words and abbreviations*). With a positive number first it is read as a coin hide: `You hid <N> <coin>.`, `You don't have <N> <coin> to hide!`, or `Syntax: HIDE <N> {Currency}` when the next word is no coin (@0x4670fe).
   - `drop` on the same miss answers privately: `You don't have <word> to drop!` (@0x466ac9–0x466af2), or `Syntax: DROP {Amount} {Currency}` with more words (@0x466aa2). So a stale `drop` is harmless and a stale `hide` is not.
 - **Stock: hiding an item needs sight; dropping one doesn't** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_hide` @0x466e1d–0x466e2c; Realm: Stock, Paradigm not recorded)*. `_cmd_hide` calls `_can_see` before it moves the item; blind or in a room too dark, that routine prints its one line (`You are blind.` / `The room is … - you can't see anything`) and nothing is hidden. `_cmd_drop` makes no such call.
-  - **Client use:** `AutoDiscardManager.CanHideHere` (wired in `AppServices` to the send gate, `RoomTracker.IsInDarkRoom` and `ConditionTracker.IsBlinded`): no discard hide is sent, and a held one waits, while the character can't see. The can't-see line names no item and isn't the hide's own, so a hide sent then would stay counted as on its way.
+  - **Client use:** `AutoDiscardManager.CanHideHere` (wired in `AppServices` to the send gate on both realms, and to `RoomTracker.IsInDarkRoom` and `ConditionTracker.IsBlinded` **on Stock only**, since Paradigm isn't recorded): on Stock no discard hide is sent while the character can't see; a held one waits, and a by-hand one is held instead of sent. The can't-see line names no item and isn't the hide's own, so a hide sent then would stay counted as on its way.
 - **Stock: a full room refuses the hide with `There is no room to hide <item> here.`, naming the item's record name** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_hide` @0x466e8b–0x466ef4)*. When `_add_item_to_room` fails the item is put back in the pack (@0x466ec3) and the line is printed with the item record's name (record + 0xad, @0x466ed6–0x466edd), the same pointer `You hid %s.` prints (@0x466e96–0x466e9d). So the refusal carries the full name whatever was typed, as the drop refusal does. The cap itself is in *Room item capacity: drop refusal*.
 - **A refused hide only happens on Stock** *([CONFIRMED] 2026-10-09, user: "a hide being refused only applies to a stock realm")*. It agrees with Paradigm rooms having no item cap.
 - **`hide <item>` stashes an item in the room; a bare `hide` hides the player instead.** A stashed item
@@ -6151,7 +6151,8 @@ A `get <item>` that can't succeed replies with one of these shapes:
   disconnect and a profile swap, capped at what a full `i` shows carried, and dropped once two `i` reads
   pass with no discard sent or answered between them (`OnFullInventoryRead`): `You may not hide that
   item!` names no item. The two-read rule waits while the bulk pacer still holds discards it hasn't sent
-  (`SendsQueued`), and a retry lost that way goes back to being held.
+  (`SendsQueued`), and a retry lost that way goes back to being held. A death, a disconnect and a
+  profile swap also empty the pacer's queue (`CancelQueuedSends`).
 - **Client policy** (user, 2026-10-09: "if it does happen, hold the item until we enter a new room and try
   again... and repeat this until we successfully hide it"): a discard's hide the room refuses for want of
   room keeps the item and is sent again on arriving in each different, confirmed room until `You hid …`
@@ -6159,16 +6160,25 @@ A `get <item>` that can't succeed replies with one of these shapes:
   `OnRoomEntered`, `RecheckHeldHides`), so it covers the engine's own hides and Chest Offload's. Only a
   hide sent as a discard is carried on with: a typed hide, a stash room's and Hide All's are left alone.
   - **It waits** (stays held, nothing sent) while the room is unconfirmed, during a Roomba sweep, while
-    the send gate is up, and while the character is blind or in the dark; the engine's own copies also
-    wait while its switch is off, where a by-hand discard's do not. It is looked at again on the next
-    inventory change, when a sweep ends and when the switch comes back on, and sent then if the room is
-    not the one that refused it. A disconnect keeps the held copies, each tied to the room that refused.
+    the send gate is up, on Stock while the character is blind or in the dark, and after a disconnect
+    until the pack has been read again; the engine's own copies also wait while its switch (Auto Get
+    Items) is off, where a by-hand discard's do not, and a by-hand Drop of the same item then takes
+    them over. It is looked at again on the next inventory change, when a sweep ends, when the send
+    gate releases, when a condition ends and when the switch comes back on, and sent then if the room
+    is not the one that refused it. The refusing room is kept per item, not per sender. A disconnect
+    keeps the held copies, each tied to the room that refused; a hide refused before any room was
+    confirmed is tied to the first room confirmed.
   - **Client policy** (2026-10-09): the hold is for a hide still wanted. Selling the item, dropping it,
     hiding it by hand, taking it off the Chest Offload list (✕, Clear list) or starting a Sell for it
-    calls the held hide off (`ReleaseHeld`): with a copy of the player's own also in the pack, a retry
-    after the chest's copy had gone would hide the wrong one.
+    calls the held hide off (`ReleaseHeld`), a retry already out included: with a copy of the player's
+    own also in the pack, a retry after the chest's copy had gone would hide the wrong one.
+  - **It never reaches into copies that weren't to be discarded.** At each refusal the copies no
+    discard was out for are counted (`HeldHide.Kept`) and a retry leaves that many in the pack, so a
+    copy given away, sold or lost while a hide waits is not made up for out of the player's own. The
+    engine's own retries also leave the item's keep amount as it is set at the time.
   - It is given up when *Hide items when discarding* is turned off, on a death and on a profile swap,
-    and trimmed to what is carried.
+    and trimmed to what is carried; the engine's own copies are let go when the item is no longer
+    flagged for auto-discard.
 
 ### Room item capacity: drop refusal
 *Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user); capacity + stacking rule [OBSERVED] `wccmmud.dll` 1.11p `_add_item_to_room`, CONFIRMED 2026-09-27 (user); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
