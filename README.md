@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.20**
-> - A buff is no longer recast because the game refused something you typed in the same round (`You have already cast a spell this round!` answering your own `use` or cast, not the client's)
+> **Version 3.159.21**
+> - The inventory is read again after a death, so gear handed back afterwards can be put on with a gear set (it used to read as already worn until you typed `i`)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
