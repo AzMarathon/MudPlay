@@ -1,5 +1,9 @@
 # Version history
 
+## 3.157.5
+
+- A trade the sleazy shopkeeper refuses (no brooch, no orb) ends the wait at once instead of after 8 seconds
+
 ## 3.157.4
 
 - A party buff whose cast line doesn't name the member (angelic halo) is timed from the cast, so it is no longer recast on the same member every round while the others go without
