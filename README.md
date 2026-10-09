@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.19**
-> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
-> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+> **Version 3.159.20**
+> - A `;` that starts a word is sent to the game as typed (`;o`, `/name @do ;o`, a `;)` in chat) instead of splitting the line; `n;s` still sends two commands
+> - Events and the pre-/post-rest commands split their commands by the same rule as macros, aliases and triggers
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

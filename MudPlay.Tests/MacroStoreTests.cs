@@ -15,7 +15,18 @@ public sealed class MacroStoreTests
     [InlineData(";;;n;;;",                             new[] { "n" })]                     // drops empties
     [InlineData("north\nget all\nsouth",               new[] { "north", "get all", "south" })]  // newline = separator
     [InlineData("north\r\nget all",                    new[] { "north", "get all" })]      // CRLF too
-    [InlineData("say hi\n;wave^Msmile",                new[] { "say hi", "wave", "smile" })]  // mixed with newlines
+    [InlineData("say hi\n;wave^Msmile",                new[] { "say hi", ";wave", "smile" })] // a line may begin with the game's own `;`
+    [InlineData("say hi\n; wave^msmile",               new[] { "say hi", "wave", "smile" })]  // mixed with newlines; ^m either case
+    // A `;` that starts a word belongs to the game and is sent as typed.
+    [InlineData(";o",                                  new[] { ";o" })]
+    [InlineData("/someone @do ;o",                     new[] { "/someone @do ;o" })]
+    [InlineData("gos well done ;)",                    new[] { "gos well done ;)" })]
+    [InlineData("n; ;o",                               new[] { "n", ";o" })]
+    [InlineData("n ; s",                               new[] { "n", "s" })]                // a lone `;` still splits
+    [InlineData("n;;o",                                new[] { "n", "o" })]                // no space before it: a separator
+    [InlineData("n ;",                                 new[] { "n" })]                     // nothing behind it: a separator
+    [InlineData("n^M ;o",                              new[] { "n", ";o" })]
+    [InlineData("pull book;^M",                        new[] { "pull book" })]
     [InlineData("",                                    new string[0])]
     [InlineData(null,                                  new string[0])]
     public void SplitCommandSteps_BehavesAsSpecified(string? input, string[] expected)
@@ -38,6 +49,11 @@ public sealed class MacroStoreTests
     // Separator-only line collapses to nothing → fall back to raw so the
     // caller still sends something rather than silently swallowing the line.
     [InlineData(";",               new[] { ";" })]
+    // A `;` that starts a word is the game's, not ours.
+    [InlineData(";o",              new[] { ";o" })]
+    [InlineData(";time",           new[] { ";time" })]
+    [InlineData("/someone @do ;o", new[] { "/someone @do ;o" })]
+    [InlineData("n;s; ;o",         new[] { "n", "s", ";o" })]
     public void SplitTypedInput_BehavesAsSpecified(string input, string[] expected)
     {
         IReadOnlyList<string> steps = MacroStore.SplitTypedInput(input);

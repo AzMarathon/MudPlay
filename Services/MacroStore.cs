@@ -123,14 +123,41 @@ public sealed class MacroStore
         return steps;
     }
 
-    // Normalise every separator to `;` (^M is two chars; newlines may be \r\n or
-    // \n), then a single split covers all three.
-    private static string[] Fragments(string command) => command
-        .Replace("^M", ";", StringComparison.Ordinal)
-        .Replace("\r\n", ";", StringComparison.Ordinal)
-        .Replace('\r', ';')
-        .Replace('\n', ';')
-        .Split(';');
+    // A newline, ^M (two chars, either case) and `;` each end a command, except a `;`
+    // that starts a word: at the start of a line or after a space, with a character
+    // right behind it. That one belongs to the game, whose own commands can begin with
+    // it (`;o`, `/name @do ;o`), so it is sent as typed. `n;s`, `n; s` and `n ; s`
+    // still split; `n; ;o` sends `n` and then `;o`. ^M reads as a `;`, so the `;` in
+    // `open chest^M;look` stays a separator, as it was before this rule.
+    private static string[] Fragments(string command)
+    {
+        string[] lines = command
+            .Replace("^M", ";", StringComparison.OrdinalIgnoreCase)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+        List<string> parts = new(lines.Length);
+        foreach (string line in lines)
+        {
+            int start = 0;
+            for (int i = 0; i < line.Length; i++)
+            {
+                if (line[i] != ';' || StartsAWord(line, i)) continue;
+                parts.Add(line[start..i]);
+                start = i + 1;
+            }
+            parts.Add(line[start..]);
+        }
+        return parts.ToArray();
+    }
+
+    private static bool StartsAWord(string line, int semicolon)
+    {
+        bool opensWord = semicolon == 0 || char.IsWhiteSpace(line[semicolon - 1]);
+        if (!opensWord || semicolon + 1 >= line.Length) return false;
+        char next = line[semicolon + 1];
+        return next != ';' && !char.IsWhiteSpace(next);
+    }
 
     // Split a line the PLAYER just typed (terminal / conversation input) into
     // the commands it should send. Lets a player rapid-fire several commands
@@ -141,7 +168,7 @@ public sealed class MacroStore
     // input wrapper around SplitCommandSteps; engines never route through it.
     public static IReadOnlyList<string> SplitTypedInput(string text)
     {
-        if (text.IndexOf(';') < 0 && !text.Contains("^M", StringComparison.Ordinal))
+        if (text.IndexOf(';') < 0 && !text.Contains("^M", StringComparison.OrdinalIgnoreCase))
             return new[] { text };
         IReadOnlyList<string> steps = SplitCommandSteps(text);
         return steps.Count > 0 ? steps : new[] { text };
