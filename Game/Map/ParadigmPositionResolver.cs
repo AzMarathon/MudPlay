@@ -17,8 +17,10 @@ namespace MudPlay.Game.Map;
 // One request at a time: while an `rm` is in flight we ignore new requests and
 // arm a short timeout. The reply (or the timeout) clears the in-flight state.
 // A brief throttle after each request stops a rapid-fire mismatch storm from
-// spamming `rm` at the wire. The engine is paused for the round-trip by the
-// gate, so the reported room reflects a stationary position — no stale answer.
+// spamming `rm` at the wire. The gate pauses its engine for the round-trip, so
+// the room it is told is a stationary one. A one-shot caller holds nothing, so a
+// move can go out behind its `rm`; OnLocationObserved keeps that move when the
+// answer only names the room it is leaving.
 public sealed class ParadigmPositionResolver : IDisposable
 {
     private const string LogSource = "ParadigmResync";
@@ -205,10 +207,31 @@ public sealed class ParadigmPositionResolver : IDisposable
         _log?.Log(LogSeverity.Info, LogSource,
             $"authoritative position resolved → {key} ({(solicited ? "rm resync" : "manual rm")})");
 
-        // Hard-locate the tracker first (refuses + warns if the key isn't in the
-        // active graph, leaving state untouched), then re-anchor the gate. The
-        // gate re-checks graph presence and falls back to heuristic on a miss.
-        _tracker.SetLocated(key);
+        // The game answers commands in the order they were sent, so the answer to an
+        // `rm` we asked for BEFORE a move that is still unconfirmed names the room
+        // that move is leaving. When that is the room the tracker already holds,
+        // there is nothing to correct: locating would only drop the move it is
+        // waiting on and leave it sure of a room the character is walking out of
+        // (report paradigm-20260924-053941: a door's follow-up move went out behind
+        // the `rm`, and the walk replanned from the room it had just left). An
+        // answer naming any OTHER room still locates — the tracker was wrong.
+        if (solicited
+            && _tracker.State.Confidence == RoomConfidence.Pending
+            && _tracker.LastMoveSentAt is { } moveSentAt && moveSentAt >= _requestedAtUtc
+            && _tracker.State.CurrentRoom?.Key == key)
+        {
+            _log?.Log(LogSeverity.Info, LogSource,
+                $"{key} is the room a move sent after the `rm` is leaving — tracker already there; keeping the move in flight");
+        }
+        else
+        {
+            // Hard-locate the tracker (refuses + warns if the key isn't in the
+            // active graph, leaving state untouched).
+            _tracker.SetLocated(key);
+        }
+
+        // Re-anchor the gate. It re-checks graph presence and falls back to
+        // heuristic on a miss.
         _gate.NoteAuthoritativePosition(key);
         PositionResolved?.Invoke(key);
     }

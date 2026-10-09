@@ -1151,10 +1151,18 @@ public sealed class PyramidSolver : IPyramidSolver, IDisposable
     {
         if (!Active || !_doorOpening || ticket != _doorTicket) return;
         _doorOpening = false;
-        if (result is DoorOpenResult.Failed failed)
+        // NotHere (the door wasn't in the room we stood in) retries like a failure:
+        // the next drive reads the room again before it asks for any door.
+        string? failure = result switch
         {
-            _doorFailure = failed.Reason;
-            _log?.Log(LogSeverity.Warn, LogSource, $"door {dir.ToLongName()} didn't open: {failed.Reason}");
+            DoorOpenResult.Failed failed => failed.Reason,
+            DoorOpenResult.NotHere notHere => notHere.Reason,
+            _ => null,
+        };
+        if (failure is not null)
+        {
+            _doorFailure = failure;
+            _log?.Log(LogSeverity.Warn, LogSource, $"door {dir.ToLongName()} didn't open: {failure}");
             _phase = Phase.Climbing;
             ScheduleSettle(DoorRetryDelay, Drive);
             return;

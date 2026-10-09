@@ -3971,6 +3971,13 @@ public sealed class AppServices
             MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.HealthRecoveryGate)
             || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.ManaRecoveryGate);
         Door.SetRestHold(RestHeld);
+        // A door request belongs to the room it was asked in; once the tracker is
+        // sure of another, the door manager drops it rather than work some other
+        // room's exit.
+        Door.SetConfirmedRoomProbe(() =>
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed
+                ? RoomTracker.State.CurrentRoom?.Key
+                : null);
         Winch.SetRestHold(RestHeld);
         HiddenSearch.SetRestHold(RestHeld);
         TrapDisarm.SetRestHold(RestHeld);
