@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.19**
-> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
-> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+> **Version 3.159.20**
+> - A buff is no longer recast because the game refused something you typed in the same round (`You have already cast a spell this round!` answering your own `use` or cast, not the client's)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
