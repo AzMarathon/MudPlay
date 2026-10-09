@@ -9,11 +9,11 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// The walk a route card starts is the route the card showed. The walker plans for
-// itself from what it is told, and on a re-plan or a detour leg again, so these pin
-// what it has to be told and keep: which gates the route went round (report
-// paradigm-20261008-173911) and how it takes teleports (report
-// paradigm-20261008-174236).
+// The walk a route card starts is the route the card showed, for the whole trip. The
+// walker plans one leg at a time from what it is told, so these pin what a journey
+// keeps across its legs (a re-plan, a detour to fetch an item, a restart after an
+// errand): which gates the route went round (report paradigm-20261008-173911) and
+// how it takes teleports (report paradigm-20261008-174236).
 public sealed class AutoWalkManagerPickedRouteTests : IDisposable
 {
     private readonly string _root;
@@ -52,9 +52,28 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         ]
         """;
 
-    // Three steps north on foot, or one teleport hop, from Grove to the Stone Arch.
-    //   1/10 Grove ─N─ 1/11 ─N─ 1/12 ─N─ 7/131 Stone Arch
-    //     └─ SW (CMD 100 teleport) ───────────┘
+    // The same, with a door as the first step of the way round and that way one
+    // room shorter: 1/1 ─N(Door)─ 1/2 ─E─ 1/4.
+    private const string GatedRoomsWithDoor = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Hills", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Door)", "S": "0", "E": "1/4 (Item: 815)", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Tunnel", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1 (Door)", "E": "1/4", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Lake", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9 (Item: 807)", "W": "1/2", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/10", "W": "1/4", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 10, "Name": "Giver", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/9", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // Three steps north on foot, or one teleport hop, from Grove to the Stone Arch;
+    // the Shop is a room off the trail, three steps on foot from the Grove by way of
+    // the Trail, or two by the teleport and back down from the Arch.
+    //   1/10 Grove ─N─ 1/11 Trail ─N─ 1/12 Ridge ─N─ 7/131 Stone Arch ─E─ 1/20 Shop
+    //     └─ SW (CMD 100 teleport) ──────────────────────┘        1/12 Ridge ─E─ 1/20
     private const string TeleportRooms = """
         [
           { "Map Number": 1, "Room Number": 10, "Name": "Grove", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 100,
@@ -62,20 +81,24 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
           { "Map Number": 1, "Room Number": 11, "Name": "Trail", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
             "N": "1/12", "S": "1/10", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 1, "Room Number": 12, "Name": "Ridge", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "7/131", "S": "1/11", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+            "N": "7/131", "S": "1/11", "E": "1/20", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 7, "Room Number": 131, "Name": "Stone Arch", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "1/12", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            "N": "0", "S": "1/12", "E": "1/20", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 20, "Name": "Shop", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/12", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
         """;
 
-    private static readonly RoomKey Hills = new(1, 1), Dest = new(1, 9), Giver = new(1, 10);
-    private static readonly RoomKey Grove = new(1, 10), Trail = new(1, 11), Arch = new(7, 131);
+    private static readonly RoomKey Hills = new(1, 1), Lake = new(1, 4), Dest = new(1, 9), Giver = new(1, 10);
+    private static readonly RoomKey Grove = new(1, 10), Trail = new(1, 11), Arch = new(7, 131), Shop = new(1, 20);
     private static readonly int[] Talisman = { 815 };
 
     private sealed class Harness
     {
         public required BfsMapper Bfs { get; init; }
         public required RoomGraphManager Graph { get; init; }
+        public required GameDataCache Cache { get; init; }
+        public required RoomTracker Tracker { get; init; }
         public required MovementFilter Filter { get; init; }
         public required MovementCoordinator Coordinator { get; init; }
         public required AutoWalkManager Walker { get; init; }
@@ -84,16 +107,17 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
 
         // The walk planned last, as "3 step(s)" or "0 move(s), 1 action(s)".
         public string LastPlan => Events.Last(e => e.Kind == WalkEventKind.Started).Detail;
+        public int Plans => Events.Count(e => e.Kind == WalkEventKind.Started);
     }
 
-    // The walker starts paused, so each WalkTo plans and waits: a test reads the plan
-    // and lets it go with Play.
-    // carriesEverything: the teleport fixture's exit is an item-use one, shut to a
-    // crosser without its item, and those tests aren't about item gates.
-    private Harness NewHarness(string rooms, RoomKey at, bool carriesEverything = false)
+    // paused: the walker plans and waits, so a test reads the plan and lets it go
+    // with Play. carriesEverything: the teleport fixture's exit is an item-use one,
+    // shut to a crosser without its item, and those tests aren't about item gates.
+    private Harness NewHarness(string rooms, RoomKey at, bool carriesEverything = false, bool paused = true)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), "[]");
         File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"),
             """[ { "Number": 100, "Action": "go arch:teleport 131 7\n" } ]""");
         GameDataCache cache = new(_root);
@@ -113,16 +137,23 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
             ItemCarriedProbe = _ => carriesEverything,
         };
         AutoWalkManager walker = new(graph, bfs, tracker, coordinator, filter);
-        Harness h = new() { Bfs = bfs, Graph = graph, Filter = filter, Coordinator = coordinator, Walker = walker };
+        Harness h = new()
+        {
+            Bfs = bfs, Graph = graph, Cache = cache, Tracker = tracker, Filter = filter,
+            Coordinator = coordinator, Walker = walker,
+        };
         walker.SetWireSender(b => h.Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         walker.SetTeleportResolver((_, _) => "go arch");
         walker.Event += h.Events.Add;
         tracker.SetLocated(at);
-        coordinator.AssertGate(MovementCoordinator.UserGate);
+        if (paused) coordinator.AssertGate(MovementCoordinator.UserGate);
         return h;
     }
 
     private static void Play(Harness h) => h.Coordinator.ClearGate(MovementCoordinator.UserGate);
+
+    private static bool CardWalk(Harness h, RoomKey to) =>
+        h.Walker.WalkTo(to, planThroughAcquirableGates: true, pickedRoute: true, keepGatesClosedFor: Talisman);
 
     // ----- the gates a picked route goes round ------------------------------
 
@@ -154,30 +185,213 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Assert.Equal("2 step(s)", h.LastPlan);
     }
 
+    // The first report's own path: the step is refused, the retry too, and the walk
+    // "hands off to replan". The re-plan is the walk's own and keeps its route.
+    [Fact]
+    public void AReplanInPlace_KeepsTheClosedGates()
+    {
+        Harness h = NewHarness(GatedRooms, Hills, paused: false);
+        CardWalk(h, Dest);
+        Assert.Equal(new[] { "n" }, h.Sent);
+
+        h.Tracker.NoteMoveBlocked();   // the one retry a step gets
+        h.Tracker.NoteMoveBlocked();   // out of retries: re-plan from here
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(2, h.Plans);
+        Assert.Equal("4 step(s)", h.LastPlan);
+        Assert.Equal(Talisman, h.Walker.Journey?.ClosedGates);
+    }
+
+    // Started while a move is still on the wire, the walk plans only once the room
+    // settles. What it was told has to be there when it does.
+    [Fact]
+    public void ADeferredStart_PlansWithTheClosedGates()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+        h.Tracker.NoteMoveSent(Direction.N);
+
+        CardWalk(h, Dest);
+        Assert.Contains("deferred", h.LastPlan);
+
+        h.Tracker.NoteMoveBlocked();   // the move never happened; still in the Hills
+
+        Assert.Equal("4 step(s)", h.LastPlan);
+    }
+
     // A detour leg is a walk of its own that states nothing. It plans through gates
     // while an item is still owed, and must still go round the ones the route did.
     [Fact]
     public void DetourLeg_KeepsTheJourneysClosedGates()
     {
         Harness h = NewHarness(GatedRooms, Hills);
-        h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, pickedRoute: true, keepGatesClosedFor: Talisman);
+        CardWalk(h, Dest);
 
         h.Walker.WalkTo(Giver, planThroughAcquirableGates: true, supersedeSilently: true);
 
         Assert.Equal("5 step(s)", h.LastPlan);                    // not 3, through the talisman exit
-        Assert.Equal(Talisman, h.Walker.JourneyClosedGateItems);
+        Assert.Equal(Talisman, h.Walker.Journey?.ClosedGates);
+        Assert.False(h.Walker.LegIsToJourneyGoal);
     }
 
     [Fact]
     public void ANewWalk_StartsWithoutTheLastJourneysClosedGates()
     {
         Harness h = NewHarness(GatedRooms, Hills);
-        h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, pickedRoute: true, keepGatesClosedFor: Talisman);
+        CardWalk(h, Dest);
 
         h.Walker.WalkTo(Giver, planThroughAcquirableGates: true);
 
         Assert.Equal("3 step(s)", h.LastPlan);
-        Assert.Null(h.Walker.JourneyClosedGateItems);
+        Assert.Null(h.Walker.Journey?.ClosedGates);
+        Assert.Equal(Giver, h.Walker.Journey?.Destination);
+    }
+
+    // ----- a reset inside the walker never ends the journey -----------------
+
+    // A door, hidden-exit or winch manager told to stop answers its caller on the
+    // spot. That answer used to come back into the walker as the walk failing, in
+    // the middle of the redirect that had asked for the stop: a Failed raised for
+    // the journey's destination, which ended the journey, so the leg being planned
+    // went through every gate.
+    [Fact]
+    public void ASilentRedirectDuringADoorAttempt_RaisesNothing_AndKeepsTheJourney()
+    {
+        Harness h = NewHarness(GatedRoomsWithDoor, Hills, paused: false);
+        List<Action<DoorOpenResult>> pending = new();
+        h.Walker.SetDoorEnqueuer((_, _, _, _, _, reply) => pending.Add(reply));
+        h.Walker.SetDoorStopper(() =>
+        {
+            foreach (Action<DoorOpenResult> reply in pending.ToArray())
+                reply(new DoorOpenResult.Failed("door flow stopped"));
+            pending.Clear();
+        });
+        CardWalk(h, Dest);
+        Assert.Equal("3 step(s)", h.LastPlan);                    // N through the door, E, E
+        Assert.Single(pending);
+
+        h.Walker.WalkTo(Giver, planThroughAcquirableGates: true, supersedeSilently: true);
+
+        Assert.DoesNotContain(h.Events, e => e.Kind is WalkEventKind.Failed or WalkEventKind.Stopped);
+        Assert.Equal(Talisman, h.Walker.Journey?.ClosedGates);
+        Assert.Equal("4 step(s)", h.LastPlan);                    // still round the talisman exit
+    }
+
+    // A stop the user asks for still stops the door attempt, and says Stopped once.
+    [Fact]
+    public void AStopDuringADoorAttempt_IsOneStopped_NotAFailure()
+    {
+        Harness h = NewHarness(GatedRoomsWithDoor, Hills, paused: false);
+        Action<DoorOpenResult>? pending = null;
+        int stops = 0;
+        h.Walker.SetDoorEnqueuer((_, _, _, _, _, reply) => pending = reply);
+        h.Walker.SetDoorStopper(() => { stops++; pending?.Invoke(new DoorOpenResult.Failed("door flow stopped")); });
+        CardWalk(h, Dest);
+
+        h.Walker.Stop();
+
+        Assert.Equal(1, stops);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Single(h.Events, e => e.Kind == WalkEventKind.Stopped);
+        Assert.Null(h.Walker.Journey);
+    }
+
+    // ----- where a journey ends ---------------------------------------------
+
+    [Fact]
+    public void TheJourneyEnds_WhenALegToItsDestinationArrives()
+    {
+        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true, paused: false);
+        h.Walker.WalkTo(new RoomKey(1, 12), preferTeleportFree: true);
+        Assert.NotNull(h.Walker.Journey);
+        Assert.True(h.Walker.LegIsToJourneyGoal);
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Ridge",
+            new HashSet<Direction> { Direction.N, Direction.S, Direction.E }));
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.Null(h.Walker.Journey);
+    }
+
+    [Fact]
+    public void TheJourneyEnds_WhenALegToItsDestinationFails()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+
+        h.Walker.WalkTo(Dest, preferTeleportFree: true);          // gates live: no route
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Null(h.Walker.Journey);
+    }
+
+    // The leg out to the giver ends there (or fails), and the journey goes on.
+    [Fact]
+    public void ASideTripArrivingOrFailing_LeavesTheJourneyStanding()
+    {
+        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true);
+        h.Walker.WalkTo(Arch, preferTeleportFree: false);
+
+        h.Walker.WalkTo(Trail, supersedeSilently: true);          // already there: finishes at once
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.Equal(Arch, h.Walker.Journey?.Destination);
+
+        h.Walker.WalkTo(new RoomKey(9, 999), supersedeSilently: true);   // no such room: fails
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(Arch, h.Walker.Journey?.Destination);
+    }
+
+    // A walk to a stop-before boss room goes to the room one short of it, and that
+    // is the room a detour router hands back as "where the walk was going". A leg
+    // there is a leg to the journey's destination: it takes the journey's rules, and
+    // its arrival is the journey's end.
+    [Fact]
+    public void ALegToTheRoomShortOfAStopBeforeDestination_IsALegToTheDestination()
+    {
+        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true);
+        RoomKey ridge = new(1, 12);
+        h.Walker.SetBossStopRooms(() => new HashSet<RoomKey> { Arch });
+        h.Walker.WalkTo(Arch, preferTeleportFree: true);
+        Assert.Equal(ridge, h.Walker.Destination);
+        Assert.Equal(Arch, h.Walker.Journey?.Destination);
+
+        h.Walker.WalkTo(ridge, supersedeSilently: true);
+        Assert.True(h.Walker.LegIsToJourneyGoal);
+
+        Play(h);
+        h.Tracker.NoteRoomObserved(new RoomObservation("Ridge",
+            new HashSet<Direction> { Direction.N, Direction.S, Direction.E }));
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.Null(h.Walker.Journey);
+    }
+
+    // Idle between two legs (at the giver, waiting on the hand-over) there is no walk
+    // for a Stop to stop, and the journey still has to end with it.
+    [Fact]
+    public void StopWhileIdleBetweenLegs_EndsTheJourney()
+    {
+        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true);
+        h.Walker.WalkTo(Arch, preferTeleportFree: false);
+        h.Walker.WalkTo(Trail, supersedeSilently: true);
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.NotNull(h.Walker.Journey);
+
+        h.Walker.Stop();
+
+        Assert.Null(h.Walker.Journey);
+    }
+
+    // A silent walk with no journey standing is nobody's leg: it is its own journey,
+    // and a report captured during it says so.
+    [Fact]
+    public void ASilentWalkWithNoJourneyStanding_IsAJourneyOfItsOwn()
+    {
+        Harness h = NewHarness(TeleportRooms, Grove, carriesEverything: true);
+
+        h.Walker.WalkTo(Arch, supersedeSilently: true, preferTeleportFree: true);
+
+        Assert.Equal(new WalkJourney(Arch, PreferTeleportFree: true), h.Walker.Journey);
+        Assert.True(h.Walker.LegIsToJourneyGoal);
     }
 
     // ----- teleports on the legs of a walk the user started -----------------
@@ -188,7 +402,7 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
     // a giver and back; the leg back states no preference, and used to be planned
     // by the automatic-walk setting as if the client had started it.
     [Fact]
-    public void DetourLegOfAUserWalk_TakesTeleportsAsThatWalkDoes()
+    public void TheLegOnToTheDestination_TakesTeleportsAsTheJourneyDoes()
     {
         Harness h = NewHarness(TeleportRooms, Grove, carriesEverything: true);
         h.Walker.SetAutomaticWalkTeleports(NoTeleports);
@@ -199,6 +413,38 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
 
         Assert.Equal(new[] { "go arch" }, h.Sent);
         Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // A side trip of that journey is the user's walk (the automatic-walk list
+    // doesn't apply), but no card showed its route: it goes on foot when it can.
+    // The teleport the card named was agreed for the journey's own route.
+    [Fact]
+    public void ASideTripOfAJourneyThatTeleports_GoesOnFootWhenItCan()
+    {
+        Harness h = NewHarness(TeleportRooms, Grove, carriesEverything: true);
+        h.Walker.WalkTo(Arch, preferTeleportFree: false);
+
+        h.Walker.WalkTo(Shop, supersedeSilently: true);
+
+        Assert.Equal("3 step(s)", h.LastPlan);                    // N, N, E; not the teleport and E
+        Play(h);
+        Assert.Equal(new[] { "n" }, h.Sent);
+    }
+
+    // On foot when it can, not on foot or nothing: with no walking route the side
+    // trip takes the teleport, whatever the automatic-walk list says.
+    [Fact]
+    public void ASideTripWithNoWayOnFoot_TakesTheTeleport()
+    {
+        Harness h = NewHarness(TeleportRooms, Grove, carriesEverything: true);
+        h.Walker.SetAutomaticWalkTeleports(NoTeleports);
+        h.Filter.MarkAvoided(Trail);
+        h.Walker.WalkTo(Arch, preferTeleportFree: false);
+
+        h.Walker.WalkTo(Shop, supersedeSilently: true);
+        Play(h);
+
+        Assert.Equal(new[] { "go arch" }, h.Sent);
     }
 
     // A walk the client started on its own has no such preference to hand on, so its
@@ -229,19 +475,84 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Play(h);
 
         Assert.Equal(new[] { "n" }, h.Sent);
-        Assert.Null(h.Walker.JourneyPreferTeleportFree);
+        Assert.Null(h.Walker.Journey?.PreferTeleportFree);
     }
 
-    // The leg out to the giver ends there, and the journey goes on to its own end.
+    // ----- journeys nobody's walk begins, and journeys picked back up --------
+
+    // A Shortcut card picked without the item sends the walker to the item's source
+    // through the detour walk, which starts no journey. Declared, it is the user's
+    // trip: off the automatic-walk list, and it replaces the journey of the card walk
+    // it supersedes.
     [Fact]
-    public void ADetourLegArriving_LeavesTheJourneyStanding()
+    public void ADeclaredJourney_ReplacesTheOneStanding_AndItsSilentLegsFollowIt()
     {
-        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true);
+        Harness h = NewHarness(TeleportRooms, Grove, carriesEverything: true);
+        h.Walker.SetAutomaticWalkTeleports(NoTeleports);
+        h.Walker.WalkTo(Shop, planThroughAcquirableGates: true, pickedRoute: true, keepGatesClosedFor: Talisman);
+
+        h.Walker.BeginJourney(new WalkJourney(Arch, PreferTeleportFree: false));
+        Assert.Equal(Arch, h.Walker.Journey?.Destination);
+        Assert.Null(h.Walker.Journey?.ClosedGates);
+
+        h.Walker.WalkTo(Arch, supersedeSilently: true);
+        Play(h);
+
+        Assert.True(h.Walker.LegIsToJourneyGoal);
+        Assert.Equal(new[] { "go arch" }, h.Sent);
+    }
+
+    // An errand (a sell detour, a flee) stops the walk and starts it again. Started
+    // again from a bare destination it had forgotten its route.
+    [Fact]
+    public void AnErrandRestart_PicksTheJourneyBackUp_WithItsRoute()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+        LoopRunner loops = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs, walker: h.Walker);
+        AutoLairManager lair = new(h.Walker, h.Tracker, h.Graph, h.Bfs, new LairTimerStore(h.Cache, h.Graph, h.Tracker));
+        CardWalk(h, Dest);
+
+        DetourResume resume = DetourResume.Snapshot(h.Walker, loops, lair, includeWalk: true);
+        resume.Stop(h.Walker, loops, lair, "sell detour");
+        Assert.Null(h.Walker.Journey);
+        h.Walker.WalkTo(Hills, planThroughAcquirableGates: true);   // the errand's own walk
+        resume.Resume(h.Walker, loops, lair);
+
+        Assert.Equal(Dest, resume.WalkDestination);
+        Assert.Equal("4 step(s)", h.LastPlan);                    // round the talisman exit, as before
+        Assert.Equal(Talisman, h.Walker.Journey?.ClosedGates);
+        Assert.True(h.Walker.Journey?.PickedRoute);
+    }
+
+    // Caught on a side trip, the walk to pick back up is the journey's, not the trip
+    // to the giver the walker happened to be on.
+    [Fact]
+    public void AnErrandCatchingASideTrip_ResumesToTheJourneysDestination()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+        LoopRunner loops = new(h.Tracker, h.Coordinator, graph: h.Graph, bfs: h.Bfs, walker: h.Walker);
+        AutoLairManager lair = new(h.Walker, h.Tracker, h.Graph, h.Bfs, new LairTimerStore(h.Cache, h.Graph, h.Tracker));
+        CardWalk(h, Dest);
+        h.Walker.WalkTo(Giver, planThroughAcquirableGates: true, supersedeSilently: true);
+
+        DetourResume resume = DetourResume.Snapshot(h.Walker, loops, lair, includeWalk: true);
+
+        Assert.Equal(Dest, resume.WalkDestination);
+    }
+
+    // The teleport preference comes back with it too.
+    [Fact]
+    public void ResumeJourney_KeepsHowItTakesTeleports()
+    {
+        Harness h = NewHarness(TeleportRooms, Grove, carriesEverything: true);
+        h.Walker.SetAutomaticWalkTeleports(NoTeleports);
         h.Walker.WalkTo(Arch, preferTeleportFree: false);
+        WalkJourney journey = h.Walker.Journey!;
+        h.Walker.Stop();
 
-        h.Walker.WalkTo(Trail, supersedeSilently: true);          // already there: finishes at once
+        h.Walker.ResumeJourney(journey);
+        Play(h);
 
-        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
-        Assert.False(h.Walker.JourneyPreferTeleportFree);
+        Assert.Equal(new[] { "go arch" }, h.Sent);
     }
 }

@@ -879,7 +879,9 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.Equal("Requires bloodstone orb (ask gnome commander)", vm.RequirementSummary);
         Assert.StartsWith("Shortcut via amber talisman — saves 90 rooms", vm.ShortcutSummary);
-        Assert.StartsWith("Requires amber talisman; bloodstone orb (ask gnome commander). ", vm.ShortcutDetail);
+        // Items only: the main card's walk asks the gnome commander, this card's
+        // walk fetches nothing but the talisman, so it promises no source.
+        Assert.StartsWith("Requires amber talisman; bloodstone orb. ", vm.ShortcutDetail);
     }
 
     // A card's walk takes the teleport its route takes, so the card names it.
@@ -894,6 +896,24 @@ public sealed class RouteChoiceDialogViewModelTests
 
         Assert.EndsWith(" — takes the teleport to Stone Tunnel, Hole Up (2/1306)", vm.GatedSummary);
         Assert.DoesNotContain("teleport", vm.FreeSummary);
+    }
+
+    // "Walk to the hazard and stop" and "walk to the shop and stop" walk somewhere
+    // else, on foot, so the teleport on the route drawn is not theirs to announce.
+    // Nor is a blocked route's "run to the block".
+    [Fact]
+    public void ACardThatStopsShort_WalksNoneOfTheRoutesDrawn()
+    {
+        RouteChoice choice = Choice();
+
+        Assert.Same(GatedLine, RouteChoicePrompt.RouteACardWalks(choice, RouteChoiceResult.Gated, gatedStopsShort: false));
+        Assert.Null(RouteChoicePrompt.RouteACardWalks(choice, RouteChoiceResult.Gated, gatedStopsShort: true));
+        // The other cards of that route still cross it whole.
+        Assert.Same(GatedLine, RouteChoicePrompt.RouteACardWalks(choice, RouteChoiceResult.GatedNoAcquire, gatedStopsShort: true));
+        Assert.Same(FreeLine, RouteChoicePrompt.RouteACardWalks(choice, RouteChoiceResult.Free, gatedStopsShort: true));
+
+        RouteChoice blocked = choice with { Kind = RouteChoiceKind.Blocked };
+        Assert.Null(RouteChoicePrompt.RouteACardWalks(blocked, RouteChoiceResult.Gated, gatedStopsShort: false));
     }
 
     // The walk-or-teleport cards are already about the teleport.

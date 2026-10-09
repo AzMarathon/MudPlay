@@ -5,7 +5,9 @@
 - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
 - A card whose route uses a teleport (a hole, a hatch, a vortex) takes it and says so on the card; picking it no longer walked a far longer way on foot
 - The Shortcut card lists everything its route needs, and no longer names the key of a door you can pick or bash
-- A walk you start keeps its route through a detour to fetch an item: those legs go round the same gates, and aren't held to the automatic-walk teleport list
+- A walk you start keeps its route for the whole trip: through a re-plan, a detour to fetch an item, and picking up again after a sell trip, a flee or a party comeback
+- Side trips to fetch an item for such a walk go on foot when they can, and aren't held to the automatic-walk teleport list
+- Stopping or redirecting a walk while it is opening a door no longer reports the walk as failed
 - bug reports addressed: paradigm-20261008-173911, paradigm-20261008-174023, paradigm-20261008-174236
 
 ## 3.153.19

@@ -961,23 +961,73 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool _activeArmAcquisition = true;
     private bool _activePickedRoute;
 
-    // What the walk that began the current journey settled, kept past that walk's
-    // own Reset for the legs a detour router walks on its behalf: out to a giver or
-    // a shop, then on to where the journey was going. Those legs are WalkTo calls of
-    // their own and state nothing, so without this the leg after a route card's
-    // "ask the gnome commander" planned through the very gate the card went round,
-    // and followed the automatic-walk teleport setting on a walk the user started.
-    // The journey ends when it arrives, fails or is stopped, or another one begins.
-    private RoomKey? _journeyDestination;
-    private IReadOnlyCollection<int>? _journeyClosedGates;
-    private bool? _journeyPreferTeleportFree;
+    // The trip under way, kept past each leg's own Reset (see WalkJourney). A walk
+    // that takes the walker over silently is a leg of the journey standing: a detour
+    // router's trip to a giver or a shop, and the leg from there on to where the
+    // journey was going. Those are WalkTo calls of their own that state nothing, so
+    // without this the leg after a route card's "ask the gnome commander" planned
+    // through the very gate the card went round, and followed the automatic-walk
+    // teleport setting on a walk the user started. Any other walk begins a journey
+    // of its own. It ends when a leg to its destination arrives or fails, when the
+    // walker is stopped, or when EndJourney says so; an internal Reset never ends it.
+    private WalkJourney? _journey;
+    public WalkJourney? Journey => _journey;
 
-    // For the bug report: where the journey is going, the gate items its route goes
-    // round, and whether its legs keep to walking (null: an automatic walk, which
-    // follows its setting).
-    public RoomKey? JourneyDestination => _journeyDestination;
-    public IReadOnlyCollection<int>? JourneyClosedGateItems => _journeyClosedGates;
-    public bool? JourneyPreferTeleportFree => _journeyPreferTeleportFree;
+    // Where a journey to a stop-before boss room actually walks to (one room short).
+    // A leg there is a leg to the journey's destination.
+    private RoomKey? _journeyStopsAt;
+
+    // Whether the leg under way is one to the journey's destination, so that its
+    // arriving or failing ends the journey. Outlives Reset: the failure of a leg is
+    // raised on either side of one, and a re-plan keeps the leg it re-plans.
+    private bool _legToJourneyGoal;
+    public bool LegIsToJourneyGoal => _legToJourneyGoal;
+
+    private bool IsJourneyGoal(RoomKey destination) =>
+        _journey is { } journey
+        && (journey.Destination.Equals(destination) || destination.Equals(_journeyStopsAt));
+
+    // Declares the journey a run of silent legs belongs to when no walk of the
+    // walker's own begins it: a Shortcut card sends the walker to the item's source
+    // first, through the detour walk, and that trip is the user's as much as a walk
+    // straight to the destination. Replaces whatever journey was standing.
+    public void BeginJourney(WalkJourney journey)
+    {
+        ArgumentNullException.ThrowIfNull(journey);
+        _journey = journey;
+        _journeyStopsAt = null;
+        _legToJourneyGoal = false;
+        _log?.Info("Walker", $"journey to {journey.Destination} begun: {journey.Describe()}");
+    }
+
+    // Ends the journey with no walk to stop: the walker sits idle between a
+    // journey's legs (at a giver, waiting on the hand-over), and whatever halts
+    // things then has no Stopped event to end it with.
+    public void EndJourney()
+    {
+        _journey = null;
+        _journeyStopsAt = null;
+        _legToJourneyGoal = false;
+    }
+
+    // Picks a journey back up after an errand stopped its walk (a sell detour, a
+    // flee, a party comeback): a walk to its destination by its own rules, so a
+    // route that went round a gate still does. An errand that restarts through the
+    // acquirable gates, to get back from wherever it ended, says so.
+    public bool ResumeJourney(WalkJourney journey, bool planThroughAcquirableGates = false)
+    {
+        ArgumentNullException.ThrowIfNull(journey);
+        return WalkTo(
+            journey.Destination,
+            planThroughAcquirableGates: planThroughAcquirableGates || journey.ThroughGates,
+            armItemAcquisition: journey.ArmAcquisition,
+            avoidTeleports: journey.AvoidTeleports,
+            avoidTraps: journey.AvoidTraps,
+            ignoreAvoids: journey.IgnoreAvoids,
+            preferTeleportFree: journey.PreferTeleportFree,
+            pickedRoute: journey.PickedRoute,
+            keepGatesClosedFor: journey.ClosedGates);
+    }
 
     // The teleports a walk the client starts on its own may use, as (room, landing)
     // pairs. A walk the user starts states its own preference (the route cards pass
@@ -1056,23 +1106,38 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // carried would take the shortcut and stop at its gate.
         IReadOnlyCollection<int>? keepGatesClosedFor = null)
     {
-        // A leg a detour router walks for a journey the user started (out to a giver
-        // or a shop, then on to where they were going) is still their walk: it takes
-        // teleports as that walk does, not as the automatic-walk setting says.
-        if (supersedeSilently && !_replanningInPlace)
+        // A silent walk while a journey stands is one of its legs, and is planned by
+        // the journey's rules where it states none of its own.
+        if (supersedeSilently && !_replanningInPlace && _journey is { } standing)
         {
-            preferTeleportFree ??= _journeyPreferTeleportFree;
-            if (_journeyDestination is { } goal && (_journeyPreferTeleportFree is not null || _journeyClosedGates is not null))
-                _log?.Info("Walker",
-                    $"leg to {destination} of the walk to {goal}: keeps that walk's route — "
-                    + (_journeyPreferTeleportFree switch
+            bool toGoal = IsJourneyGoal(destination);
+            if (toGoal)
+            {
+                // The leg on to where the journey was going is the journey's route.
+                avoidTeleports |= standing.AvoidTeleports;
+                avoidTraps |= standing.AvoidTraps;
+                ignoreAvoids |= standing.IgnoreAvoids;
+                preferTeleportFree ??= standing.PreferTeleportFree;
+            }
+            else if (standing.PreferTeleportFree is not null)
+            {
+                // A side trip (to a giver, a shop) is the user's walk, so the
+                // automatic-walk list doesn't apply; but no card showed its route, so
+                // it goes on foot unless that is impossible. The teleport a card named
+                // was agreed for the journey's own route only.
+                preferTeleportFree ??= true;
+            }
+            _log?.Info("Walker",
+                $"leg to {destination} of the journey to {standing.Destination} ({(toGoal ? "its destination" : "a side trip")}): "
+                + (avoidTeleports ? "never teleports"
+                    : preferTeleportFree switch
                     {
                         true => "on foot unless walking is impossible",
-                        false => "its teleports allowed",
+                        false => "the picked route's teleports",
                         null => "teleports by the automatic-walk setting",
                     })
-                    + (_journeyClosedGates is { } closed
-                        ? $", going round the gates that need item(s) {string.Join("/", closed)}" : ""));
+                + (standing.ClosedGates is { Count: > 0 } closed
+                    ? $", going round the gates that need item(s) {string.Join("/", closed)}" : ""));
         }
 
         // Settled once per walk, before the Reset below clears the walk it replaces:
@@ -1108,12 +1173,20 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 Stop(reason: "superseded by new walk");
         }
 
-        // After the Stop above, which ends the journey it supersedes.
-        if (!_replanningInPlace && !supersedeSilently)
+        // After the Stop above, which ends the journey it supersedes. A silent walk
+        // with no journey standing is nobody's leg, so it is a journey of its own
+        // (the walk on from a token's landing).
+        if (!_replanningInPlace)
         {
-            _journeyDestination = destination;
-            _journeyClosedGates = keepGatesClosedFor is { Count: > 0 } ? keepGatesClosedFor : null;
-            _journeyPreferTeleportFree = preferTeleportFree;
+            if (!supersedeSilently || _journey is null)
+            {
+                _journey = new WalkJourney(
+                    destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps,
+                    ignoreAvoids, preferTeleportFree, pickedRoute,
+                    keepGatesClosedFor is { Count: > 0 } ? keepGatesClosedFor : null);
+                _journeyStopsAt = null;
+            }
+            _legToJourneyGoal = IsJourneyGoal(destination);
         }
 
         // In-flight moves still on the wire (typical when the user
@@ -1215,7 +1288,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
         else
         {
             destination = ApplyStopBefore(source.Key, destination);
-            if (!destination.Equals(requested)) _stopShortOf = (requested, destination);
+            if (!destination.Equals(requested))
+            {
+                _stopShortOf = (requested, destination);
+                // A detour router resumes to where the walker was heading, which is
+                // this room, not the boss room the journey names.
+                if (_legToJourneyGoal) _journeyStopsAt = destination;
+            }
         }
         if (_bossRuleActive) _bossRule!.NoteWalkedTo(requested, destination);
 
@@ -1237,7 +1316,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // A route nobody picked keeps an uncountered hazard room closed, and every
         // leg of a journey keeps the gates its picked route goes round closed.
         IDisposable? gateScope = !planThroughAcquirableGates ? null
-            : _journeyClosedGates is { } closedGates
+            : _journey?.ClosedGates is { } closedGates
                 ? Filter?.SuspendAcquirableGatesExcept(closedGates, keepUncounteredHazards: !pickedRoute)
             : pickedRoute ? Filter?.SuspendAcquirableGates()
             : Filter?.SuspendAcquirableGatesButUncounteredHazards();
@@ -1797,7 +1876,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     public void Stop(string reason = "user stop")
     {
-        if (State == WalkState.Idle) return;
+        if (State == WalkState.Idle)
+        {
+            // No walk to stop, but a journey may be standing between two of its legs.
+            EndJourney();
+            return;
+        }
         RoomKey? dest = _destination;
         Reset();
         // Free any party-reform gate this walk was holding so a stopped user
@@ -3666,16 +3750,26 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // walk is superseded mid-door-open or mid-hidden-search, the
         // manager keeps its internal state (WaitingBash / Searching /
         // etc.) and the next walk's enqueue call sits in its queue
-        // forever (TryStartNext bails on non-Idle state). The stale-
-        // callback case is also covered by clearing _awaitingDoorOpen /
-        // _awaitingHiddenReveal so OnDoorReply / OnHiddenSearchReply
-        // skip the late reply that arrives after StopAll.
-        if (_awaitingDoorOpen)      _doorStopAll?.Invoke();
-        if (_awaitingHiddenReveal)  _hiddenSearchStopAll?.Invoke();
-        if (_awaitingWinch)         _winchStopAll?.Invoke();
+        // forever (TryStartNext bails on non-Idle state).
+        //
+        // The flags are cleared BEFORE the stoppers run. A stopper answers its
+        // caller on the spot ("door flow stopped"), and with the flag still set
+        // that answer came back in here as the walk failing: a Failed raised from
+        // inside a silent redirect or a re-plan, which a detour router takes for
+        // its walk dying and which read as the end of the journey. Cleared first,
+        // OnDoorReply and the rest drop the answer, and the reset says nothing.
+        bool stopDoor = _awaitingDoorOpen, stopHidden = _awaitingHiddenReveal,
+            stopWinch = _awaitingWinch, stopTrap = _awaitingTrapDisarm;
+        _awaitingDoorOpen = false;
+        _awaitingHiddenReveal = false;
+        _awaitingWinch = false;
+        _awaitingTrapDisarm = false;
+        if (stopDoor)   _doorStopAll?.Invoke();
+        if (stopHidden) _hiddenSearchStopAll?.Invoke();
+        if (stopWinch)  _winchStopAll?.Invoke();
         // Drop a pending party-delegation watch so a stray say reply can't
         // resume a superseded walk. Harmless when the trap was local-only.
-        if (_awaitingTrapDisarm)    _trapDelegateStopAll?.Invoke();
+        if (stopTrap)   _trapDelegateStopAll?.Invoke();
 
         _path = null;
         _index = 0;
@@ -3687,10 +3781,6 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _bossRuleActive = false;
         HaltedBeforeBossRoom = null;
         _awaitingPromptForCommand = false;
-        _awaitingTrapDisarm = false;
-        _awaitingDoorOpen = false;
-        _awaitingHiddenReveal = false;
-        _awaitingWinch = false;
         _boatTimer?.Dispose();
         _boatTimer = null;
         _awaitingBoatArrival = false;
@@ -3737,17 +3827,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void Raise(WalkEvent evt)
     {
-        // A detour leg ends somewhere else and leaves the journey standing.
-        bool endsJourney = evt.Kind == WalkEventKind.Stopped
-            || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed
-                && _journeyDestination is { } goal
-                && (goal.Equals(evt.Destination) || goal.Equals(evt.Requested)));
-        if (endsJourney)
-        {
-            _journeyDestination = null;
-            _journeyClosedGates = null;
-            _journeyPreferTeleportFree = null;
-        }
+        // A stop ends the journey whichever leg it catches. Arriving or failing ends
+        // it only on a leg to its destination: a side trip that arrives or fails
+        // leaves the journey standing for the leg that follows. Read from the leg
+        // itself, not the event's room, which a stop-before boss room re-points.
+        if (evt.Kind == WalkEventKind.Stopped
+            || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed && _legToJourneyGoal))
+            EndJourney();
         LastEvent = evt;
         Event?.Invoke(evt);
     }

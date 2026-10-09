@@ -693,6 +693,158 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // Round the talisman exit there are two ways to the lake: north over a trap (two
+    // hops) or south and round (three, no trap). The walk a sole-route card starts
+    // plans for the fewest traps, so the card has to as well, or it shows the
+    // 3-step route and the walk takes the 4-step one.
+    //   1/1 ─E(815)─ 1/4 Lake ─E(807)─ 1/9
+    //    ├N(Trap)─ 1/2 ─E─ 1/4
+    //    └S─ 1/3 ─E─ 1/5 ─N─ 1/4
+    private const string TrapOnTheWayRoundJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Hills",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2 (Trap)", "S": "1/3", "E": "1/4 (Item: 815)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Trapped Pass",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Low Road",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "0", "E": "1/5", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Low Road End",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "0", "E": "0", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Lake",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/5", "E": "1/9 (Item: 807)", "W": "1/2",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    [Fact]
+    public void SoleRoute_RoundAShortcut_IsPlannedByTheTrapRuleItsWalkUses()
+    {
+        WithGraph(TrapOnTheWayRoundJson, (bfs, graph, filter) =>
+        {
+            AsLockpickerCarryingNothing(filter);
+            RoomKey src = new(1, 1), dst = new(1, 9);
+
+            RouteChoice choice = RouteChoicePlanner.Evaluate(bfs, filter, graph, src, dst)!;
+
+            Assert.Equal(new[] { 815 }, choice.ClosedGateItems);
+            Assert.Equal(
+                new[] { src, new RoomKey(1, 3), new RoomKey(1, 5), new RoomKey(1, 4), dst },
+                choice.GatedPath);
+            Assert.Equal(4, choice.GatedStepCount);
+
+            // The walk the card commits: through the gates but for the closed ones,
+            // fewest traps, on foot (the route doesn't teleport).
+            IReadOnlyList<Direction>? walk;
+            using (filter.SuspendAcquirableGatesExcept(choice.ClosedGateItems!))
+                walk = bfs.FindPath(src, dst, filter, refuseTeleports: true, avoidTraps: true);
+            Assert.Equal(choice.GatedPath, RouteChoicePlanner.BuildKeyPath(graph, src, walk!));
+        });
+    }
+
+    // A door the crosser can pick, opening into a hazard room they hold no counter
+    // for. The exit is closed to them by the hazard, not the lock, so its key is no
+    // gate the route "goes round": the walk would be told to keep a gate closed that
+    // isn't one, and the log and bug report would name a key nobody needs.
+    [Fact]
+    public void APickableDoorIntoAHazardRoom_DoesNotMakeItsKeyAClosedGate()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0,
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "1/5 (Key: 806 [or 20 picklocks])", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 5, "Name": "Flooded Hall", "Spell": 700,
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "1/9", "W": "1/1",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0,
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "1/5",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        WithGraph(rooms, (bfs, graph, filter) =>
+        {
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.Null(choice!.ClosedGateItems);
+            Assert.Null(choice.ShortcutItems);
+            RouteRequirement req = Assert.Single(choice.Requirements);
+            Assert.Equal(RouteRequirementKind.HazardProtection, req.Kind);
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 5) ? 700 : 0;
+            AsLockpickerCarryingNothing(filter);
+        });
+    }
+
+    // The whole of the third report's fix is this decision: a picked route that
+    // teleports is walked with teleports allowed, and one that walks keeps the walk
+    // on foot. "Walk it" is never overridden, nor is an explicit "Teleport".
+    [Fact]
+    public void PickedWalkPrefersTeleportFree_FollowsTheRouteTheCardShowed()
+    {
+        string[] none = Array.Empty<string>(), hole = { "Stone Tunnel, Hole Up (2/1306)" };
+
+        Assert.True(RouteChoicePlanner.PickedWalkPrefersTeleportFree(requested: true, avoidTeleports: false, none));
+        Assert.False(RouteChoicePlanner.PickedWalkPrefersTeleportFree(requested: true, avoidTeleports: false, hole));
+        Assert.True(RouteChoicePlanner.PickedWalkPrefersTeleportFree(requested: true, avoidTeleports: true, hole));
+        Assert.False(RouteChoicePlanner.PickedWalkPrefersTeleportFree(requested: false, avoidTeleports: false, none));
+    }
+
+    // A teleport beside a door to the same room: with the door passable the walk
+    // goes through the door, so the hop is no teleport; with it shut, it is one.
+    [Fact]
+    public void TeleportLandings_ATeleportBesideAPassableExit_IsNoTeleportHop()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Start", "CMD": 5,
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "1/9", "S": "0", "E": "1/9 (Item: 5)", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 9, "Name": "Vault",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "1/1", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        WithTeleportGraph(rooms, (_, graph, filter) =>
+        {
+            RoomKey[] hop = { new(1, 1), new(1, 9) };
+            Assert.Empty(RouteChoicePlanner.TeleportLandings(graph, hop, filter));
+            Assert.Equal(new[] { "Vault (1/9)" },
+                RouteChoicePlanner.TeleportLandings(graph, hop, new WalkingExitsShut()));
+        });
+    }
+
+    // Closes every exit that isn't a teleport, as a gate the crosser can't pass would.
+    private sealed class WalkingExitsShut : IRoomFilter
+    {
+        public bool IsAvoided(RoomKey key) => false;
+        public bool IsExitBlocked(in RoomExit exit) => !AutomaticWalkTeleportFilter.IsTeleport(in exit);
+    }
+
     [Fact]
     public void TeleportLandings_OnACardsRoute_NameEachLanding_OrNothingWhenItWalks()
     {

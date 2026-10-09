@@ -7241,6 +7241,10 @@ public sealed class AppServices
                 RestoreRouteSearchAutoSearchIfDone("walk ended");
             }
         };
+        // A journey can stand with the walker idle (between two of its legs), where
+        // no walk event ends it. Another character's trip is not this one's.
+        Profile.ProfileLoaded += _ => Walker.EndJourney();
+        Profile.ProfileClosed += Walker.EndJourney;
 
         // Search the room a walk / loop / auto-lair STARTS from. Auto-search fires on
         // room entry, but the room the walker steps out of at the start of a run was
@@ -12609,11 +12613,19 @@ public sealed class AppServices
     // the character walks WITH the sourced item in hand, which crosses that gate.
     // For a gate a free route already bypasses this is a no-op; it only rescues the
     // sole-route case (e.g. buying a rope to reach the hazard-gated FCCO cavern).
+    // The gates the journey's route goes round stay closed, as they do for the
+    // walk the detour will make: a source that can only be reached through one
+    // would be picked and then never arrived at.
     private int? PathItemDetourDistance(Game.Map.RoomKey a, Game.Map.RoomKey b)
     {
-        using (Movement.SuspendAcquirableGates())
+        using (SuspendGatesAsTheJourneyDoes())
             return Bfs.DistanceBetween(a, b, Movement);
     }
+
+    // The acquirable gates stood down the way the walker stands them down for the
+    // journey under way: all of them, but for the gates its picked route goes round.
+    public IDisposable SuspendGatesAsTheJourneyDoes()
+        => Movement.SuspendAcquirableGatesExcept(Walker.Journey?.ClosedGates ?? Array.Empty<int>());
 
     // For a hazard's any-of counter set, pick the counter the run can most cheaply
     // obtain and describe how — preferring one already on the current room's floor

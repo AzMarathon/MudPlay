@@ -214,7 +214,10 @@ public static class RouteChoicePrompt
                 if (plan.Choice is { } sole
                     && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
                     services.ForcePathObtain(soleItems);
-                CommitWalk(services, destination, gated: true, stopForBossRooms: stopsForBossRooms,
+                // avoidTraps as for a picked sole route: the planner chose this route
+                // for the fewest traps, and the walk has to plan by the same rule to
+                // be that route.
+                CommitWalk(services, destination, gated: true, avoidTraps: true, stopForBossRooms: stopsForBossRooms,
                     pickedRoute: plan.Choice?.GatedPath, closedGates: plan.Choice?.ClosedGateItems);
                 return true;
             default:
@@ -570,15 +573,14 @@ public static class RouteChoicePrompt
             ? e2.ShopRoom
             : null;
 
-        // The teleports each card's route takes, if any, for the card to say so.
+        // The teleports each card's walk takes, if any, for the card to say so. The
+        // base card of a route that stops short (at the hazard's edge, at the shop to
+        // provision by hand) walks to that room on foot, not the route drawn, so it
+        // gets no note.
+        bool gatedStopsShort = hazardEdge is not null || buyPauseRoom is not null;
         Func<RouteChoiceResult, string?> teleportsOn = r =>
-            RouteChoicePlanner.DescribeTeleports(RouteChoicePlanner.TeleportLandings(services.RoomGraph, r switch
-            {
-                RouteChoiceResult.Free => choice.FreePath,
-                RouteChoiceResult.AvoidOverrideAlt => choice.AvoidAlternativePath,
-                RouteChoiceResult.Shortcut => choice.ShortcutPath,
-                _ => choice.GatedPath,
-            }));
+            RouteChoicePlanner.DescribeTeleports(RouteChoicePlanner.TeleportLandings(
+                services.RoomGraph, RouteACardWalks(choice, r, gatedStopsShort), services.Movement));
 
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
@@ -684,8 +686,9 @@ public static class RouteChoicePrompt
                     // progress is taken over first, as CommitWalk does, so it can't keep
                     // stepping while the party tokens across. The coordinator declines
                     // (returns false) for a party follower, who walks overland instead.
-                    if (services.Walker.State is WalkState.Walking or WalkState.Paused)
-                        services.Walker.Stop("superseded by token route");
+                    // Idle too: the token route's own walks go out silently, and must
+                    // not be taken for legs of a journey left standing between legs.
+                    services.Walker.Stop("superseded by token route");
                     services.MovementCoordinator.ClearGate(
                         MovementCoordinator.UserGate, nameof(RouteChoicePrompt));
                     if (!services.TokenRoute.TryBegin(place, landing, destination))
@@ -859,8 +862,21 @@ public static class RouteChoicePrompt
                 // item has no reachable source, so we just walk the long route.
                 int shortcutItem = sci[0];
                 if (services.IsItemCarried(shortcutItem))
+                {
                     CommitWalk(services, destination, gated: false, pickedRoute: choice.ShortcutPath);
-                else if (!services.ShortcutSource.TryBegin(shortcutItem, destination))
+                    break;
+                }
+                // The trip to the item's source and on from it goes through the detour
+                // walk, which starts no journey of its own. Declared here it is the
+                // user's walk for both legs (never held to the automatic-walk teleport
+                // list, the shortcut's own teleports kept for the leg that takes it),
+                // and it replaces the journey of any walk this pick supersedes.
+                services.Walker.BeginJourney(new WalkJourney(
+                    destination,
+                    PreferTeleportFree: RouteChoicePlanner.PickedWalkPrefersTeleportFree(
+                        requested: true, avoidTeleports: false,
+                        RouteChoicePlanner.TeleportLandings(services.RoomGraph, choice.ShortcutPath, services.Movement))));
+                if (!services.ShortcutSource.TryBegin(shortcutItem, destination))
                     CommitWalk(services, destination, gated: false);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
@@ -925,12 +941,10 @@ public static class RouteChoicePrompt
         // paradigm-20261008-174236, paradigm-20261008-173911).
         IReadOnlyList<RoomKey>? pickedRoute = null, IReadOnlyCollection<int>? closedGates = null)
     {
-        // Preferring to walk is right for a route that walks. One that teleports was
-        // shown doing so and picked; preferring to walk would trade it for whatever
-        // way on foot exists, however long, which no card showed.
-        string? teleports = RouteChoicePlanner.DescribeTeleports(
-            RouteChoicePlanner.TeleportLandings(services.RoomGraph, pickedRoute));
-        if (teleports is not null && !avoidTeleports) preferTeleportFree = false;
+        IReadOnlyList<string> landings =
+            RouteChoicePlanner.TeleportLandings(services.RoomGraph, pickedRoute, services.Movement);
+        string? teleports = RouteChoicePlanner.DescribeTeleports(landings);
+        preferTeleportFree = RouteChoicePlanner.PickedWalkPrefersTeleportFree(preferTeleportFree, avoidTeleports, landings);
         if (pickedRoute is { Count: > 1 })
             services.Log.Info(LogCat,
                 $"route pick -> {destination}: walking the picked route, {pickedRoute.Count - 1} step(s), "
@@ -964,6 +978,24 @@ public static class RouteChoicePrompt
             // forked, chose: a gated pick may cross a hazard as picked.
             pickedRoute: gated,
             keepGatesClosedFor: gated ? closedGates : null);
+    }
+
+    // The route a card's walk follows, or null when its walk follows none of the
+    // routes drawn: the base card of a route that stops short (gatedStopsShort)
+    // walks to the hazard's edge or the shop, on foot, and a blocked route's card
+    // walks to the block.
+    internal static IReadOnlyList<RoomKey>? RouteACardWalks(
+        RouteChoice choice, RouteChoiceResult card, bool gatedStopsShort)
+    {
+        if (choice.Kind == RouteChoiceKind.Blocked) return null;
+        return card switch
+        {
+            RouteChoiceResult.Free => choice.FreePath,
+            RouteChoiceResult.AvoidOverrideAlt => choice.AvoidAlternativePath,
+            RouteChoiceResult.Shortcut => choice.ShortcutPath,
+            RouteChoiceResult.Gated when gatedStopsShort => null,
+            _ => choice.GatedPath,
+        };
     }
 
     // The items that protect as well as itemId on this route: the intersection of

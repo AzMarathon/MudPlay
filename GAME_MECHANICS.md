@@ -4953,12 +4953,15 @@ Among protectable hazards, a further split governs whether the navigator may off
     surfaces as "— you have it"), reports only genuinely-required unheld items, and offers the shortcut
     separately (`RouteChoice.ShortcutItems` / `ShortcutStepCount`) with the rooms it would save.
   - The walk that card starts plans with the shortcut's gates kept closed
-    (`RouteChoice.ClosedGateItems` → `AutoWalkManager.WalkTo(keepGatesClosedFor:)`, kept for re-plans
-    and detour legs). Before 2026-10-08 it planned with every gate open and walked to the talisman exit
-    (report `paradigm-20261008-173911`).
+    (`RouteChoice.ClosedGateItems` → `AutoWalkManager.WalkTo(keepGatesClosedFor:)`, held on the
+    walk's `WalkJourney` for re-plans, detour legs and errand restarts through
+    `AutoWalkManager.ResumeJourney`). Before 2026-10-08 it planned with every gate open and walked to
+    the talisman exit (report `paradigm-20261008-173911`).
   - A gate counts as a shortcut's only when it stops the crosser: a keyed door they can pick or bash
-    doesn't, so the gate key is no longer named beside the talisman. The shortcut card lists its own
-    route's full needs (`RouteChoice.ShortcutRequirements`; report `paradigm-20261008-174023`).
+    doesn't, so the gate key is no longer named beside the talisman
+    (`RouteChoicePlanner.ItemGatesOnPath`, by the item / locked-door block reasons only). The shortcut
+    card lists its own route's full needs (`RouteChoice.ShortcutRequirements`; report
+    `paradigm-20261008-174023`).
 
 ### Random-teleport maze (the Warped Asylum)
 *Status: CONFIRMED 2026-07-17 (user design); solvable-room fast path CONFIRMED 2026-08-16 (user) · Realm: both (Paradigm lever handling differs)*

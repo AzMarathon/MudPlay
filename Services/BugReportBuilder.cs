@@ -1716,7 +1716,9 @@ public static class BugReportBuilder
         if (walker.IsSailing)
             Kv(sb, "Sailing", $"to {walker.SailingDestinationName ?? "(port)"}, arriving in "
                 + $"{Math.Max(0, (walker.SailingArrivalEta - DateTimeOffset.UtcNow).TotalSeconds):F0}s");
-        Kv(sb, "Journey origin (flee anchor)",
+        // Where the leg under way began, not the whole trip: a detour leg starts
+        // from wherever the detour took over. The trip is the "Whole trip" line.
+        Kv(sb, "This leg's origin (flee anchor)",
             walker.JourneyOrigin is { } origin ? $"{origin.Map}/{origin.Room}" : "(none)");
         Kv(sb, "Next planned direction",
             walker.PeekNextPlannedDirection() is { } dir ? dir.ToString() : "(none / command step)");
@@ -1735,21 +1737,19 @@ public static class BugReportBuilder
             walker.LastEvent is { } ev
                 ? $"{ev.Kind}: {ev.Detail}" + (ev.Destination is { } d ? $" → {d.Map}/{d.Room}" : string.Empty)
                 : "(none yet)");
-        // What the walk under way was told about its route, which a re-plan and a
-        // detour leg both keep: without it a capture can't tell a route the planner
-        // chose from one the walker fell back to.
-        Kv(sb, "Route this walk keeps to",
-            walker.JourneyDestination is not { } journey ? "(no walk under way)"
-            : $"to {journey.Map}/{journey.Room}: "
-            + (walker.JourneyPreferTeleportFree switch
-            {
-                true => "on foot unless walking is impossible",
-                false => "the picked route's teleports",
-                null => "the automatic-walk teleport setting (nobody picked a route)",
-            })
-            + (walker.JourneyClosedGateItems is { Count: > 0 } closed
-                ? $"; goes round the gates needing item(s) {string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))}"
-                : string.Empty));
+        // The whole trip, of which the walk above is one leg: where it ends and the
+        // rules every leg, re-plan and errand restart is planned by. Without it a
+        // capture can't tell a route the planner chose from one the walker fell
+        // back to. A journey can stand with the walker idle, between two legs.
+        Kv(sb, "Whole trip (every leg keeps to this)",
+            walker.Journey is not { } journey
+                ? (walker.State == Game.Map.WalkState.Idle ? "(none)" : "(none — this walk is on no trip's rules)")
+            : $"to {journey.Destination.Map}/{journey.Destination.Room}: {journey.Describe()}"
+              + (journey.ClosedGates is { Count: > 0 } closed
+                  ? $" ({string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))})" : string.Empty)
+              + (walker.State == Game.Map.WalkState.Idle ? "; no leg under way (between legs)"
+                  : walker.LegIsToJourneyGoal ? "; this leg goes to its destination"
+                  : "; this leg is a side trip"));
 
         AppendLastRoutePlan(sb, svc);
 

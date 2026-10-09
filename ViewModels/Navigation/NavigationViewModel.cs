@@ -4201,7 +4201,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private IReadOnlyList<RoomKey> ComposeDetourRoute(
         IReadOnlyList<RoomKey> detourLeg, RoomKey waypoint, RoomKey finalDest)
     {
-        if (RouteAsRoomKeys(waypoint, finalDest) is not { Count: >= 2 } onward)
+        if (RouteAsRoomKeys(waypoint, finalDest, onTheJourney: true) is not { Count: >= 2 } onward)
             return detourLeg;
         if (detourLeg.Count == 0) return onward;
 
@@ -4218,13 +4218,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // gate-respecting BFS first, then re-plans with acquirable gates suspended so a
     // route through an item / hazard gate still draws (the same line Go would take).
     // Null when no route exists either way, or the ends coincide.
-    private IReadOnlyList<RoomKey>? RouteAsRoomKeys(RoomKey src, RoomKey dest)
+    // onTheJourney: the line is a leg of the walk under way, so the gates its route
+    // goes round stay closed as they will for the walker, or the onward line would
+    // be drawn through the shortcut the walk isn't taking.
+    private IReadOnlyList<RoomKey>? RouteAsRoomKeys(RoomKey src, RoomKey dest, bool onTheJourney = false)
     {
         if (Graph is null || src.Equals(dest)) return null;
         IReadOnlyList<Direction>? path = _services.Bfs.FindPath(src, dest, _services.Movement);
         if (path is null || path.Count == 0)
         {
-            using (_services.Movement.SuspendAcquirableGates())
+            using (onTheJourney ? _services.SuspendGatesAsTheJourneyDoes() : _services.Movement.SuspendAcquirableGates())
                 path = _services.Bfs.FindPath(src, dest, _services.Movement);
             if (path is null || path.Count == 0) return null;
         }

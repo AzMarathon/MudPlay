@@ -609,10 +609,12 @@ public sealed partial class RouteChoiceDialogViewModel
                     + $"({StepsEta(choice.ShortcutStepCount, TimeSpan.Zero)})";
                 // The whole list, as the main card gives: the shortcut usually still
                 // crosses the long route's required gates, and naming only the item
-                // that makes it a shortcut read as if that were all it took.
+                // that makes it a shortcut read as if that were all it took. Items
+                // only, with no "(ask …)" / "(buy at …)": this card's walk fetches
+                // nothing but the shortcut item, so a source would be a promise it
+                // doesn't keep.
                 string scRequires = choice.ShortcutRequirements is { Count: > 0 } scReqs
-                    ? "Requires " + DescribeRequirements(
-                        scReqs, itemName, giveNameForItem, shopBuyPhraseForItem, dropNameForItem) + ". "
+                    ? "Requires " + DescribeRequirements(scReqs, itemName, null, null, null) + ". "
                     : string.Empty;
                 ShortcutDetail = scRequires
                     + $"If you're carrying {scNames}, takes the shorter way. If not, walks to "
