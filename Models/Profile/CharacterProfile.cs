@@ -163,10 +163,17 @@ public sealed class CharacterProfile
     // lairs the way they left it. Serialized by name, defaults to Uniform.
     public LairDisplayMode NavLairMode { get; set; } = LairDisplayMode.Uniform;
 
-    // The Navigation map's room-spell overlay mode (the "Spells" chip cycle:
-    // mono → by name → off). Persisted per-character like NavLairMode. Serialized by
-    // name, defaults to Mono (the original flat-purple "has a room spell" cue).
+    // The Navigation map's room-spell overlay mode (the "Spells" chip cycle), as
+    // every client reads it: mono, by name or off. Persisted per-character like
+    // NavLairMode. Serialized by name, defaults to Mono (the original flat-purple
+    // "has a room spell" cue). Read and written through SpellDisplayModes, which
+    // keeps a later mode out of this key.
     public SpellDisplayMode NavSpellMode { get; set; } = SpellDisplayMode.Mono;
+
+    // The name of a room-spell overlay mode NavSpellMode can't hold (by teleport),
+    // or null when NavSpellMode is the whole answer. A plain string so a client
+    // that doesn't know the name skips it instead of failing the profile load.
+    public string? NavSpellOverlay { get; set; }
 
     // How the Navigation map draws a running loop (the "Loop lines" chip cycle:
     // line + numbered steps → line only → off). Persisted per-character like

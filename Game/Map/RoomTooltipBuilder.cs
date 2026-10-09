@@ -20,7 +20,7 @@ namespace MudPlay.Game.Map;
 //      "Floor items: …" (the room's Placed / roomitem items).
 //   4. blank
 //   5. Shop: …
-//   6. Room Spell: …
+//   6. Room Spell: … (with its teleport class while the map colours by teleport)
 //   7. blank
 //   8. Obvious exits: per-direction list with destination room name +
 //      (map/room) + Door / Trap / gated annotation.
@@ -36,7 +36,8 @@ public static class RoomTooltipBuilder
     public static string Build(Room room, RoomGraphManager graph, GameDataCache? data,
         TBInfoStore? tbinfo = null, MonsterSpawnIndex? spawnIndex = null,
         Game.Spells.KnownSpellCatalog? spellCatalog = null, int charIllu = 0,
-        RoomFloorItemIndex? floorItems = null, TrapDisarmOdds? disarmOdds = null, int picklocks = 0)
+        RoomFloorItemIndex? floorItems = null, TrapDisarmOdds? disarmOdds = null, int picklocks = 0,
+        RoomSpellTeleport? spellTeleport = null)
     {
         ArgumentNullException.ThrowIfNull(room);
         ArgumentNullException.ThrowIfNull(graph);
@@ -61,8 +62,17 @@ public static class RoomTooltipBuilder
         string shopLine = room.Shop > 0
             ? "Shop: " + (LookupName(data, "Shops", room.Shop) ?? $"#{room.Shop}")
             : string.Empty;
+        // spellTeleport is passed only while the map colours spell rooms by teleport,
+        // so the line names what the room's colour stands for.
+        string teleportNote = spellTeleport switch
+        {
+            RoomSpellTeleport.Always => " (teleports)",
+            RoomSpellTeleport.Chance => " (may teleport)",
+            RoomSpellTeleport.None   => " (no teleport)",
+            _                        => string.Empty,
+        };
         string spellLine = room.Spell > 0
-            ? "Room Spell: " + (LookupName(data, "Spells", room.Spell) ?? $"#{room.Spell}")
+            ? "Room Spell: " + (LookupName(data, "Spells", room.Spell) ?? $"#{room.Spell}") + teleportNote
             : string.Empty;
         if (shopLine.Length > 0 || spellLine.Length > 0)
         {

@@ -57,7 +57,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.Profile.Current is { } lairProfile)
         {
             _lairMode = lairProfile.NavLairMode;
-            _spellMode = lairProfile.NavSpellMode;
+            _spellMode = SpellDisplayModes.Read(lairProfile);
             _loopLinesMode = lairProfile.NavLoopLinesMode;
             _showLevelGates = lairProfile.NavShowLevelGates;
         }
@@ -111,6 +111,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Conditions.PropertyChanged += OnConditionsChanged;
         _services.RoomGraph.GraphReloaded += OnGraphReloaded;
         _services.TBInfo.StoreReloaded    += RefreshTeleportRooms;
+        _services.RoomSpellTeleports.StoreReloaded += RefreshSpellTeleportClasses;
         _services.Loops.LoopsChanged += OnLoopsChanged;
         _services.Favorites.Changed += OnFavoritesChanged;
         _services.GotoHistory.Changed += RefreshGotoHistory;
@@ -160,6 +161,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         RebuildContextSysopGotos();
         RefreshCrawlerChords();
         RefreshTeleportRooms();
+        RefreshSpellTeleportClasses();
         RefreshDeathRooms();
 
         // Let the bug report snapshot the live estimator when one's active. The
@@ -292,6 +294,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.Conditions.PropertyChanged -= OnConditionsChanged;
         _services.RoomGraph.GraphReloaded -= OnGraphReloaded;
         _services.TBInfo.StoreReloaded    -= RefreshTeleportRooms;
+        _services.RoomSpellTeleports.StoreReloaded -= RefreshSpellTeleportClasses;
         _services.Loops.LoopsChanged -= OnLoopsChanged;
         _services.Favorites.Changed -= OnFavoritesChanged;
         _services.Profile.ProfileLoaded -= OnProfileChangedRebuildSysopGotos;
@@ -887,21 +890,28 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     [ObservableProperty] private bool _highlightShops = true;
 
-    // Spells chip is a three-stage toggle: Mono (flat purple on every spell room) ->
-    // ByName (colour each room by which spell it carries) -> Off -> Mono.
+    // Spells chip is a four-stage toggle: Mono (flat purple on every spell room) ->
+    // ByName (colour each room by which spell it carries) -> ByTeleport (colour it by
+    // whether the spell teleports) -> Off -> Mono.
     // HighlightSpells (the chip's active-fill flag) is derived: lit for anything but Off.
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HighlightSpells))]
     [NotifyPropertyChangedFor(nameof(SpellButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(SpellsByTeleport))]
     private SpellDisplayMode _spellMode = SpellDisplayMode.Mono;
 
     public bool HighlightSpells => SpellMode != SpellDisplayMode.Off;
 
+    // Shows the Legend's three by-teleport swatches, which mean nothing in the
+    // other modes.
+    public bool SpellsByTeleport => SpellMode == SpellDisplayMode.ByTeleport;
+
     public string SpellButtonLabel => SpellMode switch
     {
-        SpellDisplayMode.ByName => "Spells: by name",
-        SpellDisplayMode.Off    => "Spells: off",
-        _                       => "Spells",
+        SpellDisplayMode.ByName     => "Spells: by name",
+        SpellDisplayMode.ByTeleport => "Spells: by teleport",
+        SpellDisplayMode.Off        => "Spells: off",
+        _                           => "Spells",
     };
 
     // Persist the room-spell overlay mode per-character so the map reopens the way
@@ -909,10 +919,15 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     partial void OnSpellModeChanged(SpellDisplayMode value)
     {
         if (_services.Profile.Current is not { } profile) return;
-        if (profile.NavSpellMode == value) return;
-        profile.NavSpellMode = value;
+        if (!SpellDisplayModes.Write(profile, value)) return;
         _services.Profile.Save();
     }
+
+    // The by-teleport overlay's colour key: each placed room spell's class, from the
+    // per-set index.
+    [ObservableProperty] private IReadOnlyDictionary<int, RoomSpellTeleport>? _spellTeleportClasses;
+
+    private void RefreshSpellTeleportClasses() => SpellTeleportClasses = _services.RoomSpellTeleports.Classes;
 
     // Loop lines chip is a three-stage toggle: Steps (the running loop's line with a
     // numbered circle on each step) -> NoSteps (the line alone) -> Off -> Steps.
@@ -1093,9 +1108,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [RelayCommand] private void ToggleShops()  => HighlightShops  = !HighlightShops;
     [RelayCommand] private void ToggleSpells() => SpellMode = SpellMode switch
     {
-        SpellDisplayMode.Mono   => SpellDisplayMode.ByName,
-        SpellDisplayMode.ByName => SpellDisplayMode.Off,
-        _                       => SpellDisplayMode.Mono,
+        SpellDisplayMode.Mono       => SpellDisplayMode.ByName,
+        SpellDisplayMode.ByName     => SpellDisplayMode.ByTeleport,
+        SpellDisplayMode.ByTeleport => SpellDisplayMode.Off,
+        _                           => SpellDisplayMode.Mono,
     };
     [RelayCommand] private void ToggleLoopLines() => LoopLinesMode = LoopLinesMode switch
     {

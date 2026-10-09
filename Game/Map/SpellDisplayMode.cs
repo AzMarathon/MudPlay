@@ -1,7 +1,7 @@
 namespace MudPlay.Game.Map;
 
 // How the Navigation map paints room-spell rooms (rooms whose Room.Spell > 0). The
-// Spells chip cycles through these in order: Mono -> ByName -> Off -> Mono.
+// Spells chip cycles through these in order: Mono -> ByName -> ByTeleport -> Off -> Mono.
 // Serialized by name (JsonStringEnumConverter) when persisted per-character, so the
 // declaration order is free to change without breaking saved profiles.
 public enum SpellDisplayMode
@@ -20,4 +20,10 @@ public enum SpellDisplayMode
 
     // Room-spell rooms get no special fill; they render like any other room.
     Off,
+
+    // Each room-spell room coloured by whether its spell moves you: red when it
+    // teleports, yellow when a teleport hangs on a roll, green when it has none
+    // (RoomSpellTeleport). Clients older than this mode know only the three above;
+    // SpellDisplayModes keeps its name out of the profile key they read.
+    ByTeleport,
 }

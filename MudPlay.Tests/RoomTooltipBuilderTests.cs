@@ -93,7 +93,7 @@ public sealed class RoomTooltipBuilderTests : IDisposable
             "N": "0", "S": "1/1", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 1, "Room Number": 3, "Name": "Inn",
-            "Light": 0, "Shop": 0, "Spell": 0, "Lair": "", "Delay": 5,
+            "Light": 0, "Shop": 0, "Spell": 42, "Lair": "", "Delay": 5,
             "N": "0", "S": "0", "E": "0", "W": "1/1 (Door)",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
         ]
@@ -151,6 +151,22 @@ public sealed class RoomTooltipBuilderTests : IDisposable
         Room room = graph.GetRoom(new RoomKey(1, 1))!;
         string text = RoomTooltipBuilder.Build(room, graph, cache);
         Assert.Contains("Shop: Silvermere Bank", text);
+    }
+
+    [Fact]
+    public void Build_RoomSpellLine_NamesTheTeleportClassOnlyWhenGiven()
+    {
+        var (graph, cache) = NewGraph();
+        Room room = graph.GetRoom(new RoomKey(1, 3))!;
+
+        // No class passed (the map isn't colouring by teleport): the name alone.
+        Assert.Contains("Room Spell: Heal\n", RoomTooltipBuilder.Build(room, graph, cache) + "\n");
+        Assert.Contains("Room Spell: Heal (teleports)",
+            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.Always));
+        Assert.Contains("Room Spell: Heal (may teleport)",
+            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.Chance));
+        Assert.Contains("Room Spell: Heal (no teleport)",
+            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.None));
     }
 
     [Fact]

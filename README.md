@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.19**
-> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
-> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+> **Version 3.159.20**
+> - Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you, yellow when it may, green when it doesn't
+> - In that mode the room tooltip and the Legend name the three
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

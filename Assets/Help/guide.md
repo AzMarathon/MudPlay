@@ -555,6 +555,14 @@ The panel lists clickable links to everything attached to the room:
 
 The **Overlays ▾** button layers lairs, shops, spell rooms, **level gates** and a running loop's **loop lines** onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk).
 
+The **Spells** chip under it cycles how **spell rooms** are painted — rooms that cast a spell on you while you stand in them: one flat purple → **by name** (a colour per spell; hover a room for the spell's name) → **by teleport** → off. **By teleport** colours each spell room by whether its spell moves you:
+
+- **Red** — the spell teleports you. That includes a teleport that depends on you or on the room rather than on luck: an item you carry or lack (the ice slide without a rope and grapple), your class, level or alignment, or the room being empty of monsters. The map paints a spell the same for every character, so it doesn't work out whether the condition holds for yours.
+- **Yellow** — the spell *may* teleport you: the teleport hangs on a roll (the desert's sandstorm, the open sea).
+- **Green** — the spell has no teleport.
+
+In that mode the hover tooltip's **Room Spell** line ends in *(teleports)*, *(may teleport)* or *(no teleport)*, and the Legend lists the three colours. A spell's resist roll isn't counted as a chance. A spell room that is also a lair or a shop keeps its lair or shop colour while that overlay is on — switch it off to see the spell colour. The chip's setting is saved per character.
+
 The **Legend** keys every room-cell marker the map draws: the amber-ringed **current room**, the blue-ringed **walk-to destination**, room fills (lair, shop/bank, spell, auto-lair, up/down/up+down exit rooms), and the overlay glyphs — **deathpile** skull, **boss** crown (with a red halt ring when it's a *stop-before* boss), **trainer** chevrons, **gang-house** robot, **avoid** (red X), **stash** (gold X), the amber **level-gate** wedge, and the fading green **@where** result.
 
 **Route lines** are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange** (these four are recolourable under Settings → General, so they're described here rather than pinned in the Legend).

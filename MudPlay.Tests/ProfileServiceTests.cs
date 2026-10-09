@@ -74,6 +74,44 @@ public sealed class ProfileServiceTests
     }
 
     [Fact]
+    public void NavSpellMode_ByTeleport_IsKeptOutOfTheKeyOlderClientsRead()
+    {
+        // What an older client does with a mode name it doesn't know: the whole
+        // profile fails to load. So the by-teleport mode can't go in NavSpellMode.
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<CharacterProfile>(
+            "{\"NavSpellMode\":\"SomeLaterMode\"}", JsonStore.Options));
+
+        var profile = new CharacterProfile();
+        Assert.True(SpellDisplayModes.Write(profile, SpellDisplayMode.ByTeleport));
+        Assert.False(SpellDisplayModes.Write(profile, SpellDisplayMode.ByTeleport));
+        string json = JsonSerializer.Serialize(profile, JsonStore.Options);
+        Assert.Contains("\"NavSpellMode\": \"Mono\"", json);
+        Assert.Contains("\"NavSpellOverlay\": \"ByTeleport\"", json);
+
+        CharacterProfile back = JsonSerializer.Deserialize<CharacterProfile>(json, JsonStore.Options)!;
+        Assert.Equal(SpellDisplayMode.ByTeleport, SpellDisplayModes.Read(back));
+
+        // Back on a mode every client knows, the second key is cleared: left behind
+        // it would outrank the first.
+        Assert.True(SpellDisplayModes.Write(back, SpellDisplayMode.Off));
+        Assert.Null(back.NavSpellOverlay);
+        Assert.Equal(SpellDisplayMode.Off, SpellDisplayModes.Read(back));
+    }
+
+    [Fact]
+    public void NavSpellMode_ReadFallsBackToTheOldKey()
+    {
+        // A profile from before the second key, and one a later client left a mode
+        // in that this client doesn't know.
+        Assert.Equal(SpellDisplayMode.Mono,
+            SpellDisplayModes.Read(JsonSerializer.Deserialize<CharacterProfile>("{}", JsonStore.Options)!));
+        Assert.Equal(SpellDisplayMode.ByName, SpellDisplayModes.Read(JsonSerializer.Deserialize<CharacterProfile>(
+            "{\"NavSpellMode\":\"ByName\"}", JsonStore.Options)!));
+        Assert.Equal(SpellDisplayMode.ByName, SpellDisplayModes.Read(JsonSerializer.Deserialize<CharacterProfile>(
+            "{\"NavSpellMode\":\"ByName\",\"NavSpellOverlay\":\"SomeLaterMode\"}", JsonStore.Options)!));
+    }
+
+    [Fact]
     public void NavLoopLinesMode_DefaultsToSteps_AndRoundTripsByName()
     {
         // An older profile has no value stored and must come back drawing the loop

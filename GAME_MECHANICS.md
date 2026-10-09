@@ -2763,6 +2763,7 @@ How one damage spell cast against a monster is worked out.
     for a player on Stock** (`cmp edx,0x61`; a monster target caps at 98), so the chance is that figure
     in 99. MMUD-Explorer's sim caps it at 98 (MR 196), which
     the client uses for Paradigm. Wire text: `You resisted %s's cast of %s.`
+  - **A room spell cast on a player makes the same full-resist roll, and no cast-success roll** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_room_cast_on_user` @0x475763–0x4757c4; Realm: Stock, Paradigm not recorded)*. When the spell's `TypeOfResists` is 2, or 1 and the player has AntiMagic (ability 51), a 1–99 roll at or under `MR/2`, capped at 97, ends the routine there: it prints nothing and none of the spell's abilities run, so no damage, no textblock and no teleport. A `TypeOfResists 0` room spell is never resisted. Nothing in the routine reads Spellcasting or `Diff`. (A second test straight after, the helper @0x43e3db that `_monster_cast` also calls @0x427e80, can end it too; not read.) Which room spells this bears on is in *Movement & navigation → Room spells that teleport*: of those that teleport, in both imported sets only the class filters 1325–1327 are not `TypeOfResists 0` (they are 1).
   - **Paradigm prints `You negate <monster>'s cast of <spell>!`** for a monster spell that does nothing to you *([OBSERVED] 2026-10-03, reports `paradigm-20261003-194358` / `paradigm-20261003-201253`: `You negate vengeful spirit's cast of necromantic beam!`, 94 times across the two captures)*. It is the same full resist as Stock's `You resisted…` line, under Paradigm's wording *([CONFIRMED] 2026-10-03, user)*.
 - **Client use:**
   - The `UserMisses` pattern skips any `You … 's cast of …!` line. Before 2026-10-03 the Paradigm negate line counted as a miss of our own and as a confirmed cast of our attack spell (`CombatManager.OnAttackCastConfirmed`), spending its cast cap (report `paradigm-20261003-194358`).
@@ -4894,6 +4895,60 @@ Among protectable hazards, a further split governs whether the navigator may off
 **Client use:**
 - Encoded as `RoomHazard.IsSurvivableDamage`; classifier `RoomHazardIndex.IsSurvivableHazardDamage`.
 
+### Room spells that teleport
+*Status: [OBSERVED] 2026-10-09 (game data: `data-v1.11p`, `data-Paradigm-1.9.1`); the colour rule is Client policy (user, 2026-10-09) · Realm: both*
+
+- **A room spell (`Rooms.Spell`) reaches a teleport in one of three ways** *([OBSERVED] 2026-10-09, game data: both sets)*:
+  - **its own TeleportRoom ability (140)**, with TeleportMap (141) for the map: `gloomy teleport` (1257) is `140 = 0`, `141 = 8`, `MinBase`/`MaxBase` 633–656, a random room of map 8 (the value-0 rule is in *Cast-on-walk exits and random teleports*);
+  - **a `teleport <room> <map>` step in the textblock its TextBlock ability (148) names**: `ice cavern level 2` (1145) → TBInfo 9410, `failitem 930:failitem 191:message 2979:teleport 297 10:message 2980:cast 1142`;
+  - **a `cast` in that textblock of a spell carrying 140**, in one chain by way of an EndCast (151): `desert spell` (683) ends, three blocks down, in `cast 743` (`desert sandstorm temp`, `Dur 1`, EndCast 1387 `sandstorm`), whose TBInfo 4357 is `failitem 1180:cast 713` (`desert sandstorm`: `140 = 0`, `141 = 12`, rooms 1055–1084 on Stock and 1061–1084 on Paradigm).
+  - No room spell in either set reaches a named `teleport_*` step or an EndCast% (164).
+- **What stands between a room spell and its teleport is a condition, a roll, or both** *(same source)*:
+  - **Conditions** found on the way: `failitem` / `checkitem` / `takeitem`, `class`, `minlevel` / `maxlevel`, `goodaligned` / `evilaligned`, `nomonsters`, `roomitem` / `failroomitem` / `clearitem`, `checkability` / `failability`, `checkspell` / `failspell`.
+  - **The one roll found is a `random` table with a band that does not teleport.** A table whose every band teleports only picks the landing: TBInfo 9408 (two rooms, the ice slide), 9383 (99 bands, all on map 17), 9396 (five) and Paradigm's 3361 (one).
+  - A `testskill` (a roll: *`testskill` obstacle checks*) stands before no room-spell teleport: `spellcaster filter` (1337) carries four, and their fail block 4269 holds no teleport.
+- **The room spells that reach a teleport** *(same source; rooms carrying the spell are given Stock / Paradigm, "—" where the set doesn't place it)*:
+
+  | Spell | Rooms | Behind | Chain |
+  |---|---|---|---|
+  | 683 `desert spell` | 902 / 936 | roll | TBInfo 2653 → `random 2655` → `100:random 2700` → `30:nomonsters:failitem 1180:cast 743` → 713. Paradigm's 2655 also has `86:maxlevel 19:cast 713`. |
+  | 684 `desert spell 2` | 43 / 43 | roll | as 683 through TBInfo 2658 → 2660; 2660 also ends `100:failitem 1180:cast 714` (`sinkhole`: `140 = 0`, `141 = 12`, 1279–1520) |
+  | 742 `dao scatter` | 1 / 1 | condition | TBInfo 2692 `nomonsters:message 2081:teleport 335 12:message 2082` |
+  | 1076, 1077, 1078 `sea 1`–`sea 3` | 181, 194, 206 / 116, 149, 125 | roll | TBInfo 9358–9360. With no boat (`failitem 690:failitem 691`), `random 9357`: `30:addexp 0`, `100:random 9383`. With one, tables 9445, 9361 and 9363 lead by further rolls to `random 9396`; 9362 (`sea 2` at level 50 and over) leads to none. |
+  | 1079 `white forest noise` | 110 / 110 | condition | TBInfo 9443 `evilaligned -50:goodaligned 39:teleport 1641 17` and `evilaligned 40:teleport 1641 17:cast 1135` |
+  | 1144 `ice cavern level 1` | 10 / 10 | condition | TBInfo 9407 `failitem 191:failitem 930:random 9408`; 9408's bands are `teleport 287 10` and `teleport 297 10` |
+  | 1145 `ice cavern level 2` | 7 / 7 | condition | TBInfo 9410 `failitem 930:failitem 191:…:teleport 297 10:…` |
+  | 1213 `cracked pit` | 8 / 8 | condition | TBInfo 4077 `failitem 930:failitem 191:message 2979:teleport 1524 7:message 2980:cast 1142` |
+  | 1231 `island spell` | 12 / 12 | condition | TBInfo 9511 `maxlevel 49:random 9383` |
+  | 1235 `face rgen` | 1 / 1 | condition | TBInfo 9693 `maxlevel 49:random 9383` |
+  | 1257 `gloomy teleport` | 2 / 1 | nothing | its own ability 140 |
+  | 1303 `tele out of pit` | 2 / 2 | condition | TBInfo 4172 `nomonsters:teleport 2859 17` |
+  | 1325 `thief  filter`, 1326 `battle  filter`, 1327 `magic filter` | 10, 23, 2 / 10, 23, 2 | condition | TBInfo 4241–4243: `class N:teleport 2982 17`, one line for each class turned away |
+  | 1337 `spellcaster filter` | 19 / 19 | condition | TBInfo 4244: the same, with `class N:testskill … 4269:addevil 0` for classes 5, 11, 12 and 13 |
+  | 1354 `tele out of pit` | 1 / 1 | condition | TBInfo 4286: `nomonsters:failability 152:…:teleport 2381 12:…`; Stock's second line lands in `221 12` |
+  | 1360 `phoenix boss check` | 1 / 1 | condition | TBInfo 4227 `nomonsters:failroomitem 1910:message 3312:teleport 2980 17:message 837`; Paradigm has `cast 5078` (`musty teleport`, `140 = 9462`) ahead of the `teleport` |
+  | 1361 `hydra boss check` | 1 / — | condition | TBInfo 4120 `failroomitem 1891:clearitem 1958:cast 645:teleport 3090 17:summon 1016` |
+  | 1365 `tele out of pit` | 1 / — | condition | TBInfo 4286, as 1354 |
+  | 1370 `demon lord boss check` | 1 / 1 | condition | TBInfo 4325 `nomonsters:failroomitem 1911:message 3312:teleport 2980 17:message 837` |
+  | 1371 `majestic boss check` | 1 / — | condition | TBInfo 4227, as 1360 |
+  | 1375 `solo trainer key check` | 2 / 2 | condition | TBInfo 4327 `class N:takeitem 1975:teleport <room> 17:message 837`, room 3250, 3304 or 3325 by class |
+  | 5085 `under level teleport` | — / 1 | condition | TBInfo 3360 `maxlevel 79:random 3361`; 3361 is `100:teleport 1041 8` |
+  | 5258 `bloodwood weald temp` | — / 1 | roll | TBInfo 3457 `nomonsters:random 3470`: `70:addevil 0`, `100:cast 5259` (`bloodwood weald`: `140 = 0`, 3449–3595) |
+  | 5788 `cavern 1`, 5789 `cavern 2` | — / 34, 32 | roll | TBInfo 10167 `random 10168` (10169 / 10170 for 5789): `85:addevil 0`, `100:maxlevel 19:cast 5786` (5787) (`fall below`: `140 = 0`, `141 = 12`) |
+
+  - The other placed room spells reach no teleport: 57 of Stock's 82 and 133 of Paradigm's 159. The Paradigm `baenglen portal` (5624), `farnholme portal` (5676) and `talgarn portal` (5686) only summon, and every `… scatter` spell but `dao scatter` carries ScatterItems (157) and no textblock.
+  - The two sets agree on every spell they both place.
+- **Whether the teleport can be resisted** is in *Spells, buffs & conditions → Magic Resist (M.R.) and `TypeOfResists`* (the room-spell bullet); that a textblock `cast` makes no cast roll is in *Textblock directives — the Stock interpreter's list*.
+- **Client policy** (user, 2026-10-09: "if a roomspell contains a teleport in it, color it red, if it contains a chance to teleport, color it yellow, if it contains no teleports, green"): the Navigation map's by-teleport overlay colours a spell room by its spell. The client takes "a chance" to mean a roll, the *Behind* column above:
+  - **red** when some branch teleports with no roll in the way. A branch that hangs only on conditions counts: they are facts about the character or the room, and the map paints a spell the same for every character;
+  - **yellow** when every teleport it reaches is past a roll: a `random` table with a band that doesn't teleport or with numbers that stop short of 100 (*Textblock directives — the Stock interpreter's list*), a `testskill`, or an EndCast with an EndCast% under 100;
+  - **green** when it reaches none.
+  - A resist roll is not counted: it is the character's own Magic Res against the spell, and only the three class filters could roll one.
+
+**Client use:**
+- `RoomSpellTeleportClassifier` reads the class of one spell; `RoomSpellTeleportIndex` holds it for every room spell of the active set and logs the three counts on a set change.
+- The Navigation map's **Spells** chip mode `SpellDisplayMode.ByTeleport` paints it (`MapControl`), and in that mode the hover tooltip's `Room Spell:` line names it (`RoomTooltipBuilder.Build`).
+
 ### Door and gate barriers in the room display
 *Status: CONFIRMED 2026-07-14 (capture, report 091244)*
 
@@ -5302,6 +5357,7 @@ Among protectable hazards, a further split governs whether the navigator may off
   - `addexp`: *Quests → Quest experience — `addexp`*.
 - **The rest of the list** *(same source)*:
   - `cast <spell>`: casts with no target (`_cast_no_target`). A cast that fails fails the line, with no message (@0x47032c–0x470352).
+    - **It is a forced cast, with no cast-success roll** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll`; Realm: Stock, Paradigm not recorded)*. The step passes 1 as the routine's third argument (@0x47032c). With it set, `_cast_no_target` marks the cast as landed (@0x440349) and jumps over the Spellcasting + `Diff` roll of *Spells, buffs & conditions → Spell cast-success chance and the `Diff` column* (@0x4405b7 → 0x4406b4); it also skips the confusion check (@0x43ff7c). So the `Diff` of a spell plays no part when a textblock casts it. The forced path can still return failure from the two compares just before the landed mark (@0x440318–0x440342, a spell field against another record's; not identified).
   - `message <msg>`; `text <textblock>`, shown to you; `roomtext <textblock>`, shown to the room (unused in the Stock data).
   - `addevil <N>`: adds N to your evil points; N may be negative.
   - `adddelay <N>`: adds to the action-delay counter (*Wire, prompt & command output → Command rate limit (typing/sending too fast)*).

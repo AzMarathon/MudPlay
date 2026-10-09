@@ -1,5 +1,10 @@
 # Version history
 
+## 3.159.20
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you, yellow when it may, green when it doesn't
+- In that mode the room tooltip and the Legend name the three
+
 ## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters

@@ -633,7 +633,7 @@
                                     <Button Classes="ToggleChip" Content="{Binding SpellButtonLabel}"
                                             Command="{Binding ToggleSpellsCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                            ToolTip.Tip="Room-spell highlight: click to cycle one flat colour → colour each room by its spell (hover a room to see the spell name) → off. Your choice is saved per character."
+                                            ToolTip.Tip="Room-spell highlight: click to cycle one flat colour → colour each room by its spell (hover a room to see the spell name) → colour each room by teleport (red: the spell teleports you, yellow: it may, on a roll, green: it doesn't) → off. Your choice is saved per character."
                                             Classes.SpellFill="{Binding HighlightSpells}"/>
                                     <Button Classes="ToggleChip" Content="Level gates"
                                             Command="{Binding ToggleLevelGatesCommand}"
@@ -794,6 +794,7 @@
                                  LairMonsterCounts="{Binding LairMonsterCounts}"
                                  HighlightShops="{Binding HighlightShops}"
                                  SpellMode="{Binding SpellMode}"
+                                 SpellTeleportClasses="{Binding SpellTeleportClasses}"
                                  NavLineStyles="{Binding NavLineStyles}"
                                  AutoFollowHoldSeconds="{Binding MapRecenterHoldSeconds}"
                                  ComparisonRecordedPath="{Binding ComparisonRecordedPath}"
@@ -1088,6 +1089,20 @@
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Border Width="14" Height="14" Background="#6428A0"/>
                         <TextBlock Text="Spell room" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <!-- The Spells chip's by-teleport colours (MapControl.SpellTeleportHex),
+                         listed only while that mode paints them. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SpellsByTeleport}">
+                        <Border Width="14" Height="14" Background="#C81E3C"/>
+                        <TextBlock Text="Spell room: teleports" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SpellsByTeleport}">
+                        <Border Width="14" Height="14" Background="#F2DC5A"/>
+                        <TextBlock Text="Spell room: may teleport" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SpellsByTeleport}">
+                        <Border Width="14" Height="14" Background="#218A45"/>
+                        <TextBlock Text="Spell room: no teleport" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Border Width="14" Height="14" Background="#DC821E"/>
