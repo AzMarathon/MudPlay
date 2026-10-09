@@ -1,10 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.0**
-> - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder
-> - Written every N minutes (1 to 120, 5 by default) while the character is in the game, and once more on leaving it; the Session Stats window doesn't need to be open
-> - Off by default; saved for all characters
+> **Version 3.153.1**
+> - A `rest` or `meditate` typed by hand no longer re-wears Default pieces the moment the Pre-rest set goes on: slots the set leaves blank keep what you put on (a phoenix feather was swapped off in the lava caverns)
+> - The gear readout keeps showing the Pre-rest set through such a rest instead of flipping to Default
+> - Bug report lists the gear set last applied
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -6319,13 +6319,13 @@ public sealed class AppServices
                 // swap AND the recovery-complete Default revert together; the revert
                 // runs first and no-ops against the not-yet-streamed pre-rest set, then
                 // the pre-rest swap lands last and strands the medi/pre-rest gear
-                // (report paradigm-20260903-111227). Now that the pre-rest set is
-                // actually worn and recovery is done, re-fire the Default revert (it
-                // will diff correctly this time). OnRecoveryComplete self-guards on
-                // combat + using-rest-sets; the Default swap it fires re-enters here
-                // with Default worn, so this terminates after one correction.
-                if (!Health.IsRecoveringRest && CurrentEquippedIsPreRestSet())
-                    AutoEquip.OnRecoveryComplete();
+                // (report paradigm-20260903-111227). Now that the pre-rest set has gone
+                // out, the coordinator re-fires the Default revert — only when a rest
+                // really did just finish, never for a set worn with no rest behind it.
+                // The Default swap it fires re-enters here with Default current, so
+                // this terminates after one correction.
+                if (CurrentEquippedIsPreRestSet())
+                    AutoEquip.OnPreRestSetStreamed();
                 // If this swap streamed during a live fight (swap-to-Default-on-combat),
                 // its wear/eq burst breaks the swing on Paradigm — arm combat's
                 // interrupt resume so the imminent *Combat Off* re-engages instead of

@@ -277,6 +277,13 @@ public static class BugReportBuilder
         // fight. Answers a "why did/didn't my gear swap when a mob showed up" report.
         Kv(sb, "Swap to Default on combat",
             (svc.Profile.Current?.Equipment?.SwapToDefaultOnCombat ?? false) ? "on" : "off");
+        // The loadout the client believes is on — a gear report turns on whether that
+        // matches the worn list under Inventory.
+        Kv(sb, "Gear set last applied",
+            svc.Equipment.CurrentSetId is { } currentSetId
+                ? svc.Profile.Current?.Equipment?.Sets.FirstOrDefault(s => s.Id == currentSetId)?.Name
+                    ?? "(a set this profile no longer has)"
+                : "(none this session)");
         // A set picked from the Equip menu turns every automatic gear swap off — the
         // first thing to rule out in a "my gear stopped swapping" report.
         Kv(sb, "Gear set held from the Equip menu",
