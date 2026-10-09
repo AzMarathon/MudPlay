@@ -203,6 +203,8 @@ public static class KnownPatterns
     // "Your fists have no effect against this monster!" — our weapon fell off
     // (encumbrance, server quirk, missed equip-confirm). CombatManager treats
     // this as "re-equip from scratch" and clears the shadow-equipped state.
+    // A kick or a jumpkick says "feet"; from a martial-arts strike either wording
+    // means the strike can't hurt the monster, not that a weapon is missing.
     public const string FistsNoEffect        = "combat.fists-no-effect";
 
     // ----- Spellcasting -------------------------------------------------

@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.1**
+> **Version 3.154.0**
 > - CP plan is typed from the trained stats and CP Left on the `train stats` screen, so a buff on `stat` no longer throws it off
 > - A plan row is cleared only once the game shows its CP was spent
 > - `stat` values marked as modified have gear and the listed effects taken off; one that can't be accounted for is flagged on the CP Allocation tab and not planned from

@@ -412,6 +412,25 @@ public partial class MainWindowViewModel : ObservableObject
     // A Sprint start turned Sprint Mode on and it hasn't ended yet.
     private bool _tripStartedSprint;
 
+    // Movement was stopped on purpose: the Stop button or its hotkey, the Navigation
+    // window's Stop, or a remote @stop (which pauses, so endsTheRun is false). The
+    // live auto toggles go back to the character's base modes, as they do when a
+    // walk-to arrives: one switched off by hand for the trip (Auto-Combat, to get
+    // somewhere without fighting) comes back even if the user forgets it, instead
+    // of the character standing in a room of monsters with combat off (reports
+    // paradigm-20260923-163805, -163843, -164004).
+    //
+    // Two cases keep their own rule. A Run / Sprint start stopped before it began
+    // is settled by its Settings → Other box (OnUserStoppedRun). And while Sprint
+    // Mode is on, the autos it silenced are Sprint's to restore when it ends.
+    private void OnUserStopped(string reason, bool endsTheRun)
+    {
+        bool tripPending = _tripTurnedOffCombat || _tripStartedSprint;
+        if (endsTheRun) OnUserStoppedRun();
+        if (tripPending || IsSprintModeActive) return;
+        ReconcileAutoModeToBase(reason);
+    }
+
     // The user stopped the run before it began (a walk-to short of its destination, a
     // loop still walking to its start, an Auto-Lair short of its first lair). Settings →
     // Other decides whether the autos a Run / Sprint start turned off come back now or
@@ -1581,7 +1600,11 @@ public partial class MainWindowViewModel : ObservableObject
         // behind — without the note the leader walked back through the teleport to
         // fetch them.
         AppServices.Current.ApplyRunStartMode = ApplyRunStartMode;
-        AppServices.Current.NoteUserStoppedRun = OnUserStoppedRun;
+        AppServices.Current.NoteUserStoppedRun = () => OnUserStopped("stopped by the user", endsTheRun: true);
+        // A remote @stop arrives inside the remote-command pump, and the reset can
+        // write to the terminal, so it is posted.
+        AppServices.Current.NoteRemoteStop = () => Dispatcher.UIThread.Post(
+            () => OnUserStopped("@stop", endsTheRun: false));
         AppServices.Current.Walker.SetPartySplitHandler(OnLeaderPartySplitTeleport);
         AppServices.Current.LoopRunner.SetPartySplitHandler(OnLeaderPartySplitTeleport);
 
@@ -5323,7 +5346,7 @@ public partial class MainWindowViewModel : ObservableObject
         // The first Stop holds a money or training errand; a second ends it.
         if (AppServices.Current.MovementControl.HoldErrandOnStop()) return;
         AppServices.Current.MovementControl.Stop();
-        OnUserStoppedRun();
+        OnUserStopped("stopped by the user", endsTheRun: true);
     }
 
     // Singleton handle for the one Navigation Management dialog — either entry point

@@ -302,7 +302,7 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.WeaponNoEffect,
             @"^Your weapon has no effect against this monster!");
         yield return new RegexPattern(KnownPatterns.FistsNoEffect,
-            @"^Your fists have no effect against this monster!");
+            @"^Your (?:fists|feet) have no effect against this monster!");
 
         // ----- Spellcasting failures ------------------------------------
         // Cast outcomes that block further casts for the current round.
