@@ -337,14 +337,16 @@
 
                             <!-- What the board takes for a hang-up in a fight. The board
                                  sets it and the game never prints it, so the user records
-                                 it here; the program log and the bug report show it. No
-                                 hang-up is sent, held or skipped because of it. -->
+                                 it here; the program log and the bug report show it, and
+                                 an item figure above 0 makes the client look for dropped
+                                 items on the way back in. No hang-up is sent, held or
+                                 skipped because of it. -->
                             <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Hang-up penalties on this realm"/>
 
                             <CheckBox IsChecked="{Binding HangupPenaltyEnabled, Mode=TwoWay}"
                                       Margin="0,6,0,0"
                                       Content="Does the BBS have hang-up penalties?"
-                                      ToolTip.Tip="Tick this when the board penalises a character who hangs up in a fight. A hang-up in PvP combat is then penalised; tick the box below when a fight with a monster is too. MudPlay only records the board's rule: it is shown in the program log when a hang-up goes out, and in bug reports. It does not change when MudPlay hangs up, which stays with Disable hangups, the Health settings, the PvP actions and @panic."/>
+                                      ToolTip.Tip="Tick this when the board penalises a character who hangs up in a fight. A hang-up in PvP combat is then penalised; tick the box below when a fight with a monster is too. The HP figures are a record of the board's rule, shown in the program log when a hang-up goes out and in bug reports. An Items dropped figure above 0 also makes MudPlay look for the dropped items when you come back into the game. None of it changes when or whether MudPlay hangs up, which stays with Disable hangups, the Health settings, the PvP actions and @panic."/>
 
                             <StackPanel IsEnabled="{Binding HangupPenaltyEnabled}">
                                 <TextBlock Classes="FieldLabel" Margin="0,6,0,0" Text="A hang-up in PvP combat:"/>
@@ -371,7 +373,7 @@
                                                    Minimum="0" Maximum="100" Increment="1"
                                                    FormatString="0" Width="140"
                                                    HorizontalAlignment="Left"
-                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in PvP combat. Leave it at 0 when the board takes HP only, as most do. Default 0."/>
+                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in PvP combat. Leave it at 0 when the board takes HP only, as most do. Above 0, MudPlay looks for dropped items when you come back into the game: what you held before and are missing is picked up from the floor of the room, never more copies than the larger of this figure and the PvE one when that side is ticked. It does not change when or whether MudPlay hangs up. Default 0."/>
                                 </Grid>
 
                                 <CheckBox IsChecked="{Binding HangupPvePenaltyEnabled, Mode=TwoWay}"
@@ -402,7 +404,7 @@
                                                    Minimum="0" Maximum="100" Increment="1"
                                                    FormatString="0" Width="140"
                                                    HorizontalAlignment="Left"
-                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in a fight with a monster. Leave it at 0 when the board takes HP only, as most do. Default 0."/>
+                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in a fight with a monster. Leave it at 0 when the board takes HP only, as most do. Above 0, MudPlay looks for dropped items when you come back into the game: what you held before and are missing is picked up from the floor of the room, never more copies than the larger of this figure and the PvP one. It does not change when or whether MudPlay hangs up. Default 0."/>
                                 </Grid>
                             </StackPanel>
 

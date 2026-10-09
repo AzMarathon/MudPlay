@@ -612,18 +612,31 @@ public sealed class AutoGetItemsManager : IDisposable
     // auto-collect choices apply to it: not the master toggle, the per-item flag,
     // the carry cap or the encumbrance brackets, since it is being taken back, not
     // looted. It still goes out the one way a get does here: counted per realm,
-    // held on the acquisition gate until `You took` answers it, and entered in the
-    // floor ledger so a re-render of the same floor doesn't collect it a second time.
+    // held on the acquisition gate until `You took` answers it, and reconciled with
+    // the floor ledger both ways. A get this engine already has out for the item
+    // counts towards the copies asked for (the collect-after-combat flush runs on
+    // the observation that ends a fight, just ahead of a caller waiting on the same
+    // one, and a room redisplay the caller asked for collects a flagged item
+    // first); and what is sent here is entered there, so a re-render of the same
+    // floor doesn't collect it a second time.
     public void CollectNamed(string name, int count, string why)
     {
         if (_disposed || count <= 0 || string.IsNullOrWhiteSpace(name)) return;
         ExpireFloorLedgerIfStale();
-        _log?.Info(LogCategory, $"collect {count}x item={name} ({why})");
-        CountedCommand.Emit(cmd => { _gate?.NoteGetSent(); Send(cmd); },
-            "get", count, name, _isParadigm());
         // Under the name the confirmation drains it by (OnPlayerGets).
         string ledgerName = _resolve(name)?.Name ?? name;
-        _floorInFlight[ledgerName] = _floorInFlight.GetValueOrDefault(ledgerName) + count;
+        int have = _floorInFlight.GetValueOrDefault(ledgerName);
+        int toSend = count - have;
+        if (toSend <= 0)
+        {
+            _log?.Info(LogCategory, $"collect {count}x item={name} ({why}): {have} get(s) already out for it, none added");
+            return;
+        }
+        _log?.Info(LogCategory, $"collect {toSend}x item={name} ({why})"
+            + (have > 0 ? $"; {have} more already out" : ""));
+        CountedCommand.Emit(cmd => { _gate?.NoteGetSent(); Send(cmd); },
+            "get", toSend, name, _isParadigm());
+        _floorInFlight[ledgerName] = have + toSend;
         _floorInFlightAt = DateTime.UtcNow;
     }
 

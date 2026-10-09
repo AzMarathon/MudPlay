@@ -230,7 +230,8 @@ public sealed class MovementCoordinator
     // hang-up dropped have been looked for, on a realm whose settings say items are
     // dropped. A loop restarts on the first prompt after a reconnect, before the
     // login's inventory read can say what is missing, and would walk out of the
-    // room the items lie in. Engine-wait tier. Ends with the check, or with the link.
+    // room the items lie in. Engine-wait tier. Ends with the check or with the link,
+    // and is given up when the game isn't entered, or no inventory read, in time.
     public const string HangupItemCheckGate = "HangupItemCheck";
 
     // Asserted by ConfusionMovementGate while the local character is confused. A

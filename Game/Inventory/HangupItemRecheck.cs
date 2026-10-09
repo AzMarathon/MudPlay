@@ -13,13 +13,14 @@ namespace MudPlay.Game.Inventory;
 // taken back.
 //
 // It runs only on a realm whose settings say items are dropped (Settings → BBS,
-// HangupPenaltyNotice.DropsItems), once per connection, and has no part in
-// deciding a hang-up.
+// HangupPenaltyNotice.MaxItemsDropped), once per connection, takes back no more
+// copies than those settings say were dropped, and has no part in deciding a
+// hang-up.
 //
 // The order on the way in:
-//   connect       — a list is stored and the realm drops items: movement is held,
-//                   so a loop that restarts on the first prompt can't walk out of
-//                   the room before the check has run.
+//   connect       — a list is stored for this realm and the realm drops items:
+//                   movement is held, so a loop that restarts on the first prompt
+//                   can't walk out of the room before the check has run.
 //   game entered  — wait for an inventory read. The login sends `i` itself; an
 //                   entry made by hand gets one asked for after InventoryWaitTicks.
 //   inventory in  — compare. Nothing short ends it. Otherwise the room is needed:
@@ -27,12 +28,17 @@ namespace MudPlay.Game.Inventory;
 //   room known    — another room than the one the link dropped in ends it. Else a
 //                   `get` for each short item the floor list shows, once any
 //                   fight in the room is over.
-//   gets answered — worn pieces go back on by death recovery's rule, and the hold
-//                   on movement is dropped.
+//   gets answered — the gear set that was on is applied again when a piece of it
+//                   came back, and the hold on movement is dropped.
+//
+// The hold never outlasts its reason. An entry or an inventory read that doesn't
+// come in time gives it up, and so does Reset States; the list is kept, and the
+// comparison still runs when the read arrives, without the hold, picking up only
+// if the character hasn't left the room it came in at.
 //
 // Nothing is retried: one pass per connection, and what isn't on the floor then
 // is logged as still missing and forgotten. Only a pass cut short by the link
-// dropping again carries its unfound items over to the next entry.
+// dropping again carries its unfound items over to the next connection.
 public sealed class HangupItemRecheck
 {
     public const string LogCategory = "HangupItems";
@@ -48,13 +54,18 @@ public sealed class HangupItemRecheck
     // Quiet after the last `You took` before the gets count as answered. A get
     // the game refuses prints a line this doesn't read, and must not hold movement.
     private const int GetSettleTicks = 3;
+    // From the connect to the game: a login takes seconds, and a login that stops
+    // at the board's menu (after a hang-up the user enters by hand) can take as
+    // long as the user likes. Past this the hold is given up.
+    private const int EntryWaitTicks = 180;
 
     private enum Phase { Idle, AwaitingEntry, AwaitingInventory, AwaitingRoom, AwaitingFightEnd, PickingUp }
 
     private readonly MovementCoordinator _coordinator;
     private readonly Func<CharacterProfile?> _profile;
     private readonly Action _saveProfile;
-    private readonly Func<bool> _realmDropsItems;
+    private readonly Func<string?> _realmKey;
+    private readonly Func<int> _maxItemsDropped;
     private readonly Func<InventorySnapshot> _inventory;
     private readonly Func<RoomKey?> _confirmedRoom;
     private readonly Func<IReadOnlyList<string>> _floor;
@@ -64,7 +75,8 @@ public sealed class HangupItemRecheck
     private readonly Func<bool> _isAutoEnabled;
     private readonly Func<bool> _roomRedisplayFree;
     private readonly Action<string, int> _collect;
-    private readonly Action<IReadOnlyList<DeathItem>> _rewear;
+    private readonly Func<IReadOnlyCollection<string>, string?> _reapplyGearSet;
+    private readonly Action<string>? _notice;
     private readonly Action<Action> _post;
     private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
@@ -72,40 +84,53 @@ public sealed class HangupItemRecheck
 
     private Phase _phase;
     private HeldAtDisconnect? _before;
-    private List<HangupMissingItem> _missing = new();
+    private List<(string Name, int Count)> _missing = new();
     private List<(string Name, int Count)> _plan = new();
     private readonly Dictionary<string, int> _taken = new(StringComparer.OrdinalIgnoreCase);
     private int _ticks;
+    private int _entryTicks;
     private bool _askedInventory;
     private bool _holding;
 
-    // Per connection. The room and floor flags also fall with a room change: a
-    // display read before it shows another room's floor.
+    // Per connection.
+    private bool _linkUp;
     private bool _inGame;
     private bool _enteredThisLink;
     private bool _inventoryReadThisLink;
+    // The character died and no inventory has been read since: the record in
+    // memory still lists what went into the deathpile, so nothing it says is held.
+    private bool _heldUnknown;
+    // These fall with a room change: a display read before it shows another
+    // room's floor.
     private bool _roomShownHere;
     private bool _floorShownHere;
+    private bool _movedSinceEntry;
 
-    //   profile          — the loaded character, whose HeldAtDisconnect is read and written.
-    //   realmDropsItems  — HangupPenaltyNotice.DropsItems for the realm being played.
+    //   profile          — the named character that is loaded, whose HeldAtDisconnect
+    //                      is read and written; null with none (the default profile
+    //                      is the template new characters are made from).
+    //   realmKey         — the BBS and realm being played, as HeldAtDisconnect.Realm.
+    //   maxItemsDropped  — HangupPenaltyNotice.MaxItemsDropped for that realm.
     //   confirmedRoom    — the room the map is sure of, else null.
     //   floor            — the room's latest floor list (GroundItemTracker.Items).
-    //   itemKey          — see HangupItemPlan.Pickup; null for its default.
     //   fighting         — a monster the client is set to fight is in the room: the
     //                      pickup waits for the fight to end, as collect-after-combat does.
     //   hostilePresent   — any hostile monster is in the room, fought or not.
     //   isAutoEnabled    — Auto-All; off, nothing is sent.
     //   roomRedisplayFree — RoomRedisplayCoordinator.ShouldSend.
     //   collect          — AutoGetItemsManager.CollectNamed.
-    //   rewear           — DeathRecoveryManager.ReequipWorn.
+    //   reapplyGearSet   — AutoEquipCoordinator.ReapplySetAfterItemsReturned: given
+    //                      the names picked up, the set it applied again, or null.
+    //   notice           — a line for the terminal.
+    //   itemKey          — see HangupItemPlan.Pickup; null for its default.
     //   post             — run after the handlers of the line now being read; the room
     //                      display parser reports a display before the map has taken it in.
     public HangupItemRecheck(
         MovementCoordinator coordinator,
         Func<CharacterProfile?> profile,
         Action saveProfile,
-        Func<bool> realmDropsItems,
+        Func<string?> realmKey,
+        Func<int> maxItemsDropped,
         Func<InventorySnapshot> inventory,
         Func<RoomKey?> confirmedRoom,
         Func<IReadOnlyList<string>> floor,
@@ -114,7 +139,8 @@ public sealed class HangupItemRecheck
         Func<bool> isAutoEnabled,
         Func<bool> roomRedisplayFree,
         Action<string, int> collect,
-        Action<IReadOnlyList<DeathItem>> rewear,
+        Func<IReadOnlyCollection<string>, string?> reapplyGearSet,
+        Action<string>? notice = null,
         Func<string, string>? itemKey = null,
         Action<Action>? post = null,
         Func<DateTimeOffset>? now = null,
@@ -123,7 +149,8 @@ public sealed class HangupItemRecheck
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(saveProfile);
-        ArgumentNullException.ThrowIfNull(realmDropsItems);
+        ArgumentNullException.ThrowIfNull(realmKey);
+        ArgumentNullException.ThrowIfNull(maxItemsDropped);
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(confirmedRoom);
         ArgumentNullException.ThrowIfNull(floor);
@@ -132,21 +159,23 @@ public sealed class HangupItemRecheck
         ArgumentNullException.ThrowIfNull(isAutoEnabled);
         ArgumentNullException.ThrowIfNull(roomRedisplayFree);
         ArgumentNullException.ThrowIfNull(collect);
-        ArgumentNullException.ThrowIfNull(rewear);
+        ArgumentNullException.ThrowIfNull(reapplyGearSet);
         _coordinator = coordinator;
         _profile = profile;
         _saveProfile = saveProfile;
-        _realmDropsItems = realmDropsItems;
+        _realmKey = realmKey;
+        _maxItemsDropped = maxItemsDropped;
         _inventory = inventory;
         _confirmedRoom = confirmedRoom;
         _floor = floor;
-        _itemKey = itemKey;
         _fighting = fighting;
         _hostilePresent = hostilePresent;
         _isAutoEnabled = isAutoEnabled;
         _roomRedisplayFree = roomRedisplayFree;
         _collect = collect;
-        _rewear = rewear;
+        _reapplyGearSet = reapplyGearSet;
+        _notice = notice;
+        _itemKey = itemKey;
         _post = post ?? (static run => run());
         _now = now ?? (static () => DateTimeOffset.Now);
         _log = log;
@@ -154,24 +183,28 @@ public sealed class HangupItemRecheck
 
     // ----- for the bug report -------------------------------------------
 
+    private const string NoneYet = "none for this character this session";
+
     // Where the check stands, in words.
     public string Status => _phase switch
     {
-        Phase.AwaitingEntry => "waiting for the game to be entered",
-        Phase.AwaitingInventory => "waiting for an inventory read",
+        Phase.AwaitingEntry => "waiting for the game to be entered" + Unheld,
+        Phase.AwaitingInventory => "waiting for an inventory read" + Unheld,
         Phase.AwaitingRoom => "waiting for a room display",
         Phase.AwaitingFightEnd => "waiting for the fight in the room to end",
         Phase.PickingUp => "picking up",
         _ => "idle",
     };
 
-    // How the last check ended, with its time; "none" before the first.
-    public string LastOutcome { get; private set; } = "none this session";
+    private string Unheld => _holding ? "" : " (movement no longer held)";
+
+    // How the last check ended, with its time.
+    public string LastOutcome { get; private set; } = NoneYet;
 
     // What the last comparison found short, and what of it was still short when
     // the check ended.
-    public IReadOnlyList<HangupMissingItem> LastMissing { get; private set; } = Array.Empty<HangupMissingItem>();
-    public IReadOnlyList<HangupMissingItem> LastStillMissing { get; private set; } = Array.Empty<HangupMissingItem>();
+    public IReadOnlyList<(string Name, int Count)> LastMissing { get; private set; } = [];
+    public IReadOnlyList<(string Name, int Count)> LastStillMissing { get; private set; } = [];
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
 
@@ -179,26 +212,41 @@ public sealed class HangupItemRecheck
 
     // ----- the list on disk ---------------------------------------------
 
-    // ProfileService.ProfileSaving: write what is held now. Only while in the game
-    // with an inventory read on this connection: before that the record in memory
-    // is the last session's, and the list on disk is the one still to be compared.
+    // ProfileService.ProfileSaving: write what is held now. Only for the character
+    // the check reads from, in the game, with an inventory read on this connection:
+    // before that the record in memory is the last session's, and the list on disk
+    // is the one still to be compared. After a death there is nothing to write.
     public void StampForSave(CharacterProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        if (!_inGame || !_inventoryReadThisLink) return;
+        if (!ReferenceEquals(profile, _profile()) || !_inGame) return;
+        if (_heldUnknown)
+        {
+            profile.HeldAtDisconnect = null;
+            return;
+        }
+        if (!_inventoryReadThisLink) return;
+
+        List<(string Name, int Count)> outstanding = Outstanding();
         profile.HeldAtDisconnect = new HeldAtDisconnect
         {
             At = _now(),
+            Realm = _realmKey(),
             Room = _confirmedRoom() is { } room ? new RoomRef(room.Map, room.Room) : null,
-            Items = HangupItemPlan.WithOutstanding(HangupItemPlan.Held(_inventory()), Outstanding()),
+            // What an unfinished check hasn't found was dropped before this
+            // connection; a drop of this one comes on top of it.
+            PenaltiesSpanned = outstanding.Count > 0 ? Spanned(_before) + 1 : 1,
+            Items = HangupItemPlan.WithOutstanding(HangupItemPlan.Held(_inventory()), outstanding),
         };
     }
 
     // Short items of a check that hasn't ended, which a list saved now must keep.
-    private List<HangupMissingItem> Outstanding() =>
+    private List<(string Name, int Count)> Outstanding() =>
         _phase is Phase.AwaitingRoom or Phase.AwaitingFightEnd or Phase.PickingUp
             ? HangupItemPlan.Outstanding(_missing, _taken)
-            : new List<HangupMissingItem>();
+            : new List<(string Name, int Count)>();
+
+    private static int Spanned(HeldAtDisconnect? list) => Math.Max(1, list?.PenaltiesSpanned ?? 1);
 
     // ----- connection and game entry ------------------------------------
 
@@ -208,17 +256,28 @@ public sealed class HangupItemRecheck
     public void NoteConnected()
     {
         Abandon("a new connection began");
+        _linkUp = true;
         _inGame = false;
         _enteredThisLink = false;
         _inventoryReadThisLink = false;
+        _heldUnknown = false;
         _roomShownHere = false;
         _floorShownHere = false;
+        _movedSinceEntry = false;
 
         if (_profile()?.HeldAtDisconnect is not { Items.Count: > 0 } before) return;
-        if (!_realmDropsItems()) return;
+        if (_maxItemsDropped() <= 0) return;
+        string? realm = _realmKey();
+        if (realm is null || !string.Equals(before.Realm, realm, StringComparison.OrdinalIgnoreCase))
+        {
+            _log?.Debug(LogCategory,
+                $"the stored list is for '{before.Realm ?? "(no realm)"}', not '{realm ?? "(no realm)"}': left alone");
+            return;
+        }
 
         _before = before;
         _phase = Phase.AwaitingEntry;
+        _entryTicks = 0;
         Hold("items a hang-up may have dropped are checked for on entering the game");
         _log?.Info(LogCategory,
             $"This realm drops items for a hang-up. {before.Items.Count} kind(s) of item were held when the character "
@@ -226,43 +285,94 @@ public sealed class HangupItemRecheck
             + "they are checked against the inventory on entering the game.");
     }
 
-    // The link is gone. InGameCapture has already reported leaving the game
-    // (OnInGameChanged), which is where an unfinished check is saved and dropped;
-    // this ends one that never reached the game.
-    public void NoteDisconnected() => Abandon("the link dropped");
+    // The link is gone. InGameCapture has normally reported leaving the game
+    // already; an entry it never saw (taken from a room display) is left here.
+    public void NoteDisconnected()
+    {
+        LeaveGame();
+        _linkUp = false;
+        Abandon("the link dropped");
+    }
 
     // InGameCapture.InGameChanged.
     public void OnInGameChanged(bool inGame)
     {
-        if (inGame)
-        {
-            _inGame = true;
-            if (_enteredThisLink) return;
-            _enteredThisLink = true;
-            if (_phase != Phase.AwaitingEntry) return;
-            _phase = Phase.AwaitingInventory;
-            _ticks = InventoryWaitTicks;
-            _askedInventory = false;
-            return;
-        }
-
-        // Out of the game, by a dropped link or an exit to the board's menu: what
-        // is held now is what the next entry is checked against. Saved while the
-        // check still counts as under way, so its unfound items go with it.
-        if (_inGame && _inventoryReadThisLink) _saveProfile();
-        _inGame = false;
-        if (_phase is not (Phase.Idle or Phase.AwaitingEntry)) Abandon("the game was left before the check ended");
+        if (inGame) EnterGame();
+        else LeaveGame();
     }
 
-    // Another character was loaded: the check belonged to the one before.
+    private void EnterGame()
+    {
+        _inGame = true;
+        if (_enteredThisLink) return;
+        _enteredThisLink = true;
+        if (_phase != Phase.AwaitingEntry) return;
+        _phase = Phase.AwaitingInventory;
+        _ticks = InventoryWaitTicks;
+        _askedInventory = false;
+    }
+
+    // Out of the game, by a dropped link or an exit to the board's menu: what is
+    // held now is what the next entry is checked against. Saved while the check
+    // still counts as under way, so what it hasn't found goes onto the list.
+    private void LeaveGame()
+    {
+        if (!_inGame) return;
+        if (_inventoryReadThisLink) _saveProfile();
+        _inGame = false;
+        switch (_phase)
+        {
+            case Phase.AwaitingInventory:
+                // Not compared yet, and nothing was stamped over the list: it waits
+                // for the game to be entered again, on this link or the next.
+                _phase = Phase.AwaitingEntry;
+                _enteredThisLink = false;
+                break;
+            case Phase.AwaitingRoom or Phase.AwaitingFightEnd or Phase.PickingUp:
+                Abandon("the game was left before the check ended; what it hadn't found is kept on the list");
+                break;
+        }
+    }
+
+    // Another character was loaded: the check, and what it last found, belonged to
+    // the one before.
     public void OnProfileLoaded()
     {
         Abandon("another profile was loaded");
         _inventoryReadThisLink = false;
+        _heldUnknown = false;
+        LastOutcome = NoneYet;
+        LastMissing = [];
+        LastStillMissing = [];
     }
 
-    // Reset States.
-    public void Cancel(string reason) => Abandon(reason);
+    // RoomTracker.PlayerDeathObserved. Nothing clears the inventory record on a
+    // death and no `i` follows one, so a list written from it would name the whole
+    // deathpile as held, and the next entry would read all of it as dropped by a
+    // hang-up. The list is void until an inventory is read again.
+    public void OnPlayerDied()
+    {
+        if (!_inGame) return;
+        _inventoryReadThisLink = false;
+        _heldUnknown = true;
+        if (_phase is Phase.Idle or Phase.AwaitingEntry) _saveProfile();
+        else Finish("the character died, so what was held before no longer says what is missing");
+    }
+
+    // Reset States. Before the comparison only the hold goes: the list is still to
+    // be compared, and is when an inventory is read. After it the check stops.
+    public void Cancel(string reason)
+    {
+        switch (_phase)
+        {
+            case Phase.AwaitingEntry or Phase.AwaitingInventory:
+                ReleaseHold($"{reason}: movement is no longer held; the list is kept and compared when an inventory is read");
+                break;
+            case Phase.AwaitingRoom or Phase.AwaitingFightEnd or Phase.PickingUp:
+                Finish($"stopped ({reason})");
+                break;
+        }
+    }
 
     // ----- the pass -----------------------------------------------------
 
@@ -270,6 +380,7 @@ public sealed class HangupItemRecheck
     public void OnInventoryRead()
     {
         _inventoryReadThisLink = true;
+        _heldUnknown = false;
         if (_phase != Phase.AwaitingInventory || _before is null) return;
         Compare(_before);
         // Still under way: put what is held now on disk in place of the list just
@@ -289,12 +400,17 @@ public sealed class HangupItemRecheck
             Finish("nothing held before is missing");
             return;
         }
-        _log?.Info(LogCategory,
-            $"Held before and missing now: {Names(_missing.Select(m => (m.Name, m.Count)))}"
-            + (_missing.Any(m => m.WornSlots.Count > 0)
-                ? $" (worn: {string.Join(", ", _missing.Where(m => m.WornSlots.Count > 0).Select(m => m.Name))})."
-                : "."));
+        _log?.Info(LogCategory, $"Held before and missing now: {Names(_missing)}.");
 
+        // The hold was given up before this read came. Where the character came in
+        // is only still the room it stands in if it hasn't moved and that room was
+        // drawn; otherwise the floor here is some other room's.
+        if (!_holding && (_movedSinceEntry || !_roomShownHere))
+        {
+            Finish("the inventory read came after the check had stopped holding movement, and the character "
+                   + "is no longer in the room it came in at, so nothing was looked for");
+            return;
+        }
         if (!_isAutoEnabled())
         {
             Finish("Auto-All is off, so nothing was looked for or picked up");
@@ -342,13 +458,38 @@ public sealed class HangupItemRecheck
 
     private void TryPickUp()
     {
-        IReadOnlyList<string> floor = _floorShownHere ? _floor() : Array.Empty<string>();
-        _plan = HangupItemPlan.Pickup(HangupItemPlan.Outstanding(_missing, _taken), floor, _itemKey);
-        if (_plan.Count == 0)
+        List<(string Name, int Count)> outstanding = HangupItemPlan.Outstanding(_missing, _taken);
+        // It can have been switched off while a fight was waited out.
+        if (!_isAutoEnabled())
         {
+            Finish($"Auto-All is off, so {Names(outstanding)} stayed where they are");
+            return;
+        }
+
+        IReadOnlyList<string> floor = _floorShownHere ? _floor() : Array.Empty<string>();
+        List<(string Name, int Count)> lying = HangupItemPlan.Pickup(outstanding, floor, _itemKey);
+        if (lying.Count == 0)
+        {
+            _notice?.Invoke($"[Hang-up item check: {Names(outstanding)} missing since you were last in the game, and not on the floor here]");
             Finish("none of the missing items is on the floor here");
             return;
         }
+
+        // No more than the board can have dropped: its count for one hang-up, for
+        // each drop of the link the list covers.
+        int most = Math.Max(0, _maxItemsDropped()) * Spanned(_before);
+        _plan = HangupItemPlan.Capped(lying, most);
+        int beyond = lying.Sum(p => p.Count) - _plan.Sum(p => p.Count);
+        if (beyond > 0)
+            _log?.Info(LogCategory,
+                $"On the floor here: {Names(lying)}. The realm's settings say a hang-up drops at most {most} item(s), "
+                + $"so {beyond} of them are beyond what the penalty takes and are left.");
+        if (_plan.Count == 0)
+        {
+            Finish("the realm's settings no longer say a hang-up drops items");
+            return;
+        }
+
         if (_fighting())
         {
             if (_phase != Phase.AwaitingFightEnd)
@@ -386,26 +527,24 @@ public sealed class HangupItemRecheck
         List<(string Name, int Count)> got = _plan
             .Select(p => (p.Name, Count: _taken.GetValueOrDefault(p.Name)))
             .Where(p => p.Count > 0).ToList();
-        List<DeathItem> worn = new();
-        foreach (HangupMissingItem item in _missing)
+        if (got.Count == 0)
         {
-            int back = Math.Min(_taken.GetValueOrDefault(item.Name), item.WornSlots.Count);
-            for (int i = 0; i < back; i++) worn.Add(new DeathItem(item.Name, item.WornSlots[i]));
+            _log?.Info(LogCategory, "Nothing was picked up: the game didn't confirm any of the gets.");
+            Finish("the gets weren't confirmed");
+            return;
         }
 
-        _log?.Info(LogCategory, got.Count > 0
-            ? $"Picked up: {Names(got)}."
-            : "Nothing was picked up: the game didn't confirm any of the gets.");
+        _log?.Info(LogCategory, $"Picked up: {Names(got)}.");
+        _notice?.Invoke($"[Hang-up item check: picked up {Names(got)} from the floor]");
         // Ahead of the hold being dropped, so the wear commands go out before a
-        // waiting loop's next step.
-        if (worn.Count > 0)
-        {
-            _log?.Info(LogCategory,
-                $"{worn.Count} of them were worn ({string.Join(", ", worn.Select(w => w.Name))}): they go back on "
-                + "as after a corpse recovery (Auto-Equip After Recovery, and Auto-All).");
-            _rewear(worn);
-        }
-        Finish(got.Count > 0 ? $"picked up {Names(got)}" : "the gets weren't confirmed");
+        // waiting loop's next step. Which pieces go on, and whether any does, is the
+        // equipment manager's to say.
+        string? set = _reapplyGearSet(got.Select(g => g.Name).ToList());
+        _log?.Info(LogCategory, set is not null
+            ? $"Gear set '{set}' was applied again, for the pieces of it that came back."
+            : "No gear set was applied again: none of what came back is in the set that is on, or the equipment "
+              + "manager held the apply (its own [Equipment] line says which).");
+        Finish($"picked up {Names(got)}");
     }
 
     // ----- what moves the pass along ------------------------------------
@@ -415,8 +554,14 @@ public sealed class HangupItemRecheck
     {
         switch (_phase)
         {
+            case Phase.AwaitingEntry:
+                if (_holding && ++_entryTicks >= EntryWaitTicks)
+                    ReleaseHold($"the game wasn't entered within {EntryWaitTicks / 60} minutes of connecting: movement is no "
+                                + "longer held; the list is kept and compared if the game is entered");
+                break;
             case Phase.AwaitingInventory:
-                if (--_ticks > 0) return;
+                // Given up: the read is waited for without asking or holding.
+                if (!_holding || --_ticks > 0) return;
                 if (!_askedInventory && _isAutoEnabled())
                 {
                     _askedInventory = true;
@@ -425,7 +570,8 @@ public sealed class HangupItemRecheck
                     _wire.Send("i");
                     return;
                 }
-                Abandon("no inventory read came after entering the game");
+                ReleaseHold("no inventory read came after entering the game: movement is no longer held; the list is "
+                            + "kept and compared when one is read");
                 break;
             case Phase.AwaitingRoom:
                 if (--_ticks > 0 || _before is null) return;
@@ -444,6 +590,14 @@ public sealed class HangupItemRecheck
     // RoomDisplayParser.RoomParsed: a room display was read to its exits line.
     public void NoteRoomDisplayed()
     {
+        // Only the game draws a room. The game prompt is what normally says the
+        // game was entered, and a statline it can't read would leave the hold up
+        // on a character that is plainly in the game.
+        if (_linkUp && !_inGame)
+        {
+            _log?.Debug(LogCategory, "a room display was read before any game prompt: taken as the game being entered");
+            EnterGame();
+        }
         _roomShownHere = true;
         if (_phase != Phase.AwaitingRoom) return;
         _post(() =>
@@ -467,6 +621,7 @@ public sealed class HangupItemRecheck
     {
         _roomShownHere = false;
         _floorShownHere = false;
+        if (_enteredThisLink) _movedSinceEntry = true;
         if (_phase == Phase.AwaitingFightEnd)
             Finish($"the character left the room before the fight ended, so {Names(_plan)} stayed on the floor");
         else if (_phase == Phase.PickingUp)
@@ -480,7 +635,7 @@ public sealed class HangupItemRecheck
     {
         LastStillMissing = HangupItemPlan.Outstanding(_missing, _taken);
         if (LastStillMissing.Count > 0)
-            _log?.Info(LogCategory, $"Still missing: {Names(LastStillMissing.Select(m => (m.Name, m.Count)))}.");
+            _log?.Info(LogCategory, $"Still missing: {Names(LastStillMissing)}.");
         LastOutcome = $"{_now():HH:mm:ss} {outcome}";
         _log?.Info(LogCategory, $"Check ended: {outcome}.");
         End(outcome);
@@ -488,7 +643,10 @@ public sealed class HangupItemRecheck
         _saveProfile();
     }
 
-    // The pass was cut short. The list on disk stays for the next entry.
+    // The pass was cut short by the link or by another character being loaded.
+    // The list on disk is what the next connection reads: the one still to be
+    // compared, since nothing is written before an inventory read, or the one
+    // LeaveGame saved with the unfound items on it.
     private void Abandon(string why)
     {
         if (_phase == Phase.Idle) return;
@@ -501,7 +659,7 @@ public sealed class HangupItemRecheck
     {
         _phase = Phase.Idle;
         _before = null;
-        _missing = new List<HangupMissingItem>();
+        _missing = new List<(string Name, int Count)>();
         _plan = new List<(string Name, int Count)>();
         _taken.Clear();
         if (!_holding) return;
@@ -514,6 +672,16 @@ public sealed class HangupItemRecheck
         if (_holding) return;
         _holding = true;
         _coordinator.AssertGate(MovementCoordinator.HangupItemCheckGate, AsserterName, reason);
+    }
+
+    // Stop holding movement and keep waiting: the list is still to be compared.
+    private void ReleaseHold(string why)
+    {
+        if (!_holding) return;
+        _holding = false;
+        _log?.Info(LogCategory, $"Hold given up: {why}.");
+        LastOutcome = $"{_now():HH:mm:ss} still waiting, without the hold: {why}";
+        _coordinator.ClearGate(MovementCoordinator.HangupItemCheckGate, AsserterName, why);
     }
 
     private string Key(string name) => (_itemKey ?? ItemNameStore.Normalize)(name);

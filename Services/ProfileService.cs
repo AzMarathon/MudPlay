@@ -665,6 +665,8 @@ public sealed class ProfileService
         // start: with these left unset it would take the shared files' flags.
         fresh.FavoriteLoops ??= new List<string>();
         fresh.FavoriteLairSetups ??= new List<string>();
+        // What some other character held is no part of a template.
+        fresh.HeldAtDisconnect = null;
         configure?.Invoke(fresh);
         Directory.CreateDirectory(AppPaths.ProfileFolder(bbsName, profileName));
         JsonStore.Save(AppPaths.CharacterProfileFile(bbsName, profileName), fresh);

@@ -194,21 +194,24 @@ public static class BugReportBuilder
             Game.Health.HangupPenaltyNotice.Describe(svc.ResolveActiveRealm()?.Realm));
         // The check for what a penalised hang-up dropped: whether it runs on this
         // realm, how the last one ended, and what it found short.
+        int hangupItemCap = Game.Health.HangupPenaltyNotice.MaxItemsDropped(svc.ResolveActiveRealm()?.Realm);
         Kv(sb, "Hang-up item check",
-            (Game.Health.HangupPenaltyNotice.DropsItems(svc.ResolveActiveRealm()?.Realm)
-                ? "on (the realm drops items)" : "off (the realm's settings drop no items)")
+            (hangupItemCap > 0
+                ? $"on (the realm drops up to {hangupItemCap} item(s) a hang-up)" : "off (the realm's settings drop no items)")
             + $"; now: {svc.HangupItems.Status}; last: {svc.HangupItems.LastOutcome}");
+        static string HeldNames(IEnumerable<(string Name, int Count)> items) =>
+            string.Join(", ", items.Select(m => m.Count > 1 ? $"{m.Count} {m.Name}" : m.Name));
         Kv(sb, "Missing after hang-up", svc.HangupItems.LastMissing.Count == 0
             ? "(nothing)"
-            : string.Join(", ", svc.HangupItems.LastMissing.Select(m =>
-                  $"{(m.Count > 1 ? $"{m.Count} " : "")}{m.Name}{(m.WornSlots.Count > 0 ? " (worn)" : "")}"))
+            : HeldNames(svc.HangupItems.LastMissing)
               + (svc.HangupItems.LastStillMissing.Count == 0
                   ? "; all back"
-                  : "; still missing: " + string.Join(", ", svc.HangupItems.LastStillMissing.Select(m =>
-                        m.Count > 1 ? $"{m.Count} {m.Name}" : m.Name))));
+                  : "; still missing: " + HeldNames(svc.HangupItems.LastStillMissing)));
         Kv(sb, "Held list on file", svc.Profile.Current?.HeldAtDisconnect is { } heldList
-            ? $"{heldList.Items.Count} kind(s) of item, written {heldList.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}, "
+            ? $"{heldList.Items.Count} kind(s) of item, written {heldList.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
+              + $"on {heldList.Realm ?? "(no realm)"}, "
               + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
+              + (heldList.PenaltiesSpanned > 1 ? $", covering {heldList.PenaltiesSpanned} drops of the link" : "")
             : "(none)");
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")

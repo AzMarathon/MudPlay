@@ -26,14 +26,16 @@ public sealed class HangupItemRecheckTests
     // ----- The realm's settings ----------------------------------------
 
     [Theory]
-    [InlineData(false, 3, false, 0, false)]   // master switch off
-    [InlineData(true, 0, false, 0, false)]    // HP only, as most boards
-    [InlineData(true, 2, false, 0, true)]     // PvP side drops items
-    [InlineData(true, 0, false, 4, false)]    // PvE count set but that side isn't ticked
-    [InlineData(true, 0, true, 4, true)]      // PvE side drops items
-    [InlineData(true, -5, true, -1, false)]   // a hand-edited file reads through the limits
-    public void TheRealmDropsItems_OnlyWhenASideThatAppliesHasACount(
-        bool enabled, int pvpItems, bool pve, int pveItems, bool expected)
+    [InlineData(false, 3, false, 0, 0)]   // master switch off
+    [InlineData(true, 0, false, 0, 0)]    // HP only, as most boards
+    [InlineData(true, 2, false, 0, 2)]    // PvP side drops items
+    [InlineData(true, 0, false, 4, 0)]    // PvE count set but that side isn't ticked
+    [InlineData(true, 0, true, 4, 4)]     // PvE side drops items
+    [InlineData(true, 3, true, 5, 5)]     // either side may have applied: the larger
+    [InlineData(true, 6, true, 5, 6)]
+    [InlineData(true, -5, true, -1, 0)]   // a hand-edited file reads through the limits
+    public void TheMostARealmDrops_IsTheLargerCountOfTheSidesThatApply(
+        bool enabled, int pvpItems, bool pve, int pveItems, int expected)
     {
         RealmProfile realm = new()
         {
@@ -43,8 +45,8 @@ public sealed class HangupItemRecheckTests
             HangupPveItemsDropped = pveItems,
         };
 
-        Assert.Equal(expected, HangupPenaltyNotice.DropsItems(realm));
-        Assert.False(HangupPenaltyNotice.DropsItems(null));
+        Assert.Equal(expected, HangupPenaltyNotice.MaxItemsDropped(realm));
+        Assert.Equal(0, HangupPenaltyNotice.MaxItemsDropped(null));
     }
 
     // ----- What is held, and what is short ------------------------------
@@ -59,11 +61,9 @@ public sealed class HangupItemRecheckTests
             light: new ReadiedLight("torch", 40)));
 
         Assert.Equal(2, held.Single(h => h.Name == "gold ring").Count);
-        Assert.Equal(["Finger", "Finger"], held.Single(h => h.Name == "gold ring").WornSlots);
         Assert.Equal(3, held.Single(h => h.Name == "dagger").Count);
-        Assert.Equal(["Weapon Hand"], held.Single(h => h.Name == "dagger").WornSlots);
         Assert.Equal(4, held.Single(h => h.Name == "torch").Count);
-        Assert.Null(held.Single(h => h.Name == "rope").WornSlots);
+        Assert.Equal(1, held.Single(h => h.Name == "rope").Count);
         Assert.Equal(2, held.Single(h => h.Name == "black star key").Count);
         Assert.Equal(1, held.Single(h => h.Name == "brass key").Count);
     }
@@ -74,16 +74,10 @@ public sealed class HangupItemRecheckTests
         List<HeldItem> before = HangupItemPlan.Held(Snap(
             worn: [("chainmail hauberk", "Torso")], carried: ["3 torch", "rope"], keys: ["2 black star key"]));
 
-        List<HangupMissingItem> missing = HangupItemPlan.Missing(before, Snap(
+        List<(string Name, int Count)> missing = HangupItemPlan.Missing(before, Snap(
             carried: ["torch", "rope"], keys: ["black star key"]));
 
-        Assert.Equal(3, missing.Count);
-        HangupMissingItem hauberk = missing.Single(m => m.Name == "chainmail hauberk");
-        Assert.Equal(1, hauberk.Count);
-        Assert.Equal(["Torso"], hauberk.WornSlots);
-        Assert.Equal(2, missing.Single(m => m.Name == "torch").Count);
-        Assert.Empty(missing.Single(m => m.Name == "torch").WornSlots);
-        Assert.Equal(1, missing.Single(m => m.Name == "black star key").Count);
+        Assert.Equal([("chainmail hauberk", 1), ("torch", 2), ("black star key", 1)], missing);
     }
 
     [Fact]
@@ -97,25 +91,17 @@ public sealed class HangupItemRecheckTests
             carried: ["dagger", "torch", "waterskin"], keys: ["brass key"], light: new ReadiedLight("torch", 80))));
     }
 
-    // Two of one item worn: the one still worn keeps its slot, the other is the
-    // missing worn copy.
     [Fact]
-    public void Missing_Duplicates_OnlyTheShortCopiesAndTheirSlots()
+    public void Missing_Duplicates_OnlyTheShortCopies()
     {
         List<HeldItem> before = HangupItemPlan.Held(Snap(
             worn: [("gold ring", "Finger"), ("gold ring", "Finger"), ("dagger", "Weapon Hand")],
             carried: ["2 dagger"]));
 
-        List<HangupMissingItem> missing = HangupItemPlan.Missing(before, Snap(
+        List<(string Name, int Count)> missing = HangupItemPlan.Missing(before, Snap(
             worn: [("gold ring", "Finger"), ("dagger", "Weapon Hand")], carried: ["dagger"]));
 
-        HangupMissingItem ring = missing.Single(m => m.Name == "gold ring");
-        Assert.Equal(1, ring.Count);
-        Assert.Equal(["Finger"], ring.WornSlots);
-        // A dagger is short, but the one in hand is still in hand.
-        HangupMissingItem dagger = missing.Single(m => m.Name == "dagger");
-        Assert.Equal(1, dagger.Count);
-        Assert.Empty(dagger.WornSlots);
+        Assert.Equal([("gold ring", 1), ("dagger", 1)], missing);
     }
 
     // ----- The pickup plan ----------------------------------------------
@@ -123,12 +109,7 @@ public sealed class HangupItemRecheckTests
     [Fact]
     public void Pickup_OnlyMissingNames_OnlyUpToTheMissingCount()
     {
-        List<HangupMissingItem> missing =
-        [
-            new("torch", 2, []),
-            new("chainmail hauberk", 1, ["Torso"]),
-            new("rope", 1, []),
-        ];
+        List<(string Name, int Count)> missing = [("torch", 2), ("chainmail hauberk", 1), ("rope", 1)];
 
         // Five torches lie here, a hauberk, and things that were never ours.
         List<(string Name, int Count)> plan = HangupItemPlan.Pickup(
@@ -140,23 +121,32 @@ public sealed class HangupItemRecheckTests
     [Fact]
     public void Pickup_TakesNoMoreThanLiesThere_AndNothingFromAnEmptyFloor()
     {
-        List<HangupMissingItem> missing = [new("torch", 3, [])];
+        List<(string Name, int Count)> missing = [("torch", 3)];
 
         Assert.Equal([("torch", 1)], HangupItemPlan.Pickup(missing, ["torch"]));
         Assert.Empty(HangupItemPlan.Pickup(missing, []));
     }
 
+    // Never more copies than the board can have dropped, in the plan's order.
     [Fact]
-    public void Outstanding_DropsWhatCameBack_WornCopiesFirst()
+    public void Capped_CutsThePlanToTheMostTheBoardDrops()
     {
-        List<HangupMissingItem> missing = [new("gold ring", 2, ["Finger"]), new("torch", 1, [])];
+        List<(string Name, int Count)> plan = [("chainmail hauberk", 1), ("torch", 3), ("rope", 1)];
 
-        List<HangupMissingItem> left = HangupItemPlan.Outstanding(
-            missing, new Dictionary<string, int> { ["gold ring"] = 1, ["torch"] = 1 });
+        Assert.Equal([("chainmail hauberk", 1), ("torch", 2)], HangupItemPlan.Capped(plan, 3));
+        Assert.Equal(plan, HangupItemPlan.Capped(plan, 5));
+        Assert.Equal(plan, HangupItemPlan.Capped(plan, 100));
+        Assert.Empty(HangupItemPlan.Capped(plan, 0));
+    }
 
-        HangupMissingItem ring = Assert.Single(left);
-        Assert.Equal(1, ring.Count);
-        Assert.Empty(ring.WornSlots);
+    [Fact]
+    public void Outstanding_DropsWhatCameBack()
+    {
+        List<(string Name, int Count)> left = HangupItemPlan.Outstanding(
+            [("gold ring", 2), ("torch", 1)],
+            new Dictionary<string, int> { ["gold ring"] = 1, ["torch"] = 1 });
+
+        Assert.Equal([("gold ring", 1)], left);
     }
 
     // ----- The list on disk ---------------------------------------------
@@ -169,8 +159,10 @@ public sealed class HangupItemRecheckTests
             HeldAtDisconnect = new HeldAtDisconnect
             {
                 At = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
+                Realm = "Board/PvP",
                 Room = new RoomRef(1, 3),
-                Items = [new HeldItem("gold ring", 2, ["Finger", "Finger"]), new HeldItem("torch", 3)],
+                PenaltiesSpanned = 2,
+                Items = [new HeldItem("gold ring", 2), new HeldItem("torch", 3)],
             },
         };
 
@@ -179,11 +171,11 @@ public sealed class HangupItemRecheckTests
 
         HeldAtDisconnect held = back.HeldAtDisconnect!;
         Assert.Equal(profile.HeldAtDisconnect.At, held.At);
+        Assert.Equal("Board/PvP", held.Realm);
         Assert.Equal(3, held.Room!.Room);
+        Assert.Equal(2, held.PenaltiesSpanned);
         Assert.Equal(2, held.Items.Count);
-        Assert.Equal(["Finger", "Finger"], held.Items[0].WornSlots);
         Assert.Equal(3, held.Items[1].Count);
-        Assert.Null(held.Items[1].WornSlots);
     }
 
     // The list is a new optional field: a profile from before has none, and the
@@ -204,9 +196,14 @@ public sealed class HangupItemRecheckTests
 
     private sealed class Harness
     {
+        public const string RealmKey = "Board/Main";
+
         public MovementCoordinator Coordinator { get; } = new();
         public CharacterProfile Profile { get; } = new();
-        public bool RealmDrops { get; set; } = true;
+        // False: the default profile is loaded, not a named character.
+        public bool Named { get; set; } = true;
+        public string? Realm { get; set; } = RealmKey;
+        public int MaxItems { get; set; } = 10;
         public InventorySnapshot Inventory { get; set; } = InventorySnapshot.Empty;
         public RoomKey? Room { get; set; } = new RoomKey(1, 3);
         public List<string> Floor { get; } = new();
@@ -214,7 +211,11 @@ public sealed class HangupItemRecheckTests
         public bool Hostile { get; set; }
         public bool AutoAll { get; set; } = true;
         public List<(string Name, int Count)> Collected { get; } = new();
-        public List<DeathItem> Reworn { get; } = new();
+        // The names handed to the equipment manager each time gear came back, and
+        // the set it says it applied.
+        public List<string[]> GearAsked { get; } = new();
+        public string? GearSetApplied { get; set; } = "Default";
+        public List<string> Notices { get; } = new();
         public HangupItemRecheck Check { get; }
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.HangupItemCheckGate);
@@ -224,10 +225,11 @@ public sealed class HangupItemRecheckTests
         {
             Check = new HangupItemRecheck(
                 Coordinator,
-                profile: () => Profile,
+                profile: () => Named ? Profile : null,
                 // A profile save runs the saving hook, as ProfileService does.
                 saveProfile: () => Check!.StampForSave(Profile),
-                realmDropsItems: () => RealmDrops,
+                realmKey: () => Realm,
+                maxItemsDropped: () => MaxItems,
                 inventory: () => Inventory,
                 confirmedRoom: () => Room,
                 floor: () => Floor,
@@ -236,7 +238,8 @@ public sealed class HangupItemRecheckTests
                 isAutoEnabled: () => AutoAll,
                 roomRedisplayFree: () => true,
                 collect: (name, count) => Collected.Add((name, count)),
-                rewear: worn => Reworn.AddRange(worn));
+                reapplyGearSet: names => { GearAsked.Add(names.ToArray()); return GearSetApplied; },
+                notice: Notices.Add);
             Check.SetWireSender(_ => { });
         }
 
@@ -245,6 +248,7 @@ public sealed class HangupItemRecheckTests
             Profile.HeldAtDisconnect = new HeldAtDisconnect
             {
                 At = DateTimeOffset.Now.AddMinutes(-2),
+                Realm = RealmKey,
                 Room = room ?? new RoomRef(1, 3),
                 Items = HangupItemPlan.Held(before),
             };
@@ -280,7 +284,7 @@ public sealed class HangupItemRecheckTests
     [Fact]
     public void ARealmThatDropsNoItems_IsLeftAlone()
     {
-        Harness h = new() { RealmDrops = false };
+        Harness h = new() { MaxItems = 0 };
         h.Stored(Snap(carried: ["2 torch"]));
 
         h.ConnectAndEnter("2 torch");
@@ -291,16 +295,33 @@ public sealed class HangupItemRecheckTests
         Assert.Empty(h.Sent);
     }
 
+    // No list, nothing said and nothing held: a dial with nothing to check
+    // leaves no trace in the gate history.
     [Fact]
-    public void NoStoredList_NothingToCheck()
+    public void NoStoredList_NothingToCheck_AndNoGateTouched()
     {
         Harness h = new();
 
         h.ConnectAndEnter("2 torch");
         h.ReadInventory(Snap());
 
-        Assert.False(h.Held);
         Assert.Empty(h.Collected);
+        Assert.Empty(h.Coordinator.History);
+        Assert.Equal("idle", h.Check.Status);
+    }
+
+    // A list taken on another board or realm says nothing about the pack here.
+    [Fact]
+    public void AListFromAnotherRealm_IsIgnored()
+    {
+        Harness h = new() { Realm = "Board/PvP" };
+        h.Stored(Snap(carried: ["2 torch"]));
+
+        h.ConnectAndEnter("2 torch");
+        h.ReadInventory(Snap());
+
+        Assert.Empty(h.Collected);
+        Assert.Empty(h.Coordinator.History);
     }
 
     // The hold goes up at the connect, ahead of the first game prompt a loop
@@ -322,11 +343,14 @@ public sealed class HangupItemRecheckTests
         Assert.False(h.Held);
         Assert.Empty(h.Collected);
         Assert.Empty(h.Sent);
+        Assert.Empty(h.Notices);
         Assert.Contains("nothing held before is missing", h.Check.LastOutcome);
     }
 
+    // What comes back is handed to the equipment manager by name; which pieces go
+    // on is its business.
     [Fact]
-    public void MissingItemsOnTheFloor_ArePickedUp_AndTheWornOnesGoBackOn()
+    public void MissingItemsOnTheFloor_ArePickedUp_AndTheEquipmentManagerIsAsked()
     {
         Harness h = new();
         h.Stored(Snap(worn: [("chainmail hauberk", "Torso")], carried: ["3 torch", "rope"]));
@@ -337,17 +361,16 @@ public sealed class HangupItemRecheckTests
         // Only what is ours and lying here: not the dagger, and no get for the rope.
         Assert.Equal([("chainmail hauberk", 1), ("torch", 2)], h.Collected);
         Assert.True(h.Held);
+        Assert.Empty(h.GearAsked);
 
         h.Check.OnItemTaken("chainmail hauberk", 1);
         h.Check.OnItemTaken("torch", 2);
 
         Assert.False(h.Held);
-        DeathItem worn = Assert.Single(h.Reworn);
-        Assert.Equal("chainmail hauberk", worn.Name);
-        Assert.Equal("Torso", worn.Slot);
-        HangupMissingItem still = Assert.Single(h.Check.LastStillMissing);
-        Assert.Equal("rope", still.Name);
+        Assert.Equal(new[] { "chainmail hauberk", "torch" }, Assert.Single(h.GearAsked));
+        Assert.Equal([("rope", 1)], h.Check.LastStillMissing);
         Assert.Equal(3, h.Check.LastMissing.Count);
+        Assert.Contains("picked up chainmail hauberk, 2 torch", Assert.Single(h.Notices));
     }
 
     // Stock answers one `You took` a copy; the count is reached over several.
@@ -368,7 +391,8 @@ public sealed class HangupItemRecheckTests
         Assert.Empty(h.Check.LastStillMissing);
     }
 
-    // A get the game refuses prints no `You took`: movement isn't held on it.
+    // A get the game refuses prints no `You took`: movement isn't held on it, and
+    // with nothing back there is nothing to ask the equipment manager for.
     [Fact]
     public void GetsThatAreNeverAnswered_EndTheCheck_WithTheItemStillMissing()
     {
@@ -382,8 +406,33 @@ public sealed class HangupItemRecheckTests
 
         Assert.False(h.Held);
         Assert.Single(h.Check.LastStillMissing);
-        Assert.Empty(h.Reworn);
+        Assert.Empty(h.GearAsked);
+        Assert.Empty(h.Notices);
     }
+
+    // ----- No more than the board drops ---------------------------------
+
+    [Fact]
+    public void NoMoreIsPickedUp_ThanTheRealmSaysAHangupDrops()
+    {
+        Harness h = new() { MaxItems = 2 };
+        h.Stored(Snap(worn: [("chainmail hauberk", "Torso")], carried: ["5 torch", "rope"]));
+
+        // Everything is gone and all of it lies here: a list this far out can't be
+        // one hang-up's doing, so only two copies are the board's.
+        h.ConnectAndEnter("chainmail hauberk", "5 torch", "rope");
+        h.ReadInventory(Snap());
+
+        Assert.Equal([("chainmail hauberk", 1), ("torch", 1)], h.Collected);
+
+        h.Check.OnItemTaken("chainmail hauberk", 1);
+        h.Check.OnItemTaken("torch", 1);
+
+        Assert.False(h.Held);
+        Assert.Equal([("torch", 4), ("rope", 1)], h.Check.LastStillMissing);
+    }
+
+    // ----- Where and when it holds back ---------------------------------
 
     [Fact]
     public void ComingInSomewhereElse_PicksNothingUp()
@@ -450,6 +499,7 @@ public sealed class HangupItemRecheckTests
 
         Assert.Empty(h.Collected);
         Assert.Contains("none of the missing items is on the floor", h.Check.LastOutcome);
+        Assert.Contains("2 torch missing", Assert.Single(h.Notices));
     }
 
     [Fact]
@@ -469,6 +519,24 @@ public sealed class HangupItemRecheckTests
         h.Check.OnRoomObserved();
 
         Assert.Equal([("torch", 2)], h.Collected);
+    }
+
+    // Auto-All can be switched off while a fight is waited out.
+    [Fact]
+    public void AutoAllSwitchedOffDuringTheFight_NothingIsPickedUpWhenItEnds()
+    {
+        Harness h = new() { Fighting = true };
+        h.Stored(Snap(carried: ["2 torch"]));
+        h.ConnectAndEnter("2 torch");
+        h.ReadInventory(Snap());
+
+        h.AutoAll = false;
+        h.Fighting = false;
+        h.Check.OnRoomObserved();
+
+        Assert.Empty(h.Collected);
+        Assert.False(h.Held);
+        Assert.Contains("Auto-All is off", h.Check.LastOutcome);
     }
 
     [Fact]
@@ -537,30 +605,6 @@ public sealed class HangupItemRecheckTests
         Assert.Empty(h.Collected);
     }
 
-    // An entry made by hand sends no `i`: one is asked for, once, and a check that
-    // still gets no read gives the hold up and keeps the list for the next entry.
-    [Fact]
-    public void NoInventoryRead_OneIsAskedFor_ThenTheCheckGivesUp_KeepingTheList()
-    {
-        Harness h = new();
-        h.Stored(Snap(carried: ["torch"]));
-        HeldAtDisconnect stored = h.Profile.HeldAtDisconnect!;
-        h.ConnectAndEnter("torch");
-
-        h.Heartbeats(3);
-        Assert.Empty(h.Sent);
-        h.Heartbeats(1);
-        Assert.Equal(["i\r"], h.Sent);
-        Assert.True(h.Held);
-
-        h.Heartbeats(4);
-
-        Assert.Equal(["i\r"], h.Sent);
-        Assert.False(h.Held);
-        Assert.Same(stored, h.Profile.HeldAtDisconnect);
-        Assert.Contains("not finished", h.Check.LastOutcome);
-    }
-
     [Fact]
     public void AutoAllOff_NothingIsSent()
     {
@@ -600,6 +644,29 @@ public sealed class HangupItemRecheckTests
         Assert.False(h.Held);
     }
 
+    // Out to the board's menu and back in on the same link: no second check, and
+    // the list goes on being written.
+    [Fact]
+    public void ASecondEntryOnOneLink_StartsNoCheck_ButTheListIsStillWritten()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["torch"]));
+        h.ConnectAndEnter();
+        h.ReadInventory(Snap(carried: ["torch"]));
+        h.Check.OnInGameChanged(false);
+
+        h.Check.OnInGameChanged(true);
+        h.ShowRoom("torch");
+        h.Inventory = Snap(carried: ["torch", "rope"]);
+        h.Check.StampForSave(h.Profile);
+
+        Assert.False(h.Held);
+        Assert.Empty(h.Collected);
+        Assert.Equal(2, h.Profile.HeldAtDisconnect!.Items.Count);
+    }
+
+    // ----- The hold never outlasts its reason ---------------------------
+
     [Fact]
     public void ALinkThatDropsBeforeTheGame_GivesTheHoldUp_AndKeepsTheList()
     {
@@ -613,6 +680,212 @@ public sealed class HangupItemRecheckTests
 
         Assert.False(h.Held);
         Assert.Same(stored, h.Profile.HeldAtDisconnect);
+    }
+
+    // An entry made by hand sends no `i`: one is asked for, once. With still no
+    // read the hold is given up, the list is kept, and the read that does come is
+    // compared without the hold.
+    [Fact]
+    public void NoInventoryRead_OneIsAskedFor_ThenTheHoldIsGivenUp_AndALateReadIsStillCompared()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["torch"]));
+        HeldAtDisconnect stored = h.Profile.HeldAtDisconnect!;
+        h.ConnectAndEnter("torch");
+
+        h.Heartbeats(3);
+        Assert.Empty(h.Sent);
+        h.Heartbeats(1);
+        Assert.Equal(["i\r"], h.Sent);
+        Assert.True(h.Held);
+
+        h.Heartbeats(4);
+
+        Assert.Equal(["i\r"], h.Sent);
+        Assert.False(h.Held);
+        Assert.Same(stored, h.Profile.HeldAtDisconnect);
+        Assert.Contains("without the hold", h.Check.LastOutcome);
+
+        // A save in between can't write over the list: no inventory has been read.
+        h.Check.StampForSave(h.Profile);
+        Assert.Same(stored, h.Profile.HeldAtDisconnect);
+
+        // Still standing in the room it came in at: the late read picks up.
+        h.Heartbeats(30);
+        h.ReadInventory(Snap());
+
+        Assert.Equal(["i\r"], h.Sent);
+        Assert.Equal([("torch", 1)], h.Collected);
+        Assert.False(h.Held);
+    }
+
+    // The character walked on before the late read: what is missing is reported,
+    // and the floor here, some other room's, is left alone.
+    [Fact]
+    public void ALateInventoryRead_AfterMovingOn_OnlyReports()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["torch"]));
+        h.ConnectAndEnter("torch");
+        h.Heartbeats(8);
+        Assert.False(h.Held);
+
+        h.Check.OnRoomChanged();
+        h.ShowRoom("torch");
+        h.ReadInventory(Snap());
+
+        Assert.Empty(h.Collected);
+        Assert.Equal([("torch", 1)], h.Check.LastMissing);
+        Assert.Equal("idle", h.Check.Status);
+    }
+
+    // A statline the prompt scanner can't read gives no game prompt. Only the game
+    // draws a room, so a room display is entry enough.
+    [Fact]
+    public void ARoomDisplayWithNoGamePrompt_CountsAsEnteringTheGame()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["torch"]));
+        h.Check.NoteConnected();
+
+        h.ShowRoom("torch");
+        h.ReadInventory(Snap());
+
+        Assert.Equal([("torch", 1)], h.Collected);
+
+        // And leaving is seen at the disconnect, though no prompt ever said "in".
+        h.Check.OnItemTaken("torch", 1);
+        h.Inventory = Snap(carried: ["torch"]);
+        h.Check.NoteDisconnected();
+        Assert.Equal("torch", Assert.Single(h.Profile.HeldAtDisconnect!.Items).Name);
+    }
+
+    // A login that stops at the board's menu can wait as long as the user likes;
+    // the hold can't.
+    [Fact]
+    public void TheGameNotEnteredInThreeMinutes_TheHoldIsGivenUp_AndTheListKept()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["torch"]));
+        HeldAtDisconnect stored = h.Profile.HeldAtDisconnect!;
+        h.Check.NoteConnected();
+
+        h.Heartbeats(179);
+        Assert.True(h.Held);
+        h.Heartbeats(1);
+
+        Assert.False(h.Held);
+        Assert.Same(stored, h.Profile.HeldAtDisconnect);
+
+        // Entered at last: compared all the same, without the hold or an `i` of its own.
+        h.ShowRoom("torch");
+        h.Check.OnInGameChanged(true);
+        h.Heartbeats(10);
+        Assert.Empty(h.Sent);
+        h.ReadInventory(Snap());
+
+        Assert.Equal([("torch", 1)], h.Collected);
+        Assert.False(h.Held);
+    }
+
+    // Reset States frees the hold from wherever the check stands. Before the
+    // comparison the list is kept and still compared; after it the check stops.
+    [Fact]
+    public void ResetStates_FreesTheHold_FromEveryPhase()
+    {
+        // Waiting for the game.
+        Harness entry = new();
+        entry.Stored(Snap(carried: ["torch"]));
+        entry.Check.NoteConnected();
+        entry.Check.Cancel("reset");
+        Assert.False(entry.Held);
+
+        // Waiting for the inventory: the late read is compared.
+        Harness inventory = new();
+        inventory.Stored(Snap(carried: ["torch"]));
+        HeldAtDisconnect stored = inventory.Profile.HeldAtDisconnect!;
+        inventory.ConnectAndEnter("torch");
+        inventory.Check.Cancel("reset");
+        Assert.False(inventory.Held);
+        inventory.Heartbeats(10);
+        Assert.Empty(inventory.Sent);
+        Assert.Same(stored, inventory.Profile.HeldAtDisconnect);
+        inventory.ReadInventory(Snap());
+        Assert.Equal([("torch", 1)], inventory.Collected);
+
+        // Waiting for a room display.
+        Harness room = new();
+        room.Stored(Snap(carried: ["torch"]));
+        room.Check.NoteConnected();
+        room.Check.OnInGameChanged(true);
+        room.ReadInventory(Snap());
+        Assert.True(room.Held);
+        room.Check.Cancel("reset");
+        Assert.False(room.Held);
+        Assert.Equal("idle", room.Check.Status);
+
+        // Waiting out a fight.
+        Harness fight = new() { Fighting = true };
+        fight.Stored(Snap(carried: ["torch"]));
+        fight.ConnectAndEnter("torch");
+        fight.ReadInventory(Snap());
+        fight.Check.Cancel("reset");
+        Assert.False(fight.Held);
+        fight.Fighting = false;
+        fight.Check.OnRoomObserved();
+        Assert.Empty(fight.Collected);
+
+        // Picking up.
+        Harness picking = new();
+        picking.Stored(Snap(carried: ["torch"]));
+        picking.ConnectAndEnter("torch");
+        picking.ReadInventory(Snap());
+        Assert.True(picking.Held);
+        picking.Check.Cancel("reset");
+        Assert.False(picking.Held);
+        Assert.Equal("idle", picking.Check.Status);
+    }
+
+    // Another character loaded: the check was the other one's, and so is what it found.
+    [Fact]
+    public void AnotherProfileLoaded_FreesTheHold_FromEveryPhase_AndForgetsTheLastCheck()
+    {
+        Harness entry = new();
+        entry.Stored(Snap(carried: ["torch"]));
+        entry.Check.NoteConnected();
+        entry.Check.OnProfileLoaded();
+        Assert.False(entry.Held);
+        Assert.Equal("idle", entry.Check.Status);
+
+        Harness inventory = new();
+        inventory.Stored(Snap(carried: ["torch"]));
+        inventory.ConnectAndEnter("torch");
+        inventory.Check.OnProfileLoaded();
+        Assert.False(inventory.Held);
+        inventory.ReadInventory(Snap());
+        Assert.Empty(inventory.Collected);
+
+        Harness fight = new() { Fighting = true };
+        fight.Stored(Snap(carried: ["torch"]));
+        fight.ConnectAndEnter("torch");
+        fight.ReadInventory(Snap());
+        Assert.Single(fight.Check.LastMissing);
+        fight.Check.OnProfileLoaded();
+        Assert.False(fight.Held);
+        Assert.Empty(fight.Check.LastMissing);
+        Assert.Empty(fight.Check.LastStillMissing);
+        Assert.Contains("none", fight.Check.LastOutcome);
+
+        Harness picking = new();
+        picking.Stored(Snap(carried: ["torch"]));
+        picking.ConnectAndEnter("torch");
+        picking.ReadInventory(Snap());
+        picking.Check.OnProfileLoaded();
+        Assert.False(picking.Held);
+        // The new character's profile isn't stamped from the old one's inventory.
+        picking.Profile.HeldAtDisconnect = null;
+        picking.Check.StampForSave(picking.Profile);
+        Assert.Null(picking.Profile.HeldAtDisconnect);
     }
 
     // ----- When the list is written -------------------------------------
@@ -637,9 +910,32 @@ public sealed class HangupItemRecheckTests
         h.Check.StampForSave(h.Profile);
 
         HeldAtDisconnect held = h.Profile.HeldAtDisconnect!;
+        Assert.Equal(Harness.RealmKey, held.Realm);
         Assert.Equal(3, held.Room!.Room);
+        Assert.Equal(1, held.PenaltiesSpanned);
         Assert.Equal(3, held.Items.Count);
         Assert.Equal(2, held.Items.Single(i => i.Name == "torch").Count);
+    }
+
+    // The default profile is the template new characters are made from, and some
+    // other profile being saved isn't the one the inventory belongs to.
+    [Fact]
+    public void TheList_IsWrittenOnlyToTheNamedCharacterThatIsLoaded()
+    {
+        Harness unnamed = new() { Named = false };
+        unnamed.Check.NoteConnected();
+        unnamed.Check.OnInGameChanged(true);
+        unnamed.ReadInventory(Snap(carried: ["torch"]));
+        unnamed.Check.StampForSave(unnamed.Profile);
+        Assert.Null(unnamed.Profile.HeldAtDisconnect);
+
+        Harness h = new();
+        h.Check.NoteConnected();
+        h.Check.OnInGameChanged(true);
+        h.ReadInventory(Snap(carried: ["torch"]));
+        CharacterProfile other = new();
+        h.Check.StampForSave(other);
+        Assert.Null(other.HeldAtDisconnect);
     }
 
     // Leaving the game saves, so the list is as of the moment the link dropped.
@@ -662,6 +958,53 @@ public sealed class HangupItemRecheckTests
         Assert.Equal(2, h.Profile.HeldAtDisconnect!.Items.Count);
     }
 
+    // Nothing clears the inventory record on a death and no `i` follows one. A
+    // list written from it would name the whole deathpile as held, and the next
+    // entry would take it all for a hang-up's drop.
+    [Fact]
+    public void ADeath_StoresNoList_UntilAnInventoryIsReadAgain()
+    {
+        Harness h = new();
+        h.Check.NoteConnected();
+        h.Check.OnInGameChanged(true);
+        h.ReadInventory(Snap(worn: [("chainmail hauberk", "Torso")], carried: ["2 torch"]));
+        h.Check.StampForSave(h.Profile);
+        Assert.NotNull(h.Profile.HeldAtDisconnect);
+
+        h.Check.OnPlayerDied();
+        Assert.Null(h.Profile.HeldAtDisconnect);
+
+        // A save after the death, and the link dropping, still store none.
+        h.Check.StampForSave(h.Profile);
+        h.Check.OnInGameChanged(false);
+        Assert.Null(h.Profile.HeldAtDisconnect);
+
+        // Back in with a fresh read: the list is what is really held.
+        h.Check.NoteConnected();
+        h.Check.OnInGameChanged(true);
+        h.ReadInventory(Snap(carried: ["torch"]));
+        h.Check.StampForSave(h.Profile);
+        Assert.Equal("torch", Assert.Single(h.Profile.HeldAtDisconnect!.Items).Name);
+    }
+
+    [Fact]
+    public void ADeathMidCheck_EndsIt_AndStoresNoList()
+    {
+        Harness h = new() { Fighting = true };
+        h.Stored(Snap(carried: ["2 torch"]));
+        h.ConnectAndEnter("2 torch");
+        h.ReadInventory(Snap());
+        Assert.True(h.Held);
+
+        h.Check.OnPlayerDied();
+
+        Assert.False(h.Held);
+        Assert.Null(h.Profile.HeldAtDisconnect);
+        h.Fighting = false;
+        h.Check.OnRoomObserved();
+        Assert.Empty(h.Collected);
+    }
+
     // The stored list must outlast a second drop that comes before the login's
     // inventory read: the record in memory is no newer than the list.
     [Fact]
@@ -681,27 +1024,29 @@ public sealed class HangupItemRecheckTests
     }
 
     // Hanging up again mid-fight, before the first drop was picked up: the next
-    // entry still knows about it.
+    // entry still knows about it, and two drops may have cost twice the count.
     [Fact]
     public void ADropMidCheck_CarriesTheUnfoundItemsToTheNextEntry()
     {
-        Harness h = new() { Fighting = true };
+        Harness h = new() { Fighting = true, MaxItems = 2 };
         h.Stored(Snap(worn: [("chainmail hauberk", "Torso")], carried: ["2 torch"]));
         h.ConnectAndEnter("chainmail hauberk", "2 torch");
-        h.ReadInventory(Snap());
+        h.ReadInventory(Snap(carried: ["rope"]));
 
         h.Check.OnInGameChanged(false);
         h.Check.NoteDisconnected();
 
         HeldAtDisconnect carriedOver = h.Profile.HeldAtDisconnect!;
+        Assert.Equal(2, carriedOver.PenaltiesSpanned);
         Assert.Equal(2, carriedOver.Items.Single(i => i.Name == "torch").Count);
-        Assert.Equal(["Torso"], carriedOver.Items.Single(i => i.Name == "chainmail hauberk").WornSlots);
+        Assert.Equal(1, carriedOver.Items.Single(i => i.Name == "chainmail hauberk").Count);
 
+        // The second drop took the rope too. Four copies may be the board's now.
         h.Fighting = false;
-        h.ConnectAndEnter("chainmail hauberk", "2 torch");
+        h.ConnectAndEnter("chainmail hauberk", "2 torch", "rope");
         h.ReadInventory(Snap());
 
-        Assert.Equal([("chainmail hauberk", 1), ("torch", 2)], h.Collected);
+        Assert.Equal([("rope", 1), ("chainmail hauberk", 1), ("torch", 2)], h.Collected);
     }
 
     // What a finished check didn't find is not carried: it isn't looked for again.
@@ -714,7 +1059,8 @@ public sealed class HangupItemRecheckTests
 
         h.ReadInventory(Snap(carried: ["rope"]));
 
-        HeldItem only = Assert.Single(h.Profile.HeldAtDisconnect!.Items);
-        Assert.Equal("rope", only.Name);
+        HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
+        Assert.Equal("rope", Assert.Single(list.Items).Name);
+        Assert.Equal(1, list.PenaltiesSpanned);
     }
 }

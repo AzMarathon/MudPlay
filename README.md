@@ -2,9 +2,10 @@
 
 <!-- current-version:start -->
 > **Version 3.160.0**
-> - On a realm set to drop items for a hang-up, entering the game checks what was held before the link dropped against the inventory and picks up what is missing from the room's floor
-> - Worn pieces picked back up go on again by the Auto-Equip After Recovery rule
-> - Loops and walks wait for the check; what was held is kept in the profile, so it survives a restart
+> - Items a hang-up penalty dropped are picked up on re-entering the game
+> - Only on a realm set to drop items, and never more than it drops
+> - The gear set last equipped is applied again for pieces that came back
+> - Loops and walks wait for the check
 > - Never changes when the client hangs up
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

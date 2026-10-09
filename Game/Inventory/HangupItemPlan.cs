@@ -15,12 +15,7 @@ public static class HangupItemPlan
     {
         List<HeldItem> rows = new();
         foreach (EquippedItem worn in snapshot.EquippedItems)
-        {
-            if (string.IsNullOrWhiteSpace(worn.Name)) continue;
-            HeldItem row = RowFor(rows, worn.Name);
-            row.Count++;
-            (row.WornSlots ??= new List<string>()).Add(worn.Slot);
-        }
+            if (!string.IsNullOrWhiteSpace(worn.Name)) RowFor(rows, worn.Name).Count++;
         foreach (string carried in snapshot.CarriedItems)
         {
             (int count, string name) = CountedCommand.SplitLeadingCount(carried);
@@ -36,27 +31,16 @@ public static class HangupItemPlan
         return rows;
     }
 
-    // The rows of `before` the snapshot holds fewer copies of. A worn copy counts
-    // as missing from its slot only as far as the item is short at all.
-    public static List<HangupMissingItem> Missing(IReadOnlyList<HeldItem> before, InventorySnapshot now)
+    // The rows of `before` the snapshot holds fewer copies of, each with how many
+    // it is short.
+    public static List<(string Name, int Count)> Missing(IReadOnlyList<HeldItem> before, InventorySnapshot now)
     {
         List<HeldItem> held = Held(now);
-        List<HangupMissingItem> missing = new();
+        List<(string Name, int Count)> missing = new();
         foreach (HeldItem was in before)
         {
-            HeldItem? still = Find(held, was.Name);
-            int shortBy = was.Count - (still?.Count ?? 0);
-            if (shortBy <= 0) continue;
-
-            List<string> slots = new(was.WornSlots ?? new List<string>());
-            foreach (string slot in still?.WornSlots ?? new List<string>())
-            {
-                if (slots.Count == 0) break;
-                int at = slots.IndexOf(slot);
-                slots.RemoveAt(at >= 0 ? at : 0);
-            }
-            if (slots.Count > shortBy) slots.RemoveRange(shortBy, slots.Count - shortBy);
-            missing.Add(new HangupMissingItem(was.Name, shortBy, slots));
+            int shortBy = was.Count - (Find(held, was.Name)?.Count ?? 0);
+            if (shortBy > 0) missing.Add((was.Name, shortBy));
         }
         return missing;
     }
@@ -68,7 +52,8 @@ public static class HangupItemPlan
     //           the item table's where there is one, else the name without its
     //           article and count.
     public static List<(string Name, int Count)> Pickup(
-        IReadOnlyList<HangupMissingItem> missing, IReadOnlyList<string> floor, Func<string, string>? key = null)
+        IReadOnlyList<(string Name, int Count)> missing, IReadOnlyList<string> floor,
+        Func<string, string>? key = null)
     {
         key ??= ItemNameStore.Normalize;
         Dictionary<string, int> lying = new(StringComparer.OrdinalIgnoreCase);
@@ -79,27 +64,44 @@ public static class HangupItemPlan
         }
 
         List<(string Name, int Count)> plan = new();
-        foreach (HangupMissingItem item in missing)
+        foreach ((string name, int count) in missing)
         {
-            string k = key(item.Name);
-            int take = Math.Min(item.Count, lying.GetValueOrDefault(k));
+            string k = key(name);
+            int take = Math.Min(count, lying.GetValueOrDefault(k));
             if (take <= 0) continue;
             lying[k] -= take;
-            plan.Add((item.Name, take));
+            plan.Add((name, take));
         }
         return plan;
     }
 
-    // `missing` less the copies picked up so far, the worn ones counted back first.
-    public static List<HangupMissingItem> Outstanding(
-        IReadOnlyList<HangupMissingItem> missing, IReadOnlyDictionary<string, int> taken)
+    // The plan cut to `most` copies in all, in its own order. The list a check
+    // compares can be older than it looks (torches burnt since the last `i`, a
+    // save from before a death), and what makes a like-named item on the floor
+    // the character's own is only that the board can have dropped it: so never
+    // more than the board drops.
+    public static List<(string Name, int Count)> Capped(IReadOnlyList<(string Name, int Count)> plan, int most)
     {
-        List<HangupMissingItem> left = new();
-        foreach (HangupMissingItem item in missing)
+        List<(string Name, int Count)> capped = new();
+        foreach ((string name, int count) in plan)
         {
-            int got = Math.Min(item.Count, taken.GetValueOrDefault(item.Name));
-            if (got >= item.Count) continue;
-            left.Add(new HangupMissingItem(item.Name, item.Count - got, item.WornSlots.Skip(got).ToList()));
+            int take = Math.Min(count, most);
+            if (take <= 0) break;
+            most -= take;
+            capped.Add((name, take));
+        }
+        return capped;
+    }
+
+    // `missing` less the copies picked up so far.
+    public static List<(string Name, int Count)> Outstanding(
+        IReadOnlyList<(string Name, int Count)> missing, IReadOnlyDictionary<string, int> taken)
+    {
+        List<(string Name, int Count)> left = new();
+        foreach ((string name, int count) in missing)
+        {
+            int still = count - taken.GetValueOrDefault(name);
+            if (still > 0) left.Add((name, still));
         }
         return left;
     }
@@ -107,14 +109,10 @@ public static class HangupItemPlan
     // The held list with items still missing put back on it. A list saved while a
     // check is under way would otherwise forget them, and a second hang-up before
     // they are picked up would leave them on the floor for good.
-    public static List<HeldItem> WithOutstanding(List<HeldItem> held, IReadOnlyList<HangupMissingItem> outstanding)
+    public static List<HeldItem> WithOutstanding(
+        List<HeldItem> held, IReadOnlyList<(string Name, int Count)> outstanding)
     {
-        foreach (HangupMissingItem item in outstanding)
-        {
-            HeldItem row = RowFor(held, item.Name);
-            row.Count += item.Count;
-            if (item.WornSlots.Count > 0) (row.WornSlots ??= new List<string>()).AddRange(item.WornSlots);
-        }
+        foreach ((string name, int count) in outstanding) RowFor(held, name).Count += count;
         return held;
     }
 

@@ -1581,4 +1581,121 @@ public sealed class AutoEquipCoordinatorTests
         player.InCombat = false;
         Assert.Equal(new[] { "default-set", "rest-set" }, applied);
     }
+
+    // ===== gear that came back to the pack =====
+    // A hang-up penalty dropped pieces and they were picked up again. No recovery
+    // rule of its own: the set that was on is applied again (user, 2026-10-09).
+
+    private static EquipmentSet Wearing(EquipTriggerType trigger, bool enabled, string id, params string[] items)
+    {
+        EquipmentSet set = SetFor(trigger, enabled, id);
+        set.Name = id;
+        EquipmentSlot slot = EquipmentSlot.Head;
+        foreach (string item in items) set.Slots.Add(new EquipmentSlotEntry(slot++, item));
+        return set;
+    }
+
+    private static AutoEquipCoordinator ReturnHarness(
+        EquipmentSettings cfg, List<string> applied, PlayerState? player = null,
+        Func<bool>? autoEnabled = null, Func<bool>? hpGate = null, Func<bool>? wornKnown = null,
+        EquipResult result = EquipResult.Applied) =>
+        new(player ?? new PlayerState(), () => cfg, hpGate ?? (() => false), () => false,
+            id => { applied.Add(id); return result; }, wornKnown ?? (() => true), autoEnabled ?? (() => true));
+
+    [Fact]
+    public void ItemsReturned_TheSetLastApplied_IsAppliedAgain()
+    {
+        EquipmentSettings cfg = Config(
+            Wearing(EquipTriggerType.Default, enabled: true, "default-set", "plate mail"),
+            Wearing(EquipTriggerType.WhileMoving, enabled: true, "moving-set", "astral slippers", "plate mail"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = ReturnHarness(cfg, applied);
+
+        string? set = coord.ReapplySetAfterItemsReturned("moving-set", new[] { "torch", "Astral Slippers" });
+
+        Assert.Equal("moving-set", set);
+        Assert.Equal(new[] { "moving-set" }, applied);
+    }
+
+    // A set put on by hand is on whatever its automation switch says.
+    [Fact]
+    public void ItemsReturned_TheSetLastApplied_IsAppliedAgain_EvenWhenAutomationMayNotEquipIt()
+    {
+        EquipmentSettings cfg = Config(
+            Wearing(EquipTriggerType.Default, enabled: true, "default-set", "plate mail"),
+            Wearing(EquipTriggerType.Backstab, enabled: false, "backstab-set", "black hood"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = ReturnHarness(cfg, applied);
+
+        Assert.Equal("backstab-set", coord.ReapplySetAfterItemsReturned("backstab-set", new[] { "black hood" }));
+    }
+
+    // A torch back in the pack is no gear change, and a piece of some other set
+    // goes on when that set next does.
+    [Fact]
+    public void ItemsReturned_NoneOfThemInTheSet_SendsNoEquip()
+    {
+        EquipmentSettings cfg = Config(
+            Wearing(EquipTriggerType.Default, enabled: true, "default-set", "plate mail"),
+            Wearing(EquipTriggerType.PreRestHp, enabled: true, "rest-set", "ring of regeneration"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = ReturnHarness(cfg, applied);
+
+        Assert.Null(coord.ReapplySetAfterItemsReturned("default-set", new[] { "torch", "ring of regeneration" }));
+        Assert.Null(coord.ReapplySetAfterItemsReturned("default-set", Array.Empty<string>()));
+        Assert.Empty(applied);
+    }
+
+    // The set last applied is kept in memory only. After the client restarts it
+    // isn't known, and the set automation would have on right now stands in.
+    [Fact]
+    public void ItemsReturned_LastSetNotKnown_TheSetAutomationWantsNowStandsIn()
+    {
+        EquipmentSettings cfg = Config(
+            Wearing(EquipTriggerType.Default, enabled: true, "default-set", "plate mail"),
+            Wearing(EquipTriggerType.PreRestHp, enabled: true, "rest-set", "ring of regeneration"));
+        var applied = new List<string>();
+        bool hpGate = false;
+        using AutoEquipCoordinator coord = ReturnHarness(cfg, applied, hpGate: () => hpGate);
+
+        Assert.Equal("default-set", coord.ReapplySetAfterItemsReturned(null, new[] { "plate mail" }));
+
+        // Below the rest threshold the rest set is what automation wants: the
+        // Default piece waits for Default to come round again.
+        hpGate = true;
+        Assert.Null(coord.ReapplySetAfterItemsReturned("a set this profile no longer has", new[] { "plate mail" }));
+        Assert.Equal("rest-set", coord.ReapplySetAfterItemsReturned(null, new[] { "ring of regeneration" }));
+        Assert.Equal(new[] { "default-set", "rest-set" }, applied);
+    }
+
+    // A stand-in is automation's own pick, so only a set automation may equip.
+    [Fact]
+    public void ItemsReturned_LastSetNotKnown_ADisabledSetIsNotAStandIn()
+    {
+        EquipmentSettings cfg = Config(Wearing(EquipTriggerType.Default, enabled: false, "default-set", "plate mail"));
+        var applied = new List<string>();
+        using AutoEquipCoordinator coord = ReturnHarness(cfg, applied);
+
+        Assert.Null(coord.ReapplySetAfterItemsReturned(null, new[] { "plate mail" }));
+        Assert.Empty(applied);
+    }
+
+    [Fact]
+    public void ItemsReturned_FollowsAutoAll_AndTheKnownLoadout_AndTheEquipmentManagersAnswer()
+    {
+        EquipmentSettings cfg = Config(Wearing(EquipTriggerType.Default, enabled: true, "default-set", "plate mail"));
+        string[] back = { "plate mail" };
+
+        var applied = new List<string>();
+        using (AutoEquipCoordinator off = ReturnHarness(cfg, applied, autoEnabled: () => false))
+            Assert.Null(off.ReapplySetAfterItemsReturned("default-set", back));
+        using (AutoEquipCoordinator unknown = ReturnHarness(cfg, applied, wornKnown: () => false))
+            Assert.Null(unknown.ReapplySetAfterItemsReturned("default-set", back));
+        Assert.Empty(applied);
+
+        // Asked, and the equipment manager held it (a swap already streaming).
+        using AutoEquipCoordinator busy = ReturnHarness(cfg, applied, result: EquipResult.Busy);
+        Assert.Null(busy.ReapplySetAfterItemsReturned("default-set", back));
+        Assert.Equal(new[] { "default-set" }, applied);
+    }
 }

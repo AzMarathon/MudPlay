@@ -9076,14 +9076,28 @@ public sealed class AppServices
 
         // What a penalised hang-up dropped, looked for on the way back in. Gated on
         // the realm's own settings, and on Auto-All for anything it sends. Its gets
-        // go out through the auto-get engine and its re-wear through death
-        // recovery, so each keeps one sender. Built last among the engines: every
-        // one it reads or is driven by is above this line.
+        // go out through the auto-get engine, and gear that comes back is the
+        // equipment manager's to put on (the set last applied is applied again),
+        // so each keeps one sender. Built last among the engines: every one it
+        // reads or is driven by is above this line.
         HangupItems = new Game.Inventory.HangupItemRecheck(
             MovementCoordinator,
-            profile: () => Profile.Current,
-            saveProfile: () => Profile.Save(),
-            realmDropsItems: () => Game.Health.HangupPenaltyNotice.DropsItems(ResolveActiveRealm()?.Realm),
+            // A named character only: the default profile is the template new
+            // characters are made from, and a list there would be handed to each.
+            profile: () => Profile.CurrentProfileName is null ? null : Profile.Current,
+            // One of these runs inside the Disconnected handler. A save that threw
+            // there would skip everything after it, the reconnect scheduling included.
+            saveProfile: () =>
+            {
+                try { Profile.Save(); }
+                catch (Exception ex)
+                {
+                    Log.Warn(Game.Inventory.HangupItemRecheck.LogCategory,
+                        $"Couldn't save the list of what is held ({ex.GetType().Name}: {ex.Message}).");
+                }
+            },
+            realmKey: () => ResolveActiveRealm() is { } played ? $"{played.Bbs.Name}/{played.Realm.Name}" : null,
+            maxItemsDropped: () => Game.Health.HangupPenaltyNotice.MaxItemsDropped(ResolveActiveRealm()?.Realm),
             inventory: () => Inventory.Snapshot,
             confirmedRoom: () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed
                 ? RoomTracker.State.CurrentRoom?.Key
@@ -9094,7 +9108,10 @@ public sealed class AppServices
             isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             roomRedisplayFree: RoomRedisplay.ShouldSend,
             collect: (name, count) => AutoGetItems.CollectNamed(name, count, "dropped by a hang-up penalty"),
-            rewear: worn => DeathRecovery.ReequipWorn(worn, RoomTracker.State.CurrentRoom?.Key),
+            reapplyGearSet: pickedUp => AutoEquip.ReapplySetAfterItemsReturned(Equipment.CurrentSetId, pickedUp),
+            // Posted: these are raised while a line is being handled, and a terminal
+            // write from inside that feeds the emulator back into itself.
+            notice: msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)),
             // The item table's number where it knows the item, so a floor entry and
             // a held name of one item meet however the floor words it.
             itemKey: name => ItemNames.FindByName(name) is int number ? $"#{number}" : ItemNameStore.Normalize(name),
@@ -9102,6 +9119,8 @@ public sealed class AppServices
             log: Log);
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
+        // The event the other engines take a death of our own from (both wordings).
+        RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
         Inventory.FullInventoryParsed += HangupItems.OnInventoryRead;
         Inventory.ItemTaken += HangupItems.OnItemTaken;

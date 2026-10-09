@@ -217,7 +217,8 @@ public sealed class CharacterProfile
     // The items held the last time the character was known to be in the game.
     // Written by Game.Inventory.HangupItemRecheck on ProfileSaving and read by it
     // on the next connect, on a realm that drops items for a hang-up. null until
-    // an inventory has been read in the game.
+    // an inventory has been read in the game, and again from a death to the next
+    // inventory read.
     public HeldAtDisconnect? HeldAtDisconnect { get; set; }
 
     // Full names of the spells this character has learned — the persisted Spell

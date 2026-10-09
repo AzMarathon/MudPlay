@@ -919,6 +919,40 @@ public sealed class AutoGetItemsManagerTests
         Assert.Equal(new[] { "get torch" }, h.SentText);
     }
 
+    // The engine's own get for a flagged item can already be out when the named
+    // one is asked for: a room redisplay the caller sent lists the item first.
+    // That get counts towards the copies wanted.
+    [Fact]
+    public void CollectNamed_CountsAGetAlreadyOutForTheItem()
+    {
+        using Harness h = new();
+        h.Flags["torch"] = true;
+        h.Feed("You notice torch here.");
+
+        h.Items.CollectNamed("torch", 1, "test");
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+
+        h.Items.CollectNamed("torch", 3, "test");
+        Assert.Equal(new[] { "get torch", "get torch", "get torch" }, h.SentText);
+    }
+
+    // Collect-after-combat flushes on the observation that ends the fight, just
+    // ahead of a caller that waited for the same one.
+    [Fact]
+    public void CollectNamed_AfterTheCombatFlush_SendsNoSecondGet()
+    {
+        using Harness h = new() { CollectAfterCombat = true, HasHostiles = true };
+        h.Flags["torch"] = true;
+        h.Feed("You notice torch here.");
+        Assert.Empty(h.Sent);
+
+        h.HasHostiles = false;
+        h.Items.OnRoomObserved();
+        h.Items.CollectNamed("torch", 1, "test");
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
     [Fact]
     public void Disposed_StopsSending()
     {
