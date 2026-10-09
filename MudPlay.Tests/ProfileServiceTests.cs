@@ -89,4 +89,31 @@ public sealed class ProfileServiceTests
         CharacterProfile back = JsonSerializer.Deserialize<CharacterProfile>(json, JsonStore.Options)!;
         Assert.Equal(LoopLinesMode.NoSteps, back.NavLoopLinesMode);
     }
+
+    // The listing reads a BBS's profiles folder without checking for it first, because a BBS
+    // another client renames or removes mid-listing looks exactly like this one: a folder
+    // under BBS/ whose profiles folder isn't there. It used to throw out of the listing.
+    [Fact]
+    public void ListAll_ABbsWithNoProfilesFolder_IsSkipped_AndTheRestAreListed()
+    {
+        string id = Path.GetRandomFileName();
+        string empty = "listall-test-empty-" + id;
+        string full = "listall-test-full-" + id;
+        try
+        {
+            Directory.CreateDirectory(AppPaths.BbsFolder(empty));
+            Directory.CreateDirectory(AppPaths.ProfileFolder(full, "Tester"));
+            File.WriteAllText(AppPaths.CharacterProfileFile(full, "Tester"), "{}");
+
+            List<ProfileRef> listed = new ProfileService().ListAll().ToList();
+
+            Assert.Contains(new ProfileRef(full, "Tester"), listed);
+            Assert.DoesNotContain(listed, r => r.Bbs == empty);
+        }
+        finally
+        {
+            foreach (string bbs in new[] { empty, full })
+                if (Directory.Exists(AppPaths.BbsFolder(bbs))) Directory.Delete(AppPaths.BbsFolder(bbs), recursive: true);
+        }
+    }
 }

@@ -12,6 +12,8 @@ namespace MudPlay.Tests;
 // The settings files several clients share (global.json, a BBS's bbs.json) and the
 // realm's room blacklist. A client holds a copy and used to save the whole of it,
 // undoing whatever another client had saved since.
+// In the EmoteRuntime collection for the per-BBS emote library test, which commits to an EmoteStore.
+[Collection(EmoteRuntimeCollection.Name)]
 public sealed class SharedSettingsFilesTests : IDisposable
 {
     private readonly string _bbs = "test-sharedbbs-" + Guid.NewGuid().ToString("N").Substring(0, 12);
