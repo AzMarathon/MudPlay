@@ -1477,6 +1477,10 @@ public static class BugReportBuilder
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
+        // Whether the map is in a build mode, and what its loop builder holds: a
+        // running loop drawn as the builder's line was reported with nothing in the
+        // capture to say how the window got there (report paradigm-20261008-225930).
+        Kv(sb, "Navigation window mode", svc.NavigationModeProvider?.Invoke() ?? "(window closed)");
         // Last loop / auto-lair run this session, retained past a stop/death —
         // what @path reports when idle so a party member can help the player
         // resume the circuit they were on.
