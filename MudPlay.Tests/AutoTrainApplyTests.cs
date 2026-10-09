@@ -443,7 +443,9 @@ public sealed class AutoTrainApplyTests : IDisposable
         _screen = FormText(136, 1);
 
         UserTypesTrainStats();
-        await WaitUntil(() => !manager.IsBusy);
+        // This ending goes idle just before it reports the row, and here that happens on
+        // another thread, so idle alone can be seen a moment too early.
+        await WaitUntil(() => !manager.IsBusy && _committed > 0);
 
         Assert.Equal(new[] { "train stats" }, Sent());
         Assert.Equal(1, _committed);

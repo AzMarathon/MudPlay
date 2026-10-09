@@ -3,7 +3,7 @@
 <!-- current-version:start -->
 > **Version 3.155.1**
 > - Profile lists no longer fail when another client renames or removes a BBS at that moment
-> - Test suite: the Conversation window tests and the profile-listing tests no longer fail at random in a full run
+> - Test suite: the Conversation window, profile-listing and auto-train tests no longer fail at random in a full run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
