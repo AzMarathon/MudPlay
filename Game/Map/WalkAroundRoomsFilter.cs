@@ -29,6 +29,8 @@ public sealed class WalkAroundRoomsFilter : IRoomFilter
     public IDisposable SuspendAcquirableGates() => _inner?.SuspendAcquirableGates() ?? NoSuspension.Instance;
     public IDisposable SuspendAcquirableGatesButUncounteredHazards() =>
         _inner?.SuspendAcquirableGatesButUncounteredHazards() ?? NoSuspension.Instance;
+    public IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false) =>
+        _inner?.SuspendAcquirableGatesExcept(keepClosed, keepUncounteredHazards) ?? NoSuspension.Instance;
 
     private sealed class NoSuspension : IDisposable
     {

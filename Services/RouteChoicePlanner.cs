@@ -119,6 +119,14 @@ public sealed record RouteChoice(
     IReadOnlyList<RoomKey>? ShortcutPath = null,
     int ShortcutStepCount = 0,
     IReadOnlyList<int>? ShortcutItems = null,
+    // Everything the shortcut route needs, not only the item that makes it a
+    // shortcut: it usually shares the committed route's required gates (the way
+    // through the talisman exit still crosses the orb gate), and its card lists them.
+    IReadOnlyList<RouteRequirement>? ShortcutRequirements = null,
+    // The gate items the committed (GatedPath) route was planned round. The walk has
+    // to plan the same way, or its own search (every gate assumed open) takes the
+    // shortcut the card set aside. Set whenever such gates exist, shortcut saving or not.
+    IReadOnlyList<int>? ClosedGateItems = null,
     // For a Token choice (Paradigm transport token): the token's place ("Silvermere"),
     // the room it lands in, the gold cost in copper, the level needed to use it, and
     // the daily charges left (null = not yet looked). FreeStepCount/FreePath are the
@@ -261,13 +269,17 @@ public static class RouteChoicePlanner
             RouteChoice sole = new(
                 0, gc.CommittedPath.Count, gc.Requirements,
                 Array.Empty<RoomKey>(),
-                BuildKeyPath(graph, source, gc.CommittedPath));
+                BuildKeyPath(graph, source, gc.CommittedPath))
+            {
+                ClosedGateItems = gc.ClosedGateItems.Count > 0 ? gc.ClosedGateItems : null,
+            };
             if (gc.ShortcutPath is { } scp)
                 sole = sole with
                 {
                     ShortcutPath = BuildKeyPath(graph, source, scp),
                     ShortcutStepCount = scp.Count,
-                    ShortcutItems = gc.ShortcutItems,
+                    ShortcutItems = gc.ClosedGateItems,
+                    ShortcutRequirements = TaggedRequirements(graph, filter, source, scp),
                 };
             return sole;
         }
@@ -831,6 +843,42 @@ public static class RouteChoicePlanner
         return null;
     }
 
+    // Where a route held as the rooms it passes (a card's path) teleports: the landing
+    // of each hop that only a teleport makes, in order; empty when it walks all the
+    // way. Decides how a picked card's walk is planned (a walk that prefers going on
+    // foot would leave a route that teleports for a far longer one) and what the card
+    // says.
+    public static IReadOnlyList<string> TeleportLandings(RoomGraphManager graph, IReadOnlyList<RoomKey>? keys)
+    {
+        ArgumentNullException.ThrowIfNull(graph);
+        var landings = new List<string>();
+        if (keys is null) return landings;
+        for (int i = 0; i + 1 < keys.Count; i++)
+        {
+            if (graph.GetRoom(keys[i]) is not { } room) break;
+            RoomKey next = keys[i + 1];
+            bool walks = false, teleports = false;
+            foreach (RoomExit exit in room.Exits.Values)
+            {
+                if (!exit.Target.Equals(next)) continue;
+                if (exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport) teleports = true;
+                else walks = true;
+            }
+            if (teleports && !walks)
+                landings.Add(graph.GetRoom(next)?.Name is { Length: > 0 } name ? $"{name} ({next})" : next.ToString());
+        }
+        return landings;
+    }
+
+    // "the teleport to Stone Tunnel (2/1306)" / "teleports to A, B and C", for a card
+    // or a log line; null when there are none.
+    public static string? DescribeTeleports(IReadOnlyList<string> landings) => landings.Count switch
+    {
+        0 => null,
+        1 => $"the teleport to {landings[0]}",
+        _ => $"teleports to {string.Join(", ", landings.Take(landings.Count - 1))} and {landings[^1]}",
+    };
+
     // Total per-person fare of the paid transports a planned route crosses (0 when
     // none). The filter already refused any fare the party can't cover, so this is
     // what the route will cost each member, stated on the card.
@@ -867,11 +915,13 @@ public static class RouteChoicePlanner
         return keys;
     }
 
+    // ClosedGateItems: the optional gates CommittedPath was planned round (empty when
+    // the shortest route has none, or they turned out to be needed after all).
     private readonly record struct GateClassification(
         IReadOnlyList<Direction> CommittedPath,
         List<RouteRequirement> Requirements,
         IReadOnlyList<Direction>? ShortcutPath,
-        IReadOnlyList<int> ShortcutItems);
+        IReadOnlyList<int> ClosedGateItems);
 
     // Separates a sole route's item gates into genuinely-required (the destination is
     // unreachable without them), optional shortcuts (a longer route avoids them), and
@@ -884,10 +934,13 @@ public static class RouteChoicePlanner
         BfsMapper bfs, MovementFilter filter, RoomGraphManager graph,
         RoomKey source, RoomKey destination, IReadOnlyList<Direction> gated)
     {
-        // Distinct unheld item-gate ids on the shortest all-suspended route.
+        // Distinct item-gate ids on the shortest all-suspended route that actually
+        // stop the crosser. A locked door they can pick or bash is no gate: its key
+        // isn't held, but the shortcut card then named a gate key for a door a thief
+        // opens by hand (report paradigm-20261008-174023).
         var unheld = new List<int>();
-        foreach ((RouteRequirement req, bool held) in ItemGatesOnPath(graph, filter, source, gated))
-            if (!held)
+        foreach ((RouteRequirement req, bool held, bool blocked) in ItemGatesOnPath(graph, filter, source, gated))
+            if (!held && blocked)
                 foreach (int id in req.ItemIds)
                     if (id > 0 && !unheld.Contains(id)) unheld.Add(id);
 
@@ -915,8 +968,7 @@ public static class RouteChoicePlanner
             return new(gated, TaggedRequirements(graph, filter, source, gated), null, Array.Empty<int>());
 
         IReadOnlyList<Direction>? shortcut = committed.Count > gated.Count ? gated : null;
-        return new(committed, TaggedRequirements(graph, filter, source, committed),
-                   shortcut, shortcut is null ? Array.Empty<int>() : optional);
+        return new(committed, TaggedRequirements(graph, filter, source, committed), shortcut, optional);
     }
 
     // The committed route's requirements: the still-blocked gates + hazards (required,
@@ -927,16 +979,18 @@ public static class RouteChoicePlanner
         RoomGraphManager graph, MovementFilter filter, RoomKey source, IReadOnlyList<Direction> path)
     {
         List<RouteRequirement> reqs = CollectRequirements(graph, filter, source, path);
-        foreach ((RouteRequirement req, bool held) in ItemGatesOnPath(graph, filter, source, path))
+        foreach ((RouteRequirement req, bool held, _) in ItemGatesOnPath(graph, filter, source, path))
             if (held && !AlreadyHave(reqs, req))
                 reqs.Add(req with { Carried = true });
         return reqs;
     }
 
-    // Every item-gate exit on a path, with whether the crosser carries all its item(s).
-    // Item gates only (Item/Ticket/KeyLocked/MultiActionHidden/Teleport) — hazards and
-    // plain doors are not carryable possession gates.
-    private static IEnumerable<(RouteRequirement Req, bool Held)> ItemGatesOnPath(
+    // Every item-gate exit on a path, with whether the crosser carries all its item(s)
+    // and whether the exit stops them as things stand (a keyed door they can pick is
+    // unheld and not blocked). Item gates only
+    // (Item/Ticket/KeyLocked/MultiActionHidden/Teleport) — hazards and plain doors
+    // are not carryable possession gates.
+    private static IEnumerable<(RouteRequirement Req, bool Held, bool Blocked)> ItemGatesOnPath(
         RoomGraphManager graph, MovementFilter filter, RoomKey source, IReadOnlyList<Direction> path)
     {
         RoomKey cur = source;
@@ -950,7 +1004,7 @@ public static class RouteChoicePlanner
                 // is short for lists as needed and not as "you have it".
                 bool perMember = exit.Hint is RoomExitHint.Item or RoomExitHint.Ticket;
                 bool held = req.ItemIds.Count > 0 && req.ItemIds.All(id => filter.HoldsGateItem(id, perMember));
-                yield return (req, held);
+                yield return (req, held, filter.IsExitBlocked(in exit));
             }
             cur = exit.Target;
         }

@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.0**
-> - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder
-> - Written every N minutes (1 to 120, 5 by default) while the character is in the game, and once more on leaving it; the Session Stats window doesn't need to be open
-> - Off by default; saved for all characters
+> **Version 3.153.3**
+> - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
+> - A card whose route uses a teleport (a hole, a hatch, a vortex) takes it and says so on the card; picking it no longer walked a far longer way on foot
+> - The Shortcut card lists everything its route needs, and no longer names the key of a door you can pick or bash
+> - A walk you start keeps its route through a detour to fetch an item: those legs go round the same gates, and aren't held to the automatic-walk teleport list
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

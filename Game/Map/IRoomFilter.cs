@@ -107,6 +107,14 @@ public interface IRoomFilter
     // by nothing, and the walk would simply go in (report paradigm-20261004-204354).
     IDisposable SuspendAcquirableGatesButUncounteredHazards() => SuspendAcquirableGates();
 
+    // The same suspension with some item gates left standing: an exit that needs an
+    // item in keepClosed stays shut unless that item is carried. For a walk whose
+    // route was chosen as the way round those gates, so its plan can't quietly go
+    // through one. keepUncounteredHazards adds the rule of
+    // SuspendAcquirableGatesButUncounteredHazards.
+    IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false)
+        => keepUncounteredHazards ? SuspendAcquirableGatesButUncounteredHazards() : SuspendAcquirableGates();
+
     // The default-implementation's inert scope — disposing it does nothing.
     private sealed class NoGateSuspension : IDisposable
     {

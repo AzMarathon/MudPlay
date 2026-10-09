@@ -593,6 +593,123 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // The shape of reports paradigm-20261008-173911 / -174023: both ways to 1/9 cross
+    // the orb gate (807) and a keyed door the crosser can pick (806, 101 picklocks).
+    // They differ only at the start: one hop through the talisman exit (815), or three
+    // hops round it.
+    // Shortcut:  1/1 ─E(talisman)─ 1/4 ─E(orb)─ 1/5 ─E(door)─ 1/9          (3 hops).
+    // Committed: 1/1 ─N─ 1/2 ─N─ 1/3 ─E─ 1/4 ─E(orb)─ 1/5 ─E(door)─ 1/9    (5 hops).
+    private const string ShortcutSharesGatesJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Hills",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "1/4 (Item: 815)", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Tunnel",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Tunnel End",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "1/4", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "Lake",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/5 (Item: 807)", "W": "1/3",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Gate",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9 (Key: 806 [or 101 picklocks])", "W": "1/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "1/5",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A thief who picks the gate and carries neither orb nor talisman.
+    private static void AsLockpickerCarryingNothing(MovementFilter filter)
+    {
+        filter.InventoryReadyProbe = () => true;
+        filter.ItemCarriedProbe = _ => false;
+        filter.StrengthProvider = () => 90;
+        filter.PicklocksProvider = () => 119;
+    }
+
+    [Fact]
+    public void SoleRoute_EachCardListsWhatItsOwnRouteNeeds()
+    {
+        WithGraph(ShortcutSharesGatesJson, (bfs, graph, filter) =>
+        {
+            AsLockpickerCarryingNothing(filter);
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(
+                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+
+            Assert.NotNull(choice);
+            Assert.False(choice!.HasFreeRoute);
+
+            // The committed route goes round the talisman exit and needs the orb alone:
+            // the door is picked, so its key is nothing to bring.
+            Assert.Equal(5, choice.GatedStepCount);
+            RouteRequirement orb = Assert.Single(choice.Requirements);
+            Assert.Equal(new[] { 807 }, orb.ItemIds);
+            Assert.Equal(new[] { 815 }, choice.ClosedGateItems);
+
+            // The shortcut is named for the talisman only (the gate key was listed
+            // beside it, for a door this crosser opens by hand)...
+            Assert.Equal(new[] { 815 }, choice.ShortcutItems);
+            Assert.Equal(3, choice.ShortcutStepCount);
+
+            // ...and its own list has everything its route needs: it still crosses
+            // the orb gate, which the card left out.
+            Assert.NotNull(choice.ShortcutRequirements);
+            Assert.Equal(2, choice.ShortcutRequirements!.Count);
+            Assert.Contains(choice.ShortcutRequirements, r => r.ItemIds.SequenceEqual(new[] { 815 }) && !r.Carried);
+            Assert.Contains(choice.ShortcutRequirements, r => r.ItemIds.SequenceEqual(new[] { 807 }) && !r.Carried);
+        });
+    }
+
+    // A walk plans for itself, through every gate, so it has to be told which gates
+    // the card's route went round. With them kept closed its search is the card's.
+    [Fact]
+    public void SoleRoute_ClosedGateItems_ReproduceTheCommittedRoute()
+    {
+        WithGraph(ShortcutSharesGatesJson, (bfs, graph, filter) =>
+        {
+            AsLockpickerCarryingNothing(filter);
+            RoomKey src = new(1, 1), dst = new(1, 9);
+            RouteChoice choice = RouteChoicePlanner.Evaluate(bfs, filter, graph, src, dst)!;
+
+            IReadOnlyList<Direction>? everyGateOpen, asCommitted;
+            using (filter.SuspendAcquirableGates())
+                everyGateOpen = bfs.FindPath(src, dst, filter);
+            using (filter.SuspendAcquirableGatesExcept(choice.ClosedGateItems!))
+                asCommitted = bfs.FindPath(src, dst, filter);
+
+            Assert.Equal(choice.ShortcutPath, RouteChoicePlanner.BuildKeyPath(graph, src, everyGateOpen!));
+            Assert.Equal(choice.GatedPath, RouteChoicePlanner.BuildKeyPath(graph, src, asCommitted!));
+        });
+    }
+
+    [Fact]
+    public void TeleportLandings_OnACardsRoute_NameEachLanding_OrNothingWhenItWalks()
+    {
+        WithTeleportGraph(TeleportShortcutJson, (_, graph, _) =>
+        {
+            Assert.Equal(new[] { "Vault (1/9)" }, RouteChoicePlanner.TeleportLandings(
+                graph, new[] { new RoomKey(1, 1), new RoomKey(1, 9) }));
+            Assert.Empty(RouteChoicePlanner.TeleportLandings(
+                graph, new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3), new RoomKey(1, 9) }));
+            Assert.Empty(RouteChoicePlanner.TeleportLandings(graph, null));
+        });
+
+        Assert.Null(RouteChoicePlanner.DescribeTeleports(Array.Empty<string>()));
+        Assert.Equal("the teleport to Vault (1/9)", RouteChoicePlanner.DescribeTeleports(new[] { "Vault (1/9)" }));
+        Assert.Equal("teleports to A, B and C", RouteChoicePlanner.DescribeTeleports(new[] { "A", "B", "C" }));
+    }
+
     [Fact]
     public void NoChoice_WhenShortcutSavesNoSteps()
     {

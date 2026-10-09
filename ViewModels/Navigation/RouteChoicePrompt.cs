@@ -214,7 +214,8 @@ public static class RouteChoicePrompt
                 if (plan.Choice is { } sole
                     && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
                     services.ForcePathObtain(soleItems);
-                CommitWalk(services, destination, gated: true, stopForBossRooms: stopsForBossRooms);
+                CommitWalk(services, destination, gated: true, stopForBossRooms: stopsForBossRooms,
+                    pickedRoute: plan.Choice?.GatedPath, closedGates: plan.Choice?.ClosedGateItems);
                 return true;
             default:
                 return await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
@@ -380,13 +381,21 @@ public static class RouteChoicePrompt
                 + $"{RouteChoicePlanner.ListAvoided(alt.AvoidedNames)}, no counter)";
         }
 
-        string reqSummary = string.Join(", ", choice.Requirements.Select(r =>
+        static string Summarize(IReadOnlyList<RouteRequirement> reqs) => string.Join(", ", reqs.Select(r =>
             $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"));
+        string reqSummary = Summarize(choice.Requirements);
         if (choice.GatedWalk is not null)
             avoidAltNote += " (the gates are on a lever detour, not the route itself)";
+        // Each route with its own length and needs, so the log shows the two the
+        // cards offered rather than one route and a saving.
+        if (!choice.HasFreeRoute)
+            reqSummary += $" over {choice.GatedStepCount} step(s)";
+        if (choice.ClosedGateItems is { Count: > 0 } closed)
+            reqSummary += $", going round the gates that need item(s) {string.Join("/", closed)}";
         string shortcutNote = choice.ShortcutItems is { Count: > 0 } sc
-            ? $" (+optional shortcut via CarryItem[{string.Join("/", sc)}] saving "
-              + $"{choice.GatedStepCount - choice.ShortcutStepCount} room(s))"
+            ? $" (+optional shortcut via item(s) {string.Join("/", sc)}: {choice.ShortcutStepCount} step(s), "
+              + $"saving {choice.GatedStepCount - choice.ShortcutStepCount} room(s), needs "
+              + $"{Summarize(choice.ShortcutRequirements ?? Array.Empty<RouteRequirement>())})"
             : "";
 
         // Sole route (no gate-free alternative) whose gates are item/ticket/key, not a
@@ -561,6 +570,16 @@ public static class RouteChoicePrompt
             ? e2.ShopRoom
             : null;
 
+        // The teleports each card's route takes, if any, for the card to say so.
+        Func<RouteChoiceResult, string?> teleportsOn = r =>
+            RouteChoicePlanner.DescribeTeleports(RouteChoicePlanner.TeleportLandings(services.RoomGraph, r switch
+            {
+                RouteChoiceResult.Free => choice.FreePath,
+                RouteChoiceResult.AvoidOverrideAlt => choice.AvoidAlternativePath,
+                RouteChoiceResult.Shortcut => choice.ShortcutPath,
+                _ => choice.GatedPath,
+            }));
+
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
         if (calcVm is not null && calcDialogTask is not null)
@@ -571,7 +590,8 @@ public static class RouteChoicePrompt
             dialogTask = calcDialogTask;
             vm.Populate(
                 choice, services.RouteItemLabel, giveName, shopName, dropName,
-                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote);
+                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote,
+                teleportsOn);
         }
         else
         {
@@ -580,7 +600,8 @@ public static class RouteChoicePrompt
             vm = new RouteChoiceDialogViewModel(
                 choice, destLabel, services.RouteItemLabel, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
-                economyNote, sourceLabel: DestinationLabel(services, source));
+                economyNote, sourceLabel: DestinationLabel(services, source),
+                teleportsOn: teleportsOn);
             dialogTask = services.Dialogs
                 .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
         }
@@ -656,7 +677,7 @@ public static class RouteChoicePrompt
             {
                 case RouteChoiceResult.Free:
                     // "Walk it" — the plain overland route, no token.
-                    CommitWalk(services, destination, gated: false);
+                    CommitWalk(services, destination, gated: false, pickedRoute: choice.FreePath);
                     break;
                 case RouteChoiceResult.Token when choice.TokenPlace is { } place && choice.TokenLanding is { } landing:
                     // Use the token, then resume from its landing. A walk still in
@@ -699,11 +720,11 @@ public static class RouteChoicePrompt
             {
                 case RouteChoiceResult.Free:
                     // "Avoid traps" — plan the trap-free route (refuse trapped exits).
-                    CommitWalk(services, destination, gated: false, avoidTraps: true);
+                    CommitWalk(services, destination, gated: false, avoidTraps: true, pickedRoute: choice.FreePath);
                     break;
                 case RouteChoiceResult.Gated:
                     // "Cross traps" — the walker's default plan, disarming at step time.
-                    CommitWalk(services, destination, gated: false);
+                    CommitWalk(services, destination, gated: false, pickedRoute: choice.GatedPath);
                     break;
                 // null → cancelled: walk nothing.
             }
@@ -719,15 +740,15 @@ public static class RouteChoicePrompt
                     HashSet<RoomKey> around = new(services.BossStopRooms());
                     around.Remove(destination);
                     around.Remove(source);
-                    CommitWalk(services, destination, gated: false, walkAround: around);
+                    CommitWalk(services, destination, gated: false, walkAround: around, pickedRoute: choice.FreePath);
                     break;
                 case RouteChoiceResult.Gated:
                     // "Walk up to it and wait": the route through, paused one room short.
-                    CommitWalk(services, destination, gated: false);
+                    CommitWalk(services, destination, gated: false, pickedRoute: choice.GatedPath);
                     break;
                 case RouteChoiceResult.GatedNoAcquire:
                     // "Walk through": the same route, with the stop-before mark set aside.
-                    CommitWalk(services, destination, gated: false, stopForBossRooms: false);
+                    CommitWalk(services, destination, gated: false, stopForBossRooms: false, pickedRoute: choice.GatedPath);
                     break;
                 // null → cancelled: walk nothing.
             }
@@ -741,12 +762,12 @@ public static class RouteChoicePrompt
                 case RouteChoiceResult.Free:
                     // "Respect my avoids" (two-route case) — the longer route that
                     // honours the avoid list, planned normally.
-                    CommitWalk(services, destination, gated: false);
+                    CommitWalk(services, destination, gated: false, pickedRoute: choice.FreePath);
                     break;
                 case RouteChoiceResult.Gated:
                     // "Route through avoided rooms" — override the avoid list for this
                     // one walk. Avoids stay set; only this walk crosses them.
-                    CommitWalk(services, destination, gated: false, ignoreAvoids: true);
+                    CommitWalk(services, destination, gated: false, ignoreAvoids: true, pickedRoute: choice.GatedPath);
                     break;
                 // null → cancelled: walk nothing.
             }
@@ -756,7 +777,7 @@ public static class RouteChoicePrompt
         switch (result)
         {
             case RouteChoiceResult.Free:
-                CommitWalk(services, destination, gated: false);
+                CommitWalk(services, destination, gated: false, pickedRoute: choice.FreePath);
                 break;
             case RouteChoiceResult.Gated when hazardEdge is { } edge:
                 // Mixed route, no sourceable counter: the base card walks to the
@@ -793,14 +814,16 @@ public static class RouteChoicePrompt
                 // crossed a gate it had made no arrangements for.
                 if (services.SourceableGateItems(choice.Requirements) is { Count: > 0 } gateItems)
                     services.ForcePathObtain(gateItems);
-                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
+                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute,
+                    pickedRoute: choice.GatedPath, closedGates: choice.ClosedGateItems);
                 break;
             case RouteChoiceResult.GatedNoAcquire:
                 // "Send it": walk the gated route but don't arm acquisition — the
                 // user asserts they'll clear the gates without provisioning. A sole
                 // route still avoids traps, matching the planner's chosen approach.
                 CommitWalk(services, destination, gated: true,
-                    armAcquisition: false, avoidTraps: !choice.HasFreeRoute);
+                    armAcquisition: false, avoidTraps: !choice.HasFreeRoute,
+                    pickedRoute: choice.GatedPath, closedGates: choice.ClosedGateItems);
                 break;
             case RouteChoiceResult.SearchEnRoute:
                 // "Search en route": force-obtain every any-of counter, then walk the
@@ -817,13 +840,15 @@ public static class RouteChoicePrompt
                 // this leg if it's off — the card always actually searches. It flips
                 // back off once the counter lands (found or bought) or the walk ends.
                 services.BeginRouteSearchAutoSearch();
-                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute);
+                CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute,
+                    pickedRoute: choice.GatedPath, closedGates: choice.ClosedGateItems);
                 break;
             case RouteChoiceResult.AvoidOverrideAlt:
                 // "Route through my avoided rooms" — the extra card: override the avoid
                 // list for this one walk (needs no counter). Avoids stay set; only this
                 // walk crosses them, same as the avoid-override fork's commit.
-                CommitWalk(services, destination, gated: false, ignoreAvoids: true);
+                CommitWalk(services, destination, gated: false, ignoreAvoids: true,
+                    pickedRoute: choice.AvoidAlternativePath);
                 break;
             case RouteChoiceResult.Shortcut when choice.ShortcutItems is { Count: > 0 } sci:
                 // The optional shortcut route. Already holding the item → walk it (a
@@ -834,7 +859,7 @@ public static class RouteChoicePrompt
                 // item has no reachable source, so we just walk the long route.
                 int shortcutItem = sci[0];
                 if (services.IsItemCarried(shortcutItem))
-                    CommitWalk(services, destination, gated: false);
+                    CommitWalk(services, destination, gated: false, pickedRoute: choice.ShortcutPath);
                 else if (!services.ShortcutSource.TryBegin(shortcutItem, destination))
                     CommitWalk(services, destination, gated: false);
                 break;
@@ -891,8 +916,29 @@ public static class RouteChoicePrompt
         // A walk the user starts pauses one room short of each boss room marked "stop
         // before entering" that it passes through, unless they picked the walk around
         // them (walkAround) or the walk through regardless (stopForBossRooms: false).
-        IReadOnlySet<RoomKey>? walkAround = null, bool stopForBossRooms = true)
+        IReadOnlySet<RoomKey>? walkAround = null, bool stopForBossRooms = true,
+        // The route of the card the user picked, and the gate items it was planned
+        // round. The walker plans for itself from flags, so the flags have to add up
+        // to this route: a card that showed a 45-step way through a hole in the
+        // ground was walked as 263 steps on foot, and a card that went round the
+        // amber talisman's exit was walked straight at it (reports
+        // paradigm-20261008-174236, paradigm-20261008-173911).
+        IReadOnlyList<RoomKey>? pickedRoute = null, IReadOnlyCollection<int>? closedGates = null)
     {
+        // Preferring to walk is right for a route that walks. One that teleports was
+        // shown doing so and picked; preferring to walk would trade it for whatever
+        // way on foot exists, however long, which no card showed.
+        string? teleports = RouteChoicePlanner.DescribeTeleports(
+            RouteChoicePlanner.TeleportLandings(services.RoomGraph, pickedRoute));
+        if (teleports is not null && !avoidTeleports) preferTeleportFree = false;
+        if (pickedRoute is { Count: > 1 })
+            services.Log.Info(LogCat,
+                $"route pick -> {destination}: walking the picked route, {pickedRoute.Count - 1} step(s), "
+                + (teleports is null ? "on foot (a re-plan keeps to walking)" : $"takes {teleports}")
+                + (gated ? ", planned through its gates" : "")
+                + (closedGates is { Count: > 0 }
+                    ? $", going round the gates that need item(s) {string.Join("/", closedGates)}" : ""));
+
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
         // → SendNextStep), which would fire one stale step toward the OLD
@@ -916,7 +962,8 @@ public static class RouteChoicePrompt
             preferTeleportFree: preferTeleportFree,
             // Every walk committed here is one the user started and, where the route
             // forked, chose: a gated pick may cross a hazard as picked.
-            pickedRoute: gated);
+            pickedRoute: gated,
+            keepGatesClosedFor: gated ? closedGates : null);
     }
 
     // The items that protect as well as itemId on this route: the intersection of

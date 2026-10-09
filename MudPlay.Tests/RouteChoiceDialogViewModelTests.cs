@@ -848,4 +848,63 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.Contains("Level 40+", vm.GatedDetail);
         Assert.Contains("level gate", vm.GatedDetail);
     }
+
+    private static string? RouteItem(int id) => id switch
+    {
+        807 => "bloodstone orb",
+        815 => "amber talisman",
+        _ => null,
+    };
+
+    // The shortcut card named only the item that makes it a shortcut. Its route
+    // still crosses the orb gate the long route does, and has to say so (reports
+    // paradigm-20261008-173911, paradigm-20261008-174023).
+    [Fact]
+    public void ShortcutCard_ListsEverythingItsRouteNeeds()
+    {
+        RouteRequirement orb = new(RouteRequirementKind.CarryItem, new[] { 807 });
+        RouteRequirement talisman = new(RouteRequirementKind.CarryItem, new[] { 815 });
+        RouteChoice choice = SoleChoice(orb) with
+        {
+            GatedStepCount = 246,
+            ShortcutPath = GatedLine,
+            ShortcutStepCount = 156,
+            ShortcutItems = new[] { 815 },
+            ShortcutRequirements = new[] { talisman, orb },
+        };
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Dest (1/9)", RouteItem,
+            giveNameForItem: id => id == 807 ? "gnome commander" : null);
+
+        Assert.Equal("Requires bloodstone orb (ask gnome commander)", vm.RequirementSummary);
+        Assert.StartsWith("Shortcut via amber talisman — saves 90 rooms", vm.ShortcutSummary);
+        Assert.StartsWith("Requires amber talisman; bloodstone orb (ask gnome commander). ", vm.ShortcutDetail);
+    }
+
+    // A card's walk takes the teleport its route takes, so the card names it.
+    [Fact]
+    public void ACardWhoseRouteTeleports_SaysWhereTo()
+    {
+        RouteChoice choice = Choice() with { Kind = RouteChoiceKind.AvoidOverride, AvoidedRoomCount = 1 };
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Dest (1/9)", RouteItem,
+            teleportsOn: r => r == RouteChoiceResult.Gated ? "the teleport to Stone Tunnel, Hole Up (2/1306)" : null);
+
+        Assert.EndsWith(" — takes the teleport to Stone Tunnel, Hole Up (2/1306)", vm.GatedSummary);
+        Assert.DoesNotContain("teleport", vm.FreeSummary);
+    }
+
+    // The walk-or-teleport cards are already about the teleport.
+    [Fact]
+    public void TheTeleportFork_GetsNoSecondTeleportNote()
+    {
+        RouteChoice choice = Choice() with { Kind = RouteChoiceKind.Teleport, TeleportLanding = "Vault (1/9)" };
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Dest (1/9)", RouteItem, teleportsOn: _ => "the teleport to Vault (1/9)");
+
+        Assert.DoesNotContain("takes the teleport", vm.GatedSummary);
+    }
 }

@@ -45,6 +45,9 @@ public sealed class LevelIgnoringFilter(IRoomFilter inner, int? atLevel = null) 
     public IDisposable SuspendAcquirableGatesButUncounteredHazards() =>
         inner.SuspendAcquirableGatesButUncounteredHazards();
 
+    public IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false) =>
+        inner.SuspendAcquirableGatesExcept(keepClosed, keepUncounteredHazards);
+
     private bool Excluded(int minLevel, int maxLevel) =>
         atLevel is int level && OutsideLevelWindow(level, minLevel, maxLevel);
 

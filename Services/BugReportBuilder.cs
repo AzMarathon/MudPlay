@@ -1715,6 +1715,21 @@ public static class BugReportBuilder
             walker.LastEvent is { } ev
                 ? $"{ev.Kind}: {ev.Detail}" + (ev.Destination is { } d ? $" → {d.Map}/{d.Room}" : string.Empty)
                 : "(none yet)");
+        // What the walk under way was told about its route, which a re-plan and a
+        // detour leg both keep: without it a capture can't tell a route the planner
+        // chose from one the walker fell back to.
+        Kv(sb, "Route this walk keeps to",
+            walker.JourneyDestination is not { } journey ? "(no walk under way)"
+            : $"to {journey.Map}/{journey.Room}: "
+            + (walker.JourneyPreferTeleportFree switch
+            {
+                true => "on foot unless walking is impossible",
+                false => "the picked route's teleports",
+                null => "the automatic-walk teleport setting (nobody picked a route)",
+            })
+            + (walker.JourneyClosedGateItems is { Count: > 0 } closed
+                ? $"; goes round the gates needing item(s) {string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))}"
+                : string.Empty));
 
         AppendLastRoutePlan(sb, svc);
 

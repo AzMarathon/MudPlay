@@ -394,8 +394,10 @@ public sealed class MovementFilter : IRoomFilter
     // crosser still reach the destination WITHOUT relying on those items?" — reachable
     // means they merely unlock an optional shortcut; unreachable means one is a genuine
     // requirement. Single-threaded planning use; dispose to restore gating.
-    public IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed) =>
-        new GateSuspensionScope(this, keepClosed);
+    // keepUncounteredHazards adds SuspendAcquirableGatesButUncounteredHazards' rule,
+    // for a leg of such a walk that nobody was shown.
+    public IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false) =>
+        new GateSuspensionScope(this, keepClosed, keepUncounteredHazards);
 
     public readonly struct GateSuspensionScope : IDisposable
     {

@@ -961,6 +961,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
     private bool _activeArmAcquisition = true;
     private bool _activePickedRoute;
 
+    // What the walk that began the current journey settled, kept past that walk's
+    // own Reset for the legs a detour router walks on its behalf: out to a giver or
+    // a shop, then on to where the journey was going. Those legs are WalkTo calls of
+    // their own and state nothing, so without this the leg after a route card's
+    // "ask the gnome commander" planned through the very gate the card went round,
+    // and followed the automatic-walk teleport setting on a walk the user started.
+    // The journey ends when it arrives, fails or is stopped, or another one begins.
+    private RoomKey? _journeyDestination;
+    private IReadOnlyCollection<int>? _journeyClosedGates;
+    private bool? _journeyPreferTeleportFree;
+
+    // For the bug report: where the journey is going, the gate items its route goes
+    // round, and whether its legs keep to walking (null: an automatic walk, which
+    // follows its setting).
+    public RoomKey? JourneyDestination => _journeyDestination;
+    public IReadOnlyCollection<int>? JourneyClosedGateItems => _journeyClosedGates;
+    public bool? JourneyPreferTeleportFree => _journeyPreferTeleportFree;
+
     // The teleports a walk the client starts on its own may use, as (room, landing)
     // pairs. A walk the user starts states its own preference (the route cards pass
     // theirs, and a user's "Teleport" pick is the consent) and never reads this; a
@@ -1031,8 +1049,32 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // neither carried nor arranged — picking it was the consent. Every other
         // through-gates walk (a bank run, a trainer trip, a stash transfer) keeps such
         // a room closed: nobody agreed to walk into it.
-        bool pickedRoute = false)
+        bool pickedRoute = false,
+        // keepGatesClosedFor: gate items a through-gates plan must not count as in
+        // hand. The picked route goes round the exits that need them (an optional
+        // shortcut's item, which is never fetched), so a plan that assumed them
+        // carried would take the shortcut and stop at its gate.
+        IReadOnlyCollection<int>? keepGatesClosedFor = null)
     {
+        // A leg a detour router walks for a journey the user started (out to a giver
+        // or a shop, then on to where they were going) is still their walk: it takes
+        // teleports as that walk does, not as the automatic-walk setting says.
+        if (supersedeSilently && !_replanningInPlace)
+        {
+            preferTeleportFree ??= _journeyPreferTeleportFree;
+            if (_journeyDestination is { } goal && (_journeyPreferTeleportFree is not null || _journeyClosedGates is not null))
+                _log?.Info("Walker",
+                    $"leg to {destination} of the walk to {goal}: keeps that walk's route — "
+                    + (_journeyPreferTeleportFree switch
+                    {
+                        true => "on foot unless walking is impossible",
+                        false => "its teleports allowed",
+                        null => "teleports by the automatic-walk setting",
+                    })
+                    + (_journeyClosedGates is { } closed
+                        ? $", going round the gates that need item(s) {string.Join("/", closed)}" : ""));
+        }
+
         // Settled once per walk, before the Reset below clears the walk it replaces:
         // an in-place re-plan keeps the list its walk began with, a fresh automatic
         // walk reads the setting, and a walk that states a preference has none.
@@ -1064,6 +1106,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 Reset();
             else
                 Stop(reason: "superseded by new walk");
+        }
+
+        // After the Stop above, which ends the journey it supersedes.
+        if (!_replanningInPlace && !supersedeSilently)
+        {
+            _journeyDestination = destination;
+            _journeyClosedGates = keepGatesClosedFor is { Count: > 0 } ? keepGatesClosedFor : null;
+            _journeyPreferTeleportFree = preferTeleportFree;
         }
 
         // In-flight moves still on the wire (typical when the user
@@ -1184,8 +1234,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // Expand pass so BFS returns the gated shortcut rather than the free
         // detour. Level / toll / class gates stay active regardless. Disposed
         // before any stepping so the live filter re-gates for mid-walk replans.
-        // A route nobody picked keeps an uncountered hazard room closed.
+        // A route nobody picked keeps an uncountered hazard room closed, and every
+        // leg of a journey keeps the gates its picked route goes round closed.
         IDisposable? gateScope = !planThroughAcquirableGates ? null
+            : _journeyClosedGates is { } closedGates
+                ? Filter?.SuspendAcquirableGatesExcept(closedGates, keepUncounteredHazards: !pickedRoute)
             : pickedRoute ? Filter?.SuspendAcquirableGates()
             : Filter?.SuspendAcquirableGatesButUncounteredHazards();
         IReadOnlyList<Direction>? path;
@@ -3653,6 +3706,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private void Raise(WalkEvent evt)
     {
+        // A detour leg ends somewhere else and leaves the journey standing.
+        bool endsJourney = evt.Kind == WalkEventKind.Stopped
+            || (evt.Kind is WalkEventKind.Finished or WalkEventKind.Failed
+                && _journeyDestination is { } goal
+                && (goal.Equals(evt.Destination) || goal.Equals(evt.Requested)));
+        if (endsJourney)
+        {
+            _journeyDestination = null;
+            _journeyClosedGates = null;
+            _journeyPreferTeleportFree = null;
+        }
         LastEvent = evt;
         Event?.Invoke(evt);
     }
