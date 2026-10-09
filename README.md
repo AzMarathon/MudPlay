@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.157.9**
-> - Profile lists no longer fail when another client renames or removes a BBS at that moment
-> - Test suite: the Conversation window, profile-listing and auto-train tests no longer fail at random in a full run
+> **Version 3.157.10**
+> - Unrecognized Lines no longer fills with counterstrike damage, party members' gear swaps (wields too), glancing blows, other people's dodges and door work, a look at a player, or the tail of a wrapped exits row
+> - A monster's death message is still dropped when a wear-off line sits between it and the experience line
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -45,12 +45,20 @@ public static partial class BenignChatterMatcher
             || MiscRx().IsMatch(text)
             || ListingHeaderRx().IsMatch(text)
             || ListingRowRx().IsMatch(text)
-            || UnreadPromptRx().IsMatch(text);
+            || UnreadPromptRx().IsMatch(text)
+            || CounterstrikeRx().IsMatch(text)
+            || GlancesOffRx().IsMatch(text)
+            || OthersDodgeRx().IsMatch(text)
+            || OthersDoorRx().IsMatch(text)
+            || PartyDisbandedRx().IsMatch(text)
+            || ExitListTailRx().IsMatch(text)
+            || PlayerLookRowRx().IsMatch(text);
     }
 
     // The first line of a server listing whose rows are free text: the shop stock
     // table, a top list, the `set` help, the `profile` readout, Paradigm's `abil` readout,
-    // a gang roster. The watcher skips from here to the next prompt.
+    // a gang roster, a look at a player ("[ Name ](Gang)", then their description and
+    // gear). The watcher skips from here to the next prompt.
     public static bool IsListingHeader(string text) =>
         !string.IsNullOrEmpty(text) && ListingHeaderRx().IsMatch(text);
 
@@ -72,7 +80,7 @@ public static partial class BenignChatterMatcher
         return false;
     }
 
-    // Another player changing gear ("X wears / removes <item>!"). Roster-gated: only a
+    // Another player changing gear ("X wields / wears / removes <item>!"). Roster-gated: only a
     // KNOWN player's name qualifies, so a same-shaped monster / spell line ("The lich
     // removes its own head!") can never be suppressed by mistake.
     public static bool IsOtherPlayerGearSwap(string text, Func<string, bool> isKnownPlayer)
@@ -125,7 +133,8 @@ public static partial class BenignChatterMatcher
     private static partial Regex StatusLabelRx();
 
     [GeneratedRegex(
-        @"^(?:Item\s{2,}Quantity\s{2,}Price$|Top .+ of the Realm\b|The SET command is used to change|Player ID:\s+\d+$|HP Regen:\s+\S+\s+AC vs Evil:|.+ members \(\d+\)$)",
+        @"^(?:Item\s{2,}Quantity\s{2,}Price$|Top .+ of the Realm\b|The SET command is used to change|Player ID:\s+\d+$|HP Regen:\s+\S+\s+AC vs Evil:|.+ members \(\d+\)$"
+      + @"|\[ [A-Z][\w '-]* \](?:\(.*\))?$)",
         RegexOptions.CultureInvariant)]
     private static partial Regex ListingHeaderRx();
 
@@ -179,7 +188,8 @@ public static partial class BenignChatterMatcher
 
     // Paradigm's wording for a monster's spell that failed or was resisted. It names
     // the spell, so it is never the spell's own message.
-    [GeneratedRegex(@"^.+ attempts to cast .+ on you, but (?:fails\.|you resist!)$", RegexOptions.CultureInvariant)]
+    // The same line names a party member when the spell was aimed at one of them.
+    [GeneratedRegex(@"^.+ attempts to cast .+ on (?:you, but (?:fails\.|you resist!)|.+, but fails\.)$", RegexOptions.CultureInvariant)]
     private static partial Regex MonsterCastFailedRx();
 
     [GeneratedRegex(@"^\w[\w '-]* just (?:joined|left) your channel \(\d+\)$", RegexOptions.CultureInvariant)]
@@ -206,6 +216,55 @@ public static partial class BenignChatterMatcher
     [GeneratedRegex(@"^(?:\[HP=\d+/\d+[^\]]*\]\s*:|set statline \S)", RegexOptions.CultureInvariant)]
     private static partial Regex UnreadPromptRx();
 
+    // Damage handed back by a counterstrike, ours or anyone's. Each monster name and
+    // each amount made a line of its own in the queue.
+    [GeneratedRegex(
+        @"^(?:A counterstrike at .+ does \d+ damage!|You counterstrike .+ for \d+ damage!)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex CounterstrikeRx();
+
+    // A blow that landed and did nothing: a monster's on someone, or ours on a monster.
+    [GeneratedRegex(
+        @"^(?:The .+, but the swing glances off!|Your \w+ glances off .+!)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex GlancesOffRx();
+
+    // A swing someone else dodged ("…, but she dodges out of the way!", "…, but Boost
+    // dodges!"). Our own dodges are routed patterns.
+    [GeneratedRegex(
+        @"^.+, but (?:he|she|it|they|[A-Z][\w'-]*) dodges?(?: out of the way)?!$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex OthersDodgeRx();
+
+    // What the room sees of someone working a door or gate.
+    [GeneratedRegex(
+        @"^You see .+? (?:bash|unlock|lock|open|close|pick the lock on) the (?:door|gate) "
+      + @"(?:to the (?:north|south|east|west|northeast|northwest|southeast|southwest|up|down)|above you|below you)\.$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex OthersDoorRx();
+
+    // PartyManager reads this off the wire itself.
+    [GeneratedRegex(@"^Your party has been disbanded\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex PartyDisbandedRx();
+
+    // The tail of an "Obvious exits:" row that wrapped: nothing but exits ("west",
+    // "door west, down").
+    [GeneratedRegex(
+        @"^(?:(?:(?:open|closed|locked) )?(?:door|gate) )?(?:north|south|east|west|northeast|northwest|southeast|southwest|up|down)"
+      + @"(?:, (?:(?:(?:open|closed|locked) )?(?:door|gate) )?(?:north|south|east|west|northeast|northwest|southeast|southwest|up|down))*$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex ExitListTailRx();
+
+    // Rows of a look at a player, for one that lands outside its block: the gear
+    // heading, a worn item with its slot, and the wound line (whole, or the tail of
+    // one that wrapped).
+    [GeneratedRegex(
+        @"^(?:(?:He|She|It) is equipped with:"
+      + @"|\S.*\S\s{2,}\((?:Head|Ears|Eyes|Face|Neck|Back|Torso|Arms|Wrist|Hands|Finger|Waist|Legs|Feet|Worn|Weapon Hand|Off-Hand|Two-Handed)\)"
+      + @"|(?:(?:He|She|It) (?:is|appears to be) )?(?:unwounded|(?:slightly|moderately|heavily|severely|critically|very critically|mortally) wounded)\.)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex PlayerLookRowRx();
+
     // The `br` broadcast-channel status: a header followed by the member list. The list
     // is bare player names, indistinguishable from other text on its own, so the watcher
     // suppresses it ONLY on the lines right after the header (stateful) — these two
@@ -224,6 +283,6 @@ public static partial class BenignChatterMatcher
     [GeneratedRegex(@"^[A-Z][\w'-]*(?:,? +[A-Z][\w'-]*)*\.?$", RegexOptions.CultureInvariant)]
     private static partial Regex ChannelMemberListRx();
 
-    [GeneratedRegex(@"^(?<name>\w[\w '-]*) (?:wears|removes) .+!$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^(?<name>\w[\w '-]*) (?:wields|wears|removes) .+!$", RegexOptions.CultureInvariant)]
     private static partial Regex GearSwapRx();
 }

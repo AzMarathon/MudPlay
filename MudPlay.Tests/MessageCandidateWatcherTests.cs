@@ -662,6 +662,36 @@ public sealed class MessageCandidateWatcherTests
     }
 
     [Fact]
+    public void DeathFlavour_SurvivesAWearOffLineBeforeTheExperienceGain()
+    {
+        // What the monster had cast lifts as it dies, between its death message and
+        // the experience line. A line the catalogues know doesn't release the held one.
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed("The nanati lets out a shriek and fades away!", flush: false);
+        h.Feed("Your party has been disbanded.", flush: false);   // any recognized line
+        h.Feed("You gain 825 experience.");
+
+        Assert.Empty(h.Candidates.Candidates);
+    }
+
+    [Fact]
+    public void HeldLine_IsStagedOnceMoreThanACoupleOfRecognizedLinesPass()
+    {
+        // The allowance is for the line or two a death prints, not for the rest of a
+        // fight: an unknown line followed by ordinary traffic is still staged.
+        Harness h = new(seedDefaultPatterns: true);
+
+        h.Feed("The gnarled tree groans ominously.", flush: false);
+        h.Feed("Your party has been disbanded.", flush: false);
+        h.Feed("Your party has been disbanded.", flush: false);
+        Assert.Empty(h.Candidates.Candidates);
+        h.Feed("Your party has been disbanded.", flush: false);
+
+        Assert.Single(h.Candidates.Candidates);
+    }
+
+    [Fact]
     public void LineNotFollowedByExperience_IsStagedNormally()
     {
         // The deferral must not swallow ordinary lines — only the one an experience

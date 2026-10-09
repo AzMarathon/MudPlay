@@ -1,5 +1,11 @@
 # Version history
 
+## 3.157.10
+
+- Unrecognized Lines no longer fills with counterstrike damage, party members' gear swaps (wields too), glancing blows, other people's dodges and door work, a look at a player, or the tail of a wrapped exits row
+- A monster's death message is still dropped when a wear-off line sits between it and the experience line
+- bug reports addressed: unrecognized-lines-20261008-214608
+
 ## 3.157.9
 
 - Profile lists no longer fail when another client renames or removes a BBS at that moment
