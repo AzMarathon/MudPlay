@@ -192,6 +192,24 @@ public static class BugReportBuilder
         // for this realm. It explains HP or items missing after a reconnect.
         Kv(sb, "Realm hang-up penalty",
             Game.Health.HangupPenaltyNotice.Describe(svc.ResolveActiveRealm()?.Realm));
+        // The check for what a penalised hang-up dropped: whether it runs on this
+        // realm, how the last one ended, and what it found short.
+        Kv(sb, "Hang-up item check",
+            (Game.Health.HangupPenaltyNotice.DropsItems(svc.ResolveActiveRealm()?.Realm)
+                ? "on (the realm drops items)" : "off (the realm's settings drop no items)")
+            + $"; now: {svc.HangupItems.Status}; last: {svc.HangupItems.LastOutcome}");
+        Kv(sb, "Missing after hang-up", svc.HangupItems.LastMissing.Count == 0
+            ? "(nothing)"
+            : string.Join(", ", svc.HangupItems.LastMissing.Select(m =>
+                  $"{(m.Count > 1 ? $"{m.Count} " : "")}{m.Name}{(m.WornSlots.Count > 0 ? " (worn)" : "")}"))
+              + (svc.HangupItems.LastStillMissing.Count == 0
+                  ? "; all back"
+                  : "; still missing: " + string.Join(", ", svc.HangupItems.LastStillMissing.Select(m =>
+                        m.Count > 1 ? $"{m.Count} {m.Name}" : m.Name))));
+        Kv(sb, "Held list on file", svc.Profile.Current?.HeldAtDisconnect is { } heldList
+            ? $"{heldList.Items.Count} kind(s) of item, written {heldList.At.ToLocalTime():yyyy-MM-dd HH:mm:ss}, "
+              + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
+            : "(none)");
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));

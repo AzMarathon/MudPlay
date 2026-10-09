@@ -866,6 +866,59 @@ public sealed class AutoGetItemsManagerTests
         Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
     }
 
+    // A named get (what a hang-up penalty dropped) is the character's own item
+    // coming back: none of the auto-collect choices stand in its way, and it goes
+    // out the way every other get here does.
+    [Fact]
+    public void CollectNamed_IgnoresTheAutoCollectChoices_OnePerCopyOnStock()
+    {
+        using Harness h = new() { Enabled = false };   // Auto Get Items off, item not flagged
+
+        h.Items.CollectNamed("chainmail hauberk", 1, "test");
+        h.Items.CollectNamed("torch", 2, "test");
+
+        Assert.Equal(new[] { "get chainmail hauberk", "get torch", "get torch" }, h.SentText);
+    }
+
+    [Fact]
+    public void CollectNamed_OnParadigm_SendsOneCountedGet()
+    {
+        using Harness h = new() { Paradigm = true };
+
+        h.Items.CollectNamed("torch", 3, "test");
+
+        Assert.Equal(new[] { "get 3 torch" }, h.SentText);
+    }
+
+    [Fact]
+    public void CollectNamed_HoldsTheWalkerUntilTheItemIsTaken()
+    {
+        using Harness h = new();
+        MudPlay.Game.Map.MovementCoordinator coord = new();
+        using AcquisitionGate gate = new(coord);
+        h.Items.SetAcquisitionGate(gate);
+
+        h.Items.CollectNamed("torch", 1, "test");
+        Assert.True(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
+
+        h.Feed("You took torch.");
+        Assert.False(coord.IsGateAsserted(MudPlay.Game.Map.MovementCoordinator.AcquisitionGate));
+    }
+
+    // The same floor drawn again before the get is answered must not send a
+    // second get for a copy already asked for.
+    [Fact]
+    public void CollectNamed_IsNotCollectedAgain_ByARedrawOfTheSameFloor()
+    {
+        using Harness h = new();
+        h.Flags["torch"] = true;
+
+        h.Items.CollectNamed("torch", 1, "test");
+        h.Feed("You notice torch here.");
+
+        Assert.Equal(new[] { "get torch" }, h.SentText);
+    }
+
     [Fact]
     public void Disposed_StopsSending()
     {

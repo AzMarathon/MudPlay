@@ -1089,7 +1089,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // back to us.
     private void ReequipAllWorn(DeathRecord record, RoomKey? pacingRoom = null)
     {
-        if (!AutoEquip || record.EquippedAtDeath is not { } worn || worn.Count == 0) return;
+        if (record.EquippedAtDeath is not { } worn || worn.Count == 0) return;
 
         HashSet<string> missing = record.UnrecoveredItems is { Count: > 0 } rem
             ? rem.Select(ItemNameStore.Normalize).ToHashSet(StringComparer.OrdinalIgnoreCase)
@@ -1097,7 +1097,20 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         List<DeathItem> recovered = worn
             .Where(i => !missing.Contains(ItemNameStore.Normalize(i.Name)))
             .ToList();
-        if (recovered.Count == 0) return;
+        RoomKey? diedIn = record.Room is { } died ? new RoomKey(died.Map, died.Room) : null;
+        ReequipWorn(recovered, pacingRoom ?? diedIn);
+    }
+
+    // Put back on worn gear that has come back to the pack, by the rules above:
+    // only with Auto-Equip on, held while Auto-All is off, paced round by round in
+    // pacingRoom when something hostile is there. Public for gear that came back
+    // some other way than a deathpile: what a hang-up penalty dropped and the
+    // client picked up again (HangupItemRecheck) is worn again by the same rules,
+    // so there is one answer to "does the client put my gear back on".
+    public void ReequipWorn(IReadOnlyList<DeathItem> recovered, RoomKey? pacingRoom)
+    {
+        ArgumentNullException.ThrowIfNull(recovered);
+        if (!AutoEquip || recovered.Count == 0) return;
 
         List<DeathItem> ordered = OrderForReequip(recovered, _armourClass);
 
@@ -1111,9 +1124,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             return;
         }
 
-        (int Map, int Room)? paceIn = pacingRoom is { } pr ? (pr.Map, pr.Room)
-            : record.Room is { } dr ? (dr.Map, dr.Room) : null;
-        EquipOrPace(ordered, paceIn);
+        EquipOrPace(ordered, pacingRoom is { } room ? (room.Map, room.Room) : null);
     }
 
     // Auto-All came back on: put on what was held while it was off. Anything the user

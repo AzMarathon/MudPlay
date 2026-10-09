@@ -613,6 +613,12 @@ public sealed class AppServices
     // loop paused until a manual `rm`. Armed from the Connected handler.
     public Game.Map.DeferredCollectReconnectReleaser DeferredCollectResume { get; private set; } = null!;
 
+    // On a realm that drops items for a hang-up: compares what was held before the
+    // link dropped with the login's inventory read, and picks up what is short and
+    // lying in the room. Armed from the Connected handler; wire bound in
+    // MainWindowViewModel.
+    public Game.Inventory.HangupItemRecheck HangupItems { get; private set; } = null!;
+
     // Leader-side reconnect party reform — the mirror of PartyRejoin. Snapshots the
     // followers we're leading at disconnect and, on the first in-game room after the
     // reconnect, rebases the grace window + holds the loop so a nightly-cleanup
@@ -9068,6 +9074,48 @@ public sealed class AppServices
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
             LoopRunner, AutoLair, PartyState, Party, Log);
 
+        // What a penalised hang-up dropped, looked for on the way back in. Gated on
+        // the realm's own settings, and on Auto-All for anything it sends. Its gets
+        // go out through the auto-get engine and its re-wear through death
+        // recovery, so each keeps one sender. Built last among the engines: every
+        // one it reads or is driven by is above this line.
+        HangupItems = new Game.Inventory.HangupItemRecheck(
+            MovementCoordinator,
+            profile: () => Profile.Current,
+            saveProfile: () => Profile.Save(),
+            realmDropsItems: () => Game.Health.HangupPenaltyNotice.DropsItems(ResolveActiveRealm()?.Realm),
+            inventory: () => Inventory.Snapshot,
+            confirmedRoom: () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed
+                ? RoomTracker.State.CurrentRoom?.Key
+                : null,
+            floor: () => GroundItems.Items,
+            fighting: () => CombatTracker.HasEngageableHostiles,
+            hostilePresent: () => CombatTracker.HasHostileMonster,
+            isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
+            roomRedisplayFree: RoomRedisplay.ShouldSend,
+            collect: (name, count) => AutoGetItems.CollectNamed(name, count, "dropped by a hang-up penalty"),
+            rewear: worn => DeathRecovery.ReequipWorn(worn, RoomTracker.State.CurrentRoom?.Key),
+            // The item table's number where it knows the item, so a floor entry and
+            // a held name of one item meet however the floor words it.
+            itemKey: name => ItemNames.FindByName(name) is int number ? $"#{number}" : ItemNameStore.Normalize(name),
+            post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run),
+            log: Log);
+        Profile.ProfileSaving += HangupItems.StampForSave;
+        Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
+        InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
+        Inventory.FullInventoryParsed += HangupItems.OnInventoryRead;
+        Inventory.ItemTaken += HangupItems.OnItemTaken;
+        GroundItems.SurveyUpdated += HangupItems.NoteFloorSurveyed;
+        // After CombatTracker's own handler (subscribed far above), so the fight
+        // reads as over on the observation that ended it.
+        RoomClassifier.EntitiesObserved += _ => HangupItems.OnRoomObserved();
+        CombatTracker.CombatForceCleared += HangupItems.OnRoomObserved;
+        Tick.HeartbeatElapsed += HangupItems.OnHeartbeat;
+        RoomTracker.StateChanged += t =>
+        {
+            if (!Nullable.Equals(t.PreviousRoom?.Key, t.NewRoom?.Key)) HangupItems.OnRoomChanged();
+        };
+
         // Startup profile priority: a --profile launch argument wins over the
         // "Auto-load last profile" setting, which wins over a blank draft. The CLI
         // token is resolved here (not in Program.Main) because resolving a bare
@@ -13179,6 +13227,7 @@ public sealed class AppServices
         Events.CancelRun();
         PartyComeback.Cancel(reason);
         DeathRecovery.CancelTrip();
+        HangupItems.Cancel(reason);
 
         // Outstanding needs and deferred pickups / searches.
         Needs.Clear();

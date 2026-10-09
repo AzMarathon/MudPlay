@@ -312,6 +312,79 @@ public sealed class DeathRecoveryManagerTests
         Assert.Equal(0, h.Recovery.HeldReequipCount);
     }
 
+    // ----- worn gear that came back without a deathpile ---------------
+    // What a hang-up penalty dropped and the client picked up again goes back on
+    // by the corpse recovery's own rule (HangupItemRecheck hands it here).
+
+    private static readonly DeathItem[] PickedBackUp =
+    {
+        new("plate mail", "Torso"),
+        new("platinum mace", "Weapon Hand"),
+    };
+
+    [Fact]
+    public void ReequipWorn_AutoEquipOn_PutsThePiecesBackOn_WeaponFirst()
+    {
+        using GraphHarness h = new();
+        h.EnterGates();
+        h.Recovery.AutoEquip = true;
+
+        h.Recovery.ReequipWorn(PickedBackUp, h.Tracker.State.CurrentRoom?.Key);
+
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+    }
+
+    [Fact]
+    public void ReequipWorn_AutoEquipOff_LeavesThemInThePack()
+    {
+        using GraphHarness h = new();
+        h.EnterGates();
+
+        h.Recovery.ReequipWorn(PickedBackUp, h.Tracker.State.CurrentRoom?.Key);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(0, h.Recovery.HeldReequipCount);
+    }
+
+    [Fact]
+    public void ReequipWorn_AutoAllOff_HoldsThem_UntilItIsBackOn()
+    {
+        using GraphHarness h = new();
+        bool autoOn = false;
+        h.Recovery.SetAutoEnabledProbe(() => autoOn);
+        h.EnterGates();
+        h.Recovery.AutoEquip = true;
+
+        h.Recovery.ReequipWorn(PickedBackUp, h.Tracker.State.CurrentRoom?.Key);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(2, h.Recovery.HeldReequipCount);
+
+        autoOn = true;
+        h.Recovery.OnAutoAllRestored();
+
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+    }
+
+    [Fact]
+    public void ReequipWorn_WithAHostileInTheRoom_IsPacedByCombatRound()
+    {
+        using GraphHarness h = new();
+        h.EnterGates();
+        h.Recovery.AutoEquip = true;
+        h.Hostiles = true;
+
+        h.Recovery.ReequipWorn(PickedBackUp, h.Tracker.State.CurrentRoom?.Key);
+
+        Assert.Empty(h.Sent);
+        Assert.True(h.GateHeld);
+
+        h.CombatRound();
+
+        Assert.Equal(new[] { "eq platinum mace", "wear plate mail" }, h.Sent.ToArray());
+        Assert.False(h.GateHeld);
+    }
+
     // ----- gear handed back by a party member -------------------------
 
     [Fact]

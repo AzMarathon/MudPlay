@@ -711,6 +711,7 @@ public sealed class ProfileService
             copy.LastKnownStats = null;
             copy.DefaultPoolBaseline = null;
             copy.LastKnownEncumbrance = null;
+            copy.HeldAtDisconnect = null;
             copy.LastKnownRoom = null;
             copy.RecentSteps = null;
             copy.PendingReconnectLeader = null;

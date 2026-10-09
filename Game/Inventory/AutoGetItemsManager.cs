@@ -607,6 +607,26 @@ public sealed class AutoGetItemsManager : IDisposable
         _gate?.NoteDeferredCleared();
     }
 
+    // Get a named item the caller knows to be the character's own and lying on this
+    // floor (what a penalised hang-up dropped, HangupItemRecheck). None of the
+    // auto-collect choices apply to it: not the master toggle, the per-item flag,
+    // the carry cap or the encumbrance brackets, since it is being taken back, not
+    // looted. It still goes out the one way a get does here: counted per realm,
+    // held on the acquisition gate until `You took` answers it, and entered in the
+    // floor ledger so a re-render of the same floor doesn't collect it a second time.
+    public void CollectNamed(string name, int count, string why)
+    {
+        if (_disposed || count <= 0 || string.IsNullOrWhiteSpace(name)) return;
+        ExpireFloorLedgerIfStale();
+        _log?.Info(LogCategory, $"collect {count}x item={name} ({why})");
+        CountedCommand.Emit(cmd => { _gate?.NoteGetSent(); Send(cmd); },
+            "get", count, name, _isParadigm());
+        // Under the name the confirmation drains it by (OnPlayerGets).
+        string ledgerName = _resolve(name)?.Name ?? name;
+        _floorInFlight[ledgerName] = _floorInFlight.GetValueOrDefault(ledgerName) + count;
+        _floorInFlightAt = DateTime.UtcNow;
+    }
+
     // Drop the dedup ledger once its window has elapsed: by then the sent gets are
     // reflected on the floor, so a fresh survey is authoritative and a later kill's
     // drop must be collectable again.
@@ -622,8 +642,9 @@ public sealed class AutoGetItemsManager : IDisposable
     // one get per unit; a missing or unrecognized leading token is the article
     // form ("a rusty dagger") — a single item. Mirrors the leading-count strip
     // in ItemNameStore.Normalize so the count parsed here is exactly the token
-    // the resolver drops when matching the item name.
-    private static int ParseLeadingCount(string entry)
+    // the resolver drops when matching the item name. Shared with
+    // HangupItemPlan, which counts the same entries.
+    internal static int ParseLeadingCount(string entry)
     {
         int sp = entry.IndexOf(' ');
         if (sp <= 0) return 1;
