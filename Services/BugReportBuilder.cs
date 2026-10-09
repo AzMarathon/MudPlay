@@ -365,6 +365,7 @@ public static class BugReportBuilder
             ? "(nobody)" : string.Join(", ", svc.PartyDisconnectMovement.PendingMembers));
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember is { } rec
             ? (svc.PartyComeback.RecoveringLeftBehind ? $"{rec} (left behind by our move)" : rec)
+              + $" — {svc.PartyComeback.RecoveryPhase}"
             : "(none in flight)");
         Kv(sb, "Recovery reach (rooms)", svc.PartyComeback.ReturnDistanceRooms.ToString());
         Kv(sb, "Recovery given up, resume kept for", svc.PartyComeback.ParkedResumeSummary ?? "(none)");
@@ -1465,6 +1466,14 @@ public static class BugReportBuilder
             Kv(sb, "Loop waiting on a trap disarm", svc.LoopRunner.IsAwaitingTrapDisarm.ToString());
             Kv(sb, "Loop command held for an empty room", svc.LoopRunner.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         }
+        // A loop set aside by a dropped link restarts on the first prompt back in the
+        // game, held until the party reform has seen the room when one is pending: a
+        // "walked off without the party after a relog" report needs which it was.
+        Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
+            ? $"'{pendingLoop}' — on the next in-game prompt"
+            : svc.LoopRunner.ReconnectResumeHeldForReform
+                ? "restarted — held until the party reform has seen the room"
+                : "(none pending)");
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
@@ -1601,6 +1610,15 @@ public static class BugReportBuilder
         Kv(sb, "Open-door exits",
             roomState.OpenDoorDirections is { Count: > 0 } doors
                 ? string.Join(", ", doors) : "(none)");
+        // The last exit whose spell teleported us on, where the tracker put us and
+        // what it went by. Its landings can look alike (the golden idol's do), so a
+        // "map shows me on the wrong side" report needs the reasoning.
+        Kv(sb, "Last cast-on-walk teleport", svc.RoomTracker.LastCastLanding is { } cast
+            ? $"{cast.From} → {cast.Landing} at {cast.At.ToLocalTime():HH:mm:ss} ({cast.Basis})"
+            : "(none this session)");
+        // The landing is booked off the room passed through and then asked for; a
+        // roster or loot read that never happened there shows as this still set.
+        Kv(sb, "Cast-on-walk landing booked, its room not shown yet", svc.RoomTracker.CastLandingAwaitsDisplay.ToString());
         // RoomTracker anchors its timestamps in UTC (DateTimeOffset.UtcNow); the
         // rest of the report uses local .Now. The two are the same absolute
         // instant so all the tracker's comparisons work either way, but printing

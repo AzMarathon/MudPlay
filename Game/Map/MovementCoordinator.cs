@@ -213,6 +213,12 @@ public sealed class MovementCoordinator
     // (Settings → Party "If leading, wait only") elapses.
     public const string MemberDisconnectGate = "MemberDisconnect";
 
+    // Asserted by LoopRunner from the first prompt after a reconnect until the
+    // leader's party reform has seen the room (5 s at most). The loop restarts on
+    // that prompt, ahead of the room display the reform fires on, and without this
+    // its first step went out before the reform's own holds were up.
+    public const string ReconnectReformGate = "ReconnectReform";
+
     // Asserted by ConfusionMovementGate while the local character is confused. A
     // follower afflicted with a curable ailment telepaths the leader @wait so the
     // party pauses; a leader (or solo player) has no one to signal — the eaten

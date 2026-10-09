@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.156.0**
+> **Version 3.157.0**
 > - A door key an NPC trades for an item in your pack can be fetched from the route card: with the opal brooch, the card for the dark-elf archmage's tower reads "glowing key (ask sleazy shopkeeper, in trade for your opal brooch)", and picking it makes the trade on the way
 > - A trade is only ever made from a card that names it, for the one walk that card starts: only for a door key nothing else yields, only the item the card named, and never one you are wearing
 > - Picking a route card during another walk no longer loses what the card was to fetch; a card with both a hazard counter and a gate item fetches both; and the fetch stays with the walk through a light-buying or selling detour

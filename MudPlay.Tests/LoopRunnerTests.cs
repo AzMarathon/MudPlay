@@ -950,6 +950,143 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
+    // Report paradigm-20260923-092317: the leader's link dropped mid-loop. Back in the
+    // game, the loop restarted on the first prompt and sent its first step in the
+    // same second, before the party reform (which fires off the room display that
+    // prompt came with) had put its hold up — and the followers were left in the
+    // room. With a reform pending the loop is restarted behind a hold of its own,
+    // which lasts until the reform has seen the room and its holds are up.
+    [Fact]
+    public void FirstPromptAfterDisconnect_WithAPartyReformPending_StartsHeldUntilTheReformHasSeenTheRoom()
+    {
+        Harness h = NewHarness(deferResume: true);
+        bool reformPending = true;
+        h.Runner.SetReconnectReformProbe(() => reformPending);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+        h.Runner.NotifyDisconnected();
+
+        h.Runner.FirePromptObservedForTests();     // the prompt, read ahead of its lines
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal(LoopState.Paused, h.Runner.State);         // a paused run, not an idle one
+        Assert.True(h.Runner.ReconnectResumeHeldForReform);
+        Assert.True(h.Coordinator.IsGateAsserted(MovementCoordinator.ReconnectReformGate));
+        Assert.Single(h.Sent);                      // no step
+
+        // The room display's lines are handled: the reform fires and holds movement.
+        reformPending = false;
+        h.Coordinator.AssertGate(MovementCoordinator.PartyInviteGate);
+        h.Drain();                                  // the look after this prompt's lines
+
+        Assert.False(h.Runner.ReconnectResumeHeldForReform);
+        Assert.False(h.Coordinator.IsGateAsserted(MovementCoordinator.ReconnectReformGate));
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.Single(h.Sent);                      // still no step: the reform holds it
+
+        h.Coordinator.ClearGate(MovementCoordinator.PartyInviteGate);   // the party is back
+        h.Drain();
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    private Harness HeldAfterReconnect(Func<bool> reformPending)
+    {
+        Harness h = NewHarness();
+        h.Runner.SetReconnectReformProbe(reformPending);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+        h.Runner.FirePromptObservedForTests();
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.True(h.Runner.ReconnectResumeHeldForReform);
+        Assert.Single(h.Sent);
+        return h;
+    }
+
+    // A room too dark to display never gives the reform its look. The loop doesn't
+    // wait on that for good.
+    [Fact]
+    public void ReconnectHold_ReformNeverSeesARoom_StepsWhenTheHoldRunsOut()
+    {
+        Harness h = HeldAfterReconnect(() => true);
+
+        h.Runner.FireReconnectHoldElapsedForTests();
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.False(h.Runner.ReconnectResumeHeldForReform);
+        Assert.False(h.Coordinator.IsPaused);
+        Assert.Equal(2, h.Sent.Count);
+    }
+
+    // Stop during the hold stops the loop for good: the hold goes with it and
+    // nothing starts up when its time runs out.
+    [Fact]
+    public void ReconnectHold_UserStop_StopsTheLoopAndDropsTheHold()
+    {
+        Harness h = HeldAfterReconnect(() => true);
+
+        h.Runner.Stop();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.False(h.Runner.ReconnectResumeHeldForReform);
+        Assert.False(h.Coordinator.IsPaused);
+
+        h.Runner.FireReconnectHoldElapsedForTests();
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Single(h.Sent);
+    }
+
+    // The link drops again during the hold: the hold ends with that connection, and
+    // the loop is set aside for the next one as before.
+    [Fact]
+    public void ReconnectHold_SecondDisconnect_SetsTheLoopAsideAgain()
+    {
+        bool reformPending = true;
+        Harness h = HeldAfterReconnect(() => reformPending);
+
+        h.Runner.NotifyDisconnected();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.False(h.Runner.ReconnectResumeHeldForReform);
+        Assert.False(h.Coordinator.IsPaused);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+        h.Runner.FireReconnectHoldElapsedForTests();            // the old hold's timer does nothing
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        reformPending = false;                                   // the next reconnect, no party this time
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+    }
+
+    // A loop the user starts during the hold replaces the restarted one, and waits
+    // for the party reform just the same.
+    [Fact]
+    public void ReconnectHold_UserStartsALoop_ItIsHeldTooUntilTheReformHasSeenTheRoom()
+    {
+        bool reformPending = true;
+        Harness h = HeldAfterReconnect(() => reformPending);
+
+        Assert.True(h.Runner.Start(AbCycle(), userStarted: true));
+
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        Assert.True(h.Runner.ReconnectResumeHeldForReform);
+        Assert.Single(h.Sent);
+
+        reformPending = false;
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+    }
+
     [Fact]
     public void PromptObserved_WithNoPendingReconnect_DoesNotReStartTheLoop()
     {
