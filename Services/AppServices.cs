@@ -6099,6 +6099,9 @@ public sealed class AppServices
         Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         // @equip <set> update rewrites a set on the character profile — persist it.
         Equipment.SetEquipmentSaver(() => Profile.Save());
+        // A gear swap never takes off the worn counter to a hazard of the room we
+        // are in, or of the next room over.
+        Equipment.SetRoomProtectionProbe(WornRoomHazardCounters);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
         // Location-based auto-equip: re-evaluated on every room transition (fires
@@ -12686,6 +12689,32 @@ public sealed class AppServices
             $"no reachable counter source for items [{string.Join(",", counters)}] "
             + $"from {source.Map}/{source.Room} to {destination.Map}/{destination.Room}");
         return null;
+    }
+
+    // The worn items that counter a room-entry hazard of the room we stand in or of
+    // a room one step away (so a swap at the edge of a lava field doesn't strip the
+    // feather on the way in). A counter only protects while it is worn (GAME_MECHANICS
+    // "Room-spell hazard shape 1"), so these are what a gear swap must leave alone.
+    public IReadOnlyCollection<string> WornRoomHazardCounters()
+    {
+        if (RoomTracker.State.CurrentRoom is not { } here) return Array.Empty<string>();
+        HashSet<int>? counters = null;
+        AddCounters(here.Spell);
+        foreach (Game.Map.RoomExit exit in here.Exits.Values)
+            AddCounters(RoomGraph.GetRoom(exit.Target)?.Spell ?? 0);
+        if (counters is null) return Array.Empty<string>();
+
+        List<string>? worn = null;
+        foreach (Game.Inventory.EquippedItem e in Inventory.Snapshot.EquippedItems)
+            if (ItemNames.FindByName(e.Name) is int id && counters.Contains(id))
+                (worn ??= new List<string>()).Add(e.Name);
+        return worn ?? (IReadOnlyCollection<string>)Array.Empty<string>();
+
+        void AddCounters(int spell)
+        {
+            if (spell <= 0 || RoomHazards.HazardForSpell(spell) is not { } hazard) return;
+            foreach (int item in hazard.ProtectingItems) (counters ??= new HashSet<int>()).Add(item);
+        }
     }
 
     // True when every room-entry hazard on `path` that the player has NO counter

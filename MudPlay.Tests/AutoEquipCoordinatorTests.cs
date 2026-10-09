@@ -1126,6 +1126,96 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Equal("mana-set", equipment.CurrentSetId);
     }
 
+    // ===== a gear swap never strips the room's protection =====
+
+    private static (EquipmentManager Equipment, EquipmentSettings Config) HazardRig(
+        IReadOnlyCollection<string> wornCounters, params EquippedItem[] worn)
+    {
+        EquipmentSettings cfg = Config(
+            new EquipmentSet
+            {
+                Trigger = EquipTriggerType.Default, Enabled = true, Id = "default-set", Name = "Default",
+                Slots =
+                {
+                    new(EquipmentSlot.Head, "turban"), new(EquipmentSlot.Neck, "stone"),
+                    new(EquipmentSlot.Finger1, "gold ring"), new(EquipmentSlot.Finger2, "pearl ring"),
+                },
+            });
+        InventorySnapshot snap = InventorySnapshot.Empty with
+        {
+            EquippedItems = worn,
+            CarriedItems = new[] { "turban", "stone", "gold ring", "pearl ring" },
+            LastUpdated = DateTimeOffset.UtcNow,
+        };
+        var equipment = new EquipmentManager(
+            readEquipment: () => cfg,
+            getSnapshot: () => snap,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { });
+        equipment.SetRoomProtectionProbe(() => wornCounters);
+        return (equipment, cfg);
+    }
+
+    private static string[] Sent(EquipmentManager equipment) =>
+        equipment.LastSentForTests.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')).ToArray();
+
+    // In a lava room the phoenix feather on the neck is what stops the burning. The
+    // Default set names another neck piece; applying it there dresses every other
+    // slot and leaves the feather where it is.
+    [Fact]
+    public void ApplyingASet_InAHazardRoom_LeavesTheWornCounterOn()
+    {
+        (EquipmentManager equipment, _) = HazardRig(new[] { "phoenix feather" },
+            new EquippedItem("wizard hat", "Head"), new EquippedItem("phoenix feather", "Neck"));
+
+        equipment.ApplyBySetId("default-set");
+
+        string[] sent = Sent(equipment);
+        Assert.Contains("wear turban", sent);
+        Assert.DoesNotContain("wear stone", sent);
+        Assert.DoesNotContain(sent, c => c.Contains("phoenix feather"));
+    }
+
+    // Out of the hazard the same apply dresses the neck as the set says.
+    [Fact]
+    public void ApplyingASet_AwayFromAnyHazard_DressesTheSlotAsUsual()
+    {
+        (EquipmentManager equipment, _) = HazardRig(Array.Empty<string>(),
+            new EquippedItem("wizard hat", "Head"), new EquippedItem("phoenix feather", "Neck"));
+
+        equipment.ApplyBySetId("default-set");
+
+        Assert.Contains("wear stone", Sent(equipment));
+    }
+
+    // A counter that is only carried isn't protecting anything, so nothing is held for it.
+    [Fact]
+    public void ACounterThatIsNotWorn_HoldsNoSlot()
+    {
+        (EquipmentManager equipment, _) = HazardRig(new[] { "phoenix feather" },
+            new EquippedItem("wizard hat", "Head"));
+
+        equipment.ApplyBySetId("default-set");
+
+        Assert.Contains("wear stone", Sent(equipment));
+    }
+
+    // A counter on one of a pair (a ring, a wristband) holds both: putting a ring on
+    // a full pair evicts whichever one the realm picks, and that could be the counter.
+    [Fact]
+    public void ACounterOnAPairedSlot_HoldsBothOfThePair()
+    {
+        (EquipmentManager equipment, _) = HazardRig(new[] { "ring of cooling" },
+            new EquippedItem("wizard hat", "Head"), new EquippedItem("ring of cooling", "Finger"),
+            new EquippedItem("iron ring", "Finger"));
+
+        equipment.ApplyBySetId("default-set");
+
+        string[] sent = Sent(equipment);
+        Assert.Contains("wear turban", sent);
+        Assert.DoesNotContain(sent, c => c.Contains("ring"));
+    }
+
     // The swap-finished revert is for a rest that ended while its gear was going on:
     // it needs a rest that really just finished, and no gate still held.
     [Theory]
