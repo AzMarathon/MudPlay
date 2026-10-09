@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.3**
+> **Version 3.154.3**
 > - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
 > - A card whose route uses a teleport (a hole, a hatch, a vortex) takes it and says so on the card; picking it no longer walked a far longer way on foot
 > - The Shortcut card lists everything its route needs, and no longer names the key of a door you can pick or bash
