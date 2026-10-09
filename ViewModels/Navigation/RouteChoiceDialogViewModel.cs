@@ -309,13 +309,14 @@ public sealed partial class RouteChoiceDialogViewModel
         // The room the walk starts from, for the "From X to Y" title. Optional (defaults
         // empty → a plain "Route to Y") so the picker's many unit tests, which don't
         // exercise the heading, construct the VM without it.
-        string sourceLabel = "")
+        string sourceLabel = "",
+        Func<RouteChoiceResult, string?>? teleportsOn = null)
     {
         Heading = ComposeHeading(destinationLabel, sourceLabel);
         Populate(
             choice, itemName, giveNameForItem, shopBuyPhraseForItem,
             dropNameForItem, freeEta, gatedEta, hazardCounterSource, hazardSurvivable,
-            resolvedHazardCounter, economyNote);
+            resolvedHazardCounter, economyNote, teleportsOn);
     }
 
     // "Calculating…" construction: the idle (off-thread) path opens the picker with
@@ -351,7 +352,11 @@ public sealed partial class RouteChoiceDialogViewModel
         string? hazardCounterSource = null,
         bool hazardSurvivable = false,
         Func<RouteRequirement, (int ItemId, string Source)?>? resolvedHazardCounter = null,
-        string? economyNote = null)
+        string? economyNote = null,
+        // The teleports a card's route takes ("the teleport to Stone Tunnel (2/1306)"),
+        // or null when it walks all the way. The picker has no map of its own, so the
+        // prompt answers.
+        Func<RouteChoiceResult, string?>? teleportsOn = null)
     {
         ArgumentNullException.ThrowIfNull(choice);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -602,13 +607,41 @@ public sealed partial class RouteChoiceDialogViewModel
                 int saved = choice.GatedStepCount - choice.ShortcutStepCount;
                 ShortcutSummary = $"Shortcut via {scNames} — saves {saved} room{(saved == 1 ? "" : "s")} "
                     + $"({StepsEta(choice.ShortcutStepCount, TimeSpan.Zero)})";
-                ShortcutDetail = $"If you're carrying {scNames}, takes the shorter way. If not, walks to "
+                // The whole list, as the main card gives: the shortcut usually still
+                // crosses the long route's required gates, and naming only the item
+                // that makes it a shortcut read as if that were all it took. Items
+                // only, with no "(ask …)" / "(buy at …)": this card's walk fetches
+                // nothing but the shortcut item, so a source would be a promise it
+                // doesn't keep.
+                string scRequires = choice.ShortcutRequirements is { Count: > 0 } scReqs
+                    ? "Requires " + DescribeRequirements(scReqs, itemName, null, null, null) + ". "
+                    : string.Empty;
+                ShortcutDetail = scRequires
+                    + $"If you're carrying {scNames}, takes the shorter way. If not, walks to "
                     + "its source to try to get it — then the shortcut if it turns up, otherwise the long "
                     + "route. Never bought or fetched automatically.";
             }
             TeleportCaveat = string.Empty;
             TrapCaveat = string.Empty;
             AvoidCaveat = string.Empty;
+        }
+
+        // A card whose route takes a teleport says so. Its walk takes that teleport
+        // (the card's route is the one walked), and where a teleport lands is the
+        // player's call to make, so it can't go unmentioned. The walk-or-teleport fork
+        // is exempt: its cards are about nothing else.
+        if (teleportsOn is not null && !IsTeleportChoice)
+        {
+            string Noted(string summary, RouteChoiceResult card) =>
+                summary.Length > 0 && teleportsOn(card) is { Length: > 0 } teleports
+                    ? $"{summary} — takes {teleports}"
+                    : summary;
+            if (HasFreeRoute) FreeSummary = Noted(FreeSummary, RouteChoiceResult.Free);
+            GatedSummary = Noted(GatedSummary, RouteChoiceResult.Gated);
+            SendItSummary = Noted(SendItSummary, RouteChoiceResult.GatedNoAcquire);
+            SearchSummary = Noted(SearchSummary, RouteChoiceResult.SearchEnRoute);
+            AvoidAltSummary = Noted(AvoidAltSummary, RouteChoiceResult.AvoidOverrideAlt);
+            ShortcutSummary = Noted(ShortcutSummary, RouteChoiceResult.Shortcut);
         }
 
         // Options are ready: drop the "Calculating…" state and refresh every card
