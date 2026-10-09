@@ -2727,6 +2727,9 @@ public sealed class AppServices
         // confirm checkboxes write to Global through this path).
         ApplyConfirmFromGlobalSettings();
         Settings.GlobalSettingsChanged += _ => ApplyConfirmFromGlobalSettings();
+        // The terminal's 16 base colours follow the Global setting the same way.
+        ApplyTerminalColorsFromGlobalSettings();
+        Settings.GlobalSettingsChanged += _ => ApplyTerminalColorsFromGlobalSettings();
         // Log already set by ctor parameter — bootstrap log carries the
         // DataMigration entries from before AppServices was constructed.
         Panels = new FloatingPanelHost();
@@ -13434,6 +13437,35 @@ public sealed class AppServices
     // install-wide preference, not per-character) so this fires off
     // SettingsService.GlobalSettingsChanged, not the
     // per-profile events.
+    // Push the saved colour scheme (Settings → General) to the terminal's palette.
+    // The palette raises its own change only when the 16 colours really differ, so
+    // the saves of every other global setting cost nothing here.
+    private string _terminalColorsApplied = "Standard";
+    private void ApplyTerminalColorsFromGlobalSettings()
+    {
+        Models.Settings.TerminalColorSettings? saved = Settings.Current.TerminalColors;
+        Terminal.AnsiPalette.SetBaseColors(Terminal.AnsiColorSchemes.Resolve(saved?.Scheme, saved?.Colors));
+        string now = DescribeTerminalColors();
+        if (now == _terminalColorsApplied) return;
+        _terminalColorsApplied = now;
+        Log.Info("Settings", $"Terminal colours: {now}.");
+    }
+
+    // The colour scheme in use, for the program log and the bug report: the scheme's
+    // name, and for Custom each colour the user changed.
+    public string DescribeTerminalColors()
+    {
+        Models.Settings.TerminalColorSettings? saved = Settings.Current.TerminalColors;
+        Terminal.AnsiColorScheme scheme = Terminal.AnsiColorSchemes.Parse(saved?.Scheme);
+        if (scheme != Terminal.AnsiColorScheme.Custom) return scheme.ToString();
+        Dictionary<int, string>? changed =
+            Terminal.AnsiColorSchemes.CustomDelta(Terminal.AnsiColorSchemes.CustomColors(saved?.Colors));
+        return changed is null
+            ? "Custom (every colour at the standard one)"
+            : "Custom (" + string.Join(", ", changed.OrderBy(kv => kv.Key)
+                .Select(kv => $"{Terminal.AnsiColorSchemes.NameOf(kv.Key)} {kv.Value}")) + ")";
+    }
+
     private void ApplyConfirmFromGlobalSettings()
     {
         Models.Settings.ConfirmSettings dto =

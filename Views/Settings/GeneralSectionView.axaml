@@ -7,6 +7,49 @@
              x:Class="MudPlay.Views.Settings.GeneralSectionView"
              x:DataType="vm:GeneralSectionViewModel">
 
+    <UserControl.Resources>
+        <!-- One of the 16 terminal colours: its name, a swatch that opens a picker
+             under the Custom scheme, a sample of text in it on the terminal's
+             black, and (Custom only) a Reset back to the standard colour. -->
+        <DataTemplate x:Key="TerminalColorRow" x:DataType="vm:TerminalColorRowViewModel">
+            <Grid ColumnDefinitions="118,Auto,Auto,Auto" Margin="0,3">
+                <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Padding="2" VerticalAlignment="Center"
+                        IsEnabled="{Binding CanEdit}"
+                        ToolTip.Tip="This colour as it is drawn. Under Custom, click to pick another.">
+                    <Border Width="46" Height="18"
+                            Background="{Binding Brush}"
+                            BorderBrush="{StaticResource ChromeBorderSoftBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource CornerSm}"/>
+                    <Button.Flyout>
+                        <Flyout>
+                            <LayoutTransformControl>
+                                <LayoutTransformControl.LayoutTransform>
+                                    <ScaleTransform ScaleX="0.7" ScaleY="0.7"/>
+                                </LayoutTransformControl.LayoutTransform>
+                                <ColorView Color="{Binding Color, Mode=TwoWay}"
+                                           IsAlphaEnabled="False"/>
+                            </LayoutTransformControl>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <Border Grid.Column="2" Background="Black" Margin="8,0,0,0" Padding="8,2"
+                        VerticalAlignment="Center"
+                        CornerRadius="{StaticResource CornerSm}">
+                    <TextBlock Text="Sample text" Foreground="{Binding Brush}"
+                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </Border>
+                <Button Grid.Column="3" Content="Reset" Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding CanEdit}"
+                        Command="{Binding ResetCommand}"
+                        ToolTip.Tip="Put this colour back to the standard one."/>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <UserControl.Styles>
         <Style Selector="TextBlock.SectionHeader">
             <Setter Property="Foreground" Value="{StaticResource ChromeFgMutedBrush}"/>
@@ -532,6 +575,61 @@
                         HorizontalAlignment="Left"
                         Command="{Binding RestoreNavLineDefaultsCommand}"
                         ToolTip.Tip="Reset every navigation line's colour and thickness to the factory defaults."/>
+
+                <!-- ============================================================
+                     Visual impairment: how the 16 base ANSI colours are drawn.
+                     Global tier; pushed to the terminal's palette on Apply.
+                     ============================================================ -->
+                <TextBlock Classes="SectionHeader" Text="Visual impairment: terminal colours"/>
+                <TextBlock Text="How the 16 colours the game uses are drawn in the terminal and the backscroll. Pick the choice made for a kind of colour blindness, or Custom to set each colour yourself. Only how a colour looks changes; nothing the client reads from the game is affected. Applies to every character."
+                           Foreground="{StaticResource ChromeFgSecBrush}"
+                           FontSize="{StaticResource FontSizeSm}"
+                           TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <ContentControl Content="{Binding TerminalColors}">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate x:DataType="vm:TerminalColorsEditorViewModel">
+                            <StackPanel>
+                                <WrapPanel Orientation="Horizontal">
+                                    <RadioButton GroupName="TerminalColorScheme" Margin="0,0,18,4"
+                                                 IsChecked="{Binding IsStandard, Mode=TwoWay}"
+                                                 Content="Default"
+                                                 ToolTip.Tip="The standard colours, as the terminal has always drawn them."/>
+                                    <RadioButton GroupName="TerminalColorScheme" Margin="0,0,18,4"
+                                                 IsChecked="{Binding IsDeuteranopia, Mode=TwoWay}"
+                                                 Content="Deuteranopia"
+                                                 ToolTip.Tip="Red-green colour blindness of the green-weak kind, the most common. Under the standard colours green and yellow, and yellow and bright red, are hard to tell apart."/>
+                                    <RadioButton GroupName="TerminalColorScheme" Margin="0,0,18,4"
+                                                 IsChecked="{Binding IsProtanopia, Mode=TwoWay}"
+                                                 Content="Protanopia"
+                                                 ToolTip.Tip="Red-green colour blindness of the red-weak kind. Under the standard colours green and yellow look the same, and red is very dim."/>
+                                    <RadioButton GroupName="TerminalColorScheme" Margin="0,0,18,4"
+                                                 IsChecked="{Binding IsTritanopia, Mode=TwoWay}"
+                                                 Content="Tritanopia"
+                                                 ToolTip.Tip="Blue-yellow colour blindness. Under the standard colours green and cyan are hard to tell apart."/>
+                                    <RadioButton GroupName="TerminalColorScheme" Margin="0,0,18,4"
+                                                 IsChecked="{Binding IsCustom, Mode=TwoWay}"
+                                                 Content="Custom"
+                                                 ToolTip.Tip="Your own colours. Starts from the choice you were looking at, and is kept if you pick another choice and come back."/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding Hint}"
+                                           Foreground="{StaticResource ChromeFgSecBrush}"
+                                           FontSize="{StaticResource FontSizeSm}"
+                                           TextWrapping="Wrap" Margin="0,2,0,6"/>
+                                <WrapPanel Orientation="Horizontal">
+                                    <ItemsControl ItemsSource="{Binding NormalRows}" Margin="0,0,28,0"
+                                                  ItemTemplate="{StaticResource TerminalColorRow}"/>
+                                    <ItemsControl ItemsSource="{Binding BrightRows}"
+                                                  ItemTemplate="{StaticResource TerminalColorRow}"/>
+                                </WrapPanel>
+                                <Button Content="Restore standard colours" Margin="0,8,0,0"
+                                        HorizontalAlignment="Left"
+                                        IsVisible="{Binding IsCustom}"
+                                        Command="{Binding RestoreStandardColorsCommand}"
+                                        ToolTip.Tip="Put every one of your own colours back to the standard colour."/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
 
             </StackPanel>
 

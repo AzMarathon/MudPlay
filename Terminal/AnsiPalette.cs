@@ -21,16 +21,48 @@ public static class AnsiPalette
         0xFF0000FF, 0xFFFF00FF, 0xFF00FFFF, 0xFFFFFFFF,
     };
 
-    // Color used when a cell's foreground is "default".
-    public const uint DefaultForegroundArgb = 0xFFC0C0C0;
-    // Color used when a cell's background is "default".
+    // Color used when a cell's background is "default". The terminal's own
+    // backdrop: it stays black whatever the 16 colours are set to, so a cell that
+    // names black as its background can still be told from an untouched one.
     public const uint DefaultBackgroundArgb = 0xFF000000;
+
+    // How many colours the user can set: the 16 base ANSI colours.
+    public const int BaseColorCount = 16;
 
     // Lazily-built once per process; covers the full xterm 256-color palette.
     private static readonly uint[] s_xterm256 = BuildXterm256();
 
-    // Look up an entry in the 256-color xterm palette.
-    public static uint Indexed256(int idx) => s_xterm256[idx & 0xFF];
+    // The 16 base colours as drawn: Default16, a scheme made for a kind of colour
+    // blindness, or the user's own (Settings → General). Replaced whole, never
+    // edited in place, so a repaint under way reads one consistent set.
+    private static volatile uint[] s_base16 = (uint[])Default16.Clone();
+
+    // Raised after SetBaseColors changed what is drawn. The views repaint on it.
+    public static event Action? Changed;
+
+    // Set the 16 base colours as drawn (null for the standard set): a colour scheme
+    // from AnsiColorSchemes, or the user's own. Changing a colour changes how it is
+    // drawn everywhere it appears, as text or as a named background; what the game
+    // sent (the colour's index) is untouched, and everything that reads meaning from
+    // a colour reads the index.
+    public static void SetBaseColors(IReadOnlyList<uint>? sixteen)
+    {
+        uint[] next = (uint[])Default16.Clone();
+        if (sixteen is { Count: BaseColorCount })
+            for (int i = 0; i < BaseColorCount; i++) next[i] = 0xFF000000u | sixteen[i];
+
+        if (next.AsSpan().SequenceEqual(s_base16)) return;
+        s_base16 = next;
+        Changed?.Invoke();
+    }
+
+    // Look up an entry in the 256-color xterm palette. The first 16 are the base
+    // colours, which the user may have changed.
+    public static uint Indexed256(int idx)
+    {
+        idx &= 0xFF;
+        return idx < BaseColorCount ? s_base16[idx] : s_xterm256[idx];
+    }
 
     // Map a logical foreground color to its final 32-bit ARGB value. When the
     // cell is bold, indexed colors 0–7 are promoted to their "bright"
@@ -38,10 +70,12 @@ public static class AnsiPalette
     public static uint ResolveForeground(TerminalColor color, bool bold) =>
         color.Kind switch
         {
-            ColorKind.Default => bold ? Default16[15] : DefaultForegroundArgb,
+            // Untouched text is drawn in "white" (7), bright white when bold, so it
+            // follows those two wherever the user has moved them.
+            ColorKind.Default => s_base16[bold ? 15 : 7],
             ColorKind.Indexed => ResolveIndexedForeground((int)color.Value, bold),
             ColorKind.Rgb     => 0xFF000000u | color.Value,
-            _ => DefaultForegroundArgb,
+            _ => s_base16[7],
         };
 
     // Map a logical background color to its ARGB value.

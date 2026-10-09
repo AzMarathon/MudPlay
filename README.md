@@ -1,9 +1,10 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.157.11**
-> - Starting a loop from the toolbar, the Manage dialog or `@loop` closes the map's loop builder when it holds that loop, so the running loop is no longer drawn as the build line
-> - Program log and bug report record the Navigation window's mode and what switched it
+> **Version 3.158.0**
+> - New in Settings → General, under Global client settings: **Visual impairment: terminal colours**. Choose how the 16 game colours are drawn: Default, Deuteranopia, Protanopia, Tritanopia or Custom
+> - The three colour-blindness choices keep each colour near its usual hue and spread the 16 as far apart as they go for that kind of colour blindness, all readable on black
+> - Custom sets each colour yourself, with a reset per colour and for all; the terminal and Backscroll repaint on Apply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -2550,6 +2550,22 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 **When you might change it:** Make the lines thicker or higher-contrast if you find the default map lines hard to see; give each route type a color you can tell apart at a glance.
 **Important notes:** This is a **Global-tier** setting — changing it changes the map for every character on the install, not just the current one. "Restore Defaults" resets every line at once, and each row has its own **Reset** button. Applies live — the Navigation map repaints immediately with no restart.
 
+### Visual impairment: terminal colours
+
+**Default:** Default (the standard colours).
+**Available options:** **Default**, **Deuteranopia**, **Protanopia**, **Tritanopia**, **Custom**.
+**What it does:** Chooses how the 16 colours the game uses are drawn in the terminal and in the Backscroll window. The list under the choices shows all 16 as the choice draws them, each with a sample of text on the terminal's black.
+
+- **Default** draws them as the terminal always has.
+- **Deuteranopia** and **Protanopia** are for the two kinds of red-green colour blindness (green-weak and red-weak). Under the standard colours green and yellow are close to the same for both, and for protanopia red is very dim.
+- **Tritanopia** is for blue-yellow colour blindness, where the standard green and cyan are hard to tell apart.
+- **Custom** lets you set each colour yourself: click a colour's swatch to pick another. **Reset** puts that one back to the standard colour and **Restore standard colours** puts them all back. Custom starts from whichever choice you were looking at, so you can pick one of the three above and then adjust it.
+
+Each of the three made choices keeps every colour near its usual hue, so red is still a red to anyone looking over your shoulder, and moves its shade and brightness until the 16 are as far apart as they will go for that kind of colour blindness. Every colour is also kept bright enough to read on black, which the standard dark blue is not.
+
+**When you might change it:** You can't tell two of the game's colours apart, or one of them is too dim for you to read.
+**Important notes:** This is a **Global-tier** setting: it changes the colours for every character on the install. It takes effect when you press **Apply** or **OK**, and the terminal repaints at once. Your own colours are kept while another choice is picked, so going back to Custom finds them as you left them. Only how a colour **looks** changes. Everything the client reads from the game's colours (room names, a modified stat on `stat`, emotes) goes by which colour the game sent, not by how it is drawn, so nothing else behaves differently. The colours above the base 16 and the terminal's black background are not changed.
+
 ### Default task
 
 **Default:** `Do nothing`

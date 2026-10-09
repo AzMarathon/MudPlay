@@ -395,9 +395,13 @@ public sealed class TerminalControl : Control
         ApplyScale();
     });
 
+    // The 16 base colours were changed in Settings: draw the screen in the new ones.
+    private void OnPaletteChanged() => Dispatcher.UIThread.Post(InvalidateVisual);
+
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        AnsiPalette.Changed += OnPaletteChanged;
         RecalculateMetrics();
         // Cursor blink: toggle on/off twice a second.
         _blinkTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -457,6 +461,7 @@ public sealed class TerminalControl : Control
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        AnsiPalette.Changed -= OnPaletteChanged;
         _blinkTimer?.Stop();
         _blinkTimer = null;
         _repaintTimer?.Stop();
@@ -943,7 +948,8 @@ public sealed class TerminalControl : Control
     // Brush cache: DrawRun resolves a fg + bg brush for every same-attr run, on
     // every repaint — a fresh ImmutableSolidColorBrush per run was pure allocation
     // churn under heavy output. The ARGB space is bounded (the 16 base + 256 xterm
-    // palette entries), so caching them never grows unbounded. Render runs on the
+    // palette entries, plus 16 more each time the user changes the base colours),
+    // so caching them never grows without limit. Render runs on the
     // UI thread only, so a plain Dictionary needs no lock.
     private static readonly Dictionary<uint, IBrush> _brushCache = new();
 

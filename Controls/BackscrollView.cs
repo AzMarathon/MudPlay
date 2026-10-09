@@ -221,6 +221,21 @@ public sealed class BackscrollView : Control, ILogicalScrollable
         return new Vector(Math.Clamp(v.X, 0, maxX), Math.Clamp(v.Y, 0, maxY));
     }
 
+    // The 16 base colours were changed in Settings: draw the transcript in the new ones.
+    private void OnPaletteChanged() => Avalonia.Threading.Dispatcher.UIThread.Post(InvalidateVisual);
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        AnsiPalette.Changed += OnPaletteChanged;
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        AnsiPalette.Changed -= OnPaletteChanged;
+    }
+
     protected override Size MeasureOverride(Size availableSize)
     {
         // Logical scrolling: the control is viewport-sized; scrollbars come from
