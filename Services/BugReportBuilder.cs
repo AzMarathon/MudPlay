@@ -1451,6 +1451,11 @@ public static class BugReportBuilder
                 ? $"{running.Name} — step {loop.CurrentIndex + 1}/{loop.StepCount}"
                 : "(none)");
         Kv(sb, "Loop holding for a command's replies", loop.AwaitingCommandReplies ? "yes" : "no");
+        // A room command that opens an exit on a stat roll is sent again when the
+        // move behind it bonks; a count stuck at the cap is a reveal that never took.
+        Kv(sb, "Rolled-reveal re-sends on the step in flight (walk / loop)",
+            $"{svc.Walker.RolledRevealRetries} / {loop.RolledRevealRetries} of "
+            + Game.Map.SpecialExitDispatch.RolledRevealRetryCap);
         if (loop.CurrentLoop is { } curLoop)
         {
             Kv(sb, "Loop approach target",

@@ -3024,8 +3024,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // accumulates: every replan attempt walks in seeing _replanCount
             // back at 0, so a persistently blocked exit (not just an unlucky
             // fumble streak) would retry through this path forever instead of
-            // failing once the budget is genuinely spent.
+            // failing once the budget is genuinely spent. The rolled-reveal count
+            // is carried over for the same reason: a replan from the room the
+            // reveal is in leads straight back to that step, and a fresh count
+            // each time would multiply its cap by the replans.
             int replanCount = _replanCount;
+            int revealRetries = _revealRetries;
             _replanningInPlace = true;
             try
             {
@@ -3044,6 +3048,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             finally
             {
                 _replanCount = replanCount;
+                _revealRetries = revealRetries;
                 _replanningInPlace = false;
             }
         }
@@ -3254,6 +3259,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // a stale map, and the one retry and two replans those get ran out on a short
     // run of bad rolls. Past the cap the ordinary blocked handling takes the step.
     private int _revealRetries;
+
+    // Diagnostics: rolled-reveal re-sends spent on the step in flight.
+    public int RolledRevealRetries => _revealRetries;
 
     private bool TryResendRolledReveal(Room source)
     {

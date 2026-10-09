@@ -820,28 +820,29 @@ public sealed class LoopRunnerTests : IDisposable
     // A step that opens its exit with a room command that rolls (`clear rubble`
     // behind a `testskill`): a bonk means the roll missed, and the command goes out
     // again without spending the loop's three recoveries.
+    private const string RolledRevealRooms = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Ruin Entrance",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 1422,
+            "N": "1/2 (Hidden/Needs 1 Actions, any order)",
+            "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Ruin",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+    private const string RolledRevealTbInfo = """
+        [ { "Number": 1422,
+            "Action": "clear rubble:testskill strength 0 1423:remoteaction 1 1840 0 0\n",
+            "Called From": "Room 1/1" } ]
+        """;
+
     [Fact]
     public void RolledReveal_MoveBonks_SendsTheRevealAgain_WithoutEnteringRecovery()
     {
-        const string rooms = """
-            [
-              { "Map Number": 1, "Room Number": 1, "Name": "Ruin Entrance",
-                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 1422,
-                "N": "1/2 (Hidden/Needs 1 Actions, any order)",
-                "S": "0", "E": "0", "W": "0",
-                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-              { "Map Number": 1, "Room Number": 2, "Name": "Ruin",
-                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 0,
-                "N": "0", "S": "1/1", "E": "0", "W": "0",
-                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
-            ]
-            """;
-        const string tbinfo = """
-            [ { "Number": 1422,
-                "Action": "clear rubble:testskill strength 0 1423:remoteaction 1 1840 0 0\n",
-                "Called From": "Room 1/1" } ]
-            """;
-        Harness h = NewHarness(rooms, tbinfoJson: tbinfo);
+        Harness h = NewHarness(RolledRevealRooms, tbinfoJson: RolledRevealTbInfo);
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Runner.Start(AbCycle());
         List<string> Sent() => h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
@@ -856,6 +857,37 @@ public sealed class LoopRunnerTests : IDisposable
         }
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+    }
+
+    // Past the cap the bonk is an ordinary blocked step: recovery takes it, the count
+    // is kept across the reroute (the reroute leads back to the same step), and the
+    // loop fails on its own budget instead of circling.
+    [Fact]
+    public void RolledReveal_PastTheCap_EntersRecovery_AndFailsOnTheLoopsOwnBudget()
+    {
+        Harness h = NewHarness(RolledRevealRooms, tbinfoJson: RolledRevealTbInfo);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.RecoveryAttemptSpacingForTests = TimeSpan.Zero;
+        h.Runner.Start(AbCycle());
+        int Reveals() => h.Sent.Count(b => Encoding.Latin1.GetString(b) == "clear rubble\r");
+
+        for (int miss = 0; miss < SpecialExitDispatch.RolledRevealRetryCap; miss++)
+            h.Tracker.NoteMoveBlocked();
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(1 + SpecialExitDispatch.RolledRevealRetryCap, Reveals());
+        Assert.Equal(SpecialExitDispatch.RolledRevealRetryCap, h.Runner.RolledRevealRetries);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+
+        h.Tracker.NoteMoveBlocked();                      // the cap is spent: recovery
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
+
+        for (int i = 0; i < 20 && h.Runner.State != LoopState.Idle; i++)
+            h.Tracker.NoteMoveBlocked();
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Failed);
+        // One more reveal for each of the loop's recoveries, never a second ten.
+        Assert.InRange(Reveals(), 1 + SpecialExitDispatch.RolledRevealRetryCap,
+            SpecialExitDispatch.RolledRevealRetryCap + 6);
     }
 
     [Fact]

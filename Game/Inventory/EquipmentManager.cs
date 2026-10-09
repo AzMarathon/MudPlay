@@ -88,7 +88,10 @@ public sealed class EquipmentManager
     // slots are skipped when building commands, so a swap never re-bonks a piece
     // we already know we can't wear (e.g. after an alignment drift EP-zap). In
     // memory only — self-heals: a fresh session re-detects on the next apply.
-    private readonly record struct BlockInfo(string Name, bool ServerConfirmed);
+    // Transient marks a refusal that describes the moment, not the item ("no more
+    // room to wear that item": every worn slot was taken). It lasts until a worn
+    // piece comes off (NoteWornPieceRemoved).
+    private readonly record struct BlockInfo(string Name, bool ServerConfirmed, bool Transient = false);
     private readonly Dictionary<(string SetId, EquipmentSlot Slot), BlockInfo> _blocked = new();
     // Silent-seed guard: the first block evaluation after a profile load colours
     // the tab without a terminal notice (a saved set's already-unwearable items
@@ -1223,7 +1226,7 @@ public sealed class EquipmentManager
     }
 
     private void SetBlock((string SetId, EquipmentSlot Slot) key, string name,
-        bool serverConfirmed, bool announce)
+        bool serverConfirmed, bool announce, bool transient = false)
     {
         if (_blocked.TryGetValue(key, out BlockInfo existing)
             && string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase))
@@ -1233,9 +1236,10 @@ public sealed class EquipmentManager
                 _blocked[key] = existing with { ServerConfirmed = true };
             return;
         }
-        _blocked[key] = new BlockInfo(name, serverConfirmed);
+        _blocked[key] = new BlockInfo(name, serverConfirmed, transient);
         _log?.Info(LogCategory,
-            $"slot {key.Slot} blocked — can't wear '{name}'{(serverConfirmed ? " (game refused)" : "")}");
+            $"slot {key.Slot} blocked — can't wear '{name}'{(serverConfirmed ? " (game refused)" : "")}"
+            + (transient ? " until a worn piece comes off" : ""));
         BlocksChanged?.Invoke();
         if (announce) SlotBlockedAnnounced?.Invoke(new EquipBlock(key.SetId, key.Slot, name));
     }
@@ -1357,8 +1361,11 @@ public sealed class EquipmentManager
     // is taken). Neither says anything about alignment, class or level, so the slot
     // is blocked like any other refusal and the caller learns nothing from it. The
     // first line names the item and goes to the attempt of that name; the second
-    // names none and goes to the oldest armour attempt still unanswered. Returns
-    // the blocked item's name, or null when no attempt of ours fits.
+    // names none and goes to the oldest armour attempt still unanswered. An item
+    // with no wear slot never gains one, so its block stays until the set is edited;
+    // "no more room" is true only while every worn slot is taken, so that block is
+    // lifted when a piece comes off. Returns the blocked item's name, or null when
+    // no attempt of ours fits.
     public string? NoteCannotBeWorn(string? itemName)
     {
         ExpirePending();
@@ -1369,8 +1376,23 @@ public sealed class EquipmentManager
         if (idx < 0) return null;
         PendingEquip p = _pending[idx];
         _pending.RemoveAt(idx);
-        SetBlock((p.SetId, p.Slot), p.ItemName, serverConfirmed: true, announce: true);
+        SetBlock((p.SetId, p.Slot), p.ItemName, serverConfirmed: true, announce: true,
+            transient: named.Length == 0);
         return p.ItemName;
+    }
+
+    // A worn piece came off ("You have removed <item>.", or the game stripping gear
+    // on an alignment change): a worn slot is free again, so the "no more room"
+    // blocks no longer describe the character. The next apply tries those slots anew.
+    public void NoteWornPieceRemoved()
+    {
+        List<(string SetId, EquipmentSlot Slot)> lifted =
+            _blocked.Where(kv => kv.Value.Transient).Select(kv => kv.Key).ToList();
+        if (lifted.Count == 0) return;
+        foreach ((string SetId, EquipmentSlot Slot) key in lifted) _blocked.Remove(key);
+        _log?.Info(LogCategory,
+            $"a worn piece came off — lifting {lifted.Count} \"no more room\" block(s)");
+        BlocksChanged?.Invoke();
     }
 
     // ----- sneak keeping ---------------------------------------------------

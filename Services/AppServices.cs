@@ -1911,6 +1911,7 @@ public sealed class AppServices
     private IDisposable? _equipWearFailSub;
     private IDisposable? _equipWieldFailSub;
     private IDisposable? _equipCannotBeWornSub;
+    private IDisposable[]? _wornPieceRemovedSubs;
 
     // Auto-equip trigger coordinator. Subscribes to
     // Game.PlayerState's position / combat signals and, when the
@@ -6300,6 +6301,12 @@ public sealed class AppServices
         _equipCannotBeWornSub = Router.Subscribe(
             Services.Patterns.KnownPatterns.UserEquipCannotBeWorn,
             m => Equipment.NoteCannotBeWorn(m.Groups.Count > 0 ? m.Groups[0] : null));
+        // A "no more room" block lasts only while every worn slot is taken.
+        _wornPieceRemovedSubs = new[]
+        {
+            Router.Subscribe(Services.Patterns.KnownPatterns.UserRemoved, _ => Equipment.NoteWornPieceRemoved()),
+            Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentGearRemoved, _ => Equipment.NoteWornPieceRemoved()),
+        };
 
         // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
         // each stands the character up, and without this the rest engine re-sends
@@ -6444,11 +6451,7 @@ public sealed class AppServices
         // is under way a fumble line starts no fresh attack, weapon or spell (user,
         // 2026-10-09). Everything else is re-fired as before.
         Conditions.ActionFailed += _ =>
-        {
-            if (Combat.OnActionFailed()) return;
-            if (Combat.AttackAlreadyEngaged(EngineGate.LastClientCommandText)) return;
-            EngineGate.ReplayLastClientCommand();
-        };
+            Combat.HandleFumble(EngineGate.LastClientCommandText, EngineGate.ReplayLastClientCommand);
 
         // CashManager. Subscribes to cash-on-ground
         // / cash-picked-up / cash-dropped patterns and dispatches

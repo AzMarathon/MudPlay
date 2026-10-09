@@ -2751,6 +2751,9 @@ public sealed class LoopRunner : IRecoverableEngine
     // the bonk is taken for a blocked step and spent against the three recoveries.
     private int _revealRetries;
 
+    // Diagnostics: rolled-reveal re-sends spent on the step in flight.
+    public int RolledRevealRetries => _revealRetries;
+
     private bool TryResendRolledReveal(Room source)
     {
         if (_index >= _expandedSteps.Count || _expandedSteps[_index] is not MoveLoopStep step) return false;

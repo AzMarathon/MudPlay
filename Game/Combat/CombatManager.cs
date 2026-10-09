@@ -4670,13 +4670,12 @@ public sealed partial class CombatManager : IDisposable
     // auto-repeats and the failures stop. Weapon mode only — spell mode re-issues
     // its cast on the per-round tick (OnCombatTick), and _lastAttackCommand holds a
     // weapon verb we must not fire into a spell fight.
-    // Returns true when combat has dealt with the fumble (so the caller need not fall
-    // back to a generic re-fire): it re-sent the weapon swing, or the swing already
-    // took and nothing is owed. False when this isn't a weapon fight it can act on —
-    // spell mode, no target, attacks blocked, or no prior swing — in which case the
-    // caller re-fires the last client command generically
-    // (EngineSendGate.ReplayLastClientCommand), which covers the fumbled attack SPELL /
-    // item-use / other client commands.
+    // Returns true when it re-sent the weapon swing (so the caller knows combat
+    // handled the fumble and need not fall back to a generic re-fire). False when it
+    // sent nothing: this isn't a weapon fight it can act on (spell mode, no target,
+    // attacks blocked, no prior swing), or the swing has already been answered. The
+    // caller then re-fires the last client command generically, which covers the
+    // fumbled attack SPELL / item-use / other client commands (HandleFumble).
     //
     // The swing is re-sent only until the game answers it with `*Combat Engaged*`:
     // that line means the attack went through, and from then on the game repeats it
@@ -4695,7 +4694,7 @@ public sealed partial class CombatManager : IDisposable
         if (EngagedForLastAttack)
         {
             _log?.Combat(LogCategory, $"action failed with the fight engaged — '{line}' is not re-sent");
-            return true;
+            return false;
         }
 
         _combatOff = false;
@@ -4711,6 +4710,25 @@ public sealed partial class CombatManager : IDisposable
     // Engaged line arrives.
     private bool _engagedSinceLastAttack;
     private bool EngagedForLastAttack => _engagedSinceLastAttack && !_combatOff;
+
+    // A fumble line arrived (ConditionTracker.ActionFailed): decide what, if anything,
+    // goes out again. In order:
+    //   1. an attack the game hasn't answered yet is re-sent (OnActionFailed);
+    //   2. the engine's own attack in a fight already engaged is left alone, whoever
+    //      would have re-sent it;
+    //   3. anything else the client sent last is re-fired through the send gate: a
+    //      heal, a buff, an item use. Only the attack is held back once engaged
+    //      (user, 2026-10-09), in a weapon fight and a spell fight alike.
+    // lastClientCommand is the gate's last send as text; replayLastClientCommand
+    // re-sends it (EngineSendGate.ReplayLastClientCommand, which itself leaves out
+    // bare moves and anything the user typed).
+    public void HandleFumble(string? lastClientCommand, Action replayLastClientCommand)
+    {
+        ArgumentNullException.ThrowIfNull(replayLastClientCommand);
+        if (OnActionFailed()) return;
+        if (AttackAlreadyEngaged(lastClientCommand)) return;
+        replayLastClientCommand();
+    }
 
     // Whether a client command is this engine's own attack — the weapon swing last
     // sent, or a cast of the attack spell announced — in a fight the game has already

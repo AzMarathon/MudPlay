@@ -1552,6 +1552,35 @@ public sealed class EquipmentManagerTests
         Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Weapon));
     }
 
+    // "No more room" is true only while every worn slot is taken: its block is
+    // lifted when a piece comes off. An item with no wear slot never gains one, so
+    // that block stays.
+    [Fact]
+    public void NoMoreRoomBlock_LiftsWhenAWornPieceComesOff_TheNoSlotBlockStays()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "painted shield"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+        mgr.NoteCannotBeWorn("painted shield");      // names the item: permanent
+        mgr.NoteCannotBeWorn(null);                  // no more room: the helm, for now
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+
+        // A refresh that finds both wearable lifts neither: both are the game's word.
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+
+        mgr.NoteWornPieceRemoved();
+
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
     // A piece the user tried by hand isn't one of ours: nothing is blocked.
     [Fact]
     public void NoteCannotBeWorn_NamingSomethingWeDidNotSend_BlocksNothing()

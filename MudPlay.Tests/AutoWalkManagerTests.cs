@@ -1841,6 +1841,28 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying);
     }
 
+    // A reveal that never opens ends the walk on the one cap, however the walk gets
+    // there: a replan from the room the reveal is in leads straight back to the same
+    // step, and must not hand it a fresh ten tries.
+    [Fact]
+    public void RolledReveal_ThatNeverOpens_KeepsItsCapAcrossReplans_AndFails()
+    {
+        Harness h = NewHarness(RolledRevealGraphJson, tbinfoJson: RolledRevealTbInfoJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        for (int i = 0; i < 100 && h.Walker.State != WalkState.Idle; i++)
+            h.Tracker.NoteMoveBlocked();
+
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        int reveals = SentText(h).Count(c => c == "clear rubble");
+        // The first try, the ten re-sends, and one more for each ordinary retry and
+        // replan the blocked-step handling then spends: well short of a second ten.
+        Assert.InRange(reveals, 1 + SpecialExitDispatch.RolledRevealRetryCap,
+            SpecialExitDispatch.RolledRevealRetryCap + 8);
+    }
+
     // A room command that reveals with no `testskill` in its chain doesn't roll.
     [Fact]
     public void UnrolledRoomCommandReveal_MoveBonks_KeepsTheOrdinaryRetry()

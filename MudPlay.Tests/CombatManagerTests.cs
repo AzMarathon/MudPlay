@@ -366,10 +366,86 @@ public sealed class CombatManagerTests
 
         h.Feed("*Combat Engaged*");                  // it went through
 
-        Assert.True(h.Combat.OnActionFailed());      // dealt with: nothing is owed
+        Assert.False(h.Combat.OnActionFailed());     // nothing re-sent: the swing isn't owed
         Assert.Equal(3, h.Sent.Count);
         Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
         Assert.False(h.Combat.AttackAlreadyEngaged("cast bless"));
+    }
+
+    // The whole decision a fumble line goes through, with the send gate the engines
+    // share standing in for the last client command and its replay.
+    private static (EngineSendGate Gate, Action<byte[]> Send) GateOver(Harness h)
+    {
+        EngineSendGate gate = new();
+        return (gate, gate.WrapEngineSender(h.Sent.Add));
+    }
+
+    // Engaged weapon fight, and the command the fumble ate was a heal: the heal goes
+    // out again and no attack does. Only the attack is held back once engaged.
+    [Fact]
+    public void HandleFumble_EngagedFight_ReplaysAFumbledHeal_AndSendsNoAttack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        (EngineSendGate gate, Action<byte[]> send) = GateOver(h);
+        send(Encoding.Latin1.GetBytes("mihe\r"));               // a between-round heal
+        int before = h.Sent.Count;
+
+        h.Combat.HandleFumble(gate.LastClientCommandText, gate.ReplayLastClientCommand);
+
+        Assert.Equal(before + 1, h.Sent.Count);
+        Assert.Equal("mihe", h.LastSent);
+        Assert.Equal(1, h.Sent.Count(b => Encoding.Latin1.GetString(b) == "a giant rat\r"));
+    }
+
+    // Engaged, and the last thing the client sent IS the swing: nothing goes out,
+    // from the combat engine or from the gate's replay.
+    [Fact]
+    public void HandleFumble_EngagedFight_LastCommandIsTheSwing_SendsNothing()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        (EngineSendGate gate, Action<byte[]> send) = GateOver(h);
+        h.Feed("Also here: giant rat.");
+        send(Encoding.Latin1.GetBytes("a giant rat\r"));        // the gate saw the swing go out
+        h.Feed("*Combat Engaged*");
+        int before = h.Sent.Count;
+
+        h.Combat.HandleFumble(gate.LastClientCommandText, gate.ReplayLastClientCommand);
+
+        Assert.Equal(before, h.Sent.Count);
+    }
+
+    // Not engaged yet: the swing itself is re-sent, once, and the gate's replay is
+    // not asked for on top of it.
+    [Fact]
+    public void HandleFumble_NotEngaged_ResendsTheSwing_AndSkipsTheReplay()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        int replays = 0;
+
+        h.Combat.HandleFumble("mihe", () => replays++);
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("a giant rat", h.LastSent);
+        Assert.Equal(0, replays);
+    }
+
+    // No fight at all: whatever the client sent last is re-fired, as it always was.
+    [Fact]
+    public void HandleFumble_NoFight_ReplaysTheLastClientCommand()
+    {
+        using Harness h = new();
+        int replays = 0;
+
+        h.Combat.HandleFumble("use waterskin", () => replays++);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(1, replays);
     }
 
     // *Combat Off* ends the engagement, and so does a fresh attack going out: each

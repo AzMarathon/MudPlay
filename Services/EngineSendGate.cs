@@ -110,22 +110,22 @@ public sealed class EngineSendGate
         };
     }
 
-    // Re-send the last client command — a confusion fumble consumed it without it
-    // executing (GAME_MECHANICS "Confusion fumbles"), so re-sending is what performs
-    // the intended action. Driven by ConditionTracker.ActionFailed. No-op while a hold
-    // is up, before any client send, or when the last command was a bare MOVEMENT step:
-    // a fumbled move is already recovered by MovementRefusalDetector's revert + the
-    // walker's own re-send, so re-firing it here would double-step and desync position.
-    // (Combat weapon swings are re-sent by CombatManager with its engage bookkeeping; the
-    // AppServices coordinator only falls through to this for the non-weapon cases —
-    // attack spells, item uses, and other client commands — and not for an attack the
-    // game has already engaged.)
     // The last client command as text, for a caller that has to judge it before
     // asking for the replay. Null before any client send.
     public string? LastClientCommandText => _lastClientCommand is { Length: > 0 } cmd
         ? System.Text.Encoding.Latin1.GetString(cmd).TrimEnd('\r', '\n')
         : null;
 
+    // Re-send the last client command — a confusion fumble consumed it without it
+    // executing (GAME_MECHANICS "Confusion fumbles"), so re-sending is what performs
+    // the intended action. Driven by ConditionTracker.ActionFailed. No-op while a hold
+    // is up, before any client send, or when the last command was a bare MOVEMENT step:
+    // a fumbled move is already recovered by MovementRefusalDetector's revert + the
+    // walker's own re-send, so re-firing it here would double-step and desync position.
+    // (Combat weapon swings are re-sent by CombatManager with its engage bookkeeping;
+    // CombatManager.HandleFumble only falls through to this for the non-weapon cases —
+    // attack spells, item uses, and other client commands — and not for an attack the
+    // game has already engaged.)
     public void ReplayLastClientCommand()
     {
         if (IsLocked) return;
