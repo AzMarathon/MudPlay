@@ -1027,6 +1027,291 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Equal(MovementEngineState.Idle, w.H.Controller!.State);
     }
 
+    // ----- second review: starts, darkness, stops left, pauses --------
+
+    [Fact]
+    public void DeferredSweep_DoesNotStart_WithAnotherEnginesMoveOnTheWire()
+    {
+        // A loop's flee return ends in the death room with a hostile there, so the
+        // sweep waits. The kill frees the loop's next move and the sweep in the same
+        // instant, and the heartbeat ticks before that move lands. Started then, the
+        // looks go out from a room the character is leaving, the landing is ignored
+        // for their length, and the tracker is anchored back in the death room.
+        using SpillWorld w = new(CrossJson);
+        w.Enter(1);
+        w.Die(Worn("iron sword", "steel helm"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.H.Recovery.AutoRecover = true;
+        w.Enter(2);
+        w.H.OtherEngine = true;
+        w.H.Hostiles = true;
+        Assert.True(w.H.Walker!.WalkTo(new RoomKey(1, 1)));
+        w.Run(8);
+        Assert.Contains("waiting to start", w.State);
+
+        w.H.Hostiles = false;
+        w.H.Tracker.NoteMoveSent(Direction.N);     // the loop's own move, on the wire
+        int mark = w.H.Sent.Count;
+        w.H.Heartbeat();                           // ticks before the move lands
+        w.Enter(2);                                // it lands: we are in 1/2 now
+        for (int i = 0; i < 6; i++) w.H.Heartbeat();
+
+        Assert.DoesNotContain(w.H.Sent.Skip(mark), s => s.StartsWith("look "));
+        Assert.Equal(new RoomKey(1, 2), w.H.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal("idle", w.State);
+    }
+
+    [Fact]
+    public void DeferredSweep_DoesNotStart_WithATypedMoveOnTheWire()
+    {
+        using SpillWorld w = SwordHereRopeOut(doorsClosed: false);
+        w.H.Hostiles = true;
+        w.RecoverNow(beats: 6);
+        Assert.Contains("waiting to start", w.State);
+
+        w.H.Hostiles = false;
+        w.H.Tracker.NoteMoveSent(Direction.E);
+        int mark = w.H.Sent.Count;
+        w.H.Heartbeat();
+        w.Enter(3);
+        for (int i = 0; i < 8; i++) w.H.Heartbeat();
+
+        Assert.Empty(w.H.Sent.Skip(mark));
+        Assert.Equal(new RoomKey(1, 3), w.H.Tracker.State.CurrentRoom!.Key);
+    }
+
+    [Fact]
+    public void DeferredSweep_StartsAfterAMoveTheGameRefused()
+    {
+        // The move bounced: we stand confirmed in the death room again, and the wait
+        // is over.
+        using SpillWorld w = SwordHereRopeOut();
+        w.Put(2, "rope");
+        w.H.Hostiles = true;
+        w.RecoverNow(beats: 6);
+        w.H.Hostiles = false;
+        w.H.Tracker.NoteMoveSent(Direction.E);
+        w.H.Heartbeat();
+        Assert.Contains("waiting to start", w.State);
+
+        w.H.Tracker.NoteMoveBlocked();
+        w.Run(40);
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
+    }
+
+    [Fact]
+    public void DeferredSweep_IsCalledOffByStop()
+    {
+        using SpillWorld w = SwordHereRopeOut();
+        w.H.Hostiles = true;
+        w.RecoverNow(beats: 6);
+        Assert.Contains("waiting to start", w.State);
+        int mark = w.H.Sent.Count;
+
+        w.H.Controller!.Stop();
+        w.H.Hostiles = false;
+        w.Run(20);
+
+        Assert.Empty(w.H.Sent.Skip(mark));
+        Assert.Equal("idle", w.State);
+    }
+
+    [Fact]
+    public void Stock_WalkIntoADarkDeathRoom_StaysArmedForTheLookThatFollowsALight()
+    {
+        // A dark room confirms with no display at all. Nothing has been read, so the
+        // floor is not taken as empty and no sweep sets off from it.
+        using GraphHarness h = new() { Paradigm = false };
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        h.Recovery.AutoRecover = true;
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.Tracker.NoteMoveSent(Direction.S);
+        h.Tracker.NoteDarkRoomEntered();
+        Assert.True(h.Tracker.IsInDarkRoom);
+
+        for (int i = 0; i < 5; i++) h.Heartbeat();
+        Assert.Empty(h.Sent);
+        Assert.Equal("idle", h.Recovery.SpillSweepState);
+
+        h.FeedSurvey("a torch");   // a light went on and the room was looked at
+        Assert.Contains("get torch", h.Sent);
+    }
+
+    [Fact]
+    public void Sweep_CharacterMovedOffAStopWhilePaused_EndsOnResume_AndSearchesNothing()
+    {
+        // At a trail stop a typed move pauses navigation; the user steps into their
+        // stash room and presses Resume. The search owed to the stop must not go out
+        // where the character now stands.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.H.StashRooms.Add(new RoomKey(1, 3));
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Enter(1);
+        w.RecoverNow(beats: 0);
+        w.RunUntil("getting items at 1/1");
+        int mark = w.H.Sent.Count;
+
+        w.H.Controller!.Pause();                   // what a typed move does
+        w.H.Tracker.NoteMoveSent(Direction.E);
+        w.Enter(3);
+        for (int i = 0; i < 5; i++) w.H.Heartbeat();
+        Assert.Contains("getting items at 1/1", w.State);   // paused: it waits, and doesn't end itself
+
+        w.H.Controller.Resume();
+        for (int i = 0; i < 6; i++) w.H.Heartbeat();
+
+        Assert.Empty(w.H.Sent.Skip(mark));
+        Assert.Contains("moved off the stop", w.State);
+        Assert.False(w.H.Coordinator.IsGateAsserted(MovementCoordinator.UserGate));
+    }
+
+    [Fact]
+    public void Sweep_UnderTheUsersPause_NeverEndsItself_AndItsClocksStop()
+    {
+        // A sweep that ended itself under a pause would leave the user's gate up with
+        // nothing running, and the next walk the client started would begin held.
+        using SpillWorld w = SweepIn("grab");
+        w.Put(4, "rope");
+
+        w.H.Controller!.Pause();
+        w.Run(800);   // past the ten minutes and the two for a walk back
+
+        Assert.Contains("getting items at 1/2", w.State);
+        Assert.Equal(MovementEngineState.Paused, w.H.Controller.State);
+
+        w.H.Controller.Resume();
+        w.Run(40);
+        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);   // with its time intact
+    }
+
+    [Fact]
+    public void Sweep_StopReachedWithoutWalking_DoesNotTakeAPeekedFloorForItsOwn()
+    {
+        // No spill room can be walked to, so the first stop is the death room itself,
+        // as a trail stop. The floor list still holds what the look east showed (a
+        // rope like ours, where the walker won't go). That is not this room's floor:
+        // no get goes out for it, and ours, which the search reveals, is still got.
+        using SpillWorld w = new(CrossJson);
+        w.H.Filter.Avoided.Add(new RoomKey(1, 2));
+        w.H.Filter.Avoided.Add(new RoomKey(1, 3));
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Put(3, "rope");
+        w.Hide(1, "rope");
+
+        w.Enter(1);
+        w.RecoverNow(beats: 40);
+
+        Assert.Equal(1, w.H.Sent.Count(s => s == "get rope"));
+        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
+    }
+
+    [Fact]
+    public void Sweep_OutOfTimeWhileFreeToMove_WalksBack()
+    {
+        // A hostile at the last trail stop holds the search, not the walking. When the
+        // ten minutes are up the sweep can still move, so it goes back.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(3);
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        int into3 = 0;
+        w.OnStepInto = room =>
+        {
+            if (room == 3 && ++into3 == 2) w.H.Hostiles = true;   // back there as a trail stop
+        };
+
+        w.Enter(1);
+        w.RecoverNow(beats: 700);
+
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+        Assert.Contains("out of time (600 s)", w.Note);
+        Assert.DoesNotContain("movement held", w.Note);
+        Assert.DoesNotContain("not put back on", w.Note);
+    }
+
+    [Fact]
+    public void Disconnect_WhileTheDeathRoomGrabSettles_StartsNoSweepAfterwards()
+    {
+        using SpillWorld w = SwordHereRopeOut();
+        w.RecoverNow(beats: 0);
+        w.Settle();                                // the look is answered, the sword got
+        Assert.Contains("get iron sword", w.H.Sent);
+        int mark = w.H.Sent.Count;
+
+        w.Recovery.NotifyDisconnected();
+        w.Run(20);
+
+        Assert.Empty(w.H.Sent.Skip(mark));
+        Assert.Equal("idle", w.State);
+    }
+
+    [Fact]
+    public void Sweep_BackToADeathRoomTheWalkerStopsBefore_FinishesOneRoomShort()
+    {
+        // The death room is marked "stop before entering", so the walk back ends one
+        // room short. That is the arrival, at once, and the gear goes back on.
+        using SpillWorld w = SwordHereRopeOut();
+        w.H.Walker!.SetBossStopRooms(() => new HashSet<RoomKey> { new(1, 1) });
+
+        w.RecoverNow(beats: 30);
+
+        Assert.Equal(new RoomKey(1, 3), w.Here);
+        Assert.Equal("idle; the last one ended: every room in the plan was tried", w.State);
+        Assert.DoesNotContain("not put back on", w.Note);
+    }
+
+    [Fact]
+    public void WhoseWalkItWas_IsAskedAtTheNextHeartbeat_NotInsideTheArrival()
+    {
+        // An errand that walked here (a token route, say) still reads as driving
+        // while the arrival is being handled, and is done a moment later. The walk was
+        // the user's Recover-style walk-to all the same: it earns the whole sweep.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Put(4, "rope");
+        w.H.Recovery.AutoRecover = true;
+        w.Enter(3);
+        w.H.OtherEngine = true;
+
+        Assert.True(w.H.Walker!.WalkTo(new RoomKey(1, 1)));
+        w.Settle();                 // the arrival, handled with the errand still up
+        w.H.OtherEngine = false;    // and over by the next heartbeat
+        w.Run(60);
+
+        Assert.Contains(4, w.Walked);
+        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
+    }
+
+    [Fact]
+    public void ALoopWhoseApproachWalkJustEndedHere_GetsTheShortSweep()
+    {
+        // The other way round: inside the arrival the loop isn't running yet (its
+        // walk has only just ended); by the next heartbeat it is.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Put(4, "rope");
+        w.H.Recovery.AutoRecover = true;
+        w.Enter(3);
+
+        Assert.True(w.H.Walker!.WalkTo(new RoomKey(1, 1)));
+        w.Settle();
+        w.H.OtherEngine = true;
+        w.Run(60);
+
+        Assert.Equal(new[] { 1 }, w.Walked.ToArray());   // the looks only
+        Assert.Equal(new[] { "rope" }, w.H.Latest.UnrecoveredItems);
+    }
+
     [Fact]
     public void Paradigm_NeverSweeps()
     {

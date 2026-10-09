@@ -19,6 +19,7 @@ public sealed class PvpFleeWalk : IDisposable
     private readonly Action<TimeSpan, Action> _schedule;
     private readonly Action _startSprint;
     private readonly LogService? _log;
+    private readonly Func<bool>? _walkIsNotToResume;
 
     private RoomKey _destination;
     private DetourResume _resume;
@@ -32,8 +33,10 @@ public sealed class PvpFleeWalk : IDisposable
     // by itself when the walk arrives.
     public PvpFleeWalk(
         AutoWalkManager walker, LoopRunner loops, AutoLairManager lair,
-        Action<TimeSpan, Action> schedule, Action startSprint, LogService? log = null)
+        Action<TimeSpan, Action> schedule, Action startSprint, LogService? log = null,
+        Func<bool>? walkIsNotToResume = null)
     {
+        _walkIsNotToResume = walkIsNotToResume;
         _walker = walker;
         _loops = loops;
         _lair = lair;
@@ -48,7 +51,10 @@ public sealed class PvpFleeWalk : IDisposable
     {
         if (IsActive) return true;
 
-        DetourResume resume = DetourResume.Snapshot(_walker, _loops, _lair, includeWalk: true);
+        // A walk that is one leg of something which ends when its walk is taken (a
+        // Stock spill sweep) is not picked back up: its stop means nothing afterwards.
+        DetourResume resume = DetourResume.Snapshot(_walker, _loops, _lair,
+            includeWalk: _walkIsNotToResume?.Invoke() != true);
         resume.Stop(_walker, _loops, _lair, $"PvP flee: {reason}");
 
         _destination = destination;

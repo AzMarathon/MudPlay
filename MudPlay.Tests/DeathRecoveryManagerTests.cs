@@ -116,9 +116,9 @@ public sealed partial class DeathRecoveryManagerTests
                 movementHeld: () => Coordinator.IsPaused,
                 isStashRoom: StashRooms.Contains,
                 otherEngineDrives: () => OtherEngine,
-                sendsHeld: () => Coordinator.IsGateAsserted(MovementCoordinator.HealthRecoveryGate)
-                    || Coordinator.IsGateAsserted(MovementCoordinator.ManaRecoveryGate)
-                    || Coordinator.IsGateAsserted(MovementCoordinator.UserGate),
+                restHeld: () => Coordinator.IsGateAsserted(MovementCoordinator.HealthRecoveryGate)
+                    || Coordinator.IsGateAsserted(MovementCoordinator.ManaRecoveryGate),
+                userPaused: () => Coordinator.IsGateAsserted(MovementCoordinator.UserGate),
                 autoSearchesRooms: () => AutoSearches,
                 noteRoomSearched: Searched.Add);
             Recovery.SetStaysOnDeathProbe(Stays.Contains);
@@ -145,6 +145,7 @@ public sealed partial class DeathRecoveryManagerTests
                     held: () => Recovery.SpillSweepHeld,
                     stop: Recovery.StopSpillSweep);
                 Recovery.SpillSweepStateChanged += Controller.NoteSolverStateChanged;
+                Controller.Stopping += Recovery.DropDeferredSweep;
                 _engines.Add(Controller);
                 _engines.Add(autoLair);
                 _engines.Add(timers);

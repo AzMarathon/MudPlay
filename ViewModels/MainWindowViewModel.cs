@@ -556,11 +556,16 @@ public partial class MainWindowViewModel : ObservableObject
         !EngineActionIsIdle && AppServices.Current.MovementControl.IsUserPaused ? "PAUSED"
         : _autoLairOn                                   ? "AUTO-LAIR"
         : _loopRunning                                  ? "LOOPING"
+        : SpillSweepRunning                             ? "RECOVERING"
         : (_walkerState != Game.Map.WalkState.Idle)     ? "WALKING"
         :                                                 "IDLE";
 
-    public bool EngineActionIsIdle    => !_autoLairOn && !_loopRunning && _walkerState == Game.Map.WalkState.Idle;
-    public bool EngineActionIsWalking => !_autoLairOn && !_loopRunning && _walkerState != Game.Map.WalkState.Idle;
+    // A Stock spill sweep stands in rooms looking, getting and searching with the
+    // walker idle. Stop and Pause are live for it then, so the chip mustn't read IDLE.
+    private static bool SpillSweepRunning => AppServices.Current.DeathRecovery.SpillSweepActive;
+
+    public bool EngineActionIsIdle    => !_autoLairOn && !_loopRunning && _walkerState == Game.Map.WalkState.Idle && !SpillSweepRunning;
+    public bool EngineActionIsWalking => !_autoLairOn && !_loopRunning && (_walkerState != Game.Map.WalkState.Idle || SpillSweepRunning);
     public bool EngineActionIsLooping => !_autoLairOn &&  _loopRunning;
     public bool EngineActionIsLair    =>  _autoLairOn;
 
@@ -656,7 +661,9 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 if (row.IsButton) ApplyToolbarRowState(row);
             }
-            OnPropertyChanged(nameof(EngineActionBadge));
+            // The whole chip, not only its label: a solver starting or ending (the
+            // spill sweep) changes which state it shows with no walker event.
+            RefreshEngineActionChip();
         });
 
     private void RefreshEngineActionChip()

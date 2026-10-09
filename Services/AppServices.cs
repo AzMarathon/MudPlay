@@ -7182,14 +7182,16 @@ public sealed class AppServices
             // The sweep the user asked for gives way to whatever else drives the
             // character: a loop, Auto-Lair or an errand's walk, any other errand or
             // solver that has the walker, and a party leader being followed.
+            // A loop being walked to (its handoff pending) is a loop for this purpose:
+            // the walker's arrival hands over to it a moment later.
             otherEngineDrives: () =>
                 ErrandOwnsWalk() || ErrandHasTheWalker
-                || LoopRunner.State != Game.Map.LoopState.Idle
+                || LoopRunner.State != Game.Map.LoopState.Idle || LoopHandoff.Pending is not null
                 || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate),
             // It sends nothing during a rest (helper actions wait one out) or while
             // the user has paused; Auto-All is its own probe below.
-            sendsHeld: () => RestHeld()
-                || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
+            restHeld: RestHeld,
+            userPaused: () => MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
             autoSearchesRooms: () => ReadAutoModeFlag(d => d.AutoSearch)
                 || PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
             noteRoomSearched: room => AutoSearch.NoteSearchedByOther(room));
@@ -7940,7 +7942,8 @@ public sealed class AppServices
         PvpFlee = new Game.Pvp.PvpFleeWalk(
             Walker, LoopRunner, AutoLair, pacedReplyScheduler,
             startSprint: () => ApplyRunStartMode?.Invoke(Game.Map.RunStartMode.Sprint),
-            Log);
+            Log,
+            walkIsNotToResume: () => DeathRecovery.SpillSweepActive);
         PvpFight = new Game.Pvp.PvpFight(
             Router, RoomClassifier,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
@@ -8039,6 +8042,9 @@ public sealed class AppServices
             held: () => DeathRecovery.SpillSweepHeld,
             stop: DeathRecovery.StopSpillSweep);
         DeathRecovery.SpillSweepStateChanged += MovementControl.NoteSolverStateChanged;
+        // A sweep still waiting to start isn't running, so the solver list doesn't
+        // reach it; Stop calls it off here.
+        MovementControl.Stopping += DeathRecovery.DropDeferredSweep;
 
         // Gear driven by movement + room, for the While Moving / Bossing sets. Both
         // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).
@@ -8646,7 +8652,10 @@ public sealed class AppServices
                 || PathItemShopRouter.DetourActive || PathItemGiveRouter.DetourActive
                 || PathItemSummonRouter.DetourActive || MonsterDropRouter.DetourActive
                 || AutoLightShopRouter.DetourActive
-                || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive,
+                || MazeSolver.Active || PyramidSolver.Active || GhSweep.IsActive
+                // A spill sweep's leg is not a walk to pick back up: the sweep ends when
+                // its walk is taken, and the detour would walk on to a stop nobody wants.
+                || DeathRecovery.SpillSweepActive,
             nearestLoopRoom: NearestLoopRoom,
             nearBankSteps: () => ReadSection<Models.Profile.CashSettings>(Profile.Current, "Cash").SellOnBankRunWithinSteps,
             log: Log);

@@ -38,16 +38,22 @@ public sealed class DeathSpillOrderTests : IDisposable
         return sb.ToString();
     }
 
-    private IReadOnlyList<RoomKey> Candidates(params string[] rows)
+    private int _graphs;
+
+    private RoomGraphManager Graph(IEnumerable<string> rows)
     {
-        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), "[" + string.Join(",\n", rows) + "]");
-        GameDataCache cache = new(_root);
+        string root = Path.Combine(_root, "g" + _graphs++);
+        Directory.CreateDirectory(Path.Combine(root, "alpha"));
+        File.WriteAllText(Path.Combine(root, "alpha", "Rooms.json"), "[" + string.Join(",\n", rows) + "]");
+        GameDataCache cache = new(root);
         cache.SwitchSet("alpha");
         RoomGraphManager graph = new(cache);
         graph.OnActiveSetChanged("alpha");
-        return DeathSpillOrder.Candidates(new RoomKey(1, 1), graph.GetRoom);
+        return graph;
     }
+
+    private IReadOnlyList<RoomKey> Candidates(params string[] rows) =>
+        DeathSpillOrder.Candidates(new RoomKey(1, 1), Graph(rows).GetRoom);
 
     private static RoomKey[] Rooms(params int[] rooms) => rooms.Select(r => new RoomKey(1, r)).ToArray();
 
@@ -160,6 +166,53 @@ public sealed class DeathSpillOrderTests : IDisposable
             Row("1/2"));
 
         Assert.Equal(Rooms(2), order);
+    }
+
+    // The engine's walk as it runs, with nothing passed over: every room re-entered
+    // and gone on from again, to the depth limit.
+    private static void LiteralReplay(RoomKey key, int depth, Func<RoomKey, Room?> rooms,
+        List<RoomKey> order, HashSet<RoomKey> listed)
+    {
+        if (depth > DeathSpillOrder.MaxRoomsBeyondDeathRoom || rooms(key) is not { } room) return;
+        if (listed.Add(key)) order.Add(key);
+        foreach ((Direction _, RoomKey target) in DeathSpillOrder.SpillExits(room))
+            LiteralReplay(target, depth + 1, rooms, order, listed);
+    }
+
+    // Candidates passes over a room already gone on from no deeper, to spare the
+    // engine's re-walking. That must never change the order: checked against the
+    // literal replay on sixty random graphs with cycles, exits off the graph and
+    // exits to another map.
+    [Fact]
+    public void PassingOverRoomsAlreadyGoneOnFrom_LeavesTheOrderTheEngines()
+    {
+        for (int seed = 1; seed <= 60; seed++)
+        {
+            Random rng = new(seed);
+            int n = 12 + rng.Next(30);
+            List<string> rows = new();
+            for (int r = 1; r <= n; r++)
+            {
+                List<string> exits = new();
+                HashSet<int> used = new();
+                int degree = 1 + rng.Next(5);
+                for (int e = 0; e < degree; e++) used.Add(rng.Next(10));
+                foreach (int c in used)
+                {
+                    int target = 1 + rng.Next(n + 2);       // a few lead off the graph
+                    int map = rng.Next(12) == 0 ? 2 : 1;    // a few change map
+                    exits.Add($"{s_columns[c]}={map}/{target}");
+                }
+                rows.Add(Row($"1/{r}", exits.ToArray()));
+            }
+            RoomGraphManager graph = Graph(rows);
+
+            RoomKey death = new(1, 1);
+            List<RoomKey> literal = new();
+            LiteralReplay(death, 0, graph.GetRoom, literal, new HashSet<RoomKey> { death });
+
+            Assert.Equal(literal, DeathSpillOrder.Candidates(death, graph.GetRoom));
+        }
     }
 
     [Fact]
