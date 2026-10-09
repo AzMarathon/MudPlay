@@ -367,6 +367,7 @@ public static class KnownPatterns
     public const string UserEquipped      = "item.user-equipped";   // wearing + lit (torches etc.)
     public const string UserEquipFailed   = "item.user-equip-failed";  // armor: "You may not wear that item!"
     public const string UserWieldFailed   = "item.user-wield-failed";  // weapon EP-zap: "You may not use that weapon."
+    public const string UserEquipCannotBeWorn = "item.user-equip-cannot-be-worn"; // "<item> may not be worn!" / "You have no more room to wear that item!" — nothing to do with alignment
     public const string UserRemoved       = "item.user-removed";
     public const string HiddenItems       = "item.hidden-items";
     public const string ShopListHeader    = "item.shop-list-header";
@@ -425,6 +426,12 @@ public static class KnownPatterns
     // into a RoomTracker.NoteMoveSent so the map stays located instead of drifting
     // to Lost. Group 0 captures the long-form direction word.
     public const string PartyFollowMove     = "party.follow-move";
+    // The character's `set follow` mode, as the game states it: the `pro` sheet's
+    // "Follow Mode:        Blind|Normal" row and the two replies to `set follow`. In
+    // Blind mode a follow move prints no room.
+    public const string FollowModeRow       = "party.follow-mode-row";
+    public const string FollowModeSetBlind  = "party.follow-mode-set-blind";   // "You will only see the fact that you have moved when following."
+    public const string FollowModeSetNormal = "party.follow-mode-set-normal";  // "You will see your normal room descriptions when following."
     public const string PartyStopsFollowing = "party.stops-following";   // "X has stopped following you." / "X stops following you."
     public const string PartyLeftBehind     = "party.left-behind";       // "X is no longer following you." — leader's view of a follower who couldn't move with us (held / knocked down)
     public const string PartyYouInvited     = "party.you-invited";       // "You have invited X to follow you." — our own outbound invite confirmation

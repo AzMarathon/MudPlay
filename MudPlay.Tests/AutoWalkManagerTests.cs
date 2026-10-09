@@ -1776,6 +1776,100 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal("n\r",           Encoding.Latin1.GetString(h.Sent[2]));
     }
 
+    // A reveal that rolls: the room's command chain opens its own hidden N exit
+    // through a `testskill`, which can miss and leave the exit shut.
+    private const string RolledRevealGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Ruin Entrance",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 1422,
+            "N": "1/2 (Hidden/Needs 1 Actions, any order)",
+            "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Ruin",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 0,
+            "N": "0", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+    private const string RolledRevealTbInfoJson = """
+        [ { "Number": 1422,
+            "Action": "clear rubble:testskill strength 0 1423:remoteaction 1 1840 0 0\n",
+            "Called From": "Room 1/1" } ]
+        """;
+
+    private static List<string> SentText(Harness h) =>
+        h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
+
+    // The roll missed, the exit stayed hidden and the move bonked: the command goes
+    // out again with the move, on a budget of its own. Before, one retry and two
+    // replans were all a reveal got, and a short run of bad rolls failed the walk.
+    [Fact]
+    public void RolledReveal_MoveBonks_SendsTheRevealAgain_UntilTheWayOpens()
+    {
+        Harness h = NewHarness(RolledRevealGraphJson, tbinfoJson: RolledRevealTbInfoJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+        Assert.Equal(new[] { "clear rubble", "n" }, SentText(h));
+
+        for (int miss = 1; miss <= 5; miss++)
+        {
+            h.Tracker.NoteMoveBlocked();
+            Assert.Equal(WalkState.Walking, h.Walker.State);
+            Assert.Equal(2 * (miss + 1), h.Sent.Count);
+            Assert.Equal(new[] { "clear rubble", "n" }, SentText(h).TakeLast(2));
+        }
+        Assert.DoesNotContain(h.Events, e => e.Kind is WalkEventKind.Failed or WalkEventKind.Retrying);
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Ruin", new HashSet<Direction> { Direction.S }));
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+    }
+
+    // The retries are capped: past the cap the step is an ordinary blocked step.
+    [Fact]
+    public void RolledReveal_PastTheCap_FallsBackToTheBlockedStepHandling()
+    {
+        Harness h = NewHarness(RolledRevealGraphJson, tbinfoJson: RolledRevealTbInfoJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        for (int miss = 0; miss < SpecialExitDispatch.RolledRevealRetryCap; miss++)
+            h.Tracker.NoteMoveBlocked();
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Retrying);
+        Assert.Equal(2 * (SpecialExitDispatch.RolledRevealRetryCap + 1), h.Sent.Count);
+
+        h.Tracker.NoteMoveBlocked();                      // the cap is spent
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying);
+    }
+
+    // A room command that reveals with no `testskill` in its chain doesn't roll.
+    [Fact]
+    public void UnrolledRoomCommandReveal_MoveBonks_KeepsTheOrdinaryRetry()
+    {
+        Harness h = NewHarness(RolledRevealGraphJson, tbinfoJson: """
+            [ { "Number": 1422, "Action": "pull chain:remoteaction 1 1840 0 0\n", "Called From": "Room 1/1" } ]
+            """);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+        Assert.Equal(new[] { "pull chain", "n" }, SentText(h));
+
+        h.Tracker.NoteMoveBlocked();
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying);
+    }
+
+    // A lever exit carries no roll, so a bonk behind it keeps the ordinary handling.
+    [Fact]
+    public void LeverExit_MoveBonks_KeepsTheOrdinaryRetry()
+    {
+        Harness h = NewHarness(MultiActionGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        h.Tracker.NoteMoveBlocked();
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying);
+    }
+
     // Cross-room multi-action — the gated exit (1/2's N → 1/9) needs a command
     // typed in room 1/5, one E hop off the host room. The round-trip host↔issue
     // is routable, so the walker walks to the lever room, pulls it, walks back,

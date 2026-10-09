@@ -612,6 +612,44 @@ public sealed class DefaultPatternsTests
     public void UserBuyRefusedRegex_LeavesTheOtherShopLinesAlone(string line)
         => Assert.False(PatternById(KnownPatterns.UserBuyRefused).TryMatch(Line(line), out _));
 
+    // The two wear refusals that say nothing about who may wear the item. They have
+    // a pattern of their own so the alignment-reading refusal handler never sees them.
+    [Theory]
+    [InlineData("painted shield may not be worn!", "painted shield")]
+    [InlineData("You have no more room to wear that item!", "")]
+    public void UserEquipCannotBeWornRegex_MatchesBothLines(string line, string item)
+    {
+        Assert.True(PatternById(KnownPatterns.UserEquipCannotBeWorn).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(item, r.Groups[0]);
+        Assert.False(PatternById(KnownPatterns.UserEquipFailed).TryMatch(Line(line), out _));
+    }
+
+    [Fact]
+    public void UserEquipCannotBeWornRegex_LeavesTheAlignmentRefusalAlone()
+        => Assert.False(PatternById(KnownPatterns.UserEquipCannotBeWorn).TryMatch(
+            Line("You may not wear that item!"), out _));
+
+    // `set follow`: the `pro` sheet's row and the command's two replies.
+    [Theory]
+    [InlineData("Follow Mode:        Blind", "Blind")]
+    [InlineData("Follow Mode:        Normal", "Normal")]
+    public void FollowModeRowRegex_ReadsTheMode(string line, string mode)
+    {
+        Assert.True(PatternById(KnownPatterns.FollowModeRow).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(mode, r.Groups[0]);
+    }
+
+    [Fact]
+    public void FollowModeReplies_Match()
+    {
+        Assert.True(PatternById(KnownPatterns.FollowModeSetBlind).TryMatch(
+            Line("You will only see the fact that you have moved when following."), out _));
+        Assert.True(PatternById(KnownPatterns.FollowModeSetNormal).TryMatch(
+            Line("You will see your normal room descriptions when following."), out _));
+        Assert.False(PatternById(KnownPatterns.FollowModeRow).TryMatch(
+            Line("Valid follow options: BLIND, NORMAL"), out _));
+    }
+
     // A Stock comma-list price still reads as one buy line.
     [Fact]
     public void UserBuysRegex_TakesAStockCoinListPrice()

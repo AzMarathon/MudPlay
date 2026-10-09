@@ -35,12 +35,26 @@ namespace MudPlay.Game;
 //   * Stock ends some rows with the word EDITED, after the gang when there is
 //     one. It is dropped so it doesn't read as part of the title or the gang
 //     (GAME_MECHANICS "The `who` listing").
+//
+// Stock's `set style technical` prints the same list as a column table:
+//
+//   Title           Name                    Reputation Gang/Guild
+//   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+//   Canon           Abel Brightwater        Lawful     Old People Only
+//   Druid Novice    Edda Fenwick            Neutral    None
+//
+// Title 15 wide, name 20, two flag characters (`g` gossip off, `a` auction off),
+// reputation 10, gang 19 (`None` for no gang), then a last field of 6. It names
+// Neutral outright where the fantasy rows leave the left column blank; both are
+// recorded as "Neutral".
 public sealed partial class WhoListParser : IDisposable
 {
     private readonly LineExtractor _lines;
     private readonly PlayerDatabase _db;
     private readonly LogService? _log;
     private State _state = State.Idle;
+    // The block being read is the technical-style table, not the fantasy rows.
+    private bool _technical;
     private int _rowsThisBlock;
     // Players.Count at block start — used to split added vs updated counts in the
     // end-of-block log line.
@@ -114,7 +128,14 @@ public sealed partial class WhoListParser : IDisposable
                 if (HeaderPattern().IsMatch(text))
                 {
                     _state = State.WaitForSeparator;
+                    _technical = false;
                     _log?.Info("WhoListParser", "who response started");
+                }
+                else if (TechnicalHeaderPattern().IsMatch(text))
+                {
+                    _state = State.WaitForSeparator;
+                    _technical = true;
+                    _log?.Info("WhoListParser", "who response started (technical style)");
                 }
                 break;
 
@@ -122,14 +143,14 @@ public sealed partial class WhoListParser : IDisposable
                 // Servers commonly emit a blank line between the header
                 // and the separator — stay parked here rather than bail.
                 if (string.IsNullOrWhiteSpace(text)) break;
-                if (SeparatorPattern().IsMatch(text))
+                if ((_technical ? TechnicalSeparatorPattern() : SeparatorPattern()).IsMatch(text))
                 {
                     _state = State.Reading;
                     _rowsThisBlock = 0;
                     _consecutiveSkips = 0;
                     _playersCountAtBlockStart = _db.Players.Count;
                 }
-                else if (!HeaderPattern().IsMatch(text))
+                else if (!(_technical ? TechnicalHeaderPattern() : HeaderPattern()).IsMatch(text))
                 {
                     // Header was a false positive (chat message containing
                     // "Current Adventurers", maybe a remote command). Bail
@@ -152,7 +173,7 @@ public sealed partial class WhoListParser : IDisposable
                     if (_rowsThisBlock > 0) EndBlock();
                     break;
                 }
-                if (TryParseRow(text, out PlayerRowMatch row))
+                if (_technical ? TryParseTechnicalRow(text, out PlayerRowMatch row) : TryParseRow(text, out row))
                 {
                     string display = string.IsNullOrEmpty(row.Family)
                         ? row.Given
@@ -231,6 +252,37 @@ public sealed partial class WhoListParser : IDisposable
         return true;
     }
 
+    // One row of the technical-style table. The columns are fixed, so the title
+    // and the gang are cut by position; the reputation has to be an alignment word
+    // (or Neutral), which keeps anything else in the block from reading as a row.
+    private static bool TryParseTechnicalRow(string text, out PlayerRowMatch row)
+    {
+        row = default;
+        Match m = TechnicalRowPattern().Match(text);
+        if (!m.Success) return false;
+
+        string title = m.Groups["title"].Value.Trim();
+        string name = m.Groups["name"].Value.Trim();
+        string reputation = m.Groups["rep"].Value;
+        if (title.Length == 0 || name.Length == 0) return false;
+        bool neutral = reputation.Equals("Neutral", StringComparison.OrdinalIgnoreCase);
+        if (!neutral && !AlignmentWords.Contains(reputation, StringComparer.OrdinalIgnoreCase)) return false;
+
+        int space = name.IndexOf(' ');
+        string given = space < 0 ? name : name[..space];
+        string family = space < 0 ? string.Empty : name[(space + 1)..].Trim();
+
+        // The gang column is 19 wide; what follows it is the row's last field.
+        string tail = m.Groups["tail"].Value;
+        string gangText = (tail.Length > TechnicalGangWidth ? tail[..TechnicalGangWidth] : tail).Trim();
+        string? gang = gangText.Length == 0 || gangText.Equals("None", StringComparison.Ordinal) ? null : gangText;
+
+        row = new PlayerRowMatch(neutral ? "Neutral" : NormalizeAlignment(reputation), given, family, title, gang, null);
+        return true;
+    }
+
+    private const int TechnicalGangWidth = 19;
+
     // Map a matched align token (any casing) to its canonical AlignmentWords entry,
     // e.g. "FIEND" -> "Fiend". Unrecognized falls back to Neutral (the regex only
     // feeds recognized words, so that branch is defensive).
@@ -244,6 +296,23 @@ public sealed partial class WhoListParser : IDisposable
     // "Current Adventurers" header — case-sensitive per server output.
     [GeneratedRegex(@"^\s*Current Adventurers\s*$", RegexOptions.CultureInvariant)]
     private static partial Regex HeaderPattern();
+
+    // The technical-style table's header and the rule under it.
+    [GeneratedRegex(@"^\s*Title\s+Name\s+Reputation\s+Gang/Guild\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex TechnicalHeaderPattern();
+
+    [GeneratedRegex(@"^\s*(?:=-){5,}=?\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex TechnicalSeparatorPattern();
+
+    // A technical-style row: title (15), a space, name (20), the two flag
+    // characters, a space, the reputation word, then the gang column onward. The
+    // name is allowed one more column than the engine's format gives it: the one
+    // capture on record has the reputation a column further right than the format
+    // puts it.
+    [GeneratedRegex(
+        @"^(?<title>.{15}) (?<name>.{20,21}?)(?<flags>[ ga]{2}) (?<rep>[A-Za-z]{1,10}) *(?<tail>.*)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex TechnicalRowPattern();
 
     // Row of equal signs that separates the header from the data rows.
     [GeneratedRegex(@"^\s*={5,}\s*$", RegexOptions.CultureInvariant)]

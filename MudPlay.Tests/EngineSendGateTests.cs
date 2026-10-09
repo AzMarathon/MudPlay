@@ -152,6 +152,21 @@ public sealed class EngineSendGateTests
         Assert.Single(sent);   // held → no replay
     }
 
+    // The fumble coordinator reads the last client command before asking for the
+    // replay, to leave out an attack the game has already engaged.
+    [Fact]
+    public void LastClientCommandText_IsTheLastWrappedSend()
+    {
+        EngineSendGate gate = new();
+        Assert.Null(gate.LastClientCommandText);
+
+        Action<byte[]> wrapped = gate.WrapEngineSender(_ => { });
+        wrapped(Encoding.Latin1.GetBytes("a orc\r"));
+        wrapped(Encoding.Latin1.GetBytes("mmis orc\r"));
+
+        Assert.Equal("mmis orc", gate.LastClientCommandText);
+    }
+
     [Fact]
     public void Replay_NoOpBeforeAnyClientSend()
     {

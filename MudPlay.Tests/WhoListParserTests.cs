@@ -141,6 +141,127 @@ public sealed class WhoListParserTests
         Assert.Null(FindByGiven(db, "Ivy").Role);
     }
 
+    // Stock's `set style technical` table, as a board prints it (made-up names).
+    private static readonly string[] TechnicalSample =
+    {
+        "Title           Name                    Reputation Gang/Guild",
+        "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=",
+        "Canon           Abelard Brightwtr       Lawful     Old People Only",
+        "Explorer        Corin Dale              Good       None",
+        "Druid Novice    Eddas Fenwicks          Neutral    None",
+        "Kai Warrior     Garrick Holme           Good       Old People Only",
+        "Fighter Priest  Isolde Jute             Good       None",
+        "",
+    };
+
+    [Fact]
+    public void TechnicalStyle_ReadsTheSameFieldsAsTheFantasyRows()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(TechnicalSample, Now);
+
+        Assert.Equal(5, db.Players.Count);
+        AssertHas(db, given: "Abelard", family: "Brightwtr", align: "Lawful",  title: "Canon",          gang: "Old People Only");
+        AssertHas(db, given: "Corin",   family: "Dale",      align: "Good",    title: "Explorer",       gang: null);   // "None" is no gang
+        AssertHas(db, given: "Eddas",   family: "Fenwicks",  align: "Neutral", title: "Druid Novice",   gang: null);   // Neutral is named outright
+        AssertHas(db, given: "Garrick", family: "Holme",     align: "Good",    title: "Kai Warrior",    gang: "Old People Only");
+        AssertHas(db, given: "Isolde",  family: "Jute",      align: "Good",    title: "Fighter Priest", gang: null);
+        Assert.Equal(5, p.LastBlockRowCount);
+    }
+
+    // The same players in fantasy style: a Neutral reputation is a blank left
+    // column there, and both styles record the same thing.
+    [Fact]
+    public void FantasyAndTechnicalStyles_AgreeOnEveryField()
+    {
+        WhoListParser fantasy = Build(out PlayerDatabase fantasyDb);
+        fantasy.FeedTestLines(new[]
+        {
+            "         Current Adventurers",
+            "         ===================",
+            "",
+            "  Lawful Abelard Brightwtr     -  Canon  of Old People Only",
+            "    Good Corin Dale            -  Explorer",
+            "         Eddas Fenwicks        -  Druid Novice",
+            "",
+        }, Now);
+        WhoListParser technical = Build(out PlayerDatabase technicalDb);
+        technical.FeedTestLines(TechnicalSample, Now);
+
+        foreach (string given in new[] { "Abelard", "Corin", "Eddas" })
+        {
+            PlayerRecord f = FindByGiven(fantasyDb, given);
+            PlayerRecord t = FindByGiven(technicalDb, given);
+            Assert.Equal(f.FamilyName, t.FamilyName);
+            Assert.Equal(f.Alignment, t.Alignment);
+            Assert.Equal(f.Title, t.Title);
+            Assert.Equal(f.Gang, t.Gang);
+        }
+        Assert.Equal("Neutral", FindByGiven(fantasyDb, "Eddas").Alignment);
+    }
+
+    // The engine's own columns (reputation one column left of the capture's), the
+    // two flag letters, a name that fills its column, a gang that fills its own with
+    // the row's last field after it, and the list's end at a prompt.
+    [Fact]
+    public void TechnicalStyle_EngineColumns_FlagsAndFullWidthFields()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        int lists = 0;
+        p.ListRead += () => lists++;
+        // The engine's row format: title 15, name 20, two flags, reputation 10, gang
+        // 19, last field 6.
+        static string Row(string title, string name, string flags, string rep, string gang, string last) =>
+            $"{title,-15} {name,-20}{flags} {rep,-10} {gang,-19} {last,-6}".TrimEnd();
+        p.FeedTestLines(new[]
+        {
+            $"{"Title",-15} {"Name",-20}   {"Reputation",-10} Gang/Guild",
+            "=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=",
+            Row("Canon", "Abelard Brightwtr", "g ", "Lawful", "Old People Only", ""),
+            Row("High Priestess", "Tessaly Wintermourne", "ga", "FIEND", "The Long Named Gang", "EDITED"),
+            Row("Apprentice", "Olwen", " a", "Saint", "None", "EDITED"),
+            "this row is not a row at all",
+        }, Now);
+        Assert.Equal(3, db.Players.Count);
+        AssertHas(db, given: "Abelard", family: "Brightwtr",    align: "Lawful", title: "Canon",          gang: "Old People Only");
+        AssertHas(db, given: "Tessaly", family: "Wintermourne", align: "Fiend",  title: "High Priestess", gang: "The Long Named Gang");
+        AssertHas(db, given: "Olwen",   family: "",             align: "Saint",  title: "Apprentice",     gang: null);
+        Assert.Equal(0, lists);                       // one stray row doesn't end the list
+    }
+
+    // A second `who` in the other style starts a fresh block of its own kind.
+    [Fact]
+    public void TechnicalThenFantasy_EachBlockReadInItsOwnStyle()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(TechnicalSample, Now);
+        p.FeedTestLines(new[]
+        {
+            "         Current Adventurers",
+            "         ===================",
+            "",
+            "    Good Marrow Quill          -  Warrior Novice",
+            "",
+        }, Now);
+
+        Assert.Equal(6, db.Players.Count);
+        AssertHas(db, given: "Marrow", family: "Quill", align: "Good", title: "Warrior Novice", gang: null);
+    }
+
+    // The technical header inside chat isn't followed by its rule: no block starts.
+    [Fact]
+    public void TechnicalHeader_WithoutItsRule_StartsNothing()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            "Title           Name                    Reputation Gang/Guild",
+            "Canon           Abelard Brightwtr       Lawful     Old People Only",
+            "",
+        }, Now);
+        Assert.Empty(db.Players);
+    }
+
     // Only a trailing EDITED is the engine's word. The same letters inside a gang's
     // name are the gang's.
     [Fact]

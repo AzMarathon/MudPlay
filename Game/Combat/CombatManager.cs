@@ -538,6 +538,10 @@ public sealed partial class CombatManager : IDisposable
     // spell-mode heartbeat permanently gated, so nothing ever retried the attack.
     public bool CombatOff => _combatOff;
 
+    // Diagnostics: `*Combat Engaged*` has answered the attack last sent. While true a
+    // fumble line re-sends no attack.
+    public bool EngagedSinceLastAttack => EngagedForLastAttack;
+
     // Diagnostics: whether this room's backstab surprise round is spent, and whether an
     // attack is waiting on the engine send gate to lift (see OnWireReleased).
     public bool BackstabOpenerSpent => _backstabOpenerConsumed;
@@ -2322,6 +2326,7 @@ public sealed partial class CombatManager : IDisposable
                 + $"spellTarget={_castingSpellTarget ?? "(none)"}, spellAttackOwed={_spellAttackOwed}");
         _currentTarget = null;
         _deadAttackWordWarned = false;
+        _engagedSinceLastAttack = false;
         ClearAttackSpellCascadeState();
     }
 
@@ -4257,6 +4262,7 @@ public sealed partial class CombatManager : IDisposable
         {
             _combatOff = true;
             _engageConfirmed = false;
+            _engagedSinceLastAttack = false;
 
             // A pre-attack debuff already fired this round's combat attack immediately
             // (DeferPostDebuffAttack); every *Combat Off* carrying that debuff's
@@ -4472,6 +4478,7 @@ public sealed partial class CombatManager : IDisposable
             // Server acknowledged the swing — disarm the engage-verify
             // safety net; our attack landed on a real, present target.
             _engageConfirmed = true;
+            _engagedSinceLastAttack = true;
             _awaitingEngageSince = null;
         }
     }
@@ -4663,12 +4670,20 @@ public sealed partial class CombatManager : IDisposable
     // auto-repeats and the failures stop. Weapon mode only — spell mode re-issues
     // its cast on the per-round tick (OnCombatTick), and _lastAttackCommand holds a
     // weapon verb we must not fire into a spell fight.
-    // Returns true when it re-sent the weapon swing (so the caller knows combat
-    // handled the fumble and need not fall back to a generic re-fire). False when this
-    // isn't a weapon fight it can act on — spell mode, no target, attacks blocked, or
-    // no prior swing — in which case the caller re-fires the last client command
-    // generically (EngineSendGate.ReplayLastClientCommand), which covers the fumbled
-    // attack SPELL / item-use / other client commands.
+    // Returns true when combat has dealt with the fumble (so the caller need not fall
+    // back to a generic re-fire): it re-sent the weapon swing, or the swing already
+    // took and nothing is owed. False when this isn't a weapon fight it can act on —
+    // spell mode, no target, attacks blocked, or no prior swing — in which case the
+    // caller re-fires the last client command generically
+    // (EngineSendGate.ReplayLastClientCommand), which covers the fumbled attack SPELL /
+    // item-use / other client commands.
+    //
+    // The swing is re-sent only until the game answers it with `*Combat Engaged*`:
+    // that line means the attack went through, and from then on the game repeats it
+    // each round by itself. A fumble line in a fight that is under way is some other
+    // command's (or the game's own round), and a fresh attack sent for it would break
+    // the fight off and start it over (GAME_MECHANICS "Confusion fumbles — actions
+    // fail and must be re-sent").
     public bool OnActionFailed()
     {
         if (_disposed || !Fighting()) return false;
@@ -4677,12 +4692,40 @@ public sealed partial class CombatManager : IDisposable
         if (_lastAttackCommand is not { Length: > 0 } line) return false;
         if (_wireSender is null) return false;
         if (AttacksBlocked()) return false;   // can't re-send a swing while attacks are blocked
+        if (EngagedForLastAttack)
+        {
+            _log?.Combat(LogCategory, $"action failed with the fight engaged — '{line}' is not re-sent");
+            return true;
+        }
 
         _combatOff = false;
         _log?.Combat(LogCategory, $"action failed — re-sending last attack '{line}'");
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
         return true;
+    }
+
+    // `*Combat Engaged*` has answered the attack last sent, weapon or spell, and no
+    // `*Combat Off*` has come since: the game is carrying that attack on by itself.
+    // Cleared by every attack sent, so a fresh one is unanswered until its own
+    // Engaged line arrives.
+    private bool _engagedSinceLastAttack;
+    private bool EngagedForLastAttack => _engagedSinceLastAttack && !_combatOff;
+
+    // Whether a client command is this engine's own attack — the weapon swing last
+    // sent, or a cast of the attack spell announced — in a fight the game has already
+    // engaged. The fumble re-fire asks before repeating the last client command: an
+    // attack that is under way must not be sent again.
+    public bool AttackAlreadyEngaged(string? command)
+    {
+        if (_disposed || !EngagedForLastAttack || string.IsNullOrWhiteSpace(command)) return false;
+        string cmd = command.Trim();
+        if (_lastAttackCommand is { Length: > 0 } swing
+            && cmd.Equals(swing, StringComparison.OrdinalIgnoreCase)) return true;
+        if (_announcedSpellCode is not { Length: > 0 } spell) return false;
+        int space = cmd.IndexOf(' ');
+        string word = space >= 0 ? cmd[..space] : cmd;
+        return word.Equals(spell, StringComparison.OrdinalIgnoreCase);
     }
 
     // Arm the engage-verification timer after a fresh attack goes out. No-op once
@@ -4707,6 +4750,7 @@ public sealed partial class CombatManager : IDisposable
         // survival cast next round (see _spellAttackOwed). No-op for a weapon swing,
         // which never set this in the first place.
         _spellAttackOwed = false;
+        _engagedSinceLastAttack = false;
         if (_engageConfirmed) return;
         _awaitingEngageSince ??= DateTimeOffset.Now;
     }

@@ -101,13 +101,22 @@ public sealed class LoopRunnerTests : IDisposable
     // to capture them in Harness.Posted for manual Drain() — needed to interleave
     // a same-burst gate assert between a resume and its deferred send.
     private Harness NewHarness(string json = GraphJson, bool deferResume = false,
-        bool wireRecovery = false, bool withWalker = false, LogService? log = null)
+        bool wireRecovery = false, bool withWalker = false, LogService? log = null,
+        string? tbinfoJson = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), json);
+        if (tbinfoJson is not null)
+            File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"), tbinfoJson);
         GameDataCache cache = new(_root);
         cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
+        TBInfoStore? tbinfo = null;
+        if (tbinfoJson is not null)
+        {
+            tbinfo = new TBInfoStore(cache);
+            tbinfo.OnActiveSetChanged("alpha");
+        }
+        RoomGraphManager graph = tbinfo is null ? new(cache) : new(cache, log: null, tbinfo);
         graph.OnActiveSetChanged("alpha");
         RoomTracker tracker = new(graph);
         MovementCoordinator coord = new();
@@ -806,6 +815,47 @@ public sealed class LoopRunnerTests : IDisposable
             e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    // A step that opens its exit with a room command that rolls (`clear rubble`
+    // behind a `testskill`): a bonk means the roll missed, and the command goes out
+    // again without spending the loop's three recoveries.
+    [Fact]
+    public void RolledReveal_MoveBonks_SendsTheRevealAgain_WithoutEnteringRecovery()
+    {
+        const string rooms = """
+            [
+              { "Map Number": 1, "Room Number": 1, "Name": "Ruin Entrance",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 1422,
+                "N": "1/2 (Hidden/Needs 1 Actions, any order)",
+                "S": "0", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+              { "Map Number": 1, "Room Number": 2, "Name": "Ruin",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0, "CMD": 0,
+                "N": "0", "S": "1/1", "E": "0", "W": "0",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+            ]
+            """;
+        const string tbinfo = """
+            [ { "Number": 1422,
+                "Action": "clear rubble:testskill strength 0 1423:remoteaction 1 1840 0 0\n",
+                "Called From": "Room 1/1" } ]
+            """;
+        Harness h = NewHarness(rooms, tbinfoJson: tbinfo);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        List<string> Sent() => h.Sent.Select(b => Encoding.Latin1.GetString(b).TrimEnd('\r')).ToList();
+        Assert.Equal(new[] { "clear rubble", "n" }, Sent());
+
+        for (int miss = 1; miss <= 5; miss++)
+        {
+            h.Tracker.NoteMoveBlocked();
+            Assert.Equal(LoopState.Running, h.Runner.State);
+            Assert.Equal(2 * (miss + 1), h.Sent.Count);
+            Assert.Equal(new[] { "clear rubble", "n" }, Sent().TakeLast(2));
+        }
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("recovering"));
     }
 
     [Fact]

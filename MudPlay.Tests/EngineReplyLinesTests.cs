@@ -31,7 +31,6 @@ public sealed class EngineReplyLinesTests
     [InlineData("-- old gypsy man")]
     // Stock refusals and notices nothing reads.
     [InlineData("You already have something lit!")]
-    [InlineData("You have no more room to wear that item!")]
     [InlineData("This weapon feels heavy in your hands.")]
     [InlineData("You are extremely quick and deadly with this weapon.")]
     [InlineData("A concealed passage opens to the north.")]

@@ -126,7 +126,6 @@ public static partial class EngineReplyLines
         "You have chosen a way of life which does not allow this action.",
         "You have chosen a way of life which prevents this action.",
         "You have left %s.",
-        "You have no more room to wear that item!",
         "You have not forgotten any users.",
         "You have not progressed far enough to use the training provided here.",
         "You have now forgotten %s",

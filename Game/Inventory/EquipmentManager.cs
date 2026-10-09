@@ -1352,6 +1352,27 @@ public sealed class EquipmentManager
     // weapon EP-zap). Attribute it to the oldest unresolved weapon attempt.
     public string? NoteWeaponRefused() => BlockOldestPending(weapon: true);
 
+    // The game says the piece can't go on at all: "<item> may not be worn!" (it has
+    // no wear slot) or "You have no more room to wear that item!" (every worn slot
+    // is taken). Neither says anything about alignment, class or level, so the slot
+    // is blocked like any other refusal and the caller learns nothing from it. The
+    // first line names the item and goes to the attempt of that name; the second
+    // names none and goes to the oldest armour attempt still unanswered. Returns
+    // the blocked item's name, or null when no attempt of ours fits.
+    public string? NoteCannotBeWorn(string? itemName)
+    {
+        ExpirePending();
+        string named = itemName?.Trim() ?? string.Empty;
+        int idx = named.Length > 0
+            ? _pending.FindIndex(p => string.Equals(p.ItemName, named, StringComparison.OrdinalIgnoreCase))
+            : _pending.FindIndex(p => p.Slot != EquipmentSlot.Weapon);
+        if (idx < 0) return null;
+        PendingEquip p = _pending[idx];
+        _pending.RemoveAt(idx);
+        SetBlock((p.SetId, p.Slot), p.ItemName, serverConfirmed: true, announce: true);
+        return p.ItemName;
+    }
+
     // ----- sneak keeping ---------------------------------------------------
     // Gear commands end a sneak (GAME_MECHANICS "What ends a sneak"). While
     // SneakGuard keeps one, an automatic swap is held — the latest per kind — and

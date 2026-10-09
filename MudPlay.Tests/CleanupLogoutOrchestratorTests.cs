@@ -281,6 +281,38 @@ public sealed class CleanupLogoutOrchestratorTests
         Assert.Equal(1, h.DisconnectCalls);
     }
 
+    // ===== The engine's own out-of-the-game prompt =======================
+
+    // The saved sentence is board text a sysop can reword; the prompt after it is
+    // the engine's. Seen while our exit is out, it completes the log-off.
+    [Fact]
+    public void Exiting_RealmLeftPrompt_DropsCarrier()
+    {
+        Harness h = Setup();
+        h.Safe = true;
+        FireWarning(h);
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+
+        h.Engine.NoteRealmLeftPrompt();
+
+        Assert.Equal(CleanupLogoutPhase.Done, h.Engine.Phase);
+        Assert.Equal(1, h.DisconnectCalls);
+    }
+
+    // The same prompt stands on a board's menus at login and after a manual exit.
+    [Fact]
+    public void RealmLeftPrompt_WhenNotExiting_Ignored()
+    {
+        Harness h = Setup();
+        h.Engine.NoteRealmLeftPrompt();                        // Idle
+        Assert.Equal(CleanupLogoutPhase.Idle, h.Engine.Phase);
+
+        FireWarning(h);                                        // unsafe: Pending
+        h.Engine.NoteRealmLeftPrompt();
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+        Assert.Equal(0, h.DisconnectCalls);
+    }
+
     // ===== Exit called off by an attack =================================
 
     // An attack during the exit wait keeps the character in the game. The engine

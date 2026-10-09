@@ -24,8 +24,11 @@ namespace MudPlay.Game;
 // menus exit past it entirely (report stock-20260904-230111: exiting landed on
 // the door post-game screen then the BBS games menu, neither of which shows
 // that row, so the disconnect only ever came from the blind timeout below).
-// Both the saved line and the main-menu row still complete the logout; the
-// double-timeout is the last-ditch fallback if neither is seen.
+// Both the saved line and the main-menu row still complete the logout, and so
+// does the Stock engine's own out-of-the-game prompt, "[MAJORMUD]: "
+// (NoteRealmLeftPrompt): the saved sentence is most likely a text block the board
+// can reword, the prompt after it is fixed in the engine. The double-timeout is
+// the last-ditch fallback if none is seen.
 //
 // The game can call the exit wait off ("Your meditation has been interrupted - you
 // may not exit now!", KnownPatterns.RealmExitInterrupted; GAME_MECHANICS "Realm
@@ -222,6 +225,18 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         if (Phase != CleanupLogoutPhase.Exiting) return;
         _log?.Log(LogSeverity.Info, "CleanupLogout",
             "Character saved — out of the realm; dropping carrier, auto-reconnect redials after cleanup.");
+        CompleteLogout();
+    }
+
+    // The engine's out-of-the-game prompt arrived (WirePromptScanner, which sees it
+    // at a prompt position only). It is no line, so it reaches us from the wire
+    // scanner and not the router. Counts only while our own exit is out: the same
+    // prompt stands on a board's menus at other times.
+    public void NoteRealmLeftPrompt()
+    {
+        if (Phase != CleanupLogoutPhase.Exiting) return;
+        _log?.Log(LogSeverity.Info, "CleanupLogout",
+            "The game's own menu prompt is showing — out of the realm; dropping carrier, auto-reconnect redials after cleanup.");
         CompleteLogout();
     }
 

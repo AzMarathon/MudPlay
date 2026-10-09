@@ -349,6 +349,52 @@ public sealed class CombatManagerTests
         Assert.Equal("a giant rat", h.LastSent);
     }
 
+    // The swing is re-sent until the game answers it with *Combat Engaged*. After
+    // that the game repeats it each round by itself, and a fumble line (some other
+    // command's, or the round's own) must not start the attack over.
+    [Fact]
+    public void OnActionFailed_OnceEngaged_DoesNotResendTheAttack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Single(h.Sent);
+
+        Assert.True(h.Combat.OnActionFailed());      // not engaged yet: re-sent
+        Assert.True(h.Combat.OnActionFailed());      // and again, for as long as it fumbles
+        Assert.Equal(3, h.Sent.Count);
+
+        h.Feed("*Combat Engaged*");                  // it went through
+
+        Assert.True(h.Combat.OnActionFailed());      // dealt with: nothing is owed
+        Assert.Equal(3, h.Sent.Count);
+        Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
+        Assert.False(h.Combat.AttackAlreadyEngaged("cast bless"));
+    }
+
+    // *Combat Off* ends the engagement, and so does a fresh attack going out: each
+    // attack is unanswered until its own Engaged line.
+    [Fact]
+    public void Engagement_EndsOnCombatOff_AndOnAFreshAttack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
+        Assert.True(h.Combat.AttackAlreadyEngaged("A Giant Rat"));
+
+        h.Feed("*Combat Off*");
+        Assert.False(h.Combat.AttackAlreadyEngaged("a giant rat"));
+
+        h.Feed("*Combat Engaged*");
+        Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
+        h.Combat.NoteUnattributedDeath();
+        h.Feed("Also here: giant rat.");             // a fresh rat: a fresh attack goes out
+        Assert.Equal("a giant rat", h.LastSent);
+        Assert.False(h.Combat.AttackAlreadyEngaged("a giant rat"));
+    }
+
     [Fact]
     public void OnActionFailed_NoOp_WhenNoTarget()
     {

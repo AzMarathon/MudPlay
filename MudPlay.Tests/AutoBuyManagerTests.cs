@@ -231,7 +231,7 @@ public sealed class AutoBuyManagerTests
     [Theory]
     [InlineData("You cannot buy dagger here!")]                          // out of stock
     [InlineData("dagger is not a known item.")]
-    [InlineData("You cannot carry that much!")]                          // too heavy, or the pack is full
+    [InlineData("You cannot carry that much!")]                          // over what can be carried
     [InlineData("A strange force stops you from getting this item.")]
     public void BuyRefused_MovesToNextWare(string refusal)
     {

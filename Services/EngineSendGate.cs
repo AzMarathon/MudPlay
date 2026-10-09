@@ -118,7 +118,14 @@ public sealed class EngineSendGate
     // walker's own re-send, so re-firing it here would double-step and desync position.
     // (Combat weapon swings are re-sent by CombatManager with its engage bookkeeping; the
     // AppServices coordinator only falls through to this for the non-weapon cases —
-    // attack spells, item uses, and other client commands.)
+    // attack spells, item uses, and other client commands — and not for an attack the
+    // game has already engaged.)
+    // The last client command as text, for a caller that has to judge it before
+    // asking for the replay. Null before any client send.
+    public string? LastClientCommandText => _lastClientCommand is { Length: > 0 } cmd
+        ? System.Text.Encoding.Latin1.GetString(cmd).TrimEnd('\r', '\n')
+        : null;
+
     public void ReplayLastClientCommand()
     {
         if (IsLocked) return;

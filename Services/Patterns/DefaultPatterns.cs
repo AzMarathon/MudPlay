@@ -632,6 +632,12 @@ public static class DefaultPatterns
             @"^You may not wear that item!$");
         yield return new RegexPattern(KnownPatterns.UserWieldFailed,
             @"^You may not use that weapon\.$");
+        // The Stock engine's two other wear refusals: the item has no wear slot, or
+        // every worn slot is in use. Neither is about who may wear the item, so they
+        // are kept apart from UserEquipFailed, whose handler reads alignment into a
+        // refusal. Group [0] is the item the first line names, empty for the second.
+        yield return new RegexPattern(KnownPatterns.UserEquipCannotBeWorn,
+            @"^(?:(?<item>[\w' -]+) may not be worn!|You have no more room to wear that item!)$");
         yield return new RegexPattern(KnownPatterns.UserRemoved,
             @"^You have removed (?<item>[\w ]+?)(?: and extinguished it)?\.$");
         yield return new RegexPattern(KnownPatterns.HiddenItems,
@@ -650,7 +656,7 @@ public static class DefaultPatterns
             @"^You cannot afford (?<item>.+)\.$");
         // The Stock engine's other answers to a `buy` that bought nothing: the
         // ware is out of stock, the shop has no such ware, and the two lines of
-        // an item that can't be taken (too heavy or no free pack slot, and the
+        // an item that can't be taken (more than can be carried, and the
         // engine's own refusal). The last two also answer a `get`, so a consumer
         // reads them only while a buy of its own is out (GAME_MECHANICS "Buy /
         // sell result lines"). Groups: [0] the ware named as out of stock, [1]
@@ -751,6 +757,13 @@ public static class DefaultPatterns
         // feed it to RoomTracker as the move a dragged follower never typed.
         yield return new RegexPattern(KnownPatterns.PartyFollowMove,
             @"^\s*--\s*Following your Party leader\s+(?<dir>northeast|northwest|southeast|southwest|north|south|east|west|up|down)\s*--\s*$");
+        // `set follow`, read off the `pro` sheet's row and the command's two replies.
+        yield return new RegexPattern(KnownPatterns.FollowModeRow,
+            @"^Follow Mode:\s+(?<mode>Blind|Normal)\s*$");
+        yield return new RegexPattern(KnownPatterns.FollowModeSetBlind,
+            @"^You will only see the fact that you have moved when following\.");
+        yield return new RegexPattern(KnownPatterns.FollowModeSetNormal,
+            @"^You will see your normal room descriptions when following\.");
         yield return new RegexPattern(KnownPatterns.PartyStopsFollowing,
             @"^(?<player>\w+) (?:stops following you|has stopped following you)\.?");
         yield return new RegexPattern(KnownPatterns.PartyLeftBehind,

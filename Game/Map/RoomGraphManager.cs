@@ -661,8 +661,9 @@ public sealed class RoomGraphManager
     // unroutable. The keyword the player types already parses (it backs the room
     // tooltip); here we fold it into the same `byExit` bucket the guard-door / lever
     // promotions use, so the patch loop attaches a satisfiable MultiActionExitData
-    // and SpecialExitDispatch sends the keyword then the cardinal. Zero-difficulty
-    // `testskill` checks (the rubble case) never fail, so no fail-handling is owed.
+    // and SpecialExitDispatch sends the keyword then the cardinal. A chain with a
+    // `testskill` (the rubble case) is carried as a Rolled step: its roll can miss,
+    // and the engines send the keyword again when the cardinal bonks.
     private void InjectRoomCmdRemoteActions(
         Dictionary<(RoomKey Room, Direction Dir), List<ExitAction>> byExit)
     {
@@ -674,13 +675,13 @@ public sealed class RoomGraphManager
 
             // Collapse synonyms (clear/move/push × rubble/mound/rock all reveal the
             // same exit) to the first keyword per (target room, direction).
-            Dictionary<(int Room, int Dir), string>? firstByExit = null;
+            Dictionary<(int Room, int Dir), (string Keyword, bool Rolled)>? firstByExit = null;
             foreach (TBInfoActionResolver.RemoteActionExit ra in
                      TBInfoActionResolver.EnumerateRemoteActions(_tbinfo, room.Cmd))
-                (firstByExit ??= new()).TryAdd((ra.RoomNumber, ra.DirectionIndex), ra.Keyword);
+                (firstByExit ??= new()).TryAdd((ra.RoomNumber, ra.DirectionIndex), (ra.Keyword, ra.Rolled));
             if (firstByExit is null) continue;
 
-            foreach (((int roomNum, int dirIdx), string keyword) in firstByExit)
+            foreach (((int roomNum, int dirIdx), (string keyword, bool rolled)) in firstByExit)
             {
                 Direction dir = s_directions[dirIdx];
                 RoomKey target = new(key.Map, roomNum);
@@ -693,7 +694,7 @@ public sealed class RoomGraphManager
                 var exitKey = (target, dir);
                 if (!byExit.TryGetValue(exitKey, out List<ExitAction>? list))
                     byExit[exitKey] = list = new List<ExitAction>();
-                list.Add(new ExitAction(StepNumber: 1, new[] { keyword }, remote));
+                list.Add(new ExitAction(StepNumber: 1, new[] { keyword }, remote, Rolled: rolled));
 
                 _log?.Log(LogSeverity.Info, "RoomGraph",
                     $"Room {target} {dir}: hidden exit revealed by room-CMD action '{keyword}'"
