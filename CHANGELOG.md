@@ -1,5 +1,9 @@
 # Version history
 
+## 3.153.20
+
+- A pick the game answers with `Your command had no effect.`, or an open answered `That is not a door or a gate!` (no door that way here), ends the door attempt and re-routes, as a bash already did
+
 ## 3.153.19
 
 - A bash the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever

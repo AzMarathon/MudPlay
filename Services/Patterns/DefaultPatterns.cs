@@ -144,6 +144,7 @@ public static class DefaultPatterns
 
         // ----- Failures --------------------------------------------------
         yield return new RegexPattern(KnownPatterns.CommandNoEffect, @"^Your command had no effect\.$");
+        yield return new RegexPattern(KnownPatterns.NotADoorOrGate,  @"^That is not a door or a gate!");
         yield return new RegexPattern(KnownPatterns.CommandIgnored,  @"^You are typing too quickly - command ignored");
         yield return new RegexPattern(KnownPatterns.SlowDown,        @"^Why don't you slow down for a few seconds\?");
 

@@ -49,6 +49,9 @@ public static class KnownPatterns
 
     // ----- Failure -------------------------------------------------------
     public const string CommandNoEffect   = "failure.command-no-effect";
+    // "That is not a door or a gate!" — an `open` or `close` aimed at an exit that
+    // has no door. DoorOpenManager ends its request on it.
+    public const string NotADoorOrGate    = "failure.not-a-door-or-gate";
     public const string CommandIgnored    = "failure.command-ignored";
     public const string SlowDown          = "failure.slow-down";
 

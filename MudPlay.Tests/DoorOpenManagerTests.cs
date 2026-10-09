@@ -702,10 +702,9 @@ public sealed class DoorOpenManagerTests
         Assert.Single(h.AllSent);
     }
 
-    // Only a bash has been seen to draw the line at a non-door exit. A pick or an
-    // open that draws it keeps waiting, with its own retries and fallbacks.
+    // A pick at an exit with no door draws the same line a bash does.
     [Fact]
-    public void Pick_NoEffect_IsNotTakenForTheDoor()
+    public void Pick_NoEffect_EndsAsNotHere()
     {
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
@@ -714,12 +713,13 @@ public sealed class DoorOpenManagerTests
 
         h.Line("Your command had no effect.");
 
-        Assert.Null(result);
-        Assert.Equal(DoorOpenManager.DoorState.WaitingPick, h.Mgr.CurrentState);
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+        Assert.Single(h.AllSent);
     }
 
+    // An open there is told so in its own words.
     [Fact]
-    public void Open_NoEffect_IsNotTakenForTheDoor()
+    public void Open_NotADoorOrAGate_EndsAsNotHere()
     {
         using Harness h = new() { PicklocksOverBash = true };
         DoorOpenResult? result = null;
@@ -727,9 +727,30 @@ public sealed class DoorOpenManagerTests
         h.Line("You successfully unlocked the door.");
         Assert.Equal("open w", h.LastSent);
 
-        h.Line("Your command had no effect.");
+        h.Line("That is not a door or a gate!");
 
-        Assert.Null(result);
+        Assert.IsType<DoorOpenResult.NotHere>(result);
+        Assert.Equal(DoorOpenManager.DoorState.Idle, h.Mgr.CurrentState);
+    }
+
+    // The generic line isn't an open's answer, and the door line isn't a bash's:
+    // each is taken only for the verb that draws it.
+    [Fact]
+    public void EachLine_IsTakenOnlyForTheVerbThatDrawsIt()
+    {
+        using Harness opening = new() { PicklocksOverBash = true };
+        DoorOpenResult? openResult = null;
+        opening.Mgr.Enqueue(Direction.W, 0, canBash: true, "walker", r => openResult = r);
+        opening.Line("You successfully unlocked the door.");
+        opening.Line("Your command had no effect.");
+        Assert.Null(openResult);
+
+        using Harness bashing = new();
+        DoorOpenResult? bashResult = null;
+        bashing.Mgr.Enqueue(Direction.SE, 11, canBash: true, "walker", r => bashResult = r);
+        bashing.Line("That is not a door or a gate!");
+        Assert.Null(bashResult);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingBash, bashing.Mgr.CurrentState);
     }
 
     // The caller re-plans from inside the reply and may ask for a door the same way
