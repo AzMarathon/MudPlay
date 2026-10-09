@@ -1,10 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.0**
-> - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder
-> - Written every N minutes (1 to 120, 5 by default) while the character is in the game, and once more on leaving it; the Session Stats window doesn't need to be open
-> - Off by default; saved for all characters
+> **Version 3.153.15**
+> - Fixed: a Mystic attacking with punch, kick or jumpkick walked past monsters that need hit magic (and didn't fight back when they attacked): the client judged the strike by the weapon in hand, which a strike doesn't use
+> - A class's own hit magic now counts: a Mystic's strikes and a Witchunter's swings hurt magical monsters whatever the weapon
+> - A `Your fists / feet have no effect` line from a strike writes that monster off, like the weapon line does
+> - Stopping movement yourself (Stop, or a party member's `@stop`) now puts the auto toggles back to their base modes, as a walk-to arriving does, so Auto-Combat switched off for a trip comes back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

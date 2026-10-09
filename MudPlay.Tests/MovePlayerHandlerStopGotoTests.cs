@@ -56,6 +56,7 @@ public sealed class MovePlayerHandlerStopGotoTests : IDisposable
         public required RoomTracker Tracker { get; init; }
         public required AutoLairManager AutoLair { get; init; }
         public required LairTimerStore Timers { get; init; }
+        public required MovePlayerHandler Handler { get; init; }
 
         public void Dispose()
         {
@@ -98,13 +99,13 @@ public sealed class MovePlayerHandlerStopGotoTests : IDisposable
         RemoteCommandManager engine = new(chat, new PartyState(), new PlayerDatabase());
 
         // Registers @goto / @stop / @rego / … on the engine.
-        _ = new MovePlayerHandler(engine, search, graph, tracker, walker, loops, loopRunner,
+        MovePlayerHandler handler = new(engine, search, graph, tracker, walker, loops, loopRunner,
             lairs, autoLair, coord, controller, favorites, bosses, bfs, new LoopShareHandler(loops));
 
         return new Rig
         {
             Engine = engine, Walker = walker, Coord = coord, Controller = controller,
-            Tracker = tracker, AutoLair = autoLair, Timers = timers,
+            Tracker = tracker, AutoLair = autoLair, Timers = timers, Handler = handler,
         };
     }
 
@@ -125,6 +126,28 @@ public sealed class MovePlayerHandlerStopGotoTests : IDisposable
         r.Engine.TryInvokeLocal("@goto", new[] { "1/2" }, _ => { });
         Assert.False(r.Controller.IsUserPaused);
         Assert.Equal(new RoomKey(1, 2), r.Walker.Destination);
+    }
+
+    // An @stop that takes hold says so once, which is what sends the auto toggles
+    // back to the character's base modes. Repeating it while already stopped doesn't.
+    [Fact]
+    public void Stop_AnnouncesItself_OncePerHold_WalkingOrIdle()
+    {
+        using Rig r = Build();
+        int stops = 0;
+        r.Handler.Stopped = () => stops++;
+        r.Tracker.SetLocated(new RoomKey(1, 1));
+        r.Walker.WalkTo(new RoomKey(1, 3));
+
+        r.Engine.TryInvokeLocal("@stop", null, _ => { });
+        r.Engine.TryInvokeLocal("@stop", null, _ => { });
+        Assert.Equal(1, stops);
+
+        // Standing still counts too: the toggles a finished trip left off come back.
+        r.Engine.TryInvokeLocal("@rego", null, _ => { });
+        r.Walker.Stop("test");
+        r.Engine.TryInvokeLocal("@stop", null, _ => { });
+        Assert.Equal(2, stops);
     }
 
     [Fact]
