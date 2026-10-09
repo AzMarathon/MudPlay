@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.19**
+> **Version 3.159.18**
 > - Auto-light relights a spare when a Stock lamp, lantern, moon-lamp, light ball or other light burns out, not only a torch
 > - A player seen sneaking in is read on Stock too (`You notice <name> sneak in from the <dir>.`)
 > - A party member's death is read from Stock's `<name> is dead.` as well as `<name> has died.`

@@ -103,6 +103,10 @@ public partial class App : Application
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.RoomDetailDialogViewModel,
                 MudPlay.Views.GameData.Edit.RoomDetailDialog>();
+            // Quest Flags tab double-click — one flag's script lines laid out as steps.
+            AppServices.Current.Dialogs.RegisterWindow<
+                MudPlay.ViewModels.GameData.QuestFlagStepsViewModel,
+                MudPlay.Views.GameData.QuestFlagStepsWindow>();
             AppServices.Current.Dialogs.RegisterWindow<
                 MudPlay.ViewModels.GameData.Edit.PlayerEditDialogViewModel,
                 MudPlay.Views.GameData.Edit.PlayerEditDialog>();

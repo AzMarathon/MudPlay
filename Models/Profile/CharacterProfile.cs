@@ -14,7 +14,7 @@ public sealed class CharacterProfile
 {
     // The schema version a freshly-authored (fully-migrated) profile carries.
     // Bump in lockstep with a new Services.ProfileMigrations step.
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     // JSON schema version (see GlobalSettings.SchemaVersion for the contract).
     // A fresh profile is authored at CurrentSchemaVersion so it never triggers a
@@ -381,6 +381,13 @@ public sealed class CharacterProfile
     // are ticked. Drives the bonus fold into Character Info. null / empty means
     // nothing completed yet.
     public List<QuestProgress>? QuestLog { get; set; }
+
+    // The step ticks in QuestLog were saved before the drafted checklists gained their
+    // kill lines, so they still count checkboxes the way the draft read then. Set by the
+    // schema upgrade for a profile that holds ticks; QuestTickMigration moves them onto
+    // the same steps the first time a game-data set is there to draft from, and clears
+    // this.
+    public bool QuestTicksPredateKillSteps { get; set; }
 
     // Local date the login-time quest-flag sync last ran for this character. The
     // sync (the `abil` burst on Paradigm / `sys ... abil` on Stock) runs at most

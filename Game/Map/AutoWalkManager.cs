@@ -1546,10 +1546,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
             AnnouncePlannedRoute(source.Key, path);
         }
 
+        // The announce comes before the first step so that a hold it raises (the
+        // party being asked who holds a route item) keeps that step back: the
+        // answer may turn the walk aside for a shop.
         if (_coordinator.IsPaused)
         {
-            State = WalkState.Paused;
-            Raise(new WalkEvent(WalkEventKind.Paused, "coordinator paused", destination));
+            // A gate the announce itself asserted has paused us and said so already.
+            if (State != WalkState.Paused)
+            {
+                State = WalkState.Paused;
+                Raise(new WalkEvent(WalkEventKind.Paused, "coordinator paused", destination));
+            }
             return true;
         }
 

@@ -5326,6 +5326,22 @@ public partial class MainWindowViewModel : ObservableObject
             vm.OnFloorChangeRequested(key);
     }
 
+    // Centre the map on a room and flash it green as an @where reply does, opening or
+    // raising the Navigation window first: unlike the reply's own flash, this one was
+    // asked for (a double-click in Players Seen), so the map comes to the user.
+    private void ShowRoomOnMap(Game.Map.RoomKey key)
+    {
+        if (AppServices.Current.RoomGraph.GetRoom(key) is null)
+        {
+            AppServices.Current.Log.Info("Navigation",
+                $"Room {key.Map}/{key.Room} isn't in the active game data's map, so there is nothing to show.");
+            return;
+        }
+        if (EnsureNavigationWindow() is not { } vm) return;
+        AppServices.Current.Log.Info("Navigation", $"Showing {key.Map}/{key.Room} on the map.");
+        vm.ShowWhereHighlight(key);
+    }
+
     // Flash + centre an @where reply's room on the map, but only if it's open —
     // an answered "where are you?" lights up where they are without summoning the
     // window over what you're doing.
@@ -5604,7 +5620,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         PlayersSeenWindow window = new()
         {
-            DataContext = new PlayersSeenViewModel(AppServices.Current.PlayerSightings),
+            DataContext = new PlayersSeenViewModel(AppServices.Current.PlayerSightings, ShowRoomOnMap),
         };
         window.Closed += (_, _) => _playersSeen = null;
         _playersSeen = window;
