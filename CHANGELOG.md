@@ -1,5 +1,9 @@
 # Version history
 
+## 3.158.3
+
+- Game Data Browser → Monsters: new **BS Def** column (backstab defence) in the column picker, with a range filter
+
 ## 3.158.2
 
 - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor
