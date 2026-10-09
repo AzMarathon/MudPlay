@@ -271,7 +271,7 @@ public sealed class LoopRunnerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 3));
         h.Filter.GatedTargets.Add(new RoomKey(1, 2));
         List<(RoomKey From, RoomKey Entry)> armed = new();
-        h.Runner.SetGatedApproachArmer((from, entry) => armed.Add((from, entry)));
+        h.Runner.SetGatedApproachFetch((from, entry) => { armed.Add((from, entry)); return null; });
         RoomKey giver = new(1, 9);
         h.Runner.SetPathItemDetourRoomProbe(() => giver);
 

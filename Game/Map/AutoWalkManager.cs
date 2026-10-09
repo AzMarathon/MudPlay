@@ -1032,7 +1032,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             preferTeleportFree: journey.PreferTeleportFree,
             pickedRoute: journey.PickedRoute,
             keepGatesClosedFor: journey.ClosedGates,
-            agreedHazardRooms: journey.AgreedHazardRooms);
+            agreedHazardRooms: journey.AgreedHazardRooms,
+            fetch: journey.Fetch);
     }
 
     // The teleports a walk the client starts on its own may use, as (room, landing)
@@ -1115,7 +1116,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // route the user was shown. They are the only ones the plan (and each
         // re-plan, and a restart after an errand) may enter uncountered; left null
         // or empty, it enters none.
-        IReadOnlyCollection<RoomKey>? agreedHazardRooms = null)
+        IReadOnlyCollection<RoomKey>? agreedHazardRooms = null,
+        // fetch: what this walk is to fetch on its way and the trades agreed for it.
+        // Held on the journey this walk begins, so it is there for that journey's
+        // legs and restarts and for no other walk.
+        JourneyFetch? fetch = null)
     {
         // A silent walk while a journey stands is one of its legs, and is planned by
         // the journey's rules where it states none of its own.
@@ -1197,7 +1202,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps,
                     ignoreAvoids, preferTeleportFree, pickedRoute,
                     keepGatesClosedFor is { Count: > 0 } ? keepGatesClosedFor : null,
-                    pickedRoute ? agreedHazardRooms : null);
+                    pickedRoute ? agreedHazardRooms : null,
+                    fetch);
                 _journeyStopsAt = null;
             }
             _legToJourneyGoal = IsJourneyGoal(destination);

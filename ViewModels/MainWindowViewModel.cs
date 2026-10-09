@@ -3365,6 +3365,10 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.LoopRunner.NotifyDisconnected();
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
+                // A trade agreed to on a route card is not made after a drop: where
+                // the character stands and how far the trade had got can't be vouched
+                // for. A walk still standing fetches as before, and trades nothing.
+                AppServices.Current.EndTradeSession();
                 // A fight with a player can't outlive the connection; left standing
                 // it would keep the combat engine stood down after the reconnect.
                 AppServices.Current.PvpFight.Stop("disconnected", resume: false, connected: false);

@@ -45,7 +45,7 @@ public sealed class MonsterDropRouterTests
                 ? l
                 : (IReadOnlyList<MonsterDropSpawn>)Array.Empty<MonsterDropSpawn>(),
             anyShopSells: ShopItems.Contains,
-            deterministicGiveExists: GiveItems.Contains,
+            certainSourceExists: GiveItems.Contains,
             currentRoom: () => Current,
             walkDestination: () => WalkDest,
             distancesFrom: _ => Distances,

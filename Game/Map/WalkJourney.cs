@@ -16,6 +16,9 @@ namespace MudPlay.Game.Map;
 // agree to any other hazard room, so they are named one by one: a plan made later
 // from another room opens these and nothing else. A picked route that names none
 // agreed to none.
+//
+// Fetch is what the journey was told to fetch on its way and the trades a route
+// card named for it (JourneyFetch). Being on the journey is its whole lifetime.
 public sealed record WalkJourney(
     RoomKey Destination,
     bool ThroughGates = false,
@@ -26,7 +29,8 @@ public sealed record WalkJourney(
     bool? PreferTeleportFree = null,
     bool PickedRoute = false,
     IReadOnlyCollection<int>? ClosedGates = null,
-    IReadOnlyCollection<RoomKey>? AgreedHazardRooms = null)
+    IReadOnlyCollection<RoomKey>? AgreedHazardRooms = null,
+    JourneyFetch? Fetch = null)
 {
     // "on foot unless walking is impossible, going round the gates that need
     // item(s) 815", for the program log and the bug report.
@@ -45,6 +49,9 @@ public sealed record WalkJourney(
             + (AvoidTraps ? ", fewest traps" : "")
             + (!PickedRoute ? ""
                 : AgreedHazardRooms is not { Count: > 0 } ? ", no hazard room agreed to"
-                : $", hazard room(s) {string.Join(", ", AgreedHazardRooms)} agreed to");
+                : $", hazard room(s) {string.Join(", ", AgreedHazardRooms)} agreed to")
+            + (Fetch is not { HasItems: true } ? "" : $", fetching item(s) {string.Join("/", Fetch.Items)}")
+            + (Fetch is not { Trades.Count: > 0 } ? ""
+                : $", trade(s) agreed: {string.Join(", ", Fetch.Trades.Select(t => $"{t.Key} for {t.Value}"))}");
     }
 }

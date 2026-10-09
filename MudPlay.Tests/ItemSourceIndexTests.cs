@@ -51,7 +51,14 @@ public sealed class ItemSourceIndexTests : IDisposable
             "Obtained From": "Textblock #720, Room(get roots|pick roots) 9/500|9/501-503" },
           { "Number": 32, "Name": "Copper Ore", "ItemType": 2,
             "Obtained From": "Room(mine ore) 6/1664(25%)" },
-          { "Number": 30, "Name": "Hermit Gift", "ItemType": 2 }
+          { "Number": 30, "Name": "Hermit Gift", "ItemType": 2 },
+          { "Number": 33, "Name": "opal brooch", "ItemType": 0 },
+          { "Number": 34, "Name": "glowing key", "ItemType": 7 },
+          { "Number": 35, "Name": "dark blue orb", "ItemType": 10 },
+          { "Number": 36, "Name": "adamantite key", "ItemType": 7 },
+          { "Number": 37, "Name": "moldy key", "ItemType": 7 },
+          { "Number": 38, "Name": "dark temple key", "ItemType": 7 },
+          { "Number": 39, "Name": "Signet Copy", "ItemType": 2 }
         ]
         """;
 
@@ -68,6 +75,8 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 302, "Name": "Dragon Lord" },
           { "Number": 303, "Name": "Gnome Commander", "Summoned By": "Room 5/512, Room 5/513" },
           { "Number": 304, "Name": "old hermit", "Summoned By": "Room 17/1790" },
+          { "Number": 305, "Name": "sleazy shopkeeper", "Summoned By": "Room 8/486" },
+          { "Number": 306, "Name": "pedlar", "Summoned By": "Room 7/1290" },
           { "Number": 347, "Name": "obsidian statue", "Summoned By": "Textblock #863",
             "DropItem-0": 26, "DropItem%-0": 100 },
           { "Number": 348, "Name": "sandstone sphinx", "Summoned By": "Textblock #864",
@@ -96,8 +105,38 @@ public sealed class ItemSourceIndexTests : IDisposable
     // 700/701 — multi-block menu: Gnome Commander's greeting routes "orb" to a
     //           sub-block that unconditionally gives item 25 (deterministic,
     //           keyword read off the parent menu).
+    // 838–846 — the sleazy shopkeeper's menu as the Paradigm data has it: `brooch`
+    //           trades the opal brooch for the glowing key, `orb` the dark blue orb
+    //           for the adamantite and moldy keys. Each takes one item and no more.
+    // 211 — a device that takes two different keys for one.
+    // 212 — a trade that also checks for an item it doesn't take.
+    // 2833 — a trade that first checks for the item it takes (the shape of the
+    //        behemoth hellhound hide for a magma amulet).
+    // 213 — the same item taken twice.
+    // 214 — trades that ask something else of the character: a class, a level, coin.
+    // 900–909 — a pedlar whose keywords each reach more than one award line:
+    //        `swap` and `barter` through two blocks apiece, one line conditioned and
+    //        one plain, in either order; `pick` through one block of two alternatives.
     private const string TBInfoJson = """
         [
+          { "Number": 838, "LinkTo": 839, "Action": "help:840\nbrooch:841\norb:844\n", "Called From": "Monster #305" },
+          { "Number": 841, "LinkTo": 842, "Action": "", "Called From": "Textblock #838" },
+          { "Number": 842, "LinkTo": 0, "Action": "takeitem 33 1368:giveitem 34:text 843\n", "Called From": "Textblock #841" },
+          { "Number": 844, "LinkTo": 845, "Action": "", "Called From": "Textblock #838" },
+          { "Number": 845, "LinkTo": 0, "Action": "takeitem 35 1369:giveitem 36:giveitem 37:text 846\n", "Called From": "Textblock #844" },
+          { "Number": 211, "LinkTo": 0, "Action": "put keys in device:takeitem 26 467:message 468:takeitem 27 469:message 470:giveitem 38\n", "Called From": "Room 7/1281" },
+          { "Number": 212, "LinkTo": 0, "Action": "copy signet:checkitem 10 5:takeitem 28 6:giveitem 39\n", "Called From": "Room 7/1282" },
+          { "Number": 2833, "LinkTo": 0, "Action": "give hide to elder:checkitem 40 2507:takeitem 40 2507:giveitem 41 2508:text 2909\n", "Called From": "Room 16/1839" },
+          { "Number": 213, "LinkTo": 0, "Action": "put spikes:takeitem 42:takeitem 42:giveitem 43\n", "Called From": "Room 7/1283" },
+          { "Number": 214, "LinkTo": 0, "Action": "swap a:class 2:takeitem 44:giveitem 46\nswap b:minlevel 20 123:takeitem 44:giveitem 47\nswap c:price 500 9:takeitem 44:giveitem 48\n", "Called From": "Room 7/1284" },
+          { "Number": 900, "LinkTo": 0, "Action": "swap:901\nbarter:905\npick:909\n", "Called From": "Monster #306" },
+          { "Number": 901, "LinkTo": 902, "Action": "", "Called From": "Textblock #900" },
+          { "Number": 902, "LinkTo": 0, "Action": "class 2:takeitem 44:giveitem 49\n", "Called From": "Textblock #901" },
+          { "Number": 903, "LinkTo": 0, "Action": "takeitem 44:giveitem 49\n", "Called From": "Textblock #901" },
+          { "Number": 905, "LinkTo": 906, "Action": "", "Called From": "Textblock #900" },
+          { "Number": 906, "LinkTo": 0, "Action": "takeitem 44:giveitem 50\n", "Called From": "Textblock #905" },
+          { "Number": 907, "LinkTo": 0, "Action": "minlevel 20 5:takeitem 44:giveitem 50\n", "Called From": "Textblock #905" },
+          { "Number": 909, "LinkTo": 0, "Action": "takeitem 44:giveitem 51\ntakeitem 20:giveitem 51\n", "Called From": "Textblock #900" },
           { "Number": 500, "LinkTo": 0, "Action": "giveitem 10\n", "Called From": "Spell #200" },
           { "Number": 610, "LinkTo": 0, "Action": "give blade:takeitem 20 999:giveitem 22\n", "Called From": "Monster #300" },
           { "Number": 620, "LinkTo": 0, "Action": "insert fang:checkability 126 4:giveitem 21:giveability 126 5\n", "Called From": "Room 3/606" },
@@ -250,6 +289,86 @@ public sealed class ItemSourceIndexTests : IDisposable
         // The message its conditions print when they fail, once, from both lines.
         Assert.Equal(new[] { 3075 }, remind.RefusalMessages);
         Assert.Equal(new[] { new RoomKey(17, 1790) }, index.GiverMonsterRoomsOf(304));
+    }
+
+    // Report paradigm-20261008-175938: the glowing key for the dark tower was read
+    // as having no source. It has one, for a character carrying the opal brooch:
+    // the shopkeeper's `brooch` keyword takes that and nothing else.
+    [Fact]
+    public void GiversOf_PlainTrade_NamesTheOneItemItTakes()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        ItemGiver key = Assert.Single(index.GiversOf(34));
+        Assert.Equal("sleazy shopkeeper", key.Name);
+        Assert.Equal("brooch", key.Keyword);
+        Assert.False(key.Deterministic);
+        Assert.Equal(33, key.TradeItemId);
+        Assert.Equal("turn in opal brooch", key.Requirement);
+        // The message `takeitem` names is what he says to someone without a brooch.
+        Assert.Equal(new[] { 1368 }, key.RefusalMessages);
+        Assert.Equal(new[] { new RoomKey(8, 486) }, index.GiverMonsterRoomsOf(305));
+
+        // One hand-in, two keys back.
+        Assert.Equal(35, Assert.Single(index.GiversOf(36)).TradeItemId);
+        ItemGiver moldy = Assert.Single(index.GiversOf(37));
+        Assert.Equal("orb", moldy.Keyword);
+        Assert.Equal(35, moldy.TradeItemId);
+
+        // The single-line form carries its own keyword.
+        Assert.Equal(20, Assert.Single(index.GiversOf(22)).TradeItemId);
+    }
+
+    // A check for the very item the line then takes is part of the trade, not a
+    // condition on the character.
+    [Fact]
+    public void GiversOf_TradeThatFirstChecksForItsOwnItem_IsStillPlain()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        ItemGiver elder = Assert.Single(index.GiversOf(41));
+        Assert.Equal("give hide to elder", elder.Keyword);
+        Assert.Equal(40, elder.TradeItemId);
+    }
+
+    // How the game counts an item taken twice isn't known, and a class, a level or
+    // a price is something else asked of the character.
+    [Theory]
+    [InlineData(43)]   // the same item taken twice
+    [InlineData(46)]   // class
+    [InlineData(47)]   // minlevel
+    [InlineData(48)]   // price
+    public void GiversOf_TradeTakingTwiceOrAskingMore_IsNoPlainTrade(int itemId)
+        => Assert.Equal(0, Assert.Single(NewIndex(NewCache()).GiversOf(itemId)).TradeItemId);
+
+    // One keyword that reaches a conditioned line and a plain one is no plain
+    // trade, whichever the index meets first: the conditioned line may be the one
+    // the game runs. Nor is a keyword that runs one of two alternatives.
+    [Theory]
+    [InlineData(49, "swap")]     // conditioned block first, then plain
+    [InlineData(50, "barter")]   // plain block first, then conditioned
+    [InlineData(51, "pick")]     // two lines in one block
+    public void GiversOf_KeywordReachingMoreThanOneLine_IsNoPlainTrade(int itemId, string keyword)
+    {
+        ItemGiver row = Assert.Single(NewIndex(NewCache()).GiversOf(itemId));
+
+        Assert.Equal(keyword, row.Keyword);
+        Assert.Equal("pedlar", row.Name);
+        Assert.Equal(0, row.TradeItemId);
+    }
+
+    // A give that asks anything more of the character than the one item is not a
+    // trade to walk into: a quest step, a second item taken, an item checked for.
+    [Fact]
+    public void GiversOf_TurnInWithOtherConditions_IsNoPlainTrade()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        Assert.Equal(0, Assert.Single(index.GiversOf(29), g => g.Keyword == "gift").TradeItemId);
+        Assert.Equal(0, Assert.Single(index.GiversOf(38)).TradeItemId);
+        Assert.Equal(0, Assert.Single(index.GiversOf(39)).TradeItemId);
+        // A free give takes nothing.
+        Assert.Equal(0, Assert.Single(index.GiversOf(25)).TradeItemId);
     }
 
     // An export that lists "Room(<command>) <rooms>" on the item names every room a

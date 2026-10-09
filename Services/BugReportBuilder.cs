@@ -1734,6 +1734,23 @@ public static class BugReportBuilder
         Kv(sb, "Physical route (all gates ignored)",
             physical is { Count: > 0 } ? $"{physical.Count} step(s)" : "none — graph-disconnected");
 
+        // The gates the route card named, and what the client makes of each: whether
+        // a pick of the card would fetch a door key, and any trade that yields it.
+        if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs })
+        {
+            IReadOnlyList<int> fetchable = svc.SourceableGateItems(reqs);
+            Kv(sb, "Gate items on the route through gates", string.Join("; ", reqs.Select(r =>
+            {
+                string items = string.Join("/", r.ItemIds.Select(id => $"{id} {svc.ItemNames.GetName(id) ?? "?"}"));
+                if (r.Carried) return $"{r.Kind} {items} (carried)";
+                if (r.Kind != RouteRequirementKind.DoorKey) return $"{r.Kind} {items}";
+                string source = fetchable.Contains(r.ItemIds[0])
+                    ? " — a route card's pick fetches it" : " — nothing fetches it";
+                string trade = svc.GiveSources.TradeNote(r.ItemIds[0]) is { } note ? $" — {note}" : string.Empty;
+                return $"{r.Kind} {items}{source}{trade}";
+            })));
+        }
+
         if (RouteChoicePlanner.PlanBlocked(bfs, filter, graph, here, target) is { } b)
         {
             string reason = Game.Map.BlockedExitDescriber.Describe(
@@ -1856,6 +1873,14 @@ public static class BugReportBuilder
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
+        // Both ride on the journey ("Route this walk keeps to" above), so with no
+        // journey standing there is nothing to list.
+        Game.Map.JourneyFetch? fetch = svc.Walker.Journey?.Fetch;
+        Kv(sb, "Journey's items to fetch", fetch is not { HasItems: true } ? "(none)" : string.Join(", ", fetch.Items));
+        Kv(sb, "Journey's trades agreed to on its route card",
+            fetch is not { Trades.Count: > 0 } ? "(none)" : string.Join(", ", fetch.Trades.Select(t =>
+                $"{t.Key} {svc.ItemNames.GetName(t.Key) ?? "?"} for {t.Value} {svc.ItemNames.GetName(t.Value) ?? "?"}"
+                + (svc.AgreedTradeFor(t.Key) is null ? " (not in force)" : " (in force)"))));
         Kv(sb, "Shop-buy detour active", svc.PathItemShopRouter.DetourActive.ToString());
         Kv(sb, "Monster-drop hunt detour active", svc.MonsterDropRouter.DetourActive.ToString());
         Kv(sb, "Summon detour active", svc.PathItemSummonRouter.DetourActive.ToString()
