@@ -4791,7 +4791,7 @@ public sealed class AppServices
                 || Game.Tokens.TokenCatalog.ParseUsesRemaining(text) >= 0
                 // Another KNOWN player changing gear ("X wears / removes …!") — roster-gated
                 // so a same-shaped monster / spell line can't be suppressed.
-                || Game.BenignChatterMatcher.IsOtherPlayerGearSwap(text, IsKnownRoomPlayer)
+                || Game.BenignChatterMatcher.IsOtherPlayerGearSwap(text, IsRoomOrPartyPlayer)
                 // A prompt the statline pattern can't read arrives as an ordinary line,
                 // with the echo of whatever was typed glued on. The reconciler holds the
                 // last such prompt for as long as the mismatch lasts.
@@ -13531,6 +13531,17 @@ public sealed class AppServices
     // others'-POV actions/emotes (they're room-local, so the actor is in the room's
     // entity list). Matches the first name token so "Fujin" resolves a "Fujin
     // WuzHere" resolved name.
+    // A player the room lists, or one of our party. A party member is in the room
+    // whether or not the last room display listed them (hidden, or read mid-move),
+    // and their gear swaps were staged as unknown lines by the hundred.
+    private bool IsRoomOrPartyPlayer(string name)
+    {
+        if (IsKnownRoomPlayer(name)) return true;
+        foreach (Game.PartyMember m in PartyState.Members)
+            if (!m.IsSelf && FirstTokenEquals(m.Name, name)) return true;
+        return false;
+    }
+
     private bool IsKnownRoomPlayer(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;

@@ -375,29 +375,35 @@ public sealed class MessageCandidateWatcher : IDisposable
         if (ClientNotice.IsNotice(text)) return;
         if (IsRecentCommand(text, line.Timestamp)) return;
 
-        // A real server line that isn't the experience gain — whatever was held can't
-        // be death flavour, so stage it.
+        // In order:
+        //  - listings and wrapped room rows, recognized by where they sit, not by text;
+        //  - the `br` broadcast-channel status ("The following users are on channel N:"
+        //    then the members), run for every line so its one-line member-list gate is
+        //    kept up: the members are bare player names, suppressed ONLY right after
+        //    the header, and a non-member line clears the gate without being touched;
+        //  - the catalogues and fixed shapes;
+        //  - colour-aware: a BBS action / emote reads like any other sentence in plain
+        //    text, so it's told apart by the wire's all-green colouring (plus a
+        //    known-player check);
+        //  - last, because it's the only check that consults the live roster and game
+        //    data: an attack shape that only a class lookup can tell from a spell.
+        if (IsBlockLine(text, line.Timestamp)
+            || IsQuoteContinuation(text)
+            || IsOwnActionReply(text, line.Timestamp)
+            || IsChannelListLine(text)
+            || IsKnownText(line, text)
+            || _isRecognizedByDirectParser?.Invoke(text) == true
+            || _isRecognizedLine?.Invoke(line) == true
+            || _isNonCasterPhysicalAction?.Invoke(text) == true)
+        {
+            NoteRecognizedLinePastPending(line.Timestamp);
+            return;
+        }
+
+        // An unrecognized line that isn't the experience gain — whatever was held
+        // can't be death flavour, so stage it.
         CommitPending();
 
-        // Listings and wrapped room rows: recognized by where they sit, not by text.
-        if (IsBlockLine(text, line.Timestamp)) return;
-        if (IsQuoteContinuation(text)) return;
-        if (IsOwnActionReply(text, line.Timestamp)) return;
-
-        // The `br` broadcast-channel status ("The following users are on channel N:"
-        // then the members). Run first so the one-line member-list gate is maintained
-        // for every line — the members are bare player names, suppressed ONLY right
-        // after the header, and a non-member line clears the gate without being touched.
-        if (IsChannelListLine(text)) return;
-
-        if (IsKnownText(line, text)) return;
-        if (_isRecognizedByDirectParser?.Invoke(text) == true) return;
-        // Colour-aware: a BBS action / emote reads like any other sentence in plain text,
-        // so it's told apart by the wire's all-green colouring (plus a known-player check).
-        if (_isRecognizedLine?.Invoke(line) == true) return;
-        // Last, because it's the only check that consults the live roster and game
-        // data: an attack shape that only a class lookup can tell from a spell.
-        if (_isNonCasterPhysicalAction?.Invoke(text) == true) return;
         // A dismissed candidate is a final verdict — drop every recurrence
         // outright: no re-add, no occurrence bump, no re-alert.
         if (_candidates.IsDismissed(text)) return;
@@ -437,7 +443,23 @@ public sealed class MessageCandidateWatcher : IDisposable
             : (null, null);
         // Held rather than staged — see the death-flavour rule at the top of OnLine.
         _pending = new PendingCandidate(text, now, map, room);
+        _linesPastPending = 0;
     }
+
+    // A recognized line arrived while a line was held. The experience line doesn't
+    // always follow a death message directly: the wear-off of what the monster had
+    // cast, or the coins it dropped, can sit between them ("The nanati lets out a
+    // shriek and fades away!" / "The unnatural darkness lifts." / "You gain 825
+    // experience."). The held line outlasts a couple of such lines; past that, or
+    // past the burst they would all arrive in, it was no death message.
+    private void NoteRecognizedLinePastPending(DateTimeOffset now)
+    {
+        if (_pending is not { } p) return;
+        if (++_linesPastPending > MaxLinesBeforeExperience || now - p.When > BurstWindow) CommitPending();
+    }
+
+    private const int MaxLinesBeforeExperience = 2;
+    private int _linesPastPending;
 
     // A server listing — shop stock, a top list, the `profile` readout, Paradigm's
     // `abil` tables, a gang roster, an item's or a room's description — runs from
