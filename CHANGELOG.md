@@ -1,5 +1,10 @@
 # Version history
 
+## 3.159.20
+
+- The inventory is read again after a death, so gear handed back afterwards can be put on with a gear set (it used to read as already worn until you typed `i`)
+- bug reports addressed: paradigm-20261009-105244
+
 ## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters

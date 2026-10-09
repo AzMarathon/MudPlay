@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.19**
-> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
-> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+> **Version 3.159.20**
+> - The inventory is read again after a death, so gear handed back afterwards can be put on with a gear set (it used to read as already worn until you typed `i`)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
