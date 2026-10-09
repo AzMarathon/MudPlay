@@ -654,8 +654,8 @@ public sealed class MapControl : Control
 
     private static readonly IBrush Bg            = new SolidColorBrush(Color.Parse("#0E0E0E"));
     private static readonly IBrush TileBg        = new SolidColorBrush(Color.Parse("#1E1E1E"));
-    // The room fills are internal for MapSpellPaletteTests, which holds the
-    // by-teleport swatches off each of them.
+    // The room fills are readable outside the control so the by-teleport swatches
+    // can be held to a minimum distance from every one of them.
     internal static readonly IBrush RoomFill     = new SolidColorBrush(Color.Parse("#9B9B9B"));
     // Darkened + shifted off pure yellow (lower green channel) so the current-room
     // fill doesn't blend into a down-exit room's #DCDC00 yellow where the two abut at

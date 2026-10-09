@@ -2,7 +2,7 @@
 
 <!-- current-version:start -->
 > **Version 3.160.1**
-> - Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you outright or on a random roll, yellow when it does so only under a condition (an item, your class or level, an empty room), green when it doesn't
+> - Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
 > - In that mode the room tooltip and the Legend name the colours
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
