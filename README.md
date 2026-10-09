@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.9**
-> - Round totals: a monster's damage shield striking back (the razor boar's spines) is credited to that monster, not to "unknown" or to no attacker
-> - A strike-back in wording the client hasn't seen is still credited when the game data gives the monster just hit a damage shield
+> **Version 3.158.10**
+> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
+> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

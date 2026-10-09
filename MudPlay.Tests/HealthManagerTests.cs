@@ -3388,6 +3388,61 @@ public sealed class HealthManagerTests
         Assert.DoesNotContain("=x", h.SentLines);
     }
 
+    // The hang-up penalty line is asked for once per hang-up actually sent, after
+    // the exit command, and is told which hang-up was the PvP response's. A wimpy
+    // jump or a suppressed drop sends no hang-up, so asks for no line.
+    [Fact]
+    public void HangupPenaltyLog_ToldAfterEachHangupSent_WithThePvpResponseMarked()
+    {
+        using Harness low = new();
+        List<bool> lowAsked = new();
+        low.Health.SetHangupPenaltyLog(pvp =>
+        {
+            Assert.Contains("=x", low.SentLines);
+            lowAsked.Add(pvp);
+        });
+        low.SetPrompt(hp: 5, maxHp: 200);
+        Assert.Equal(new[] { false }, lowAsked);
+
+        using Harness panic = new();
+        List<bool> panicAsked = new();
+        panic.Health.SetHangupPenaltyLog(panicAsked.Add);
+        panic.SetPrompt(hp: 200, maxHp: 200);
+        panic.Health.RespondToReceivedPanic("Bob");
+        Assert.Equal(new[] { false }, panicAsked);
+
+        using Harness pvp = new();
+        List<bool> pvpAsked = new();
+        pvp.Health.SetHangupPenaltyLog(pvpAsked.Add);
+        pvp.SetPrompt(hp: 200, maxHp: 200);
+        Assert.True(pvp.Health.HangUpForPvp("Bob attacked us"));
+        Assert.Equal(new[] { true }, pvpAsked);
+    }
+
+    [Fact]
+    public void HangupPenaltyLog_NotToldWhenNoHangupGoesOut()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness jumped = new(s) { WimpyFireResult = true };
+        int asked = 0;
+        jumped.Health.SetHangupPenaltyLog(_ => asked++);
+        jumped.SetPrompt(hp: 200, maxHp: 200);
+        Assert.True(jumped.Health.HangUpForPvp("Bob is here"));
+
+        using Harness disabled = new();
+        disabled.General.DisableHangups = true;
+        disabled.Health.SetHangupPenaltyLog(_ => asked++);
+        disabled.SetPrompt(hp: 5, maxHp: 200);
+        Assert.False(disabled.Health.RespondToReceivedPanic("Bob"));
+        Assert.False(disabled.Health.HangUpForPvp("Bob is here"));
+
+        Assert.Equal(0, asked);
+    }
+
     [Fact]
     public void WimpyGoto_Enabled_AndFires_SkipsHangup()
     {

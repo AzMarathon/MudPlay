@@ -335,6 +335,77 @@
                                       Content="PvP is enabled on this realm"
                                       ToolTip.Tip="Tick this when players can attack one another on this realm. The PvP settings, and the care taken not to hit other players with room attacks, only apply on a realm where it is ticked."/>
 
+                            <!-- What the board takes for a hang-up in a fight. The board
+                                 sets it and the game never prints it, so the user records
+                                 it here; the program log and the bug report show it. No
+                                 hang-up is sent, held or skipped because of it. -->
+                            <TextBlock Classes="FieldLabel" FontWeight="SemiBold" Margin="0,12,0,0" Text="Hang-up penalties on this realm"/>
+
+                            <CheckBox IsChecked="{Binding HangupPenaltyEnabled, Mode=TwoWay}"
+                                      Margin="0,6,0,0"
+                                      Content="Does the BBS have hang-up penalties?"
+                                      ToolTip.Tip="Tick this when the board penalises a character who hangs up in a fight. A hang-up in PvP combat is then penalised; tick the box below when a fight with a monster is too. MudPlay only records the board's rule: it is shown in the program log when a hang-up goes out, and in bug reports. It does not change when MudPlay hangs up, which stays with Disable hangups, the Health settings, the PvP actions and @panic."/>
+
+                            <StackPanel IsEnabled="{Binding HangupPenaltyEnabled}">
+                                <TextBlock Classes="FieldLabel" Margin="0,6,0,0" Text="A hang-up in PvP combat:"/>
+                                <Grid ColumnDefinitions="180,Auto,Auto,Auto,*" RowDefinitions="Auto,Auto"
+                                      Margin="0,4,0,0" ColumnSpacing="8" RowSpacing="4">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="HP lost (%):"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                                   Value="{Binding HangupPvpHpFromPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                   Minimum="0" Maximum="100" Increment="1"
+                                                   FormatString="0" Width="140"
+                                                   HorizontalAlignment="Left"
+                                                   ToolTip.Tip="The least the board takes for a hang-up in PvP combat, as a percentage of your maximum HP. The board takes a share somewhere between this figure and the one after it. Default 25."/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="to"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="3"
+                                                   Value="{Binding HangupPvpHpToPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                   Minimum="0" Maximum="100" Increment="1"
+                                                   FormatString="0" Width="140"
+                                                   HorizontalAlignment="Left"
+                                                   ToolTip.Tip="The most the board takes for a hang-up in PvP combat, as a percentage of your maximum HP. Never less than the figure before it; set both the same when the board takes a fixed share. Default 50."/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Items dropped (up to):"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                                   Value="{Binding HangupPvpItemsDropped, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                   Minimum="0" Maximum="100" Increment="1"
+                                                   FormatString="0" Width="140"
+                                                   HorizontalAlignment="Left"
+                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in PvP combat. Leave it at 0 when the board takes HP only, as most do. Default 0."/>
+                                </Grid>
+
+                                <CheckBox IsChecked="{Binding HangupPvePenaltyEnabled, Mode=TwoWay}"
+                                          Margin="0,6,0,0"
+                                          Content="Also penalised in combat with monsters (PvE)"
+                                          ToolTip.Tip="Tick this when the board also penalises a hang-up in a fight with a monster. Unticked, only a hang-up in PvP combat is penalised."/>
+                                <Grid ColumnDefinitions="180,Auto,Auto,Auto,*" RowDefinitions="Auto,Auto"
+                                      Margin="0,4,0,0" ColumnSpacing="8" RowSpacing="4"
+                                      IsEnabled="{Binding HangupPvePenaltyEnabled}">
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Classes="FieldLabel" Text="HP lost (%):"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="1"
+                                                   Value="{Binding HangupPveHpFromPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                   Minimum="0" Maximum="100" Increment="1"
+                                                   FormatString="0" Width="140"
+                                                   HorizontalAlignment="Left"
+                                                   ToolTip.Tip="The least the board takes for a hang-up in a fight with a monster, as a percentage of your maximum HP. The board takes a share somewhere between this figure and the one after it. Default 25."/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Classes="FieldLabel" Text="to"/>
+                                    <NumericUpDown Grid.Row="0" Grid.Column="3"
+                                                   Value="{Binding HangupPveHpToPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                   Minimum="0" Maximum="100" Increment="1"
+                                                   FormatString="0" Width="140"
+                                                   HorizontalAlignment="Left"
+                                                   ToolTip.Tip="The most the board takes for a hang-up in a fight with a monster, as a percentage of your maximum HP. Never less than the figure before it; set both the same when the board takes a fixed share. Default 50."/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Classes="FieldLabel" Text="Items dropped (up to):"/>
+                                    <NumericUpDown Grid.Row="1" Grid.Column="1"
+                                                   Value="{Binding HangupPveItemsDropped, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                   Minimum="0" Maximum="100" Increment="1"
+                                                   FormatString="0" Width="140"
+                                                   HorizontalAlignment="Left"
+                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in a fight with a monster. Leave it at 0 when the board takes HP only, as most do. Default 0."/>
+                                </Grid>
+                            </StackPanel>
+
                             <!-- Nightly boss cleanup: "Respawns @ Cleanup" bosses on the
                                  Bosses tab read DEAD once marked and flip back to ALIVE at
                                  this daily wall-clock time (in the chosen zone). -->

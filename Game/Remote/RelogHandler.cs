@@ -30,6 +30,7 @@ public sealed class RelogHandler : IDisposable
     private readonly RelogSignal _signal;
     private Action<byte[]>? _wireSender;
     private Func<bool>? _hangupsDisabled;
+    private Action? _logHangupPenalty;
     private bool _disposed;
 
     public RelogHandler(RemoteCommandManager engine, GameCommands commands, RelogSignal signal)
@@ -66,6 +67,14 @@ public sealed class RelogHandler : IDisposable
         _hangupsDisabled = disabled;
     }
 
+    // Bind the log line that says what the realm's hang-up penalty (Settings →
+    // BBS) makes of the @relog just sent. It reports and nothing more.
+    public void SetHangupPenaltyLog(Action logHangupPenalty)
+    {
+        ArgumentNullException.ThrowIfNull(logHangupPenalty);
+        _logHangupPenalty = logHangupPenalty;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -91,5 +100,6 @@ public sealed class RelogHandler : IDisposable
         if (_wireSender is null) return;
         byte[] bytes = Encoding.Latin1.GetBytes(command + "\r");
         _wireSender(bytes);
+        _logHangupPenalty?.Invoke();
     }
 }

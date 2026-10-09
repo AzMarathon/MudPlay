@@ -3244,11 +3244,13 @@ public sealed class AppServices
         // what's on the screen.
         Hangup = new Game.Remote.HangupHandler(RemoteCommands, GameCommands, HangupSignal);
         Hangup.SetHangupsDisabledCheck(ReadDisableHangups);
+        Hangup.SetHangupPenaltyLog(() => LogHangupPenalty(pvpResponse: false));
         // @relog handler — graceful exit (GameCommands.ExitCommand) +
         // RelogSignal so MainWindowVM forces an unconditional reconnect
         // and the normal login automation logs the character back in.
         Relog = new Game.Remote.RelogHandler(RemoteCommands, GameCommands, RelogSignal);
         Relog.SetHangupsDisabledCheck(ReadDisableHangups);
+        Relog.SetHangupPenaltyLog(() => LogHangupPenalty(pvpResponse: false));
         // @divert handler — subscribes to ChatRouter telepaths and repeats
         // them to a target while diverting. Wire-sender bound in
         // MainWindowVM after the telnet client is up.
@@ -4697,6 +4699,7 @@ public sealed class AppServices
         // its waypoints flagged DoNotRest. Matched by room key (per-room), so it
         // clears the instant the loop steps into any other room. Loops only.
         Health.SetRestEnabledGate(() => ReadAutoModeFlag(d => d.AutoRest));
+        Health.SetHangupPenaltyLog(LogHangupPenalty);
         Health.SetDoNotRestSelector(() =>
             ReadSprintMode()
             || (LoopRunner.State != Game.Map.LoopState.Idle
@@ -9905,6 +9908,21 @@ public sealed class AppServices
     // without restarting an engine.
     private bool ReadDisableHangups() =>
         ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups;
+
+    // Says in the program log what the realm's hang-up penalty (Settings → BBS)
+    // makes of a hang-up the client has just sent: the health settings', the PvP
+    // response's, or an @panic / @hangup / @relog. Which side applies comes from
+    // what is already tracked, a fight with a player (PvpFight) and
+    // PlayerState.InCombat; pvpResponse is the one thing only the caller knows.
+    // A record for the reader. Nothing is decided on it.
+    private void LogHangupPenalty(bool pvpResponse)
+    {
+        if (Game.Health.HangupPenaltyNotice.ForHangup(
+                ResolveActiveRealm()?.Realm,
+                pvp: pvpResponse || PvpFight.IsActive,
+                inCombat: PlayerState.InCombat) is { } line)
+            Log.Info(Game.Health.HangupPenaltyNotice.LogCategory, line);
+    }
 
     // Live read of Sprint Mode from the char-tier General section — the same
     // store the toolbar toggle writes. Wired into HealthManager's rest-skip

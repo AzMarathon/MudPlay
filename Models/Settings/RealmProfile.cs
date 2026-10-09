@@ -2,8 +2,8 @@ namespace MudPlay.Models.Settings;
 
 // One realm on a BBS. A board can host several versions of the game, picked from
 // its menu, and each usually differs — often with its own MDB export — so what a
-// realm needs (its game data, menu commands, death floor, cleanup time, currency
-// name) lives here, and everything the client collects while playing it (players
+// realm needs (its game data, menu commands, death floor, hang-up penalty, cleanup
+// time, currency name) lives here, and everything the client collects while playing it (players
 // seen, blacklist, leaderboard, roomba, quests, realm-tier game-data edits, boss
 // timers) is stored in its folder (AppPaths.RealmFolder). Character profiles are
 // assigned to a realm by name (CharacterProfile.Realm); characters on the same
@@ -50,6 +50,35 @@ public sealed class RealmProfile
     // says so, so the user tells us; the PvP settings and the room-attack care
     // around other players only apply where this is on.
     public bool PvpEnabled { get; set; }
+
+    // ----- Hang-up penalty -----
+    // What this board does to a character who hangs up in a fight (GAME_MECHANICS
+    // "Hang-up / lost carrier"). The board sets it and nothing the game prints
+    // says what it is, so the user records it here. It is a record only: the
+    // program log and the bug report show it (Game.Health.HangupPenaltyNotice),
+    // and no hang-up is sent, held or skipped because of it.
+    //
+    // Persisted with the realm in the BBS file (BBS/{bbs}/bbs.json → Realms), the
+    // tier the death floor is on: a board's PvE and PvP realms are separate game
+    // instances, each with its own rule.
+
+    // The board penalises hang-ups. Off leaves everything below unused.
+    public bool HangupPenaltyEnabled { get; set; }
+
+    // A hang-up in PvP combat takes a share of max HP between these two
+    // percentages and drops up to this many items. The HP pair starts at the
+    // game's own initial values; the item count at 0, since most boards that
+    // penalise take HP only.
+    public int HangupPvpHpFromPercent { get; set; } = 25;
+    public int HangupPvpHpToPercent { get; set; } = 50;
+    public int HangupPvpItemsDropped { get; set; }
+
+    // The board penalises a hang-up in a fight with a monster too, with its own
+    // HP share and item count.
+    public bool HangupPvePenaltyEnabled { get; set; }
+    public int HangupPveHpFromPercent { get; set; } = 25;
+    public int HangupPveHpToPercent { get; set; } = 50;
+    public int HangupPveItemsDropped { get; set; }
 
     // The realm's nightly cleanup wall-clock time. Some bosses ("Respawns @
     // Cleanup" in the boss table) reset only at this daily cleanup — a marked one
