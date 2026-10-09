@@ -2717,6 +2717,53 @@ public sealed class LoopRunnerTests : IDisposable
     }
 
     [Fact]
+    public void Circuit_ClosedDoor_NotHere_RecoversInsteadOfFailingTheLap()
+    {
+        // The door manager found no door that way in the room we're standing in —
+        // the step was planned from the wrong room. Nothing is wrong with the door,
+        // so the lap re-checks its position and reroutes rather than failing.
+        Harness h = NewHarness(DoorGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+
+        List<Action<DoorOpenResult>> doorReplies = new();
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => doorReplies.Add(reply));
+        h.Runner.SetDoorStopper(() => { });
+
+        h.Runner.Start(new Loop("house", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        Assert.Single(doorReplies);
+
+        doorReplies[0](new DoorOpenResult.NotHere("'bash e' had no effect"));
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Contains(h.Events,
+            e => e.Kind == LoopEventKind.Paused && e.Detail.Contains("door isn't here"));
+        // Rerouted from the room the tracker holds, which asks for its door afresh.
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, doorReplies.Count);
+    }
+
+    // The reroute comes straight back to the same door and the game says the same
+    // again. Recovery would drop that second entry as an echo of the first, with
+    // nothing left to wake the step, so the lap ends with the reason instead.
+    [Fact]
+    public void Circuit_ClosedDoor_NotHereAgainAtOnce_FailsTheStep_InsteadOfStranding()
+    {
+        Harness h = NewHarness(DoorGraphJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        List<Action<DoorOpenResult>> doorReplies = new();
+        h.Runner.SetDoorEnqueuer((_, _, _, _, _, reply) => doorReplies.Add(reply));
+        h.Runner.SetDoorStopper(() => { });
+        h.Runner.Start(new Loop("house", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+
+        doorReplies[0](new DoorOpenResult.NotHere("'bash e' had no effect"));
+        Assert.Equal(2, doorReplies.Count);
+        doorReplies[1](new DoorOpenResult.NotHere("'bash e' had no effect"));
+
+        Assert.Contains(h.Events,
+            e => e.Kind == LoopEventKind.Failed && e.Detail.Contains("re-routing came straight back"));
+    }
+
+    [Fact]
     public void RecoveryAttemptsArrivingInTheSameInstantDoNotBurnTheBudget()
     {
         // A reroute from a room the tracker has wrong re-blocks immediately and

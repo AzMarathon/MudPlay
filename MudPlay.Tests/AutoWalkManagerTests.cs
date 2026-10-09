@@ -1286,6 +1286,85 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
     }
 
+    // The gaol of report paradigm-20260924-053941: a door southeast out of the
+    // first room, and a plain southeast exit out of the room behind it.
+    private const string DoorThenPlainGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Gaol",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "1/2 (Door)", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "Dungeon",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "1/1 (Door)", "SE": "1/3", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "Vault",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "1/2", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // The door manager found the door isn't in the room we're standing in (we were
+    // already through it). That is no failure of the walk: it re-plans from where the
+    // tracker now is, and from there southeast is a plain exit.
+    [Fact]
+    public void Walker_DoorNotHere_ReplansFromTheRoomWeAreIn_InsteadOfFailing()
+    {
+        Harness h = NewHarness(DoorThenPlainGraphJson);
+        FakeDoorEnqueuer door = new();
+        h.Walker.SetDoorEnqueuer(door.Enqueue);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Equal(Direction.SE, Assert.Single(door.Calls).Direction);
+
+        // The room behind the door shows up while the door request is still out.
+        h.Tracker.NoteRoomObserved(new RoomObservation("Dungeon",
+            new HashSet<Direction> { Direction.NW, Direction.SE }));
+        Assert.Equal(new RoomKey(1, 2), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Empty(h.Sent);
+
+        door.Calls[0].Reply(new DoorOpenResult.NotHere("'bash se' had no effect"));
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Single(door.Calls);
+        Assert.Equal("se\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Vault",
+            new HashSet<Direction> { Direction.NW }));
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+    }
+
+    // A pause that comes and goes while a door is being opened (a party @wait / @ok
+    // in the same second) must leave the door request alone. No move has gone out,
+    // so reading the still-unmoved tracker as a refused move replanned the walk —
+    // asking rm first — underneath a door manager that was about to send the move.
+    [Fact]
+    public void Walker_ResumeWhileDoorIsOpening_WaitsForTheDoor_DoesNotReplan()
+    {
+        Harness h = NewHarness(DoorGraphJson);
+        FakeDoorEnqueuer door = new();
+        int stopCalls = 0;
+        h.Walker.SetDoorEnqueuer(door.Enqueue);
+        h.Walker.SetDoorStopper(() => stopCalls++);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+        Assert.Single(door.Calls);
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "a member asked us to wait");
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "all ok");
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Retrying);
+        Assert.Equal(0, stopCalls);
+        Assert.Single(door.Calls);
+        Assert.Empty(h.Sent);
+
+        door.Calls[0].Reply(DoorOpenResult.Opened.Instance);
+        Assert.Equal("e\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
     [Fact]
     public void Walker_DoorAlreadyOpen_SkipsFsm_SendsMoveDirectly()
     {

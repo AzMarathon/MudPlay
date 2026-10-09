@@ -25,6 +25,9 @@ namespace MudPlay.Game.Map;
 //      then fall back to the other verb if viable, else fail.
 //   5) Bash success → Opened directly (bash both unlocks AND swings the
 //      door). Pick success → open <dir> → on "is now open" → Opened.
+//   6) The door turns out not to be where the character stands — the verb drew
+//      "Your command had no effect.", or the tracker confirmed another room —
+//      → NotHere: no further verb is sent and the caller re-plans.
 //
 // Single-pattern matchers: the regex doesn't capture direction so other
 // in-flight commands (manual user typing) could in theory match the wrong
@@ -50,6 +53,9 @@ public sealed class DoorOpenManager : IDisposable
     private readonly Func<bool>? _bashRestRecovered;
     // True while the movement engines hold for a rest or a meditate. Unset → never.
     private Func<bool>? _restHold;
+    // The room the tracker is confirmed in, or null while it isn't sure. Unset →
+    // the room a door belongs to is never checked.
+    private Func<RoomKey?>? _confirmedRoom;
     private readonly LogService? _log;
     private readonly IDisposable _bashOkSub;
     private readonly IDisposable _bashFailSub;
@@ -62,11 +68,16 @@ public sealed class DoorOpenManager : IDisposable
     private readonly IDisposable _lockedSub;
     private readonly IDisposable _keyOkSub;
     private readonly IDisposable _keyUnknownSub;
+    private readonly IDisposable _noEffectSub;
     private readonly WireSender _wire = new();
     private bool _disposed;
 
     private readonly Queue<DoorRequest> _queue = new();
     private DoorRequest? _current;
+    // The room the in-flight request's door is in: where the tracker was confirmed
+    // when the request started. Null when it wasn't sure then (a maze solve opens
+    // doors while lost), which leaves the request unchecked.
+    private RoomKey? _doorRoom;
     private DoorState _state = DoorState.Idle;
     private string? _verb;                                // "bash" / "pick"
     private int _verbAttempts;
@@ -90,6 +101,10 @@ public sealed class DoorOpenManager : IDisposable
 
     // Direction of the in-flight request, or null when idle.
     public string? CurrentDirection => _current?.DirectionShort;
+
+    // The room the in-flight request's door is in, for the bug report. Null when
+    // idle or when the request started with the tracker unsure of the room.
+    public RoomKey? CurrentDoorRoom => _doorRoom;
 
     // Outstanding queue depth (excludes the in-flight request).
     public int QueueDepth => _queue.Count;
@@ -141,6 +156,7 @@ public sealed class DoorOpenManager : IDisposable
         _lockedSub      = _router.Subscribe(KnownPatterns.DoorIsLocked,         OnIsLocked);
         _keyOkSub       = _router.Subscribe(KnownPatterns.DoorKeyUnlockSuccess, OnKeyUnlockSuccess);
         _keyUnknownSub  = _router.Subscribe(KnownPatterns.DoorKeyUnknown,       OnKeyUnknown);
+        _noEffectSub    = _router.Subscribe(KnownPatterns.CommandNoEffect,      OnNoEffect);
     }
 
     // Bind the wire-sender. Same shape as TrapDisarmManager.SetWireSender
@@ -166,6 +182,7 @@ public sealed class DoorOpenManager : IDisposable
         _lockedSub.Dispose();
         _keyOkSub.Dispose();
         _keyUnknownSub.Dispose();
+        _noEffectSub.Dispose();
     }
 
     // Queue a door-open request. The walker normalises direction to short
@@ -234,6 +251,7 @@ public sealed class DoorOpenManager : IDisposable
             q.Reply(new DoorOpenResult.Failed("door flow stopped"));
         }
         _state = DoorState.Idle;
+        _doorRoom = null;
         _verb = null;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
@@ -247,6 +265,7 @@ public sealed class DoorOpenManager : IDisposable
         if (_state != DoorState.Idle) return;
         if (_queue.Count == 0) return;
         _current = _queue.Dequeue();
+        _doorRoom = _confirmedRoom?.Invoke();
         _state = DoorState.SelectingVerb;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
@@ -294,6 +313,7 @@ public sealed class DoorOpenManager : IDisposable
     private void StartUseKey()
     {
         if (_current is not { } cur) return;
+        if (AbandonIfLeftRoom()) return;
         string? keyName = _itemNameLookup(cur.KeyItemId);
         if (string.IsNullOrWhiteSpace(keyName))
         {
@@ -331,6 +351,7 @@ public sealed class DoorOpenManager : IDisposable
     private void SendVerb()
     {
         if (_current is not { } cur || _verb is null) return;
+        if (AbandonIfLeftRoom()) return;
 
         // Bashing drains HP — pause before a swing once HP has fallen to the rest
         // trigger and let HealthManager rest to rest-max. NotifyHealthChanged (or the
@@ -381,6 +402,9 @@ public sealed class DoorOpenManager : IDisposable
 
     public void SetRestHold(Func<bool> isHeld) => _restHold = isHeld;
 
+    // Bound after construction: the tracker is built later than this manager.
+    public void SetConfirmedRoomProbe(Func<RoomKey?> confirmedRoom) => _confirmedRoom = confirmedRoom;
+
     // The rest hold changed: a bash or pick that was waiting on it goes out once
     // it's over.
     public void NotifyRestHoldChanged()
@@ -404,6 +428,7 @@ public sealed class DoorOpenManager : IDisposable
     private void SendOpen()
     {
         if (_current is not { } cur) return;
+        if (AbandonIfLeftRoom()) return;
         _state = DoorState.WaitingOpen;
         _wire.Send($"open {cur.DirectionShort}");
         _log?.Info("Door", $"open {cur.DirectionShort} (after pick success).");
@@ -433,6 +458,7 @@ public sealed class DoorOpenManager : IDisposable
     private void OnVerbTimeout()
     {
         if (_disposed || _current is not { } cur) return;
+        if (AbandonIfLeftRoom()) return;
         switch (_state)
         {
             case DoorState.WaitingBash:
@@ -496,6 +522,31 @@ public sealed class DoorOpenManager : IDisposable
         if (_state != DoorState.WaitingBash) return;
         if (_current is null) return;
         TryFallbackOrFail($"can't bash ('{m.Text.Trim()}')");
+    }
+
+    // "Your command had no effect." to a bash: the exit that way is not a door in
+    // the room the character is standing in (GAME_MECHANICS "Locked doors — picking,
+    // opening and bashing"). Only a bash has been seen to draw it; what a pick or an
+    // open at a non-door prints isn't known, so those keep their own retries and
+    // fallbacks. Either the character isn't in the
+    // room the request was planned from or the map has the exit wrong, and the same
+    // verb can only draw the same answer — unrecognised, it read as silence and the
+    // watchdog re-bashed without end (report paradigm-20260924-053941). The line
+    // answers any command the game refuses, so it is the door's only while a bash
+    // is the one awaiting a reply, and never when the command echoed ahead of
+    // it is some other one (a cast or an attack sent meanwhile).
+    private void OnNoEffect(MatchResult _)
+    {
+        if (_current is not { } cur) return;
+        if (_state != DoorState.WaitingBash) return;
+        string awaited = $"{_verb} {cur.DirectionShort}";
+        if (_router.ReplyIsForCommandNotNaming(awaited))
+        {
+            _log?.Debug("Door",
+                $"'no effect' answers '{_router.CommandEchoedBeforeLine}', not {awaited} — still waiting.");
+            return;
+        }
+        AbandonCurrent($"'{awaited}' had no effect, so that exit is not a door here");
     }
 
     private void OnPickSuccess(MatchResult _)
@@ -645,6 +696,7 @@ public sealed class DoorOpenManager : IDisposable
     private void SucceedCurrent()
     {
         if (_current is not { } cur) return;
+        if (AbandonIfLeftRoom()) return;
         cur.Reply(DoorOpenResult.Opened.Instance);
         Reset();
     }
@@ -652,20 +704,58 @@ public sealed class DoorOpenManager : IDisposable
     private void FailCurrent(string reason)
     {
         if (_current is not { } cur) return;
+        if (AbandonIfLeftRoom()) return;
         _log?.Warn("Door", $"door {cur.DirectionShort} failed: {reason}.");
         cur.Reply(new DoorOpenResult.Failed(reason));
         Reset();
     }
 
+    // The tracker has confirmed another room than the one this door is in: a move
+    // already on the wire landed, or the request was planned from a room the
+    // character had already left. Any further verb would be aimed at that room's
+    // exit, and an "opened" or "failed" line now would be about some other door, so
+    // the request ends here whatever it was about to do. Checked where the FSM acts
+    // (each send, each outcome, each watchdog expiry) rather than on the tracker's
+    // own event: ending a request re-plans the caller's walk, and doing that from
+    // inside the tracker's dispatch would run ahead of the caller's own handler for
+    // the same transition.
+    private bool AbandonIfLeftRoom()
+    {
+        if (_current is not { } cur || _doorRoom is not { } doorRoom) return false;
+        if (_confirmedRoom?.Invoke() is not { } now || now == doorRoom) return false;
+        AbandonCurrent($"now in {now}, and the door {cur.DirectionShort} was in {doorRoom}");
+        return true;
+    }
+
+    private void AbandonCurrent(string reason)
+    {
+        if (_current is not { } cur) return;
+        _log?.Info("Door",
+            $"door {cur.DirectionShort} abandoned — {reason}; handing back for a re-check of the room.");
+        // The request is cleared before the caller hears of it: the caller re-plans
+        // from inside the reply and may ask for a door the same way at once, and a
+        // request still standing would have the duplicate guard swallow the new one,
+        // leaving the caller waiting on a reply that never comes.
+        ClearCurrent();
+        cur.Reply(new DoorOpenResult.NotHere(reason));
+        TryStartNext();
+    }
+
     private void Reset()
+    {
+        ClearCurrent();
+        TryStartNext();
+    }
+
+    private void ClearCurrent()
     {
         DisarmWatchdog();
         _current = null;
+        _doorRoom = null;
         _state = DoorState.Idle;
         _verb = null;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
-        TryStartNext();
     }
 
     // ----- helpers ----------------------------------------------------

@@ -2341,6 +2341,206 @@ public sealed class CombatManagerTests
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
     }
 
+    // ----- A martial-arts strike is judged by the character, not the weapon ---
+
+    // The fixture's monsters: 108 needs hit magic 1. These need more than the
+    // sickle in hand has.
+    private static void WireStrikeGate(Harness h, string root)
+    {
+        string dir = Path.Combine(root, "alpha");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Items.json"), """
+            [ { "Number": 1, "Name": "golden sickle", "Abil-0": 28, "AbilVal-0": 2 } ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), """
+            [ { "Number": 1250, "Name": "giant hellhound", "Abil-0": 28, "AbilVal-0": 3 },
+              { "Number": 681,  "Name": "pyrimera",        "Abil-0": 28, "AbilVal-0": 4 },
+              { "Number": 1033, "Name": "demon imp",       "Abil-0": 28, "AbilVal-0": 9 } ]
+            """);
+        GameDataCache cache = new(root);
+        cache.SwitchSet("alpha");
+        h.Combat.SetMagicEligibility(
+            new MonsterMagicIndex(cache), new ItemMagicIndex(cache), new SpellReqLevelIndex(cache),
+            new MonsterResistIndex(cache), new SpellAttackTypeIndex(cache));
+        h.Settings.NormalWeapon = "golden sickle";
+        h.WornWeapon = "golden sickle";
+        h.Combat.SetCarriedCheck(_ => true);
+    }
+
+    // Reports paradigm-20261008-183931 and the eleven before it: a Mystic punching
+    // (`pu`) with a golden sickle (hit magic 2) in hand walked past giant hellhounds,
+    // magma golems and pyrimeras (3 and 4), each written off as unkillable, while
+    // its punches were hurting them. A strike doesn't use the weapon: it lands with
+    // the class's own hit magic.
+    [Theory]
+    [InlineData("pu")]
+    [InlineData("punch")]
+    [InlineData("ki")]
+    [InlineData("kick")]
+    [InlineData("ju")]
+    [InlineData("jumpkick")]
+    public void AStrike_IsJudgedByTheClassHitMagic_NotTheWeaponInHand(string strike)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-strike-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireStrikeGate(h, root);
+            h.Settings.NormalAttackCommand = strike;
+            h.Combat.SetInnateHitMagic(() => 6, () => false);      // a Paradigm Mystic
+            h.AddMonster(1250, "giant hellhound", killable: true);
+            h.AddMonster(681, "pyrimera", killable: true);
+
+            h.Feed("Also here: giant hellhound.");
+
+            Assert.True(h.Combat.CanEngageMonster(1250));
+            Assert.True(h.Combat.CanEngageMonster(681));
+            Assert.Equal($"{strike} giant hellhound", h.LastSent);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // The class's hit magic is still a level: what it doesn't reach stays out.
+    [Fact]
+    public void AStrike_StillCannotHurt_AMonsterAboveTheClassHitMagic()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-strike-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireStrikeGate(h, root);
+            h.Settings.NormalAttackCommand = "pu";
+            h.Combat.SetInnateHitMagic(() => 6, () => false);
+            h.AddMonster(1033, "demon imp", killable: true);
+
+            h.Feed("Also here: demon imp.");
+
+            Assert.False(h.Combat.CanEngageMonster(1033));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // The game's own word is the backstop: a strike that draws the no-effect line
+    // (fists for a punch, feet for a kick or jumpkick) can't hurt that monster, and
+    // it is written off like a weapon that drew the weapon line.
+    [Theory]
+    [InlineData("pu", "Your fists have no effect against this monster!")]
+    [InlineData("kick", "Your feet have no effect against this monster!")]
+    public void AStrikeThatDrawsNoEffect_WritesTheMonsterOff(string strike, string line)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-strike-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireStrikeGate(h, root);
+            h.Settings.NormalAttackCommand = strike;
+            h.Combat.SetInnateHitMagic(() => 6, () => false);
+            h.AddMonster(1250, "giant hellhound", killable: true);
+            h.Feed("Also here: giant hellhound.");
+            Assert.True(h.Combat.CanEngageMonster(1250));
+
+            h.Feed(line);
+
+            Assert.False(h.Combat.CanEngageMonster(1250));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // A class with no hit magic of its own gets nothing from its fists, and the
+    // weapon it isn't swinging doesn't help.
+    [Fact]
+    public void AStrike_WithNoClassHitMagic_CannotHurtAMagicalMonster()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-strike-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireStrikeGate(h, root);
+            h.Settings.NormalAttackCommand = "pu";
+            h.AddMonster(1250, "giant hellhound", killable: true);
+
+            h.Feed("Also here: giant hellhound.");
+
+            Assert.False(h.Combat.CanEngageMonster(1250));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // A weapon swing has the weapon's magic and the class's: the higher of the two
+    // on Paradigm, both together on Stock.
+    [Theory]
+    [InlineData(false, 2, 3, false)]   // Paradigm: max(2, 2) = 2, short of 3
+    [InlineData(true, 2, 3, true)]     // Stock: 2 + 2 = 4, reaches 3
+    [InlineData(false, 10, 4, true)]   // a Witchunter's 10 covers it either way
+    [InlineData(true, 10, 4, true)]
+    [InlineData(false, 0, 3, false)]   // no hit magic of its own: the weapon alone, as before
+    public void AWeaponSwing_CombinesTheWeaponAndTheClassHitMagic_ByRealm(
+        bool stock, int classHitMagic, int monsterNeeds, bool canHit)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-strike-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireStrikeGate(h, root);
+            h.Settings.NormalAttackCommand = "a";
+            h.Combat.SetInnateHitMagic(() => classHitMagic, () => stock);
+            int number = monsterNeeds == 3 ? 1250 : 681;
+            h.AddMonster(number, monsterNeeds == 3 ? "giant hellhound" : "pyrimera", killable: true);
+
+            h.Feed($"Also here: {(monsterNeeds == 3 ? "giant hellhound" : "pyrimera")}.");
+
+            Assert.Equal(canHit, h.Combat.CanEngageMonster(number));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    // A Witchunter hurts a magical monster with any weapon it can use: the class's
+    // own hit magic does it, on either realm, however plain the weapon.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AWitchunter_HitsAMagicalMonster_WithAPlainWeapon(bool stock)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-combat-strike-" + Path.GetRandomFileName());
+        try
+        {
+            using Harness h = new();
+            WireStrikeGate(h, root);
+            h.Settings.NormalAttackCommand = "a";
+            h.Combat.SetInnateHitMagic(() => 10, () => stock);
+            h.AddMonster(681, "pyrimera", killable: true);
+            h.AddMonster(1033, "demon imp", killable: true);
+
+            h.Feed("Also here: pyrimera.");
+
+            Assert.True(h.Combat.CanEngageMonster(681));       // needs 4, sickle has 2
+            Assert.True(h.Combat.CanEngageMonster(1033));      // needs 9
+            Assert.Equal("a pyrimera", h.LastSent);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort */ } }
+    }
+
+    [Theory]
+    [InlineData("pu", true)]
+    [InlineData("PUNCH", true)]
+    [InlineData("ki", true)]
+    [InlineData("kick", true)]
+    [InlineData("ju", true)]
+    [InlineData("jumpk", true)]
+    [InlineData("jumpkick", true)]
+    [InlineData("a", false)]
+    [InlineData("attack", false)]
+    [InlineData("kill", false)]      // not a lead of "kick"
+    [InlineData("k", false)]         // one letter is no strike's short form
+    [InlineData("bash", false)]
+    [InlineData("smash", false)]
+    [InlineData("bs", false)]
+    [InlineData("harm", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void MartialArtsCommand_KnowsAStrikeByItsWord(string? command, bool isStrike) =>
+        Assert.Equal(isStrike, MartialArtsCommand.IsStrike(command));
+
     // Even with the alternate carried, a swap that never lands stops being retried.
     [Fact]
     public void WeaponNoEffect_SwapNeverLands_StopsAfterAFewTries()

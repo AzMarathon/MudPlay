@@ -1,13 +1,34 @@
 # Version history
 
-## 3.153.4
+## 3.153.19
 
-- The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
-- Your position is tracked to the room that passage really puts you in (the Lost City side with the idol, the look-alike dead end without)
-- Going back for a party member ends as soon as they are following you again, and never starts for a move you typed while movement is paused
-- After a reconnect, a loop waits for the party re-invite to see the room before it takes its first step
-- Players seen through a `look <direction>` are no longer invited, and no longer count as arrived for a party re-invite
-- bug reports addressed: paradigm-20260923-092317, paradigm-20260929-221642, paradigm-20261007-134305, paradigm-20261007-134824
+- A bash the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever
+- A door attempt is dropped once the map shows you in another room than the door's
+- A pause that comes and goes while a door is being opened (a party `@wait` / `@ok`) no longer restarts the walk underneath it
+- A Paradigm `rm` answered before a move sent just after it has landed no longer cancels that move
+- bug reports addressed: paradigm-20260924-053941
+
+## 3.153.18
+
+- A `rest` or `meditate` typed by hand no longer re-wears Default pieces the moment the Pre-rest set goes on: slots the set leaves blank keep what you put on (a phoenix feather was swapped off in the lava caverns)
+- The gear readout keeps showing the Pre-rest set through such a rest instead of flipping to Default
+- A gear-set swap never takes off (or wears over) the item protecting you from the room you are in or the next one, such as a phoenix feather in the volcano
+- Bug report lists the gear set last applied
+- bug reports addressed: paradigm-20261008-202210
+
+## 3.153.16
+
+- Quests: a quest with two level gates in one step now needs the higher one, as the game does
+- Paradigm: Meditate is announced to a Mystic at level 27, not 23
+- bug reports addressed: paradigm-20260925-123004
+
+## 3.153.15
+
+- Fixed: a Mystic attacking with punch, kick or jumpkick walked past monsters that need hit magic (and didn't fight back when they attacked): the client judged the strike by the weapon in hand, which a strike doesn't use
+- A class's own hit magic now counts: a Mystic's strikes and a Witchunter's swings hurt magical monsters whatever the weapon
+- A `Your fists / feet have no effect` line from a strike writes that monster off, like the weapon line does
+- Stopping movement yourself (Stop, or a party member's `@stop`) now puts the auto toggles back to their base modes, as a walk-to arriving does, so Auto-Combat switched off for a trip comes back
+- bug reports addressed: paradigm-20260928-164335, paradigm-20260929-220653, paradigm-20260930-182409, paradigm-20261002-192542, paradigm-20261007-150934, paradigm-20261008-113129, paradigm-20261008-181821, paradigm-20261008-181901, paradigm-20261008-182349, paradigm-20261008-182456, paradigm-20261008-183736, paradigm-20261008-183931, paradigm-20260923-163805, paradigm-20260923-163843, paradigm-20260923-164004
 
 ## 3.153.0
 
