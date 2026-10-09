@@ -5,9 +5,10 @@ namespace MudPlay.Game.Health;
 // Words a realm's hang-up penalty (RealmProfile, Settings → BBS) for the two
 // places that show it: the program log when a hang-up goes out, and the bug
 // report. The penalty is the board's own (GAME_MECHANICS
-// "Hang-up / lost carrier"); the client only reports it. When it hangs up, and
-// whether, is decided by Disable Hangups, the health settings, the PvP actions
-// and @panic, and nothing here feeds back into any of them.
+// "Hang-up / lost carrier"); the client reports it, and after one looks for the
+// items it dropped (MaxItemsDropped). When it hangs up, and whether, is decided by
+// Disable Hangups, the health settings, the PvP actions and @panic, and nothing
+// here feeds back into any of them.
 public static class HangupPenaltyNotice
 {
     public const string LogCategory = "Hangup";
@@ -25,6 +26,19 @@ public static class HangupPenaltyNotice
     }
 
     public static int Items(int items) => Math.Clamp(items, 0, MaxItems);
+
+    // The most items the realm's settings say one hang-up can cost: the PvP side's
+    // count, or the monster side's when that side is ticked and takes more, since
+    // the client can't know afterwards which side applied. 0 when no items are
+    // dropped. Read on the way back into the game by
+    // Game.Inventory.HangupItemRecheck, which looks for what was dropped and takes
+    // back no more than this; it has no say in a hang-up either.
+    public static int MaxItemsDropped(RealmProfile? realm)
+    {
+        if (realm is not { HangupPenaltyEnabled: true }) return 0;
+        int pvp = Items(realm.HangupPvpItemsDropped);
+        return realm.HangupPvePenaltyEnabled ? Math.Max(pvp, Items(realm.HangupPveItemsDropped)) : pvp;
+    }
 
     // The realm's penalties in one phrase, for the bug report.
     public static string Describe(RealmProfile? realm)

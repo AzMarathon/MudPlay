@@ -1,5 +1,13 @@
 # Version history
 
+## 3.160.0
+
+- Items a hang-up penalty dropped are picked up on re-entering the game
+- Only on a realm set to drop items, and never more than it drops
+- The gear set last equipped is applied again for pieces that came back
+- Loops and walks wait for the check
+- Never changes when the client hangs up
+
 ## 3.159.27
 
 - A monster set to **Hangup** (Game Data → the monster's record → Fighting it) now hangs the client up as soon as it is seen in the room

@@ -214,6 +214,13 @@ public sealed class CharacterProfile
     // encumbrance bracket instead of Unknown. null until the first `i` capture.
     public LastKnownEncumbrance? LastKnownEncumbrance { get; set; }
 
+    // The items held the last time the character was known to be in the game.
+    // Written by Game.Inventory.HangupItemRecheck on ProfileSaving and read by it
+    // on the next connect, on a realm that drops items for a hang-up. null until
+    // an inventory has been read in the game, and again from a death to the next
+    // inventory read.
+    public HeldAtDisconnect? HeldAtDisconnect { get; set; }
+
     // Full names of the spells this character has learned — the persisted Spell
     // Book obtained set, so the learned checkmarks survive across sessions
     // instead of blanking until the next in-game `spells` / `pow` poll. Stored

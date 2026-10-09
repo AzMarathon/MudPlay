@@ -118,6 +118,7 @@ public sealed class ProfileManagementTests : IDisposable
         source.DefaultPoolBaseline = new DefaultPoolBaseline { MaxHp = 480, MaxMa = 300, Level = 60 };
         source.LearnedSpells = new List<string> { "minor healing" };
         source.DeathHistory = new List<DeathRecord> { new() };
+        source.HeldAtDisconnect = new HeldAtDisconnect { Items = { new HeldItem("silver chalice", 1) } };
         source.StashedCopper = new Dictionary<string, long> { ["1/100"] = 5000 };
         source.GotoHistory = new List<string> { "silvermere bank" };
         source.Equipment = new EquipmentSettings { SwapToDefaultBeforeLairs = true };
@@ -134,6 +135,7 @@ public sealed class ProfileManagementTests : IDisposable
         Assert.True(copy.Equipment.SwapToDefaultBeforeLairs);
         Assert.Null(copy.LearnedSpells);
         Assert.Null(copy.DeathHistory);
+        Assert.Null(copy.HeldAtDisconnect);
         Assert.Null(copy.StashedCopper);
         Assert.Single(copy.GotoHistory!);
         CharacterProfile kept = JsonStore.Load<CharacterProfile>(sourcePath)!;
