@@ -1897,6 +1897,8 @@ Items and Monsters open an editable pane on the left with the read-only **Other 
 
 **Selling.** With **Auto-sell** on (and Auto-Get Items running), walking into a shop room whose shop has the item in its inventory listing sells it straight away — no `list` needed. Selling keeps your **Min. to keep** count when it's above 0, and sells every copy when it's 0 or blank. Your walk or loop waits while it sells (*Waiting — selling*).
 
+**Discarding.** With **Auto-discard** on (and Auto-Get Items running), the item is dropped as soon as it is in your pack. With **Must have minimum** ticked, **Min. to keep** copies stay with you and every copy above that goes; without it, every copy goes. A pile is counted by its copies: carrying 10 with 2 to keep discards 8, as one `drop 8 <item>` on Paradigm and as eight `drop <item>` a few at a time on Stock. They are hidden instead of dropped when **Settings → Other → Hide items when discarding** is ticked.
+
 **Sell detours.** Tick **Make detours to sell it** (under Auto-sell, once Auto-sell is on) and a walk-to, loop or Auto-Lair will turn aside to sell it once you carry more than the **when carrying more than** count, and more than **Min. to keep**. **0** goes as soon as you carry more than Min. to keep (your first copy when that's blank or 0). **Blank means no detour**, so a red warning appears under the box when detours are ticked with it blank:
 
 - **Which shop:** tick **Sell here** on the shops in the **Bought / sold** list to choose. With none ticked, any shop that trades the item can be used. Among the allowed shops, it picks the one that adds the fewest steps.

@@ -10,8 +10,8 @@ namespace MudPlay.Game.Inventory;
 // Auto-discard items engine. When the pack holds an item flagged
 // ItemOverlay.AutoDiscard above its keep floor, offloads the excess with
 // drop <item name> — or hide <item name> when HideMode is set (OtherSettings
-// "hide when discarding") — one command per copy (MajorMUD has no bulk-drop
-// verb). The keep floor is MinToKeep when MustHaveMinimum is set; otherwise
+// "hide when discarding") — one counted command on Paradigm, one command per
+// copy on Stock. The keep floor is MinToKeep when MustHaveMinimum is set; otherwise
 // zero, so an unbanded flagged item is discarded entirely (the confirmed
 // "no band → discard all" rule). A LoyalItem is never discarded even if also
 // flagged AutoDiscard — loyalty (never-drop) is the safety flag and wins the
@@ -207,9 +207,10 @@ public sealed class AutoDiscardManager : IDisposable
     // were handed to it. They are not unanswered yet, only unsent.
     public Func<bool> SendsQueued { get; set; } = static () => false;
 
-    // Sends a batch a few at a time. A room's worth of held hides goes out right
-    // after a move, when Stock queues commands behind the move's delay and drops
-    // them past a dozen. Unbound (tests): each goes straight out.
+    // Sends a batch a few at a time. A pile is one command per copy on Stock, and a
+    // room's worth of held hides goes out right after a move, when Stock queues
+    // commands behind the move's delay and drops them past a dozen. Unbound
+    // (tests): each goes straight out.
     public Action<IReadOnlyList<string>>? PacedSender { get; set; }
 
     private Action<byte[]>? _wireSender;
@@ -262,18 +263,19 @@ public sealed class AutoDiscardManager : IDisposable
         // Sent now it would be lost and still counted as on its way.
         if (HideMode && !CanHideHere()) return;
 
-        // Group carried copies by resolved item Number so duplicate name strings
-        // ("a torch", "a torch") count as two of one item.
+        // Count carried COPIES per item Number. The pack lists a pile as one entry
+        // with its count in front ("3 torch"), so counting entries read every
+        // pile as one copy: a keep amount of one or more never discarded, and a
+        // pile went out one copy per confirmation.
         Dictionary<int, (ResolvedDiscard Item, int Count)> groups = new();
         foreach (string entry in _carried())
         {
             if (_resolve(entry) is not { Discard: true } item) continue;
-            if (groups.TryGetValue(item.Number, out (ResolvedDiscard Item, int Count) g))
-                groups[item.Number] = (g.Item, g.Count + 1);
-            else
-                groups[item.Number] = (item, 1);
+            int copies = CountedCommand.SplitLeadingCount(entry.Trim()).Count;
+            groups[item.Number] = (item, groups.GetValueOrDefault(item.Number).Count + copies);
         }
 
+        List<string> commands = new();
         foreach ((int number, (ResolvedDiscard item, int count)) in groups)
         {
             // Count that will remain once the outstanding offloads land. A copy
@@ -282,10 +284,20 @@ public sealed class AutoDiscardManager : IDisposable
             int toDrop = projected - item.KeepCount;
             if (toDrop <= 0) continue;
 
-            _log?.Info(LogCategory, $"discard {toDrop}x item={item.Name} via {DiscardVerb} (keep {item.KeepCount})");
+            _log?.Info(LogCategory, $"discard {toDrop}x item={item.Name} via {DiscardVerb} (carrying {count}, keep {item.KeepCount})");
             // The count-prefixed confirmation clears in-flight by N below.
-            Offload(Send, number, item.Name, Copies.Of(toDrop, byHand: false));
+            Offload(commands.Add, number, item.Name, Copies.Of(toDrop, byHand: false));
         }
+        SendAll(commands);
+    }
+
+    // A pile is one command on Paradigm and one per copy on Stock, which is why
+    // the engine's commands share the pacer with the by-hand sweeps.
+    private void SendAll(IReadOnlyList<string> commands)
+    {
+        if (commands.Count == 0) return;
+        if (PacedSender is { } paced) paced(commands);
+        else foreach (string command in commands) Send(command);
     }
 
     // Send a discard of up to `count` copies of `name` for a surface that discards
@@ -587,9 +599,7 @@ public sealed class AutoDiscardManager : IDisposable
             _log?.Info(LogCategory, $"retrying held hide of {due.Total}x {held.Name} in {here}");
             Offload(commands.Add, number, held.Name, due);
         }
-        if (commands.Count == 0) return;
-        if (PacedSender is { } paced) paced(commands);
-        else foreach (string command in commands) Send(command);
+        SendAll(commands);
     }
 
     // A full `i` listing landed. A hide for a copy the pack no longer holds can't

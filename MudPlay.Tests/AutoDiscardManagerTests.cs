@@ -11,19 +11,54 @@ using Xunit;
 namespace MudPlay.Tests;
 
 // AutoDiscardManager: on any inventory change, drops each carried item flagged
-// AutoDiscard down to its keep floor — one `drop` per copy. Drops it has sent but
-// not yet seen confirmed are held in-flight and subtracted from the live count so
-// the Changed events its own drops raise don't re-send; a self "You dropped ..."
-// clears the in-flight count, another player's drop is ignored.
+// AutoDiscard down to its keep floor — one `drop` per copy on Stock, one counted
+// `drop N` on Paradigm. Drops it has sent but not yet seen confirmed are held
+// in-flight and subtracted from the live count so the Changed events its own drops
+// raise don't re-send; a self "You dropped ..." clears the in-flight count, another
+// player's drop is ignored.
 public sealed class AutoDiscardManagerTests
 {
+    // The pack in the shape InventoryManager keeps it: one entry per item, a pile's
+    // count in front ("3 dagger"), a single copy bare ("dagger"). The engine once
+    // counted entries, which only a list of unstacked duplicates hid.
+    private sealed class Pack
+    {
+        private readonly List<string> _entries = new();
+
+        public IReadOnlyList<string> Entries => _entries;
+
+        public int Count(string name)
+        {
+            int at = IndexOf(name);
+            return at < 0 ? 0 : CountedCommand.SplitLeadingCount(_entries[at]).Count;
+        }
+
+        public void Set(string name, int copies)
+        {
+            int at = IndexOf(name);
+            if (copies <= 0) { if (at >= 0) _entries.RemoveAt(at); return; }
+            string entry = copies == 1 ? name : $"{copies} {name}";
+            if (at < 0) _entries.Add(entry);
+            else _entries[at] = entry;
+        }
+
+        public void Gain(string name, int copies = 1) => Set(name, Count(name) + copies);
+
+        public void Lose(string name, int copies = 1) => Set(name, Count(name) - copies);
+
+        public void Clear() => _entries.Clear();
+
+        private int IndexOf(string name) => _entries.FindIndex(e =>
+            string.Equals(CountedCommand.SplitLeadingCount(e).Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
     private sealed class Harness : IDisposable
     {
         public MessageRouter Router { get; } = new();
         public LogService Log { get; } = new();
         public AutoDiscardManager Discard { get; }
         public List<byte[]> Sent { get; } = new();
-        public List<string> Carried { get; } = new();
+        public Pack Carried { get; } = new();
         public bool Enabled { get; set; } = true;
         public bool Paradigm { get; set; }
 
@@ -35,7 +70,7 @@ public sealed class AutoDiscardManagerTests
         {
             DefaultPatterns.Seed(Router);
             Discard = new AutoDiscardManager(Router,
-                carriedItems: () => Carried,
+                carriedItems: () => Carried.Entries,
                 resolve: Resolve,
                 isEnabled: () => Enabled,
                 log: Log,
@@ -77,7 +112,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
 
         h.Discard.OnInventoryChanged();
 
@@ -93,7 +128,7 @@ public sealed class AutoDiscardManagerTests
         // normal discard resumes when the sweep ends.
         using Harness h = new();
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
         h.Discard.SuppressDuringSweep = () => true;
 
         h.Discard.OnInventoryChanged();
@@ -106,7 +141,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new() { Paradigm = true };
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
 
         h.Discard.OnInventoryChanged();
 
@@ -118,7 +153,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new() { Paradigm = true };
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
 
         h.Discard.OnInventoryChanged();
         Assert.Single(h.SentText);                 // one batched "drop 3 dagger"
@@ -137,11 +172,116 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         h.Map("dagger", 1, discard: true, keep: 1);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
 
         h.Discard.OnInventoryChanged();
 
         Assert.Equal(2, h.SentText.Count);   // 3 carried − 1 keep
+    }
+
+    // The engine counts copies, not pack entries: a pile is one entry however many
+    // it holds. Counted by entry, a keep amount of one or more never discarded
+    // anything and a pile went out one copy per confirmation.
+    [Theory]
+    [InlineData(1, 0, 1)]
+    [InlineData(3, 0, 3)]
+    [InlineData(10, 0, 10)]
+    [InlineData(1, 1, 0)]
+    [InlineData(3, 1, 2)]
+    [InlineData(10, 1, 9)]
+    [InlineData(1, 2, 0)]
+    [InlineData(3, 2, 1)]
+    [InlineData(10, 2, 8)]
+    public void Stock_DiscardsAPileDownToTheKeepAmount_OneCommandPerCopy(int pile, int keep, int discarded)
+    {
+        using Harness h = new();
+        h.Map("dagger", 1, discard: true, keep: keep);
+        h.Carried.Set("dagger", pile);
+
+        h.Discard.OnInventoryChanged();
+
+        Assert.Equal(discarded, h.SentText.Count);
+        Assert.All(h.SentText, s => Assert.Equal("drop dagger", s));
+    }
+
+    [Theory]
+    [InlineData(1, 0, "drop dagger")]
+    [InlineData(3, 0, "drop 3 dagger")]
+    [InlineData(10, 0, "drop 10 dagger")]
+    [InlineData(1, 1, null)]
+    [InlineData(3, 1, "drop 2 dagger")]
+    [InlineData(10, 1, "drop 9 dagger")]
+    [InlineData(1, 2, null)]
+    [InlineData(3, 2, "drop dagger")]
+    [InlineData(10, 2, "drop 8 dagger")]
+    public void Paradigm_DiscardsAPileDownToTheKeepAmount_InOneCommand(int pile, int keep, string? command)
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Map("dagger", 1, discard: true, keep: keep);
+        h.Carried.Set("dagger", pile);
+
+        h.Discard.OnInventoryChanged();
+
+        if (command is null) Assert.Empty(h.Sent);
+        else Assert.Equal(command, Assert.Single(h.SentText));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PileGrowingWhileDiscardsAreOut_DiscardsOnlyTheNewCopies(bool paradigm)
+    {
+        using Harness h = new() { Paradigm = paradigm };
+        h.Map("dagger", 1, discard: true, keep: 1);
+        h.Carried.Set("dagger", 3);
+        h.Discard.OnInventoryChanged();              // two go out, none answered yet
+
+        h.Carried.Gain("dagger", 2);                 // a chest pours two more in
+        h.Discard.OnInventoryChanged();
+        h.Discard.OnInventoryChanged();
+
+        string[] expected = paradigm
+            ? new[] { "drop 2 dagger", "drop 2 dagger" }
+            : new[] { "drop dagger", "drop dagger", "drop dagger", "drop dagger" };
+        Assert.Equal(expected, h.SentText);
+
+        // All four land: one is left, the keep amount, and nothing more goes out.
+        if (paradigm) { h.Feed("You dropped 2 dagger."); h.Feed("You dropped 2 dagger."); }
+        else for (int i = 0; i < 4; i++) h.Feed("You dropped dagger.");
+        h.Carried.Set("dagger", 1);
+        h.Discard.OnInventoryChanged();
+        Assert.Equal(expected.Length, h.Sent.Count);
+    }
+
+    // One per copy on Stock is a burst: it goes to the pacer the sweeps use, in one
+    // batch, not out one copy per inventory change.
+    [Fact]
+    public void Stock_PileGoesToThePacerInOneBatch()
+    {
+        using Harness h = new();
+        List<IReadOnlyList<string>> batches = new();
+        h.Discard.PacedSender = batches.Add;
+        h.Map("dagger", 1, discard: true);
+        h.Carried.Set("dagger", 10);
+
+        h.Discard.OnInventoryChanged();
+        h.Discard.OnInventoryChanged();
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(10, Assert.Single(batches).Count);
+    }
+
+    [Fact]
+    public void HideMode_PileIsHiddenDownToTheKeepAmount()
+    {
+        using Harness h = new() { Paradigm = true };
+        h.Discard.HideMode = true;
+        h.Map("dagger", 1, discard: true, keep: 2);
+        h.Carried.Set("dagger", 10);
+
+        h.Discard.OnInventoryChanged();
+
+        Assert.Equal("hide 8 dagger", Assert.Single(h.SentText));
     }
 
     [Fact]
@@ -149,7 +289,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         h.Map("dagger", 1, discard: false);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
 
         h.Discard.OnInventoryChanged();
 
@@ -161,7 +301,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new() { Enabled = false };
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
 
         h.Discard.OnInventoryChanged();
 
@@ -173,7 +313,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
 
         h.Discard.OnInventoryChanged();      // sends 3 drops
         Assert.Equal(3, h.SentText.Count);
@@ -189,7 +329,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
 
         h.Discard.OnInventoryChanged();      // 3 drops, in-flight = 3
         h.Feed("You dropped dagger.");
@@ -198,7 +338,7 @@ public sealed class AutoDiscardManagerTests
 
         // A fresh chest dump pours in two more; with in-flight clear they drop.
         h.Carried.Clear();
-        h.Carried.AddRange(new[] { "dagger", "dagger" });
+        h.Carried.Set("dagger", 2);
         h.Discard.OnInventoryChanged();
 
         Assert.Equal(5, h.SentText.Count);   // 3 + 2
@@ -209,7 +349,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
 
         h.Discard.OnInventoryChanged();      // 1 drop, in-flight = 1
         Assert.Single(h.Sent);
@@ -227,7 +367,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger" });
+        h.Carried.Set("dagger", 2);
 
         h.Discard.OnInventoryChanged();
 
@@ -241,7 +381,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger" });
+        h.Carried.Set("dagger", 2);
 
         h.Discard.OnInventoryChanged();      // 2 hides, in-flight = 2
         h.Feed("You hid dagger.");
@@ -249,7 +389,7 @@ public sealed class AutoDiscardManagerTests
 
         // A fresh copy pours in; with in-flight clear it hides.
         h.Carried.Clear();
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         h.Discard.OnInventoryChanged();
 
         Assert.Equal(3, h.SentText.Count);   // 2 + 1
@@ -261,7 +401,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.AddRange(new[] { "dagger", "dagger" });
+        h.Carried.Set("dagger", 2);
 
         h.Discard.OnInventoryChanged();      // 2 engine hides registered
 
@@ -289,7 +429,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();   // HideMode defaults off
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
 
         h.Discard.OnInventoryChanged();      // sends `drop dagger`
 
@@ -310,7 +450,7 @@ public sealed class AutoDiscardManagerTests
         Harness h = new();
         h.Discard.HideMode = true;
         h.Map("moonstone", 7, discard: false);
-        for (int i = 0; i < copies; i++) h.Carried.Add("moonstone");
+        h.Carried.Set("moonstone", copies);
         h.Discard.OnRoomEntered(RoomA);
         return h;
     }
@@ -320,7 +460,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();   // HideMode defaults off
         h.Map("moonstone", 7, discard: false);
-        h.Carried.AddRange(new[] { "moonstone", "moonstone" });
+        h.Carried.Set("moonstone", 2);
         List<string> sent = new();
 
         (string verb, int count, _) = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
@@ -355,7 +495,7 @@ public sealed class AutoDiscardManagerTests
         h.Paradigm = true;
         h.Discard.HideMode = true;
         h.Map("moonstone", 7, discard: false);
-        h.Carried.Add("3 moonstone");   // an `i` lists the stack as one counted entry
+        h.Carried.Set("moonstone", 3);
         List<string> sent = new();
 
         h.Discard.EmitDiscard(sent.Add, "moonstone", 3);
@@ -414,7 +554,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = new();
         h.Map("moonstone", 7, discard: false);
-        h.Carried.Add("moonstone");
+        h.Carried.Set("moonstone", 1);
         List<string> sent = new();
 
         h.Discard.EmitDiscard(sent.Add, "moonstone", 1);
@@ -436,7 +576,7 @@ public sealed class AutoDiscardManagerTests
         h.Discard.EmitDiscard(_ => { }, "moonstone", 3);
         Assert.True(h.Hid("moonstone"));
         Assert.True(h.Hid("moonstone"));
-        h.Carried.RemoveRange(0, 2);
+        h.Carried.Lose("moonstone", 2);
         h.Feed("There is no room to hide moonstone here.");
 
         Assert.Equal(new[] { "moonstone" }, refused);
@@ -523,7 +663,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = HidingMoonstones(1);
         h.Map("ruby", 8, discard: false);
-        h.Carried.Add("ruby");
+        h.Carried.Set("ruby", 1);
         List<string> refused = new();
         h.Discard.HideRefused += refused.Add;
         h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
@@ -590,7 +730,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         h.Discard.OnRoomEntered(RoomA);
 
         h.Discard.OnInventoryChanged();
@@ -620,7 +760,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         h.Discard.OnRoomEntered(RoomA);
         h.Discard.OnInventoryChanged();
         h.Feed("There is no room to hide dagger here.");
@@ -656,7 +796,7 @@ public sealed class AutoDiscardManagerTests
         h.Discard.HeldHideEnded += ended.Add;
 
         h.Discard.ReleaseHeld("moonstone", 1);   // "You sold moonstone …", by the wiring
-        h.Carried.RemoveAt(0);
+        h.Carried.Lose("moonstone");
         h.Discard.OnRoomEntered(RoomB);
 
         Assert.Empty(h.Sent);
@@ -672,7 +812,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = OwnTwoAndAHeldChestMoonstone();
 
         h.Feed(line);
-        h.Carried.RemoveAt(0);
+        h.Carried.Lose("moonstone");
         h.Discard.OnRoomEntered(RoomB);
 
         Assert.Empty(h.Sent);
@@ -691,7 +831,7 @@ public sealed class AutoDiscardManagerTests
         h.Discard.OnRoomEntered(RoomB);           // kept back
         sweeping = false;
 
-        h.Carried.RemoveAt(0);
+        h.Carried.Lose("moonstone");
         h.Discard.OnInventoryChanged();           // Changed, from inside the sale
         h.Discard.ReleaseHeld("moonstone", 1);    // ItemSold, after it
 
@@ -704,7 +844,7 @@ public sealed class AutoDiscardManagerTests
     {
         using Harness h = OwnTwoAndAHeldChestMoonstone();
 
-        h.Carried.RemoveAt(0);                    // "You just gave moonstone to Bob."
+        h.Carried.Lose("moonstone");                    // "You just gave moonstone to Bob."
         h.Discard.OnInventoryChanged();
         h.Discard.OnRoomEntered(RoomB);
 
@@ -718,13 +858,13 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true, keep: 1);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 3);
         h.Discard.OnRoomEntered(RoomA);
         h.Discard.OnInventoryChanged();           // two go out, one is kept
         h.Feed("There is no room to hide dagger here.");
         h.Feed("There is no room to hide dagger here.");
 
-        h.Carried.RemoveAt(0);                    // one given away: two left
+        h.Carried.Lose("dagger");                    // one given away: two left
         h.Discard.OnRoomEntered(RoomB);
 
         Assert.Equal(3, h.Sent.Count);            // one retry, not two
@@ -768,7 +908,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         h.Discard.OnRoomEntered(RoomA);
         h.Discard.OnInventoryChanged();
         h.Feed("There is no room to hide dagger here.");
@@ -789,7 +929,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("moonstone", 7, discard: false);
-        h.Carried.Add("moonstone");
+        h.Carried.Set("moonstone", 1);
         h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
         h.Feed("There is no room to hide moonstone here.");
 
@@ -843,7 +983,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true, keep: 1);
-        h.Carried.AddRange(new[] { "dagger", "dagger", "dagger", "dagger" });
+        h.Carried.Set("dagger", 4);
         h.Discard.OnRoomEntered(RoomA);
 
         h.Discard.EmitDiscard(_ => { }, "dagger", 1);   // one by hand
@@ -851,7 +991,7 @@ public sealed class AutoDiscardManagerTests
         Assert.Equal(3, h.Discard.UnansweredHides);
 
         h.Hid("dagger");                                // one lands
-        h.Carried.RemoveAt(0);
+        h.Carried.Lose("dagger");
         h.Feed("There is no room to hide dagger here.");
         h.Feed("There is no room to hide dagger here.");
         AutoDiscardManager.HeldHideInfo held = Assert.Single(h.Discard.HeldHides);
@@ -861,7 +1001,7 @@ public sealed class AutoDiscardManagerTests
         h.Discard.ReleaseHeld("dagger", 1, byHandOnly: true);   // nothing by hand is left held
         Assert.Equal(2, Assert.Single(h.Discard.HeldHides).Engine);
 
-        h.Carried.RemoveAt(0);                          // a read finds two
+        h.Carried.Lose("dagger");                          // a read finds two
         h.Discard.OnFullInventoryRead();
         Assert.Equal(1, Assert.Single(h.Discard.HeldHides).Count);
 
@@ -876,7 +1016,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         h.Discard.OnRoomEntered(RoomA);
         h.Discard.OnInventoryChanged();
         h.Feed("There is no room to hide dagger here.");
@@ -896,7 +1036,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         h.Discard.OnRoomEntered(RoomA);
         h.Discard.OnInventoryChanged();
         h.Feed("There is no room to hide dagger here.");
@@ -917,7 +1057,7 @@ public sealed class AutoDiscardManagerTests
         h.Enabled = false;
         h.Discard.HideMode = true;
         h.Map("moonstone", 7, discard: flagged);
-        h.Carried.Add("moonstone");
+        h.Carried.Set("moonstone", 1);
         h.Discard.OnRoomEntered(RoomA);
         h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
         h.Feed("There is no room to hide moonstone here.");
@@ -956,7 +1096,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         bool canHide = false;
         h.Discard.CanHideHere = () => canHide;
 
@@ -1014,7 +1154,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = new();
         h.Discard.HideMode = true;
         h.Map("dagger", 1, discard: true);
-        h.Carried.Add("dagger");
+        h.Carried.Set("dagger", 1);
         h.Discard.OnRoomEntered(RoomA);
         h.Discard.OnInventoryChanged();
         h.Feed("There is no room to hide dagger here.");
@@ -1056,7 +1196,7 @@ public sealed class AutoDiscardManagerTests
         Assert.Single(h.Sent);
 
         h.Discard.Reset("disconnected", keepHeld: true);
-        h.Carried.RemoveAt(0);                    // the login `i`: two left, the player's own
+        h.Carried.Lose("moonstone");                    // the login `i`: two left, the player's own
         h.Discard.OnFullInventoryRead();
         h.Discard.OnRoomEntered(RoomC);
 
@@ -1103,7 +1243,7 @@ public sealed class AutoDiscardManagerTests
         using Harness h = HidingMoonstones(2);
         h.Discard.EmitDiscard(_ => { }, "moonstone", 2);
 
-        h.Carried.RemoveAt(0);   // the read shows one left
+        h.Carried.Lose("moonstone");   // the read shows one left
         h.Discard.OnFullInventoryRead();
 
         Assert.Equal(1, h.Discard.UnansweredHides);
@@ -1121,7 +1261,7 @@ public sealed class AutoDiscardManagerTests
         h.Feed("There is no room to hide moonstone here.");
         h.Feed("There is no room to hide moonstone here.");
 
-        h.Carried.RemoveAt(0);
+        h.Carried.Lose("moonstone");
         h.Discard.OnFullInventoryRead();
         Assert.Equal(1, h.Discard.HeldFor("moonstone"));
 
@@ -1138,12 +1278,12 @@ public sealed class AutoDiscardManagerTests
         h.Paradigm = true;
         h.Discard.HideMode = true;
         h.Map("moonstone", 7, discard: false);
-        h.Carried.Add("3 moonstone");
+        h.Carried.Set("moonstone", 3);
         List<string> sent = new();
         h.Discard.EmitDiscard(sent.Add, "moonstone", 3);
 
         h.Hid("2 moonstone");
-        h.Carried[0] = "moonstone";
+        h.Carried.Set("moonstone", 1);
         Assert.Equal(1, h.Discard.UnansweredHides);
 
         h.Discard.OnFullInventoryRead();
@@ -1201,7 +1341,7 @@ public sealed class AutoDiscardManagerTests
 
         h.Discard.OnFullInventoryRead();
         h.Hid("moonstone");                // a paced batch still draining
-        h.Carried.RemoveAt(0);
+        h.Carried.Lose("moonstone");
         h.Discard.OnFullInventoryRead();
 
         Assert.Equal(2, h.Discard.UnansweredHides);
