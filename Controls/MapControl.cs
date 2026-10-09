@@ -73,7 +73,7 @@ public sealed class MapControl : Control
         AvaloniaProperty.Register<MapControl, SpellDisplayMode>(nameof(SpellMode), defaultValue: SpellDisplayMode.Mono);
 
     // Each placed room spell's teleport class by spell number, read only in the
-    // ByTeleport mode. A spell absent from it draws as one that doesn't teleport.
+    // ByTeleport mode. A spell absent from it draws as one whose class is unknown.
     public static readonly StyledProperty<IReadOnlyDictionary<int, RoomSpellTeleport>?> SpellTeleportClassesProperty =
         AvaloniaProperty.Register<MapControl, IReadOnlyDictionary<int, RoomSpellTeleport>?>(nameof(SpellTeleportClasses));
 
@@ -654,21 +654,23 @@ public sealed class MapControl : Control
 
     private static readonly IBrush Bg            = new SolidColorBrush(Color.Parse("#0E0E0E"));
     private static readonly IBrush TileBg        = new SolidColorBrush(Color.Parse("#1E1E1E"));
-    private static readonly IBrush RoomFill      = new SolidColorBrush(Color.Parse("#9B9B9B"));
+    // The room fills are internal for MapSpellPaletteTests, which holds the
+    // by-teleport swatches off each of them.
+    internal static readonly IBrush RoomFill     = new SolidColorBrush(Color.Parse("#9B9B9B"));
     // Darkened + shifted off pure yellow (lower green channel) so the current-room
     // fill doesn't blend into a down-exit room's #DCDC00 yellow where the two abut at
     // a shared corner; red kept high so "you are here" still reads as a punchy gold.
-    private static readonly IBrush CurrentFill   = new SolidColorBrush(Color.Parse("#E0A000"));
-    private static readonly IBrush LairFill      = new SolidColorBrush(Color.Parse("#8E4F7B"));
-    private static readonly IBrush ShopFill      = new SolidColorBrush(Color.Parse("#4A7791"));
-    private static readonly IBrush SpellFill     = new SolidColorBrush(Color.Parse("#6428A0"));
+    internal static readonly IBrush CurrentFill  = new SolidColorBrush(Color.Parse("#E0A000"));
+    internal static readonly IBrush LairFill     = new SolidColorBrush(Color.Parse("#8E4F7B"));
+    internal static readonly IBrush ShopFill     = new SolidColorBrush(Color.Parse("#4A7791"));
+    internal static readonly IBrush SpellFill    = new SolidColorBrush(Color.Parse("#6428A0"));
     // Vertical-exit indicators: green = up only,
     // yellow = down only, orange = both. Applied as the room-node fill
     // when no higher-priority highlight (current / auto-lair / lair /
     // shop / spell) takes the cell.
-    private static readonly IBrush UpFill        = new SolidColorBrush(Color.Parse("#00C800"));
-    private static readonly IBrush DownFill      = new SolidColorBrush(Color.Parse("#DCDC00"));
-    private static readonly IBrush UpDownFill    = new SolidColorBrush(Color.Parse("#FFB432"));
+    internal static readonly IBrush UpFill       = new SolidColorBrush(Color.Parse("#00C800"));
+    internal static readonly IBrush DownFill     = new SolidColorBrush(Color.Parse("#DCDC00"));
+    internal static readonly IBrush UpDownFill   = new SolidColorBrush(Color.Parse("#FFB432"));
     // Dark rim for the U/D corner-badge triangles so the yellow down-badge (and green
     // up-badge) read against ANY cell fill — in particular the gold current-room fill,
     // where a rimless yellow triangle blends into the highlight. Same trick the skull /
@@ -736,7 +738,7 @@ public sealed class MapControl : Control
     // lightened tints so a near-black node stays visible on the dark map.
     private const int HeatBaseSeconds  = 30;
     private const int HeatStepSeconds  = 30;
-    private static readonly string[] HeatFixedHex =
+    internal static readonly string[] HeatFixedHex =
     {
         "#E64A4A", // 0:30 red
         "#F07818", // 1:00 orange
@@ -789,12 +791,14 @@ public sealed class MapControl : Control
     private static readonly (IBrush fill, IPen pen)[] SpellCategory = BuildSpellSwatches(SpellCategoryHex);
 
     // The room-spell "by teleport" overlay (SpellDisplayMode.ByTeleport), indexed by
-    // RoomSpellTeleport: green for a spell with no teleport, yellow for one that may,
-    // red for one that does. Each sits off the pure hue a neighbouring cue already
-    // owns, since a spell room can stand beside any of them: the up-exit room's
-    // #00C800 and the 2:30 lair's #43B84E (so a forest green), the down-exit room's
-    // #DCDC00 and the current room's gold (so a pale lemon), the 30-second lair's
-    // #E64A4A (so a crimson). MapSpellPaletteTests pins the gaps.
+    // RoomSpellTeleport: green for a spell with no teleport, yellow for one that
+    // teleports on a condition, red for one that teleports outright or on a roll.
+    // Each sits off the pure hue a neighbouring cue already owns, since a spell room
+    // can stand beside any of them: the up-exit room's #00C800 and the 2:30 lair's
+    // #43B84E (so a forest green), the down-exit room's #DCDC00 and the current
+    // room's gold (so a pale lemon), the 30-second lair's #E64A4A (so a crimson).
+    // MapSpellPaletteTests pins the gaps. A spell whose class is unknown has no
+    // swatch here: it keeps the flat spell purple, which claims nothing either way.
     internal static readonly string[] SpellTeleportHex = { "#218A45", "#F2DC5A", "#C81E3C" };
     private static readonly (IBrush fill, IPen pen)[] SpellTeleportSwatch = BuildSpellSwatches(SpellTeleportHex);
 
@@ -820,9 +824,10 @@ public sealed class MapControl : Control
 
     private (IBrush fill, IPen pen) SpellTeleportColorFor(int spellNumber)
     {
-        RoomSpellTeleport kind = SpellTeleportClasses is { } classes && classes.TryGetValue(spellNumber, out RoomSpellTeleport found)
-            ? found : RoomSpellTeleport.None;
-        return SpellTeleportSwatch[(int)kind];
+        return SpellTeleportClasses is { } classes && classes.TryGetValue(spellNumber, out RoomSpellTeleport found)
+            && found != RoomSpellTeleport.Unknown
+            ? SpellTeleportSwatch[(int)found]
+            : (SpellFill, SpellBorderPen);
     }
 
     private static Color LightenToward(Color a, Color b, double t)

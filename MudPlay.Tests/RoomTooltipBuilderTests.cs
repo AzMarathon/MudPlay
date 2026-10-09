@@ -161,12 +161,15 @@ public sealed class RoomTooltipBuilderTests : IDisposable
 
         // No class passed (the map isn't colouring by teleport): the name alone.
         Assert.Contains("Room Spell: Heal\n", RoomTooltipBuilder.Build(room, graph, cache) + "\n");
-        Assert.Contains("Room Spell: Heal (teleports)",
-            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.Always));
-        Assert.Contains("Room Spell: Heal (may teleport)",
-            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.Chance));
+        Assert.Contains("Room Spell: Heal (teleports: always, or at random)",
+            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.Sudden));
+        Assert.Contains("Room Spell: Heal (teleports on a condition)",
+            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.Conditional));
         Assert.Contains("Room Spell: Heal (no teleport)",
             RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.None));
+        // A spell the data doesn't let the client class is never called teleport-free.
+        Assert.Contains("Room Spell: Heal (teleport unknown)",
+            RoomTooltipBuilder.Build(room, graph, cache, spellTeleport: RoomSpellTeleport.Unknown));
     }
 
     [Fact]

@@ -66,10 +66,11 @@ public static class RoomTooltipBuilder
         // so the line names what the room's colour stands for.
         string teleportNote = spellTeleport switch
         {
-            RoomSpellTeleport.Always => " (teleports)",
-            RoomSpellTeleport.Chance => " (may teleport)",
-            RoomSpellTeleport.None   => " (no teleport)",
-            _                        => string.Empty,
+            RoomSpellTeleport.Sudden      => " (teleports: always, or at random)",
+            RoomSpellTeleport.Conditional => " (teleports on a condition)",
+            RoomSpellTeleport.None        => " (no teleport)",
+            RoomSpellTeleport.Unknown     => " (teleport unknown)",
+            _                             => string.Empty,
         };
         string spellLine = room.Spell > 0
             ? "Room Spell: " + (LookupName(data, "Spells", room.Spell) ?? $"#{room.Spell}") + teleportNote

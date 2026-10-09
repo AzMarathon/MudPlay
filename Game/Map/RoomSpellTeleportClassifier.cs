@@ -9,20 +9,26 @@ namespace MudPlay.Game.Map;
 //
 // A room spell reaches a teleport three ways: its own TeleportRoom ability, a
 // `teleport` step in the textblock its TextBlock ability runs, or a `cast` in that
-// textblock of a spell that does either. What stands in the way is of two kinds,
-// and only one of them is luck:
-//   - a condition on the character or the room (failitem / checkitem, class, level,
-//     alignment, nomonsters, a buff check, a quest flag). It holds or it doesn't; the
-//     map can't know which for the character looking at it, so a teleport behind
-//     conditions alone counts as a teleport.
-//   - a roll: a `random` table with a band that doesn't teleport, a `testskill`, or
-//     an EndCast that fires only some of the time. A teleport behind one is a chance.
-// A `random` table whose every band teleports is no roll at all for this purpose:
-// the ice slide lands in one of two rooms, but it always slides.
+// textblock of a spell that does either. Each way there is a path, and what a path
+// passes on the way is of two kinds:
+//   - a condition on the character or the room (an item, class, level, alignment,
+//     monsters present, a quest flag, a buff). It holds or it doesn't.
+//   - a roll: a `random` table, a `testskill`, an EndCast that fires only some of
+//     the time.
+// A teleport behind conditions alone is Conditional. One behind nothing, or behind a
+// roll (with or without conditions beside it), is Sudden. The spell takes the
+// strongest of its paths.
+//
+// A `random` table whose every band teleports is no roll: the ice slide lands in
+// one of two rooms, but it always slides. A band counts as teleporting when it
+// reaches a teleport with no roll of its own, conditions or not. So a table whose
+// bands teleport under different conditions reads as conditional, though for a
+// character meeting only some of them it is a roll; no table a room spell reaches
+// in either realm's data is built that way.
 //
 // The summon read (RoomSummonParser) follows one textblock to one table; this needs
-// every branch and whether a roll was passed on the way there, so it walks the
-// chain itself and shares only that parser's table reader.
+// every branch and what was passed on the way there, so it walks the chain itself
+// and shares only that parser's table reader.
 public static class RoomSpellTeleportClassifier
 {
     private const int TextBlockAbility = 148;
@@ -32,20 +38,56 @@ public static class RoomSpellTeleportClassifier
     // roll, so only a table whose lines reach 100 runs a line every time.
     private const int RollCeiling = 100;
 
-    // Past this many hops a chain is a data loop the busy sets didn't catch.
-    private const int MaxChainDepth = 16;
+    // The busy sets stop a chain that loops; this stops one that is merely long,
+    // and the walk says so rather than call what it didn't read "no teleport".
+    internal const int MaxChainDepth = 16;
+
+    // The steps of the game's textblock interpreter that pass or fail on a fact
+    // about the character or the room (GAME_MECHANICS "Textblock directives — the
+    // Stock interpreter's list"). `checkspell` / `failspell` are conditions too, read
+    // apart because they name a block. A word outside the list doesn't gate anything:
+    // the interpreter passes over what it doesn't know.
+    private static readonly HashSet<string> ConditionVerbs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "minlevel", "maxlevel", "checkitem", "failitem", "takeitem", "nomonsters", "monsters", "needmonster",
+        "class", "race", "goodaligned", "evilaligned", "checkability", "testability", "failability", "price",
+        "checkskill", "flag", "test_tournament", "roomitem", "failroomitem", "clearitem",
+    };
 
     // spellOf resolves a spell number to its record, textblock a TBInfo number to
-    // its Action; either returns null for a number the set doesn't have.
+    // its entry; either returns null for a number the set doesn't have. gap names
+    // the first thing the walk couldn't read, or is null when it read everything;
+    // a spell with a gap and no teleport found comes back Unknown, not None.
     public static RoomSpellTeleport Classify(
-        int spell, Func<int, SpellFormulaInput?> spellOf, Func<int, string?> textblock)
+        int spell, Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock, out string? gap)
     {
         ArgumentNullException.ThrowIfNull(spellOf);
         ArgumentNullException.ThrowIfNull(textblock);
-        return new Walk(spellOf, textblock).Spell(spell, 0);
+        var walk = new Walk(spellOf, textblock);
+        Reach reach = walk.Spell(spell, default, 0);
+        gap = walk.Gap;
+        if (reach.Found != RoomSpellTeleport.None) return reach.Found;
+        return gap is null ? RoomSpellTeleport.None : RoomSpellTeleport.Unknown;
     }
 
-    private sealed class Walk(Func<int, SpellFormulaInput?> spellOf, Func<int, string?> textblock)
+    // What the path so far has passed.
+    private readonly record struct Gates(bool Rolled, bool Conditioned)
+    {
+        public RoomSpellTeleport Teleport =>
+            Rolled || !Conditioned ? RoomSpellTeleport.Sudden : RoomSpellTeleport.Conditional;
+    }
+
+    // What a part of the chain reaches: its strongest teleport, and whether it gets
+    // to one without a roll of its own (what lets a table of such parts be no roll).
+    private readonly record struct Reach(RoomSpellTeleport Found, bool Unrolled)
+    {
+        public Reach With(Reach other) =>
+            new(Found > other.Found ? Found : other.Found, Unrolled || other.Unrolled);
+
+        public Reach Past(bool roll) => roll ? this with { Unrolled = false } : this;
+    }
+
+    private sealed class Walk(Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock)
     {
         // What is being read right now. A chain that comes back to one of these has
         // looped (the sea's tables re-roll each other), and the second visit adds
@@ -53,16 +95,20 @@ public static class RoomSpellTeleportClassifier
         private readonly HashSet<int> _spells = new();
         private readonly HashSet<(bool Table, int Block)> _blocks = new();
 
-        public RoomSpellTeleport Spell(int number, int depth)
+        public string? Gap { get; private set; }
+
+        public Reach Spell(int number, Gates gates, int depth)
         {
-            if (number <= 0 || depth > MaxChainDepth || spellOf(number) is not { } spell) return RoomSpellTeleport.None;
-            if (TBInfoCastTeleportResolver.IsTeleportSpell(spell)) return RoomSpellTeleport.Always;
-            if (!_spells.Add(number)) return RoomSpellTeleport.None;
+            if (number <= 0) return default;
+            if (depth > MaxChainDepth) return Missed($"chain cut at spell {number}, {MaxChainDepth} steps in");
+            if (spellOf(number) is not { } spell) return Missed($"spell {number} missing");
+            if (TBInfoCastTeleportResolver.IsTeleportSpell(spell)) return new Reach(gates.Teleport, Unrolled: true);
+            if (!_spells.Add(number)) return default;
 
             // An EndCast% under 100 makes the follow-on spell a roll; without one it
             // always fires when this spell ends.
             bool endCastRolls = SpellEffectFormatter.EndCastPercent(spell) is > 0 and < 100;
-            RoomSpellTeleport result = RoomSpellTeleport.None;
+            Reach reach = default;
             foreach (SpellAbility ability in spell.Abilities)
             {
                 if (ability.Code == TextBlockAbility)
@@ -71,56 +117,64 @@ public static class RoomSpellTeleportClassifier
                     // number in MinBase / MaxBase (GAME_MECHANICS "Room-spell hazard
                     // shape 2 — TextBlock action guarded by `failitem <itemNum>`").
                     int block = ability.Value > 0 ? ability.Value : spell.MinBase > 0 ? spell.MinBase : spell.MaxBase;
-                    result = Stronger(result, Lines(block, depth + 1));
+                    reach = reach.With(Lines(block, gates, depth + 1));
                 }
                 else if (ability.Code == EndCastAbility && ability.Value > 0)
                 {
-                    result = Stronger(result, Capped(Spell(ability.Value, depth + 1), endCastRolls));
+                    Gates after = gates with { Rolled = gates.Rolled || endCastRolls };
+                    reach = reach.With(Spell(ability.Value, after, depth + 1).Past(endCastRolls));
                 }
             }
             _spells.Remove(number);
-            return result;
+            return reach;
         }
 
         // A block run line by line: the game takes the first line whose steps all
-        // pass, and which that is depends on the character, so the block is as
-        // strong as its strongest line.
-        private RoomSpellTeleport Lines(int block, int depth)
+        // pass, and which that is depends on the character, so each line is a path
+        // of its own from where the block was entered.
+        private Reach Lines(int block, Gates gates, int depth)
         {
-            if (!Enter(table: false, block, depth, out string action)) return RoomSpellTeleport.None;
-            RoomSpellTeleport result = RoomSpellTeleport.None;
+            if (!Enter(table: false, block, depth, out string action)) return default;
+            Reach reach = default;
             foreach (string line in action.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                result = Stronger(result, Steps(line.Split(':', StringSplitOptions.TrimEntries), depth));
+                reach = reach.With(Steps(line.Split(':', StringSplitOptions.TrimEntries), gates, depth));
             _blocks.Remove((false, block));
-            return result;
+            return reach;
         }
 
-        // A block rolled as a d100 table: one line runs, picked by the roll. It
-        // teleports for sure only when every line that can be picked does.
-        private RoomSpellTeleport Table(int block, int depth)
+        // A block rolled as a d100 table: one line runs, picked by the roll.
+        private Reach Table(int block, Gates gates, int depth)
         {
-            if (!Enter(table: true, block, depth, out string action)) return RoomSpellTeleport.None;
+            if (!Enter(table: true, block, depth, out string action)) return default;
             int covered = 0;
-            bool any = false, every = true;
+            bool everyBandTeleports = true;
+            RoomSpellTeleport strongest = RoomSpellTeleport.None;
             foreach ((int threshold, string[] steps) in RoomSummonParser.ReadBands(action))
             {
                 // A line at or under an earlier line's number is never the first one
                 // above the roll.
                 if (threshold <= covered || covered >= RollCeiling) continue;
                 covered = threshold;
-                RoomSpellTeleport band = Steps(steps, depth);
-                any |= band != RoomSpellTeleport.None;
-                every &= band == RoomSpellTeleport.Always;
+                Reach band = Steps(steps, gates, depth);
+                if (band.Found > strongest) strongest = band.Found;
+                everyBandTeleports &= band.Unrolled;
             }
             _blocks.Remove((true, block));
-            if (!any) return RoomSpellTeleport.None;
-            return every && covered >= RollCeiling ? RoomSpellTeleport.Always : RoomSpellTeleport.Chance;
+            if (strongest == RoomSpellTeleport.None) return default;
+            // A table that teleports whatever is rolled only picks the landing. Any
+            // other is a roll, and a teleport past a roll is Sudden whatever else
+            // gates it.
+            return everyBandTeleports && covered >= RollCeiling
+                ? new Reach(strongest, Unrolled: true)
+                : new Reach(RoomSpellTeleport.Sudden, Unrolled: false);
         }
 
-        private RoomSpellTeleport Steps(IEnumerable<string> steps, int depth)
+        // One line's steps, left to right. Only what comes before a teleport gates
+        // it: a step that fails later on the line can't take the move back.
+        private Reach Steps(IEnumerable<string> steps, Gates gates, int depth)
         {
-            bool rolled = false;
-            RoomSpellTeleport result = RoomSpellTeleport.None;
+            bool rolledHere = false;
+            Reach reach = default;
             foreach (string step in steps)
             {
                 string[] words = step.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -130,34 +184,61 @@ public static class RoomSpellTeleportClassifier
                 // `teleport <room> <map>`, and the named forms (`teleport_sewers`)
                 // that pick a room of their area.
                 if (verb.StartsWith("teleport", StringComparison.OrdinalIgnoreCase))
-                    result = Stronger(result, Capped(RoomSpellTeleport.Always, rolled));
+                    reach = reach.With(new Reach(gates.Teleport, Unrolled: !rolledHere));
                 else if (Is(verb, "cast"))
-                    result = Stronger(result, Capped(Spell(Number(words, 1), depth + 1), rolled));
+                    reach = reach.With(Spell(Number(words, 1), gates, depth + 1).Past(rolledHere));
                 else if (Is(verb, "random"))
-                    result = Stronger(result, Capped(Table(Number(words, 1), depth + 1), rolled));
+                    reach = reach.With(Table(Number(words, 1), gates, depth + 1).Past(rolledHere));
                 else if (Is(verb, "checkspell") || Is(verb, "failspell"))
-                    // The second number is the block run when the buff is missing: a
-                    // condition, like the rest of the line.
-                    result = Stronger(result, Capped(Lines(Number(words, 2), depth + 1), rolled));
+                {
+                    // The second number is the block run when the buff is missing;
+                    // the rest of the line runs when it is up. Either way the buff
+                    // decided it.
+                    gates = gates with { Conditioned = true };
+                    reach = reach.With(Lines(Number(words, 2), gates, depth + 1).Past(rolledHere));
+                }
                 else if (Is(verb, "testskill"))
                 {
                     // `testskill <skill> [<modifier>] <failTextblock>` rolls: the block
                     // runs on a miss, the rest of the line on a pass.
-                    result = Stronger(result, Capped(Lines(Number(words, words.Length - 1), depth + 1), rolled: true));
-                    rolled = true;
+                    gates = gates with { Rolled = true };
+                    rolledHere = true;
+                    reach = reach.With(Lines(Number(words, words.Length - 1), gates, depth + 1).Past(roll: true));
                 }
+                else if (ConditionVerbs.Contains(verb))
+                    gates = gates with { Conditioned = true };
             }
-            return result;
+            return reach;
         }
 
         private bool Enter(bool table, int block, int depth, out string action)
         {
             action = string.Empty;
-            if (block <= 0 || depth > MaxChainDepth) return false;
-            if (textblock(block) is not { } text || string.IsNullOrWhiteSpace(text)) return false;
+            if (block <= 0) return false;
+            if (depth > MaxChainDepth)
+            {
+                Missed($"chain cut at textblock {block}, {MaxChainDepth} steps in");
+                return false;
+            }
+            if (textblock(block) is not { } entry)
+            {
+                Missed($"textblock {block} missing");
+                return false;
+            }
+            // A continuation record may hold more steps; how the game runs one from
+            // a spell's textblock isn't known, so it is left unread and said so.
+            if (entry.LinkTo > 0) Missed($"textblock {block} continues in {entry.LinkTo}, not read");
+            // A block that is there and empty does nothing, which is an answer.
+            if (string.IsNullOrWhiteSpace(entry.Action)) return false;
             if (!_blocks.Add((table, block))) return false;
-            action = text;
+            action = entry.Action;
             return true;
+        }
+
+        private Reach Missed(string what)
+        {
+            Gap ??= what;
+            return default;
         }
 
         private static bool Is(string verb, string name) => verb.Equals(name, StringComparison.OrdinalIgnoreCase);
@@ -165,11 +246,5 @@ public static class RoomSpellTeleportClassifier
         private static int Number(string[] words, int index) =>
             index > 0 && index < words.Length
             && int.TryParse(words[index], NumberStyles.Integer, CultureInfo.InvariantCulture, out int n) ? n : 0;
-
-        private static RoomSpellTeleport Stronger(RoomSpellTeleport a, RoomSpellTeleport b) => a > b ? a : b;
-
-        // A teleport found past a roll is a chance at best.
-        private static RoomSpellTeleport Capped(RoomSpellTeleport found, bool rolled) =>
-            rolled && found > RoomSpellTeleport.Chance ? RoomSpellTeleport.Chance : found;
     }
 }

@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using Avalonia.Media;
 using MudPlay.Controls;
+using MudPlay.Game.Map;
 using Xunit;
 
 namespace MudPlay.Tests;
@@ -35,40 +38,56 @@ public sealed class MapSpellPaletteTests
         }
     }
 
-    // The room fills a by-teleport spell room can stand beside, from
-    // Controls/MapControl.cs: the plain room, up / down / up+down exit rooms, the
-    // current room, lair, shop, and the ten lair-heat stops.
-    private static readonly string[] NeighbouringFills =
+    // The room fills a by-teleport spell room can stand beside, read off the map
+    // itself: the plain room, the current room, lair, shop, the flat spell purple
+    // (an unknown spell keeps it), up / down / up+down exit rooms, and the lair-heat
+    // stops.
+    private static IEnumerable<(string Name, int R, int G, int B)> NeighbouringFills()
     {
-        "#9B9B9B", "#00C800", "#DCDC00", "#FFB432", "#E0A000", "#8E4F7B", "#4A7791",
-        "#E64A4A", "#F07818", "#C8A000", "#A6C82A", "#43B84E", "#22B58E", "#34B9DE", "#3B7FE6", "#6B54DC", "#A24BD6",
-    };
+        (string, IBrush)[] brushes =
+        {
+            ("room", MapControl.RoomFill), ("current room", MapControl.CurrentFill), ("lair", MapControl.LairFill),
+            ("shop", MapControl.ShopFill), ("spell", MapControl.SpellFill), ("up exit", MapControl.UpFill),
+            ("down exit", MapControl.DownFill), ("up+down exit", MapControl.UpDownFill),
+        };
+        foreach ((string name, IBrush brush) in brushes)
+        {
+            Color c = Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
+            yield return (name, c.R, c.G, c.B);
+        }
+        foreach (string hex in MapControl.HeatFixedHex)
+        {
+            (int r, int g, int b) = Rgb(hex);
+            yield return ("lair heat " + hex, r, g, b);
+        }
+    }
 
     [Fact]
-    public void ByTeleportSwatches_AreOneEachPerClass_AndStandOffEveryNeighbouringFill()
+    public void ByTeleportSwatches_AreOneEachPerPaintedClass_AndStandOffEveryNeighbouringFill()
     {
-        Assert.Equal(Enum.GetValues<MudPlay.Game.Map.RoomSpellTeleport>().Length, MapControl.SpellTeleportHex.Length);
+        // Unknown is the one class with no swatch: it keeps the flat spell purple.
+        Assert.Equal(Enum.GetValues<RoomSpellTeleport>().Length - 1, MapControl.SpellTeleportHex.Length);
+        Assert.Equal((int)RoomSpellTeleport.Unknown, MapControl.SpellTeleportHex.Length);
 
         foreach (string hex in MapControl.SpellTeleportHex)
         {
             (int r, int g, int b) = Rgb(hex);
-            foreach (string other in NeighbouringFills)
+            foreach ((string name, int otherR, int otherG, int otherB) in NeighbouringFills())
             {
-                (int otherR, int otherG, int otherB) = Rgb(other);
                 int dist = Math.Abs(r - otherR) + Math.Abs(g - otherG) + Math.Abs(b - otherB);
                 Assert.True(dist >= 80,
-                    $"{hex} is within {dist} (Manhattan) of the room fill {other} — the two would be mistaken for each other");
+                    $"{hex} is within {dist} (Manhattan) of the {name} fill — the two would be mistaken for each other");
             }
         }
 
-        // Green none, yellow chance, red teleports: each swatch's dominant channels
-        // are the ones its meaning names.
-        (int nr, int ng, int nb) = Rgb(MapControl.SpellTeleportHex[(int)MudPlay.Game.Map.RoomSpellTeleport.None]);
-        (int cr, int cg, int cb) = Rgb(MapControl.SpellTeleportHex[(int)MudPlay.Game.Map.RoomSpellTeleport.Chance]);
-        (int ar, int ag, int ab) = Rgb(MapControl.SpellTeleportHex[(int)MudPlay.Game.Map.RoomSpellTeleport.Always]);
+        // Green none, yellow conditional, red sudden: each swatch's dominant
+        // channels are the ones its colour names.
+        (int nr, int ng, int nb) = Rgb(MapControl.SpellTeleportHex[(int)RoomSpellTeleport.None]);
+        (int cr, int cg, int cb) = Rgb(MapControl.SpellTeleportHex[(int)RoomSpellTeleport.Conditional]);
+        (int sr, int sg, int sb) = Rgb(MapControl.SpellTeleportHex[(int)RoomSpellTeleport.Sudden]);
         Assert.True(ng > nr && ng > nb, "the no-teleport swatch isn't green");
-        Assert.True(cr > cb + 100 && cg > cb + 100, "the may-teleport swatch isn't yellow");
-        Assert.True(ar > ag + 100 && ar > ab + 100, "the teleports swatch isn't red");
+        Assert.True(cr > cb + 100 && cg > cb + 100, "the conditional swatch isn't yellow");
+        Assert.True(sr > sg + 100 && sr > sb + 100, "the sudden swatch isn't red");
     }
 
     [Fact]

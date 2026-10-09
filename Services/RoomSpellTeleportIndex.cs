@@ -44,30 +44,46 @@ public sealed class RoomSpellTeleportIndex
         _log = log;
     }
 
-    // Pass Room.Spell. A spell no room carries, or 0, reads as no teleport.
+    // Pass Room.Spell. A spell no room carries reads as unknown, never as a spell
+    // without a teleport: nothing was read to say so.
     public RoomSpellTeleport ClassOf(int spell) =>
-        _classes.TryGetValue(spell, out RoomSpellTeleport found) ? found : RoomSpellTeleport.None;
+        _classes.TryGetValue(spell, out RoomSpellTeleport found) ? found : RoomSpellTeleport.Unknown;
 
     // Reload for setName; null clears. Wired by AppServices to
     // GameDataCache.ActiveSetChanged.
     public void OnActiveSetChanged(string? setName)
     {
         var classes = new Dictionary<int, RoomSpellTeleport>();
+        var gaps = new List<string>();
         if (!string.IsNullOrWhiteSpace(setName))
         {
-            foreach (int spell in _graph.Rooms.Select(static r => r.Spell).Where(static s => s > 0).Distinct())
-                classes[spell] = RoomSpellTeleportClassifier.Classify(
-                    spell, _spells.GetFormulaByNumber, n => _tbinfo.GetEntry(n)?.Action);
+            foreach (int spell in _graph.Rooms.Select(static r => r.Spell).Where(static s => s > 0).Distinct().Order())
+            {
+                RoomSpellTeleport found = RoomSpellTeleportClassifier.Classify(
+                    spell, _spells.GetFormulaByNumber, _tbinfo.GetEntry, out string? gap);
+                classes[spell] = found;
+                if (gap is not null)
+                    gaps.Add($"{spell} ({gap}; {(found == RoomSpellTeleport.Unknown ? "unknown" : "teleport found anyway")})");
+            }
             // The catalog read the raw Spells table to resolve the chains.
             _cache.EvictTable("Spells");
         }
         _classes = classes;
 
-        int Count(RoomSpellTeleport kind) => classes.Values.Count(c => c == kind);
-        _log?.Info("RoomSpellTeleportIndex", string.IsNullOrWhiteSpace(setName)
-            ? "No active set; cleared."
-            : $"Classed {classes.Count} room spell(s) from '{setName}': {Count(RoomSpellTeleport.Always)} teleport, "
-              + $"{Count(RoomSpellTeleport.Chance)} may teleport, {Count(RoomSpellTeleport.None)} don't.");
+        if (string.IsNullOrWhiteSpace(setName))
+            _log?.Info("RoomSpellTeleportIndex", "No active set; cleared.");
+        else
+        {
+            int Count(RoomSpellTeleport kind) => classes.Values.Count(c => c == kind);
+            _log?.Info("RoomSpellTeleportIndex",
+                $"Classed {classes.Count} room spell(s) from '{setName}': {Count(RoomSpellTeleport.Sudden)} teleport outright or on a roll, "
+                + $"{Count(RoomSpellTeleport.Conditional)} on a condition, {Count(RoomSpellTeleport.None)} don't, "
+                + $"{Count(RoomSpellTeleport.Unknown)} unknown.");
+            // A gap is data the set lacks, so it is the same every load: said once
+            // here, where a "why isn't this room green" report can find it.
+            if (gaps.Count > 0)
+                _log?.Info("RoomSpellTeleportIndex", $"Room spell(s) not read in full: {string.Join("; ", gaps)}.");
+        }
 
         StoreReloaded?.Invoke();
     }

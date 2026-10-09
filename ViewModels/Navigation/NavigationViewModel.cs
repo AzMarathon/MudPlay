@@ -898,13 +898,20 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(HighlightSpells))]
     [NotifyPropertyChangedFor(nameof(SpellButtonLabel))]
     [NotifyPropertyChangedFor(nameof(SpellsByTeleport))]
+    [NotifyPropertyChangedFor(nameof(SpellTeleportUnknownInLegend))]
     private SpellDisplayMode _spellMode = SpellDisplayMode.Mono;
 
     public bool HighlightSpells => SpellMode != SpellDisplayMode.Off;
 
-    // Shows the Legend's three by-teleport swatches, which mean nothing in the
-    // other modes.
+    // Swaps the Legend's flat "Spell room" swatch for the three by-teleport ones:
+    // each means nothing in the other's mode.
     public bool SpellsByTeleport => SpellMode == SpellDisplayMode.ByTeleport;
+
+    // The Legend's fourth by-teleport row, for a spell the data doesn't let the
+    // client class. Shown only when the set has one, so it isn't a row to puzzle
+    // over on a map with none.
+    public bool SpellTeleportUnknownInLegend =>
+        SpellsByTeleport && SpellTeleportClasses is { } classes && classes.Values.Contains(RoomSpellTeleport.Unknown);
 
     public string SpellButtonLabel => SpellMode switch
     {
@@ -925,7 +932,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // The by-teleport overlay's colour key: each placed room spell's class, from the
     // per-set index.
-    [ObservableProperty] private IReadOnlyDictionary<int, RoomSpellTeleport>? _spellTeleportClasses;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SpellTeleportUnknownInLegend))]
+    private IReadOnlyDictionary<int, RoomSpellTeleport>? _spellTeleportClasses;
 
     private void RefreshSpellTeleportClasses() => SpellTeleportClasses = _services.RoomSpellTeleports.Classes;
 

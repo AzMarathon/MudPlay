@@ -22,8 +22,9 @@ public enum SpellDisplayMode
     Off,
 
     // Each room-spell room coloured by whether its spell moves you: red when it
-    // teleports, yellow when a teleport hangs on a roll, green when it has none
-    // (RoomSpellTeleport). Clients older than this mode know only the three above;
+    // teleports outright or on a roll, yellow when only on a condition, green when
+    // it has no teleport (RoomSpellTeleport); a spell the data can't answer for
+    // keeps the flat purple. Clients older than this mode know only the three above;
     // SpellDisplayModes keeps its name out of the profile key they read.
     ByTeleport,
 }

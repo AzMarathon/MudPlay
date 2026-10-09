@@ -112,6 +112,23 @@ public sealed class ProfileServiceTests
     }
 
     [Fact]
+    public void NavSpellOverlay_HandEdited_IsReadWhenItNamesAModeAndIgnoredOtherwise()
+    {
+        static SpellDisplayMode Read(string overlay) => SpellDisplayModes.Read(
+            new CharacterProfile { NavSpellMode = SpellDisplayMode.ByName, NavSpellOverlay = overlay });
+
+        // A mode's name wins over the old key, whichever mode it is.
+        Assert.Equal(SpellDisplayMode.Off, Read("Off"));
+        Assert.Equal(SpellDisplayMode.ByTeleport, Read("ByTeleport"));
+        // A number that is a mode's value is that mode; one that isn't, a different
+        // casing, and an empty string all leave the old key standing.
+        Assert.Equal(SpellDisplayMode.ByTeleport, Read(((int)SpellDisplayMode.ByTeleport).ToString()));
+        Assert.Equal(SpellDisplayMode.ByName, Read("99"));
+        Assert.Equal(SpellDisplayMode.ByName, Read("byteleport"));
+        Assert.Equal(SpellDisplayMode.ByName, Read(""));
+    }
+
+    [Fact]
     public void NavLoopLinesMode_DefaultsToSteps_AndRoundTripsByName()
     {
         // An older profile has no value stored and must come back drawing the loop
