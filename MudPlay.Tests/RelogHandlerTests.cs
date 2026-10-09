@@ -106,6 +106,25 @@ public sealed class RelogHandlerTests
         Assert.Empty(wire);
     }
 
+    // The hang-up penalty line is asked for once per @relog actually sent, and
+    // not for one the Disable hangups switch dropped.
+    [Fact]
+    public void Relog_AsksForThePenaltyLine_OnlyWhenTheExitWentOut()
+    {
+        var (engine, handler, players, wire, _, _) = Setup();
+        SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
+        int asked = 0;
+        handler.SetHangupPenaltyLog(() => { Assert.Single(wire); asked++; });
+
+        engine.DispatchForTests(Telepath("Trusted", "@relog"));
+        Assert.Equal(1, asked);
+
+        handler.SetHangupsDisabledCheck(() => true);
+        engine.DispatchForTests(Telepath("Trusted", "@relog"));
+        Assert.Equal(1, asked);
+        Assert.Single(wire);
+    }
+
     [Fact]
     public void Dispose_UnregistersHandler()
     {

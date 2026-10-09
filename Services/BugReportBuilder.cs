@@ -188,6 +188,10 @@ public static class BugReportBuilder
         Kv(sb, "Realm PvP", (svc.ResolveActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
             + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
             + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
+        // What the board takes for a hang-up in a fight, as the user recorded it
+        // for this realm. It explains HP or items missing after a reconnect.
+        Kv(sb, "Realm hang-up penalty",
+            Game.Health.HangupPenaltyNotice.Describe(svc.ResolveActiveRealm()?.Realm));
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));

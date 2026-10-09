@@ -112,6 +112,7 @@ public sealed class HealthManager : IDisposable
     private Action<byte[]>? _hangupWireSender;  // un-wrapped: pierces EngineSendGate
     private Action? _requestHangupDisconnect;   // hard-close the socket after the exit command
     private Func<string, bool>? _tryWimpyGoto;  // sys-goto-wimpy escape substitute for the hangup
+    private Action<bool>? _logHangupPenalty;    // the realm's hang-up penalty, for the log; arg = the PvP response's hang-up
     private Func<Models.Profile.PartySettings>? _readPartySettings; // @panic send/ignore gates
     private Func<bool>? _selfIsPartyLeader;     // in a party AND leading it (@panic broadcast gate)
     private Func<bool>? _isPartyFollower;       // in a party AND not the leader
@@ -455,6 +456,16 @@ public sealed class HealthManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(tryWimpyGoto);
         _tryWimpyGoto = tryWimpyGoto;
+    }
+
+    // Wire the log line that says what the realm's hang-up penalty (Settings →
+    // BBS) makes of a hang-up this manager has just sent. The argument is true
+    // for the PvP response's hang-up, the one case only the caller here knows.
+    // It reports and nothing more: the hang-up has gone out by the time it runs.
+    public void SetHangupPenaltyLog(Action<bool> logHangupPenalty)
+    {
+        ArgumentNullException.ThrowIfNull(logHangupPenalty);
+        _logHangupPenalty = logHangupPenalty;
     }
 
     // Wire party-role-aware recovery. isPartyFollower returns true when the local
@@ -1814,7 +1825,7 @@ public sealed class HealthManager : IDisposable
         MaybeBroadcastPanic(s);
 
         return ExecuteEscape(s, $"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}",
-            allowCarrierDrop: true);
+            allowCarrierDrop: true, pvpResponse: false);
     }
 
     // The low-HP escape action, shared by our own emergency hangup
@@ -1836,7 +1847,9 @@ public sealed class HealthManager : IDisposable
     // DisableHangups master switch was already checked upstream); a received @panic
     // passes !DisableHangups, so an opted-out character still wimpy-jumps (no carrier
     // drop) but is never force-disconnected by someone else's panic.
-    private bool ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop)
+    //
+    // pvpResponse only words the hang-up penalty log line (SetHangupPenaltyLog).
+    private bool ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop, bool pvpResponse)
     {
         if (s.SysGotoWimpyInsteadOfHanging
             && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
@@ -1875,6 +1888,9 @@ public sealed class HealthManager : IDisposable
         // ourselves so a stuck / slow drop can't leave the character connected.
         // The callback flushes the just-sent exit command before disposing.
         _requestHangupDisconnect?.Invoke();
+        // Last, so nothing the penalty line reads can come between the trigger
+        // and the hang-up.
+        _logHangupPenalty?.Invoke(pvpResponse);
         return true;
     }
 
@@ -1907,7 +1923,7 @@ public sealed class HealthManager : IDisposable
         HealthSettings s = _readSettings();
         bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"received @panic from {fromWhom} — bailing (wimpy-or-hang)");
-        return ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop);
+        return ExecuteEscape(s, $"@panic from {fromWhom}", allowDrop, pvpResponse: false);
     }
 
     // The PvP response's hang-up: the same escape a received @panic takes, so the
@@ -1916,7 +1932,7 @@ public sealed class HealthManager : IDisposable
     {
         bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"PvP — bailing (wimpy-or-hang): {reason}");
-        return ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop);
+        return ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true);
     }
 
     // The PvP response's flee: the retreat a low-HP run makes, but `rooms` long, and

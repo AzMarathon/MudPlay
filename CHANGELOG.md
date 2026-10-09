@@ -1,5 +1,10 @@
 # Version history
 
+## 3.159.19
+
+- Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
+- The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+
 ## 3.159.18
 
 - Auto-light relights a spare when a Stock lamp, lantern, moon-lamp, light ball or other light burns out, not only a torch
