@@ -10,6 +10,17 @@
 - A walk that stops at a locked door for want of its key names the key
 - bug reports addressed: paradigm-20261008-175938
 
+## 3.154.0
+
+- CP plan is typed from the trained stats and CP Left on the `train stats` screen, so a buff on `stat` no longer throws it off
+- The trainer screen must show what was typed before it is saved; if it doesn't, MudPlay stops and leaves the screen open
+- `train stats` is never sent into a trainer screen that is already open
+- A plan row is cleared only once the game shows its CP was spent
+- `stat` values marked as modified are worked back to the trained ones (the listed effects, and worn gear on Paradigm); one that can't be accounted for is flagged on the CP Allocation tab, and rows aren't rewritten or pruned from it
+- Stock: the CP plan waits while a stat is altered, as the game refuses `train stats` then; new **Wait for altered stats at the trainer** setting on the Auto-Trainer tab (120 s by default, 0 = don't wait)
+- Opening `train stats` yourself is only typed into when the plan has something to raise
+- bug reports addressed: paradigm-20260930-160602
+
 ## 3.153.19
 
 - A bash the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever
