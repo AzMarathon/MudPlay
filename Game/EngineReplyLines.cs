@@ -16,9 +16,9 @@ public static partial class EngineReplyLines
     private static readonly string[] Formats =
     {
         "-- %s",
-        "A concealed passage opens to the %s.",
         "--- Message Not Sent ---",
         "--- Telepath Not Sent ---",
+        "A concealed passage opens to the %s.",
         "Are you sure you want to disband %s?",
         "Banking services:",
         "Cannot find user!",
@@ -92,9 +92,9 @@ public static partial class EngineReplyLines
         "Why would you want to rob yourself?",
         "Why would you want to search that?",
         "You add the %s to your shops stock.",
+        "You already have something lit!",
         "You are already the owner of a gang house.",
         "You are already wearing %s and it may not be removed.",
-        "You already have something lit!",
         "You are dragging %s.",
         "You are extremely quick and deadly with this weapon.",
         "You are no longer dragging %s.",

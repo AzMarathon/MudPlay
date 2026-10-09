@@ -305,8 +305,12 @@ public sealed class CleanupLogoutOrchestratorTests
         Assert.Single(h.Engine.LastSentForTests);
         Assert.Equal(0, h.DisconnectCalls);
 
-        // The room clears: the exit goes out again, with its own fresh timeout.
+        // The room clears, and has to stay clear for a round before the exit goes
+        // out again, with its own fresh timeout.
         h.Safe = true;
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+        h.Clock = h.Clock.Add(h.Engine.InterruptSettle);
         h.Engine.EvaluateForTests();
         Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
         Assert.Equal(2, h.Engine.LastSentForTests.Count);
@@ -316,6 +320,105 @@ public sealed class CleanupLogoutOrchestratorTests
         DispatchSavedLine(h.Router);
         Assert.Equal(CleanupLogoutPhase.Done, h.Engine.Phase);
         Assert.Equal(1, h.DisconnectCalls);
+    }
+
+    // With nothing typed during the wait the line arrives on the end of the row of
+    // dots; it is read the same.
+    [Fact]
+    public void Exiting_WaitInterrupted_OnTheRowOfDots_IsRead()
+    {
+        Harness h = Setup();
+        h.Safe = true;
+        FireWarning(h);
+
+        DispatchLine(h.Router, "................Your meditation has been interrupted - you may not exit now!");
+
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+    }
+
+    // After a called-off exit the room must read safe for a whole round, unbroken:
+    // a reading that flickers between swings starts the count again.
+    [Fact]
+    public void AfterInterruption_ExitWaitsForARoundOfUnbrokenSafety()
+    {
+        Harness h = Setup();
+        h.Safe = true;
+        FireWarning(h);
+        DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+
+        h.Engine.EvaluateForTests();                           // safe: the count starts
+        h.Clock = h.Clock.AddSeconds(3);
+        h.Safe = false;
+        h.Engine.EvaluateForTests();                           // broken
+        h.Safe = true;
+        h.Clock = h.Clock.AddSeconds(1);
+        h.Engine.EvaluateForTests();                           // the count starts over
+        h.Clock = h.Clock.Add(h.Engine.InterruptSettle).AddSeconds(-1);
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+        Assert.Single(h.Engine.LastSentForTests);
+
+        h.Clock = h.Clock.AddSeconds(1);
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+        Assert.Equal(2, h.Engine.LastSentForTests.Count);
+    }
+
+    // An attacker the safe check can't see calls every exit off. The retries stop
+    // at the cap, and from there the timeouts run as they do with no confirmation:
+    // one blind re-send, then the carrier is dropped.
+    [Fact]
+    public void RepeatedInterruptions_AreCapped_ThenTheTimeoutsDecide()
+    {
+        Harness h = Setup();
+        h.Safe = true;                                         // reads safe throughout
+        FireWarning(h);                                        // exit 1
+
+        for (int i = 1; i < h.Engine.MaxInterruptions; i++)
+        {
+            DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+            Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+            h.Engine.EvaluateForTests();
+            h.Clock = h.Clock.Add(h.Engine.InterruptSettle);
+            h.Engine.EvaluateForTests();                       // exit i + 1
+            Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+        }
+        Assert.Equal(h.Engine.MaxInterruptions, h.Engine.LastSentForTests.Count);
+
+        // The interruption that reaches the cap is not answered with another wait.
+        DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+        h.Engine.EvaluateForTests();
+        Assert.Equal(h.Engine.MaxInterruptions, h.Engine.LastSentForTests.Count);
+
+        h.Clock = h.Clock.Add(h.Engine.MenuWaitTimeout).AddSeconds(1);
+        h.Engine.EvaluateForTests();                           // the blind re-send
+        Assert.Equal(h.Engine.MaxInterruptions + 1, h.Engine.LastSentForTests.Count);
+        DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+
+        h.Clock = h.Clock.Add(h.Engine.MenuWaitTimeout).AddSeconds(1);
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Done, h.Engine.Phase);
+        Assert.Equal(1, h.DisconnectCalls);
+        Assert.Equal(h.Engine.MaxInterruptions + 1, h.Engine.LastSentForTests.Count);
+    }
+
+    // A new session starts the count again.
+    [Fact]
+    public void Reset_ClearsTheInterruptionCountAndTheSettle()
+    {
+        Harness h = Setup();
+        h.Safe = true;
+        FireWarning(h);
+        DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+
+        h.Engine.Reset();
+        FireWarning(h);                                        // safe: exits at once, no settle owed
+
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+        Assert.Equal(2, h.Engine.LastSentForTests.Count);
     }
 
     // The same line answers an exit the user typed; with no exit of ours out it

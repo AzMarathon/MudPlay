@@ -2321,6 +2321,7 @@ public sealed partial class CombatManager : IDisposable
                 $"disconnect cleared stale combat state — target={_currentTarget ?? "(none)"}, "
                 + $"spellTarget={_castingSpellTarget ?? "(none)"}, spellAttackOwed={_spellAttackOwed}");
         _currentTarget = null;
+        _deadAttackWordWarned = false;
         ClearAttackSpellCascadeState();
     }
 
@@ -4602,6 +4603,7 @@ public sealed partial class CombatManager : IDisposable
         _lastCastAction = null;
         _roomChannelSpell = null;   // switched off the room spell onto the weapon
         string verb = string.IsNullOrWhiteSpace(command) ? "a" : command.Trim();
+        WarnOnDeadAttackWord(verb);
         string line = $"{verb} {target}";
         if (priority is { } prio)
             _log?.Combat(LogCategory, $"attack target={target} cmd={verb} prio={prio}");
@@ -4623,6 +4625,7 @@ public sealed partial class CombatManager : IDisposable
         _lastCastAction = null;
         _roomChannelSpell = null;   // switched off the room spell onto the weapon
         string verb = string.IsNullOrWhiteSpace(command) ? "a" : command.Trim();
+        WarnOnDeadAttackWord(verb);
         string line = $"{verb} {target}";
         _log?.Combat(LogCategory,
             $"re-fire target={target} cmd={verb} timing={refireReason}");
@@ -4632,6 +4635,20 @@ public sealed partial class CombatManager : IDisposable
         _pendingAttackEchoVerb = verb;   // claim our own swing so the attack observer doesn't read it as manual
         _wireSender(Encoding.Latin1.GetBytes(line + "\r"));
         NoteAttackSent();
+    }
+
+    // An attack command the game doesn't take is still sent as the user set it; the
+    // log says so once a connection, at the first swing made with it, so a fight
+    // that never engages has its reason on record.
+    private bool _deadAttackWordWarned;
+
+    private void WarnOnDeadAttackWord(string verb)
+    {
+        if (_deadAttackWordWarned || !MartialArtsCommand.IsDeadKickLead(verb)) return;
+        _deadAttackWordWarned = true;
+        _log?.Warn(LogCategory,
+            $"attack command `{verb}` is not a command the game takes: kick's shortest form is `kic`. "
+            + "It is sent as set; change it in Settings → Combat (Normal / Alternate weapon attack command).");
     }
 
     // Lost-action recovery, driven by ConditionTracker.ActionFailed (wired in

@@ -27,6 +27,11 @@ namespace MudPlay.Game.Inventory;
 // (matching the confirmed mechanic). Each fresh `list` resets the pump, so a
 // stalled queue — a dropped result line — self-heals on the next shop visit.
 //
+// The queue belongs to the shop it was read in. Leaving the room drops it, and so
+// does the game saying we aren't in a shop: a `buy` sent anywhere else buys
+// nothing, and a queue left standing would send its next one off whatever
+// refusal happened to arrive later.
+//
 // LIGHT items are excluded upstream (Auto-light owns them) and a LoyalItem is
 // never a buy target — both decided by the injected resolver.
 //
@@ -55,6 +60,7 @@ public sealed class AutoBuyManager : IDisposable
     private readonly IDisposable _boughtSub;
     private readonly IDisposable _failedSub;
     private readonly IDisposable _refusedSub;
+    private readonly IDisposable _notInShopSub;
 
     private Terminal.LineExtractor? _lines;
     private bool _capturing;
@@ -70,6 +76,22 @@ public sealed class AutoBuyManager : IDisposable
 
     private readonly List<BuyOrder> _queue = new();
     private int _active = -1;
+
+    // What followed `buy` in the command the pump is waiting on, and when it went
+    // out; null once that command has been answered. Two refusals name no item and
+    // also answer a `get`, so they count as this buy's reply only while it is
+    // unanswered and recent.
+    private string? _awaitingArg;
+    private DateTimeOffset _sentAt;
+
+    // How long a `buy` is taken to be still unanswered. A buy is answered at once
+    // unless an action delay or commands queued ahead hold it for a second or two
+    // (BulkCommandPacer has the queue's rules); past this a nameless refusal is
+    // taken to be some other command's.
+    public static readonly TimeSpan ReplyWindow = TimeSpan.FromSeconds(5);
+
+    // Test seam for the clock the reply window is read against.
+    internal Func<DateTimeOffset> NowProvider { get; set; } = static () => DateTimeOffset.Now;
 
     private Action<byte[]>? _wireSender;
     private bool _disposed;
@@ -100,6 +122,7 @@ public sealed class AutoBuyManager : IDisposable
         _boughtSub = router.Subscribe(KnownPatterns.UserBuys, OnBought);
         _failedSub = router.Subscribe(KnownPatterns.UserBuyFailed, OnBuyFailed);
         _refusedSub = router.Subscribe(KnownPatterns.UserBuyRefused, OnBuyRefused);
+        _notInShopSub = router.Subscribe(KnownPatterns.UserBuyNotInShop, _ => DropQueue("the game says we aren't in a shop"));
     }
 
     // Bind the wire sender — the gate-wrapped engine pipeline from
@@ -169,6 +192,7 @@ public sealed class AutoBuyManager : IDisposable
         // A fresh readout supersedes any in-progress pump from a prior shop.
         _queue.Clear();
         _active = -1;
+        _awaitingArg = null;
 
         foreach (ShopListParser.StockRow s in stock)
         {
@@ -204,10 +228,27 @@ public sealed class AutoBuyManager : IDisposable
             // Either way the pump sends once and waits for the reply.
             int qty = _isParadigm() ? order.Remaining : 1;
             _log?.Info(LogCategory, $"buy {qty}x item={order.Name}");
-            Send(qty > 1 ? $"buy {qty} {order.Name}" : $"buy {order.Name}");
+            _awaitingArg = qty > 1 ? $"{qty} {order.Name}" : order.Name;
+            _sentAt = NowProvider();
+            Send($"buy {_awaitingArg}");
             return;
         }
         _active = -1;
+        _awaitingArg = null;
+    }
+
+    // The room changed under the pump (an errand that read the same `list` walked
+    // on, a teleport, a death). Bound to RoomTracker's genuine room changes.
+    public void OnRoomChanged() => DropQueue("left the shop");
+
+    private void DropQueue(string why)
+    {
+        if (_active < 0) return;
+        int left = _queue.Count - _active;
+        _queue.Clear();
+        _active = -1;
+        _awaitingArg = null;
+        _log?.Info(LogCategory, $"{why} — dropping {left} ware(s) still queued");
     }
 
     private void OnBought(MatchResult m)
@@ -219,6 +260,7 @@ public sealed class AutoBuyManager : IDisposable
         if (r.Number != order.Number) return;           // a buy we didn't drive
         // The reply's qty group is the actual count bought (empty → 1 on Stock).
         int bought = int.TryParse(m.Groups[0], out int q) && q > 0 ? q : 1;
+        _awaitingArg = null;
         order.Remaining -= bought;
         if (order.Remaining <= 0) _active++;
         PumpActive();
@@ -231,19 +273,40 @@ public sealed class AutoBuyManager : IDisposable
         if (_resolve(m.Groups[0]) is not { } r) return;
         if (r.Number != _queue[_active].Number) return;
         _log?.Info(LogCategory, $"cannot afford item={_queue[_active].Name} — stopping this ware");
+        _awaitingArg = null;
         _active++;                                      // purse spent for this ware
         PumpActive();
     }
 
-    // Out of stock, not a ware of this shop, or it can't be carried. Two of these
-    // lines name no item and one echoes what was typed, so the refusal goes to the
-    // one buy the pump has out. Without it the pump waited on a result that never
-    // came and the wares queued behind it went unbought until the next `list`.
+    // Out of stock, not a ware of this shop, or it can't be carried: the ware is
+    // done for this visit and the next one goes out. Other engines buy too (a spell
+    // errand, the light and path-item detours) and the carry lines answer a `get`,
+    // so each line has to be shown to be this pump's: by the ware it names, by the
+    // words it echoes, or, for the two that name nothing, by a buy of ours still
+    // waiting for its answer.
     private void OnBuyRefused(MatchResult m)
     {
         if (_active < 0 || _active >= _queue.Count) return;
+        BuyOrder order = _queue[_active];
+        string named = m.Groups.Count > 0 ? m.Groups[0] : string.Empty;   // "You cannot buy <item> here!"
+        string typed = m.Groups.Count > 1 ? m.Groups[1] : string.Empty;   // "<typed> is not a known item."
+        if (named.Length > 0)
+        {
+            if (_resolve(named) is not { } r || r.Number != order.Number) return;
+        }
+        else if (typed.Length > 0)
+        {
+            if (!typed.Equals(_awaitingArg, StringComparison.OrdinalIgnoreCase)
+                && !typed.Equals(order.Name, StringComparison.OrdinalIgnoreCase)) return;
+        }
+        else if (_awaitingArg is null || NowProvider() - _sentAt > ReplyWindow)
+        {
+            return;
+        }
+
         _log?.Info(LogCategory,
-            $"buy refused item={_queue[_active].Name} (\"{m.Text.Trim()}\") — stopping this ware");
+            $"buy refused item={order.Name} (\"{m.Text.Trim()}\") — stopping this ware");
+        _awaitingArg = null;
         _active++;
         PumpActive();
     }
@@ -261,6 +324,7 @@ public sealed class AutoBuyManager : IDisposable
         _boughtSub.Dispose();
         _failedSub.Dispose();
         _refusedSub.Dispose();
+        _notInShopSub.Dispose();
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

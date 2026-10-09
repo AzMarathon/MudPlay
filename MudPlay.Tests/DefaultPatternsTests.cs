@@ -549,6 +549,13 @@ public sealed class DefaultPatternsTests
         Assert.False(PatternById(KnownPatterns.RoomEntryArrival).TryMatch(Line(line), out _));
     }
 
+    // The departure form shown to the room being left is not an arrival.
+    [Theory]
+    [InlineData("You notice Bob sneaking out to the east.")]
+    [InlineData("You notice Bob sneaking out upwards.")]
+    public void SneakArrivalRegex_IgnoresTheSneakingOutForm(string line)
+        => Assert.False(PatternById(KnownPatterns.SneakArrivalNotice).TryMatch(Line(line), out _));
+
     // The room's line for a player's death: "has died." on record, "is dead." from
     // the Stock engine.
     [Theory]
@@ -560,6 +567,13 @@ public sealed class DefaultPatternsTests
         Assert.Equal("Raijin", r.Groups[0]);
     }
 
+    // A monster's own death sentence can end the same way; it names no one.
+    [Theory]
+    [InlineData("The roc hatchling lets out a squeal, and is dead.")]
+    [InlineData("The crazed lunatic hugs his dead cat, and dies.")]
+    public void PartyMemberDiedRegex_IgnoresAMonstersDeathSentence(string line)
+        => Assert.False(PatternById(KnownPatterns.PartyMemberDied).TryMatch(Line(line), out _));
+
     // A Stock `buy` that bought nothing, for a reason other than the price.
     [Theory]
     [InlineData("You cannot buy rope and grapple here!")]
@@ -568,6 +582,28 @@ public sealed class DefaultPatternsTests
     [InlineData("A strange force stops you from getting this item.")]
     public void UserBuyRefusedRegex_MatchesTheStockRefusals(string line)
         => Assert.True(PatternById(KnownPatterns.UserBuyRefused).TryMatch(Line(line), out _));
+
+    // What each refusal names, so a consumer can tell whose buy it answers.
+    [Theory]
+    [InlineData("You cannot buy rope and grapple here!", "rope and grapple", "")]
+    [InlineData("rope is not a known item.", "", "rope")]
+    [InlineData("You cannot carry that much!", "", "")]
+    [InlineData("A strange force stops you from getting this item.", "", "")]
+    public void UserBuyRefusedRegex_CarriesTheWareOrTheTypedWords(string line, string ware, string typed)
+    {
+        Assert.True(PatternById(KnownPatterns.UserBuyRefused).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(ware, r.Groups[0]);
+        Assert.Equal(typed, r.Groups[1]);
+    }
+
+    [Fact]
+    public void UserBuyNotInShopRegex_MatchesTheEnginesLine()
+    {
+        Assert.True(PatternById(KnownPatterns.UserBuyNotInShop).TryMatch(
+            Line("You cannot BUY if you are not in a shop!"), out _));
+        Assert.False(PatternById(KnownPatterns.UserBuyNotInShop).TryMatch(
+            Line("You cannot SELL if you are not in a shop!"), out _));
+    }
 
     [Theory]
     [InlineData("You cannot afford rope and grapple.")]       // UserBuyFailed's
@@ -594,12 +630,25 @@ public sealed class DefaultPatternsTests
     public void MovementFailedStuckRegex_MatchesHeldAndStunned(string line)
         => Assert.True(PatternById(KnownPatterns.MovementFailedStuck).TryMatch(Line(line), out _));
 
-    [Fact]
-    public void RealmExitInterruptedRegex_MatchesTheCalledOffWait()
-    {
-        Assert.True(PatternById(KnownPatterns.RealmExitInterrupted).TryMatch(
-            Line("Your meditation has been interrupted - you may not exit now!"), out _));
-        Assert.False(PatternById(KnownPatterns.RealmExitInterrupted).TryMatch(
-            Line("You may not perform any commands while waiting to exit!"), out _));
-    }
+    // The `hide` refusals share the opening words and are no failed move.
+    [Theory]
+    [InlineData("You can't seem to move anywhere to hide!")]
+    [InlineData("You are too stunned to move anywhere to hide!")]
+    public void MovementFailedStuckRegex_IgnoresTheHideRefusals(string line)
+        => Assert.False(PatternById(KnownPatterns.MovementFailedStuck).TryMatch(Line(line), out _));
+
+    // The line on a row of its own, and on the end of the wait's row of dots, which
+    // the game prints without a line end.
+    [Theory]
+    [InlineData("Your meditation has been interrupted - you may not exit now!")]
+    [InlineData("................Your meditation has been interrupted - you may not exit now!")]
+    public void RealmExitInterruptedRegex_MatchesTheCalledOffWait(string line)
+        => Assert.True(PatternById(KnownPatterns.RealmExitInterrupted).TryMatch(Line(line), out _));
+
+    [Theory]
+    [InlineData("You may not perform any commands while waiting to exit!")]
+    [InlineData("................")]
+    [InlineData("Bob says \"Your meditation has been interrupted - you may not exit now!\"")]
+    public void RealmExitInterruptedRegex_IgnoresTheWaitsOtherLines(string line)
+        => Assert.False(PatternById(KnownPatterns.RealmExitInterrupted).TryMatch(Line(line), out _));
 }

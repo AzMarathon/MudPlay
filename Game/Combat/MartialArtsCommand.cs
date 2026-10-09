@@ -23,4 +23,10 @@ public static class MartialArtsCommand
                 return true;
         return false;
     }
+
+    // `ki` looks like kick typed short and was once recommended for it, but the
+    // game takes kick from `kic`: sent as an attack, `ki <monster>` does nothing.
+    public static bool IsDeadKickLead(string? attackCommand) =>
+        !string.IsNullOrWhiteSpace(attackCommand)
+        && attackCommand.Trim().Split(' ', 2)[0].Equals("ki", StringComparison.OrdinalIgnoreCase);
 }

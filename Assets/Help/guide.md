@@ -2813,7 +2813,7 @@ You can edit **several boards in one visit**: click between them freely and ever
 - the server going silent long enough for the No-response check above to flag it dead;
 - the BBS's scheduled nightly cleanup finishing.
 
-"After Cleanup" is a two-part behavior: it also makes MudPlay proactively exit the realm and drop the connection *before* the BBS forcibly disconnects it, once a "shutting down soon" warning is seen. It waits for a safe room (no hostiles, not mid-fight), sends the exit command, and drops the carrier the moment the game confirms your character has been saved — so it disconnects cleanly regardless of which menu your board drops you to after leaving the realm. If something attacks you during the exit wait the game calls the exit off (`Your meditation has been interrupted - you may not exit now!`); MudPlay then waits for a safe room again and sends the exit once more.
+"After Cleanup" is a two-part behavior: it also makes MudPlay proactively exit the realm and drop the connection *before* the BBS forcibly disconnects it, once a "shutting down soon" warning is seen. It waits for a safe room (no hostiles, not mid-fight), sends the exit command, and drops the carrier the moment the game confirms your character has been saved — so it disconnects cleanly regardless of which menu your board drops you to after leaving the realm. If something attacks you during the exit wait the game calls the exit off (`Your meditation has been interrupted - you may not exit now!`); MudPlay then waits until the room has stayed safe for a full combat round and sends the exit again. If the exit is called off three times it stops waiting (whatever stops it isn't something the safe-room check can see): it re-sends the exit once and drops the connection on the timeout.
 **Important notes:** "Server stops responding" fires once MudPlay detects the connection is dead — the "No-response (s)" value above sets how quickly that happens (even at `0`, a hung server is caught within about 60 seconds). "After Cleanup" depends on the "Cleanup wait (m)" field below to know how long to wait before redialing.
 
 ### Cleanup wait (m)
@@ -3052,7 +3052,7 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 
 **Default:** `a` (both)
 **What it does:** The literal command word MudPlay sends each round to attack — `a` is the standard MajorMUD attack alias. The Alternate command is used instead whenever you're swinging your configured alternate weapon, since some off-hand or two-handed weapons want a different verb.
-**When you might change it:** Only if your class or realm uses a non-standard attack word. A Mystic sets it to a martial-arts strike: `punch`, `kick` or `jumpkick`, usually typed short (`pu`, `ju`; kick is `kic` at the shortest, since the game doesn't take `ki`).
+**When you might change it:** Only if your class or realm uses a non-standard attack word. A Mystic sets it to a martial-arts strike: `punch`, `kick` or `jumpkick`, usually typed short (`pu`, `ju`; kick is `kic` at the shortest, since the game doesn't take `ki`). A saved `ki` is still sent as you set it, and the program log warns that it does nothing.
 
 **Monsters that need magic to hit.** Some monsters can only be hurt by an attack with enough *hit magic*. Before it fights one, MudPlay checks whether your attack can hurt it, and leaves alone (walks past) a monster nothing you have can damage. What it weighs:
 

@@ -653,12 +653,17 @@ public static class DefaultPatterns
         // an item that can't be taken (too heavy or no free pack slot, and the
         // engine's own refusal). The last two also answer a `get`, so a consumer
         // reads them only while a buy of its own is out (GAME_MECHANICS "Buy /
-        // sell result lines").
+        // sell result lines"). Groups: [0] the ware named as out of stock, [1]
+        // the words echoed as unknown; both empty for the two nameless lines.
         yield return new RegexPattern(KnownPatterns.UserBuyRefused,
-            @"^(?:You cannot buy .+ here!"
-            + @"|.+ is not a known item\."
+            @"^(?:You cannot buy (?<item>.+) here!"
+            + @"|(?<typed>.+) is not a known item\."
             + @"|You cannot carry that much!"
             + @"|A strange force stops you from getting this item\.)$");
+        // A `buy` sent in a room that is no shop (and has no command of its own
+        // for the word).
+        yield return new RegexPattern(KnownPatterns.UserBuyNotInShop,
+            @"^You cannot BUY if you are not in a shop!$");
         yield return new RegexPattern(KnownPatterns.UserSellRefused,
             @"^You cannot sell (?<item>.+) here\.$");
 
@@ -872,8 +877,10 @@ public static class DefaultPatterns
         yield return new RegexPattern(KnownPatterns.RealmExitWaiting,
             @"^You may not perform any commands while waiting to exit!");
         // An attack (or, on Stock, `break`) called the wait off: still in the game.
+        // The wait's dots are printed without a line end, so with nothing typed
+        // during the wait the line can arrive on the end of their row.
         yield return new RegexPattern(KnownPatterns.RealmExitInterrupted,
-            @"^Your meditation has been interrupted - you may not exit now!");
+            @"^\.*Your meditation has been interrupted - you may not exit now!");
         // The wait is counted out as a row of dots, built up one at a time, on both
         // realms.
         yield return new RegexPattern(KnownPatterns.RealmExitDots, @"^\.{2,}$");

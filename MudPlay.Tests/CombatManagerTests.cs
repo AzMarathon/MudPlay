@@ -815,6 +815,52 @@ public sealed class CombatManagerTests
         Assert.Equal("attack giant rat", h.LastSent);
     }
 
+    // `ki` was once the recommended short form of kick and the game doesn't take
+    // it. The command still goes out as set; the log says why nothing happens,
+    // once, not at every swing.
+    [Fact]
+    public void AttackCommandKi_SentAsSet_AndWarnedOnce()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "ki";
+        h.AddMonster(1, "giant rat", killable: true);
+
+        static bool IsKiWarning(LogEntry e) =>
+            e.Severity == LogSeverity.Warn && e.Message.Contains("`ki`") && e.Message.Contains("`kic`");
+        int KiSwings() => h.Sent.Count(b => Encoding.Latin1.GetString(b) == "ki giant rat\r");
+
+        // Several swings in one connection: each kill is followed by a fresh rat.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("ki giant rat", h.LastSent);
+        h.Combat.NoteUnattributedDeath();
+        h.Feed("Also here: giant rat.");
+        h.Combat.NoteUnattributedDeath();
+        h.Feed("Also here: giant rat.");
+        Assert.True(KiSwings() >= 2, $"expected repeated swings, saw {KiSwings()}");
+        Assert.Equal(1, h.Log.Snapshot().Count(IsKiWarning));
+
+        // A new connection says it again, once.
+        h.Combat.OnDisconnected();
+        int before = KiSwings();
+        h.Feed("Also here: giant rat.");
+        Assert.True(KiSwings() > before);
+        Assert.Equal(2, h.Log.Snapshot().Count(IsKiWarning));
+    }
+
+    [Theory]
+    [InlineData("ki", true)]
+    [InlineData("KI", true)]
+    [InlineData("ki giant rat", true)]
+    [InlineData("kic", false)]
+    [InlineData("kick", false)]
+    [InlineData("k", false)]
+    [InlineData("kill", false)]
+    [InlineData("a", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void MartialArtsCommand_KnowsTheKickLeadTheGameDoesNotTake(string? command, bool dead) =>
+        Assert.Equal(dead, MartialArtsCommand.IsDeadKickLead(command));
+
     [Fact]
     public void BlankAttackCommand_DefaultsToLetterA()
     {

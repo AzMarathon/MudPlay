@@ -6960,6 +6960,8 @@ public sealed class AppServices
             // respawn-pending), so it can key its owed search and clear a search
             // deferred in the room we died in (report paradigm-20260820-090736).
             AutoSearch.OnRoomChanged(t.NewRoom?.Key);
+            // A buy queue is for the shop it was read in; a death leaves that room too.
+            AutoBuy.OnRoomChanged();
             if (t.NewRoom is null) return;   // the other engines have nothing to do on death
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();

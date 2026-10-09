@@ -378,6 +378,7 @@ public static class KnownPatterns
     // strange force stops you from getting this item." The last two name no item and
     // answer a `get` as well.
     public const string UserBuyRefused    = "item.user-buy-refused";
+    public const string UserBuyNotInShop  = "item.user-buy-not-in-shop"; // "You cannot BUY if you are not in a shop!"
     public const string UserSellRefused   = "item.user-sell-refused";// "You cannot sell X here."
 
     // ----- Room light ----------------------------------------------------

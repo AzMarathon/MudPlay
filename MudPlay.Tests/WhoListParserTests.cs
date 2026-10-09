@@ -141,6 +141,29 @@ public sealed class WhoListParserTests
         Assert.Null(FindByGiven(db, "Ivy").Role);
     }
 
+    // Only a trailing EDITED is the engine's word. The same letters inside a gang's
+    // name are the gang's.
+    [Fact]
+    public void GangContainingTheWordEdited_IsKeptWhole()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            "         Current Adventurers",
+            "         ===================",
+            "",
+            "         Barry                 -  Menace of The EDITED Ones",
+            "         Titus Anaga           -  Grunt of EDITED",
+            "         Xeeg Stat             -  Cutthroat of UNEDITED",
+            "",
+        }, Now);
+
+        Assert.Equal(3, db.Players.Count);
+        AssertHas(db, given: "Barry", family: "",      align: "Neutral", title: "Menace",    gang: "The EDITED Ones");
+        AssertHas(db, given: "Titus", family: "Anaga", align: "Neutral", title: "Grunt",     gang: "EDITED");
+        AssertHas(db, given: "Xeeg",  family: "Stat",  align: "Neutral", title: "Cutthroat", gang: "UNEDITED");
+    }
+
     private static PlayerRecord FindByGiven(PlayerDatabase db, string given)
     {
         foreach (PlayerRecord p in db.Players)

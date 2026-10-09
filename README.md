@@ -6,10 +6,10 @@
 > - A player seen sneaking in is read on Stock too (`You notice <name> sneak in from the <dir>.`)
 > - A party member's death is read from Stock's `<name> is dead.` as well as `<name> has died.`
 > - `who` on Stock: a row ending in `EDITED` no longer carries the word into the title or gang
-> - A martial-arts strike is told by the game's own short forms: kick from `kic`, not `ki`
+> - A martial-arts strike is told by the game's own short forms: kick from `kic`, not `ki` (a saved `ki` draws a warning in the log)
 > - A typed `sm` no longer counts as taking the round's attack (smash starts at `sma`), and `aa <direction>` is a door bash like `bash <direction>`
-> - Auto-buy moves on to the next ware when a buy is refused as out of stock, not sold here or too much to carry
-> - Cleanup log-off: an exit called off by an attack waits for a safe room and exits again instead of dropping the connection mid-fight
+> - Auto-buy moves on to the next ware when a buy is refused as out of stock, not sold here or too much to carry, and drops its queue on leaving the shop
+> - Cleanup log-off: an exit the game calls off waits for the room to stay safe for a round and exits again, up to three times, instead of dropping the connection mid-fight
 > - A stunned follower left behind on Stock asks the leader to come back
 > - Five more fixed Stock game replies are kept out of the unrecognized-lines list
 >
