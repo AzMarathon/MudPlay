@@ -1616,9 +1616,10 @@ public static class BugReportBuilder
         Kv(sb, "Last cast-on-walk teleport", svc.RoomTracker.LastCastLanding is { } cast
             ? $"{cast.From} → {cast.Landing} at {cast.At.ToLocalTime():HH:mm:ss} ({cast.Basis})"
             : "(none this session)");
-        // The landing is booked off the room passed through and then asked for; a
-        // roster or loot read that never happened there shows as this still set.
-        Kv(sb, "Cast-on-walk landing booked, its room not shown yet", svc.RoomTracker.CastLandingAwaitsDisplay.ToString());
+        // The landing is booked off the room passed through and the game shows it
+        // next; a roster or loot read that never happened there shows as this still
+        // set (it clears on that display, or on the wait for it running out).
+        Kv(sb, "Cast-on-walk landing booked, its own display still to come", svc.RoomTracker.CastLandingAwaitsDisplay.ToString());
         // RoomTracker anchors its timestamps in UTC (DateTimeOffset.UtcNow); the
         // rest of the report uses local .Now. The two are the same absolute
         // instant so all the tracker's comparisons work either way, but printing
