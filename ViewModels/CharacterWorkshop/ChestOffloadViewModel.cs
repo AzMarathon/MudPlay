@@ -22,7 +22,9 @@ namespace MudPlay.ViewModels.CharacterWorkshop;
 // (which lives on past the Workshop and is saved on the profile) — open the containers
 // you're holding, see the coin and items the chests gave grouped into the fewest shops
 // with a charm picker and per-item sell quantities, and sell (walking to the shop first
-// when you aren't standing in it), drop, or take items off the list.
+// when you aren't standing in it), drop, or take items off the list. A Drop is a
+// discard, so it goes out as the auto-discard engine's would: hidden instead when
+// Settings → Other "Hide items when discarding" is on.
 public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 {
     public const string SectionId = "chestoffload";
@@ -48,9 +50,12 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private readonly MovementFilter _movement;
     private readonly CurrencyNaming _naming;
     private readonly Action<string> _send;
-    // Drops go out through the sweeps' pacer: a whole shop group of copies, one
-    // `drop` per copy on Stock, would otherwise overflow the game's command queue.
+    // Discards go out through the sweeps' pacer: a whole shop group of copies, one
+    // `drop` or `hide` per copy on Stock, would otherwise overflow the game's
+    // command queue.
     private readonly Action<IReadOnlyList<string>> _sendPaced;
+    // Owns the hide-or-drop choice for a discard, and words the command.
+    private readonly AutoDiscardManager _discard;
     private readonly Action<RoomKey> _queueWalk;
     private readonly ChestSellTour _tour;
     // Walking time for a number of steps (Auto-Lair's live travel model).
@@ -68,7 +73,8 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
 
     [ObservableProperty] private int _charm;
     [ObservableProperty] private string _sellTotal = "—";
-    // What a Sell is doing when it isn't instant: walking to the shop, or why it stopped.
+    // What a Sell is doing when it isn't instant: walking to the shop, or why it
+    // stopped. Also where a refused hide is named.
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSellStatus))] private string _sellStatus = "";
     public bool HasSellStatus => SellStatus.Length > 0;
     [ObservableProperty] private bool _isTourRunning;
@@ -92,6 +98,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         AppServices.Current.Currency,
         cmd => AppServices.Current.SendGameCommand(cmd), AppServices.Current.QueueWalkTo,
         cmds => AppServices.Current.InventoryAction.SendPaced(cmds),
+        AppServices.Current.AutoDiscard,
         AppServices.Current.ChestOpens, AppServices.Current.ChestSellTour,
         hops => AppServices.Current.AutoLair.TravelCostModel.EstimateTravel(hops))
     { }
@@ -101,10 +108,12 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         ItemNameStore itemNames, PlayerStats stats, GameDataCache gameData,
         RoomTracker tracker, BfsMapper bfs, MovementFilter movement, CurrencyNaming naming,
         Action<string> send, Action<RoomKey> queueWalk,
-        Action<IReadOnlyList<string>> sendPaced, ChestOpenTracker chests, ChestSellTour tour,
+        Action<IReadOnlyList<string>> sendPaced, AutoDiscardManager discard,
+        ChestOpenTracker chests, ChestSellTour tour,
         Func<int, TimeSpan> hopEta)
     {
         _sendPaced = sendPaced;
+        _discard = discard;
         _chests = chests;
         _inventory = inventory;
         _shops = shops;
@@ -129,10 +138,12 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         _sellStatus = _tour.Status;
         _isTourRunning = _tour.IsRunning;
         _sayLootToRoom = _chests.SayLootToRoom;
-        // Reconcile the list against the game's OWN confirmed sell/drop lines, so a
-        // refused sale changes nothing and a partial one reduces only that item.
+        // Reconcile the list against the game's OWN confirmed sell/drop/hide lines, so
+        // a refused sale changes nothing and a partial one reduces only that item.
         _inventory.ItemSold += OnItemSold;
         _inventory.ItemDropped += OnItemDropped;
+        _inventory.ItemHidden += OnItemHidden;
+        _discard.HideRefused += OnHideRefused;
 
         // Test-only "Simulate Chest" button, revealed by the Log pane's "Simulate
         // Chest button" toggle (session-only, off by default). Mirror its live value.
@@ -172,9 +183,9 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     }
 
     // The tracker's list changed as a whole (an open settled, a row was taken off, the
-    // list was cleared). Sells and drops don't come through here — they reconcile row
-    // by row (OnItemSold / OnItemDropped) so the user's sell quantities and ⇄ shop
-    // moves survive. Simulated chests keep their own view.
+    // list was cleared). Sells, drops and hides don't come through here — they
+    // reconcile row by row (OnItemSold / OnItemDropped / OnItemHidden) so the user's
+    // sell quantities and ⇄ shop moves survive. Simulated chests keep their own view.
     private void OnChestsChanged()
     {
         SayLootToRoom = _chests.SayLootToRoom;   // a profile swap brings its own setting
@@ -189,26 +200,49 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // The game confirmed a sale of `count` of `name` (the player's own "You sold …").
     // Reduce that row and drop it at zero, leaving every other row's edits intact.
     private void OnItemSold(string name, int count, long _)
-        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, sold: true));
+        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, Departure.Sold));
 
     // The game confirmed a drop of `count` of `name` (the player's own "You dropped …").
     private void OnItemDropped(string name, int count)
-        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, sold: false));
+        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, Departure.Dropped));
 
-    private void ReconcileConfirmed(string name, int count, bool sold)
+    // The game confirmed a hide (the player's own "You hid …"). Unlike the sale and
+    // drop events this one carries the echo whole, so Paradigm's count is split off.
+    private void OnItemHidden(string item)
+    {
+        (int count, string name) = CountedCommand.SplitLeadingCount(item);
+        Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, Departure.Hidden));
+    }
+
+    // A full room refused a hide. The row is left as it is (nothing confirmed, so
+    // the item is still carried) and nothing is dropped in its place: a plain drop
+    // would leave in the open what the player asked to have concealed.
+    private void OnHideRefused(string name) => Dispatcher.UIThread.Post(() =>
+    {
+        if (_simulating || FindRow(name) is null) return;
+        SellStatus = $"No room to hide {name} here — this room can't hold any more hidden items. " +
+                     "It's still in your pack; try again in another room.";
+        _log?.Info(LogCategory, $"hide of {name} refused (no room to hide it here) — row kept, not dropped instead");
+    });
+
+    // How a listed item left the pack, by the game's own confirmation.
+    private enum Departure { Sold, Dropped, Hidden }
+
+    private void ReconcileConfirmed(string name, int count, Departure how)
     {
         if (_simulating || count <= 0) return;
+        string did = how.ToString().ToLowerInvariant();
         if (FindRow(name) is not (ChestOffloadShopGroup group, ChestOffloadItemRow row))
         {
             _log?.Debug(LogCategory,
-                $"{(sold ? "sold" : "dropped")} {count} {name} — no matching offload row (already reconciled or not from a chest)");
+                $"{did} {count} {name} — no matching offload row (already reconciled or not from a chest)");
             return;
         }
 
         int before = row.Gained;
-        bool empty = sold ? row.ApplySold(count) : row.ApplyDropped(count);
+        bool empty = how == Departure.Sold ? row.ApplySold(count) : row.ApplyDiscarded(count);
         _log?.Info(LogCategory,
-            $"{(sold ? "sold" : "dropped")} {count} {name} confirmed — held {before}→{row.Gained}" +
+            $"{did} {count} {name} confirmed — held {before}→{row.Gained}" +
             (empty ? " (row cleared)" : $", sell qty now {row.SellQty}"));
 
         if (empty)
@@ -616,17 +650,24 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private ChestOffloadShopGroup? GroupOf(ChestOffloadItemRow item)
         => ShopGroups.FirstOrDefault(g => g.Items.Contains(item));
 
-    // Drop this one item's whole held stack (the per-item counterpart to a shop's
-    // Drop All, which drops every item's stack). The row is NOT removed here — it
-    // reconciles when the game's "You dropped …" lands (ReconcileConfirmed), so a
-    // blocked drop leaves the plan intact.
+    // Discard this one item's whole held stack (the per-item counterpart to a shop's
+    // Drop All, which discards every item's stack). The row is NOT removed here — it
+    // reconciles when the game's "You dropped …" / "You hid …" lands
+    // (ReconcileConfirmed), so a blocked discard leaves the plan intact.
     private void DropItem(ChestOffloadItemRow item)
     {
         if (item.Gained <= 0) return;
-        _log?.Info(LogCategory, $"drop {item.Gained} {item.Name} (whole stack)");
-        List<string> drops = new();
-        CountedCommand.Emit(drops.Add, "drop", item.Gained, item.Name, _gameData.ActiveRealm == RealmType.ParaMud);
-        _sendPaced(drops);
+        List<string> commands = new();
+        QueueDiscard(commands, item);
+        _sendPaced(commands);
+    }
+
+    // Word one row's discard, hide or drop as the auto-discard engine would send
+    // it, and log which it was.
+    private void QueueDiscard(List<string> commands, ChestOffloadItemRow item)
+    {
+        string verb = _discard.EmitDiscard(commands.Add, item.Name, item.Gained);
+        _log?.Info(LogCategory, $"discard {item.Gained} {item.Name} via {verb} (whole stack)");
     }
 
     // Alternate shops that also buy this item, nearest first, minus the one it's in.
@@ -680,20 +721,15 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         OnPropertyChanged(nameof(HasLoot));
     }
 
-    // Drop every item in this shop's listing — the whole held stack of each. The rows
-    // are NOT removed here; each clears when its "You dropped …" confirms, so a blocked
-    // drop stays visible.
+    // Discard every item in this shop's listing — the whole held stack of each. The
+    // rows are NOT removed here; each clears when its "You dropped …" / "You hid …"
+    // confirms, so a blocked discard stays visible.
     private void DropAllGroup(ChestOffloadShopGroup group)
     {
         _log?.Info(LogCategory, $"Drop All '{group.ShopName}' — {group.Items.Count} item(s)");
-        bool paradigm = _gameData.ActiveRealm == RealmType.ParaMud;
-        List<string> drops = new();
-        foreach (ChestOffloadItemRow item in group.Items)
-        {
-            _log?.Info(LogCategory, $"drop {item.Gained} {item.Name} (whole stack)");
-            CountedCommand.Emit(drops.Add, "drop", item.Gained, item.Name, paradigm);
-        }
-        _sendPaced(drops);
+        List<string> commands = new();
+        foreach (ChestOffloadItemRow item in group.Items) QueueDiscard(commands, item);
+        _sendPaced(commands);
     }
 
     private double BaseCopperOf(int number)
@@ -712,6 +748,8 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         _tour.Changed -= OnTourChanged;
         _inventory.ItemSold -= OnItemSold;
         _inventory.ItemDropped -= OnItemDropped;
+        _inventory.ItemHidden -= OnItemHidden;
+        _discard.HideRefused -= OnHideRefused;
         if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
         _log?.Info(LogCategory, "tab closed");
     }

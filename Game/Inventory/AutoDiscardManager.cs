@@ -34,6 +34,11 @@ namespace MudPlay.Game.Inventory;
 // forwarder drop that ledger row while manual / stash-room hides (never
 // registered here) still record.
 //
+// The hide-or-drop choice is one decision for every discard, not only the
+// engine's own: a surface that discards by hand (Chest Offload's Drop buttons)
+// sends through EmitDiscard, so the setting covers it and its hides stay out of
+// the stash ledger the same way.
+//
 // Master switch: AutoActionDefaults.AutoDiscard (shared with the Settings and
 // Action-menu toggle). Runs UI-thread only (MessageRouter + Inventory.Changed
 // both marshal upstream), so the dictionaries need no lock.
@@ -54,18 +59,26 @@ public sealed class AutoDiscardManager : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _dropSub;
     private readonly IDisposable _hideSub;
+    private readonly IDisposable _hideRefusedSub;
 
     // item Number → offloads sent but not yet confirmed by a self
     // "You dropped X." (drop mode) / "You hid X." (hide mode).
     private readonly Dictionary<int, int> _inFlight = new();
 
-    // item Number → engine hides not yet claimed by the transaction-log
-    // forwarder, so an auto-discard hide is kept out of the stash ledger.
+    // item Number → discard hides not yet claimed by the transaction-log
+    // forwarder, so a hide that is a discard is kept out of the stash ledger.
     private readonly Dictionary<int, int> _suppressLog = new();
 
     // When true, offload with hide <item> (conceal on the ground) instead of
     // drop <item>. Live-mirrored from OtherSettings via AppServices ApplyToServices.
     public bool HideMode { get; set; }
+
+    // The verb a discard goes out with right now.
+    public string DiscardVerb => HideMode ? "hide" : "drop";
+
+    // The game refused a hide for want of room ("There is no room to hide X
+    // here."), with the item it named. Raised for any refused hide, typed ones too.
+    public event Action<string>? HideRefused;
 
     // True while a Roomba sweep is underway. Auto-discard is held off for the whole
     // sweep so it can't bin an item Roomba is in the middle of relocating — Roomba
@@ -99,6 +112,7 @@ public sealed class AutoDiscardManager : IDisposable
 
         _dropSub = router.Subscribe(KnownPatterns.PlayerDrops, OnDropLine);
         _hideSub = router.Subscribe(KnownPatterns.UserHides, OnHideLine);
+        _hideRefusedSub = router.Subscribe(KnownPatterns.RoomHideRefused, OnHideRefusedLine);
     }
 
     // Bind the wire sender — the gate-wrapped engine pipeline from
@@ -139,16 +153,33 @@ public sealed class AutoDiscardManager : IDisposable
             if (toDrop <= 0) continue;
 
             _inFlight[number] = inFlight + toDrop;
-            // Hide-mode offloads register so the transaction log can skip them.
-            if (HideMode)
-                _suppressLog[number] = _suppressLog.GetValueOrDefault(number) + toDrop;
-
-            string verb = HideMode ? "hide" : "drop";
-            _log?.Info(LogCategory, $"discard {toDrop}x item={item.Name} via {verb} (keep {item.KeepCount})");
-            // Paradigm offloads the pile in one `{verb} N <item>`; Stock sends one
-            // per copy. The count-prefixed confirmation clears in-flight by N below.
-            CountedCommand.Emit(Send, verb, toDrop, item.Name, _isParadigm());
+            _log?.Info(LogCategory, $"discard {toDrop}x item={item.Name} via {DiscardVerb} (keep {item.KeepCount})");
+            // The count-prefixed confirmation clears in-flight by N below.
+            Offload(Send, number, item.Name, toDrop);
         }
+    }
+
+    // Send a discard of `count` copies of `name` for a surface that discards by
+    // hand, in the engine's own wording: hide or drop by HideMode, counted the way
+    // the realm takes it. Returns the verb used, for the caller's log.
+    public string EmitDiscard(Action<string> send, string name, int count)
+    {
+        ArgumentNullException.ThrowIfNull(send);
+        // A bare `hide` hides the character, not an item.
+        if (string.IsNullOrWhiteSpace(name)) return DiscardVerb;
+        return Offload(send, _resolve(name)?.Number, name, count);
+    }
+
+    // Paradigm offloads the pile in one `{verb} N <item>`; Stock sends one per
+    // copy. A hide registers (when the item is known) so the transaction log can
+    // tell it from a stash.
+    private string Offload(Action<string> send, int? number, string name, int count)
+    {
+        string verb = DiscardVerb;
+        if (HideMode && count > 0 && number is { } n)
+            _suppressLog[n] = _suppressLog.GetValueOrDefault(n) + count;
+        CountedCommand.Emit(send, verb, count, name, _isParadigm());
+        return verb;
     }
 
     // Clear a pending drop when our own "You dropped X." confirmation arrives.
@@ -171,6 +202,19 @@ public sealed class AutoDiscardManager : IDisposable
     {
         if (m.Groups.Count < 1) return;
         ClearInFlight(m.Groups[0]);
+    }
+
+    // A refused hide never earns the "You hid X." that claims its registration, so
+    // release it here: left behind, it would swallow the ledger row of the next
+    // genuine stash of that item. The in-flight count stays, since clearing it
+    // would send the same hide into the same full room on the next inventory change.
+    private void OnHideRefusedLine(MatchResult m)
+    {
+        if (m.Groups.Count < 1) return;
+        string item = m.Groups[0];
+        if (TryConsumeSuppressedHide(item))
+            _log?.Info(LogCategory, $"hide refused, no room to hide {item} here: it stays in the pack");
+        HideRefused?.Invoke(CountedCommand.SplitLeadingCount(item).Name);
     }
 
     // Decrement the in-flight count for the item named in a self drop/hide
@@ -220,5 +264,6 @@ public sealed class AutoDiscardManager : IDisposable
         _disposed = true;
         _dropSub.Dispose();
         _hideSub.Dispose();
+        _hideRefusedSub.Dispose();
     }
 }

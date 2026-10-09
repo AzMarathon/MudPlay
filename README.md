@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.19**
-> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
-> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+> **Version 3.159.20**
+> - Chest Offload's Drop and Drop All hide the items when Settings → Other → Hide items when discarding is ticked, and a hidden item leaves the list
+> - A hide the room has no room for is named in the tab and the log; the item stays in the pack and is not dropped instead
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

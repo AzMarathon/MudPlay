@@ -368,7 +368,7 @@ What the game prints on the wire, including the prompt/statline, the command rat
 **Client use:**
 - Every telepath passes `TelepathPacer`'s 100 ms floor; bulk reply bursts (e.g. `@roomba sync`) go ~800 ms apart via `PacedReplySender`. See *Talk & chat channels → Telepath throttle and per-telepath acknowledgement*.
 - Roomba releases `get`/`drop` at most one per wire prompt AND no faster than an 800 ms floor (`GhSweepManager.MinCommandInterval`). The game's own prompt acts as the meter, so no rate has to be guessed. Because the prompt alone is not sufficient, it is used as a gate on top of a time floor.
-- Get All / Drop All / Hide All, and Chest Offload's drops, go through `BulkCommandPacer`: at most 6 unanswered (two short of the nudge), one more per prompt, 50 ms apart (150 ms until 2026-10-06: report `paradigm-20261006-112434` measured a Drop All and a Get All at about 6.5 commands a second against a gear set's unpaced 14 in a second, none refused; the window is the safeguard, the gap only the top speed). On a rate-limit line it waits 3 s and re-sends nothing, since a second `drop` of a stack would drop another copy. Both realms; Paradigm keeps it until the after-a-move and `hide` tests are in, though idle bursts there need none.
+- Get All / Drop All / Hide All, and Chest Offload's drops (or the hides they become under *Hide items when discarding*), go through `BulkCommandPacer`: at most 6 unanswered (two short of the nudge), one more per prompt, 50 ms apart (150 ms until 2026-10-06: report `paradigm-20261006-112434` measured a Drop All and a Get All at about 6.5 commands a second against a gear set's unpaced 14 in a second, none refused; the window is the safeguard, the gap only the top speed). On a rate-limit line it waits 3 s and re-sends nothing, since a second `drop` of a stack would drop another copy. Both realms; Paradigm keeps it until the after-a-move and `hide` tests are in, though idle bursts there need none.
 
 ### Direction words on the wire: a filler letter and a backspace
 *Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*
@@ -6108,6 +6108,11 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - `@hide-all [full|coins|keys]` and the Hide All / Hide Everything / Hide Coins / Hide Keys actions
   (`InventoryActionHandler.HideAll`) run the Drop All sweeps with `hide`, always naming the item or coin
   — never a bare `hide`, which would hide the character instead.
+- A discard goes out as `hide <item>` instead of `drop <item>` when Settings → Other *Hide items when
+  discarding* is on: `AutoDiscardManager`'s own offloads, and Chest Offload's Drop / Drop All
+  (`ChestOffloadViewModel`, through `AutoDiscardManager.EmitDiscard`; the offload sent a plain `drop`
+  until 2026-10-09). The `You hid …` confirmation takes the item off the Chest Offload list
+  (`ChestOpenTracker`), as `You dropped …` does.
 
 ### Room item capacity: drop refusal
 *Status: CONFIRMED 2026-09-02 (user, live capture); per-object stacking 2026-09-03 (user); capacity + stacking rule [OBSERVED] `wccmmud.dll` 1.11p `_add_item_to_room`, CONFIRMED 2026-09-27 (user); realm CONFIRMED 2026-09-26 (user) · Realm: Stock — Paradigm rooms have no item cap*
@@ -6139,6 +6144,11 @@ There is no room to drop amethyst pendant here.
 - **The mark is per-sweep**: a full room is only full until someone loots it.
 - **The sweep is correct but conservative.** It treats a refusal as "this room is full for everything" and re-targets the whole batch, so it gives up on stackable items that would have fitted.
 - **The stacking retry isn't built yet.** Now that the rule is known, the sweep could retry an item that already has a pile in that room's survey (and carries no uses value) before re-targeting it.
+
+**Client use (discards that hide):**
+- `There is no room to hide <item> here.` is matched as `KnownPatterns.RoomHideRefused`. `AutoDiscardManager` raises `HideRefused` on it and releases that hide's Transaction-history exemption, since no `You hid …` will come to claim it.
+- **Client policy:** a refused hide is never re-sent as a `drop` (2026-10-09; not yet put to the user). Chest Offload keeps the row, leaves the item in the pack, and names the refusal on its status line and in the program log (`ChestOffloadViewModel.OnHideRefused`).
+- `[NEEDS CONFIRMATION]` Whether the hide refusal names the item's full canonical name, as the drop refusal does, isn't recorded. The client sends the full name, so its own hides match either way.
 
 ### The `i` listing and carried weight
 *Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*

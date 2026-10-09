@@ -88,7 +88,7 @@
                                   Margin="12,0,0,0" VerticalAlignment="Center"
                                   ToolTip.Tip="Ticked: after each chest is opened (from this tab or by typing), its items and coin are said to the room, so everyone there knows what came out. Off unless you tick it; saved with the character."/>
                         <Button Content="Clear list" Command="{Binding ClearListCommand}" Margin="6,0,0,0"
-                                ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped or taken off with ✕, even if you close the Workshop."/>
+                                ToolTip.Tip="Empty the list and the coin tally — the items stay in your pack. The list otherwise keeps until each item is sold, dropped, hidden or taken off with ✕, even if you close the Workshop."/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
@@ -150,7 +150,7 @@
                                                     Margin="0,0,6,0"
                                                     ToolTip.Tip="Sell every item's quantity below at this shop — walks there first when you aren't standing in it. Never sells more than the chests gave."/>
                                             <Button Grid.Column="3" Content="Drop All" Command="{Binding DropAllCommand}"
-                                                    ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan"/>
+                                                    ToolTip.Tip="Drop every item in this shop's listing and remove it from the sell plan. With Settings → Other → Hide items when discarding ticked, they are hidden in the room instead of dropped."/>
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Items}">
                                             <ItemsControl.ItemTemplate>
@@ -213,7 +213,7 @@
                                                                 ToolTip.Tip="Sell the quantity picked above at this item's shop — walks there first when you aren't standing in it. The row updates when the game confirms the sale — a refused sale changes nothing."/>
                                                         <Button Grid.Column="6" Content="Drop" Command="{Binding DropCommand}"
                                                                 Margin="0,0,6,0"
-                                                                ToolTip.Tip="Drop this item's whole held stack. The row updates when the game confirms the drop."/>
+                                                                ToolTip.Tip="Drop this item's whole held stack — hidden in the room instead when Settings → Other → Hide items when discarding is ticked. The row updates when the game confirms the drop or the hide; a refused one changes nothing."/>
                                                         <Button Grid.Column="7" Content="✕" Command="{Binding RemoveCommand}"
                                                                 ToolTip.Tip="Take this item off the list — it stays in your pack"/>
                                                     </Grid>

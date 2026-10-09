@@ -283,4 +283,111 @@ public sealed class AutoDiscardManagerTests
         // Drop-mode offloads aren't hides, so nothing is suppressed from the log.
         Assert.False(h.Discard.TryConsumeSuppressedHide("dagger"));
     }
+
+    // ----- discards sent by hand (Chest Offload's Drop buttons) ----------
+
+    [Fact]
+    public void EmitDiscard_DropMode_SendsDropPerCopy()
+    {
+        using Harness h = new();   // HideMode defaults off
+        h.Map("moonstone", 7, discard: false);
+        List<string> sent = new();
+
+        string verb = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
+
+        Assert.Equal("drop", verb);
+        Assert.Equal(new[] { "drop moonstone", "drop moonstone" }, sent);
+        Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
+    }
+
+    [Fact]
+    public void EmitDiscard_HideMode_SendsHide_ForAnItemNotFlaggedForDiscard()
+    {
+        // The reported miss: a Drop from Chest Offload went out as `drop` with
+        // "Hide items when discarding" ticked. Chest loot isn't flagged for
+        // auto-discard, and the engine's own switch can be off: neither is part of
+        // the hide-or-drop choice.
+        using Harness h = new();
+        h.Enabled = false;
+        h.Discard.HideMode = true;
+        h.Map("moonstone", 7, discard: false);
+        List<string> sent = new();
+
+        string verb = h.Discard.EmitDiscard(sent.Add, "moonstone", 2);
+
+        Assert.Equal("hide", verb);
+        Assert.Equal(new[] { "hide moonstone", "hide moonstone" }, sent);
+        Assert.Empty(h.Sent);   // nothing goes out on the engine's own sender
+    }
+
+    [Fact]
+    public void EmitDiscard_HideMode_Paradigm_SendsOneCountedHide()
+    {
+        using Harness h = new();
+        h.Paradigm = true;
+        h.Discard.HideMode = true;
+        h.Map("moonstone", 7, discard: false);
+        List<string> sent = new();
+
+        h.Discard.EmitDiscard(sent.Add, "moonstone", 3);
+
+        Assert.Equal(new[] { "hide 3 moonstone" }, sent);
+    }
+
+    [Fact]
+    public void EmitDiscard_HideMode_KeepsItsHidesOutOfTheStashLedger()
+    {
+        using Harness h = new();
+        h.Paradigm = true;
+        h.Discard.HideMode = true;
+        h.Map("moonstone", 7, discard: false);
+
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 3);
+
+        // Paradigm confirms the pile in one counted line; it claims all three.
+        Assert.True(h.Discard.TryConsumeSuppressedHide("3 moonstone"));
+        Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
+    }
+
+    [Fact]
+    public void EmitDiscard_NoName_SendsNothing()
+    {
+        // A bare `hide` would hide the character.
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        List<string> sent = new();
+
+        h.Discard.EmitDiscard(sent.Add, " ", 1);
+
+        Assert.Empty(sent);
+    }
+
+    [Fact]
+    public void RefusedHide_ReleasesItsLedgerClaim_AndIsAnnounced()
+    {
+        using Harness h = new();
+        h.Discard.HideMode = true;
+        h.Map("moonstone", 7, discard: false);
+        List<string> refused = new();
+        h.Discard.HideRefused += refused.Add;
+
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        Assert.Equal(new[] { "moonstone" }, refused);
+        // The hide never happened, so a later stash of the item still records.
+        Assert.False(h.Discard.TryConsumeSuppressedHide("moonstone"));
+    }
+
+    [Fact]
+    public void RefusedDrop_IsNotAHideRefusal()
+    {
+        using Harness h = new();
+        List<string> refused = new();
+        h.Discard.HideRefused += refused.Add;
+
+        h.Feed("There is no room to drop moonstone here.");
+
+        Assert.Empty(refused);
+    }
 }

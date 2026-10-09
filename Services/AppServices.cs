@@ -6604,10 +6604,10 @@ public sealed class AppServices
         Profile.ProfileClosed += () => StashStore.OnRealmChanged(ActiveRealmFolder());
         Inventory.ItemHidden += item =>
         {
-            // An auto-discard offload uses `hide <item>` in HideMode — that's a
-            // discard, not a stash, so it claims its own confirmation here and is
-            // kept out of the ledger. Manual / stash-room hides were never
-            // registered, so they still record.
+            // A discard (an auto-discard offload, a Chest Offload Drop) uses
+            // `hide <item>` in HideMode — that's a discard, not a stash, so it
+            // claims its own confirmation here and is kept out of the ledger.
+            // Manual / stash-room hides were never registered, so they still record.
             if (AutoDiscard.TryConsumeSuppressedHide(item)) return;
             TransactionHistory.NoteStash(
                 Array.Empty<(string, long)>(), new[] { item }, CurrentRoomLabel());
@@ -13515,7 +13515,7 @@ public sealed class AppServices
         TrapDisarm.MaxDisarmAttempts = Math.Clamp(dto.MaxTrapDisarmAttempts, 1, 50);
         // Follower-side auto-@comeback toggle.
         ComebackRequest.Enabled = dto.AutoRequestComebackWhenLeftBehind;
-        // Auto-discard offload verb: hide <item> vs drop <item>.
+        // Discard verb (auto-discard, Chest Offload's drops): hide <item> vs drop <item>.
         AutoDiscard.HideMode = dto.HideWhenDiscarding;
         AutoParty.OnlyWhileNavigating = dto.AutoInviteOnlyWhileNavigating;
     }

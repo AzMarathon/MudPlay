@@ -14,7 +14,7 @@ namespace MudPlay.Game.Inventory;
 // double counting: each open's before is the read after the last one. A second Open
 // click while one is in flight waits its turn; a second chest typed open mid-flight
 // joins whichever diff will see its loot. The list is saved on the character profile and
-// stays until the items are sold, dropped, or the player removes them, so closing
+// stays until the items are sold, dropped, hidden, or the player removes them, so closing
 // the window (or the client) never loses it. UI thread only: line and inventory
 // events arrive through `post`.
 public sealed class ChestOpenTracker : IDisposable
@@ -63,7 +63,7 @@ public sealed class ChestOpenTracker : IDisposable
 
     // The list or the coin changed as a whole (an open settled, a row removed, the
     // list cleared, a full inventory read pruned it, a profile loaded). Confirmed
-    // sales and drops update it quietly — the window reconciles its rows itself.
+    // sales, drops and hides update it quietly — the window reconciles its rows itself.
     public event Action? Changed;
 
     public ChestOpenTracker(
@@ -84,6 +84,7 @@ public sealed class ChestOpenTracker : IDisposable
         _inventory.FullInventoryParsed += OnFullInventoryParsed;
         _inventory.ItemSold += OnItemSold;
         _inventory.ItemDropped += OnItemDropped;
+        _inventory.ItemHidden += OnItemHidden;
         _typedOpen.OpenSent += OnTypedOpen;
         _profile.ProfileLoaded += OnProfileLoaded;
         LoadFromProfile();
@@ -288,6 +289,14 @@ public sealed class ChestOpenTracker : IDisposable
 
     private void OnItemDropped(string name, int count) => _post(() => TakeOff(name, count));
 
+    // A hidden item has left the pack as surely as a dropped one. The hide echo
+    // comes through whole, so Paradigm's leading count is split off here.
+    private void OnItemHidden(string item)
+    {
+        (int count, string name) = CountedCommand.SplitLeadingCount(item);
+        _post(() => TakeOff(name, count));
+    }
+
     private void TakeOff(string name, int count)
     {
         if (count <= 0 || !_ledger.Remove(name, count)) return;
@@ -353,6 +362,7 @@ public sealed class ChestOpenTracker : IDisposable
         _inventory.FullInventoryParsed -= OnFullInventoryParsed;
         _inventory.ItemSold -= OnItemSold;
         _inventory.ItemDropped -= OnItemDropped;
+        _inventory.ItemHidden -= OnItemHidden;
         _typedOpen.OpenSent -= OnTypedOpen;
         _profile.ProfileLoaded -= OnProfileLoaded;
     }
