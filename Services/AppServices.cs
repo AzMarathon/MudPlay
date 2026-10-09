@@ -592,6 +592,9 @@ public sealed class AppServices
 
     // Recognises an @where reply telepath and flashes its room on the nav map.
     public Game.Remote.WhereReplyTracker WhereReply { get; private set; } = null!;
+
+    // Sends one `i` after a death, when the character stands in a room again.
+    public Game.Inventory.PostDeathInventoryRefresh InventoryAfterDeath { get; private set; } = null!;
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
@@ -866,6 +869,10 @@ public sealed class AppServices
     // relog does NOT suppress the entry automation, so login runs
     // normally on the reconnect.
     public RelogSignal RelogSignal { get; } = new();
+
+    // The board log-off command the player last sent (`;o` to come straight back,
+    // `=x` to stay off), read by ViewModels.MainWindowViewModel at the disconnect.
+    public SentExitCommand SentExit { get; } = new();
 
     // Passive observer for the in-game set suicide /
     // suicide password flows. Locks
@@ -1174,6 +1181,9 @@ public sealed class AppServices
     // CombatTracker's gate decisions and the LogPane's
     // unknown-entity click-to-fix dialog.
     public Game.Combat.RoomEntityClassifier RoomClassifier { get; private set; } = null!;
+
+    // Hangs up when a monster whose relationship is Hangup is on the room roster.
+    public Game.Combat.MonsterHangupWatcher MonsterHangup { get; private set; } = null!;
 
     // Auto-greets newly-seen non-party players (Settings → Talk
     // "Greet players when first met"). Subscribes to
@@ -3250,13 +3260,11 @@ public sealed class AppServices
         // connect — user manually re-enters the realm after reading
         // what's on the screen.
         Hangup = new Game.Remote.HangupHandler(RemoteCommands, GameCommands, HangupSignal);
-        Hangup.SetHangupsDisabledCheck(ReadDisableHangups);
         Hangup.SetHangupPenaltyLog(() => LogHangupPenalty(pvpResponse: false));
         // @relog handler — graceful exit (GameCommands.ExitCommand) +
         // RelogSignal so MainWindowVM forces an unconditional reconnect
         // and the normal login automation logs the character back in.
         Relog = new Game.Remote.RelogHandler(RemoteCommands, GameCommands, RelogSignal);
-        Relog.SetHangupsDisabledCheck(ReadDisableHangups);
         Relog.SetHangupPenaltyLog(() => LogHangupPenalty(pvpResponse: false));
         // @divert handler — subscribes to ChatRouter telepaths and repeats
         // them to a target while diverting. Wire-sender bound in
@@ -3303,16 +3311,16 @@ public sealed class AppServices
         // handler owns the @-command auth boundary. Wire-sender +
         // OtherSettings cadence knobs bind in MainWindowVM /
         // ApplyOtherFromActiveProfile.
-        TrapDisarm = new Game.TrapDisarmManager(Router, PlayerStats, GameData, Log,
-            // UI-thread one-shot, same as the door FSM's response watchdog below.
-            scheduleDelay: (delay, callback) =>
-            {
-                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
-                timer.Tick += (_, _) => { timer.Stop(); callback(); };
-                timer.Start();
-                return new DispatcherTimerHandle(timer);
-            });
-        TrapDelegation = new Game.TrapDelegationManager(Party, Players, GameData, Router, Log);
+        // UI-thread one-shot, same as the door FSM's response watchdog below.
+        Func<TimeSpan, Action, IDisposable> trapDelay = (delay, callback) =>
+        {
+            var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+            timer.Tick += (_, _) => { timer.Stop(); callback(); };
+            timer.Start();
+            return new DispatcherTimerHandle(timer);
+        };
+        TrapDisarm = new Game.TrapDisarmManager(Router, PlayerStats, GameData, Log, scheduleDelay: trapDelay);
+        TrapDelegation = new Game.TrapDelegationManager(Party, Players, GameData, Router, Log, trapDelay);
         // Suppress the race-probe look while a party-splitting-teleport reform is
         // settling — no member looks during that evolution (AutoParty owns the
         // reform lifecycle; a stray look re-strands the resuming walk).
@@ -4093,6 +4101,38 @@ public sealed class AppServices
             lastMoveSentAt: () => RoomTracker.LastMoveSentAt,
             log: Log);
         GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
+        // Built ahead of the combat tracker and engine, like PvpRoom: a monster whose
+        // relationship is Hangup is answered before their handlers can start a fight
+        // in the room. Health, the PvP services and InGameCapture are built further
+        // down, so they are reached through lambdas; a method group would be read
+        // here, while they are still null.
+        MonsterHangup = new Game.Combat.MonsterHangupWatcher(
+            RoomClassifier,
+            resolveOverlay: ResolveMonsterOverlay,
+            hangUp: reason => Health.HangUpForMonster(reason),
+            hangupsDisabled: () =>
+                ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups,
+            // The fight's end re-issues the roster (PvpFight.ActiveChanged, below),
+            // and a player leaving it is a roster event of its own: either is when
+            // a monster held for PvP is answered.
+            pvpHandles: roster => PvpFight.IsActive || PvpResponse.IsAnswering(roster),
+            atBoardMenu: () => InGameCapture.AtBoardMenu,
+            describeRoom: DescribeRosterRoom,
+            // UI-thread one-shot, for the once-a-second countdown of the hold.
+            schedule: (delay, callback) =>
+            {
+                var timer = new Avalonia.Threading.DispatcherTimer { Interval = delay };
+                timer.Tick += (_, _) => { timer.Stop(); callback(); };
+                timer.Start();
+            },
+            log: Log);
+        // The minute's hold after a hang-up from here starts at the first game
+        // prompt once the character is back, and belongs to the character that
+        // hung up.
+        PromptScanner.PromptObserved += _ => MonsterHangup.NoteInGamePrompt();
+        Profile.ProfileLoaded += _ => MonsterHangup.Reset();
+        Profile.ProfileClosed += () => MonsterHangup.Reset();
+        MonsterHangup.HoldNotice += text => WriteTerminalNotice($"[{text}]");
         // Another player's room attack shows as a line, not a room observation, so
         // nothing re-asks the combat gate on its own. Posted: the line is still being
         // dispatched, and the re-check can send a break.
@@ -5327,6 +5367,9 @@ public sealed class AppServices
             Walker.State == Game.Map.WalkState.Walking
             && LoopRunner.State == Game.Map.LoopState.Idle
             && !AutoLair.IsActive);
+        // A Hangup-relationship monster is fought back only while no hang-up will
+        // come for it.
+        Combat.SetHangupWatchOffProbe(() => MonsterHangup.WatchIsOff);
         // A fresh hide re-arms the surprise round for the stationary hidden opener:
         // when the FSM latches Hidden, re-open so a monster that wanders in is a
         // genuine backstab target again (no gear swap — equipping would break hide).
@@ -5765,10 +5808,20 @@ public sealed class AppServices
         OutboundMovement.AtBoardMenu = () => InGameCapture.AtBoardMenu;
         InGameCapture.AtBoardMenuChanged += atMenu =>
         {
-            if (!atMenu) { EngineGate.Release(BoardMenuHold); return; }
+            if (!atMenu)
+            {
+                EngineGate.Release(BoardMenuHold);
+                // The room is displayed ahead of the first prompt on the way back
+                // in: a Hangup monster read off it while still "at the menu" is
+                // answered now.
+                MonsterHangup.NoteBackInGame();
+                return;
+            }
             EngineGate.Hold(BoardMenuHold);
             MessageCandidateWatcher.NotifyLeftForMenu();
             StatlineReconcile.Arm();
+            // Whoever was in the room is not known to be there on the way back in.
+            RoomClassifier.NoteGameLeft();
         };
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.
@@ -8181,6 +8234,23 @@ public sealed class AppServices
         // concern is the movement engines) since the reset spans all conditions.
         RoomTracker.PlayerDeathObserved += () => Conditions.ClearAll("death");
 
+        // The death record has taken its copy of the pile by the time this is raised,
+        // so the inventory record can be marked stale here and re-read at the graveyard.
+        InventoryAfterDeath = new Game.Inventory.PostDeathInventoryRefresh(
+            markStale: Inventory.MarkStale,
+            requestInventory: () =>
+            {
+                Log.Info(Game.Inventory.InventoryManager.LogCategory,
+                    "Re-reading the inventory after a death: what was worn and carried went with the pile.");
+                SendGameCommand("i");
+            });
+        RoomTracker.PlayerDeathObserved += InventoryAfterDeath.OnDeath;
+        RoomTracker.StateChanged += _ =>
+        {
+            if (RoomTracker.State.CurrentRoom is not null) InventoryAfterDeath.OnRoomKnown();
+        };
+        Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
+
         // A held or knocked-down character can't walk and isn't dragged by a leader,
         // so a move that lands proves a latched hold is stale (its wear-off line was
         // missed). Without this the walker sits "Paused by: Held" and the hold cure
@@ -9964,20 +10034,25 @@ public sealed class AppServices
         return false;
     }
 
-    // Live read of the master "Disable hangups" kill-switch from the
-    // char-tier General section — the same store the toolbar toggle
-    // writes. Wired into every automatic-hangup site (HangupHandler,
-    // RelogHandler, CleanupLogout; HealthManager reads it through its own
-    // General-settings provider) so flipping the toggle takes effect
-    // without restarting an engine.
-    private bool ReadDisableHangups() =>
-        ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups;
+    // Where a room roster was read, for a log line. A room display prints its
+    // "Also here:" line ahead of the exits line that confirms the move, so with a
+    // move in flight the tracked room is still the one we were leaving, and the
+    // roster may belong to either.
+    private string DescribeRosterRoom()
+    {
+        if (RoomTracker.State.CurrentRoom is not { } room) return "in an unknown room";
+        string named = $"{room.Name} ({room.Key})";
+        return RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+            ? $"at {named} or the room one move on (a move was not yet confirmed)"
+            : $"in {named}";
+    }
 
     // Says in the program log what the realm's hang-up penalty (Settings → BBS)
     // makes of a hang-up the client has just sent: the health settings', the PvP
-    // response's, or an @panic / @hangup / @relog. Which side applies comes from
-    // what is already tracked, a fight with a player (PvpFight) and
-    // PlayerState.InCombat; pvpResponse is the one thing only the caller knows.
+    // response's, a Hangup-relationship monster's, or an @panic / @hangup /
+    // @relog. Which side applies comes from what is already tracked, a fight
+    // with a player (PvpFight) and PlayerState.InCombat; pvpResponse is the one
+    // thing only the caller knows.
     // A record for the reader. Nothing is decided on it.
     private void LogHangupPenalty(bool pvpResponse)
     {

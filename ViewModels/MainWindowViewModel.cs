@@ -520,6 +520,15 @@ public partial class MainWindowViewModel : ObservableObject
     // True when ReconnectCountdownText should render. Bound by the status bar.
     public bool IsReconnectCountdownVisible => !string.IsNullOrEmpty(ReconnectCountdownText);
 
+    // "Hangup watch off 0:59" beside the connection light, for the minute after a
+    // reconnect that follows a hang-up for a Hangup-relationship monster. Empty
+    // otherwise. MonsterHangupWatcher owns the countdown; this mirrors its text.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsHangupWatchHoldVisible))]
+    private string _hangupWatchHoldText = string.Empty;
+
+    public bool IsHangupWatchHoldVisible => !string.IsNullOrEmpty(HangupWatchHoldText);
+
     // Status-bar statline-mismatch warning: the explanation shown as its tooltip.
     // Set while StatlineReconciler has the mismatch flagged; empty hides it.
     [ObservableProperty]
@@ -714,7 +723,7 @@ public partial class MainWindowViewModel : ObservableObject
         // stat/exp/i refresh doesn't spam the wire.
         HangupInitiated,
         // Deliberate relog originated client-side — remote @relog from a
-        // trusted player. The character gracefully exits
+        // trusted player, or a `;o` the player sent. The character gracefully exits
         // (Services.GameCommands.ExitCommand) and we force an unconditional
         // dial-back (ignoring the per-BBS reconnect toggles), then let the
         // normal login automation log back in. Unlike HangupInitiated the
@@ -1457,6 +1466,8 @@ public partial class MainWindowViewModel : ObservableObject
         // After the exit command goes out, close the carrier ourselves rather
         // than waiting on the server to notice — see RequestHangupDisconnect.
         AppServices.Current.Health.SetHangupDisconnect(RequestHangupDisconnect);
+        AppServices.Current.MonsterHangup.HoldChanged += () =>
+            HangupWatchHoldText = AppServices.Current.MonsterHangup.HoldText ?? string.Empty;
         // The raw, gate-piercing wire for `sys goto` (SysopGotoManager). Sys commands
         // are honoured at any HP — mortally-wounded included — so the jump (and the
         // wimpy escape built on it) must survive the EngineSendGate hold, exactly like
@@ -3090,7 +3101,7 @@ public partial class MainWindowViewModel : ObservableObject
     // carrier fully drop before re-dialing; the normal login automation
     // runs on the reconnect (relog never suppresses the entry latch), so
     // the character ends up back in-game.
-    private void ScheduleRelogReconnect()
+    private void ScheduleRelogReconnect(string reason)
     {
         BbsProfile? bbs = ResolveActiveBbs();
         TimeSpan delay = TimeSpan.FromSeconds(Math.Max(1, bbs?.RedialPauseSeconds ?? 5));
@@ -3105,7 +3116,7 @@ public partial class MainWindowViewModel : ObservableObject
             $"[RELOG REQUESTED — DIALING BACK IN {FormatDelay(delay)}.]",
             TerminalStatusKind.Notice);
         AppServices.Current.Log.Info("Reconnect",
-            $"Remote @relog — reconnecting in {FormatDelay(delay)}.");
+            $"{reason} — reconnecting in {FormatDelay(delay)}.");
         StartReconnectCountdown(delay);
 
         _ = Task.Delay(delay, token).ContinueWith(t =>
@@ -3405,6 +3416,13 @@ public partial class MainWindowViewModel : ObservableObject
                 // latch here silently stops the character from ever resuming the
                 // fight after reconnect (report paradigm-20260827-203548).
                 AppServices.Current.Combat.OnDisconnected();
+                // Whoever was in the room is not known to be there when we are
+                // back: left standing, the roster is re-issued while offline (the
+                // Auto-Combat toggle, the PvP fight stopped above) and acted on.
+                AppServices.Current.RoomClassifier.NoteGameLeft();
+                // A drop with a Hangup monster in sight turns the watch off for the
+                // first minute back in the game.
+                AppServices.Current.MonsterHangup.NoteDisconnected();
 
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a
@@ -3414,6 +3432,10 @@ public partial class MainWindowViewModel : ObservableObject
                 // when neither user-flag nor hangup-signal is set do we
                 // fall back to server-side classification (carrier vs
                 // keepalive-timeout) based on wire-silence duration.
+                // Read on every disconnect, so one sent before a drop of another
+                // kind can't be left standing for the next.
+                SentExitCommand.Intent sentExit = AppServices.Current.SentExit.Consume();
+                string relogReason = "Remote @relog";
                 if (_userInitiatedDisconnect)
                 {
                     _userInitiatedDisconnect = false;
@@ -3426,6 +3448,21 @@ public partial class MainWindowViewModel : ObservableObject
                 else if (AppServices.Current.RelogSignal.ConsumeRelogIntent())
                 {
                     _lastDisconnectCause = DisconnectCause.RelogInitiated;
+                }
+                // The engines' own hang-ups and @relog send the realm's exit command
+                // too, which may be one of these two; their signals above say what
+                // was meant, so the command itself only decides when it went out
+                // on its own.
+                else if (sentExit == SentExitCommand.Intent.Relog)
+                {
+                    _lastDisconnectCause = DisconnectCause.RelogInitiated;
+                    relogReason = $"'{SentExitCommand.RelogCommand}' sent";
+                }
+                else if (sentExit == SentExitCommand.Intent.StayDown)
+                {
+                    _lastDisconnectCause = DisconnectCause.UserInitiated;
+                    AppServices.Current.Log.Info("Reconnect",
+                        $"'{SentExitCommand.StayDownCommand}' sent — staying disconnected, no redial.");
                 }
                 else if (wasConnected)
                 {
@@ -3466,10 +3503,14 @@ public partial class MainWindowViewModel : ObservableObject
                 (TimeSpan Delay, bool EnterRealm)? pvpReconnect = AppServices.Current.PvpResponse.TakeReconnect();
                 if (_lastDisconnectCause == DisconnectCause.RelogInitiated)
                 {
-                    ScheduleRelogReconnect();
+                    ScheduleRelogReconnect(relogReason);
                 }
                 else if (_lastDisconnectCause == DisconnectCause.HangupInitiated && pvpReconnect is { } pvp)
                 {
+                    // The Hangup-monster watch's minute off is for a reconnect the
+                    // user makes. This one dials and enters on its own, and would
+                    // stand the character beside the monster with nobody watching.
+                    AppServices.Current.MonsterHangup.CancelHold();
                     SchedulePvpReconnect(pvp.Delay, pvp.EnterRealm);
                 }
                 else
@@ -3669,6 +3710,9 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.ItemUseCounts.ObserveOutbound(data);
         // Chest Offload — a typed `open <chest>` is tracked like the window's own Open.
         AppServices.Current.OutboundOpen.ObserveOutbound(data);
+        // A board log-off the player sent (`;o`, `=x`) decides what the drop that
+        // follows it means: come straight back, or stay off.
+        AppServices.Current.SentExit.ObserveOutbound(data);
         AppServices.Current.Telepaths.Send(data);
     }
 

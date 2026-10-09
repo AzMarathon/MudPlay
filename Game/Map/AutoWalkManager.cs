@@ -2549,8 +2549,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (!_awaitingTrapDisarm) return;
         _awaitingTrapDisarm = false;
 
+        TrapReplyOutcome? outcome = TrapReply.Read(reply);
+
         // Stopped externally — bail without moving.
-        if (reply.Contains("flow stopped", StringComparison.OrdinalIgnoreCase))
+        if (outcome == TrapReplyOutcome.Stopped)
         {
             Raise(new WalkEvent(WalkEventKind.Stopped,
                 "trap disarm cancelled", _destination));
@@ -2558,11 +2560,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
-        // TrapDisarmManager's "Trap to the {direction} disarmed." or "No trap to the
-        // {direction} to disarm." both leave the exit clear to take.
-        bool clear = reply.Contains("disarmed", StringComparison.OrdinalIgnoreCase)
-                     || reply.StartsWith("No trap", StringComparison.OrdinalIgnoreCase);
-        if (!clear)
+        // Asked of the party and nobody took it: the same position as having nobody
+        // able, so the exit is walked through with the trap still set.
+        if (outcome == TrapReplyOutcome.Unanswered)
+        {
+            _log?.Info("Walker", "no party member took the trap: walking through it");
+        }
+        else if (outcome != TrapReplyOutcome.Clear)
         {
             Raise(new WalkEvent(WalkEventKind.Failed,
                 $"trap disarm failed: {reply}", _destination));

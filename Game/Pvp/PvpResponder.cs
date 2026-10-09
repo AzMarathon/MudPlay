@@ -108,16 +108,29 @@ public sealed class PvpResponder : IDisposable
 
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
-        if (!_pvpEnabled()) return;
+        if (EnemyOn(obs) is { } given) Respond(given, attacked: false);
+    }
+
+    // Whether this roster is the PvP response's to answer: the realm has PvP on and
+    // an Enemy outside the party is on it. It reads nothing but the roster, so it
+    // can be asked ahead of the response (MonsterHangupWatcher stands down on it)
+    // without using up the response's quiet time. True inside that quiet time too:
+    // an Enemy answered a moment ago is still the PvP actions' business.
+    public bool IsAnswering(RoomEntitiesObservation obs) => EnemyOn(obs) is not null;
+
+    // The first Enemy on the roster the response applies to, by given name.
+    private string? EnemyOn(RoomEntitiesObservation obs)
+    {
+        if (!_pvpEnabled()) return null;
         foreach (RoomEntity e in obs.Entities)
         {
             if (e.Kind != EntityKind.Player) continue;
             string given = PlayerObservation.SplitName(e.ResolvedName).Given;
             if (given.Length == 0 || _inParty(given)) continue;
             if (_players.Find(given)?.Relationship != PlayerRelationship.Enemy) continue;
-            Respond(given, attacked: false);
-            return;
+            return given;
         }
+        return null;
     }
 
     private void Respond(string given, bool attacked)

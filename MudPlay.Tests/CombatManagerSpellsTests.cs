@@ -2518,12 +2518,15 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("a grumpy badger", h.LastSent);
     }
 
-    // Flee / Hangup relationships have their own run / hangup response, so self-defense
-    // must NOT engage them — we run, we don't stand and fight.
-    [Fact]
-    public void SelfDefense_FleeMonsterAttacksUs_NotEngaged()
+    // A Flee monster is kept out of the fight, self-defense included, whatever the
+    // Hangup watch is doing.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SelfDefense_FleeMonsterAttacksUs_NotEngaged(bool hangupWatchOff)
     {
         using Harness h = new();
+        h.Combat.SetHangupWatchOffProbe(() => hangupWatchOff);
         h.AddMonster(1, "fierce dragon");
         h.SetOverlay(1, relationship: MonsterRelationship.Flee);
 
@@ -2531,6 +2534,43 @@ public sealed class CombatManagerSpellsTests
         h.Feed("The fierce dragon hits you for 50 damage!");
 
         Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon"));
+    }
+
+    // A Hangup monster is answered with a hang-up on sight, so it is not fought:
+    // the hang-up is on its way.
+    [Theory]
+    [InlineData(false)]   // the watch is on
+    [InlineData(null)]    // nothing wired
+    public void SelfDefense_HangupMonsterAttacksUs_NotEngagedWhileTheWatchIsOn(bool? hangupWatchOff)
+    {
+        using Harness h = new();
+        if (hangupWatchOff is { } off) h.Combat.SetHangupWatchOffProbe(() => off);
+        h.AddMonster(1, "fierce dragon");
+        h.SetOverlay(1, relationship: MonsterRelationship.Hangup);
+
+        h.Feed("Also here: fierce dragon.");
+        h.Feed("The fierce dragon hits you for 50 damage!");
+
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon"));
+    }
+
+    // With no hang-up coming for it (Disable Hangups on, or the minute after a
+    // reconnect), a Hangup monster that attacks is fought back (user, 2026-10-09).
+    // Like a Neutral, it is still never picked on sight: only once it attacks.
+    [Fact]
+    public void SelfDefense_HangupMonsterAttacksUs_FoughtBackWhileTheWatchIsOff()
+    {
+        using Harness h = new();
+        h.Combat.SetHangupWatchOffProbe(() => true);
+        h.AddMonster(1, "fierce dragon");
+        h.SetOverlay(1, relationship: MonsterRelationship.Hangup);
+
+        h.Feed("Also here: fierce dragon.");
+        Assert.DoesNotContain(h.AllSent, s => s.Contains("dragon"));
+
+        h.Feed("The fierce dragon hits you for 50 damage!");
+
+        Assert.Equal("a fierce dragon", h.LastSent);
     }
 
     // Auto-combat off (or a do-not-attack / combat-suppressed room, same _isEnabled
