@@ -46,6 +46,11 @@ public static class ExitGateItems
                 Add(into, exit.KeyItemId);
                 break;
         }
+
+        // A cast-on-walk exit whose spell lands the crosser on the routed side only
+        // when they have an item (the golden idol's passage) — whatever the exit's
+        // own hint is.
+        Add(into, exit.CastGateItemId);
     }
 
     // The item ids `exit` requires in hand, or an empty list when it gates on

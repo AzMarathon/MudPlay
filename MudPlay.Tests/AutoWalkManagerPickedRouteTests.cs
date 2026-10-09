@@ -715,4 +715,172 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
         Assert.Empty(h.Sent);
     }
+
+    // ----- what the pick ordered fetched, and the trades its card named -------
+    //
+    // A trade hands an item of the user's over, so the rule these pin is that it is
+    // read off the journey of the card that named it: there for that journey's legs
+    // and restarts, and for no walk before, beside or after it.
+
+    private const int GlowingKey = 808, OpalBrooch = 811, Session = 3;
+
+    private static JourneyFetch TradeFetch() =>
+        new(new[] { 807, GlowingKey }, new[] { (GlowingKey, OpalBrooch) }, Session);
+
+    // The read AppServices.AgreedTradeFor makes: a picked route's fetch, and nothing else.
+    private static int? AgreedTrade(Harness h) =>
+        h.Walker.Journey is { PickedRoute: true, Fetch: { } fetch } ? fetch.AgreedTradeFor(GlowingKey, Session) : null;
+
+    private static bool TradeCardWalk(Harness h, RoomKey to) =>
+        h.Walker.WalkTo(to, planThroughAcquirableGates: true, pickedRoute: true, keepGatesClosedFor: Talisman,
+            fetch: TradeFetch());
+
+    [Fact]
+    public void TheCardsTrade_IsInForceForItsJourney_ThroughASideTripAndBack()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+        Assert.Null(AgreedTrade(h));
+
+        TradeCardWalk(h, Dest);
+        Assert.Equal(OpalBrooch, AgreedTrade(h));
+        Assert.True(h.Walker.Journey!.Fetch!.Fetches(807));
+
+        h.Walker.WalkTo(Giver, planThroughAcquirableGates: true, supersedeSilently: true);
+        Assert.Equal(OpalBrooch, AgreedTrade(h));
+
+        h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, supersedeSilently: true);
+        Assert.Equal(OpalBrooch, AgreedTrade(h));
+    }
+
+    // The give failed, the door was found open, the walk arrived. Its journey is
+    // over, and whatever walks next through that door reads no agreement.
+    [Fact]
+    public void TheWalkArrives_ItsTradeIsGone_AndALaterWalkReadsNone()
+    {
+        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true, paused: false);
+        RoomKey ridge = new(1, 12);
+        h.Walker.WalkTo(ridge, planThroughAcquirableGates: true, pickedRoute: true, preferTeleportFree: true,
+            fetch: TradeFetch());
+        Assert.Equal(OpalBrooch, AgreedTrade(h));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Ridge",
+            new HashSet<Direction> { Direction.N, Direction.S, Direction.E }));
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
+        Assert.Null(h.Walker.Journey);
+        Assert.Null(AgreedTrade(h));
+
+        // A trainer trip, a stash transfer, a loop's approach: through gates, to the
+        // same room or another.
+        h.Walker.WalkTo(Arch, planThroughAcquirableGates: true);
+        Assert.Null(h.Walker.Journey?.Fetch);
+        Assert.Null(AgreedTrade(h));
+        h.Walker.WalkTo(ridge, planThroughAcquirableGates: true);
+        Assert.Null(AgreedTrade(h));
+        // Nor a detour leg made for that later walk.
+        h.Walker.WalkTo(Shop, planThroughAcquirableGates: true, supersedeSilently: true);
+        Assert.Null(AgreedTrade(h));
+    }
+
+    [Fact]
+    public void AStop_EvenIdleBetweenLegs_EndsTheTrade()
+    {
+        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true);
+        h.Walker.WalkTo(Arch, planThroughAcquirableGates: true, pickedRoute: true, preferTeleportFree: true,
+            fetch: TradeFetch());
+        h.Walker.WalkTo(Trail, supersedeSilently: true);          // at the giver: arrives at once
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Equal(OpalBrooch, AgreedTrade(h));
+
+        h.Walker.Stop("user stop");
+
+        Assert.Null(AgreedTrade(h));
+        // The leg the detour would have gone on with finds nothing.
+        h.Walker.WalkTo(Arch, planThroughAcquirableGates: true, supersedeSilently: true);
+        Assert.Null(AgreedTrade(h));
+    }
+
+    [Fact]
+    public void TheWalkFails_OrAnotherWalkReplacesIt_TheTradeIsGone()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+        TradeCardWalk(h, Dest);
+
+        h.Walker.WalkTo(Giver, planThroughAcquirableGates: true);     // any walk that isn't its leg
+        Assert.Null(AgreedTrade(h));
+
+        h.Walker.WalkTo(Dest, pickedRoute: true, fetch: TradeFetch());   // gates live: no route
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Null(AgreedTrade(h));
+    }
+
+    // Picking the card while another walk is under way stops that walk first. The
+    // order is the new walk's, so the old walk's Stopped can't take it away.
+    [Fact]
+    public void ACardPickedDuringAnotherWalk_KeepsItsOrder()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+        h.Walker.WalkTo(Giver, planThroughAcquirableGates: true);
+
+        TradeCardWalk(h, Dest);
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Stopped);
+        Assert.Equal(OpalBrooch, AgreedTrade(h));
+        Assert.True(h.Walker.Journey!.Fetch!.Fetches(807));
+    }
+
+    // A walk no card was shown for is not a picked route: it fetches, and trades
+    // nothing, whatever its fetch was handed.
+    [Fact]
+    public void AWalkNoCardWasShownFor_FetchesAndNeverTrades()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+
+        h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, fetch: TradeFetch());
+
+        Assert.True(h.Walker.Journey!.Fetch!.Fetches(GlowingKey));
+        Assert.Null(AgreedTrade(h));
+    }
+
+    // An errand that stopped the walk picks its journey back up, order and all; the
+    // errand's own walk in between carries none of it.
+    [Fact]
+    public void AnErrandRestart_PicksTheOrderBackUp_AndTheErrandsWalkCarriesNone()
+    {
+        Harness h = NewHarness(GatedRooms, Hills);
+        TradeCardWalk(h, Dest);
+        WalkJourney journey = h.Walker.Journey!;
+
+        h.Walker.WalkTo(Giver, planThroughAcquirableGates: true);     // the errand's walk
+        Assert.Null(AgreedTrade(h));
+
+        h.Walker.ResumeJourney(journey);
+        Assert.Equal(OpalBrooch, AgreedTrade(h));
+        Assert.Same(journey.Fetch, h.Walker.Journey?.Fetch);
+    }
+
+    // Once the key is in hand there is nothing left to trade for, and a trade is
+    // not made on another connection than the one it was agreed on.
+    [Fact]
+    public void TheTrade_EndsWithTheKeyInHand_AndWithTheConnection()
+    {
+        JourneyFetch fetch = TradeFetch();
+        Assert.Equal(OpalBrooch, fetch.AgreedTradeFor(GlowingKey, Session));
+        Assert.Null(fetch.AgreedTradeFor(807, Session));              // fetched, never traded for
+        Assert.Null(fetch.AgreedTradeFor(GlowingKey, Session + 1));
+
+        fetch.DropCovered(id => id == GlowingKey);
+
+        Assert.Null(fetch.AgreedTradeFor(GlowingKey, Session));
+        Assert.True(fetch.Fetches(807));
+        Assert.True(fetch.HasItems);
+    }
+
+    // A trade for a key the journey isn't fetching is no agreement at all.
+    [Fact]
+    public void ATradeForAKeyNotBeingFetched_IsNotInForce()
+    {
+        var fetch = new JourneyFetch(new[] { 807 }, new[] { (GlowingKey, OpalBrooch) }, Session);
+
+        Assert.Null(fetch.AgreedTradeFor(GlowingKey, Session));
+    }
 }

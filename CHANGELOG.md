@@ -1,8 +1,29 @@
 # Version history
 
-## 3.155.1
+## 3.157.1
 
 - A pick the game answers with `Your command had no effect.`, or an open answered `That is not a door or a gate!` (no door that way here), ends the door attempt and re-routes, as a bash already did
+
+## 3.157.0
+
+- A door key an NPC trades for an item in your pack can be fetched from the route card: with the opal brooch, the card for the dark-elf archmage's tower reads "glowing key (ask sleazy shopkeeper, in trade for your opal brooch)", and picking it makes the trade on the way
+- A trade is only ever made from a card that names it, for the one walk that card starts: only for a door key nothing else yields, only the item the card named, and never one you are wearing
+- Picking a route card during another walk no longer loses what the card was to fetch; a card with both a hazard counter and a gate item fetches both; and the fetch stays with the walk through a light-buying or selling detour
+- Without that item the card names the trade and what drops the item, in place of the bare key name
+- Route cards say what their pick will do about each item (ask / buy / dropped by), ticked Auto-obtain or not; a pick that only walks somewhere and stops names no source
+- A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window
+- A walk that stops at a locked door for want of its key names the key
+- bug reports addressed: paradigm-20261008-175938
+
+## 3.156.0
+
+- The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
+- That passage needs the golden idol: a walk-to through it says so (and offers it on the route card) instead of circling round to it again, and a loop through it won't run without one
+- Your position follows the passage to the room you really land in, which is then shown with one Enter; nothing is fought, picked up or invited in the room it only passes you through
+- Going back for a party member ends as soon as they are following you again, and never starts for a move you made yourself
+- After a reconnect, a loop holds its first step until the party re-invite has seen the room
+- Players seen through a `look <direction>` are no longer invited, and no longer count as arrived for a party re-invite
+- bug reports addressed: paradigm-20260923-092317, paradigm-20260929-221642, paradigm-20261007-134305, paradigm-20261007-134824
 
 ## 3.155.0
 

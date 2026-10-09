@@ -641,8 +641,11 @@ public sealed class DoorOpenManager : IDisposable
         if (_state != DoorState.WaitingUseKey) return;
         if (_current is null) return;
         // "You have no <key>" / "You don't have" — terminal failure.
-        // Keys are single-shot; no retry on the use verb.
-        FailCurrent("use-key failed (key missing or wrong)");
+        // Keys are single-shot; no retry on the use verb. The key is named: this
+        // reason is what the walk fails with, and it is all the user is told about
+        // why a walk that went to fetch a key stopped at the door.
+        string key = _itemNameLookup(_current.KeyItemId) is { Length: > 0 } name ? name : $"item #{_current.KeyItemId}";
+        FailCurrent($"use-key failed (the {key} is missing or wrong)");
     }
 
     private void OnIsLocked(MatchResult _)
