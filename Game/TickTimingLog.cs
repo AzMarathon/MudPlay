@@ -5,10 +5,11 @@ using System.Text;
 namespace MudPlay.Game;
 
 // A running record of when the game's periodic ticks were seen, to the millisecond:
-// combat rounds, every HP and mana gain, and each change of posture. It exists so a
-// realm's tick cycle can be worked out from a capture — how far apart the gains
-// come, how much each pays, and where they fall against the combat round and
-// against the moment the character lay down. The Stock engine counts every one of
+// combat rounds, every HP and mana gain, each change of posture, and each hit of
+// damage nobody dealt (a room's own spell). It exists so a realm's tick cycle can
+// be worked out from a capture — how far apart the gains come, how much each pays,
+// and where they fall against the combat round and against the moment the
+// character lay down. The Stock engine counts every one of
 // its passes off a single one-second tick (GAME_MECHANICS "The engine clock — one
 // fast tick drives every timer"); whether Paradigm does is what this is for.
 //
@@ -30,7 +31,7 @@ public sealed class TickTimingLog : IDisposable
     private bool _hpSeen, _maSeen;
     private PlayerPosition _position;
     private DateTimeOffset? _lastHpGainAt, _lastMaGainAt;
-    private DateTimeOffset? _lastRoundAt, _lastSeenRoundAt, _postureSince;
+    private DateTimeOffset? _lastRoundAt, _lastSeenRoundAt, _postureSince, _lastOffRoundDamageAt;
     private bool _disposed;
 
     private readonly record struct Entry(DateTimeOffset At, string Kind, string Detail);
@@ -60,6 +61,18 @@ public sealed class TickTimingLog : IDisposable
         _lastRoundAt = now;
         if (seen) _lastSeenRoundAt = now;
         Add(now, "round", $"{(seen ? "seen" : "projected")}  gap {gap}");
+    }
+
+    // Damage on us that nobody dealt (a room's own spell, an effect paying out), which
+    // TickEngine leaves out of the round clock. Kept with its offset from the last
+    // round seen, since that offset is what shows which of the game's passes it rides.
+    public void NoteDamageOffTheRound()
+    {
+        DateTimeOffset now = _clock();
+        string gap = _lastOffRoundDamageAt is { } prev ? Seconds(now - prev) : "first";
+        _lastOffRoundDamageAt = now;
+        string round = _lastSeenRoundAt is { } seen ? Seconds(now - seen) : "?";
+        Add(now, "damage", $"nobody dealt it, not a round  gap {gap}  round+{round}");
     }
 
     private void OnPlayerStateChanged(object? sender, PropertyChangedEventArgs e)

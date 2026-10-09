@@ -90,6 +90,20 @@ how many swings or spell fires a player or monster gets inside one round.
     - A tick more than 40 s after the last thing that placed the grid (11 s until a regen pass
       has measured the round) frees no slot (`TickEngine.LastCombatTickWasPlaced`): the cast
       then waits out `CastCoordinator.CastCommandCooldown` (5.5 s), longer than any round.
+  - **Damage on us that nobody dealt is not a round** (report `paradigm-20261009-120757`). A
+    room's own spell lands on the spell round (*Monsters, lairs & spawns → Room-spell monster
+    summons*), one to four seconds into the combat round, in the hit wording the round's own
+    lines use (`You are seared by the flames for 46 damage!`). `TickEngine` took it for a round
+    seen on the wire: the round clock moved onto it and the cast slot came free, and nine
+    between-round casts in 70 s drew `You have already cast a spell this round!`, each within
+    a second or two of a flames line. `TickEngine.IsDamageNobodyDealt` now leaves out a damage
+    line `DamageLineAttributor` reads as taken by us with no dealer (`You are …`, `You take …`,
+    `You feel …`), and `TickTimingLog` records it as a `damage` row with its offset from the
+    last round seen. A monster's on-hit effect in the same wording (`You are burned for 5
+    damage!`) follows the hit that caused it, which marks the round by itself. Not covered:
+    a room spell worded with a subject (`A magma explosion hits you for %d damage!`, `A chaotic
+    storm assaults you for %d damage!`, 12 rooms in the Paradigm 1.9.1 data), which can't be
+    told from a named attacker's hit by its wording.
 
 ### Spell round (3s) and durations
 *Status: CONFIRMED (user); wall-clock length OBSERVED (report `paradigm-20260816-222917`; observed on Paradigm)*
@@ -1757,8 +1771,13 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - `[NEEDS CONFIRMATION]` Walking out of a fight seems to print `*Combat Off*` at the next round tick and not at the move: `_move_user` has no call that ends the attack, and the round-tick check is the only path found (callees not all read). Does a timed Stock capture of a move out of a fight show `*Combat Off*` arriving with the next round?
   - **A player target leaving the room does not end the attack at the tick** (@0x44c0e6–0x44c10c): the attacker is only flagged, and the flag clears when the two share a room again. A queued spell then ends with `*Combat Off*` on the second round the target is absent (`_cast_user_target` @0x444b89–0x444bed); the weapon routine's own sites weren't traced.
 
+- **A typed `eq` in a Paradigm fight prints `*Combat Off*` ahead of its own lines, and a cast made with the fight already stopped prints none** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-122342`; Realm: Paradigm))*: `[HP=471/MA=276]:Eq phoenix` → `*Combat Off*` → `You have removed rainbow stone.` → `You are now wearing phoenix feather.`, and a second later `grhe <party member>` drew `You cast greater healing on <party member>, healing 44 damage!` alone. So a cast's `*Combat Off*` only comes when there is a fight for it to stop, as the Stock list in this topic has it.
+- **Not attacking when the monster died, the character got no experience line** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-122342`; Realm: Paradigm), one kill)*: the party killed the monster five and a half seconds after that `*Combat Off*`, with no attack of ours sent in between; our screen showed its death line and no `You gain N experience.`. The kills before and after it, with our attack engaged and no damage of ours landing, each printed `You gain 6000 experience.`. Stock's rule is in *Kill detection and monster-kill message order*; whether Paradigm splits experience the same way is not recorded.
+
 **Client use:**
-- The engine re-attacks on the equip's `*Combat Off*` via the same signal a cast arms (`CombatManager.NoteBetweenRoundCast`).
+- The engine re-attacks on the `*Combat Off*` of a gear swap of its own via the same signal a cast arms (`CombatManager.NoteGearSwapInterrupt` → `NoteBetweenRoundCast`).
+- A `*Combat Off*` the client can't put down to a cast or a swap of its own (a typed `eq`, a stun) is answered on the next combat line it reads or the next round tick: `CombatManager.OnCombatLine` / `OnCombatTick` → `TryResumeEngage`. That resume is skipped for 1.5 s after an attack was sent (`ResumeAfterAttackGuard`), which is for a `*Combat Off*` the game printed before it had the fresh attack. It no longer applies once `*Combat Engaged*` has answered that attack and a `*Combat Off*` has followed (`_offEndedAnsweredAttack`): in report `paradigm-20261009-122342` an `eq` typed half a second after the attack stopped the fight 0.4 s before the round, every line of that round and its tick fell inside the guard, the heal cast a moment later drew no `*Combat Off*` to resume on, and the monster died a round later without being attacked. The program log says when such a `*Combat Off*` arrives and when a resume is skipped, and the bug report's *Combat weapon state* carries the last resume decision.
+- A typed `eq` is not recognised as it is sent, so the re-attack waits for that next line or tick and the round in between can pass without a swing.
 
 ### `break` — stopping an announced attack
 *Status: CONFIRMED 2026-09-14 (user; report `stock-20260914-003246`) · Realm: both (no-effect reply differs by realm)*
@@ -3238,6 +3257,7 @@ How one damage spell cast against a monster is worked out.
 - **The between-round cycle runs on the same 5s tick whether or not you are in combat** — see *Timing & rounds → Combat round (5s) and the between-round cast cycle*.
 - **A between-round cast and the combat attack are independent slots** — see *Between-round cast slot vs the combat attack*.
 - **A second between-round spell the same round is rejected with `You have already cast a spell this round!`, and the spell you just sent does NOT fire** — success or failure of the first doesn't matter, the round's single between-round slot is spent.
+  - **The refusal is the only line the game prints for that cast: no `*Combat Off*` comes with it** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-120757`; Realm: Paradigm))*. Nine refusals in 70 s, seven of them with `*Combat Engaged*` standing (`[HP=414/MA=280]:grhe` → `You have already cast a spell this round!`, and nothing more until the round's lines four seconds later). So a refused cast is not followed by the `*Combat Off*` that `CombatManager.NoteBetweenRoundCast` arms a re-attack for.
 - **This line never appears for combat spells** (lbol / mmis / deathtouch / fireball are 500–1000 energy — the round's main action, not between-round), so it is purely the between-round coordinator's signal.
 - **A between-round buff never delays the SAME round's real attack — a fresh engage must fire instantly right behind one** *(CONFIRMED, user 2026-09-16)*. Casting a 0-energy buff (`prfl`, `vlwa`, …) and then immediately attacking a monster that just arrived is legitimate the same round; there is no server-side wait.
 - **Client use:**
@@ -3739,6 +3759,11 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
   - **Paradigm** re-casts the room spell **every combat tick (~5s)** while you're present (the user timed it at **~5.3s**, firing just after entry) plus the entry cast.
   - **Stock** re-rolls on a slower **"medium tick" of 6 seconds** (per the `wccmmud.dll` disassembly) plus on room change — so a Stock summoning room yields fewer rolls over the same fight than a Paradigm one. `[NEEDS CONFIRMATION]` The engine's medium pass is every 3 ticks (*Timing & rounds → The engine clock — one fast tick drives every timer*; the constant at `0x482cc0` is 3). Is the room spell re-cast on every second medium pass, or is the 6 here a misreading of that 3? The routine that re-casts it was not re-read on 2026-10-09.
   - The estimator encodes the 6s value as `StockMediumTickSeconds`.
+  - `[CONFLICT — ask the user]` **A Paradigm damage room re-cast its spell every second spell round, about 6.05 s, not every combat round** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-120757`; Realm: Paradigm))*. Magma heat (spell 526, the `Rooms.Spell` of all 308 `Infernal Cavern` rooms on map 16 in the Paradigm 1.9.1 data) printed `You are seared by the flames for %d damage!` at 12:06:46.922, 12:06:59.017, 12:07:05.039, 12:07:11.119, 12:07:17.158, 12:07:23.215, 12:07:29.269, 12:07:35.291, 12:07:41.384, 12:07:47.408 and 12:07:53.451: eleven intervals in 66.529 s, 6.048 s each on average, the nine single gaps 6.02 to 6.09 s. (The line between the first two came at 12:06:53.706, 0.75 s late along with the heal-over-time gain beside it.)
+    - It kept that rhythm while the party walked from room to room (each carrying the same spell), in a fight and out of one.
+    - Each line came within 10 ms after a heal-over-time gain on the 3-second spell round (HP `+1` / `+3` at 12:07:23.207 and .211, the line at .215), on every second one of them.
+    - Against the combat round (12:07:26.266, 12:07:31.276, 12:07:36.322, 12:07:41.384, 12:07:46.431, 12:07:51.486) it fell 3.0, 4.0, 0, 1.0 and 2.0 s in: it met a round once in 30 s (12:07:11.119 and 12:07:41.384), as six ticks against five would.
+    - That is the cadence the Stock bullet gives, and it disagrees with the Paradigm bullet's combat tick. Which is right for Paradigm: does a summoning room run on a different pass from a damage room, or was the 5.3 s timing a 6.05 s one?
   - **On Stock the cast on entering is conditional** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` room-entry helper @0x416ae6, test @0x416b61–0x416b9b; Realm: Stock)*. The helper casts the destination's room spell on the mover only when the destination has room flag `0x20` (one of the flags the sysop dump doesn't name: *Monster roaming and following*) and its spell number differs from that of the room being left. It runs before the mover's room fields change, so its lines come ahead of the arrival lines and the new room's display. The tick cast (`_medium_update_character` @0x4228a2) has no such test. This narrows "plus on room change" for Stock: walking between two rooms with the same spell, or into a room without the flag, casts nothing on entry by this helper.
 - **The summon lives in a TextBlock, not an `Abil 12` slot.** The room spell carries a **`TextBlock` ability (`Abil == 148`)** whose `AbilVal` is a **TBInfo `Number`**. The TBInfo `Action` string is the roll table — so a room-summon is *not* found by scanning `Abil == 12` (that's the death-summon path).
 - **`nomonsters:` gate.** A leading `nomonsters:` condition means the spell **only fires when the room holds no monsters** — so it can't stack summons: kill what's there, and the next tick may summon one.

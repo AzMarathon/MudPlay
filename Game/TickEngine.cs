@@ -1,5 +1,6 @@
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MudPlay.Game.Combat;
 using MudPlay.Services;
 using MudPlay.Services.Patterns;
 
@@ -175,7 +176,11 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         // broad regex matches mob-on-player lines too, plus we'll see
         // separate Hit and Miss lines in the same round if you're
         // fighting multiple mobs).
-        _patternSubs.Add(router.Subscribe(KnownPatterns.UserHits,  _ => RecordCombatTick()));
+        _patternSubs.Add(router.Subscribe(KnownPatterns.UserHits, match =>
+        {
+            if (IsDamageNobodyDealt(match.Text)) DamageOffTheRound?.Invoke();
+            else RecordCombatTick();
+        }));
         _patternSubs.Add(router.Subscribe(KnownPatterns.MobHits,   _ => RecordCombatTick()));
         _patternSubs.Add(router.Subscribe(KnownPatterns.MobMisses, _ => RecordCombatTick()));
 
@@ -186,6 +191,28 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         _timer.Tick += (_, _) => OnTimerTick();
         _timer.Start();
     }
+
+    // Damage on us that no combatant dealt ("You are seared by the flames for 46
+    // damage!") is a room's own spell or an effect paying out, and the game runs
+    // those on its spell round, not the combat round (GAME_MECHANICS "Room-spell
+    // monster summons", the cadence bullets). The hit pattern matches the wording all
+    // the same, and read as a round it moved the round clock to wherever the line
+    // fell and handed the casting engines a new round one to four seconds into the
+    // old one: nine heals and buffs in 70 s drew `You have already cast a spell this
+    // round!`, each right behind a flames line (report paradigm-20261009-120757).
+    //
+    // A monster's on-hit effect is worded the same way ("You are burned for 5
+    // damage!") and does land on the round, but only behind the hit that caused it,
+    // which marks the round by itself. A round whose only line is worded this way is
+    // left to the projection.
+    private static bool IsDamageNobodyDealt(string line) =>
+        DamageLineAttributor.TryAttribute(line, Array.Empty<string>(), out DamageAttribution sides)
+        && sides.NoDealer
+        && sides.Target == DamageLineAttributor.Self;
+
+    // Raised for a damage line left out of the round clock (IsDamageNobodyDealt), so
+    // the tick timing record can show where it fell against the rounds.
+    public event Action? DamageOffTheRound;
 
     // Ensure the timer fallback has a combat-cycle anchor even when no generic
     // hit/miss pattern has matched yet. CombatManager uses this after a fresh

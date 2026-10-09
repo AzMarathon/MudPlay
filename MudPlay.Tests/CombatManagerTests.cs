@@ -3903,6 +3903,86 @@ public sealed class CombatManagerTests
         Assert.Equal("giant rat", h.Combat.CurrentTarget);
     }
 
+    // Report paradigm-20261009-122342, 12:23:19 to 12:23:26. The attack went out and
+    // was answered, the user typed an `eq` half a second later and the game stopped
+    // the fight for it, and the round came 0.4 s after that: inside the 1.5 s the
+    // resume guard allows a fresh swing. Every line of that round and its tick were
+    // dropped, the heal sent a moment later drew no Off (combat was already off), and
+    // nothing asked again until the next round, in which the monster died unattacked.
+    [Fact]
+    public void CombatOffAfterTheAttackWasAnswered_NextRoundLineReAttacks_AndSoDoesTheHealAfterIt()
+    {
+        using Harness h = new();
+        h.AddMonster(1250, "giant hellhound", killable: false, allowNoPrefix: true, "nasty");
+
+        h.Feed("Also here: nasty giant hellhound.");
+        Assert.Equal("a nasty giant hellhound", h.LastSent);
+        h.Feed("*Combat Engaged*");
+        Assert.Single(h.Sent);
+
+        // The typed `eq` (not the engine's, so nothing is armed for it).
+        h.Feed("*Combat Off*");
+        h.Feed("You have removed rainbow stone.");
+        h.Feed("You are now wearing phoenix feather.");
+        Assert.Single(h.Sent);
+
+        // The round, a party member's hit first. The attack is still fresh.
+        h.Feed("Forged punches nasty giant hellhound for 28 damage!");
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("a nasty giant hellhound", h.LastSent);
+        h.Feed("*Combat Engaged*");
+
+        // The round's other lines ask for nothing more.
+        h.Feed("Forged punches nasty giant hellhound for 24 damage!");
+        h.Combat.OnCombatTick();
+        Assert.Equal(2, h.Sent.Count);
+
+        // The heal on the party member, cast between rounds, stops the fight again.
+        h.Combat.NoteBetweenRoundCast();
+        h.Feed("*Combat Off*");
+        Assert.Equal(3, h.Sent.Count);
+        Assert.Equal("a nasty giant hellhound", h.LastSent);
+        Assert.Contains("re-attacking", h.Combat.LastResumeDecision);
+    }
+
+    [Fact]
+    public void CombatOffAfterTheAttackWasAnswered_RoundTickReAttacks()
+    {
+        // The same break with no combat line the client reads: the round tick is
+        // the other thing that asks.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        h.Feed("*Combat Off*");
+        Assert.Single(h.Sent);
+
+        h.Combat.OnCombatTick();
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("a giant rat", h.LastSent);
+    }
+
+    [Fact]
+    public void CombatOffBeforeTheFreshAttackIsAnswered_StillGuarded()
+    {
+        // What the guard is for: an Off the game printed before it had our fresh
+        // attack (a kill's, after the re-pick already swung at the survivor). That
+        // attack is in flight, and a resume would send it twice.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: false);
+
+        h.Feed("Also here: giant rat.");
+        Assert.Single(h.Sent);
+
+        h.Feed("*Combat Off*");
+        h.Feed("The giant rat bites you for 5 damage!");
+        h.Combat.OnCombatTick();
+
+        Assert.Single(h.Sent);
+        Assert.Contains("hasn't answered it", h.Combat.LastResumeDecision);
+    }
+
     [Fact]
     public void MatchedDeath_ThenSameKillsExpAndCombatOff_DoesNotDropTheRePickedSurvivor()
     {

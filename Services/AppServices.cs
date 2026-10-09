@@ -2815,6 +2815,7 @@ public sealed class AppServices
             TickTiming.NoteRound(seen);
             if (seen && Tick.LastCombatTick is { } at) Regen.NoteRound(at);
         };
+        Tick.DamageOffTheRound += TickTiming.NoteDamageOffTheRound;
         // The game pays passive regen on a round boundary, so a gain keeps the round
         // grid true while no fight is printing damage lines. A meditate tick is
         // counted from the command on Stock and untimed on Paradigm: left out.
