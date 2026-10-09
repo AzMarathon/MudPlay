@@ -7115,6 +7115,15 @@ public sealed class AppServices
         // through the walker — attached here since the walker is built
         // after the manager.
         DeathRecovery.AttachWalker(Walker);
+        // The Stock spill sweep plans from the room graph, tells a leg a movement gate
+        // is holding from one that has stalled, and never searches a stash room. The
+        // pile list leaves out what a death doesn't drop.
+        DeathRecovery.AttachSpillSweep(
+            RoomGraph.GetRoom,
+            () => MovementCoordinator.IsPaused,
+            Movement.IsStash);
+        DeathRecovery.SetStaysOnDeathProbe(
+            name => Game.Recovery.DeathPileRules.StaysWithCharacter(ItemAbilityCodes(name)));
         // Combat-aware re-equip interleaving: recovering a corpse in a room with a
         // live hostile paces the wear/eq burst across combat rounds (each equip
         // breaks the round, same as a between-round cast) instead of firing it all
@@ -8846,6 +8855,8 @@ public sealed class AppServices
         // A stash transfer is between walks while it searches, collects or deposits,
         // so the walker's own Stopped wouldn't reach it there.
         MovementControl.Stopping += () => StashTransfer.Cancel("stopped by the user");
+        // So is a Stock spill sweep while it peeks, gets or searches at a stop.
+        MovementControl.Stopping += () => DeathRecovery.StopSpillSweep("stopped by the user");
         // So is a walk between two of its legs: standing at a giver, a shop or an
         // item's source, with the coordinator that brought it there about to issue
         // the next leg. The walker says Stopped for a journey left standing, which

@@ -1,5 +1,14 @@
 # Version history
 
+## 3.159.0
+
+- Stock death recovery looks for spilled items where the game puts them: out from the death room in the game's own exit order, up to five rooms away, behind doors and hidden exits too
+- When those rooms are tried and items are still missing, it searches the rooms you walked before dying for hidden items (never a stash room)
+- The spill sweep stops as soon as nothing is missing, walks to 12 rooms at most, obeys Stop, Auto-All and every movement hold, and returns to the death room
+- Stock: loyal and major-cursed items, and items that "returned to their rightful place", are no longer waited for
+- Stock: a partly recovered pile keeps its count when you come back, and an empty death-room floor no longer stalls recovery
+- Bug report: what the latest pile still misses, the sweep's rooms in order and where it stands
+
 ## 3.158.2
 
 - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor

@@ -1530,7 +1530,7 @@ A helper for cashing in boss chests: the **Record Keeping → Chest Offload** su
 
 Your death history. **How did I Die?** replays the backscroll from the moment of death, in the colours you saw it in and in your terminal font (select and copy with the mouse or Ctrl+C). Deaths recorded before colours were kept show in plain text. The saved log file keeps the colours as ANSI codes, so it also reads in colour in `less -R`. **Recover Now** walks to the death room and grabs the pile (or toggle **Auto-Recover Deathpiles** to do it automatically).
 
-Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one command; on **Stock**, where death scatters your items loose on the floor (and can overflow into adjacent rooms), it `get`s each item back.
+Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one command; on **Stock**, where death scatters your items loose on the floor (and overflows into other rooms when that floor is full), it `get`s each item back.
 
 With **Auto-Equip on recovery** on, MudPlay re-wears everything you had on when you died — and if a hostile is in the room when the pile comes back, it does this **combat-aware**: grabbing the pile doesn't interrupt the fight, but wearing gear does, so it puts a few pieces on between combat rounds (weapon first, then armour heaviest-first) and keeps swinging in between, then equips whatever's left the moment the room clears.
 
@@ -1538,11 +1538,22 @@ With **Auto-Equip on recovery** on, MudPlay re-wears everything you had on when 
 
 **Gear handed back by a party member.** In a party it's often the leader who recovers your corpse and gives the items back. Each item handed to you (*Nineteen just gave you shimmering white robes.*, or Paradigm's other wording, *Nineteen gives you shimmering white robes.*) is struck off your open deathpile; once the hand-off goes quiet the pile is marked **Recovered** (or **Partial** if pieces are still missing) with a note naming who returned it, and — with Auto-Equip on recovery on — the gear you were wearing goes back on, paced round by round if you're in a fight. Items that weren't part of the pile are ignored.
 
-On **Stock**, items that spilled into neighbouring rooms are chased down too:
+On **Stock**, items that spilled into other rooms are chased down too. A room's floor holds 17 objects; when the death room is full the game puts each further item in the next room with space, trying the exits in a fixed order (north, south, east, west, northeast, northwest, southeast, southwest, up, down), going on from each room it tries before coming back for the next exit, up to five rooms out. It doesn't care about doors, locks or hidden exits, so gear can land behind one. It never crosses to another map.
 
-- A *deliberate* recovery — **Recover Now**, or an Auto-Recover walk-to that **ends** in the death room — looks through each exit, then walks to the rooms holding your items (disarming any traps in the way, and skipping a direction whose trap it can't get through), grabs your gear, and returns.
+- A *deliberate* recovery — **Recover Now**, or an Auto-Recover walk-to that **ends** in the death room — runs the **spill sweep**:
+  1. It grabs what's on the death room's floor.
+  2. It looks through each exit of the death room (no movement). A neighbour seen holding your items is visited first.
+  3. It walks the rooms in the game's own spill order, getting whatever of yours is on each floor, and stops as soon as nothing is missing. The normal walker makes each trip, so it opens doors, searches out hidden exits and disarms traps on the way. A room it has no route to, or only a long way round to (more than 12 rooms), is skipped.
+  4. If every one of those rooms is tried and items are still missing, it searches the rooms you walked through before you died, starting with the death room. When no floor nearby had space the game hides the item in one of them, where only a search shows it. Each room is searched up to twice (a search can miss a hidden item). A room you've marked as a **stash room** is never searched.
+  5. It walks back to the death room and wears what it got back (with Auto-Equip on recovery on).
+- **Limits.** One sweep walks to at most 12 rooms and takes at most 10 minutes; whatever is still missing after that was most likely picked up by someone else. The pile stays **Partial** with a note saying why the sweep ended, and Recover Now runs it again.
+- **It waits rather than pushes on.** It doesn't start while something hostile is in the death room or while **Auto-All** is off, and starts by itself when that changes. On the way it obeys every movement hold (a fight, resting, your Pause). If you press **Stop**, or another walk takes over, the sweep ends where you stand and does not start walking again. A death during the sweep ends it too.
 - An Auto-Recover walk that simply **passes through** a death room grabs your overflow from the rooms right before and after it in passing.
-- Just *manually* stepping into one of your death rooms grabs whatever's on that floor but never fires the adjacent-room sweep.
+- Just *manually* stepping into one of your death rooms grabs whatever's on that floor but never fires the sweep.
+
+Two kinds of item are never waited for on Stock: one that **stays with you** through a death (a loyal or major-cursed item; it is in your pack afterwards and is worn again with the rest), and one the game says *has returned to its rightful place* as you die, which is gone for good.
+
+A bug report lists what the latest pile is still missing, the sweep's rooms in order, and where the sweep stands or how the last one ended.
 
 Finally, if the only thing left un-recovered is **currency**, the death counts as fully recovered: coins are picked up as cash automatically (never `get`-ed), so they never leave a pile stuck at "partly recovered".
 
