@@ -99,7 +99,7 @@ Each logon step is a **Message** to wait for and a **Response** to send when it 
 - **You don't need a final "enter the realm" step.** Once your steps reach the game's entry menu, MudPlay sends the entry command for you — and it does so even if your steps don't perfectly reach the end, so an automatic reconnect after a drop still lands you back in the game.
 - **You don't need a step for the bulletin pager.** If the board pages news or bulletins with *"(N)onstop, (Q)uit, or (C)ontinue?"* during login, MudPlay presses Enter for you each time it appears and carries on with your steps — useful since that prompt only shows up on days there's something new to read.
 
-(The one time it won't auto-enter is right after you hang up on purpose — a manual `@hangup` or a hang-up-on-low-HP / hang-up-when-naked rule — so you can read the screen and enter manually.)
+(The one time it won't auto-enter is right after you hang up on purpose — a manual `@hangup`, a hang-up-on-low-HP / hang-up-when-naked rule, or a monster whose relationship is **Hangup** — so you can read the screen and enter manually.)
 
 With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you in.
 
@@ -215,7 +215,7 @@ A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it land
 
 MudPlay normally leaves **Friend** and passive **Neutral** monsters alone. But if one turns hostile and starts swinging at you — you provoked it, or it just attacks — the engine **fights back**: any monster actively attacking you is engaged and finished, even one it would otherwise walk past. This is always on whenever **Auto-Combat** is on.
 
-Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup** (you run from / hang up on those instead of standing to fight), and any room you've marked **"do not attack"** (self-defense honours that too). Everything else — Friend, Enemy, Neutral — you defend against.
+Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup**, and any room you've marked **"do not attack"** (self-defense honours that too). A **Hangup** monster draws a hang-up the moment it is seen, before it can attack (see *What each Relationship does* under Game Data → the monster record). A **Flee** monster is only left alone: it is not attacked and not fought back, and MudPlay does not start a run from it. Everything else — Friend, Enemy, Neutral — you defend against.
 
 Self-defense is also suppressed while you're on a **walk-to** — an evil character crossing a guarded town, say, keeps running to their destination rather than stopping to fight the guards (a losing trade at low levels). It stays active when you're **idle, looping, or Auto-Lairing** (all farming/holding, where fighting back is what you want).
 
@@ -1939,6 +1939,25 @@ A monster's **Greet** row shows every keyword you can ask it as a collapsible tr
 
 Even *without* Kill on sight, if you hand-attack a passive neutral yourself (a manual swing or combat cast), the engine takes over and finishes it — hitting a neutral turns it hostile, so it's treated like an enemy until it dies and the walker holds in the room — so you don't have to keep swinging manually; the other un-engaged neutrals stay passive and rest-safe.
 
+**What each Relationship does.**
+
+- **Enemy** — fought on sight. A monster with nothing set is an Enemy.
+- **Neutral** — left alone unless it attacks you, you attack it, or **Kill on sight** is ticked.
+- **Friend** — never attacked on sight. If it attacks you, self-defense fights back.
+- **Flee** — never attacked and never fought back. That is all it does: MudPlay does not start a run from it.
+- **Hangup** — MudPlay hangs up as soon as that monster is seen in your room by name. No monster ships set to Hangup; it only applies to the ones you set.
+
+**How Hangup works.**
+
+- **What counts as seeing it.** The monster is on the room's **Also here:** line, or a line says it came into the room. It does not wait for the monster to attack, and it works with Auto-Combat and Auto-Heal off. The hang-up goes out before the combat engine can start a fight in that room.
+- **It is the Health tab's hang-up.** MudPlay sends your **Game exit command** and closes the connection. With **Sys goto wimpy instead of hanging** set up, it jumps there instead of hanging up. The realm's hang-up penalty line is logged as for any other hang-up. MudPlay does not dial back in, and the next connect stops at the menu so you can read the screen and enter yourself.
+- **Disable hangups stops it.** With the toolbar's **Disable hangups** on, nothing is sent (no hang-up and no wimpy jump), and the program log says once that the monster was seen. Turn it off while the monster is still there and the next room display hangs up.
+- **Once per sighting.** While the monster stays in the room there is one hang-up, however many times the room is displayed again. Once it has left, or you have changed rooms, seeing it again hangs up again.
+- **After you reconnect.** If the monster is still in the room when you enter the game again, it is seen again and MudPlay hangs up again. To get past it, turn **Disable hangups** on before you enter, or change the monster's relationship.
+- **When no names are shown.** A room too dark to see in, or a move made while you are blind, lists nobody, so nothing happens. In a dark room the monster is first named by an attack line (its own on you, or a party member moving to attack it), and that is when it is seen. A `look` into the next room does not count.
+- **Monsters that share a name.** The setting belongs to one monster record. A name on the screen is matched to the record the game data places in that room, and otherwise to the first record with that name; this is the same record combat uses. A name that matches no record does nothing.
+- **In the log and the bug report.** The program log has one `[MonsterHangup]` line naming the monster and the room each time, and a bug report's Session section has a **Hangup-relationship monster** line with the last one.
+
 **Where the override saves.** The **Use** dropdown chooses the tier — **Only for this character**, **Only for this realm** (the realm of the BBS your character plays), or **For all characters (global)** — then **OK** writes it and the row's Use column updates to match. Priority when the same record is set at more than one tier is character → realm → global → installed defaults, so a character edit always wins over a global one for that character.
 
 The dropdown also offers **Installed defaults**: picking it and saving **resets the record** — after a confirm it wipes your character, BBS, *and* global edits for that one record and restores the seeded value (the row returns to **Def**). This is the only way to clear a lower-priority edit that a higher tier is shadowing.
@@ -2689,7 +2708,7 @@ See the [Keybindings](#keybindings) section below — the rebind dialog is launc
 ### Disable hangups (toolbar toggle)
 
 **Default:** Off
-**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not a remote `@hangup`, not the emergency low-HP hangup, nothing — only you disconnecting manually will end the session.
+**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not a remote `@hangup`, not the emergency low-HP hangup, not a monster whose relationship is **Hangup**, nothing — only you disconnecting manually will end the session.
 **Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. One narrow exception still fires even with this on: a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
 
 ### Sprint Mode (toolbar toggle)
@@ -2967,7 +2986,7 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 **Important notes:** These settings only **record the board's rule**. They do **not** change when MudPlay hangs up, and no hang-up is held back, delayed or swapped for something else because of them. Whether and when MudPlay hangs up stays with the toolbar's **Disable hangups** toggle, the **Health** tab's hang-up trigger, the **PvP** tab's actions, and a partymate's `@panic` (unless you ignore it).
 
 Where the record shows up:
-- **The program log.** When MudPlay sends a hang-up (the Health tab's, the PvP response's, or one from `@panic`, `@hangup` or `@relog`) on a realm with a penalty recorded, one `[Hangup]` line says what the board takes: for example *This realm penalises a hang-up in PvP: 25–50% of max HP and up to 3 items.* It names the PvP side when a fight with a player is under way or the hang-up is the PvP response's, and the monster side when you are in combat. When MudPlay can't tell either way it gives the whole rule without picking a side. A hang-up from a fight with a monster on a realm that only penalises PvP logs nothing. A hang-up you make yourself with the Connect / Disconnect button is not logged this way.
+- **The program log.** When MudPlay sends a hang-up (the Health tab's, the PvP response's, one for a monster whose relationship is **Hangup**, or one from `@panic`, `@hangup` or `@relog`) on a realm with a penalty recorded, one `[Hangup]` line says what the board takes: for example *This realm penalises a hang-up in PvP: 25–50% of max HP and up to 3 items.* It names the PvP side when a fight with a player is under way or the hang-up is the PvP response's, and the monster side when you are in combat. When MudPlay can't tell either way it gives the whole rule without picking a side. A hang-up from a fight with a monster on a realm that only penalises PvP logs nothing. A hang-up you make yourself with the Connect / Disconnect button is not logged this way.
 - **Bug reports.** The Session section's **Realm hang-up penalty** line carries the recorded penalties, or `none`.
 
 ### Boss cleanup time / Boss cleanup zone

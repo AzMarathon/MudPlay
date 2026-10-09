@@ -3395,6 +3395,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // latch here silently stops the character from ever resuming the
                 // fight after reconnect (report paradigm-20260827-203548).
                 AppServices.Current.Combat.OnDisconnected();
+                // A Hangup-relationship monster still in the room after the
+                // reconnect is a new sighting, not the one already answered.
+                AppServices.Current.MonsterHangup.NoteDisconnected();
 
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a

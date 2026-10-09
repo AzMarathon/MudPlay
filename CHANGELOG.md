@@ -1,5 +1,10 @@
 # Version history
 
+## 3.159.20
+
+- A monster set to **Hangup** (Game Data → the monster's record → Fighting it) now hangs the client up as soon as it is seen in the room
+- It is the Health tab's hang-up: Disable hangups stops it, and it is not dialled back
+
 ## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters

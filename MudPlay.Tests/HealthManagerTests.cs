@@ -3443,6 +3443,82 @@ public sealed class HealthManagerTests
         Assert.Equal(0, asked);
     }
 
+    // A Hangup-relationship monster in the room takes the low-HP trigger's escape,
+    // whatever our HP and with the health engine off: the sight is the trigger.
+    [Fact]
+    public void HangUpForMonster_HangsUp_AtFullHealth_WithTheEngineOff()
+    {
+        using Harness h = new() { AutoHealRestEnabled = false, HostileInRoom = false };
+        List<bool> asked = new();
+        h.Health.SetHangupPenaltyLog(pvp =>
+        {
+            Assert.Contains("=x", h.SentLines);
+            asked.Add(pvp);
+        });
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.True(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Contains("=x", h.SentLines);
+        Assert.Equal(1, h.HangupDisconnectCount);
+        Assert.True(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.Equal(new[] { false }, asked);
+    }
+
+    // Disable Hangups stops all of it, as it does for the low-HP trigger: no
+    // carrier drop, no wimpy jump in its place, no penalty line.
+    [Fact]
+    public void HangUpForMonster_DisableHangups_SendsNothing()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.General.DisableHangups = true;
+        int asked = 0;
+        h.Health.SetHangupPenaltyLog(_ => asked++);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.False(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Null(h.WimpyFiredWith);
+        Assert.Equal(0, h.HangupDisconnectCount);
+        Assert.False(h.Hangup.PeekForTests().DisconnectExpected);
+        Assert.Equal(0, asked);
+    }
+
+    [Fact]
+    public void HangUpForMonster_WimpyJumps_WhenConfigured()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.True(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal("wimpy-room", h.WimpyFiredWith);
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
+    [Fact]
+    public void HangUpForMonster_NoExitCommand_ReportsNothingSent()
+    {
+        using Harness h = new() { HangupCommand = null };
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.False(h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal(0, h.HangupDisconnectCount);
+    }
+
     [Fact]
     public void WimpyGoto_Enabled_AndFires_SkipsHangup()
     {

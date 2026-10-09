@@ -1175,6 +1175,9 @@ public sealed class AppServices
     // unknown-entity click-to-fix dialog.
     public Game.Combat.RoomEntityClassifier RoomClassifier { get; private set; } = null!;
 
+    // Hangs up when a monster whose relationship is Hangup is on the room roster.
+    public Game.Combat.MonsterHangupWatcher MonsterHangup { get; private set; } = null!;
+
     // Auto-greets newly-seen non-party players (Settings → Talk
     // "Greet players when first met"). Subscribes to
     // RoomClassifier's observations; once-per-local-day
@@ -4093,6 +4096,17 @@ public sealed class AppServices
             lastMoveSentAt: () => RoomTracker.LastMoveSentAt,
             log: Log);
         GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
+        // Built ahead of the combat tracker and engine, like PvpRoom: a monster whose
+        // relationship is Hangup is answered before their handlers can start a fight
+        // in the room. Health is built further down, so it is reached through a
+        // lambda; a method group would be read here, while it is still null.
+        MonsterHangup = new Game.Combat.MonsterHangupWatcher(
+            RoomClassifier,
+            resolveOverlay: ResolveMonsterOverlay,
+            hangupsDisabled: ReadDisableHangups,
+            hangUp: reason => Health.HangUpForMonster(reason),
+            describeRoom: DescribeRosterRoom,
+            log: Log);
         // Another player's room attack shows as a line, not a room observation, so
         // nothing re-asks the combat gate on its own. Posted: the line is still being
         // dispatched, and the re-check can send a break.
@@ -9927,17 +9941,31 @@ public sealed class AppServices
     // Live read of the master "Disable hangups" kill-switch from the
     // char-tier General section — the same store the toolbar toggle
     // writes. Wired into every automatic-hangup site (HangupHandler,
-    // RelogHandler, CleanupLogout; HealthManager reads it through its own
-    // General-settings provider) so flipping the toggle takes effect
-    // without restarting an engine.
+    // RelogHandler, CleanupLogout, MonsterHangupWatcher; HealthManager reads it
+    // through its own General-settings provider) so flipping the toggle takes
+    // effect without restarting an engine.
     private bool ReadDisableHangups() =>
         ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups;
 
+    // Where a room roster was read, for a log line. A room display prints its
+    // "Also here:" line ahead of the exits line that confirms the move, so with a
+    // move in flight the tracked room is still the one we were leaving, and the
+    // roster may belong to either.
+    private string DescribeRosterRoom()
+    {
+        if (RoomTracker.State.CurrentRoom is not { } room) return "in an unknown room";
+        string named = $"{room.Name} ({room.Key})";
+        return RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending
+            ? $"at {named} or the room one move on (a move was not yet confirmed)"
+            : $"in {named}";
+    }
+
     // Says in the program log what the realm's hang-up penalty (Settings → BBS)
     // makes of a hang-up the client has just sent: the health settings', the PvP
-    // response's, or an @panic / @hangup / @relog. Which side applies comes from
-    // what is already tracked, a fight with a player (PvpFight) and
-    // PlayerState.InCombat; pvpResponse is the one thing only the caller knows.
+    // response's, a Hangup-relationship monster's, or an @panic / @hangup /
+    // @relog. Which side applies comes from what is already tracked, a fight
+    // with a player (PvpFight) and PlayerState.InCombat; pvpResponse is the one
+    // thing only the caller knows.
     // A record for the reader. Nothing is decided on it.
     private void LogHangupPenalty(bool pvpResponse)
     {

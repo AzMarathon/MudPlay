@@ -1829,7 +1829,9 @@ public sealed class HealthManager : IDisposable
     }
 
     // The low-HP escape action, shared by our own emergency hangup
-    // (TryEmergencyHangup) and a received @panic (RespondToReceivedPanic): sys-goto-
+    // (TryEmergencyHangup), a received @panic (RespondToReceivedPanic), the PvP
+    // response (HangUpForPvp) and a Hangup-relationship monster
+    // (HangUpForMonster): sys-goto-
     // wimpy if the character opted in with a location AND the jump dispatched, else
     // drop the carrier via the Game-Exit command. Returns true when it acted.
     //
@@ -1933,6 +1935,17 @@ public sealed class HealthManager : IDisposable
         bool allowDrop = _readGeneralSettings?.Invoke() is not { DisableHangups: true };
         _log?.Warn(LogCategory, $"PvP — bailing (wimpy-or-hang): {reason}");
         return ExecuteEscape(_readSettings(), $"PvP: {reason}", allowDrop, pvpResponse: true);
+    }
+
+    // A monster whose Game Data relationship is Hangup is in the room
+    // (MonsterHangupWatcher). It takes the escape our own low-HP trigger takes, at
+    // any HP and whether or not the health engine is on: the sight is the trigger.
+    // Disable Hangups stops all of it, the wimpy jump included, as it does for the
+    // low-HP trigger. Returns true when the escape went out.
+    public bool HangUpForMonster(string reason)
+    {
+        if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return false;
+        return ExecuteEscape(_readSettings(), reason, allowCarrierDrop: true, pvpResponse: false);
     }
 
     // The PvP response's flee: the retreat a low-HP run makes, but `rooms` long, and

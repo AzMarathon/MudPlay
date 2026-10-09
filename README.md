@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.19**
-> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
-> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+> **Version 3.159.20**
+> - A monster set to **Hangup** (Game Data → the monster's record → Fighting it) now hangs the client up as soon as it is seen in the room
+> - It is the Health tab's hang-up: Disable hangups stops it, and it is not dialled back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
