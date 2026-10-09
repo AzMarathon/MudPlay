@@ -1,8 +1,9 @@
 # Version history
 
-## 3.158.3
+## 3.158.4
 
 - A route card that names a trade starts the trip to the trader with the first step; in a party the walker no longer heads for the gate while it asks who holds the item
+- A walk in a party waits at its start until the party has said who holds a route item, then sets off: for the shop if copies are needed, for the gate if not
 - bug reports addressed: paradigm-20261009-011133
 
 ## 3.158.2

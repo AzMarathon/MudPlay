@@ -176,6 +176,13 @@ public sealed class MovementCoordinator
     // wait only" window elapses (at which point we uninvite them and resume).
     public const string PartyInviteGate = "PartyInvite";
 
+    // Asserted by PartyPathItemGate from a walk's start until the party has said how
+    // many of a route item each member holds. The answer decides whether the walk
+    // turns aside to fetch copies, and a walk that set off during the round trip
+    // went the wrong way for it (report paradigm-20261009-011133). Never longer than
+    // the party probe's own reply window. Engine-wait tier.
+    public const string PartyItemCountGate = "PartyItemCount";
+
     // Asserted by PartyFollowerMovementGate while the local character is a
     // party follower (in a party but not the leader). MajorMUD movement is
     // leader-driven — the leader walks and the game drags followers along — so

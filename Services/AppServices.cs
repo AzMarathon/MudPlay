@@ -6801,10 +6801,18 @@ public sealed class AppServices
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log,
             substitutes: PathItemSubstitutes.For,
-            agreedTrade: id => AgreedTradeFor(id) is not null);
+            agreedTrade: id => AgreedTradeFor(id) is not null,
+            // A gate of its own: a named gate has one owner, and no other gate's
+            // owner knows when a party count starts or ends.
+            holdWalk: reason => MovementCoordinator.AssertGate(
+                Game.Map.MovementCoordinator.PartyItemCountGate, nameof(PartyPathItemGate), reason),
+            releaseWalk: reason => MovementCoordinator.ClearGate(
+                Game.Map.MovementCoordinator.PartyItemCountGate, nameof(PartyPathItemGate), reason));
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
+        // Another character: the counts and the hold belong to the one that left.
+        Profile.ProfileLoaded += _ => PartyPathItemGate.Clear();
         // Handed out: the gate the party was short for is open again.
         PartyPathItemGate.Provisioned += ClearPartyShortGateItem;
         // A count is about one roster; a member joining or leaving voids it.
@@ -7217,6 +7225,15 @@ public sealed class AppServices
             PathItemSubstitutes.Commit(keep: FetchesForJourney);
             PartyPathItemGate.OnPathItemsRequired(ids);
         });
+        // A party count holds the walk that announced it. A walk that ends some
+        // other way (stopped, failed, replaced by one the user started) takes the
+        // hold with it; a router's own detour replaces the walk silently and keeps it.
+        Walker.Event += e =>
+        {
+            if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed
+                or Game.Map.WalkEventKind.Finished)
+                PartyPathItemGate.OnWalkEnded();
+        };
 
         // Fold each entered hazard room's counter into the same walk-start item
         // announce, so a route the user chose to run through a hazard room
@@ -8671,10 +8688,12 @@ public sealed class AppServices
             isEnabled: IsAutoObtainForPath,
             // A loop's approach is an ordinary walk to its entry room, so a give can
             // be fetched on the way in; once the loop is circling, its own steps
-            // drive and a detour would pull it off its lap.
+            // drive and a detour would pull it off its lap. An approach held at its
+            // start for the party's count is still an approach: the need is posted
+            // while that hold stands.
             engineWalkActive: () =>
                 AutoLair.IsActive
-                || LoopRunner.State is not (Game.Map.LoopState.Idle or Game.Map.LoopState.Approaching)
+                || (LoopRunner.State != Game.Map.LoopState.Idle && !LoopRunner.IsApproachInFlight)
                 || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),

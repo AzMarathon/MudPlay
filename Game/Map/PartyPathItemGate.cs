@@ -49,6 +49,14 @@ namespace MudPlay.Game.Map;
 // each way), so the decision is deferred off the walker's WalkTo call stack
 // through _post.
 //
+// The walk waits for the count. The answer decides whether the walk turns aside
+// for a shop or a giver, and a walker that set off during the round trip headed
+// for the gate and then turned round (report paradigm-20261009-011133). So the
+// walk is held from the announce, before its first step, until every count the
+// announce started has made its decision and the detour that decision asked for
+// has been started. Only the round trip holds it: the leader's wait for copies
+// to arrive afterwards does not.
+//
 // Substitutes. A hazard counter is an any-of group (any boat crosses the river),
 // but the route announces one representative item. Every count here is COVERAGE
 // — copies of the item or any of its route substitutes (PathItemSubstitutes) —
@@ -92,9 +100,16 @@ public sealed class PartyPathItemGate
     private readonly Action<Action> _post;
     private readonly Func<int, IReadOnlyList<int>> _substitutes;
     private readonly Func<int, bool> _agreedTrade;
+    private readonly Action<string>? _holdWalk;
+    private readonly Action<string>? _releaseWalk;
     private readonly LogService? _log;
     private readonly object _gate = new();
     private readonly Dictionary<int, Pending> _pending = new();
+    // Items whose party count is in flight, by name. One count per item at a time.
+    private readonly Dictionary<int, string> _counting = new();
+    private bool _holdingWalk;
+    // Bumped by Clear, so a count it dropped can't finish into what came after it.
+    private int _generation;
     private Action<byte[]>? _wireSender;
 
     public PartyPathItemGate(
@@ -112,7 +127,10 @@ public sealed class PartyPathItemGate
         Action<Action> post,
         LogService? log = null,
         Func<int, IReadOnlyList<int>>? substitutes = null,
-        Func<int, bool>? agreedTrade = null)
+        Func<int, bool>? agreedTrade = null,
+        // Hold and release the walk for a party count, each with the reason to log.
+        Action<string>? holdWalk = null,
+        Action<string>? releaseWalk = null)
     {
         ArgumentNullException.ThrowIfNull(isCarried);
         ArgumentNullException.ThrowIfNull(selfCount);
@@ -140,6 +158,8 @@ public sealed class PartyPathItemGate
         _post = post;
         _substitutes = substitutes ?? (static id => new[] { id });
         _agreedTrade = agreedTrade ?? (static _ => false);
+        _holdWalk = holdWalk;
+        _releaseWalk = releaseWalk;
         _log = log;
     }
 
@@ -249,30 +269,145 @@ public sealed class PartyPathItemGate
             {
                 // The leader provisions even for an item it already carries —
                 // a follower may still lack it, and only the leader coordinates
-                // the hand-off. Skip only when one is already in flight.
-                bool inFlight;
-                lock (_gate) inFlight = _pending.ContainsKey(id);
-                if (inFlight) continue;
-                _post(() => _ = ProvisionAsync(id));
+                // the hand-off. Skip only when the count is already in and the
+                // copies are still on their way: that wait holds nobody.
+                bool acquiring;
+                lock (_gate) acquiring = _pending.ContainsKey(id) && !_counting.ContainsKey(id);
+                if (acquiring) continue;
             }
-            else
+            else if (Total(SelfHoldings(id)) >= PerPersonFor(id)) continue;   // already hold our quota
+
+            // Nothing to ask the party about by name: a single copy for self.
+            if (_itemName(id) is not { } name || string.IsNullOrWhiteSpace(name))
             {
-                if (Total(SelfHoldings(id)) >= PerPersonFor(id)) continue;   // already hold our quota
-                _post(() => _ = TryBorrowSpareAsync(id));
+                (passthrough ??= new()).Add(id);
+                continue;
             }
+
+            // A count already in flight (the second leg of a boat route, a re-plan,
+            // a walk started over the one that asked) is the one this walk waits for.
+            if (!HoldWalkForCount(id, name, out int generation)) continue;
+            _post(() => _ = CountAsync(id, name, leader, generation));
         }
         if (passthrough is not null) _forward(passthrough, 1);
+    }
+
+    // ----- Holding the walk for a count ---------------------------------------
+
+    // The items whose party count a walk is waiting on, empty when none is. For the
+    // Navigation hold chip and the bug report.
+    public IReadOnlyList<string> HoldingWalkFor
+    {
+        get
+        {
+            lock (_gate) return _holdingWalk ? _counting.Values.ToArray() : Array.Empty<string>();
+        }
+    }
+
+    // Hold the walk being announced for the count of this item. False when that
+    // count is already in flight, so the caller starts no second one.
+    private bool HoldWalkForCount(int id, string name, out int generation)
+    {
+        bool fresh, assert;
+        lock (_gate)
+        {
+            generation = _generation;
+            fresh = _counting.TryAdd(id, name);
+            assert = !_holdingWalk;
+            _holdingWalk = true;
+        }
+        if (assert) _holdWalk?.Invoke($"asking the party who holds {name}");
+        return fresh;
+    }
+
+    // One count, from the announce to its decision. Nothing awaits it, so a fault
+    // is caught here rather than lost, and the walk it holds is let go whatever
+    // happened: a hold that outlived its count would strand the walk for good.
+    private async Task CountAsync(int id, string name, bool leader, int generation)
+    {
+        try
+        {
+            if (IsStale(generation)) return;
+            if (leader) await ProvisionAsync(id, name, generation).ConfigureAwait(true);
+            else await TryBorrowSpareAsync(id, name, generation).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // Drop the slot the count reserved, so the next announce asks again.
+            lock (_gate)
+            {
+                if (generation == _generation) _pending.Remove(id);
+            }
+            _log?.Warn(LogCategory,
+                $"party count of path item {id} ('{name}') failed ({ex.Message}) — the walk goes on without it");
+        }
+        finally
+        {
+            EndCount(id, generation);
+        }
+    }
+
+    private bool IsStale(int generation)
+    {
+        lock (_gate) return generation != _generation;
+    }
+
+    // The count has made its decision. The release is posted, not made here: a
+    // router the decision woke has only queued its detour walk, and a hold lifted
+    // now would send the walk's own first step ahead of it.
+    private void EndCount(int id, int generation)
+    {
+        lock (_gate)
+        {
+            if (generation != _generation) return;   // Clear dropped it, and its hold
+            _counting.Remove(id);
+            if (_counting.Count > 0) return;
+        }
+        _post(() => ReleaseWalkIfSettled(generation));
+    }
+
+    private void ReleaseWalkIfSettled(int generation)
+    {
+        lock (_gate)
+        {
+            // The detour's own walk-start may have begun another count meanwhile.
+            if (generation != _generation || _counting.Count > 0) return;
+        }
+        ReleaseWalk("the party count is in");
+    }
+
+    private void ReleaseWalk(string reason)
+    {
+        lock (_gate)
+        {
+            if (!_holdingWalk) return;
+            _holdingWalk = false;
+        }
+        _releaseWalk?.Invoke(reason);
+    }
+
+    // The walk a count was holding has ended (stopped, failed, replaced by another
+    // the user started), so there is nothing left to hold. The counts run on to
+    // their decisions, and a walk that needs one of them is held for it afresh
+    // when it announces.
+    public void OnWalkEnded() => ReleaseWalk("the walk it held is over");
+
+    // Reset States, or another character loaded: forget the party provisioning in
+    // flight and let go of the walk it held.
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _pending.Clear();
+            _counting.Clear();
+            _generation++;
+        }
+        ReleaseWalk("party provisioning reset");
     }
 
     // Inventory-change callback (wired to InventoryManager.Changed): re-checks
     // each in-flight provisioning and coordinates the hand-off the moment the
     // pool becomes whole. A no-op when the leader isn't provisioning anything.
-    // Reset States: forget the party provisioning probes in flight.
-    public void Clear()
-    {
-        lock (_gate) _pending.Clear();
-    }
-
     public void OnInventoryChanged()
     {
         int[] ids;
@@ -317,11 +452,8 @@ public sealed class PartyPathItemGate
         return holdings;
     }
 
-    private async Task ProvisionAsync(int id)
+    private async Task ProvisionAsync(int id, string name, int generation)
     {
-        string? name = _itemName(id);
-        if (string.IsNullOrWhiteSpace(name)) { _forward(new[] { id }, 1); return; }
-
         // Reserve the slot up-front so a re-announce mid-probe doesn't kick off
         // a second probe / double-give for the same item.
         lock (_gate)
@@ -332,7 +464,7 @@ public sealed class PartyPathItemGate
         Dictionary<string, IReadOnlyDictionary<int, int>> others = await QueryHoldingsAsync(id).ConfigureAwait(true);
         lock (_gate)
         {
-            if (!_pending.ContainsKey(id)) return;   // cleared while probing
+            if (generation != _generation || !_pending.ContainsKey(id)) return;   // cleared while probing
             _pending[id] = new Pending(id, name, others);
         }
 
@@ -449,13 +581,11 @@ public sealed class PartyPathItemGate
             $"party provisioning {name}: issued {sent} give(s) so each member holds {q}.");
     }
 
-    private async Task TryBorrowSpareAsync(int id)
+    private async Task TryBorrowSpareAsync(int id, string name, int generation)
     {
-        string? name = _itemName(id);
-        if (string.IsNullOrWhiteSpace(name)) { _forward(new[] { id }, 1); return; }
-
         int q = PerPersonFor(id);
         Dictionary<string, IReadOnlyDictionary<int, int>> holdings = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        if (IsStale(generation)) return;   // reset while probing: ask for nothing
 
         // Might have arrived between the announce and the reply window (an
         // earlier give, a floor pickup) — nothing left to do once we hold quota.

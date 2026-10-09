@@ -18,7 +18,9 @@ public sealed record NavHoldNames(
     IReadOnlyCollection<string> Downed,
     string? HeldCast,
     // The move the user typed that paused navigation, while that pause stands.
-    string? TypedMove = null)
+    string? TypedMove = null,
+    // The route items a walk is waiting on the party's count of.
+    IReadOnlyCollection<string>? CountedItems = null)
 {
     public static readonly NavHoldNames None = new([], [], [], [], null);
 }
@@ -62,6 +64,9 @@ public static class NavActivity
         (MovementCoordinator.MemberDisconnectGate, "member disconnected", NavActivityKind.Waiting, true),
         (MovementCoordinator.ReconnectReformGate, "re-forming the party", NavActivityKind.Waiting, false),
         (MovementCoordinator.PartyInviteGate, "waiting on an invite", NavActivityKind.Waiting, true),
+        // A walk that hasn't set off: the one hold that answers "why isn't it moving?"
+        // at the very start, so it gets a chip though it lasts seconds.
+        (MovementCoordinator.PartyItemCountGate, "asking the party who holds an item", NavActivityKind.Waiting, true),
         (MovementCoordinator.FollowerGate, "following leader", NavActivityKind.Waiting, false),
         // Auto-engines kill switch off — a queued walk / loop / lair is planned but
         // held here until Auto-All is restored; the single most common "why isn't it
@@ -141,6 +146,9 @@ public static class NavActivity
                     break;
                 case MovementCoordinator.PartyInviteGate:
                     Named(holds, names.Invited, n => $"Waiting on {n} to join", label);
+                    break;
+                case MovementCoordinator.PartyItemCountGate:
+                    Named(holds, names.CountedItems ?? [], n => $"Asking who holds {n}", label);
                     break;
                 case MovementCoordinator.SneakCastGate:
                     holds.Add((names.HeldCast ?? label, NavChipTone.Wait));

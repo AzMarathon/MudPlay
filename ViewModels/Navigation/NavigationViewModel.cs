@@ -3911,7 +3911,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 or Game.Spells.SpellCategory.MinorSelfHeal or Game.Spells.SpellCategory.MajorSelfHeal => "Healing",
             _ => null,   // a buff, or nothing known: the chip reads "Buffing"
         },
-        _services.MovementControl.PausedByTypedMove);
+        _services.MovementControl.PausedByTypedMove,
+        _services.PartyPathItemGate.HoldingWalkFor);
 
     private void RefreshActivityStatus()
     {

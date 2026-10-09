@@ -127,6 +127,17 @@ public sealed class NavActivityTests
             holds.Select(h => h.Label));
     }
 
+    // A walk standing at its start says which item the party is being asked about.
+    [Fact]
+    public void ActiveHolds_NameTheItemThePartyIsAskedAbout()
+    {
+        var holds = NavActivity.ActiveHolds(
+            new[] { MovementCoordinator.PartyItemCountGate },
+            isMovementPrevented: false,
+            NavHoldNames.None with { CountedItems = new[] { "log raft" } });
+        Assert.Equal(new[] { "Asking who holds log raft" }, holds.Select(h => h.Label));
+    }
+
     // A pause the user's own typed move caused says so: nobody pressed Pause, and the
     // state chip alone reads "Paused" (report paradigm-20261003-162514).
     [Fact]

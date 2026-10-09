@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using MudPlay.Game.Map;
 using MudPlay.Game.Remote;
@@ -40,6 +42,15 @@ public sealed class PartyPathItemGateTests
         public Func<int, string, Task<PartyInventoryProbe.PartyItemResult>>? QueryOverride;
         // Items whose trade the user agreed to on a route card.
         public readonly HashSet<int> AgreedTrades = new();
+        // What the gate did, in order: "hold: <reason>", "release: <reason>",
+        // "forward <id>". WalkHeld is the hold as the coordinator would have it.
+        public readonly List<string> Timeline = new();
+        public bool WalkHeld;
+        // Set to queue posted actions for RunPosted, as the dispatcher does,
+        // instead of running them inline.
+        public Queue<Action>? Posted;
+        // Runs with each forward, standing in for a router the need wakes.
+        public Action<int>? OnForward;
         public readonly PartyPathItemGate Gate;
 
         public Harness(bool bindWire = true)
@@ -64,23 +75,61 @@ public sealed class PartyPathItemGateTests
                 selfGivenName: () => SelfGiven,
                 forward: (ids, qty) =>
                 {
-                    foreach (int id in ids) { Forwarded.Add(id); ForwardedReq.Add((id, qty)); }
+                    foreach (int id in ids)
+                    {
+                        Forwarded.Add(id);
+                        ForwardedReq.Add((id, qty));
+                        Timeline.Add($"forward {id}");
+                        OnForward?.Invoke(id);
+                    }
                 },
-                post: a => a(),
+                post: a => { if (Posted is null) a(); else Posted.Enqueue(a); },
                 log: null,
                 substitutes: id => Subs.TryGetValue(id, out int[]? s) ? s : new[] { id },
-                agreedTrade: id => AgreedTrades.Contains(id));
+                agreedTrade: id => AgreedTrades.Contains(id),
+                holdWalk: reason => { WalkHeld = true; Timeline.Add($"hold: {reason}"); },
+                releaseWalk: reason => { WalkHeld = false; Timeline.Add($"release: {reason}"); });
             if (bindWire)
                 Gate.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b)));
         }
 
-        public void SetResult(int id, params (string given, int count)[] counts)
+        public void SetResult(int id, params (string given, int count)[] counts) =>
+            Results[id] = Answer(id, counts);
+
+        public void RunPosted()
         {
-            var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            int total = 0;
-            foreach ((string given, int count) c in counts) { dict[c.given] = c.count; total += c.count; }
-            Results[id] = new PartyInventoryProbe.PartyItemResult(id, total, counts.Length, counts.Length, dict);
+            while (Posted is { Count: > 0 } queue) queue.Dequeue()();
         }
+
+        // Leave the count of each item unanswered until the returned source is completed.
+        public Dictionary<int, TaskCompletionSource<PartyInventoryProbe.PartyItemResult>> HoldCountsOpen(
+            params int[] ids)
+        {
+            var open = new Dictionary<int, TaskCompletionSource<PartyInventoryProbe.PartyItemResult>>();
+            foreach (int id in ids) open[id] = new TaskCompletionSource<PartyInventoryProbe.PartyItemResult>();
+            QueryOverride = (id, _) => open[id].Task;
+            return open;
+        }
+
+        public int Count(string prefix) => Timeline.Count(t => t.StartsWith(prefix, StringComparison.Ordinal));
+    }
+
+    // Runs a test with no synchronization context, so a count that is answered
+    // carries on inside SetResult and the test reads the outcome on the next line.
+    private static void Inline(Action test)
+    {
+        SynchronizationContext? prior = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(null);
+        try { test(); }
+        finally { SynchronizationContext.SetSynchronizationContext(prior); }
+    }
+
+    private static PartyInventoryProbe.PartyItemResult Answer(int id, params (string given, int count)[] counts)
+    {
+        var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int total = 0;
+        foreach ((string given, int count) c in counts) { dict[c.given] = c.count; total += c.count; }
+        return new PartyInventoryProbe.PartyItemResult(id, total, counts.Length, counts.Length, dict);
     }
 
     // ----- Off / solo pass-through (leader-agnostic) --------------------------
@@ -695,5 +744,315 @@ public sealed class PartyPathItemGateTests
         Assert.Equal("@party give waterskin to MudPlay\r", Assert.Single(h.Sent));
         // One borrowed, still two short of quota — demand pipeline wants the full 3.
         Assert.Equal((1, 3), Assert.Single(h.ForwardedReq));
+    }
+
+    // ----- The walk waits for the count ---------------------------------------
+    //
+    // Report paradigm-20261009-011133, and the user's ruling on it: the walk waits
+    // at its start until the party's count is in, "just in case it needs to plan a
+    // detour to a shop to buy needed items". It used to set off for the gate during
+    // the round trip and turn round when the answer sent it elsewhere.
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Count_HoldsTheWalk_UntilThePartyAnswers(bool leader) => Inline(() =>
+    {
+        var h = new Harness { IsLeader = leader };
+        h.Names[1] = "rope";
+        var open = h.HoldCountsOpen(1);
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.True(h.WalkHeld);
+        Assert.Equal("hold: asking the party who holds rope", Assert.Single(h.Timeline));
+        Assert.Equal(new[] { "rope" }, h.Gate.HoldingWalkFor);
+
+        open[1].SetResult(Answer(1, ("Bob", 0)));
+
+        Assert.False(h.WalkHeld);
+        Assert.Empty(h.Gate.HoldingWalkFor);
+        Assert.Equal(new[] { 1 }, h.Forwarded);
+    });
+
+    // The router a forwarded need wakes only queues its detour walk. The hold is
+    // let go behind it, or the walk's own first step would go out ahead of the detour.
+    [Fact]
+    public void Count_ReleasesTheWalk_AfterTheDetourItAskedForHasStarted()
+    {
+        var h = new Harness { IsLeader = true, Posted = new Queue<Action>() };
+        h.Names[1] = "log raft";
+        h.SetResult(1, ("Bob", 0));
+        h.OnForward = _ => h.Posted.Enqueue(() => h.Timeline.Add("detour walk starts"));
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.True(h.WalkHeld);          // held from the announce, before the count is even sent
+        Assert.Equal(0, h.QueryCount);
+        h.RunPosted();
+
+        Assert.Equal(
+            new[]
+            {
+                "hold: asking the party who holds log raft",
+                "forward 1",
+                "detour walk starts",
+                "release: the party count is in",
+            },
+            h.Timeline);
+    }
+
+    // Nobody answering is what the probe's reply window ends in: an empty result.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Count_NobodyAnswers_ReleasesTheWalkWhenTheWindowCloses(bool leader)
+    {
+        var h = new Harness { IsLeader = leader };
+        h.Names[1] = "rope";
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.False(h.WalkHeld);
+        Assert.Equal(1, h.Count("hold"));
+        Assert.Equal(1, h.Count("release"));
+        Assert.Equal(new[] { 1 }, h.Forwarded);
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void Count_ThatFails_StillReleasesTheWalk(bool leader, bool faultsLater)
+    {
+        var h = new Harness { IsLeader = leader };
+        h.Names[1] = "rope";
+        h.QueryOverride = (id, _) => faultsLater
+            ? Task.FromException<PartyInventoryProbe.PartyItemResult>(new InvalidOperationException("probe gone"))
+            : throw new InvalidOperationException("probe gone");
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.False(h.WalkHeld);
+        Assert.Equal(1, h.Count("release"));
+        Assert.False(h.Gate.SearchDemandActive);   // the leader's slot went with the count
+
+        // The next walk asks again rather than finding a count that never ends.
+        h.QueryOverride = null;
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.Equal(2, h.QueryCount);
+        Assert.False(h.WalkHeld);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Clear_ReleasesTheWalk_AndALateAnswerDoesNothing(bool leader) => Inline(() =>
+    {
+        var h = new Harness { IsLeader = leader };
+        h.Names[1] = "rope";
+        var open = h.HoldCountsOpen(1);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.True(h.WalkHeld);
+
+        h.Gate.Clear();
+
+        Assert.False(h.WalkHeld);
+        Assert.Empty(h.Gate.HoldingWalkFor);
+
+        open[1].SetResult(Answer(1, ("Bob", 3)));   // Bob has spares to hand over
+
+        Assert.Empty(h.Sent);
+        Assert.Empty(h.Forwarded);
+        Assert.Equal(1, h.Count("release"));
+    });
+
+    [Fact]
+    public void Clear_ThenANewCount_IsNotCutShortByTheOldOne() => Inline(() =>
+    {
+        var h = new Harness();
+        h.Names[1] = "rope";
+        var first = h.HoldCountsOpen(1);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        h.Gate.Clear();
+
+        var second = h.HoldCountsOpen(1);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.True(h.WalkHeld);
+
+        first[1].SetResult(Answer(1, ("Bob", 0)));
+        Assert.True(h.WalkHeld);            // the count this walk waits for is still out
+        Assert.Empty(h.Forwarded);
+
+        second[1].SetResult(Answer(1, ("Bob", 0)));
+        Assert.False(h.WalkHeld);
+        Assert.Equal(new[] { 1 }, h.Forwarded);
+    });
+
+    [Fact]
+    public void WalkWithNoCountToTake_IsNeverHeld()
+    {
+        var solo = new Harness { InParty = false };
+        solo.Names[1] = "rope";
+        solo.Gate.OnPathItemsRequired(new[] { 1 });
+
+        var unflagged = new Harness { IsLeader = true, Enabled = false };
+        unflagged.Names[1] = "rope";
+        unflagged.Gate.OnPathItemsRequired(new[] { 1 });
+
+        var agreedTrade = new Harness { IsLeader = true };
+        agreedTrade.Names[808] = "glowing key";
+        agreedTrade.AgreedTrades.Add(808);
+        agreedTrade.Gate.OnPathItemsRequired(new[] { 808 });
+
+        var coveredFollower = new Harness();
+        coveredFollower.Names[1] = "rope";
+        coveredFollower.Carried.Add(1);
+        coveredFollower.Gate.OnPathItemsRequired(new[] { 1 });
+
+        var nameless = new Harness { IsLeader = true };   // no name to ask the party by
+        nameless.Gate.OnPathItemsRequired(new[] { 5 });
+
+        var nothing = new Harness { IsLeader = true };
+        nothing.Gate.OnPathItemsRequired(Array.Empty<int>());
+
+        foreach (Harness h in new[] { solo, unflagged, agreedTrade, coveredFollower, nameless, nothing })
+        {
+            Assert.Equal(0, h.QueryCount);
+            Assert.Equal(0, h.Count("hold"));
+            Assert.False(h.WalkHeld);
+        }
+    }
+
+    // After the count the leader goes on waiting for copies to arrive so it can
+    // hand them out. That can take the whole trip to a shop, and it holds nobody.
+    [Fact]
+    public void Leader_StillAcquiringAfterTheCount_DoesNotHoldTheWalk()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[1] = "rope";
+        h.SetResult(1, ("Bob", 0));
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.True(h.Gate.SearchDemandActive);   // slot kept: still acquiring
+        Assert.False(h.WalkHeld);
+
+        // Each later leg of the trip announces the route again. The count is known,
+        // so none of them is held for it.
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.Equal(1, h.QueryCount);
+        Assert.Equal(1, h.Count("hold"));
+        Assert.False(h.WalkHeld);
+    }
+
+    [Fact]
+    public void TwoItemsCountedAtOnce_ReleaseTheWalkOnlyWhenBothAreIn() => Inline(() =>
+    {
+        var h = new Harness { Posted = new Queue<Action>() };
+        h.Names[1] = "rope";
+        h.Names[2] = "log raft";
+        var open = h.HoldCountsOpen(1, 2);
+
+        h.Gate.OnPathItemsRequired(new[] { 1, 2 });
+        h.RunPosted();
+        Assert.Equal(2, h.QueryCount);
+        Assert.Equal(new[] { "log raft", "rope" }, h.Gate.HoldingWalkFor.OrderBy(n => n));
+
+        open[1].SetResult(Answer(1, ("Bob", 0)));
+        h.RunPosted();
+        Assert.True(h.WalkHeld);
+        Assert.Equal(new[] { 1 }, h.Forwarded);
+
+        open[2].SetResult(Answer(2, ("Bob", 0)));
+        h.RunPosted();
+        Assert.False(h.WalkHeld);
+        Assert.Equal(1, h.Count("hold"));
+        Assert.Equal(1, h.Count("release"));
+    });
+
+    // A boat route announces each of its land legs, and a re-plan announces again.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AnnouncedAgainMidCount_StartsNoSecondCount(bool leader) => Inline(() =>
+    {
+        var h = new Harness { IsLeader = leader, Posted = new Queue<Action>() };
+        h.Names[1] = "rope";
+        var open = h.HoldCountsOpen(1);
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        h.Gate.OnPathItemsRequired(new[] { 1 });   // before the first count has gone out
+        h.RunPosted();
+        h.Gate.OnPathItemsRequired(new[] { 1 });   // and while it is out
+        h.RunPosted();
+
+        Assert.Equal(1, h.QueryCount);
+        Assert.Equal(1, h.Count("hold"));
+
+        open[1].SetResult(Answer(1, ("Bob", 0)));
+        h.RunPosted();
+        Assert.False(h.WalkHeld);
+        Assert.Equal(new[] { 1 }, h.Forwarded);
+    });
+
+    // The detour a count asked for starts its own walk, which may cross a gate of
+    // its own. That walk waits for its count too; the first release must not free it.
+    [Fact]
+    public void DetourWalkThatStartsAnotherCount_StaysHeld() => Inline(() =>
+    {
+        var h = new Harness { Posted = new Queue<Action>() };
+        h.Names[1] = "rope";
+        h.Names[2] = "log raft";
+        var open = h.HoldCountsOpen(1, 2);
+        h.OnForward = id =>
+        {
+            if (id == 1) h.Posted.Enqueue(() => h.Gate.OnPathItemsRequired(new[] { 2 }));
+        };
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        h.RunPosted();
+        open[1].SetResult(Answer(1, ("Bob", 0)));
+        h.RunPosted();
+
+        Assert.True(h.WalkHeld);
+        Assert.Equal(new[] { "log raft" }, h.Gate.HoldingWalkFor);
+        Assert.Equal(0, h.Count("release"));
+
+        open[2].SetResult(Answer(2, ("Bob", 0)));
+        h.RunPosted();
+        Assert.False(h.WalkHeld);
+    });
+
+    // A stopped or failed walk has nothing left to hold. The count still comes
+    // in, and a walk started meanwhile that crosses the same gate waits for it.
+    [Fact]
+    public void WalkEnded_ReleasesTheHold_AndTheNextWalkWaitsForTheSameCount() => Inline(() =>
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[1] = "rope";
+        var open = h.HoldCountsOpen(1);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        h.Gate.OnWalkEnded();
+        Assert.False(h.WalkHeld);
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.True(h.WalkHeld);
+        Assert.Equal(1, h.QueryCount);
+
+        open[1].SetResult(Answer(1, ("Bob", 0)));
+        Assert.False(h.WalkHeld);
+        Assert.Equal(new[] { 1 }, h.Forwarded);
+    });
+
+    [Fact]
+    public void WalkEnded_WithNoCountOut_ReleasesNothing()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Gate.OnWalkEnded();
+        Assert.Empty(h.Timeline);
     }
 }
