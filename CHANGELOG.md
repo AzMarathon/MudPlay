@@ -1,5 +1,9 @@
 # Version history
 
+## 3.158.3
+
+- A `bank` reply taken while standing in a bank, which shows that bank alone, no longer counts as the full list of your deposits; train funding and the route picker ask again from outside one
+
 ## 3.158.2
 
 - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor

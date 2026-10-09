@@ -6882,7 +6882,11 @@ public sealed class AppServices
         Movement.WealthWarmProbe = PartyWealth.Probe;
 
         // Self bank-balance probe — sends `bank` and parses the deposit listing.
-        BankBalance = new Game.Remote.BankBalanceProbe(send: cmd => SendGameCommand(cmd), log: Log);
+        BankBalance = new Game.Remote.BankBalanceProbe(
+            send: cmd => SendGameCommand(cmd),
+            inBankRoom: () => RoomTracker.State.CurrentRoom?.Key is { } here
+                && Game.GameData.BankCatalog.IsBankRoom(GameData, here),
+            log: Log);
 
         // Quest-flag reader — sends `abil <flag>` (paradigm) / `sys god <name> abil` (stock)
         // and parses the flag values. Consumed by QuestFlagSync at login.
