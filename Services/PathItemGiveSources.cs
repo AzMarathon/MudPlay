@@ -87,24 +87,29 @@ public sealed class PathItemGiveSources
     // The source a route card names for a walk from source to destination, or null
     // when none can be reached: a free hand-over, or failing those (and with
     // offerTrades) the trade it would ask the user to agree to. Shares the give
-    // router's selection and its distances, so the card names the giver the run
-    // visits.
-    public GiveSource? Choose(int itemId, RoomKey source, RoomKey destination, bool offerTrades)
+    // router's selection and prices the detour as the card's walk will walk it
+    // (closedGates are the gate items that card's route goes round), so the card
+    // names the giver the run visits.
+    public GiveSource? Choose(
+        int itemId, RoomKey source, RoomKey destination, bool offerTrades,
+        IReadOnlyCollection<int>? closedGates = null)
     {
         IReadOnlyList<GiveSource> candidates = Free(itemId);
         if (candidates.Count == 0 && offerTrades) candidates = Trades(itemId);
-        return PathItemGiveRouter.TrySelectGiver(candidates, source, destination, DetourDistance, out GiveSource best)
+        return PathItemGiveRouter.TrySelectGiver(
+            candidates, source, destination, (a, b) => DetourDistance(a, b, closedGates), out GiveSource best)
             ? best
             : null;
     }
 
-    // Distance used to score a detour for a path item. The acquirable gates are
-    // suspended: the walk is priced with the fetched item in hand, and the
-    // destination of a walk that needs a key is behind the door the key opens. On
-    // the live filter that leg has no length and every source is turned down.
-    public int? DetourDistance(RoomKey a, RoomKey b)
+    // Distance used to score a detour a route card would make for a path item. The
+    // acquirable gates are suspended, but for the ones the card's route goes round:
+    // the walk is priced with the fetched item in hand, and the destination of a
+    // walk that needs a key is behind the door the key opens. On the live filter
+    // that leg has no length and every source is turned down.
+    public int? DetourDistance(RoomKey a, RoomKey b, IReadOnlyCollection<int>? closedGates = null)
     {
-        using (_filter.SuspendAcquirableGates())
+        using (_filter.SuspendAcquirableGatesExcept(closedGates ?? Array.Empty<int>()))
             return _bfs.DistanceBetween(a, b, _filter);
     }
 

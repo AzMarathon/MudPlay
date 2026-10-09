@@ -1067,8 +1067,9 @@ public sealed class LoopRunner : IRecoverableEngine
         Raise(new LoopEvent(LoopEventKind.Started, loop.Name));
         _log?.Info("LoopRunner",
             $"approach: walking from {currentKey} → {closest} (closest of {loop.Waypoints.Count} waypoints)");
-        if (throughGates) _armGatedApproach?.Invoke(currentKey.Value, closest.Value);
-        _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference);
+        JourneyFetch? fetch = throughGates ? _gatedApproachFetch?.Invoke(currentKey.Value, closest.Value) : null;
+        _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference,
+            fetch: fetch);
         return true;
     }
 
@@ -1125,8 +1126,9 @@ public sealed class LoopRunner : IRecoverableEngine
         State = LoopState.Approaching;
         _log?.Info("LoopRunner",
             $"approach: walking from {from} → {entry} (nearest loop room, {steps[entry]} step(s); joins at step {_index + 1} of {_expandedSteps.Count})");
-        if (throughGates) _armGatedApproach?.Invoke(from, entry);
-        _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference);
+        JourneyFetch? fetch = throughGates ? _gatedApproachFetch?.Invoke(from, entry) : null;
+        _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference,
+            fetch: fetch);
         return true;
     }
 
@@ -1327,13 +1329,13 @@ public sealed class LoopRunner : IRecoverableEngine
         _pathItemDetourRoom = probe;
     }
 
-    // Called with (from, entry) just before an approach walk that plans through
-    // gates, so whatever the way in needs can be armed for fetching first.
-    private Action<RoomKey, RoomKey>? _armGatedApproach;
-    public void SetGatedApproachArmer(Action<RoomKey, RoomKey> armer)
+    // Asked with (from, entry) just before an approach walk that plans through
+    // gates: what the way in needs fetched, for that walk to carry.
+    private Func<RoomKey, RoomKey, JourneyFetch?>? _gatedApproachFetch;
+    public void SetGatedApproachFetch(Func<RoomKey, RoomKey, JourneyFetch?> fetch)
     {
-        ArgumentNullException.ThrowIfNull(armer);
-        _armGatedApproach = armer;
+        ArgumentNullException.ThrowIfNull(fetch);
+        _gatedApproachFetch = fetch;
     }
 
     // Internal so a test can hand it a walker event directly.

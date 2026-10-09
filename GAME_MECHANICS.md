@@ -4911,7 +4911,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     they keep the default teleport-allowed shortest route.
 
 ### Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable
-*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional); CONFIRMED 2026-10-08 (user + report `paradigm-20261008-175938`; the tower and castle key chain inside the city) · Realm: Paradigm (1.9.1) · per-fact tags inline*
+*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional); OBSERVED 2026-10-08 (Paradigm 1.9.1 game data + reports `paradigm-20261008-173911`, `paradigm-20261008-174023`; the talisman exit and the way round it); CONFIRMED 2026-10-08 (user + report `paradigm-20261008-175938`; the tower and castle key chain inside the city) · Realm: Paradigm (1.9.1) · per-fact tags inline*
 
 - **[CONFIRMED, user 2026-07-23] A walled city can have a "front door" that is a
   keyword→item→summon→kill→key chain, entirely separate from any teleport "backdoor" the map data also
@@ -5013,6 +5013,25 @@ Among protectable hazards, a further split governs whether the navigator may off
     (who may be dead), or from hidden player-made stashes. So even though it shortens the trip,
     detouring to fetch it can fail — the client presents it as the player's own call (the slaver-leader
     detour may or may not net out ahead, depending on what the player is doing), never an auto-obtain.
+- *[OBSERVED 2026-10-08 — Paradigm 1.9.1 room data and TBInfo; reports `paradigm-20261008-173911`,
+  `paradigm-20261008-174023`]* **The talisman exit and the way round it, from Dragon's Teeth Hills:**
+  - **The exit that needs the talisman** is north out of `2/687` (Dragon's Teeth Hills) into `2/2578`
+    (Secret Passage), `Hidden/Needs 1 Actions, any order`; the action is `hold up talisman`,
+    `hold up amber talisman` or `lift up talisman`, `(Item: 815)`. `2/2578` goes on west to `8/837`.
+    From `2/2578` the exit back south opens with `pull lever` / `push lever` / `move lever` and no item.
+  - **Without the item the game answers** `You don't have amber talisman to use!` and the move north
+    then gets `There is no exit in that direction!`.
+  - **The way round** is the room command at `2/487` (Dragon's Teeth Hills), TBInfo `308`: `go hole`,
+    `enter hole` or `crawl hole` (`message 774:cast 336:message 766:text 306`), which lands in `2/1306`
+    (Stone Tunnel, Hole Up). `2/1306`'s own `CMD 307` (`go hole` / `enter hole` / `crawl hole` /
+    `climb hole`, `teleport 487 2`) goes back up.
+  - **Both ways still cross the orb gate and the Black Steel Gate**: south out of `8/398` (item 807),
+    then `8/461 → 8/462` (`Key: 806 [or 101 picklocks]`). So the talisman route needs the talisman
+    **and** the orb. **Client policy:** a character whose Picklocks meets the 101 on that exit is
+    planned through the gate without its key, on either route.
+  - **Route lengths** *(the client's route search over the 1.9.1 data, for a level-25 character with
+    Picklocks 119)*: `2/687 → 8/492` is 147 steps through the talisman exit and 237 round it;
+    `2/687 → 8/530` is 156 and 246.
 - **Client use:**
   - **Why the front door mattered for pathing:** the backdoor portal is the *shorter* graph route, so a
     blocked walk-to that re-probed by ignoring **all** gates surfaced it and blamed "a level
@@ -5028,6 +5047,16 @@ Among protectable hazards, a further split governs whether the navigator may off
     optional shortcut (so the walk takes the reliable way and any gate item the crosser already holds
     surfaces as "— you have it"), reports only genuinely-required unheld items, and offers the shortcut
     separately (`RouteChoice.ShortcutItems` / `ShortcutStepCount`) with the rooms it would save.
+  - The walk that card starts plans with the shortcut's gates kept closed
+    (`RouteChoice.ClosedGateItems` → `AutoWalkManager.WalkTo(keepGatesClosedFor:)`, held on the
+    walk's `WalkJourney` for re-plans, detour legs and errand restarts through
+    `AutoWalkManager.ResumeJourney`). Before 2026-10-08 it planned with every gate open and walked to
+    the talisman exit (report `paradigm-20261008-173911`).
+  - A gate counts as a shortcut's only when it stops the crosser: a keyed door they can pick or bash
+    doesn't, so the gate key is no longer named beside the talisman
+    (`RouteChoicePlanner.ItemGatesOnPath`, by the item / locked-door block reasons only). The shortcut
+    card lists its own route's full needs (`RouteChoice.ShortcutRequirements`; report
+    `paradigm-20261008-174023`).
   - **Client policy** (report `paradigm-20261008-175938`): a walk trades for a door key, and only for a
     door key, from a route card that names the trade.
     - A plain trade is an award line that takes one item, once, asks nothing else of the character and
@@ -5041,13 +5070,18 @@ Among protectable hazards, a further split governs whether the navigator may off
       the game would take it (*Room-command refusals*): the walk doesn't strip gear the user is wearing.
     - With the opal brooch in the pack the route card reads `glowing key (ask sleazy shopkeeper, in
       trade for your opal brooch)`; picking it agrees to that trade
-      (`AppServices.AgreeToPathItemTrades`), walks to `8/486` and sends `ask sleazy shopkeeper brooch`.
+      (`AppServices.NewJourneyFetch`), walks to `8/486` and sends `ask sleazy shopkeeper brooch`.
       A walk with no card (an item flagged **Auto-obtain for path** on a sole route, a loop's approach)
       never trades (`AppServices.ShouldAutoObtainSoleRoute`).
-    - The agreement is for that key, that item and that one walk (`RouteCardFetch.AgreedTradeFor`): it
-      comes into force when the walk the card committed starts, and ends when that walk arrives,
-      fails, is stopped or is replaced by another, and on death, a dropped connection, a profile
-      change and an engine reset. No later walk can trade on it.
+    - The agreement is for that key, that item and that one journey. It is carried on the walk's
+      `WalkJourney` (`JourneyFetch`, with the items the pick ordered fetched) and read only through
+      `AppServices.AgreedTradeFor`, for a journey whose route was picked on a card. So it is there for
+      that journey's legs, side trips and errand restarts (`AutoWalkManager.ResumeJourney`), and gone
+      when the journey ends: on arrival or failure at its destination, any Stop, death, a profile
+      change, an engine reset, or another walk starting. No later walk can trade on it.
+    - A dropped connection ends the agreement though the journey may stand
+      (`AppServices.EndTradeSession`): a walk picked up after reconnecting fetches as before and
+      trades nothing.
     - Without the brooch nothing is fetched and the card names the trade instead
       (`PathItemGiveSources.TradeNote`): `glowing key (sleazy shopkeeper trades one for opal brooch,
       which captain of the guard drops)`. Killing a boss for the item a trade takes is left to the
@@ -5793,7 +5827,7 @@ There is no room to drop amethyst pendant here.
 
 **Client use:**
 - `ItemSourceIndex` reads each award line's keyword from the NPC's menu when the line itself leads with a condition, keeps one giver row per keyword (`gift` is a turn-in, `remind` a free hand-over), and collects the message numbers its conditions print on failure; `GiveRefusalLines` holds their wording (Stock table). `PathItemGiveRouter` asks, re-reads the pack, ends the wait at once on the giver's refusal line or after the give window, does not ask again on the same trip, and lets the walk go on (report `paradigm-20261006-095806`).
-- A hand-started loop that can reach none of its rooms freely plans its approach through such a gate and fetches on the way in, as a go-to does (`LoopRunner.Start`, `AppServices.ArmLoopApproachThroughGates`); the jagged bone key ships ticked **Auto-obtain for path**.
+- A hand-started loop that can reach none of its rooms freely plans its approach through such a gate and fetches on the way in, as a go-to does (`LoopRunner.Start`, `AppServices.LoopApproachFetch`); the jagged bone key ships ticked **Auto-obtain for path**.
 
 ### Gang houses and guard emblems
 *Status: CONFIRMED 2026-08-16 (user)*

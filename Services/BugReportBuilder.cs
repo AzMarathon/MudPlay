@@ -1771,7 +1771,9 @@ public static class BugReportBuilder
         if (walker.IsSailing)
             Kv(sb, "Sailing", $"to {walker.SailingDestinationName ?? "(port)"}, arriving in "
                 + $"{Math.Max(0, (walker.SailingArrivalEta - DateTimeOffset.UtcNow).TotalSeconds):F0}s");
-        Kv(sb, "Journey origin (flee anchor)",
+        // Where the leg under way began, not the whole trip: a detour leg starts
+        // from wherever the detour took over. The trip is the "Whole trip" line.
+        Kv(sb, "This leg's origin (flee anchor)",
             walker.JourneyOrigin is { } origin ? $"{origin.Map}/{origin.Room}" : "(none)");
         Kv(sb, "Next planned direction",
             walker.PeekNextPlannedDirection() is { } dir ? dir.ToString() : "(none / command step)");
@@ -1790,6 +1792,19 @@ public static class BugReportBuilder
             walker.LastEvent is { } ev
                 ? $"{ev.Kind}: {ev.Detail}" + (ev.Destination is { } d ? $" → {d.Map}/{d.Room}" : string.Empty)
                 : "(none yet)");
+        // The whole trip, of which the walk above is one leg: where it ends and the
+        // rules every leg, re-plan and errand restart is planned by. Without it a
+        // capture can't tell a route the planner chose from one the walker fell
+        // back to. A journey can stand with the walker idle, between two legs.
+        Kv(sb, "Whole trip (every leg keeps to this)",
+            walker.Journey is not { } journey
+                ? (walker.State == Game.Map.WalkState.Idle ? "(none)" : "(none — this walk is on no trip's rules)")
+            : $"to {journey.Destination.Map}/{journey.Destination.Room}: {journey.Describe()}"
+              + (journey.ClosedGates is { Count: > 0 } closed
+                  ? $" ({string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))})" : string.Empty)
+              + (walker.State == Game.Map.WalkState.Idle ? "; no leg under way (between legs)"
+                  : walker.LegIsToJourneyGoal ? "; this leg goes to its destination"
+                  : "; this leg is a side trip"));
 
         AppendLastRoutePlan(sb, svc);
 
@@ -1840,14 +1855,14 @@ public static class BugReportBuilder
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
-        Game.Map.RouteCardFetch card = svc.CardFetch;
-        Kv(sb, "Route card's fetch order", !card.HasItems && card.Trades.Count == 0 ? "(none)"
-            : $"item(s) {(card.HasItems ? string.Join(", ", card.Items) : "none")}; "
-              + (card.WalkStarted ? "its walk is under way" : "waiting for its walk to start"));
-        Kv(sb, "Trades agreed to on the route card",
-            card.Trades.Count == 0 ? "(none)" : string.Join(", ", card.Trades.Select(t =>
+        // Both ride on the journey ("Route this walk keeps to" above), so with no
+        // journey standing there is nothing to list.
+        Game.Map.JourneyFetch? fetch = svc.Walker.Journey?.Fetch;
+        Kv(sb, "Journey's items to fetch", fetch is not { HasItems: true } ? "(none)" : string.Join(", ", fetch.Items));
+        Kv(sb, "Journey's trades agreed to on its route card",
+            fetch is not { Trades.Count: > 0 } ? "(none)" : string.Join(", ", fetch.Trades.Select(t =>
                 $"{t.Key} {svc.ItemNames.GetName(t.Key) ?? "?"} for {t.Value} {svc.ItemNames.GetName(t.Value) ?? "?"}"
-                + (card.AgreedTradeFor(t.Key) is null ? " (not in force)" : " (in force for the walk now running)"))));
+                + (svc.AgreedTradeFor(t.Key) is null ? " (not in force)" : " (in force)"))));
         Kv(sb, "Shop-buy detour active", svc.PathItemShopRouter.DetourActive.ToString());
         Kv(sb, "Monster-drop hunt detour active", svc.MonsterDropRouter.DetourActive.ToString());
         Kv(sb, "Summon detour active", svc.PathItemSummonRouter.DetourActive.ToString()

@@ -1,15 +1,27 @@
 # Version history
 
-## 3.155.2
+## 3.156.0
 
 - A door key an NPC trades for an item in your pack can be fetched from the route card: with the opal brooch, the card for the dark-elf archmage's tower reads "glowing key (ask sleazy shopkeeper, in trade for your opal brooch)", and picking it makes the trade on the way
 - A trade is only ever made from a card that names it, for the one walk that card starts: only for a door key nothing else yields, only the item the card named, and never one you are wearing
-- Picking a route card during another walk no longer loses what the card was to fetch; a card with both a hazard counter and a gate item fetches both
+- Picking a route card during another walk no longer loses what the card was to fetch; a card with both a hazard counter and a gate item fetches both; and the fetch stays with the walk through a light-buying or selling detour
 - Without that item the card names the trade and what drops the item, in place of the bare key name
 - Route cards say what their pick will do about each item (ask / buy / dropped by), ticked Auto-obtain or not; a pick that only walks somewhere and stops names no source
 - A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window
 - A walk that stops at a locked door for want of its key names the key
 - bug reports addressed: paradigm-20261008-175938
+
+## 3.155.0
+
+- A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
+- A card whose route uses a teleport (a hole, a hatch, a vortex) takes it and says so on the card; picking it no longer walked a far longer way on foot
+- The Shortcut card lists everything its route needs, and no longer names the key of a door you can pick or bash
+- A walk you start keeps its route for the whole trip: through a re-plan, a detour to fetch an item or buy a light, and picking up again after a sell trip, a flee, a party comeback or an event's Resume
+- Crossing a hazard is agreed for the hazard rooms on the card you picked: a walk picked up from somewhere else never enters a different one
+- Side trips to fetch an item for such a walk go on foot when they can, and aren't held to the automatic-walk teleport list
+- Stopping or redirecting a walk while it is opening a door no longer reports the walk as failed
+- Stop while a walk waits at a giver, shop or item source between two legs ends it; nothing walks on afterwards, and a Stop in a PvP flee room calls off the walk back
+- bug reports addressed: paradigm-20261008-173911, paradigm-20261008-174023, paradigm-20261008-174236
 
 ## 3.154.0
 

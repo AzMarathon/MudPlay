@@ -11,8 +11,15 @@ public enum DetourResumeKind
 // The movement engine an errand detour interrupts, and how to pick it back up —
 // shared by the auto-deposit reroute and the sell detour. Stop-and-restart, not a
 // gate-pause: a MovementCoordinator gate would block the detour walk itself.
-public readonly record struct DetourResume(DetourResumeKind Kind, Loop? Loop = null, RoomKey? WalkDestination = null)
+//
+// A walk is held as its journey, not the room the walker was heading for: caught on
+// a side trip that room is a giver's or a shop's, and a walk restarted from a bare
+// destination forgets the route it was on (the gates a route card went round, how
+// it takes teleports).
+public readonly record struct DetourResume(DetourResumeKind Kind, Loop? Loop = null, WalkJourney? Journey = null)
 {
+    public RoomKey? WalkDestination => Journey?.Destination;
+
     // The engine running now. Priority Lair → Loop → Walk: Auto-Lair drives the walker
     // and a loop drives it while approaching, so the topmost active engine is the real
     // activity. includeWalk off leaves a plain walk-to out (auto-deposit only reroutes
@@ -23,8 +30,8 @@ public readonly record struct DetourResume(DetourResumeKind Kind, Loop? Loop = n
         if (lair.IsActive) return new DetourResume(DetourResumeKind.Lair);
         if (loops.State is not LoopState.Idle && loops.CurrentLoop is { } loop)
             return new DetourResume(DetourResumeKind.Loop, loop);
-        if (includeWalk && walker.State is not WalkState.Idle && walker.Destination is { } dest)
-            return new DetourResume(DetourResumeKind.Walk, WalkDestination: dest);
+        if (includeWalk && walker.State is not WalkState.Idle && walker.Journey is { } journey)
+            return new DetourResume(DetourResumeKind.Walk, Journey: journey);
         return new DetourResume(DetourResumeKind.None);
     }
 
@@ -51,7 +58,7 @@ public readonly record struct DetourResume(DetourResumeKind Kind, Loop? Loop = n
                 if (Loop is { } loop) loops.ResumeAfterDetour(loop, throughGates: true);
                 break;
             case DetourResumeKind.Walk:
-                if (WalkDestination is { } dest) walker.WalkTo(dest, planThroughAcquirableGates: true);
+                if (Journey is { } journey) walker.ResumeJourney(journey, planThroughAcquirableGates: true);
                 break;
         }
     }

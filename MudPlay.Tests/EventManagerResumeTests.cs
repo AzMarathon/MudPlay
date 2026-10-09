@@ -189,10 +189,36 @@ public sealed class EventManagerResumeTests : IDisposable
         using Harness h = NewHarness();
         h.Tracker.SetLocated(new RoomKey(1, 1));
 
-        h.Events.ExecuteResume(new EventManager.EventResumePlan.Walker(new RoomKey(1, 3)));
+        h.Events.ExecuteResume(new EventManager.EventResumePlan.Walker(new WalkJourney(new RoomKey(1, 3))));
 
         Assert.Equal(WalkState.Walking, h.Walker.State);
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+    }
+
+    // An event that takes over while the walk is on a side trip (out to a giver for
+    // an item its route needs) goes back to where the walk was going, by the walk's
+    // own rules, and not to the giver's room.
+    [Fact]
+    public void Snapshot_WalkerOnASideTrip_HoldsTheJourney_AndResumeWalksItAgain()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3), preferTeleportFree: true, avoidTraps: true);
+        WalkJourney journey = h.Walker.Journey!;
+        h.Walker.WalkTo(new RoomKey(1, 2), supersedeSilently: true);     // the side trip
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+
+        EventManager.EventResumePlan.Walker plan =
+            Assert.IsType<EventManager.EventResumePlan.Walker>(h.Events.SnapshotCurrentActivity());
+        Assert.Same(journey, plan.Journey);
+        Assert.Equal(new RoomKey(1, 3), plan.Destination);
+
+        h.Walker.Stop();
+        h.Events.ExecuteResume(plan);
+
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.True(h.Walker.Journey!.AvoidTraps);
+        Assert.True(h.Walker.Journey.PreferTeleportFree);
     }
 
     [Fact]

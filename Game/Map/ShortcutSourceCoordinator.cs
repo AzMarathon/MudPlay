@@ -47,6 +47,7 @@ public sealed class ShortcutSourceCoordinator
     private int _itemId;
     private RoomKey _dest;
     private RoomKey _source;
+    private Action? _beforeLongRoute;
 
     public ShortcutSourceCoordinator(
         Func<int, RoomKey?> resolveSource,
@@ -90,7 +91,11 @@ public sealed class ShortcutSourceCoordinator
 
     // Begin the walk-to-source → obtain → shortcut-or-long flow. Returns false when
     // the item has no resolvable source (caller falls back to the long route).
-    public bool TryBegin(int shortcutItemId, RoomKey destination)
+    // beforeLongRoute runs just ahead of the walk to the destination when the item
+    // didn't turn up: the long route is another card's route, and the caller sets
+    // the walk up for that one (how it takes teleports, which gates it goes round)
+    // in place of the shortcut's.
+    public bool TryBegin(int shortcutItemId, RoomKey destination, Action? beforeLongRoute = null)
     {
         if (_phase != Phase.Idle) return false;
         if (_resolveSource(shortcutItemId) is not { } src) return false;
@@ -98,6 +103,7 @@ public sealed class ShortcutSourceCoordinator
         _itemId = shortcutItemId;
         _dest = destination;
         _source = src;
+        _beforeLongRoute = beforeLongRoute;
         _phase = Phase.WalkingToSource;
         _log?.Info(LogCategory,
             $"shortcut item {shortcutItemId} ('{_itemName(shortcutItemId)}') not held — walking to its source {src}, then destination {destination}");
@@ -184,6 +190,7 @@ public sealed class ShortcutSourceCoordinator
         _log?.Info(LogCategory, got
             ? $"got the shortcut item — taking the shortcut to {dest}"
             : $"shortcut item unavailable — taking the long route to {dest}");
+        if (!got) _beforeLongRoute?.Invoke();
         _liveWalkToDest(dest);
     }
 
@@ -192,6 +199,7 @@ public sealed class ShortcutSourceCoordinator
         RoomKey dest = _dest;
         _phase = Phase.Idle;
         _log?.Info(LogCategory, $"{why} — falling back to the long route to {dest}");
+        _beforeLongRoute?.Invoke();
         _liveWalkToDest(dest);
     }
 
