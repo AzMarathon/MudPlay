@@ -188,6 +188,10 @@ public static class BugReportBuilder
         Kv(sb, "Realm PvP", (svc.ResolveActiveRealm()?.Realm.PvpEnabled == true ? "enabled" : "off")
             + $"; {svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Friend)} friend(s), "
             + $"{svc.Players.Players.Count(p => p.Relationship == Models.GameData.PlayerRelationship.Enemy)} enemy(ies)");
+        // What the board takes for a hang-up in a fight, as the user recorded it
+        // for this realm. It explains HP or items missing after a reconnect.
+        Kv(sb, "Realm hang-up penalty",
+            Game.Health.HangupPenaltyNotice.Describe(svc.ResolveActiveRealm()?.Realm));
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));
@@ -342,6 +346,13 @@ public static class BugReportBuilder
         Kv(sb, "In party", party.IsInParty.ToString());
         Kv(sb, "Self is leader", party.SelfIsLeader.ToString());
         Kv(sb, "Leader", party.LeaderName ?? "(none)");
+        // Blind means a follow move prints no room for the map to confirm against.
+        Kv(sb, "Follow mode (set follow)", svc.FollowModes.Mode switch
+        {
+            Game.FollowMode.Blind => "Blind",
+            Game.FollowMode.Normal => "Normal",
+            _ => "(not seen — no `pro` sheet or `set follow` reply this session)",
+        });
         // What puts `par` on the wire. A "member's HP was stale / the heal came
         // late" report turns on whether anything was polling at all.
         Kv(sb, "par is sent", svc.PartyPoller.ParTriggerSummary);
@@ -641,6 +652,9 @@ public static class BugReportBuilder
         // recast-interval block left this stuck, and the character never attacked
         // again for the rest of the fight).
         Kv(sb, "Combat off (stuck?)", svc.Combat.CombatOff.ToString());
+        // While true a confusion fumble re-sends no attack: the game answered the
+        // last one with *Combat Engaged* and is repeating it itself.
+        Kv(sb, "Engaged since last attack", svc.Combat.EngagedSinceLastAttack.ToString());
         // True when Auto-Combat is off but a room hostile is blocking a needed rest
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
@@ -1458,6 +1472,11 @@ public static class BugReportBuilder
                 ? $"{running.Name} — step {loop.CurrentIndex + 1}/{loop.StepCount}"
                 : "(none)");
         Kv(sb, "Loop holding for a command's replies", loop.AwaitingCommandReplies ? "yes" : "no");
+        // A room command that opens an exit on a stat roll is sent again when the
+        // move behind it bonks; a count stuck at the cap is a reveal that never took.
+        Kv(sb, "Rolled-reveal re-sends on the step in flight (walk / loop)",
+            $"{svc.Walker.RolledRevealRetries} / {loop.RolledRevealRetries} of "
+            + Game.Map.SpecialExitDispatch.RolledRevealRetryCap);
         if (loop.CurrentLoop is { } curLoop)
         {
             Kv(sb, "Loop approach target",
@@ -1893,7 +1912,14 @@ public static class BugReportBuilder
         sb.Append("\n**Path-item detours**\n\n");
         Kv(sb, "Path-item search demand", svc.PathItemDemand.SearchDemandActive.ToString());
         Kv(sb, "Party path-item search demand", svc.PartyPathItemGate.SearchDemandActive.ToString());
+        // "Paused by" above names the gate; this says which items' counts hold it.
+        IReadOnlyList<string> counting = svc.PartyPathItemGate.HoldingWalkFor;
+        Kv(sb, "Walk held for the party's count of", counting.Count == 0 ? "(nothing)" : string.Join(", ", counting));
         Kv(sb, "Party count of per-member gate items", svc.PartyGateCountSummary);
+        // Why a walk did or didn't ask the party: a count it is still deciding
+        // from, or a route card's count waiting for the walk that card starts.
+        Kv(sb, "Party counts standing for this trip", svc.PartyPathItemGate.JourneyCountsSummary);
+        Kv(sb, "Route card counts not yet taken by a walk", svc.CardCountSummary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));

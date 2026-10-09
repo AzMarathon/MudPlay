@@ -940,6 +940,7 @@ public sealed class LoopRunner : IRecoverableEngine
         else
         {
             _recoverAttempts = 0;
+            _revealRetries = 0;
             _lastRecoveryAttemptAt = DateTimeOffset.MinValue;
             if (State is LoopState.Running or LoopState.Paused
                        or LoopState.Approaching or LoopState.Recovering)
@@ -2432,6 +2433,7 @@ public sealed class LoopRunner : IRecoverableEngine
                 _expectedMoveSource = null;
                 return;
             }
+            if (TryResendRolledReveal(t.PreviousRoom)) return;
             _log?.Warn("LoopRunner",
                 $"step {_index + 1} blocked at source {key}; expected {_expectedMoveTarget}; entering recovery");
             EnterRecovery($"step {_index + 1} blocked at {key}");
@@ -2744,12 +2746,45 @@ public sealed class LoopRunner : IRecoverableEngine
         RerouteFromCurrentRoom();
     }
 
+    // The walker's rule for a reveal that rolls (AutoWalkManager.TryResendRolledReveal
+    // has the reasoning): the room command goes out again on its own budget before
+    // the bonk is taken for a blocked step and spent against the three recoveries.
+    private int _revealRetries;
+
+    // Diagnostics: rolled-reveal re-sends spent on the step in flight.
+    public int RolledRevealRetries => _revealRetries;
+
+    private bool TryResendRolledReveal(Room source)
+    {
+        if (_index >= _expandedSteps.Count || _expandedSteps[_index] is not MoveLoopStep step) return false;
+        if (!source.Exits.TryGetValue(step.Direction, out RoomExit exit)
+            || SpecialExitDispatch.RolledRevealCommand(exit) is not { } reveal) return false;
+        if (_revealRetries >= SpecialExitDispatch.RolledRevealRetryCap)
+        {
+            _log?.Info("LoopRunner",
+                $"step {_index + 1}: '{reveal}' still hasn't opened the way {step.Direction} after "
+                + $"{_revealRetries} more tries — treating the step as blocked");
+            return false;
+        }
+
+        _revealRetries++;
+        _stepInFlight = false;
+        _expectedMoveTarget = null;
+        _expectedMoveSource = null;
+        _log?.Info("LoopRunner",
+            $"step {_index + 1}: '{reveal}' didn't open the way {step.Direction} (its roll can miss) — "
+            + $"sending it again, retry {_revealRetries} of {SpecialExitDispatch.RolledRevealRetryCap}");
+        SendNextStep();
+        return true;
+    }
+
     private void AdvanceStep()
     {
         // Forward progress → refresh the recovery budget so an unrelated block
         // later in the lap gets the full retry allowance again.
         DisarmStallWatchdog();
         _recoverAttempts = 0;
+        _revealRetries = 0;
         _lastRecoveryAttemptAt = DateTimeOffset.MinValue;   // reset the spacing clock with the budget
         _index++;
         Raise(new LoopEvent(LoopEventKind.StepCompleted, $"{_index}/{_expandedSteps.Count}"));

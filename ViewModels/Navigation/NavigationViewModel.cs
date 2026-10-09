@@ -95,6 +95,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         OnMapComparisonChanged();
         _services.MovementCoordinator.PauseStateChanged += OnPauseChanged;
         _services.MovementCoordinator.GatesChanged += OnGatesChanged;
+        // A second item joining the party-count hold changes its chips, not the gates.
+        _services.PartyPathItemGate.HoldingWalkForChanged += OnGatesChanged;
         // What a pause is for (a typed move) is set just after its gate goes up.
         _services.MovementControl.PausedByTypedMoveChanged += RefreshActivityStatus;
         _services.AutoDeposit.ReroutingChanged += OnTripChanged;
@@ -275,6 +277,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.MapComparison.Changed -= OnMapComparisonChanged;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
+        _services.PartyPathItemGate.HoldingWalkForChanged -= OnGatesChanged;
         _services.NavigationModeProvider = null;
         _services.MovementControl.PausedByTypedMoveChanged -= RefreshActivityStatus;
         _services.AutoDeposit.ReroutingChanged -= OnTripChanged;
@@ -3911,7 +3914,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 or Game.Spells.SpellCategory.MinorSelfHeal or Game.Spells.SpellCategory.MajorSelfHeal => "Healing",
             _ => null,   // a buff, or nothing known: the chip reads "Buffing"
         },
-        _services.MovementControl.PausedByTypedMove);
+        _services.MovementControl.PausedByTypedMove,
+        _services.PartyPathItemGate.HoldingWalkFor);
 
     private void RefreshActivityStatus()
     {

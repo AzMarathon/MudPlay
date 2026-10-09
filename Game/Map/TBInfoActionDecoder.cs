@@ -378,10 +378,7 @@ public static class TBInfoActionDecoder
         private string RaceName(int n)    => Named("Races",    n, "race");
 
         private string Named(string table, int number, string kind)
-        {
-            string? name = _cache.FindNameByNumber(table, number);
-            return string.IsNullOrEmpty(name) ? $"{kind} #{number}" : name;
-        }
+            => TBInfoActionDecoder.Named(_cache, table, number, kind);
 
         private string RoomName(int map, int room)
         {
@@ -392,6 +389,14 @@ public static class TBInfoActionDecoder
             }
             return $"{map}/{room}";
         }
+    }
+
+    // A record's name, or "<kind> #<number>" when the set has no such record, so a number is
+    // never dropped. Shared with the quest-flag walkthrough's names.
+    internal static string Named(GameDataCache cache, string table, int number, string kind)
+    {
+        string? name = cache.FindNameByNumber(table, number);
+        return string.IsNullOrEmpty(name) ? $"{kind} #{number}" : name;
     }
 
     // ----- Directive-argument parsers (port of the reference's inline scans) -----

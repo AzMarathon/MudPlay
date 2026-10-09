@@ -78,6 +78,8 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         "Game entry command", "Game exit command", "Enter realm", "Logoff",
         "Player dies at", "Death floor", "Bleeding out", "Dropped", "Hangup HP",
         "PvP", "PvP enabled", "Player versus player",
+        "Hang-up penalties", "Hangup penalty", "Hang-up penalty", "HP lost", "Items dropped",
+        "Penalised in combat", "PvE", "Disconnect penalty",
         "Auto-refine death floor", "Trace death floor", "Slow death", "Learn floor",
         "Disconnect pattern", "Party disconnect", "Logoff pattern", "Logs off",
         "Player disconnect line",
@@ -227,6 +229,21 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     // The PvP settings and the care taken with room attacks around other players
     // only apply where this is ticked.
     [ObservableProperty] private bool _pvpEnabled;
+
+    // ----- Hang-up penalty (selected realm) -----
+    // What the board takes for a hang-up in a fight (RealmProfile.HangupPenaltyEnabled
+    // and the fields after it): a share of max HP between two percentages and up to
+    // a number of items, for PvP and, when the board penalises that too, for a fight
+    // with a monster. The user records it; the program log and the bug report show
+    // it. No hang-up waits on it.
+    [ObservableProperty] private bool _hangupPenaltyEnabled;
+    [ObservableProperty] private int _hangupPvpHpFromPercent = 25;
+    [ObservableProperty] private int _hangupPvpHpToPercent = 50;
+    [ObservableProperty] private int _hangupPvpItemsDropped;
+    [ObservableProperty] private bool _hangupPvePenaltyEnabled;
+    [ObservableProperty] private int _hangupPveHpFromPercent = 25;
+    [ObservableProperty] private int _hangupPveHpToPercent = 50;
+    [ObservableProperty] private int _hangupPveItemsDropped;
 
     // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZone) + its zone.
     // Drives the DEAD/ALIVE state of "Respawns @ Cleanup" bosses on the Bosses tab.
@@ -817,6 +834,14 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         PlayerDiesAtHp = realm.PlayerDiesAtHp;
         AutoRefineDeathFloor = realm.AutoRefineDeathFloor;
         PvpEnabled = realm.PvpEnabled;
+        HangupPenaltyEnabled = realm.HangupPenaltyEnabled;
+        (HangupPvpHpFromPercent, HangupPvpHpToPercent) = Game.Health.HangupPenaltyNotice.HpRange(
+            realm.HangupPvpHpFromPercent, realm.HangupPvpHpToPercent);
+        HangupPvpItemsDropped = Game.Health.HangupPenaltyNotice.Items(realm.HangupPvpItemsDropped);
+        HangupPvePenaltyEnabled = realm.HangupPvePenaltyEnabled;
+        (HangupPveHpFromPercent, HangupPveHpToPercent) = Game.Health.HangupPenaltyNotice.HpRange(
+            realm.HangupPveHpFromPercent, realm.HangupPveHpToPercent);
+        HangupPveItemsDropped = Game.Health.HangupPenaltyNotice.Items(realm.HangupPveItemsDropped);
         CleanupTimeOfDay = realm.CleanupTimeOfDay;
         CleanupTimeZoneId = realm.CleanupTimeZoneId;
         RunicCurrencyName = realm.RunicCurrencyName;
@@ -1209,6 +1234,16 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         realm.PlayerDiesAtHp = Math.Min(0, PlayerDiesAtHp);
         realm.AutoRefineDeathFloor = AutoRefineDeathFloor;
         realm.PvpEnabled = PvpEnabled;
+        // The figures are kept when a switch goes off, so ticking it again brings
+        // back what was entered. Stored inside the board's own limits.
+        realm.HangupPenaltyEnabled = HangupPenaltyEnabled;
+        (realm.HangupPvpHpFromPercent, realm.HangupPvpHpToPercent) =
+            Game.Health.HangupPenaltyNotice.HpRange(HangupPvpHpFromPercent, HangupPvpHpToPercent);
+        realm.HangupPvpItemsDropped = Game.Health.HangupPenaltyNotice.Items(HangupPvpItemsDropped);
+        realm.HangupPvePenaltyEnabled = HangupPvePenaltyEnabled;
+        (realm.HangupPveHpFromPercent, realm.HangupPveHpToPercent) =
+            Game.Health.HangupPenaltyNotice.HpRange(HangupPveHpFromPercent, HangupPveHpToPercent);
+        realm.HangupPveItemsDropped = Game.Health.HangupPenaltyNotice.Items(HangupPveItemsDropped);
         realm.CleanupTimeOfDay = CleanupTimeOfDay?.Trim() ?? string.Empty;
         realm.CleanupTimeZoneId = string.IsNullOrWhiteSpace(CleanupTimeZoneId)
             ? defaults.CleanupTimeZoneId : CleanupTimeZoneId.Trim();
@@ -1305,6 +1340,37 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnPlayerDiesAtHpChanged(int value)             { PushToCache(); Dirty(); }
     partial void OnAutoRefineDeathFloorChanged(bool value)      { PushToCache(); Dirty(); }
     partial void OnPvpEnabledChanged(bool value)                { PushToCache(); Dirty(); }
+    partial void OnHangupPenaltyEnabledChanged(bool value)      { PushToCache(); Dirty(); }
+    partial void OnHangupPvpItemsDroppedChanged(int value)      { PushToCache(); Dirty(); }
+    partial void OnHangupPvePenaltyEnabledChanged(bool value)   { PushToCache(); Dirty(); }
+    partial void OnHangupPveItemsDroppedChanged(int value)      { PushToCache(); Dirty(); }
+
+    // The board takes a share between the lower figure and the upper, so moving
+    // one past the other carries the other along and the pair on screen is always
+    // the pair that gets saved.
+    partial void OnHangupPvpHpFromPercentChanged(int value)
+    {
+        if (HangupPvpHpToPercent < value) HangupPvpHpToPercent = value;
+        PushToCache(); Dirty();
+    }
+
+    partial void OnHangupPvpHpToPercentChanged(int value)
+    {
+        if (HangupPvpHpFromPercent > value) HangupPvpHpFromPercent = value;
+        PushToCache(); Dirty();
+    }
+
+    partial void OnHangupPveHpFromPercentChanged(int value)
+    {
+        if (HangupPveHpToPercent < value) HangupPveHpToPercent = value;
+        PushToCache(); Dirty();
+    }
+
+    partial void OnHangupPveHpToPercentChanged(int value)
+    {
+        if (HangupPveHpFromPercent > value) HangupPveHpFromPercent = value;
+        PushToCache(); Dirty();
+    }
     partial void OnCleanupTimeOfDayChanged(string value)        { PushToCache(); Dirty(); }
     partial void OnCleanupTimeZoneIdChanged(string value)       { PushToCache(); Dirty(); }
     partial void OnDisconnectPatternChanged(string? value)      { PushToCache(); Dirty(); }

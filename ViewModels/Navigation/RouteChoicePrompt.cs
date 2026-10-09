@@ -683,6 +683,8 @@ public static class RouteChoicePrompt
         }
         if (result is not null)
             ApplyStartMode(services, vm.StartMode != RunStartMode.Normal ? vm.StartMode : startMode);
+        else
+            services.DropCardCounts("the card was closed without a pick");
 
         if (choice.Kind == RouteChoiceKind.Blocked)
         {

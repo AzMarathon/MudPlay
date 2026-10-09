@@ -1508,6 +1508,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _activePickedRoute = pickedRoute;
         _origin = source.Key;
         _retryCount = 0;
+        _revealRetries = 0;
         _stepInFlight = false;
         _awaitingPromptForCommand = false;
         State = WalkState.Walking;
@@ -1545,10 +1546,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
             AnnouncePlannedRoute(source.Key, path);
         }
 
+        // The announce comes before the first step so that a hold it raises (the
+        // party being asked who holds a route item) keeps that step back: the
+        // answer may turn the walk aside for a shop.
         if (_coordinator.IsPaused)
         {
-            State = WalkState.Paused;
-            Raise(new WalkEvent(WalkEventKind.Paused, "coordinator paused", destination));
+            // A gate the announce itself asserted has paused us and said so already.
+            if (State != WalkState.Paused)
+            {
+                State = WalkState.Paused;
+                Raise(new WalkEvent(WalkEventKind.Paused, "coordinator paused", destination));
+            }
             return true;
         }
 
@@ -2899,6 +2907,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
 
+            if (TryResendRolledReveal(sourceForCurrentStep)) return;
+
             if (_retryCount < MaxRetriesPerStep)
             {
                 _retryCount++;
@@ -3014,8 +3024,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // accumulates: every replan attempt walks in seeing _replanCount
             // back at 0, so a persistently blocked exit (not just an unlucky
             // fumble streak) would retry through this path forever instead of
-            // failing once the budget is genuinely spent.
+            // failing once the budget is genuinely spent. The rolled-reveal count
+            // is carried over for the same reason: a replan from the room the
+            // reveal is in leads straight back to that step, and a fresh count
+            // each time would multiply its cap by the replans.
             int replanCount = _replanCount;
+            int revealRetries = _revealRetries;
             _replanningInPlace = true;
             try
             {
@@ -3034,6 +3048,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             finally
             {
                 _replanCount = replanCount;
+                _revealRetries = revealRetries;
                 _replanningInPlace = false;
             }
         }
@@ -3235,6 +3250,40 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _log?.Info("Walker",
             $"greet teleport landed at {newKey} (expected {_expectedAfterCurrentMove}); replanning");
         TryReplanOrFail(RoomConfidence.Confirmed);
+    }
+
+    // The step in flight opened its exit with a room command that rolls against a
+    // stat (`clear rubble` and its like) and the move bonked: the roll missed and
+    // the exit is still hidden. The same command is the only way through, so it is
+    // sent again on a budget of its own; a missed roll is neither a blocked exit nor
+    // a stale map, and the one retry and two replans those get ran out on a short
+    // run of bad rolls. Past the cap the ordinary blocked handling takes the step.
+    private int _revealRetries;
+
+    // Diagnostics: rolled-reveal re-sends spent on the step in flight.
+    public int RolledRevealRetries => _revealRetries;
+
+    private bool TryResendRolledReveal(Room source)
+    {
+        if (_path is null || _index >= _path.Count
+            || _path[_index] is not MoveStep { SkipSpecialDispatch: false } step) return false;
+        if (!source.Exits.TryGetValue(step.Direction, out RoomExit exit)
+            || SpecialExitDispatch.RolledRevealCommand(exit) is not { } reveal) return false;
+        if (_revealRetries >= SpecialExitDispatch.RolledRevealRetryCap)
+        {
+            _log?.Info("Walker",
+                $"step {_index + 1}: '{reveal}' still hasn't opened the way {step.Direction} after "
+                + $"{_revealRetries} more tries — treating the step as blocked");
+            return false;
+        }
+
+        _revealRetries++;
+        _stepInFlight = false;
+        _log?.Info("Walker",
+            $"step {_index + 1}: '{reveal}' didn't open the way {step.Direction} (its roll can miss) — "
+            + $"sending it again, retry {_revealRetries} of {SpecialExitDispatch.RolledRevealRetryCap}");
+        SendNextStep();
+        return true;
     }
 
     // The NPC's script refused the ask outright (alignment, level, missing item) —
@@ -3533,6 +3582,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (_path is null) return;
 
         _index++;
+        _revealRetries = 0;
         Raise(new WalkEvent(WalkEventKind.StepCompleted,
             $"{_index}/{_path.Count}", _destination));
 

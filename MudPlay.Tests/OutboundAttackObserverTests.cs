@@ -27,14 +27,14 @@ public sealed class OutboundAttackObserverTests
     {
         (OutboundAttackObserver obs, List<string> seen, _) = New();
         foreach (string cmd in new[]
-                 { "a", "at", "att", "aa", "bash", "smash", "sm", "sma", "bs" })
+                 { "a", "at", "att", "aa", "bash", "smash", "sma", "bs" })
             Send(obs, cmd);
         Send(obs, "a giant rat");   // first token is the verb, rest the target
         Send(obs, "  AA  Orc ");    // case-insensitive + trimmed
 
         Assert.Equal(new[]
         {
-            "a", "at", "att", "aa", "bash", "smash", "sm", "sma", "bs", "a", "AA",
+            "a", "at", "att", "aa", "bash", "smash", "sma", "bs", "a", "AA",
         }, seen);
     }
 
@@ -60,6 +60,17 @@ public sealed class OutboundAttackObserverTests
         Assert.Empty(seen);
     }
 
+    // The game's command table starts smash at `sma`; `sm` is no command, so the
+    // line is spoken or refused and no attack was taken.
+    [Fact]
+    public void Sm_IsNotAnAttackVerb()
+    {
+        (OutboundAttackObserver obs, List<string> seen, _) = New();
+        Send(obs, "sm");
+        Send(obs, "sm giant rat");
+        Assert.Empty(seen);
+    }
+
     // A direction after `bash` is the door on that exit. The walker bashes doors on
     // its own, so reading one as a typed attack held the engine's attack for the round.
     [Fact]
@@ -67,6 +78,11 @@ public sealed class OutboundAttackObserverTests
     {
         (OutboundAttackObserver obs, List<string> seen, List<string?> targets) = New();
         foreach (string door in new[] { "bash n", "bash sw", "BASH North", "bash  u ", "bash down" })
+            Send(obs, door);
+        Assert.Empty(seen);
+
+        // `aa` is the same command as `bash`, door form included.
+        foreach (string door in new[] { "aa n", "AA sw", "aa down" })
             Send(obs, door);
         Assert.Empty(seen);
 

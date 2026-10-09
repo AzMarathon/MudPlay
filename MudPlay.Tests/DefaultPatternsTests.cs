@@ -511,4 +511,182 @@ public sealed class DefaultPatternsTests
         Assert.False(PatternById(KnownPatterns.AlignmentGearRemoved)
             .TryMatch(Line("Raijin has been removed from your followers."), out _));
     }
+
+    // The Stock engine words a light's burn-out per item; only the torch flickers.
+    [Theory]
+    [InlineData("Your torch flickers and goes out.")]
+    [InlineData("Your lamp runs out of oil, and goes out.")]
+    [InlineData("The light in the moon-lamp flickers, and goes out.")]
+    [InlineData("Your light ball disappears out of existance.")]
+    [InlineData("scaled lantern is no longer lit!")]
+    [InlineData("glowing pearl is no longer lit!")]
+    public void LightBurnedOutRegex_MatchesEachStockLightsLine(string line)
+        => Assert.True(PatternById(KnownPatterns.LightBurnedOut).TryMatch(Line(line), out _));
+
+    [Theory]
+    [InlineData("You lit the torch.")]
+    [InlineData("You do not have torch lit.")]
+    [InlineData("You have removed torch and extinguished it.")]
+    [InlineData("Raijin's torch just went out.")]             // another player's light
+    [InlineData("A shimmering rune flickers and fades.")]
+    public void LightBurnedOutRegex_IgnoresOtherLightLines(string line)
+        => Assert.False(PatternById(KnownPatterns.LightBurnedOut).TryMatch(Line(line), out _));
+
+    // The wording on record says "sneaking in from"; the Stock engine's strings say
+    // "sneak in from", with above / below for the vertical pair and a drag suffix.
+    [Theory]
+    [InlineData("You notice Bob sneaking in from the east.", "east")]
+    [InlineData("You notice Bob sneak in from the east.", "east")]
+    [InlineData("You notice Bob sneak in from above.", "above")]
+    [InlineData("You notice Bob sneak in from below.", "below")]
+    [InlineData("You notice Bob sneak in from the northwest (Dragging Raijin).", "northwest")]
+    public void SneakArrivalRegex_ReadsBothWordings(string line, string direction)
+    {
+        Assert.True(PatternById(KnownPatterns.SneakArrivalNotice).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal("Bob", r.Groups[0]);
+        Assert.Equal(direction, r.Groups[1]);
+        // The generic arrival must not take it as a monster named "You notice Bob".
+        Assert.False(PatternById(KnownPatterns.RoomEntryArrival).TryMatch(Line(line), out _));
+    }
+
+    // The departure form shown to the room being left is not an arrival.
+    [Theory]
+    [InlineData("You notice Bob sneaking out to the east.")]
+    [InlineData("You notice Bob sneaking out upwards.")]
+    public void SneakArrivalRegex_IgnoresTheSneakingOutForm(string line)
+        => Assert.False(PatternById(KnownPatterns.SneakArrivalNotice).TryMatch(Line(line), out _));
+
+    // The room's line for a player's death: "has died." on record, "is dead." from
+    // the Stock engine.
+    [Theory]
+    [InlineData("Raijin has died.")]
+    [InlineData("Raijin is dead.")]
+    public void PartyMemberDiedRegex_ReadsBothWordings(string line)
+    {
+        Assert.True(PatternById(KnownPatterns.PartyMemberDied).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal("Raijin", r.Groups[0]);
+    }
+
+    // A monster's own death sentence can end the same way; it names no one.
+    [Theory]
+    [InlineData("The roc hatchling lets out a squeal, and is dead.")]
+    [InlineData("The crazed lunatic hugs his dead cat, and dies.")]
+    public void PartyMemberDiedRegex_IgnoresAMonstersDeathSentence(string line)
+        => Assert.False(PatternById(KnownPatterns.PartyMemberDied).TryMatch(Line(line), out _));
+
+    // A Stock `buy` that bought nothing, for a reason other than the price.
+    [Theory]
+    [InlineData("You cannot buy rope and grapple here!")]
+    [InlineData("rope is not a known item.")]
+    [InlineData("You cannot carry that much!")]
+    [InlineData("A strange force stops you from getting this item.")]
+    public void UserBuyRefusedRegex_MatchesTheStockRefusals(string line)
+        => Assert.True(PatternById(KnownPatterns.UserBuyRefused).TryMatch(Line(line), out _));
+
+    // What each refusal names, so a consumer can tell whose buy it answers.
+    [Theory]
+    [InlineData("You cannot buy rope and grapple here!", "rope and grapple", "")]
+    [InlineData("rope is not a known item.", "", "rope")]
+    [InlineData("You cannot carry that much!", "", "")]
+    [InlineData("A strange force stops you from getting this item.", "", "")]
+    public void UserBuyRefusedRegex_CarriesTheWareOrTheTypedWords(string line, string ware, string typed)
+    {
+        Assert.True(PatternById(KnownPatterns.UserBuyRefused).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(ware, r.Groups[0]);
+        Assert.Equal(typed, r.Groups[1]);
+    }
+
+    [Fact]
+    public void UserBuyNotInShopRegex_MatchesTheEnginesLine()
+    {
+        Assert.True(PatternById(KnownPatterns.UserBuyNotInShop).TryMatch(
+            Line("You cannot BUY if you are not in a shop!"), out _));
+        Assert.False(PatternById(KnownPatterns.UserBuyNotInShop).TryMatch(
+            Line("You cannot SELL if you are not in a shop!"), out _));
+    }
+
+    [Theory]
+    [InlineData("You cannot afford rope and grapple.")]       // UserBuyFailed's
+    [InlineData("You cannot sell rope and grapple here.")]    // UserSellRefused's
+    [InlineData("You just bought rope and grapple for 1 gold crown, 5 silver nobles.")]
+    public void UserBuyRefusedRegex_LeavesTheOtherShopLinesAlone(string line)
+        => Assert.False(PatternById(KnownPatterns.UserBuyRefused).TryMatch(Line(line), out _));
+
+    // The two wear refusals that say nothing about who may wear the item. They have
+    // a pattern of their own so the alignment-reading refusal handler never sees them.
+    [Theory]
+    [InlineData("painted shield may not be worn!", "painted shield")]
+    [InlineData("You have no more room to wear that item!", "")]
+    public void UserEquipCannotBeWornRegex_MatchesBothLines(string line, string item)
+    {
+        Assert.True(PatternById(KnownPatterns.UserEquipCannotBeWorn).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(item, r.Groups[0]);
+        Assert.False(PatternById(KnownPatterns.UserEquipFailed).TryMatch(Line(line), out _));
+    }
+
+    [Fact]
+    public void UserEquipCannotBeWornRegex_LeavesTheAlignmentRefusalAlone()
+        => Assert.False(PatternById(KnownPatterns.UserEquipCannotBeWorn).TryMatch(
+            Line("You may not wear that item!"), out _));
+
+    // `set follow`: the `pro` sheet's row and the command's two replies.
+    [Theory]
+    [InlineData("Follow Mode:        Blind", "Blind")]
+    [InlineData("Follow Mode:        Normal", "Normal")]
+    public void FollowModeRowRegex_ReadsTheMode(string line, string mode)
+    {
+        Assert.True(PatternById(KnownPatterns.FollowModeRow).TryMatch(Line(line), out MatchResult r));
+        Assert.Equal(mode, r.Groups[0]);
+    }
+
+    [Fact]
+    public void FollowModeReplies_Match()
+    {
+        Assert.True(PatternById(KnownPatterns.FollowModeSetBlind).TryMatch(
+            Line("You will only see the fact that you have moved when following."), out _));
+        Assert.True(PatternById(KnownPatterns.FollowModeSetNormal).TryMatch(
+            Line("You will see your normal room descriptions when following."), out _));
+        Assert.False(PatternById(KnownPatterns.FollowModeRow).TryMatch(
+            Line("Valid follow options: BLIND, NORMAL"), out _));
+    }
+
+    // A Stock comma-list price still reads as one buy line.
+    [Fact]
+    public void UserBuysRegex_TakesAStockCoinListPrice()
+    {
+        Assert.True(PatternById(KnownPatterns.UserBuys).TryMatch(
+            Line("You just bought rope and grapple for 1 gold crown, 5 silver nobles."), out MatchResult r));
+        Assert.Equal("rope and grapple", r.Groups[1]);
+        Assert.Equal("1 gold crown, 5 silver nobles", r.Groups[2]);
+    }
+
+    // The three lines a Stock follower gets before "You are no longer following X."
+    // when it can't make a follow move; the heavy one has its own pattern.
+    [Theory]
+    [InlineData("You can't seem to move anywhere!")]
+    [InlineData("You are too stunned to move anywhere!")]
+    public void MovementFailedStuckRegex_MatchesHeldAndStunned(string line)
+        => Assert.True(PatternById(KnownPatterns.MovementFailedStuck).TryMatch(Line(line), out _));
+
+    // The `hide` refusals share the opening words and are no failed move.
+    [Theory]
+    [InlineData("You can't seem to move anywhere to hide!")]
+    [InlineData("You are too stunned to move anywhere to hide!")]
+    public void MovementFailedStuckRegex_IgnoresTheHideRefusals(string line)
+        => Assert.False(PatternById(KnownPatterns.MovementFailedStuck).TryMatch(Line(line), out _));
+
+    // The line on a row of its own, and on the end of the wait's row of dots, which
+    // the game prints without a line end.
+    [Theory]
+    [InlineData("Your meditation has been interrupted - you may not exit now!")]
+    [InlineData("................Your meditation has been interrupted - you may not exit now!")]
+    public void RealmExitInterruptedRegex_MatchesTheCalledOffWait(string line)
+        => Assert.True(PatternById(KnownPatterns.RealmExitInterrupted).TryMatch(Line(line), out _));
+
+    [Theory]
+    [InlineData("You may not perform any commands while waiting to exit!")]
+    [InlineData("................")]
+    [InlineData("Bob says \"Your meditation has been interrupted - you may not exit now!\"")]
+    public void RealmExitInterruptedRegex_IgnoresTheWaitsOtherLines(string line)
+        => Assert.False(PatternById(KnownPatterns.RealmExitInterrupted).TryMatch(Line(line), out _));
 }

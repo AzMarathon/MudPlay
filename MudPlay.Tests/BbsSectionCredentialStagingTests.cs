@@ -19,6 +19,7 @@ namespace MudPlay.Tests;
 // the user's own records — and are deleted again in a finally. The character is a
 // LoadBlank draft, which keeps credentials in memory and makes Save a no-op, so
 // no character profile is touched on disk.
+[Collection(BbsSectionCollection.Name)]
 public sealed class BbsSectionCredentialStagingTests
 {
     [Fact]
