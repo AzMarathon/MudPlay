@@ -27,6 +27,13 @@ namespace MudPlay.Game;
 // Both the saved line and the main-menu row still complete the logout; the
 // double-timeout is the last-ditch fallback if neither is seen.
 //
+// An attack calls the exit wait off ("Your meditation has been interrupted - you
+// may not exit now!", KnownPatterns.RealmExitInterrupted; GAME_MECHANICS "Realm
+// exit / logoff sequence"). The character is then still in the game with
+// something swinging at it, so the engine goes back to waiting for a safe room
+// and sends the exit again from there. Left to the timeouts it re-sent the exit
+// blind and then dropped the carrier mid-fight.
+//
 // "Safe" is supplied by the host via SetSafePredicate — in production it's "no
 // engageable hostiles in the room AND not mid-combat"
 // (CombatStateTracker.HasEngageableHostiles + PlayerState.InCombat). The engine
@@ -62,6 +69,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     private readonly WireSender _wire = new();
     private readonly IDisposable _menuSub;
     private readonly IDisposable _savedSub;
+    private readonly IDisposable _interruptedSub;
 
     private Func<bool>? _isSafe;
     private Func<bool>? _isConnected;
@@ -111,6 +119,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         _cleanup.WarningObserved += OnWarningObserved;
         _menuSub = _router.Subscribe(KnownPatterns.MainMenuEnterRealm, OnMainMenuLine);
         _savedSub = _router.Subscribe(KnownPatterns.RealmExitSaved, OnRealmExitSaved);
+        _interruptedSub = _router.Subscribe(KnownPatterns.RealmExitInterrupted, OnRealmExitInterrupted);
     }
 
     // Bind the wire sink used to send the exit command. The host supplies the
@@ -149,6 +158,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         _cleanup.WarningObserved -= OnWarningObserved;
         _menuSub.Dispose();
         _savedSub.Dispose();
+        _interruptedSub.Dispose();
         StopTimer();
     }
 
@@ -189,6 +199,16 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         _log?.Log(LogSeverity.Info, "CleanupLogout",
             "Character saved — out of the realm; dropping carrier, auto-reconnect redials after cleanup.");
         CompleteLogout();
+    }
+
+    private void OnRealmExitInterrupted(MatchResult _)
+    {
+        // Ours only while our own exit is counting out; the same line answers a
+        // wait the user started by hand.
+        if (Phase != CleanupLogoutPhase.Exiting) return;
+        Phase = CleanupLogoutPhase.Pending;
+        _log?.Log(LogSeverity.Info, "CleanupLogout",
+            "Exit called off by an attack — waiting for a safe room before exiting again.");
     }
 
     // Single FSM step. Runs on the safe-poll timer and once inline when the

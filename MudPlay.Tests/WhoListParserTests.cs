@@ -116,6 +116,31 @@ public sealed class WhoListParserTests
         Assert.Equal("V", FindByGiven(db, "Vincent").Role);
     }
 
+    // The Stock engine ends some rows with the word EDITED, after the gang when
+    // there is one. It belongs to neither the title nor the gang. The marker before
+    // the title is `x` for a player with gossip off, and is read past.
+    [Fact]
+    public void StockRows_TrailingEdited_IsNotPartOfTheTitleOrTheGang()
+    {
+        WhoListParser p = Build(out PlayerDatabase db);
+        p.FeedTestLines(new[]
+        {
+            "         Current Adventurers",
+            "         ===================",
+            "",
+            "    Good Ivy Leaf  -  High Druid of what happen EDITED ",
+            "         Krow GoesKaw  x  Warrior Novice EDITED ",
+            "  Lawful Maggie May  -  Illusionist of Mudd Life Crisis  ",
+            "",
+        }, Now);
+
+        Assert.Equal(3, db.Players.Count);
+        AssertHas(db, given: "Ivy",    family: "Leaf",    align: "Good",    title: "High Druid",     gang: "what happen");
+        AssertHas(db, given: "Krow",   family: "GoesKaw", align: "Neutral", title: "Warrior Novice", gang: null);
+        AssertHas(db, given: "Maggie", family: "May",     align: "Lawful",  title: "Illusionist",    gang: "Mudd Life Crisis");
+        Assert.Null(FindByGiven(db, "Ivy").Role);
+    }
+
     private static PlayerRecord FindByGiven(PlayerDatabase db, string given)
     {
         foreach (PlayerRecord p in db.Players)

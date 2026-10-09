@@ -106,6 +106,20 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
     }
 
+    // Stock's line for a stunned follower, printed before the same "no longer
+    // following" line as the held one.
+    [Fact]
+    public void StunnedThenNoLongerFollowing_SendsComeback()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
+
+        h.Feed("You are too stunned to move anywhere!");
+        h.Feed("You are no longer following MudPlay.");
+
+        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
+    }
+
     [Fact]
     public void HeavyThenNoLongerFollowing_SendsComeback()
     {

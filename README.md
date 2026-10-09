@@ -1,9 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.2**
-> - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor
-> - A look at a player's corpse is no longer listed as an unrecognized line
+> **Version 3.158.12**
+> - Auto-light relights a spare when a Stock lamp, lantern, moon-lamp, light ball or other light burns out, not only a torch
+> - A player seen sneaking in is read on Stock too (`You notice <name> sneak in from the <dir>.`)
+> - A party member's death is read from Stock's `<name> is dead.` as well as `<name> has died.`
+> - `who` on Stock: a row ending in `EDITED` no longer carries the word into the title or gang
+> - A martial-arts strike is told by the game's own short forms: kick from `kic`, not `ki`
+> - A typed `sm` no longer counts as taking the round's attack (smash starts at `sma`), and `aa <direction>` is a door bash like `bash <direction>`
+> - Auto-buy moves on to the next ware when a buy is refused as out of stock, not sold here or too much to carry
+> - Cleanup log-off: an exit called off by an attack waits for a safe room and exits again instead of dropping the connection mid-fight
+> - A stunned follower left behind on Stock asks the leader to come back
+> - Five more fixed Stock game replies are kept out of the unrecognized-lines list
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

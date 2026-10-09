@@ -222,6 +222,41 @@ public sealed class AutoBuyManagerTests
         Assert.Equal(new[] { "buy dagger", "buy torch" }, h.SentText);
     }
 
+    // Stock's other answers to a buy that bought nothing. None is "You cannot
+    // afford", so the pump used to wait on a result that never came and the wares
+    // behind it went unbought.
+    [Theory]
+    [InlineData("You cannot buy dagger here!")]                          // out of stock
+    [InlineData("dagger is not a known item.")]
+    [InlineData("You cannot carry that much!")]                          // too heavy, or the pack is full
+    [InlineData("A strange force stops you from getting this item.")]
+    public void BuyRefused_MovesToNextWare(string refusal)
+    {
+        using Harness h = new();
+        h.Map("dagger", 1, buy: true, max: 5);
+        h.Map("torch", 2, buy: true, max: 5);
+
+        h.ShopList(("dagger", 50), ("torch", 50));
+        Assert.Equal(new[] { "buy dagger" }, h.SentText);
+
+        h.Feed(refusal);
+        Assert.Equal(new[] { "buy dagger", "buy torch" }, h.SentText);
+    }
+
+    // The carry refusal also answers a `get`: with no buy of ours out it is not ours.
+    [Fact]
+    public void BuyRefused_WithNothingOut_DoesNothing()
+    {
+        using Harness h = new();
+        h.Map("dagger", 1, buy: true, max: 1);
+
+        h.ShopList(("dagger", 50));
+        h.Feed("You just bought dagger for nothing.");   // the queue is done
+        h.Feed("You cannot carry that much!");
+
+        Assert.Equal(new[] { "buy dagger" }, h.SentText);
+    }
+
     [Fact]
     public void UnflaggedItem_NoBuy()
     {

@@ -23,13 +23,18 @@ namespace MudPlay.Game;
 //   * Optional alignment word (one of AlignmentWords). Blank = Neutral.
 //   * Given name + optional family name (some realms make family names optional;
 //     the column gets padded out with spaces).
-//   * Marker — '-' for regular players, 'x' for dead / out-of-action.
+//   * Marker — '-', or 'x' for a player who has gossip switched off (the Stock
+//     engine's rule; it says nothing about being dead or dropped). Read past, not
+//     recorded.
 //   * Title — class-derived display string (e.g. "High Druid", "Magebane").
 //     Mapping back to class + level range is a future feature; for now we record
 //     the raw string.
 //   * Optional of {gang}.
 //   * Optional trailing role marker — M mudop, S sysop, V visiting from another
 //     realm.
+//   * Stock ends some rows with the word EDITED, after the gang when there is
+//     one. It is dropped so it doesn't read as part of the title or the gang
+//     (GAME_MECHANICS "The `who` listing").
 public sealed partial class WhoListParser : IDisposable
 {
     private readonly LineExtractor _lines;
@@ -256,14 +261,15 @@ public sealed partial class WhoListParser : IDisposable
     // Reading state ends on the first non-row line), so one such guild
     // truncated the table after a handful of names. The lazy quantifier still
     // peels a trailing single-letter role (M/S/V) off the end for realms that
-    // print one; .Trim() in TryParseRow strips any edge whitespace.
+    // print one, and Stock's trailing EDITED word; .Trim() in TryParseRow strips
+    // any edge whitespace.
     // The align alternation is case-insensitive: the extreme alignments print in
     // ALL CAPS (e.g. "FIEND", "SAINT") as a highlight while the rest are title case,
     // and a case-sensitive match dropped the all-caps rows. A dropped row used to
     // truncate the whole table (see the Reading state's skip tolerance), so one FIEND
     // player cut the list off after a handful of names (report paradigm-20260827-103227).
     [GeneratedRegex(
-        @"^\s*(?:(?<align>(?i:Saint|Lawful|Good|Seedy|Outlaw|Criminal|Villain|Fiend))\s+)?(?<given>[A-Za-z][A-Za-z'\-]*)(?:\s+(?<family>[A-Za-z][A-Za-z0-9'\-]*))?\s*[-x]\s+(?<title>[A-Za-z][A-Za-z '\-]*?)(?:\s+of\s+(?<gang>\S[^\r\n]*?))?(?:\s+(?<role>[MSV]))?\s*$",
+        @"^\s*(?:(?<align>(?i:Saint|Lawful|Good|Seedy|Outlaw|Criminal|Villain|Fiend))\s+)?(?<given>[A-Za-z][A-Za-z'\-]*)(?:\s+(?<family>[A-Za-z][A-Za-z0-9'\-]*))?\s*[-x]\s+(?<title>[A-Za-z][A-Za-z '\-]*?)(?:\s+of\s+(?<gang>\S[^\r\n]*?))?(?:\s+(?<role>[MSV]))?(?:\s+EDITED)?\s*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex PlayerRowPattern();
 

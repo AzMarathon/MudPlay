@@ -30,7 +30,7 @@ public static class KnownPatterns
     // follow, the game prints one of these the instant
     // before "You are no longer following X." — distinguishing a genuine
     // left-behind (auto-`@comeback`) from a deliberate uninvite/unfollow.
-    public const string MovementFailedStuck = "movement.failed-stuck";   // "You can't seem to move anywhere!" — a prevents-movement gamedata flag blocked us
+    public const string MovementFailedStuck = "movement.failed-stuck";   // "You can't seem to move anywhere!" — a prevents-movement gamedata flag blocked us; Stock's "You are too stunned to move anywhere!" too
     public const string RestRefusedSick     = "rest.refused-sick";       // "You are too sick to rest!" / "…to meditate!" — poisoned
     public const string MeditateNotNeeded   = "rest.meditate-not-needed"; // "Meditation will not help at this time." — mana already full
     public const string MovementFailedHeavy = "movement.failed-heavy";   // "...too heavy to move" — over-encumbered (system line; never inside a chat channel)
@@ -329,7 +329,8 @@ public static class KnownPatterns
     // Combat gate the mob was holding drops instead of freezing the walker.
     public const string RoomEntryDeparture   = "presence.room-entry-departure";
 
-    // Sneak-arrival notice — "You notice <name> sneaking in from the <dir>."
+    // Sneak-arrival notice — "You notice <name> sneaking in from the <dir>." (the
+    // Stock engine's wording is "sneak in from").
     // Fires ONLY when a player fails a sneak into our room; monsters never emit
     // it. Split out from RoomEntryArrival because that pattern greedily captured
     // the whole "You notice <name>" as the arrival name and — the wire paints
@@ -372,6 +373,11 @@ public static class KnownPatterns
     public const string UserBuys          = "item.user-buys";        // "You just bought X for <price>." (any currency, incl. "nothing")
     public const string UserSells         = "item.user-sells";       // "You sold X for <price>."
     public const string UserBuyFailed     = "item.user-buy-failed";  // "You cannot afford X."
+    // A `buy` that bought nothing for another reason: "You cannot buy X here!" (out
+    // of stock), "X is not a known item.", "You cannot carry that much!" and "A
+    // strange force stops you from getting this item." The last two name no item and
+    // answer a `get` as well.
+    public const string UserBuyRefused    = "item.user-buy-refused";
     public const string UserSellRefused   = "item.user-sell-refused";// "You cannot sell X here."
 
     // ----- Room light ----------------------------------------------------
@@ -381,11 +387,12 @@ public static class KnownPatterns
     // Confirm the exact wording against a live capture before relying on it.
     public const string RoomPitchBlack   = "light.room-pitch-black";   // "The room is pitch black"
     public const string RoomVeryDark     = "light.room-very-dark";     // "The room is very dark - you can't see anything"
-    // "Your <light> flickers and goes out." — the readied light burned out. The
-    // inventory snapshot's ReadiedLight only refreshes on the next `i` dump, so
-    // this line is auto-light's live signal that the lit light is now gone, letting
-    // the next dark-room line re-ready a carried spare instead of being blocked by
-    // a stale readied-light value.
+    // "Your <light> flickers and goes out." — the readied light burned out (Stock
+    // words it per item: "Your lamp runs out of oil, and goes out.", "<item> is no
+    // longer lit!" and others). The inventory snapshot's ReadiedLight only refreshes
+    // on the next `i` dump, so this line is auto-light's live signal that the lit
+    // light is now gone, letting the next dark-room line re-ready a carried spare
+    // instead of being blocked by a stale readied-light value.
     public const string LightBurnedOut   = "light.burned-out";
 
     // ----- Room & status -------------------------------------------------
@@ -422,7 +429,7 @@ public static class KnownPatterns
     public const string PartyYouInvited     = "party.you-invited";       // "You have invited X to follow you." — our own outbound invite confirmation
     public const string PartyHeader         = "party.par-header";        // "The following people are in your travel party:" — anchors the par-block state machine
     public const string PartyMemberDeath    = "party.member-death";      // "X has been slain by Y" — conservative kill-attribution match
-    public const string PartyMemberDied     = "party.member-died";       // "X has died." — the universal third-person death line any observer sees; the consumer scopes it to party members by roster match (see PartyDeathRosterCleanup)
+    public const string PartyMemberDied     = "party.member-died";       // "X has died." / Stock's "X is dead." — the universal third-person death line any observer sees; the consumer scopes it to party members by roster match (see PartyDeathRosterCleanup)
     // "X drops to the ground!" — the room/party-side signal a player hit 0 HP
     // (mortally wounded, not yet dead). Seen by everyone present, including the
     // dropper (with their own name). AllyDroppedHandler scopes it to a party /
@@ -522,6 +529,10 @@ public static class KnownPatterns
     // game line; nothing acts on them.
     public const string RealmExitMeditation = "realm.exit-meditation";   // "You will exit after a period of silent meditation."
     public const string RealmExitWaiting = "realm.exit-waiting";         // "You may not perform any commands while waiting to exit!"
+    // "Your meditation has been interrupted - you may not exit now!" — the wait was
+    // called off and the character is still in the game. CleanupLogoutOrchestrator
+    // goes back to waiting for a safe room on it.
+    public const string RealmExitInterrupted = "realm.exit-interrupted";
     public const string RealmExitDots = "realm.exit-dots";               // "..............." — the wait is counted out in dots, on both realms
 
     // ----- Trainer menu marker -------------------------------------------

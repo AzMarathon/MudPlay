@@ -20,11 +20,12 @@ namespace MudPlay.Game.Inventory;
 // exactly one copy. The engine sends a single `buy <name>`, then waits for the
 // result before the next unit — KnownPatterns.UserBuys ("You just bought X …")
 // advances the count; KnownPatterns.UserBuyFailed ("You cannot afford X.")
-// abandons that ware (purse spent) and moves to the next flagged item. The
-// charm-scaled buy price isn't cheaply predictable, so affordability is read off
-// the live result rather than computed up front (matching the confirmed
-// mechanic). Each fresh `list` resets the pump, so a stalled queue — a dropped
-// result line — self-heals on the next shop visit.
+// abandons that ware (purse spent) and moves to the next flagged item, and so
+// does KnownPatterns.UserBuyRefused (out of stock, not a ware here, can't be
+// carried). The charm-scaled buy price isn't cheaply predictable, so
+// affordability is read off the live result rather than computed up front
+// (matching the confirmed mechanic). Each fresh `list` resets the pump, so a
+// stalled queue — a dropped result line — self-heals on the next shop visit.
 //
 // LIGHT items are excluded upstream (Auto-light owns them) and a LoyalItem is
 // never a buy target — both decided by the injected resolver.
@@ -53,6 +54,7 @@ public sealed class AutoBuyManager : IDisposable
     private readonly LogService? _log;
     private readonly IDisposable _boughtSub;
     private readonly IDisposable _failedSub;
+    private readonly IDisposable _refusedSub;
 
     private Terminal.LineExtractor? _lines;
     private bool _capturing;
@@ -97,6 +99,7 @@ public sealed class AutoBuyManager : IDisposable
 
         _boughtSub = router.Subscribe(KnownPatterns.UserBuys, OnBought);
         _failedSub = router.Subscribe(KnownPatterns.UserBuyFailed, OnBuyFailed);
+        _refusedSub = router.Subscribe(KnownPatterns.UserBuyRefused, OnBuyRefused);
     }
 
     // Bind the wire sender — the gate-wrapped engine pipeline from
@@ -232,6 +235,19 @@ public sealed class AutoBuyManager : IDisposable
         PumpActive();
     }
 
+    // Out of stock, not a ware of this shop, or it can't be carried. Two of these
+    // lines name no item and one echoes what was typed, so the refusal goes to the
+    // one buy the pump has out. Without it the pump waited on a result that never
+    // came and the wares queued behind it went unbought until the next `list`.
+    private void OnBuyRefused(MatchResult m)
+    {
+        if (_active < 0 || _active >= _queue.Count) return;
+        _log?.Info(LogCategory,
+            $"buy refused item={_queue[_active].Name} (\"{m.Text.Trim()}\") — stopping this ware");
+        _active++;
+        PumpActive();
+    }
+
     private void Send(string text)
     {
         if (_wireSender is null) return;
@@ -244,6 +260,7 @@ public sealed class AutoBuyManager : IDisposable
         _disposed = true;
         _boughtSub.Dispose();
         _failedSub.Dispose();
+        _refusedSub.Dispose();
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
     }

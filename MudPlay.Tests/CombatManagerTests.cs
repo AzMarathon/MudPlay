@@ -2523,7 +2523,8 @@ public sealed class CombatManagerTests
     [Theory]
     [InlineData("pu", true)]
     [InlineData("PUNCH", true)]
-    [InlineData("ki", true)]
+    [InlineData("ki", false)]        // the game takes kick from `kic`; `ki` is no command
+    [InlineData("kic", true)]
     [InlineData("kick", true)]
     [InlineData("ju", true)]
     [InlineData("jumpk", true)]

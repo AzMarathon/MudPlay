@@ -84,8 +84,16 @@ public static class DefaultPatterns
         // out." so it can't collide with a quoted chat echo (which starts with a
         // speaker/quote, never "Your"). The item name is captured but unused — the
         // engine re-readies whatever spare it carries, not the same item by name.
+        // Stock words the line per item: the torch flickers, a lantern or lamp runs
+        // out of oil, the moon-lamp and the light ball have their own, and a light
+        // with no message of its own answers "<item> is no longer lit!"
+        // (GAME_MECHANICS "Light sources").
         yield return new RegexPattern(KnownPatterns.LightBurnedOut,
-            @"^Your .+ flickers and goes out\.$");
+            @"^(?:Your .+ flickers and goes out\."
+            + @"|Your lamp runs out of oil, and goes out\."
+            + @"|The light in the moon-lamp flickers, and goes out\."
+            + @"|Your light ball disappears out of existance\."
+            + @"|[\w' -]+ is no longer lit!)$");
 
         // ----- Movement --------------------------------------------------
         // Every "you didn't move" reply folded into one alternation: the no-exit
@@ -115,12 +123,14 @@ public static class DefaultPatterns
             @"^You hear movement to the (?<direction>\w+)\.");
         // Left-behind disambiguators. "You can't seem to move anywhere!" fires
         // when a prevents-movement gamedata flag blocks us; "...too heavy to
-        // move" fires when over-encumbered.
+        // move" fires when over-encumbered. A stunned follower gets "You are too
+        // stunned to move anywhere!" before the same "no longer following" line
+        // on Stock (GAME_MECHANICS "A follower who can't move is left behind").
         // The heavy form is anchored ^[^"]* so a quoted chat line (all
         // MajorMUD player chat is quoted) carrying the phrase can never
         // match — only the unquoted system line does.
         yield return new RegexPattern(KnownPatterns.MovementFailedStuck,
-            @"^You can't seem to move anywhere!");
+            @"^You (?:can't seem|are too stunned) to move anywhere!");
         // Rest / meditate refusals: poisoned (you can't rest or meditate while
         // poisoned), and meditating with mana already full.
         yield return new RegexPattern(KnownPatterns.RestRefusedSick,
@@ -510,10 +520,13 @@ public static class DefaultPatterns
         // Sneak-arrival notice — a player who failed a sneak into our room.
         // Monsters never emit this; RoomEntryWatcher classifies it Player
         // unconditionally (the line's wire colour is the monster hue and can't
-        // be trusted here). Only the "in from the <dir>." wording is confirmed;
-        // add alternates here if the game emits others.
+        // be trusted here). The Stock engine words it "sneak in from the <dir>." /
+        // "sneak in from above." / "from below.", with " (Dragging <name>)" before
+        // the full stop when the sneaker drags someone; "sneaking in from" is the
+        // wording on record, so both are read (GAME_MECHANICS "Observing another
+        // player's failed sneak into your room").
         yield return new RegexPattern(KnownPatterns.SneakArrivalNotice,
-            @"^You notice (?<name>\w+) sneaking in from (?:the )?(?<direction>[\w-]+)[.!]\s*$");
+            @"^You notice (?<name>\w+) sneak(?:ing)? in from (?:the )?(?<direction>[\w-]+)(?: \(Dragging [^)]+\))?[.!]\s*$");
 
         // Room-exit departure. Two confirmed shapes, both ending "… to <dir>":
         //  • Player drag-out — a fleeing player drags an engaged mob out of our
@@ -635,6 +648,17 @@ public static class DefaultPatterns
             @"^You (?:just )?sold (?<item>.+?) for (?<price>.+)\.$");
         yield return new RegexPattern(KnownPatterns.UserBuyFailed,
             @"^You cannot afford (?<item>.+)\.$");
+        // The Stock engine's other answers to a `buy` that bought nothing: the
+        // ware is out of stock, the shop has no such ware, and the two lines of
+        // an item that can't be taken (too heavy or no free pack slot, and the
+        // engine's own refusal). The last two also answer a `get`, so a consumer
+        // reads them only while a buy of its own is out (GAME_MECHANICS "Buy /
+        // sell result lines").
+        yield return new RegexPattern(KnownPatterns.UserBuyRefused,
+            @"^(?:You cannot buy .+ here!"
+            + @"|.+ is not a known item\."
+            + @"|You cannot carry that much!"
+            + @"|A strange force stops you from getting this item\.)$");
         yield return new RegexPattern(KnownPatterns.UserSellRefused,
             @"^You cannot sell (?<item>.+) here\.$");
 
@@ -755,9 +779,11 @@ public static class DefaultPatterns
         // PartyDeathRosterCleanup, bounds every action to a name that is BOTH a
         // current party member AND shows as an [Invited] par slot, so a stray
         // "goblin has died." can never trigger a real uninvite. Wording is
-        // user-reported and pending live re-confirmation.
+        // user-reported and pending live re-confirmation. The Stock engine's room
+        // line for a player's death is "<Name> is dead."; both are read
+        // (GAME_MECHANICS "Death lines & the miracle-save").
         yield return new RegexPattern(KnownPatterns.PartyMemberDied,
-            @"^(?<player>\w+) has died\.?\s*$");
+            @"^(?<player>\w+) (?:has died|is dead)\.?\s*$");
         // "<Name> drops to the ground!" — a player hit 0 HP and is mortally
         // wounded (down, bleeding out, not yet dead). Room/party-side signal;
         // everyone present sees it, the dropper with their own name. Distinct
@@ -845,6 +871,9 @@ public static class DefaultPatterns
             @"^You will exit after a period of silent meditation\.");
         yield return new RegexPattern(KnownPatterns.RealmExitWaiting,
             @"^You may not perform any commands while waiting to exit!");
+        // An attack (or, on Stock, `break`) called the wait off: still in the game.
+        yield return new RegexPattern(KnownPatterns.RealmExitInterrupted,
+            @"^Your meditation has been interrupted - you may not exit now!");
         // The wait is counted out as a row of dots, built up one at a time, on both
         // realms.
         yield return new RegexPattern(KnownPatterns.RealmExitDots, @"^\.{2,}$");

@@ -16,6 +16,7 @@ public static partial class EngineReplyLines
     private static readonly string[] Formats =
     {
         "-- %s",
+        "A concealed passage opens to the %s.",
         "--- Message Not Sent ---",
         "--- Telepath Not Sent ---",
         "Are you sure you want to disband %s?",
@@ -74,6 +75,7 @@ public static partial class EngineReplyLines
         "This is not a gang owned shop.",
         "This item is not currently in stock.",
         "This shop is not suitable for your training.",
+        "This weapon feels heavy in your hands.",
         "To do this action, you must turn off your evil warnings.",
         "Unknown user!",
         "Verbose mode set",
@@ -92,7 +94,9 @@ public static partial class EngineReplyLines
         "You add the %s to your shops stock.",
         "You are already the owner of a gang house.",
         "You are already wearing %s and it may not be removed.",
+        "You already have something lit!",
         "You are dragging %s.",
+        "You are extremely quick and deadly with this weapon.",
         "You are no longer dragging %s.",
         "You are not allowed to borrow any money.",
         "You are not carrying %s.",
@@ -122,6 +126,7 @@ public static partial class EngineReplyLines
         "You have chosen a way of life which does not allow this action.",
         "You have chosen a way of life which prevents this action.",
         "You have left %s.",
+        "You have no more room to wear that item!",
         "You have not forgotten any users.",
         "You have not progressed far enough to use the training provided here.",
         "You have now forgotten %s",

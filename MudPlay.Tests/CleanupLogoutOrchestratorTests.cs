@@ -281,6 +281,58 @@ public sealed class CleanupLogoutOrchestratorTests
         Assert.Equal(1, h.DisconnectCalls);
     }
 
+    // ===== Exit called off by an attack =================================
+
+    // An attack during the exit wait keeps the character in the game. The engine
+    // goes back to waiting for a safe room; it must not run the timeouts out and
+    // drop the carrier in the middle of the fight.
+    [Fact]
+    public void Exiting_WaitInterrupted_GoesBackToWaitingForASafeRoom()
+    {
+        Harness h = Setup();
+        h.Safe = true;
+        FireWarning(h);   // sends "x", Exiting
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+
+        h.Safe = false;   // something is swinging at us
+        DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+
+        // Both timeouts pass with the fight still on: no blind re-send, no drop.
+        h.Clock = Now.Add(h.Engine.MenuWaitTimeout).Add(h.Engine.MenuWaitTimeout).AddSeconds(5);
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+        Assert.Single(h.Engine.LastSentForTests);
+        Assert.Equal(0, h.DisconnectCalls);
+
+        // The room clears: the exit goes out again, with its own fresh timeout.
+        h.Safe = true;
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+        Assert.Equal(2, h.Engine.LastSentForTests.Count);
+        h.Engine.EvaluateForTests();
+        Assert.Equal(2, h.Engine.LastSentForTests.Count);   // not re-sent at once
+
+        DispatchSavedLine(h.Router);
+        Assert.Equal(CleanupLogoutPhase.Done, h.Engine.Phase);
+        Assert.Equal(1, h.DisconnectCalls);
+    }
+
+    // The same line answers an exit the user typed; with no exit of ours out it
+    // changes nothing.
+    [Fact]
+    public void WaitInterrupted_BeforeExiting_Ignored()
+    {
+        Harness h = Setup();
+        DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+        Assert.Equal(CleanupLogoutPhase.Idle, h.Engine.Phase);
+
+        FireWarning(h);   // unsafe: Pending
+        DispatchLine(h.Router, "Your meditation has been interrupted - you may not exit now!");
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+        Assert.Empty(h.Engine.LastSentForTests);
+    }
+
     // ===== Abort on lost wire ===========================================
 
     [Fact]
