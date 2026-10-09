@@ -870,6 +870,10 @@ public sealed class AppServices
     // normally on the reconnect.
     public RelogSignal RelogSignal { get; } = new();
 
+    // The board log-off command the player last sent (`;o` to come straight back,
+    // `=x` to stay off), read by ViewModels.MainWindowViewModel at the disconnect.
+    public SentExitCommand SentExit { get; } = new();
+
     // Passive observer for the in-game set suicide /
     // suicide password flows. Locks
     // EngineGate for the duration of each prompt and
@@ -3258,13 +3262,11 @@ public sealed class AppServices
         // connect — user manually re-enters the realm after reading
         // what's on the screen.
         Hangup = new Game.Remote.HangupHandler(RemoteCommands, GameCommands, HangupSignal);
-        Hangup.SetHangupsDisabledCheck(ReadDisableHangups);
         Hangup.SetHangupPenaltyLog(() => LogHangupPenalty(pvpResponse: false));
         // @relog handler — graceful exit (GameCommands.ExitCommand) +
         // RelogSignal so MainWindowVM forces an unconditional reconnect
         // and the normal login automation logs the character back in.
         Relog = new Game.Remote.RelogHandler(RemoteCommands, GameCommands, RelogSignal);
-        Relog.SetHangupsDisabledCheck(ReadDisableHangups);
         Relog.SetHangupPenaltyLog(() => LogHangupPenalty(pvpResponse: false));
         // @divert handler — subscribes to ChatRouter telepaths and repeats
         // them to a target while diverting. Wire-sender bound in
@@ -9956,15 +9958,6 @@ public sealed class AppServices
             if (Game.Combat.MonsterEngagement.IsEngageable(ResolveMonsterOverlay(id))) return true;
         return false;
     }
-
-    // Live read of the master "Disable hangups" kill-switch from the
-    // char-tier General section — the same store the toolbar toggle
-    // writes. Wired into every automatic-hangup site (HangupHandler,
-    // RelogHandler, CleanupLogout; HealthManager reads it through its own
-    // General-settings provider) so flipping the toggle takes effect
-    // without restarting an engine.
-    private bool ReadDisableHangups() =>
-        ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups;
 
     // Says in the program log what the realm's hang-up penalty (Settings → BBS)
     // makes of a hang-up the client has just sent: the health settings', the PvP
