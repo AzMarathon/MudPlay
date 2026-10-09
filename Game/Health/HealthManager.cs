@@ -1786,10 +1786,11 @@ public sealed class HealthManager : IDisposable
     // A trigger resolved at or below the floor yields an empty window (never
     // fires) — the natural "never hang up" position at the bottom of the scale.
     //
-    // Returns true only when it actually sent the disconnect this call, so the
-    // Evaluate caller can short-circuit the rest of the recovery machinery. A
-    // couldn't-send (no exit command configured) still latches _hangFired but
-    // returns false, letting normal rest / flee run as a fallback.
+    // Returns true only when it actually sent the disconnect this call, or another
+    // escape went out a moment ago (EscapeJustWentOut), so the Evaluate caller can
+    // short-circuit the rest of the recovery machinery. A couldn't-send (no exit
+    // command configured) still latches _hangFired but returns false, letting
+    // normal rest / flee run as a fallback.
     private bool TryEmergencyHangup(HealthSettings s)
     {
         // Master kill-switch: the user has declared only an explicit local
@@ -1819,6 +1820,12 @@ public sealed class HealthManager : IDisposable
         }
         if (_hangFired) return false;
 
+        // Another escape has only just gone out (a Hangup monster or a PvP enemy in
+        // the same room roster): the danger is answered, so no second exit command
+        // and no @panic behind it. Not latched: if we are still here and still in
+        // danger once the moment has passed, this fires as normal.
+        if (EscapeJustWentOut($"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}")) return true;
+
         _hangFired = true;
 
         // @panic broadcast (MegaMUD parity): when we're leading a party and opted
@@ -1833,14 +1840,34 @@ public sealed class HealthManager : IDisposable
     }
 
     private static bool Acted(EscapeOutcome outcome) =>
-        outcome is EscapeOutcome.HungUp or EscapeOutcome.Jumped;
+        outcome is EscapeOutcome.HungUp or EscapeOutcome.Jumped or EscapeOutcome.AlreadyEscaping;
+
+    // An escape that went out this recently has answered the danger. A second one
+    // asked for inside the window (low HP, a Hangup monster and a PvP enemy can all
+    // be read off one room roster) would only repeat the exit command, the carrier
+    // drop and the penalty line. Time alone ends it, so it cannot go stale and hold
+    // back a later hang-up.
+    private static readonly TimeSpan EscapeRepeatWindow = TimeSpan.FromSeconds(2);
+    private DateTimeOffset? _escapeSentAt;
+
+    private bool EscapeJustWentOut(string reason)
+    {
+        if (_escapeSentAt is not { } at) return false;
+        TimeSpan since = _now() - at;
+        // A clock set back must not stretch the window.
+        if (since < TimeSpan.Zero || since >= EscapeRepeatWindow) return false;
+        _log?.Debug(LogCategory,
+            $"escape ({reason}) not repeated: one went out {since.TotalMilliseconds:0} ms ago");
+        return true;
+    }
 
     // The low-HP escape action, shared by our own emergency hangup
     // (TryEmergencyHangup), a received @panic (RespondToReceivedPanic), the PvP
     // response (HangUpForPvp) and a Hangup-relationship monster
     // (HangUpForMonster): the sysop wimpy jump if the character opted in with a
     // location AND the jump dispatched, else drop the carrier via the Game-Exit
-    // command. Returns which of the two went out, or NotSent.
+    // command. Returns which of the two went out, NotSent, or AlreadyEscaping when
+    // either kind went out a moment ago (EscapeJustWentOut).
     //
     // The wimpy jump is tried first: rather than drop the carrier, break combat and
     // jump to the configured escape location. Only when opted in with a location AND
@@ -1860,12 +1887,15 @@ public sealed class HealthManager : IDisposable
     // pvpResponse only words the hang-up penalty log line (SetHangupPenaltyLog).
     private EscapeOutcome ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop, bool pvpResponse)
     {
+        if (EscapeJustWentOut(reason)) return EscapeOutcome.AlreadyEscaping;
+
         if (s.SysGotoWimpyInsteadOfHanging
             && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
             && _tryWimpyGoto?.Invoke(s.SysGotoWimpyLocation.Trim()) == true)
         {
             _log?.Warn(LogCategory,
                 $"WIMPY GOTO instead of hangup ({reason}) → break + 'sys goto {s.SysGotoWimpyLocation.Trim()}'");
+            _escapeSentAt = _now();
             return EscapeOutcome.Jumped;
         }
 
@@ -1885,6 +1915,7 @@ public sealed class HealthManager : IDisposable
         }
 
         _log?.Warn(LogCategory, $"HANGUP ({reason}) cmd='{hangCmd}' (sending exit, then closing carrier)");
+        _escapeSentAt = _now();
         // Declare the drop intentional before it lands so MainWindowViewModel's
         // reactive-reconnect path stands down — otherwise the very disconnect we
         // just triggered gets classified as unexpected and immediately dialled back.

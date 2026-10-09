@@ -492,8 +492,26 @@ public sealed class MonsterHangupWatcherTests
         Assert.Empty(h.Notices);
     }
 
+    // Another path's escape had just gone out when the monster was seen: the
+    // sighting is answered and nothing more is asked for while its roster stands.
+    [Fact]
+    public void AnEscapeAlreadyUnderWay_AnswersTheSighting()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.AlreadyEscaping };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+
+        h.Feed("Also here: ogre.");
+        h.Outcome = EscapeOutcome.HungUp;
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.HangUps);
+        Assert.Contains("another escape had just gone out", Assert.Single(h.InfoLines));
+        Assert.Empty(h.WarnLines);
+    }
+
     [Theory]
     [InlineData(EscapeOutcome.Jumped)]
+    [InlineData(EscapeOutcome.AlreadyEscaping)]
     [InlineData(EscapeOutcome.NotSent)]
     [InlineData(EscapeOutcome.HangupsDisabled)]
     public void ADropThatWasNotOurHangUp_TurnsNothingOff(EscapeOutcome outcome)

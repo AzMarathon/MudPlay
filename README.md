@@ -6,6 +6,7 @@
 > - It is the Health tab's hang-up: Disable hangups stops it, it follows Allow hangup in all-off mode, and it is not dialled back
 > - After reconnecting from such a hang-up the watch is off for a minute, counted down beside the status bar's connection light
 > - The room's list of who is here no longer outlives a disconnect
+> - Hang-ups called for in the same moment (low HP, a PvP enemy, a Hangup monster) send one exit command, not one each
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

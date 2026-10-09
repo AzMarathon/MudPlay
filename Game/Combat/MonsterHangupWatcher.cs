@@ -264,6 +264,10 @@ public sealed class MonsterHangupWatcher : IDisposable
             case EscapeOutcome.Jumped:
                 Record($"{what} seen {_describeRoom()}: its relationship is Hangup, jumped to the wimpy location in place of the hang-up");
                 break;
+            case EscapeOutcome.AlreadyEscaping:
+                // Not ours, so it arms no hold after the reconnect.
+                Record($"{what} seen {_describeRoom()}: its relationship is Hangup, and another escape had just gone out, so nothing more was sent");
+                break;
             default:
                 // HealthManager has said why in its own line (no exit command is set).
                 Record($"{what} seen {_describeRoom()}: its relationship is Hangup, but the hang-up did not go out");

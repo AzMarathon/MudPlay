@@ -3557,20 +3557,129 @@ public sealed class HealthManagerTests
         Assert.Equal(0, h.HangupDisconnectCount);
     }
 
-    // The monster's hang-up leaves the low-HP trigger as it was: armed. If the
-    // line has not dropped and HP then falls through the trigger, it still fires.
+    // ----- one escape answers the danger --------------------------------
+    //
+    // Low HP, a Hangup monster and a PvP enemy can all be read off one room
+    // roster. Whichever asks first sends the escape; one asked for a moment later
+    // sends nothing more and is told the danger is already answered.
+
     [Fact]
-    public void LowHpHangup_StillFires_AfterAMonsterHangUp()
+    public void LowHp_RightAfterAMonsterHangUp_SendsNothingMore()
+    {
+        using Harness h = new()
+        {
+            SelfIsLeader = true,
+            Party = new PartySettings { UsePanicWhileLeading = true },
+        };
+        List<bool> penaltyAsked = new();
+        h.Health.SetHangupPenaltyLog(penaltyAsked.Add);
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        // The same roster, read by the low-HP re-check, with HP through the trigger.
+        h.SetPrompt(hp: 5, maxHp: 200);
+        h.Health.ReevaluateEmergencyHangup();
+
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+        Assert.Equal(1, h.HangupDisconnectCount);
+        Assert.Equal(new[] { false }, penaltyAsked);
+        Assert.DoesNotContain(".@panic", h.SentLines);
+    }
+
+    // The repeat is skipped, not the hang-up: still here and still in danger once
+    // the moment has passed, the low-HP trigger fires as normal.
+    [Fact]
+    public void LowHp_ThreeSecondsAfterAMonsterHangUp_HangsUp()
     {
         using Harness h = new();
         h.SetPrompt(hp: 200, maxHp: 200);
         Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
-        Assert.Equal(1, h.HangupDisconnectCount);
-
         h.SetPrompt(hp: 5, maxHp: 200);
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+
+        h.Clock += TimeSpan.FromSeconds(3);
+        h.Health.ReevaluateEmergencyHangup();
 
         Assert.Equal(2, h.SentLines.Count(line => line == "=x"));
         Assert.Equal(2, h.HangupDisconnectCount);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void PvpHangUpAndLowHp_Together_SendOneEscape(bool pvpFirst)
+    {
+        using Harness h = new();
+        List<bool> penaltyAsked = new();
+        h.Health.SetHangupPenaltyLog(penaltyAsked.Add);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        if (pvpFirst)
+        {
+            Assert.True(h.Health.HangUpForPvp("Bob is here"));
+            h.SetPrompt(hp: 5, maxHp: 200);
+        }
+        else
+        {
+            h.SetPrompt(hp: 5, maxHp: 200);
+            // Told the danger is answered, so the PvP response counts it as hung up.
+            Assert.True(h.Health.HangUpForPvp("Bob is here"));
+        }
+
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+        Assert.Equal(1, h.HangupDisconnectCount);
+        Assert.Equal(new[] { pvpFirst }, penaltyAsked);
+    }
+
+    [Fact]
+    public void AnEscapeThreeSecondsAfterAnother_GoesOut()
+    {
+        using Harness h = new();
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.True(h.Health.HangUpForPvp("Bob is here"));
+        Assert.Equal(EscapeOutcome.AlreadyEscaping, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        h.Clock += TimeSpan.FromSeconds(3);
+
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(2, h.SentLines.Count(line => line == "=x"));
+    }
+
+    // A jump has answered the danger as much as a hang-up has: a hang-up asked for
+    // on its heels is not sent after it.
+    [Fact]
+    public void AHangUpAskedForRightAfterAWimpyJump_SendsNothingMore()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true };
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.Jumped, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        h.WimpyFireResult = false;   // a second jump would be refused and fall through to the hang-up
+        Assert.True(h.Health.RespondToReceivedPanic("Bob"));
+        Assert.DoesNotContain("=x", h.SentLines);
+        Assert.Equal(0, h.HangupDisconnectCount);
+
+        h.Clock += TimeSpan.FromSeconds(3);
+        Assert.True(h.Health.RespondToReceivedPanic("Bob"));
+        Assert.Contains("=x", h.SentLines);
+    }
+
+    // A clock set back must not stretch the moment into a held-off hang-up.
+    [Fact]
+    public void AClockSetBack_DoesNotHoldOffTheNextEscape()
+    {
+        using Harness h = new();
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.True(h.Health.HangUpForPvp("Bob is here"));
+
+        h.Clock -= TimeSpan.FromHours(1);
+
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
     }
 
     [Fact]
@@ -4113,6 +4222,7 @@ public sealed class HealthManagerTests
         Assert.Equal(1, h.SentLines.Count(l => l == "=x"));
 
         h.State.Hp = 180;          // recovered above the trigger → re-arm
+        h.Clock += TimeSpan.FromSeconds(30);   // recovering took longer than a moment
         h.State.Hp = 5;            // dropped again with a hostile present
         Assert.Equal(2, h.SentLines.Count(l => l == "=x"));
     }
@@ -4131,6 +4241,7 @@ public sealed class HealthManagerTests
         h.Health.ReevaluateEmergencyHangup();
         Assert.Equal(1, h.SentLines.Count(l => l == "=x"));   // re-armed, no fire
 
+        h.Clock += TimeSpan.FromSeconds(30);  // the reconnect took longer than a moment
         h.HostileInRoom = true;               // a hostile wanders in
         h.Health.ReevaluateEmergencyHangup();
         Assert.Equal(2, h.SentLines.Count(l => l == "=x"));
