@@ -57,8 +57,8 @@ public static partial class BenignChatterMatcher
 
     // The first line of a server listing whose rows are free text: the shop stock
     // table, a top list, the `set` help, the `profile` readout, Paradigm's `abil` readout,
-    // a gang roster, a look at a player ("[ Name ](Gang)", then their description and
-    // gear). The watcher skips from here to the next prompt.
+    // a gang roster, a look at a player or at a player's corpse ("[ Name ](Gang)" or
+    // "[ corpse of Name ](Gang)", then the description and gear). The watcher skips from here to the next prompt.
     public static bool IsListingHeader(string text) =>
         !string.IsNullOrEmpty(text) && ListingHeaderRx().IsMatch(text);
 
@@ -134,7 +134,7 @@ public static partial class BenignChatterMatcher
 
     [GeneratedRegex(
         @"^(?:Item\s{2,}Quantity\s{2,}Price$|Top .+ of the Realm\b|The SET command is used to change|Player ID:\s+\d+$|HP Regen:\s+\S+\s+AC vs Evil:|.+ members \(\d+\)$"
-      + @"|\[ [A-Z][\w '-]* \](?:\(.*\))?$)",
+      + @"|\[ (?:corpse of )?[A-Z][\w '-]* \](?:\(.*\))?$)",
         RegexOptions.CultureInvariant)]
     private static partial Regex ListingHeaderRx();
 
