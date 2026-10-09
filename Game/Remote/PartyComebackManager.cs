@@ -25,7 +25,8 @@ namespace MudPlay.Game.Remote;
 // than the return-distance setting, declining via @forget + a spoken reason so
 // the member isn't left waiting. Otherwise we pause the running movement engine,
 // walk to recover them, re-invite (left-behind members are dropped from the party
-// server-side), wait for the follow confirmation, then resume.
+// server-side), wait for the follow confirmation, then resume. The member
+// following us again ends the recovery at whatever stage it has reached.
 //
 // Stop-and-restart, not gate-pause. Asserting a MovementCoordinator gate would
 // block the recovery walk itself — AutoWalkManager.WalkTo parks in Paused while
@@ -169,6 +170,15 @@ public sealed class PartyComebackManager : IDisposable
     // Whether that recovery is for a follower our own move left behind (path C).
     public bool RecoveringLeftBehind => _busy && _leftBehind;
 
+    // How far that recovery has got, for the bug report.
+    public string RecoveryPhase => _phase switch
+    {
+        ComebackPhase.WalkingToRoom => "walking to their room",
+        ComebackPhase.WalkingBacktrack => "backtracking along our path",
+        ComebackPhase.AwaitingFollow => "re-invited, waiting for them to follow",
+        _ => "idle",
+    };
+
     // Raised when a recovery starts or ends (RecoveringMember goes set / null).
     public event Action? RecoveringChanged;
 
@@ -192,6 +202,10 @@ public sealed class PartyComebackManager : IDisposable
     // reconnect hold, a pending @wait) would park the pickup walk, and the member
     // is waiting on that walk. AppServices wires it; null in tests.
     public Action<string, string>? ReleaseHolds { get; set; }
+
+    // Whether the user has movement paused (the coordinator's User gate). AppServices
+    // wires it; null in tests.
+    public Func<bool>? MovementPausedByUser { get; set; }
 
     // Test seam — every outbound wire buffer, in order.
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
@@ -425,6 +439,16 @@ public sealed class PartyComebackManager : IDisposable
         if (SnapshotRunningEngine().Kind == ResumeKind.None)
         {
             _log?.Info(LogCategory, $"{given} was left behind, but no engine is running — leaving the pickup to you.");
+            return;
+        }
+        // A walk or loop the user has paused isn't running either: the move that left
+        // the member behind was typed by hand (typing one is itself a pause). A
+        // recovery started now is a walk born paused, which wakes on Resume long
+        // after the player has fetched the member themselves (report
+        // paradigm-20260929-221642: six rooms walked back to where they had stood).
+        if (MovementPausedByUser?.Invoke() == true)
+        {
+            _log?.Info(LogCategory, $"{given} was left behind while you have movement paused — leaving the pickup to you.");
             return;
         }
         _log?.Info(LogCategory, $"{given} was left behind by our move — going back for them.");
@@ -825,8 +849,20 @@ public sealed class PartyComebackManager : IDisposable
         // succeeds), un-stranding a member we'd previously given up on.
         _failedRecoveries.Remove(GivenName(name));
 
-        if (!_busy || _phase != ComebackPhase.AwaitingFollow) return;
+        if (!_busy || _phase == ComebackPhase.Idle) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
+        if (_phase is ComebackPhase.WalkingToRoom or ComebackPhase.WalkingBacktrack)
+        {
+            // They are following us again before the walk reached them: they caught
+            // up, or were invited by hand. Nobody is left to fetch, and a walk kept
+            // going heads back to a room they have since left (reports
+            // paradigm-20261007-134824, paradigm-20260929-221642).
+            _log?.Info(LogCategory, $"{_senderGiven} is back in the party — recovery walk called off");
+            // Our own stop — idle the phase so OnWalkEvent doesn't read it as the
+            // user taking over.
+            _phase = ComebackPhase.Idle;
+            if (_walker.State is not WalkState.Idle) _walker.Stop("comeback: member is back in the party");
+        }
         if (_leftBehind)
         {
             // Whatever held them may still hold them: wait the full window for their

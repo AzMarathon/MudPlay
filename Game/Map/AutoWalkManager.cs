@@ -1989,7 +1989,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
             return;
         }
 
-        _expectedAfterCurrentMove = exit.Target;
+        // An exit whose spell teleports us on ends in its landing, not in the room it
+        // names (and the route beyond is planned from).
+        _expectedAfterCurrentMove = exit.Landing;
         _stepInFlight = true;
         ArmStallWatchdog($"step {_index + 1} sent ({step.Direction})");
 
@@ -2177,7 +2179,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 _recovery?.NoteEngineStepSent(step.Direction);
 
         byte[] bytes = EncodeMove(step.Direction);
-        EmitMoveBytes(bytes, $"move {step.Direction} → {exit.Target}");
+        EmitMoveBytes(bytes, $"move {step.Direction} → {exit.Target}"
+            + (exit.CastLandings is null ? "" : $", whose spell teleports us on to {exit.Landing}"));
+        SpecialExitDispatch.NoteCastTeleportCrossing(in exit, _isLeaderWithFollowers, _onLeaderPartySplit);
     }
 
     private void OnHiddenRevealReply(HiddenSearchResult result)
@@ -3518,7 +3522,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // a manual long-traverse would surface as off-path further down.)
         for (int i = _index; !stillHere && i < _path.Count; i++)
         {
-            if (_path[i] is MoveStep move && move.ExpectedTarget.Equals(hereKey))
+            // The step in flight may end somewhere other than the room the path
+            // names for it: an exit whose spell teleports us on ends in its landing.
+            bool inFlightLanded = i == _index && hadStepInFlight
+                && _expectedAfterCurrentMove is { } landing && landing.Equals(hereKey);
+            if (_path[i] is MoveStep move && (move.ExpectedTarget.Equals(hereKey) || inFlightLanded))
             {
                 _index = i + 1;
                 _expectedAfterCurrentMove = null;

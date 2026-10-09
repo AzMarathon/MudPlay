@@ -207,6 +207,12 @@ public sealed class AutoPartyManager : IDisposable
     private Func<Map.RoomKey?>? _currentRoom;
     public void SetRoomProbe(Func<Map.RoomKey?> currentRoom) => _currentRoom = currentRoom;
 
+    // Whether the room display now arriving is a `look <direction>` peek into the
+    // next room (RoomTracker.IsPeekSuppressed). Unset in tests / before wiring →
+    // never.
+    private Func<bool>? _isPeekedDisplay;
+    public void SetPeekProbe(Func<bool> isPeekedDisplay) => _isPeekedDisplay = isPeekedDisplay;
+
     // The room a split-teleport reform started in; null when none is pending or the
     // room wasn't known.
     private Map.RoomKey? _reformOrigin;
@@ -517,6 +523,19 @@ public sealed class AutoPartyManager : IDisposable
         if (match.Groups.Count == 0) return;
         string list = match.Groups[0];
         if (string.IsNullOrWhiteSpace(list)) return;
+
+        // A `look <direction>` peek prints the next room's "Also here:". Whoever it
+        // lists stands a room away, where an invite can't reach: taking it as
+        // presence spent a reform's one invite on "You don't see X here!" (report
+        // paradigm-20260923-092317).
+        if (_isPeekedDisplay?.Invoke() == true)
+        {
+            _log?.Log(_reformPendingInvite.Count > 0 ? LogSeverity.Info : LogSeverity.Debug, "AutoParty",
+                "Players listed by a look into the next room aren't here — no invite"
+                + (_reformPendingInvite.Count > 0
+                    ? $" (party reform still waiting to see {string.Join(", ", _reformPendingInvite)})." : "."));
+            return;
+        }
 
         foreach (string raw in SplitOccupantList(list))
         {

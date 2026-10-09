@@ -5614,6 +5614,9 @@ public sealed class AppServices
         // the same way for the test button.
         RoomTracker.AttachInventorySnapshot(() => Inventory.Snapshot);
         DeathRecovery.AttachInventorySnapshot(() => Inventory.Snapshot);
+        // Which landing an item-gated cast-on-walk teleport takes (the golden idol's
+        // passage in the Earthen Catacombs). Unknown until an inventory has parsed.
+        RoomTracker.SetItemHeldProbe(itemId => Inventory.IsLoaded ? IsItemCarried(itemId) : null);
 
         // CombatSessionTracker: our own Session Stats figures, off RoundDamage's
         // ledger plus the swing / miss / dodge patterns. Its spell matchers refresh on
@@ -8084,6 +8087,10 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
+        // A member left behind by a move typed while the user holds movement paused
+        // is theirs to fetch.
+        PartyComeback.MovementPausedByUser =
+            () => MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate);
         // A dropped member's reconnect hold (or their @wait) would park the walk to
         // pick them up — the leader never moves while they wait on it.
         PartyComeback.ReleaseHolds = (given, reason) =>
@@ -8446,6 +8453,8 @@ public sealed class AppServices
         // loop or auto-lair (running or paused), or an auto-deposit / train trip.
         // A split-teleport reform waits for the leader to leave the room it started in.
         AutoParty.SetRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
+        // Players listed by a `look <direction>` peek stand in the next room.
+        AutoParty.SetPeekProbe(() => RoomTracker.IsPeekSuppressed());
         AutoParty.SetNavigationProbe(() =>
             MovementControl.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring
             || TrainerWalk.IsBusy || TrainFunding.IsBusy || StashTransfer.IsBusy);
@@ -8825,6 +8834,9 @@ public sealed class AppServices
             Router, Party,
             isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             log: Log);
+        // A loop restarting after a reconnect waits for that reform to see the room,
+        // so its first step can't go out ahead of the reform's hold.
+        LoopRunner.SetReconnectReformProbe(() => PartyReform.PendingReform.Count > 0);
 
         // Reconnect-recovery cross-wiring — done here (after PartyRejoin exists)
         // because these hooks bridge the leader-side comeback manager and the

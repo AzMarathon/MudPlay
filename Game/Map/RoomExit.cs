@@ -87,6 +87,15 @@ namespace MudPlay.Game.Map;
 //     progress; the walker re-plans from wherever it actually lands. The nominal
 //     Target is the fixed-branch landing (a real onward-connected room) so a flagged
 //     character's route continues straight through without a re-plan.
+//   - CastLandings — set at graph-build time on a cast-on-walk exit whose
+//     post-cast spell teleports through a textblock (GAME_MECHANICS "Cast-on-walk
+//     exits and random teleports"). The step first lands in Target, the room the
+//     exit cell names, and the spell then moves the character on. CastLandings
+//     lists where to, in the order the game tries them: an entry with an ItemId is
+//     taken when the character has that item, an entry with ItemId 0 always.
+//     Target is left alone — routes, the map and saved loops go on naming the room
+//     the cell names — and RoomTracker settles the landing each character really
+//     gets. Everyone crosses on their own, so a party is split on the way through.
 public readonly partial record struct RoomExit(
     RoomKey Target,
     RoomExitHint Hint,
@@ -110,8 +119,14 @@ public readonly partial record struct RoomExit(
     IReadOnlyList<RoomKey>? CastTeleportTargets = null,
     (int Lo, int Hi)? AlignmentGate = null,
     long FareCopper = 0,
-    int RaceGate = 0)
+    int RaceGate = 0,
+    IReadOnlyList<(int ItemId, RoomKey Room)>? CastLandings = null)
 {
+    // Where a step through this exit is expected to end: its target, or for a
+    // cast-on-walk teleport the first landing, which is the one the route beyond
+    // it counts on.
+    public RoomKey Landing => CastLandings is { Count: > 0 } landings ? landings[0].Room : Target;
+
     // True when this exit carries a character-level window (either a floor, a
     // cap, or both).
     public bool HasLevelGate => MinLevel > 0 || MaxLevel > 0;

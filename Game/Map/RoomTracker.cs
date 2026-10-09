@@ -238,6 +238,23 @@ public sealed class RoomTracker
         _isFeared = probe;
     }
 
+    // Reports whether we have an item — carried, worn or on the key ring — or null
+    // while the inventory hasn't been read. Settles which landing an item-gated
+    // cast-on-walk teleport takes (InferCastLanding). Unset in tests / before
+    // wiring → unknown.
+    private Func<int, bool?>? _holdsItem;
+
+    public void SetItemHeldProbe(Func<int, bool?> probe)
+    {
+        ArgumentNullException.ThrowIfNull(probe);
+        _holdsItem = probe;
+    }
+
+    // Diagnostics: the last step through an exit whose spell teleported us on —
+    // the room it left, the room we were put in, and what that choice went by.
+    // Null until one is crossed this session.
+    public (RoomKey From, RoomKey Landing, string Basis, DateTimeOffset At)? LastCastLanding { get; private set; }
+
     // Snapshot of the rolling confirmed-position history, newest-first. [0] is
     // the most recently confirmed room (typically the current room); [1] the one
     // before it, and so on, capped at the internal history window. Used by
@@ -606,7 +623,7 @@ public sealed class RoomTracker
                 "holding position; map may drift until a lit room re-anchors.");
             return;
         }
-        if (_graph.GetRoom(exit.Target) is not { } expected)
+        if (PredictedLanding(exit) is not { } expected)
         {
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 $"Dark move '{DescribeMove(head)}' targets {exit.Target}, absent from the graph — holding position.");
@@ -694,7 +711,7 @@ public sealed class RoomTracker
                 "holding position; map may drift until a lit room re-anchors.");
             return;
         }
-        if (_graph.GetRoom(exit.Target) is not { } expected)
+        if (PredictedLanding(exit) is not { } expected)
         {
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 $"Blind move '{DescribeMove(head)}' targets {exit.Target}, absent from the graph — holding position.");
@@ -911,6 +928,13 @@ public sealed class RoomTracker
 
         // Forward confirmation: the predicted target room (Strategy 1 / 1a).
         if (!TryResolvePendingExit(source, head, out RoomExit exit)) return false;
+        // A cast-on-walk teleport shows the exit's target and then a landing.
+        if (exit.CastLandings is { } landings)
+        {
+            foreach ((int _, RoomKey landingKey) in landings)
+                if (_graph.GetRoom(landingKey) is { } landing && MatchesPredicted(landing, observation))
+                    return true;
+        }
         if (_graph.GetRoom(exit.Target) is not { } expected) return false;
         return MatchesPredicted(expected, observation)
             || (expected.HasUnknownName
@@ -1302,6 +1326,36 @@ public sealed class RoomTracker
         {
             Room? expected = _graph.GetRoom(exit.Target);
             string moveLabel = DescribeMove(head);
+            string confirmed = $"move {moveLabel} confirmed";
+            string? castBasis = null;
+
+            // A cast-on-walk teleport shows the exit's own target first and then
+            // wherever its spell sends us, so the room the display fits is settled
+            // here before the ordinary checks run against it. The target is only
+            // passed through: the move stays in flight there unless nothing we hold
+            // lets the spell move us on.
+            bool castAmbiguous = false;
+            if (exit.CastLandings is not null)
+            {
+                if (PickCastLanding(exit, observation, out castAmbiguous, out string basis) is { } landing)
+                {
+                    expected = landing;
+                    castBasis = basis;
+                    confirmed += $", sent on by the exit's spell ({basis})";
+                }
+                else if (expected is not null && MatchesPredicted(expected, observation))
+                {
+                    if (InferCastLanding(exit, out string staying) is not null)
+                    {
+                        _log?.Log(LogSeverity.Info, "RoomTracker",
+                            $"Move {moveLabel} reached {expected.Key}, the room its spell teleports us on from; waiting for the landing.");
+                        State.LastUpdatedAt = when;
+                        return;
+                    }
+                    castBasis = $"left where the exit leads: {staying}";
+                    confirmed += $", and its spell leaves us here ({staying})";
+                }
+            }
 
             // Strategy 1 — predicted neighbour matches.
             if (expected is not null && MatchesPredicted(expected, observation))
@@ -1372,20 +1426,27 @@ public sealed class RoomTracker
 
                 _pending.TryDequeue(out _);
                 State.SuspectStrikes = 0;
+                if (castBasis is not null) LastCastLanding = (source.Key, expected.Key, castBasis, when);
                 // Predicted-neighbour is a deduction — only strict (i.e.
                 // worth persisting to LastKnownRoom) when the landing
                 // room is also a 1-of-1 graph match for the observation.
-                bool strict = _graph.FindCandidates(observation.Name, observation.Exits).Count == 1;
+                bool strict = !castAmbiguous
+                    && _graph.FindCandidates(observation.Name, observation.Exits).Count == 1;
                 if (_pending.IsEmpty)
-                    SetRoom(expected, RoomConfidence.Confirmed, when, $"move {moveLabel} confirmed", isStrictAnchor: strict);
+                    SetRoom(expected, RoomConfidence.Confirmed, when, confirmed, isStrictAnchor: strict);
                 else
                 {
                     // More moves still in flight — land Confirmed at
                     // the new room (we know where we are) but keep
                     // Pending posture if more confirmations are due.
-                    SetRoom(expected, RoomConfidence.Pending, when, $"move {moveLabel} confirmed, queue not empty");
+                    SetRoom(expected, RoomConfidence.Pending, when, $"{confirmed}, queue not empty");
                 }
                 MoveConfirmed?.Invoke();
+                // The display fitted more than one of the spell's landings, so the
+                // one we took rests on what we carry. Where the realm can say which
+                // room this is, ask.
+                if (castAmbiguous)
+                    RequestAuthoritativeResync?.Invoke("a cast-on-walk teleport's landings look alike");
                 return;
             }
 
@@ -1796,6 +1857,77 @@ public sealed class RoomTracker
         exit = default;
         return false;
     }
+
+    // The landing a cast-on-walk teleport should take going by what we have: the
+    // first entry whose item we hold, or the first with no item check. Holding
+    // counts carried, worn and key-ring alike, the way the game's `failitem` is
+    // known to; that `checkitem` reads a worn item the same way is unconfirmed
+    // (GAME_MECHANICS "Jungle to the Lost City…"), which is why PickCastLanding
+    // lets the display overrule this. While the inventory is unread it is the
+    // first landing, the one the route beyond the exit counts on. Null when we
+    // hold none of the items and no entry is unconditional: the spell moves us
+    // nowhere and we stay in the exit's target.
+    private Room? InferCastLanding(in RoomExit exit, out string basis)
+    {
+        basis = "holding nothing its spell asks for";
+        if (exit.CastLandings is not { } landings) return null;
+        int missing = 0;
+        foreach ((int itemId, RoomKey room) in landings)
+        {
+            if (itemId == 0)
+            {
+                basis = missing > 0 ? $"not holding item {missing}" : "its only landing";
+                return _graph.GetRoom(room);
+            }
+            switch (_holdsItem?.Invoke(itemId))
+            {
+                case true:
+                    basis = $"holding item {itemId}";
+                    return _graph.GetRoom(room);
+                case null:
+                    basis = $"inventory not read yet, so taken as holding item {landings[0].ItemId}";
+                    return _graph.GetRoom(exit.Landing);
+            }
+            missing = itemId;
+        }
+        return null;
+    }
+
+    // Where a cast-on-walk teleport put us. The display outranks the inventory:
+    // one that fits a single landing settles it whatever we think we hold. When it
+    // fits several (the golden idol's two landings are both a one-exit "Earthen
+    // Catacombs"), the inventory picks, and ambiguous tells the caller the room is
+    // a deduction. Null when the display fits no landing.
+    private Room? PickCastLanding(in RoomExit exit, RoomObservation observation, out bool ambiguous, out string basis)
+    {
+        ambiguous = false;
+        basis = string.Empty;
+        if (exit.CastLandings is not { } landings) return null;
+
+        List<Room> fitting = new(landings.Count);
+        foreach ((int _, RoomKey key) in landings)
+        {
+            if (fitting.Exists(r => r.Key == key)) continue;
+            if (_graph.GetRoom(key) is { } room && MatchesPredicted(room, observation)) fitting.Add(room);
+        }
+        if (fitting.Count == 0) return null;
+
+        ambiguous = fitting.Count > 1;
+        if (InferCastLanding(exit, out string held) is { } inferred
+            && fitting.Find(r => r.Key == inferred.Key) is { } pick)
+        {
+            basis = ambiguous ? $"{held}; its landings look alike" : held;
+            return pick;
+        }
+        basis = ambiguous ? "its landings look alike" : "the room shown fits only this landing";
+        return fitting[0];
+    }
+
+    // The room a pending move should end in when nothing on screen can say: an
+    // ordinary exit's target, or for a cast-on-walk teleport the landing our
+    // inventory points at.
+    private Room? PredictedLanding(in RoomExit exit) =>
+        (exit.CastLandings is null ? null : InferCastLanding(exit, out _)) ?? _graph.GetRoom(exit.Target);
 
     // Find the room's Text exit whose comma-separated command alternatives
     // include command (case-insensitive). One matched token ("go path") is enough

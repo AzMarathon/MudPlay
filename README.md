@@ -1,10 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.0**
-> - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder
-> - Written every N minutes (1 to 120, 5 by default) while the character is in the game, and once more on leaving it; the Session Stats window doesn't need to be open
-> - Off by default; saved for all characters
+> **Version 3.153.4**
+> - The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
+> - Your position is tracked to the room that passage really puts you in (the Lost City side with the idol, the look-alike dead end without)
+> - Going back for a party member ends as soon as they are following you again, and never starts for a move you typed while movement is paused
+> - After a reconnect, a loop waits for the party re-invite to see the room before it takes its first step
+> - Players seen through a `look <direction>` are no longer invited, and no longer count as arrived for a party re-invite
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

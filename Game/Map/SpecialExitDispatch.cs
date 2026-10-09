@@ -188,6 +188,20 @@ internal static class SpecialExitDispatch
         return SpecialExitSend.NotHandled;
     }
 
+    // A leader has just stepped through a cast-on-walk exit whose spell teleports
+    // through a textblock. The followers are dragged in behind the leader's step
+    // and then teleported one by one, each dropping out of the party as they go
+    // (GAME_MECHANICS "Jungle to the Lost City: the Vine Bridge trap and the golden
+    // idol"), so there is no keyword to relay; the party only has to be re-formed
+    // where it lands. Called after the move is on the wire, like the teleport
+    // branch of TrySendSynchronous.
+    public static void NoteCastTeleportCrossing(
+        in RoomExit exit, Func<bool>? isLeaderWithFollowers, Action? onLeaderPartySplitTeleport)
+    {
+        if (exit.CastLandings is null) return;
+        if (isLeaderWithFollowers?.Invoke() == true) onLeaderPartySplitTeleport?.Invoke();
+    }
+
     private static string? TeleportKeyword(
         RoomExit exit, Room? sourceRoom, Func<RoomKey, RoomKey, string?>? teleportResolver)
         => exit.TextCommands is { Count: > 0 } teleCmds

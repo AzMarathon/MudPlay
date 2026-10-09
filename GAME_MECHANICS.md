@@ -3712,6 +3712,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - The client arms a short suppression window on sending the look (`RoomTracker.NoteLookSent`); the display consumers that run *before* the `Obvious exits:` line poll `IsPeekSuppressed()` to skip the peeked room, and the window is consumed when `NoteRoomObserved` fires on the exits line.
+- `AutoPartyManager.OnRoomAlsoHere` is one of those consumers: players a peek lists stand in the next room, so they are neither invited on sight nor taken as arrived by a party reform. Before 2026-10-08 a reconnect reform spent its invite on a peeked listing and got `You don't see <name> here.` (report `paradigm-20260923-092317`).
 - The Warped Asylum look-sweep opens the barrier then looks (its rooms gate siblings behind bashable doors); before #346 a shut door on a peek direction failed the whole maze solve out.
 
 ### Room display parsing — the room title is positional, not just bright cyan
@@ -4696,6 +4697,16 @@ Among protectable hazards, a further split governs whether the navigator may off
     expanding through a pocket entrance, so from outside the pocket shows only as a spell-wall stub at
     its mouth — but a walker standing *inside* still lays the whole area out, because the pocket's
     internal cast exits are reciprocal (they have return paths) and so are never flagged as entrances.
+  - A post-cast spell that teleports through a textblock is read by
+    `TBInfoCastTeleportResolver.TextblockLandings` *(2026-10-08; reports `paradigm-20261007-134305`,
+    `paradigm-20261007-134824`)*: each line of the chain that carries a `teleport` is one landing, taken
+    in order, with at most one `checkitem` before it. The exit then carries `RoomExit.CastLandings`;
+    its target stays the room its cell names, which the step only passes through. A chain holding
+    anything else (`random`, an ability check, a line that doesn't teleport, a `LinkTo` continuation)
+    is left a plain cardinal. In the stock v1.11p and Paradigm 1.9.1 data the one exit this reads is
+    `16/2273` east (spell 857). `RoomTracker` treats a display of the room the exit names as part of
+    the move and confirms the move at a landing; a party is re-formed there, as in *Jungle to the Lost
+    City: the Vine Bridge trap and the golden idol*.
 
 ### Jungle to the Lost City: the Vine Bridge trap and the golden idol
 *Status: CONFIRMED 2026-10-08 (user); rooms, spells and textblocks [OBSERVED] 2026-10-08, game-data lookup, identical on Stock v1.11p and Paradigm 1.9.1 · Realm: both*
@@ -4717,9 +4728,18 @@ Among protectable hazards, a further split governs whether the navigator may off
   4. The leader is teleported and shown `16/2431`, with the followers already there (listed on its `Also here:` line in that capture).
   - Each character is checked for the idol on their own, so a follower without one lands in `16/2228`, apart from the leader. `[NEEDS CONFIRMATION]` Not seen in a capture.
   - It is the party-splitting teleport of *CMD-driven room teleports split the party*, reached by a walk instead of a typed command: the party has to be re-invited on landing.
+  - `[NEEDS CONFIRMATION]` Does a character crossing alone see the same two room displays (`16/2274`, then the landing)? Only a leader with followers has been captured.
+- **Nothing on screen tells the three rooms apart** *([OBSERVED] 2026-10-08, game data, both realms)*. `16/2274`, `16/2431` and `16/2228` are each `Earthen Catacombs` with the one exit west (to `16/2430`, `16/2430` and `16/2227`), and `16/2430` and `16/2227` are in turn each `Earthen Catacombs` with exits north and east. A character sent to the wrong side sees the same rooms for at least two steps.
+- **The idol is a key-type item that can also be worn** *([OBSERVED] 2026-10-08, game data: `ItemType 7`, `Worn 8`)*. In report `paradigm-20261007-134305` it sat on the key ring (`You have the following keys: golden idol.`) and the leader landed in `16/2431`.
+  - `[NEEDS CONFIRMATION]` Does `checkitem 1281` pass for an idol that is worn rather than carried? `failitem` is confirmed to count a worn item (*Room-spell hazard shape 3 — buff check (`checkspell` / `failspell`): the desert waterskin*, the sunstone); nothing recorded says `checkitem` reads possession the same way.
 
 **Client use:**
-- None yet for the passthrough: the walker takes the exit as a plain move, steps on from the landing room, and the re-invite is sent from the wrong room (report `paradigm-20261007-134305`).
+- `TBInfoCastTeleportResolver.TextblockLandings` reads the spell's textblock into an ordered list of landings, and `RoomGraphManager.PromoteCastTeleportExits` hangs it on the exit (`RoomExit.CastLandings`). The exit goes on naming `16/2274`, so routes, the map and saved loops are planned as before (the seeded loop `Lost City/Earthen Catacombs (need  idol).loop` lists `16/2274` as a waypoint); that works because `16/2274` and the idol landing `16/2431` both lead west to `16/2430`. See *Cast-on-walk exits and random teleports*.
+- The walk and the loop expect such a step to end in the first landing (`RoomExit.Landing`), not in the room the exit names.
+- `RoomTracker` settles the landing each character gets (`PickCastLanding`): the room shown decides when it fits only one landing; here, where they look alike, what the character holds decides (`InferCastLanding`: carried, worn or key ring all count, pending the `checkitem` question above), the room is not written as the saved anchor, and with no engine driving Paradigm is asked with `rm`. With an engine driving, a wrong pick stands until a display disagrees.
+- **Client policy:** a leader's walk or loop that steps through tells the party engines it is a split of our own making (`SpecialExitDispatch.NoteCastTeleportCrossing` → `PartyComebackManager.NoteOwnTeleport`, `AutoPartyManager.NotePartySplitTeleport`): the `<name> is no longer following you.` lines aren't taken for members left behind, movement holds in the landing room, and each member is re-invited once seen there. Nothing is relayed, since the followers are pulled through behind the leader's step. Before 2026-10-08 the walk stepped on from the landing, the invites went out from the next room, and the leader backtracked for followers who were beside it (reports `paradigm-20261007-134305`, `paradigm-20261007-134824`).
+- A follower sent to the other side isn't looked for: the reform waits out its window for them and the walk goes on.
+- Routes are still planned through this exit for a character without the idol; they land in `16/2228`, and the walk re-plans from there.
 
 ### Quest-gated gateway portals
 *Status: CONFIRMED (game data Paradigm 1.9.1 map 9) · Realm: both (byte-identical across stock and Paradigm data)*
@@ -6101,11 +6121,18 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 - `PartyManager.OnLeftBehind` → `MemberLeftBehind` → `PartyComebackManager` path C: backtrack, re-invite, then `PartyAilmentTracker.NoteInferredHold` (Held chip + `@wait` pause over the full "If leading, wait only" window) and a `@waiting` telepath the follower answers with `@ok` once nothing holds it (`PartyEssentialHandlers.OnWaiting`).
 - **Client policy** (user, 2026-09-26): gated on *Re-invite lost party members*; only a running walk / loop / Auto-Lair goes back.
 - **Client policy** (user, 2026-09-26): a member left behind within 5 s of their own `@ok` (`PartyEssentialHandlers.OkedWithin`) gets the full wait window after rejoining, and their `@ok` is ignored for it (`NotePause(ignoreOk)`). No `@waiting` is sent in that case.
+- **Client policy** (2026-10-08): a walk or loop the user has paused doesn't count as running. A member dropped behind a move typed during that pause is left to the player (`PartyComebackManager.MovementPausedByUser`); before, the recovery walk was started paused and set off on Resume, 100 s after the member had been fetched by hand (report `paradigm-20260929-221642`).
+- **Client policy** (2026-10-08): `<name> started to follow you.` for the member being recovered ends the recovery at any stage, not only once the leader has reached them and re-invited (`PartyComebackManager.OnMemberFollowConfirmed`); the walk back is stopped and the interrupted walk, loop or Auto-Lair is put back (reports `paradigm-20261007-134824`, `paradigm-20260929-221642`).
 
 ### Losing the leader disbands the party
 *Status: CONFIRMED*
 
 - **Losing the leader disbands the whole party, whether the leader disconnects or dies.** There is no grace-window auto-invite for a lost leader. On the leader's own death, the party is gone by the time they respawn in the graveyard.
+- **The followers stay where they were** *([OBSERVED] report `paradigm-20260923-092317`, Paradigm)*: a leader whose link dropped re-entered the realm 26 s later in the room it had dropped in, and both followers were still on that room's `Also here:` line.
+
+**Client use:**
+- `PartyReformCoordinator` snapshots the followers at the drop and, on the first room display back in the game, has `PartyManager.BeginLeaderReconnectReform` and `AutoPartyManager.NoteLeaderReconnectReform` hold movement and re-invite each follower once seen in the room.
+- A loop that was running restarts after the reconnect (`LoopRunner.TryResumeAfterReconnect`), but not while that reform is still waiting for its room display: the prompt that comes with the display is read before the display's lines, and a loop started on it sent its first step before the hold went up, leaving the followers behind (report `paradigm-20260923-092317`). **Client policy:** if no room is displayed within 5 s the loop starts anyway.
 
 ### Dropping (0 HP) or instant death removes you from the party
 *Status: CONFIRMED; suicide / instant-death detail CONFIRMED 2026-08-25 (user)*

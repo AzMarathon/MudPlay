@@ -1123,6 +1123,43 @@ public sealed class AutoPartyManagerTests
         Assert.Equal("invite Raijin\r", Encoding.Latin1.GetString(sent));
     }
 
+    // Report paradigm-20260923-092317: a `look <direction>` peek listed the followers
+    // in the next room, the reform took that as their arrival and spent its invite
+    // from the wrong room ("You don't see X here!"). A peek's listing is nobody
+    // here; the invite waits for a display of the room we stand in.
+    [Fact]
+    public void LeaderReconnectReform_PeekedAlsoHere_DoesNotSpendTheInvite()
+    {
+        var (engine, router, _, _) = Setup();
+        bool peeking = true;
+        engine.SetPeekProbe(() => peeking);
+        engine.NoteLeaderReconnectReform(new[] { "Raijin", "Forged" });
+
+        Dispatch(router, "Also here: Raijin and Forged.");   // the next room, seen through a look
+
+        Assert.Empty(engine.LastSentForTests);
+
+        peeking = false;
+        Dispatch(router, "Also here: Raijin and Forged.");   // our own room
+
+        Assert.Equal(2, engine.LastSentForTests.Count);
+        Assert.Contains(engine.LastSentForTests, b => Encoding.Latin1.GetString(b) == "invite Raijin\r");
+    }
+
+    // The same goes for the everyday invite-on-seen: a flagged player seen through a
+    // look is a room away.
+    [Fact]
+    public void InviteOnSeen_PeekedAlsoHere_DoesNotInvite()
+    {
+        var (engine, router, players, _) = Setup();
+        SeedPlayer(players, "Raijin", inviteOnSeen: true);
+        engine.SetPeekProbe(() => true);
+
+        Dispatch(router, "Also here: Raijin.");
+
+        Assert.Empty(engine.LastSentForTests);
+    }
+
     [Fact]
     public void LeaderReconnectReform_EmptyList_NoOp()
     {

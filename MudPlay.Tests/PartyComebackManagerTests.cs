@@ -624,6 +624,78 @@ public sealed class PartyComebackManagerTests : IDisposable
         Assert.False(Sent(h, "/Tank {backtracking"));
     }
 
+    // Reports paradigm-20261007-134824 and paradigm-20260929-221642: the member was
+    // following again (caught up, or invited by hand) while the recovery was still
+    // walking, and the walk carried on to a room nobody was in. A rejoin ends the
+    // recovery whatever stage it has reached, and puts the stopped engine back.
+    [Fact]
+    public void LeftBehind_RejoinsWhileWeStillWalk_EndsTheRecovery()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Tracker.SetLocated(new RoomKey(1, 3));
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);                               // 1/1, with 1/2 and 1/3 behind us
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+        Assert.Equal("Tank", h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);               // the engine we stopped runs again
+        // Left behind is still left behind: they are asked for their @ok as usual.
+        Assert.True(Sent(h, "/Tank @waiting"));
+
+        // Reaching the room they were left in starts nothing over.
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.False(Sent(h, "re-inviting Tank"));
+    }
+
+    // The same while the user has the walk paused: the recovery walk sat waiting
+    // behind the pause and woke on Resume, 100 s after the member was back.
+    [Fact]
+    public void Comeback_RejoinsWhileTheWalkIsPaused_NothingWakesOnResume()
+    {
+        using Harness h = NewHarness();
+        SeatFollower(h, "Tank");
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Walker.WalkTo(new RoomKey(1, 2)));    // the user's own walk-to
+        h.Walker.Pause();
+        h.Engine.DispatchForTests(Telepath("Tank", "@comeback 1/3"));
+        Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Walker.Resume();
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.Equal(new RoomKey(1, 2), h.Walker.Destination);   // their walk, not the pickup
+    }
+
+    // Report paradigm-20260929-221642: the walk-to was paused and the user stepped
+    // on by hand, leaving a follower a room back. That move was theirs, so the
+    // pickup is too — a recovery started here is a walk born paused.
+    [Fact]
+    public void LeftBehind_WhileTheUserHasMovementPaused_IsLeftToThem()
+    {
+        using Harness h = NewHarness();
+        h.Comeback.SetWireSender(_ => { });
+        h.Comeback.MovementPausedByUser =
+            () => h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate);
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        StartLair(h);
+        h.Router.Dispatch(Line("Tank started to follow you."));
+        h.Coordinator.AssertGate(MovementCoordinator.UserGate);
+
+        h.Router.Dispatch(Line("Tank is no longer following you."));
+
+        Assert.Null(h.Comeback.RecoveringMember);
+        Assert.True(h.Lair.IsActive);
+        Assert.False(Sent(h, "/Tank {backtracking"));
+    }
+
     [Fact]
     public void Cancel_DropsTheRecoveryAndParkedResume()
     {
