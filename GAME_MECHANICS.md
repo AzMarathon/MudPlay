@@ -7590,7 +7590,7 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 - **Stock's death lines, from the engine** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_check_kill_user` @0x419a33, `_commit_suicide` @0x46e968; Realm: Stock, Paradigm not recorded)*:
   - **Every death by damage, slow or sudden, goes through one routine** and prints `You have been killed!` (@0x419b03), then `But, due to a miracle, you have been saved.` (@0x41a160) and `You have %d lives left.` (@0x41a173), with HP and mana set to max and the move to the death room (@0x41a11a–0x41a142).
   - **`You now have %d lives remaining.` is printed only by a suicide on Stock** (@0x46efb3), after `After a LONG thought, you take your own life.`; the room sees `<Name> took their own life!` **Paradigm agrees for the one damage death captured** *([OBSERVED] 2026-10-09, the user's Paradigm capture)*: a character who was `You are flat on your back!` and then hit by a monster got `You have been killed!`, `But, due to a miracle, you have been saved.`, `You have 7 lives left.` So on both realms a death by damage prints the `lives left` readout, and `lives remaining` follows a suicide (*Party → Dropping (0 HP) or instant death removes you from the party* has the suicide sequence). (The *Two different lives readouts* bullet of this topic calls `You now have N lives remaining.` the slow / normal-death readout; superseded 2026-10-09 by the Stock engine reading and this capture. Was `[CONFLICT — ask the user]`. The client reads both readouts on both realms, so nothing depends on which death prints which.)
-  - **The room sees `<Name> is dead.` when a player dies** (@0x419b83). `<Name> has died.` is not in the Stock DLL. `[CONFLICT — ask the user]` with the `<Name> has died.` line this chapter and the message catalogue give for a party member's death: is `has died.` Paradigm's wording only? (User 2026-10-09: unsure.)
+  - **The room sees `<Name> is dead.` when a player dies** (@0x419b83). `<Name> has died.` is not in the Stock DLL. `[CONFLICT — ask the user]` with the `<Name> has died.` line this chapter and the message catalogue give for a party member's death: is `has died.` Paradigm's wording only? (User 2026-10-09: unsure.) A Paradigm capture of 2026-10-09 shows `<Name> is dead.` for a death seen from the same room (*Paradigm: the same death as a follower in the room sees it*, in this topic), so `has died.` is not Paradigm's line for that case; when `<Name> has died.` prints, if it does, is still not recorded.
   - **With no lives left** the character record is deleted, `You have no lives remaining!` prints (@0x41a27d) and the player is at the game's main menu, behind the `[MAJORMUD]: ` prompt.
   - **Lives: a new character has 9, and each level trained adds 5, capped at 9** (`_create_player` @0x416581, `_train_level` @0x41eac6–0x41ead3; the 5 is set at start-up with no board option). So the count only ever reads 1 to 9.
   - **Logging in on the last life prints `You feel your life-force ebbing.`** (@0x416208–0x416212).
@@ -7611,6 +7611,15 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
   - **`*Combat Off*` and `You drop to the ground!` come first**, ahead of `You have been killed!`, when the killing round takes the character from standing past the death threshold.
   - **The party lines sit between the miracle line and the lives readout.** One `<Name> is no longer following you.` per follower, then `Your party has been disbanded.`, which printed twice with two followers. So when a leader dies the three lines of the miracle sequence above are not consecutive. (The lines themselves: *Party → A follower who can't move is left behind*.)
   - **`You have N lives left.` comes after the party lines**, and the death room's display follows it (room name and the exits line), then the prompt.
+- **Paradigm: the same death as a follower in the room sees it** *([OBSERVED] 2026-10-09, the user's Paradigm capture of the death above, from a follower's client; Realm: Paradigm)*:
+  ```
+  <Leader> drops to the ground!
+  <Leader> is dead.
+  You are no longer following <Leader>.
+  ```
+  - **The room line is `<Name> is dead.`**, the wording the Stock engine has, after `<Name> drops to the ground!`.
+  - **A follower is told `You are no longer following <Name>.`** straight after it. No `Your party has been disbanded.` line shows on the follower's side in the capture.
+  - The fight in the room goes on around these lines; the monster's swings on the leader are shown to the room in the third person (`… cleaves <Leader> for 167 damage!`).
 
 ### Deathpile — where the items go
 *Status: CONFIRMED 2026-08-24 (user); Stock spill mechanics CONFIRMED 2026-09-26 (user) · Realm: differs — Stock spills loose, Paradigm uses a corpse*
