@@ -1,5 +1,9 @@
 # Version history
 
+## 3.157.1
+
+- A pick the game answers with `Your command had no effect.`, or an open answered `That is not a door or a gate!` (no door that way here), ends the door attempt and re-routes, as a bash already did
+
 ## 3.157.0
 
 - A door key an NPC trades for an item in your pack can be fetched from the route card: with the opal brooch, the card for the dark-elf archmage's tower reads "glowing key (ask sleazy shopkeeper, in trade for your opal brooch)", and picking it makes the trade on the way

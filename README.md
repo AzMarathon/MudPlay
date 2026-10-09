@@ -1,14 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.157.0**
-> - A door key an NPC trades for an item in your pack can be fetched from the route card: with the opal brooch, the card for the dark-elf archmage's tower reads "glowing key (ask sleazy shopkeeper, in trade for your opal brooch)", and picking it makes the trade on the way
-> - A trade is only ever made from a card that names it, for the one walk that card starts: only for a door key nothing else yields, only the item the card named, and never one you are wearing
-> - Picking a route card during another walk no longer loses what the card was to fetch; a card with both a hazard counter and a gate item fetches both; and the fetch stays with the walk through a light-buying or selling detour
-> - Without that item the card names the trade and what drops the item, in place of the bare key name
-> - Route cards say what their pick will do about each item (ask / buy / dropped by), ticked Auto-obtain or not; a pick that only walks somewhere and stops names no source
-> - A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window
-> - A walk that stops at a locked door for want of its key names the key
+> **Version 3.157.1**
+> - A pick the game answers with `Your command had no effect.`, or an open answered `That is not a door or a gate!` (no door that way here), ends the door attempt and re-routes, as a bash already did
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
