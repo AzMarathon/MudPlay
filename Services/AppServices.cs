@@ -4098,9 +4098,9 @@ public sealed class AppServices
         GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
         // Built ahead of the combat tracker and engine, like PvpRoom: a monster whose
         // relationship is Hangup is answered before their handlers can start a fight
-        // in the room. Health, PvpFight and InGameCapture are built further down, so
-        // they are reached through lambdas; a method group would be read here, while
-        // they are still null.
+        // in the room. Health, the PvP services and InGameCapture are built further
+        // down, so they are reached through lambdas; a method group would be read
+        // here, while they are still null.
         MonsterHangup = new Game.Combat.MonsterHangupWatcher(
             RoomClassifier,
             resolveOverlay: ResolveMonsterOverlay,
@@ -4108,8 +4108,9 @@ public sealed class AppServices
             hangupsDisabled: () =>
                 ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups,
             // The fight's end re-issues the roster (PvpFight.ActiveChanged, below),
-            // which is when a monster held for it is answered.
-            pvpFightActive: () => PvpFight.IsActive,
+            // and a player leaving it is a roster event of its own: either is when
+            // a monster held for PvP is answered.
+            pvpHandles: roster => PvpFight.IsActive || PvpResponse.IsAnswering(roster),
             atBoardMenu: () => InGameCapture.AtBoardMenu,
             describeRoom: DescribeRosterRoom,
             // UI-thread one-shot, for the once-a-second countdown of the hold.

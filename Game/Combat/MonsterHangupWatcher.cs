@@ -28,9 +28,10 @@ namespace MudPlay.Game.Combat;
 // was not there when it was answered is answered again.
 //
 // What is asked for is HealthManager's escape, so what stops the low-HP hang-up
-// stops this: Disable Hangups, and the all-off rule. A fight with a player stops
-// it too (user, 2026-10-09: "pvp actions win"). Those, and the board's menu, leave
-// the sighting open, so the first roster after they lift is answered. With
+// stops this: Disable Hangups, and the all-off rule. So does a roster the PvP side
+// is handling, a fight with a player or an Enemy player in the room (user,
+// 2026-10-09: "pvp actions win"). Those, and the board's menu, leave the sighting
+// open, so the first roster after they lift is answered. With
 // the sysop wimpy jump set up the escape is a jump and the session goes on: nothing
 // here stops a running loop from walking back to the monster and jumping again,
 // just as nothing does after a low-HP jump.
@@ -61,7 +62,7 @@ public sealed class MonsterHangupWatcher : IDisposable
     private readonly Func<int, MonsterOverlay> _resolveOverlay;
     private readonly Func<string, EscapeOutcome> _hangUp;
     private readonly Func<bool> _hangupsDisabled;
-    private readonly Func<bool> _pvpFightActive;
+    private readonly Func<RoomEntitiesObservation, bool> _pvpHandles;
     private readonly Func<bool> _atBoardMenu;
     private readonly Func<string> _describeRoom;
     private readonly Action<TimeSpan, Action> _schedule;
@@ -98,8 +99,8 @@ public sealed class MonsterHangupWatcher : IDisposable
     // (Disable Hangups) or for the minute after a reconnect. Self-defence reads
     // it: a Hangup monster that attacks while this is true is fought back (user,
     // 2026-10-09: "fight back"). The other reasons nothing is sent are not in it:
-    // in all-off mode nothing automatic responds, and a fight with a player is
-    // the PvP actions' to run.
+    // in all-off mode nothing automatic responds, and a roster with a player to
+    // answer is the PvP actions' to run.
     public bool WatchIsOff => _hangupsDisabled() || _holdArmed || _holdUntil is not null;
 
     // The hold started, ticked down a second, or ended.
@@ -110,8 +111,10 @@ public sealed class MonsterHangupWatcher : IDisposable
 
     // hangUp is HealthManager.HangUpForMonster. hangupsDisabled is the Disable
     // Hangups switch, read here only for WatchIsOff: whether a hang-up goes out
-    // is HealthManager's to say. pvpFightActive is true while a fight with a
-    // player is under way. atBoardMenu is true while the character has left the
+    // is HealthManager's to say. pvpHandles is true for a roster the PvP side is
+    // answering: a fight with a player under way, or an Enemy player on it. This
+    // handler runs ahead of the PvP response's, so it has to ask rather than see
+    // what the response did. atBoardMenu is true while the character has left the
     // game for the board's menu with the link up, where an exit command would be
     // a menu selection. describeRoom words where the roster was read, for the
     // log. schedule runs a callback after a delay, for the countdown.
@@ -120,7 +123,7 @@ public sealed class MonsterHangupWatcher : IDisposable
         Func<int, MonsterOverlay> resolveOverlay,
         Func<string, EscapeOutcome> hangUp,
         Func<bool> hangupsDisabled,
-        Func<bool> pvpFightActive,
+        Func<RoomEntitiesObservation, bool> pvpHandles,
         Func<bool> atBoardMenu,
         Func<string> describeRoom,
         Action<TimeSpan, Action> schedule,
@@ -131,7 +134,7 @@ public sealed class MonsterHangupWatcher : IDisposable
         ArgumentNullException.ThrowIfNull(resolveOverlay);
         ArgumentNullException.ThrowIfNull(hangUp);
         ArgumentNullException.ThrowIfNull(hangupsDisabled);
-        ArgumentNullException.ThrowIfNull(pvpFightActive);
+        ArgumentNullException.ThrowIfNull(pvpHandles);
         ArgumentNullException.ThrowIfNull(atBoardMenu);
         ArgumentNullException.ThrowIfNull(describeRoom);
         ArgumentNullException.ThrowIfNull(schedule);
@@ -139,7 +142,7 @@ public sealed class MonsterHangupWatcher : IDisposable
         _resolveOverlay = resolveOverlay;
         _hangUp = hangUp;
         _hangupsDisabled = hangupsDisabled;
-        _pvpFightActive = pvpFightActive;
+        _pvpHandles = pvpHandles;
         _atBoardMenu = atBoardMenu;
         _describeRoom = describeRoom;
         _schedule = schedule;
@@ -286,10 +289,11 @@ public sealed class MonsterHangupWatcher : IDisposable
             Hold("menu", what, "the character is at the board's menu, not in the game");
             return;
         }
-        if (_pvpFightActive())
+        if (_pvpHandles(obs))
         {
-            // The roster is re-issued when the fight ends, and it is answered then.
-            Hold("pvp", what, "a fight with a player is under way and the PvP actions come first");
+            // The roster is issued again when the fight ends or the player leaves,
+            // and the monster is answered then.
+            Hold("pvp", what, "the PvP actions come first (a fight with a player, or an Enemy player in the room)");
             return;
         }
 

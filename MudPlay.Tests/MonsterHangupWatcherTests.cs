@@ -56,7 +56,7 @@ public sealed class MonsterHangupWatcherTests
                 resolveOverlay: ResolveOverlay,
                 hangUp: hangUp ?? (reason => { HangUps.Add(reason); return Outcome; }),
                 hangupsDisabled: () => HangupsDisabled,
-                pvpFightActive: () => PvpFightActive,
+                pvpHandles: _ => PvpFightActive,
                 atBoardMenu: () => AtBoardMenu,
                 describeRoom: () => "in Town Square (1/5)",
                 schedule: (_, callback) => Scheduled.Add(callback),
