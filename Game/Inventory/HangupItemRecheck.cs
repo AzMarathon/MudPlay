@@ -34,7 +34,7 @@ namespace MudPlay.Game.Inventory;
 // The hold never outlasts its reason. An entry or an inventory read that doesn't
 // come in time gives it up, and so does Reset States; the list is kept, and the
 // comparison still runs when the read arrives, without the hold, picking up only
-// if the character hasn't left the room it came in at.
+// where the map is sure the character stands in the room it left the game in.
 //
 // Nothing is retried: one pass per connection, and what isn't on the floor then
 // is logged as still missing and forgotten. Only a pass cut short by the link
@@ -104,7 +104,8 @@ public sealed class HangupItemRecheck
     // room's floor.
     private bool _roomShownHere;
     private bool _floorShownHere;
-    private bool _movedSinceEntry;
+    // A move, typed or an engine's, went out after the game was entered.
+    private bool _moveSentSinceEntry;
 
     //   profile          — the named character that is loaded, whose HeldAtDisconnect
     //                      is read and written; null with none (the default profile
@@ -188,15 +189,13 @@ public sealed class HangupItemRecheck
     // Where the check stands, in words.
     public string Status => _phase switch
     {
-        Phase.AwaitingEntry => "waiting for the game to be entered" + Unheld,
-        Phase.AwaitingInventory => "waiting for an inventory read" + Unheld,
+        Phase.AwaitingEntry => "waiting for the game to be entered",
+        Phase.AwaitingInventory => "waiting for an inventory read",
         Phase.AwaitingRoom => "waiting for a room display",
         Phase.AwaitingFightEnd => "waiting for the fight in the room to end",
         Phase.PickingUp => "picking up",
         _ => "idle",
-    };
-
-    private string Unheld => _holding ? "" : " (movement no longer held)";
+    } + (_phase != Phase.Idle && !_holding ? " (movement no longer held)" : "");
 
     // How the last check ended, with its time.
     public string LastOutcome { get; private set; } = NoneYet;
@@ -263,7 +262,7 @@ public sealed class HangupItemRecheck
         _heldUnknown = false;
         _roomShownHere = false;
         _floorShownHere = false;
-        _movedSinceEntry = false;
+        _moveSentSinceEntry = false;
 
         if (_profile()?.HeldAtDisconnect is not { Items.Count: > 0 } before) return;
         if (_maxItemsDropped() <= 0) return;
@@ -346,17 +345,19 @@ public sealed class HangupItemRecheck
         LastStillMissing = [];
     }
 
-    // RoomTracker.PlayerDeathObserved. Nothing clears the inventory record on a
-    // death and no `i` follows one, so a list written from it would name the whole
-    // deathpile as held, and the next entry would read all of it as dropped by a
-    // hang-up. The list is void until an inventory is read again.
+    // RoomTracker.PlayerDeathObserved. The inventory record goes on naming what
+    // went into the deathpile until it is read again (PostDeathInventoryRefresh
+    // asks for that at the graveyard, and the link can drop first). A list written
+    // from it would name the whole pile as held, and the next entry would read all
+    // of it as dropped by a hang-up. The list is void until that read arrives.
     public void OnPlayerDied()
     {
         if (!_inGame) return;
         _inventoryReadThisLink = false;
         _heldUnknown = true;
         if (_phase is Phase.Idle or Phase.AwaitingEntry) _saveProfile();
-        else Finish("the character died, so what was held before no longer says what is missing");
+        // No word on the terminal: what is missing now is in the deathpile.
+        else Finish("the character died, so what was held before no longer says what is missing", quiet: true);
     }
 
     // Reset States. Before the comparison only the hold goes: the list is still to
@@ -402,24 +403,37 @@ public sealed class HangupItemRecheck
         }
         _log?.Info(LogCategory, $"Held before and missing now: {Names(_missing)}.");
 
-        // The hold was given up before this read came. Where the character came in
-        // is only still the room it stands in if it hasn't moved and that room was
-        // drawn; otherwise the floor here is some other room's.
-        if (!_holding && (_movedSinceEntry || !_roomShownHere))
-        {
-            Finish("the inventory read came after the check had stopped holding movement, and the character "
-                   + "is no longer in the room it came in at, so nothing was looked for");
-            return;
-        }
         if (!_isAutoEnabled())
         {
-            Finish("Auto-All is off, so nothing was looked for or picked up");
+            Finish("Auto-All is off");
             return;
         }
-        // Known already to be another room: no need to draw it again to say so.
-        if (_roomShownHere || CameInElsewhere(before) is not null)
+        if (CameInElsewhere(before) is { } elsewhere)
+        {
+            Finish(elsewhere);
+            return;
+        }
+        // Once the hold is given up, or a move has gone out, nothing has kept the
+        // character where it came in. Then only the map can say this is still the
+        // room the items fell in, and a map that isn't sure of both rooms can't: it
+        // keeps its old room while unsure, so walking doesn't show as a room change.
+        if ((!_holding || _moveSentSinceEntry) && !SameRoomAsLeft(before))
+        {
+            Finish(_holding
+                ? "a move was sent since the game was entered, and the map can't say this is the room the character left the game in"
+                : "the inventory read came after the check had stopped holding movement, and the map can't say this "
+                  + "is the room the character left the game in");
+            return;
+        }
+        if (_roomShownHere)
         {
             CheckRoom(before);
+            return;
+        }
+        // No hold, so no time to draw the room in: the floor stays unread.
+        if (!_holding)
+        {
+            Finish(FloorUnseen);
             return;
         }
 
@@ -452,9 +466,15 @@ public sealed class HangupItemRecheck
     // was dropped lies where the character left, not here. Null otherwise.
     private string? CameInElsewhere(HeldAtDisconnect before) =>
         before.Room is { } left && _confirmedRoom() is { } here && (here.Map != left.Map || here.Room != left.Room)
-            ? $"the character came in at {here}, not at {left.Map}/{left.Room} where it left the game, "
-              + "so there is nothing of its own to pick up here"
+            ? $"the character is at {here}, not at {left.Map}/{left.Room} where it left the game"
             : null;
+
+    private bool SameRoomAsLeft(HeldAtDisconnect before) =>
+        before.Room is { } left && _confirmedRoom() is { } here && here.Map == left.Map && here.Room == left.Room;
+
+    // A dark room, or a blinded character, prints no room display and no floor
+    // list. That is not the items being gone.
+    private const string FloorUnseen = "the floor here couldn't be seen (no room display could be read: dark, or blinded)";
 
     private void TryPickUp()
     {
@@ -462,7 +482,12 @@ public sealed class HangupItemRecheck
         // It can have been switched off while a fight was waited out.
         if (!_isAutoEnabled())
         {
-            Finish($"Auto-All is off, so {Names(outstanding)} stayed where they are");
+            Finish("Auto-All is off");
+            return;
+        }
+        if (!_roomShownHere && !_floorShownHere)
+        {
+            Finish(FloorUnseen);
             return;
         }
 
@@ -470,8 +495,7 @@ public sealed class HangupItemRecheck
         List<(string Name, int Count)> lying = HangupItemPlan.Pickup(outstanding, floor, _itemKey);
         if (lying.Count == 0)
         {
-            _notice?.Invoke($"[Hang-up item check: {Names(outstanding)} missing since you were last in the game, and not on the floor here]");
-            Finish("none of the missing items is on the floor here");
+            Finish("none of them is on the floor here");
             return;
         }
 
@@ -499,7 +523,7 @@ public sealed class HangupItemRecheck
         }
         if (_hostilePresent())
         {
-            Finish($"a hostile monster is in the room, so {Names(_plan)} stayed on the floor");
+            Finish("a hostile monster the client isn't fighting is in the room");
             return;
         }
 
@@ -529,8 +553,7 @@ public sealed class HangupItemRecheck
             .Where(p => p.Count > 0).ToList();
         if (got.Count == 0)
         {
-            _log?.Info(LogCategory, "Nothing was picked up: the game didn't confirm any of the gets.");
-            Finish("the gets weren't confirmed");
+            Finish("the game didn't confirm any of the gets");
             return;
         }
 
@@ -544,7 +567,8 @@ public sealed class HangupItemRecheck
             ? $"Gear set '{set}' was applied again, for the pieces of it that came back."
             : "No gear set was applied again: none of what came back is in the set that is on, or the equipment "
               + "manager held the apply (its own [Equipment] line says which).");
-        Finish($"picked up {Names(got)}");
+        Finish($"picked up {Names(got)}",
+            notPickedUp: "not on the floor here, or more than the realm's settings say a hang-up drops");
     }
 
     // ----- what moves the pass along ------------------------------------
@@ -621,21 +645,34 @@ public sealed class HangupItemRecheck
     {
         _roomShownHere = false;
         _floorShownHere = false;
-        if (_enteredThisLink) _movedSinceEntry = true;
         if (_phase == Phase.AwaitingFightEnd)
-            Finish($"the character left the room before the fight ended, so {Names(_plan)} stayed on the floor");
+            Finish("the character left the room before the fight in it ended");
         else if (_phase == Phase.PickingUp)
             Complete();
     }
 
+    // OutboundMovementObserver.MoveSent.
+    public void NoteMoveSent()
+    {
+        if (_enteredThisLink) _moveSentSinceEntry = true;
+    }
+
     // ----- ending -------------------------------------------------------
 
-    // The pass ran to an answer. What it didn't find is not looked for again.
-    private void Finish(string outcome)
+    // The pass ran to an answer. What it didn't find is not looked for again, so
+    // the terminal says what that is and why, however the pass ended.
+    //   notPickedUp — the reason for the terminal, where the outcome isn't one.
+    //   quiet       — say nothing on the terminal.
+    private void Finish(string outcome, string? notPickedUp = null, bool quiet = false)
     {
         LastStillMissing = HangupItemPlan.Outstanding(_missing, _taken);
         if (LastStillMissing.Count > 0)
+        {
             _log?.Info(LogCategory, $"Still missing: {Names(LastStillMissing)}.");
+            if (!quiet)
+                _notice?.Invoke($"[Hang-up item check: {Names(LastStillMissing)} missing since you were last in the game. "
+                                + $"Not picked up: {notPickedUp ?? outcome}]");
+        }
         LastOutcome = $"{_now():HH:mm:ss} {outcome}";
         _log?.Info(LogCategory, $"Check ended: {outcome}.");
         End(outcome);

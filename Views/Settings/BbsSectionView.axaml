@@ -373,7 +373,7 @@
                                                    Minimum="0" Maximum="100" Increment="1"
                                                    FormatString="0" Width="140"
                                                    HorizontalAlignment="Left"
-                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in PvP combat. Leave it at 0 when the board takes HP only, as most do. Above 0, MudPlay looks for dropped items when you come back into the game: what you held before and are missing is picked up from the floor of the room, never more copies than the larger of this figure and the PvE one when that side is ticked. It does not change when or whether MudPlay hangs up. Default 0."/>
+                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in PvP combat. Leave it at 0 when the board takes HP only, as most do. Above 0, MudPlay looks for dropped items when you come back into the game: what you held before and are missing is picked up from the floor of the room, never more copies than the larger of this figure and the PvE one when that side is ticked (that many again for each earlier check the link cut short). It does not change when or whether MudPlay hangs up. Default 0."/>
                                 </Grid>
 
                                 <CheckBox IsChecked="{Binding HangupPvePenaltyEnabled, Mode=TwoWay}"
@@ -404,7 +404,7 @@
                                                    Minimum="0" Maximum="100" Increment="1"
                                                    FormatString="0" Width="140"
                                                    HorizontalAlignment="Left"
-                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in a fight with a monster. Leave it at 0 when the board takes HP only, as most do. Above 0, MudPlay looks for dropped items when you come back into the game: what you held before and are missing is picked up from the floor of the room, never more copies than the larger of this figure and the PvP one. It does not change when or whether MudPlay hangs up. Default 0."/>
+                                                   ToolTip.Tip="The most items the board drops on the floor of the room for a hang-up in a fight with a monster. Leave it at 0 when the board takes HP only, as most do. Above 0, MudPlay looks for dropped items when you come back into the game: what you held before and are missing is picked up from the floor of the room, never more copies than the larger of this figure and the PvP one (that many again for each earlier check the link cut short). It does not change when or whether MudPlay hangs up. Default 0."/>
                                 </Grid>
                             </StackPanel>
 

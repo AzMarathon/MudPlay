@@ -197,7 +197,7 @@ public static class BugReportBuilder
         int hangupItemCap = Game.Health.HangupPenaltyNotice.MaxItemsDropped(svc.ResolveActiveRealm()?.Realm);
         Kv(sb, "Hang-up item check",
             (hangupItemCap > 0
-                ? $"on (the realm drops up to {hangupItemCap} item(s) a hang-up)" : "off (the realm's settings drop no items)")
+                ? $"on (the realm drops up to {hangupItemCap} item(s) for a hang-up)" : "off (the realm's settings drop no items)")
             + $"; now: {svc.HangupItems.Status}; last: {svc.HangupItems.LastOutcome}");
         static string HeldNames(IEnumerable<(string Name, int Count)> items) =>
             string.Join(", ", items.Select(m => m.Count > 1 ? $"{m.Count} {m.Name}" : m.Name));

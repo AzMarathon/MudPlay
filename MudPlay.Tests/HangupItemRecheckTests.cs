@@ -370,7 +370,10 @@ public sealed class HangupItemRecheckTests
         Assert.Equal(new[] { "chainmail hauberk", "torch" }, Assert.Single(h.GearAsked));
         Assert.Equal([("rope", 1)], h.Check.LastStillMissing);
         Assert.Equal(3, h.Check.LastMissing.Count);
-        Assert.Contains("picked up chainmail hauberk, 2 torch", Assert.Single(h.Notices));
+        // The terminal hears what came back, and what didn't.
+        Assert.Equal(2, h.Notices.Count);
+        Assert.Contains("picked up chainmail hauberk, 2 torch", h.Notices[0]);
+        Assert.Contains("rope missing", h.Notices[1]);
     }
 
     // Stock answers one `You took` a copy; the count is reached over several.
@@ -407,7 +410,31 @@ public sealed class HangupItemRecheckTests
         Assert.False(h.Held);
         Assert.Single(h.Check.LastStillMissing);
         Assert.Empty(h.GearAsked);
-        Assert.Empty(h.Notices);
+        Assert.Contains("didn't confirm", Assert.Single(h.Notices));
+    }
+
+    // However the check ends with something still missing, the terminal says what
+    // and why: not only when the floor was empty.
+    [Fact]
+    public void EveryEndingWithSomethingMissing_SaysSoOnTheTerminal()
+    {
+        Harness autoOff = new() { AutoAll = false };
+        autoOff.Stored(Snap(carried: ["torch"]));
+        autoOff.ConnectAndEnter("torch");
+        autoOff.ReadInventory(Snap());
+        Assert.Contains("Auto-All is off", Assert.Single(autoOff.Notices));
+
+        Harness elsewhere = new() { Room = new RoomKey(1, 99) };
+        elsewhere.Stored(Snap(carried: ["torch"]));
+        elsewhere.ConnectAndEnter("torch");
+        elsewhere.ReadInventory(Snap());
+        Assert.Contains("1/99", Assert.Single(elsewhere.Notices));
+
+        Harness hostile = new() { Hostile = true };
+        hostile.Stored(Snap(carried: ["torch"]));
+        hostile.ConnectAndEnter("torch");
+        hostile.ReadInventory(Snap());
+        Assert.Contains("hostile", Assert.Single(hostile.Notices));
     }
 
     // ----- No more than the board drops ---------------------------------
@@ -498,7 +525,7 @@ public sealed class HangupItemRecheckTests
         h.ReadInventory(Snap());
 
         Assert.Empty(h.Collected);
-        Assert.Contains("none of the missing items is on the floor", h.Check.LastOutcome);
+        Assert.Contains("none of them is on the floor", h.Check.LastOutcome);
         Assert.Contains("2 torch missing", Assert.Single(h.Notices));
     }
 
@@ -590,8 +617,10 @@ public sealed class HangupItemRecheckTests
         Assert.Equal(["\r"], h.Sent);
     }
 
+    // A dark room, or a blinded character, gets no room display. That is the floor
+    // not being seen, which is not the items being gone.
     [Fact]
-    public void ARedisplayThatNeverComes_DoesNotHoldMovement()
+    public void ARedisplayThatNeverComes_DoesNotHoldMovement_AndSaysTheFloorWasNotSeen()
     {
         Harness h = new();
         h.Stored(Snap(carried: ["torch"]));
@@ -603,6 +632,51 @@ public sealed class HangupItemRecheckTests
 
         Assert.False(h.Held);
         Assert.Empty(h.Collected);
+        Assert.Contains("couldn't be seen", h.Check.LastOutcome);
+        Assert.DoesNotContain("on the floor", h.Check.LastOutcome);
+        Assert.Contains("couldn't be seen", Assert.Single(h.Notices));
+    }
+
+    // The realm's figure was set to 0 between the connect and the pickup.
+    [Fact]
+    public void TheRealmSetToDropNothingMidCheck_NothingIsPickedUp()
+    {
+        Harness h = new() { Fighting = true };
+        h.Stored(Snap(carried: ["2 torch"]));
+        h.ConnectAndEnter("2 torch");
+        h.ReadInventory(Snap());
+        Assert.True(h.Held);
+
+        h.MaxItems = 0;
+        h.Fighting = false;
+        h.Check.OnRoomObserved();
+
+        Assert.Empty(h.Collected);
+        Assert.False(h.Held);
+        Assert.Contains("no longer", h.Check.LastOutcome);
+    }
+
+    // The hold doesn't stop a move typed by hand. Once one has gone out, only a map
+    // that is sure of both rooms can say the floor here is the one the items fell on.
+    [Fact]
+    public void AMoveSentBeforeTheCompare_NeedsTheMapToVouchForTheRoom()
+    {
+        Harness unsure = new() { Room = null };
+        unsure.Stored(Snap(carried: ["torch"]));
+        unsure.ConnectAndEnter("torch");
+        unsure.Check.NoteMoveSent();
+        unsure.ShowRoom("torch");
+        unsure.ReadInventory(Snap());
+        Assert.Empty(unsure.Collected);
+        Assert.False(unsure.Held);
+
+        // A move that bonked: the map still has the room.
+        Harness sure = new();
+        sure.Stored(Snap(carried: ["torch"]));
+        sure.ConnectAndEnter("torch");
+        sure.Check.NoteMoveSent();
+        sure.ReadInventory(Snap());
+        Assert.Equal([("torch", 1)], sure.Collected);
     }
 
     [Fact]
@@ -730,6 +804,7 @@ public sealed class HangupItemRecheckTests
         h.Heartbeats(8);
         Assert.False(h.Held);
 
+        h.Room = new RoomKey(1, 4);
         h.Check.OnRoomChanged();
         h.ShowRoom("torch");
         h.ReadInventory(Snap());
@@ -737,6 +812,57 @@ public sealed class HangupItemRecheckTests
         Assert.Empty(h.Collected);
         Assert.Equal([("torch", 1)], h.Check.LastMissing);
         Assert.Equal("idle", h.Check.Status);
+    }
+
+    // A map that isn't sure keeps its old room, or has none, so walking doesn't
+    // show as a room change. Without the hold nothing kept the character where it
+    // came in, and a floor the map can't vouch for is left alone.
+    [Fact]
+    public void ALateInventoryRead_WithTheRoomNotKnown_PicksNothingUp()
+    {
+        // The map has no room now.
+        Harness unlocated = new() { Room = null };
+        unlocated.Stored(Snap(carried: ["torch"]));
+        unlocated.ConnectAndEnter("torch");
+        unlocated.Heartbeats(8);
+        Assert.False(unlocated.Held);
+        unlocated.ShowRoom("torch");
+        unlocated.ReadInventory(Snap());
+        Assert.Empty(unlocated.Collected);
+        Assert.Contains("torch missing", Assert.Single(unlocated.Notices));
+
+        // The room the character left wasn't recorded; the same after Reset States.
+        Harness unrecorded = new();
+        unrecorded.Stored(Snap(carried: ["torch"]));
+        unrecorded.Profile.HeldAtDisconnect!.Room = null;
+        unrecorded.ConnectAndEnter("torch");
+        unrecorded.Check.Cancel("reset");
+        unrecorded.ReadInventory(Snap());
+        Assert.Empty(unrecorded.Collected);
+        Assert.Equal("idle", unrecorded.Check.Status);
+    }
+
+    // A death while the read is still awaited, the hold already given up: the list
+    // is void, and the read the graveyard brings compares nothing.
+    [Fact]
+    public void ADeathWhileAwaitingTheInventory_WithTheHoldGivenUp_EndsTheCheck()
+    {
+        Harness h = new();
+        h.Stored(Snap(carried: ["torch"]));
+        h.ConnectAndEnter("torch");
+        h.Heartbeats(8);
+        Assert.False(h.Held);
+        Assert.Contains("movement no longer held", h.Check.Status);
+
+        h.Check.OnPlayerDied();
+
+        Assert.Equal("idle", h.Check.Status);
+        Assert.Null(h.Profile.HeldAtDisconnect);
+        Assert.Empty(h.Notices);
+
+        h.ReadInventory(Snap());
+        Assert.Empty(h.Collected);
+        Assert.Empty(h.Check.LastMissing);
     }
 
     // A statline the prompt scanner can't read gives no game prompt. Only the game
@@ -958,9 +1084,10 @@ public sealed class HangupItemRecheckTests
         Assert.Equal(2, h.Profile.HeldAtDisconnect!.Items.Count);
     }
 
-    // Nothing clears the inventory record on a death and no `i` follows one. A
-    // list written from it would name the whole deathpile as held, and the next
-    // entry would take it all for a hang-up's drop.
+    // The inventory record names what went into the deathpile until it is read
+    // again at the graveyard, and the link can drop first. A list written from it
+    // would name the whole pile as held, and the next entry would take it all for
+    // a hang-up's drop.
     [Fact]
     public void ADeath_StoresNoList_UntilAnInventoryIsReadAgain()
     {
@@ -1047,6 +1174,31 @@ public sealed class HangupItemRecheckTests
         h.ReadInventory(Snap());
 
         Assert.Equal([("rope", 1), ("chainmail hauberk", 1), ("torch", 2)], h.Collected);
+    }
+
+    // Each check cut short adds a drop to what the list covers.
+    [Fact]
+    public void TwoChecksCutShort_TheListCoversThreeDrops()
+    {
+        Harness h = new() { Fighting = true, MaxItems = 1 };
+        h.Stored(Snap(carried: ["3 torch"]));
+
+        h.ConnectAndEnter("3 torch");
+        h.ReadInventory(Snap());
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+        Assert.Equal(2, h.Profile.HeldAtDisconnect!.PenaltiesSpanned);
+
+        h.ConnectAndEnter("3 torch");
+        h.ReadInventory(Snap());
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+        Assert.Equal(3, h.Profile.HeldAtDisconnect!.PenaltiesSpanned);
+
+        h.Fighting = false;
+        h.ConnectAndEnter("3 torch");
+        h.ReadInventory(Snap());
+        Assert.Equal([("torch", 3)], h.Collected);
     }
 
     // What a finished check didn't find is not carried: it isn't looked for again.

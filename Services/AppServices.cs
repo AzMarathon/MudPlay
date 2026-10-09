@@ -9152,6 +9152,7 @@ public sealed class AppServices
         RoomClassifier.EntitiesObserved += _ => HangupItems.OnRoomObserved();
         CombatTracker.CombatForceCleared += HangupItems.OnRoomObserved;
         Tick.HeartbeatElapsed += HangupItems.OnHeartbeat;
+        OutboundMovement.MoveSent += HangupItems.NoteMoveSent;
         RoomTracker.StateChanged += t =>
         {
             if (!Nullable.Equals(t.PreviousRoom?.Key, t.NewRoom?.Key)) HangupItems.OnRoomChanged();
