@@ -78,6 +78,25 @@ public sealed partial class StatParser : IDisposable
     private bool _stealthReadThisArm;
     public bool LastCaptureReadPool { get; private set; }
 
+    // The screen being read: which of the six stats it has shown, which of those it
+    // marked modified, which marks could be read at all, and the effect lines under
+    // them. Published whole at the close, so nothing downstream ever pairs this
+    // screen's values with the last screen's marks.
+    private bool _headerReadThisArm;
+    private StatSet _statsReadThisArm;
+    private StatSet _modifiedThisArm;
+    private StatSet _marksKnownThisArm;
+    private readonly List<StatusEffectLine> _effectsThisArm = new();
+
+    // Lines Stock prints under the stats that are not effects.
+    private static readonly string[] ScreenFooterLines =
+    {
+        "You are Poisoned!",
+        "You are in the front rank of your group.",
+        "You are in the back rank of your group.",
+        "You have the following spell cast upon you:",
+    };
+
     // Idle self-close. The reactive gate-close in OnLine only fires when a *further*
     // line arrives after capture (a terminating prompt, or any line past the window
     // expiry). But a stat screen the player is parked in front of — e.g. sitting at a
@@ -177,6 +196,7 @@ public sealed partial class StatParser : IDisposable
             Stats.MartialArts = 0;
             Stats.MagicRes = 0;
             Stats.Spellcasting = 0;
+            ForgetScreenMarks();
             HasParsed = false;
             return;
         }
@@ -214,10 +234,37 @@ public sealed partial class StatParser : IDisposable
         Stats.MartialArts = snapshot.MartialArts;
         Stats.MagicRes = snapshot.MagicRes;
         Stats.Spellcasting = snapshot.Spellcasting;
+        // The marks and effect list belong to the same screen as the numbers, so
+        // they come back with them. A snapshot saved without them says nothing
+        // about whether its numbers were read with a buff up.
+        if (snapshot.ModifiedStats is { } marked)
+        {
+            Stats.ModifiedStats = (StatSet)marked & StatSet.All;
+            Stats.ActiveEffects = snapshot.ActiveEffects is { Count: > 0 } saved
+                ? saved.Select(e => new StatusEffectLine(e.Text, e.Timed)).ToArray()
+                : Array.Empty<StatusEffectLine>();
+            Stats.ModifiedMarksRead = true;
+        }
+        else
+            ForgetScreenMarks();
         // Flip the gate true so consumers (e.g. RemoteCommandManager's
         // LivesProvider) trust the hydrated values immediately — the
         // next live stat will reconfirm them.
         HasParsed = true;
+    }
+
+    private void ForgetScreenMarks()
+    {
+        Stats.ModifiedMarksRead = false;
+        Stats.ModifiedStats = StatSet.None;
+        Stats.ActiveEffects = Array.Empty<StatusEffectLine>();
+    }
+
+    private void ResetArmMarks()
+    {
+        _headerReadThisArm = false;
+        _statsReadThisArm = _modifiedThisArm = _marksKnownThisArm = StatSet.None;
+        _effectsThisArm.Clear();
     }
 
     // Build a snapshot of the current Stats values suitable for persisting to
@@ -259,6 +306,10 @@ public sealed partial class StatParser : IDisposable
         MartialArts = Stats.MartialArts,
         MagicRes = Stats.MagicRes,
         Spellcasting = Stats.Spellcasting,
+        ModifiedStats = Stats.ModifiedMarksRead ? (int)Stats.ModifiedStats : null,
+        ActiveEffects = Stats.ModifiedMarksRead && Stats.ActiveEffects.Count > 0
+            ? Stats.ActiveEffects.Select(e => new Models.Profile.SavedEffectLine { Text = e.Text, Timed = e.Timed }).ToList()
+            : null,
     };
 
     // True when text is a line of the stat / exp / health readout — the header
@@ -345,6 +396,7 @@ public sealed partial class StatParser : IDisposable
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
         _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
+        ResetArmMarks();
         _home = SynchronizationContext.Current;   // (re)capture the pipeline thread for the settle-close
         _settleSession++;                          // invalidate any prior window's pending settle timer
         _log?.Log(LogSeverity.Info, "StatParser",
@@ -369,6 +421,7 @@ public sealed partial class StatParser : IDisposable
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
         _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
+        ResetArmMarks();
         _home = SynchronizationContext.Current;
         _settleSession++;
         _log?.Log(LogSeverity.Info, "StatParser",
@@ -389,7 +442,7 @@ public sealed partial class StatParser : IDisposable
     // handler + the gated scan together. isPromptLine defaults to false; set
     // true for tests that want to exercise the close-on-prompt-after-capture
     // path.
-    internal void FeedTestLine(string text, bool isPromptLine = false)
+    internal void FeedTestLine(string text, bool isPromptLine = false, CellAttributes[]? attributes = null)
     {
         OnLivesRemainingLine(text);
         OnExperienceGainLine(text);
@@ -408,7 +461,7 @@ public sealed partial class StatParser : IDisposable
             CloseGate("window expired");
             return;
         }
-        ScanLine(text);
+        ScanLine(text, attributes);
         if (_fieldsCapturedThisArm > 0) _capturedThisArm = true;
     }
 
@@ -455,7 +508,7 @@ public sealed partial class StatParser : IDisposable
         }
 
         int capturedBefore = _fieldsCapturedThisArm;
-        ScanLine(line.Text);
+        ScanLine(line.Text, line.Attributes);
         if (_fieldsCapturedThisArm > 0) _capturedThisArm = true;
         // A field committed on this line — (re)arm the idle settle-close from the
         // latest capture, so a stat screen with no trailing prompt still closes.
@@ -496,9 +549,10 @@ public sealed partial class StatParser : IDisposable
     // stat-screen row (e.g., "Race: Dark-Elf       Exp: 0          Perception:
     // 50"), so we run every pattern against every line — at most one field per
     // pattern is updated per call.
-    private void ScanLine(string text)
+    private void ScanLine(string text, CellAttributes[]? attributes)
     {
         if (string.IsNullOrWhiteSpace(text)) return;
+        int capturedBefore = _fieldsCapturedThisArm;
 
         // Chat-line shape guard — any line that opens with
         // `<player> <verb>:` is chat or a self-echo of chat the user
@@ -520,19 +574,16 @@ public sealed partial class StatParser : IDisposable
         TryString(text, ClassRx(), "Class", v => Stats.Class = v);
 
         // Paired N/M fields.
-        TryPair(text, LivesCpRx(),     "Lives/CP",     (a, b) => { Stats.Lives = a; Stats.Cp = b; });
+        TryPair(text, LivesCpRx(),     "Lives/CP",     (a, b) => { Stats.Lives = a; Stats.Cp = b; BeginScreenMarks(); });
         TryPair(text, HitsRx(),        "Hits",         (a, b) => { Stats.Hits = a; Stats.MaxHits = b; _hitsReadThisArm = true; });
         TryPair(text, KaiRx(),         "Kai",          (a, b) => { Stats.Kai  = a; Stats.MaxKai  = b; _poolReadThisArm = true; });
         TryPair(text, ManaRx(),        "Mana",         (a, b) => { Stats.Mana = a; Stats.MaxMana = b; _poolReadThisArm = true; });
         TryPair(text, ArmourClassRx(), "Armour Class", (a, b) => { Stats.ArmourClass = a; Stats.MaxArmourClass = b; });
 
-        // Plain N fields. The `\*?` in every numeric regex tolerates
-        // the asterisk that altered (buffed / cursed) stats prefix
-        // their value with — e.g. `Strength: *80`. We strip the
-        // asterisk and capture the raw post-modifier value (the
-        // altered-or-not distinction isn't surfaced anywhere yet;
-        // can be added as parallel bool fields if a future consumer
-        // wants it).
+        // Plain N fields. The `\*?` in every numeric regex tolerates the asterisk
+        // Stock puts in front of an altered value — e.g. `Strength: *80` — and the
+        // value captured is the altered one. For the six trainable stats the mark
+        // itself is kept too (TryStat).
         TryInt(text, LevelRx(),        "Level",        v => Stats.Level        = v);
         TryLong(text, ExpRx(),         "Exp",          v => Stats.Exp          = v);
         TryInt(text, PerceptionRx(),   "Perception",   v => Stats.Perception   = v);
@@ -541,12 +592,12 @@ public sealed partial class StatParser : IDisposable
         TryInt(text, TrapsRx(),        "Traps",        v => Stats.Traps        = v);
         TryInt(text, PicklocksRx(),    "Picklocks",    v => Stats.Picklocks    = v);
         TryInt(text, TrackingRx(),     "Tracking",     v => Stats.Tracking     = v);
-        TryInt(text, StrengthRx(),     "Strength",     v => Stats.Strength     = v);
-        TryInt(text, IntellectRx(),    "Intellect",    v => Stats.Intellect    = v);
-        TryInt(text, WillpowerRx(),    "Willpower",    v => Stats.Willpower    = v);
-        TryInt(text, AgilityRx(),      "Agility",      v => Stats.Agility      = v);
-        TryInt(text, HealthRx(),       "Health",       v => Stats.Health       = v);
-        TryInt(text, CharmRx(),        "Charm",        v => Stats.Charm        = v);
+        TryStat(text, attributes, StrengthRx(),  "Strength",  StatSet.Strength,  v => Stats.Strength  = v);
+        TryStat(text, attributes, IntellectRx(), "Intellect", StatSet.Intellect, v => Stats.Intellect = v);
+        TryStat(text, attributes, WillpowerRx(), "Willpower", StatSet.Willpower, v => Stats.Willpower = v);
+        TryStat(text, attributes, AgilityRx(),   "Agility",   StatSet.Agility,   v => Stats.Agility   = v);
+        TryStat(text, attributes, HealthRx(),    "Health",    StatSet.Health,    v => Stats.Health    = v);
+        TryStat(text, attributes, CharmRx(),     "Charm",     StatSet.Charm,     v => Stats.Charm     = v);
         TryInt(text, MartialArtsRx(),  "Martial Arts", v => Stats.MartialArts  = v);
         TryInt(text, MagicResRx(),     "MagicRes",     v => Stats.MagicRes     = v);
         TryInt(text, SpellcastingRx(), "Spellcasting", v => Stats.Spellcasting = v);
@@ -556,6 +607,68 @@ public sealed partial class StatParser : IDisposable
         // Anchored at the line start so a chat line like
         // "Foo gossips: my Exp: 0 is lame" can't fake the prefix.
         TryExpLine(text);
+
+        if (_fieldsCapturedThisArm == capturedBefore) NoteEffectLine(text);
+    }
+
+    // The header opens a new screen. Until it has been read whole, the marks on
+    // record belong to the last screen and say nothing about the values now landing.
+    private void BeginScreenMarks()
+    {
+        ResetArmMarks();
+        _headerReadThisArm = true;
+        Stats.ModifiedMarksRead = false;
+    }
+
+    // Everything under the last stat row, up to the closing prompt, is the list of
+    // active effects.
+    private void NoteEffectLine(string text)
+    {
+        if (!_headerReadThisArm || _statsReadThisArm != StatSet.All) return;
+        string line = text.Trim();
+        if (Array.IndexOf(ScreenFooterLines, line) >= 0) return;
+        _effectsThisArm.Add(StatusEffectLine.Parse(line));
+    }
+
+    // One of the six trainable stats, with the mark the screen puts on a value that
+    // isn't the trained one (GAME_MECHANICS "How `stat` marks a modified stat").
+    private void TryStat(string text, CellAttributes[]? attributes, Regex rx, string field,
+                         StatSet stat, Action<int> set)
+    {
+        Match m = rx.Match(text);
+        if (!m.Success) return;
+        if (!int.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Integer,
+            System.Globalization.CultureInfo.InvariantCulture, out int v)) return;
+
+        bool? modified = ReadModifiedMark(m, attributes);
+        _statsReadThisArm |= stat;
+        if (modified is not null) _marksKnownThisArm |= stat;
+        if (modified == true) _modifiedThisArm |= stat;
+
+        set(v);
+        HasParsed = true;
+        _fieldsCapturedThisArm++;
+        _log?.Log(LogSeverity.Debug, "StatParser",
+            $"{field} = {v}{(modified == true ? " (marked modified)" : modified is null ? " (mark unreadable)" : string.Empty)}");
+    }
+
+    // Stock's asterisk is text and settles it alone. Otherwise the value's colour
+    // does: red for a modified stat, cyan for a trained one. Read as the palette
+    // index, not the drawn colour, so a custom palette can't move it. Null when the
+    // line carries neither.
+    private static bool? ReadModifiedMark(Match m, CellAttributes[]? attributes)
+    {
+        if (m.Value.Contains('*')) return true;
+        int at = m.Groups[1].Index;
+        if (attributes is null || at >= attributes.Length) return null;
+        TerminalColor fg = attributes[at].Foreground;
+        if (fg.Kind != ColorKind.Indexed) return null;
+        return fg.Value switch
+        {
+            1 or 9  => true,
+            6 or 14 => false,
+            _       => null,
+        };
     }
 
     // Parse the one-line exp-command output:
@@ -826,11 +939,31 @@ public sealed partial class StatParser : IDisposable
         LastCaptureReadStealth = _stealthReadThisArm;
         LastCaptureReadPool = _poolReadThisArm;
         _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
+        PublishScreenMarks();
         _settleSession++;   // cancel any settle timer still pending for this window
         // Fire ScreenParsed only when something actually changed —
         // there's no value in churning the profile snapshot for an
         // empty window.
         if (capturedSomething) ScreenParsed?.Invoke(Snapshot());
+    }
+
+    // Publish what the closing screen said about its own six stats. Only a `stat`
+    // screen does (an `exp` line has no header), and the marks count as read only
+    // when all six stats were shown and every mark could be made out. The flag goes
+    // up last, so a consumer reacting to it finds the marks and effects in place.
+    private void PublishScreenMarks()
+    {
+        if (!_headerReadThisArm) return;
+        bool whole = _statsReadThisArm == StatSet.All;
+        Stats.ModifiedStats = whole ? _modifiedThisArm : StatSet.None;
+        Stats.ActiveEffects = whole && _effectsThisArm.Count > 0
+            ? _effectsThisArm.ToArray()
+            : Array.Empty<StatusEffectLine>();
+        Stats.ModifiedMarksRead = whole && _marksKnownThisArm == StatSet.All;
+        if (Stats.ModifiedStats != StatSet.None)
+            _log?.Log(LogSeverity.Debug, "StatParser",
+                $"Stat screen marks {Stats.ModifiedStats} as modified; {Stats.ActiveEffects.Count} effect line(s) listed.");
+        ResetArmMarks();
     }
 
     // ----- Regexes -------------------------------------------------------
@@ -869,7 +1002,9 @@ public sealed partial class StatParser : IDisposable
         RegexOptions.CultureInvariant)] private static partial Regex HealthCommandRx();
 
     // Plain N fields — `\*?` between the colon and the digits
-    // tolerates the altered-stat marker.
+    // tolerates the altered-stat marker. Stock prints three of the six stats with
+    // no space after the colon (`Intellect:`, `Willpower:`, `Agility:`), so a
+    // modified one reads `Agility:*50`: the six stat labels take `\s*` there.
     [GeneratedRegex(@"\bLevel:\s+(\d+)",                                RegexOptions.CultureInvariant)] private static partial Regex LevelRx();
     [GeneratedRegex(@"\bExp:\s+(\d+)",                                  RegexOptions.CultureInvariant)] private static partial Regex ExpRx();
     [GeneratedRegex(@"\bPerception:\s+\*?\s*(\d+)",                     RegexOptions.CultureInvariant)] private static partial Regex PerceptionRx();
@@ -878,12 +1013,12 @@ public sealed partial class StatParser : IDisposable
     [GeneratedRegex(@"\bTraps:\s+\*?\s*(\d+)",                          RegexOptions.CultureInvariant)] private static partial Regex TrapsRx();
     [GeneratedRegex(@"\bPicklocks:\s+\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex PicklocksRx();
     [GeneratedRegex(@"\bTracking:\s+\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex TrackingRx();
-    [GeneratedRegex(@"\bStrength:\s+\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex StrengthRx();
-    [GeneratedRegex(@"\bIntellect:\s+\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex IntellectRx();
-    [GeneratedRegex(@"\bWillpower:\s+\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex WillpowerRx();
-    [GeneratedRegex(@"\bAgility:\s+\*?\s*(\d+)",                        RegexOptions.CultureInvariant)] private static partial Regex AgilityRx();
-    [GeneratedRegex(@"\bHealth:\s+\*?\s*(\d+)",                         RegexOptions.CultureInvariant)] private static partial Regex HealthRx();
-    [GeneratedRegex(@"\bCharm:\s+\*?\s*(\d+)",                          RegexOptions.CultureInvariant)] private static partial Regex CharmRx();
+    [GeneratedRegex(@"\bStrength:\s*\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex StrengthRx();
+    [GeneratedRegex(@"\bIntellect:\s*\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex IntellectRx();
+    [GeneratedRegex(@"\bWillpower:\s*\*?\s*(\d+)",                      RegexOptions.CultureInvariant)] private static partial Regex WillpowerRx();
+    [GeneratedRegex(@"\bAgility:\s*\*?\s*(\d+)",                        RegexOptions.CultureInvariant)] private static partial Regex AgilityRx();
+    [GeneratedRegex(@"\bHealth:\s*\*?\s*(\d+)",                         RegexOptions.CultureInvariant)] private static partial Regex HealthRx();
+    [GeneratedRegex(@"\bCharm:\s*\*?\s*(\d+)",                          RegexOptions.CultureInvariant)] private static partial Regex CharmRx();
     [GeneratedRegex(@"\bMartial Arts:\s+\*?\s*(\d+)",                   RegexOptions.CultureInvariant)] private static partial Regex MartialArtsRx();
     [GeneratedRegex(@"\bMagicRes:\s+\*?\s*(\d+)",                       RegexOptions.CultureInvariant)] private static partial Regex MagicResRx();
     [GeneratedRegex(@"\bSpellcasting:\s+\*?\s*(\d+)",                   RegexOptions.CultureInvariant)] private static partial Regex SpellcastingRx();
@@ -913,7 +1048,7 @@ public sealed partial class StatParser : IDisposable
     // stats). Every stat row carries at least one numeric label, so this catches
     // all of them without needing to re-list the value-capturing shapes above.
     [GeneratedRegex(
-        @"^\s*(?:Name|Race|Class):\s+\S|\b(?:Lives/CP|Hits|Kai|Mana|Armour Class|Level|Exp|Perception|Stealth|Thievery|Traps|Picklocks|Tracking|Strength|Intellect|Willpower|Agility|Health|Charm|Martial Arts|MagicRes|Spellcasting):\s+\*?\s*\d",
+        @"^\s*(?:Name|Race|Class):\s+\S|\b(?:Lives/CP|Hits|Kai|Mana|Armour Class|Level|Exp|Perception|Stealth|Thievery|Traps|Picklocks|Tracking|Strength|Intellect|Willpower|Agility|Health|Charm|Martial Arts|MagicRes|Spellcasting):\s*\*?\s*\d",
         RegexOptions.CultureInvariant)]
     private static partial Regex StatRowRx();
 

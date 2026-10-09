@@ -107,6 +107,19 @@ public sealed class TrainLinePatternTests
     }
 
     [Fact]
+    public void TrainStatsAltered_MatchesStocksRefusal()
+    {
+        MessageRouter router = SeededRouter();
+        bool fired = false;
+        router.Subscribe(KnownPatterns.TrainStatsAltered, _ => fired = true);
+
+        // Two spaces after the exclamation mark, as the engine prints it.
+        router.Dispatch(Line("Your stats are unnaturally altered!  You may not train stats now."));
+
+        Assert.True(fired);
+    }
+
+    [Fact]
     public void TrainRejections_DontCrossWithAttainLevel()
     {
         MessageRouter router = SeededRouter();
