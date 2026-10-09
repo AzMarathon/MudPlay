@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.155.1**
+> **Version 3.157.7**
 > - Profile lists no longer fail when another client renames or removes a BBS at that moment
 > - Test suite: the Conversation window, profile-listing and auto-train tests no longer fail at random in a full run
 >

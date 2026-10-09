@@ -2910,9 +2910,15 @@ How one damage spell cast against a monster is worked out.
   - **`Spells.Targets` = 10 / 13 (Divided / Full Party Area) → a whole-party buff**, one cast with no target that blankets the party (`chant`, `mass frenzy`, `unholy fanaticism`, `rejuvenating field`). Lands on self too.
   - **Scope 0/1 (self-only), 4/8/9/12 (enemy), 7 (item) are NOT party buffs.**
 - **Single-target targeting is by selected member (given name), not class** — a slot blesses "all members" or a checklist of specific players, and only fires for a name that is a current `par` party member (never casts at someone uninvited). Targeting is by `par` membership, not room presence (`AppServices.IsGivenNameInRoom` is NOT a party-buff cast gate); a `You do not see <name> here!` reply backs that member off — see *Party → Targeted casts on a hiding member*.
+- **Some single-target buffs print a caster line that names nobody** *([OBSERVED] 2026-10-08, report `paradigm-20261008-222838`; Paradigm and Stock message data)*: `halo <member>` (angelic halo, spell 1098, `Targets` 2) answers `You cast angelic halo!` with no `on <name>`; its caster message is `You cast {spellname}!`.
+  - In that capture ten such casts on a member printed no `A halo appears over your head!` to the caster and left the caster's own halo counting down unrefreshed (`A halo appears over your head! (138s)`, then `(129s)` eight seconds and two casts later), so they did not land on the caster.
+  - **A spell that can be cast on another player lands on the player named, whether or not its message names them** *([CONFIRMED] 2026-10-08, user: "even if they arent named, it lands on them … its just a badly formed spell message")*. So `halo <member>` buffs that member; the line is no evidence either way.
+  - Others of the kind in the data (timed, `Targets` 2): Paradigm `illuminate` (`You cast {spellname}!`), `resist water` and `vile ward` (no caster message), `globe of invulnerability` (`You move both arms in a circling gesture.`); Stock `globe of invulnerability`.
+  - `frenzy` (spells 345 and 832) does name its target: the caster sees `A shimmering red glow surrounds <name>.` The Paradigm message records carried `{spellname}` in that slot (and `{source}` in spell 832's witness line) until 2026-10-08, when both were corrected to `{target}`, as Stock's records have it.
 - **Supersession: a spell that carries RemovesSpell (Abil 122) removes the named spell** (the Spell Book renders it "Removes <spell>"). When a configured **whole-party** buff removes a configured self-buff (e.g. **chant removes bless** — a Paradigm-only example), in a party we stop self-casting the removed one and let the party buff cover us — the Buff Watchdog shows that self-buff "covered by <party buff>". Only whole-party covers count (a single-target party buff can't cover self). (Paradigm 1.9.1 data has both directions — chant #23 removes bless and bless removes chant; see *`RemovesSpell` buff clobbering — literal lists, per-realm timing, shared wear-off*.) **Layer when possible, cover only when not** *([CONFIRMED] 2026-09-26, user)*: if the self-buff can be layered with the party buff (Stock, one-way remover — cast the party buff first, then the self-buff), layer them; only when layering is impossible (Paradigm's per-tick removal, or a mutual pair) cast the party buff and stop self-casting the one it removes. **Client use:** `AppServices.SelfBuffCoverage` covers only a mutual pair on Stock (a one-way remover layers, ordered by `CollisionOrderConstraints`); on Paradigm it covers every removed self-buff.
 - **Client use:**
   - `CastingDirector.PickUnifiedBuff` casts a `WholePartyOn` slot under the slot's own rest / combat conditions (`BuffSlot.BlessWhileResting` / `BlessDuringCombat`, the same ones it uses in a party) when `!PartyState.IsInParty`, instead of holding it forever behind "must be in a party" (report `paradigm-20260906-150624`: a whole-party item-cast buff, `platinum sceptre`, never fired outside a party).
+  - `CastingDirector.ArmPartyBuffConfirm` starts a single-target buff's timer on the observed `You cast <spell> on <name>!` when the spell's caster line can name the member (`CasterMessageMatcher.CanNameTarget`), and from the send when it can't, taking that timer back on a refused cast or `You do not see <name> here!` (report `paradigm-20261008-222838`: with no line to wait for, the buff was recast on the first member every round and never reached the second). `TimeManualCastFromSend` does the same for a hand-typed cast.
   - **`WholePartyOn` remains the master enable**: the per-slot `CastSolo` option only extends an enabled slot to solo play and must not bypass an unchecked Party box. (2026-09-09, report `paradigm-20260909-220212`: unchecked whole-party rows kept casting solo through their default `CastSolo=true`, draining mana while the rest of the UI reported them off.)
 
 ### Debuff slot spells — energy and targeting
@@ -3777,6 +3783,8 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - The client arms a short suppression window on sending the look (`RoomTracker.NoteLookSent`); the display consumers that run *before* the `Obvious exits:` line poll `IsPeekSuppressed()` to skip the peeked room, and the window is consumed when `NoteRoomObserved` fires on the exits line.
+- `AutoPartyManager.OnRoomAlsoHere` is one of those consumers: players a peek lists stand in the next room, so they are neither invited on sight nor taken as arrived by a party reform. Before 2026-10-08 a reconnect reform spent its invite on a peeked listing and got `You don't see <name> here.` (report `paradigm-20260923-092317`). A reform still waiting for members asks for another redisplay of its own room when a listing is passed over, since the one it sends may be what was passed over.
+- `IsPeekSuppressed()` lets one display through while a peek is armed: that of a move sent before the look, once the game has echoed that move. The server answers in order, so that display is the room just entered and the peek's follows it (`e` then `l e` typed quickly). A move not yet echoed leaves the peek reading in force, since it may be a step the game never answered.
 - The Warped Asylum look-sweep opens the barrier then looks (its rooms gate siblings behind bashable doors); before #346 a shut door on a peek direction failed the whole maze solve out.
 
 ### Room display parsing — the room title is positional, not just bright cyan
@@ -3949,14 +3957,18 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A pick failure is `Your skill fails you this time.`**
 - **A door can lock one way and barely the other, and an open door needs nothing** *([CONFIRMED] 2026-10-06, user; data from Paradigm 1.9.1 Rooms)*. The Library door in Arlysia: from Library Steps `17/1791` north into the Library `17/1792` it needs the jagged bone key (item 1536; the data's alternative is 1000 picklocks / strength, out of reach). From inside, `17/1792` south, a very low strength bash opens it (51 in the data). A door that is already open, as it is behind someone who came out, is walked through with no key.
   - **The jagged bone key is single-use: it crumbles when used** *([CONFIRMED] 2026-10-06, user; item data: `UseCount` 1, destroyed on death)*. See *Items, inventory & equipment → NPC keyword hand-over detection* for where a fresh one comes from.
-  - **Client use:** the walker posts a need for a locked door's key only when the key is reliably fetchable: a room command summons its guaranteed dropper, an NPC hands it over for the asking, or a shop sells it (`AppServices.DoorKeyIsFetchable`, `AutoWalkManager.SetDoorKeySourceProbe`; reports `paradigm-20261006-095806`, `paradigm-20261007-192215`). The shop case: the Rancid Sewer door `9/873` E ↔ `9/909` W is `(Key: 976 [or 201 picklocks/strength])`, and skeleton key #976 (`UseCount` 5, price 100) is sold by Shop #82, Rhudaur Thieve's Guild at `2/2561` *([OBSERVED] 2026-10-07, Paradigm 1.9.1 data)*; a character with Picklocks 107 reached the door keyless and the walk failed there. Picking the gated route card arms the purchase (`RouteChoicePlanner.SourceableGateItems`), and the card names the source. A door found open at the step is walked through by the door handler whatever the plan assumed.
+  - **Client use:** the walker posts a need for a locked door's key only when the key is reliably fetchable: a room command summons its guaranteed dropper, an NPC hands it over for the asking, a shop sells it, or failing all of those an NPC trades it for an item in the pack and the user picked a route card naming that trade (see *Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*) (`AppServices.DoorKeyIsFetchable`, `AutoWalkManager.SetDoorKeySourceProbe`; reports `paradigm-20261006-095806`, `paradigm-20261007-192215`, `paradigm-20261008-175938`). The shop case: the Rancid Sewer door `9/873` E ↔ `9/909` W is `(Key: 976 [or 201 picklocks/strength])`, and skeleton key #976 (`UseCount` 5, price 100) is sold by Shop #82, Rhudaur Thieve's Guild at `2/2561` *([OBSERVED] 2026-10-07, Paradigm 1.9.1 data)*; a character with Picklocks 107 reached the door keyless and the walk failed there. Picking the gated route card arms the purchase (`RouteChoicePlanner.SourceableGateItems`), and the card names the source. A door found open at the step is walked through by the door handler whatever the plan assumed.
 - **A bash opens the door itself — no `open` afterwards.** *([CONFIRMED] 2026-09-28, user.)* `open <dir>` is only needed after a key (or a pick) has unlocked the door, or for a door that's shut but not locked.
 - **`bash` reads its argument as a direction first, and only then as a monster.** *([OBSERVED] 2026-10-03, Stock 1.11p `wccmmud.dll` `_cmd_bash` / `_cmd_smash`. Paradigm: the door form is in the capture of report `paradigm-20261003-194358` (`bash n` → `You bashed the door open.`); the fall-through to the attack is `[NEEDS CONFIRMATION]` there.)*
   - `bash <dir>` in a room that has an exit that way is the door bash, and never an attack.
   - Any other argument, or a direction the room has no exit for, goes on to the bash attack (`_cmd_any_attack`) with the argument as the monster's name.
   - `smash` has no door form: `_cmd_smash` goes straight to the attack.
 - **On Paradigm, `bash <dir>` at an exit that is not a door prints `Your command had no effect.`** *([OBSERVED] 2026-09-24, wire capture in report `paradigm-20260924-053941`; exit data from Paradigm 1.9.1 Rooms.)* In Black Fortress, Dungeon `7/1246` (`Obvious exits: open door northwest, southeast`; the data has `SE` as the plain exit `7/1235`) `bash se` drew that line sixteen times running, with no bash line and no damage line. The same `bash se` one room back, in Black Fortress, Gaol `7/1247` (`SE` is `7/1246 (Door [11 picklocks/strength])`), answered `You bashed the door open.`
-  - Stock: not recorded. `pick <dir>` and `open <dir>` at a non-door exit on Paradigm: not recorded (Stock's `open` has `That is not a door or a gate!`, in the wire text under this heading).
+  - Stock's reply to a `bash <dir>` at a non-door exit depends on the basher: see the `bash <dir>` at an exit that is not a door entry under *The engine's door, bash and pick wire text* in this topic.
+- **`open <dir>` at an exit that is not a door prints `That is not a door or a gate!` on both realms** *([CONFIRMED] 2026-10-08, user, with a screenshot from each realm; Stock also [OBSERVED] in `wccmmud.dll` 1.11p, where only `_cmd_open` and `_cmd_close` print it)*.
+- **`pick <dir>` at an exit that is not a door differs by realm** *([CONFIRMED] 2026-10-08, user, with a screenshot from each realm)*:
+  - **Paradigm:** `Your command had no effect.`, the same generic refusal a bash gets there.
+  - **Stock:** `Your skill fails you this time.`, the ordinary failed-pick line. On Stock a pick aimed at a plain exit therefore can't be told from a pick that simply failed on a real lock.
   - The line is the game's generic refusal (see *Wire, prompt & command output → Message catalogue (lines the client parses)*), so by itself it names no command.
 - **Unlocking does not open the door** — a separate `open <dir>` is required. Its success line comes in two wordings, and **the game prints both**: `You open the door.` (the capture above) and `The door is now open.` / `The %s is now open.` (the Stock 1.11p `wccmmud.dll` `_cmd_open` text). *([CONFIRMED] 2026-09-28, user. An earlier note said only `You open the door.`, and the DLL has only the second form; superseded 2026-09-28.)* The client matches both.
 - **Bashing a door drains the basher's HP.** Each `bash <dir>` swing at a door costs HP (a bashable door opens after some number of swings, gated by RNG, not a single hit), so sustained bashing whittles the character down.
@@ -3965,10 +3977,16 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **The engine's door, bash and pick wire text** *([OBSERVED] 2026-09-28, Stock 1.11p `wccmmud.dll` `_cmd_bash` / `_cmd_picklock` / `_cmd_open` / `_cmd_close` / `_cmd_lock` and the key-use path; the same on Paradigm per the user 2026-09-28, with unrecognised-line capture catching any difference)*. `%s` is the game's fill-in: `door` / `gate`, a direction, or a player name.
   - **`bash <dir>`:**
     - success `You bashed the %s open.`; miss `Your attempts to bash through fail!`;
-    - refused outright `You need a weapon to bash with!` (nothing wielded) or `You don't know the first thing about bashing!` (no bash ability);
+    - `You need a weapon to bash with!` and `You don't know the first thing about bashing!` are **not** answers to a bash at a door: they are the bash *attack* refusing, which is what `bash <dir>` becomes when that exit is no door (next bullet);
     - `You take %d damage for bashing the door!` (the HP drain above); `The %s is already open.`;
     - others in the room see `You see %s bash the %s to the %s.` / `…attempt to bash the %s to the %s.` (and `…above you.` / `…below you.` forms).
     - The engine also has `You bash the door open and walk through` followed by `The door slams shut behind you!`, which moves the basher through the exit. **No exit in the game uses it** *([CONFIRMED] 2026-09-28, user: never seen in play)*.
+  - **`bash <dir>` at an exit that is not a door or a gate, at no exit at all, or with a word that is no direction, is taken as the bash attack on a target of that name** *([OBSERVED] 2026-10-08, Stock 1.11p `wccmmud.dll` `_cmd_bash` @0x4516f1, branches @0x451be2 / @0x451c80 / @0x451d17 · Realm: Stock)*. The door branch (exit type 7 or 11) tests neither the bash ability nor a weapon; these three do:
+    - no bash ability (ability 31): `You don't know the first thing about bashing!`;
+    - the ability but nothing wielded: `You need a weapon to bash with!`;
+    - the ability and a weapon: `_cmd_any_attack` looks for a target called by the direction word, finds none, and the command falls through to `Your command had no effect.` (`_execute_input` @0x450ca5). A monster or player whose name the word fits would be bashed instead.
+    - Paradigm prints `Your command had no effect.` for the same bash (report `paradigm-20260924-053941`), which fits the third case; the first two are not recorded there.
+    - (An earlier note listed the two refusals as answers to a door bash, and another said Stock's reply to a bash at a non-door was not recorded; both superseded 2026-10-08.)
   - **`pick <dir>`:** `You successfully unlocked the %s.` / `Your skill fails you this time.`; others see `You see %s pick the lock on the %s to the %s.` (and above / below forms). The picklock command has no "not locked" line of its own.
 - **How a pick succeeds** *([OBSERVED] 2026-09-30, `wccmmud.dll` 1.11p `_cmd_picklock`, with the exit layout in `tools/1.11p source/exit_fields.md`; Stock only, Paradigm not recorded)*:
   - **One roll: 0–100 under your Picklocks plus the lock's modifier.** The modifier is stored negated: the game data's `[N picklocks]` is a modifier of `−(N − 1)`. So the chance is about **Picklocks − N + 1** percent: a `[101 picklocks]` door needs Picklocks over 100, and at 150 it opens about half the time.
@@ -3987,7 +4005,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - `DoorOpenManager` treats the two bash refusals as "can't bash" and falls back to pick, then the key, instead of re-bashing on the response watchdog forever (2026-09-28); the wrong-key line fails the key step at once.
 - `DoorOpenManager` bashes a *bashable* door (per `DoorPolicy`) **uncapped** — no fixed attempt limit — but interleaves rest: once HP falls to the Health-tab **rest-if-below** trigger it pauses bashing so `HealthManager` can rest to **rest-max**, then resumes. (Confirmed by user direction; replaced the old fixed `MaxBashAttempts` cap.)
 - Picking keeps its `MaxPickAttempts` retry cap.
-- `DoorOpenManager.OnNoEffect` ends a door request as `DoorOpenResult.NotHere` when `Your command had no effect.` answers its bash (report `paradigm-20260924-053941`; with no pattern for the line the response watchdog re-bashed without end). It is read only while a bash is the command awaiting a reply, and not when the command echoed ahead of it is another one (`MessageRouter.ReplyIsForCommandNotNaming`). `[NEEDS CONFIRMATION]` What does the game print for a `pick <dir>` or an `open <dir>` at an exit that is not a door, on either realm? Until that is known those two keep their own retries and fallbacks. The request also ends as `NotHere` once the tracker has confirmed another room than the door's (`DoorOpenManager.AbandonIfLeftRoom`). On `NotHere` the walker re-plans (`AutoWalkManager.OnDoorReply`), a loop re-syncs and reroutes (`LoopRunner.OnDoorReply`), and the pyramid climb retries the step.
+- `DoorOpenManager.OnNoEffect` ends a door request as `DoorOpenResult.NotHere` when `Your command had no effect.` answers its bash (report `paradigm-20260924-053941`; with no pattern for the line the response watchdog re-bashed without end). It is read while a bash or a pick is the command awaiting a reply, and not when the command echoed ahead of it is another one (`MessageRouter.ReplyIsForCommandNotNaming`). `DoorOpenManager.OnNotADoor` ends an `open` the same way on `That is not a door or a gate!`. On Stock a pick at a plain exit draws only the failed-pick line, so there the pick runs out its attempts and falls back as it would on a real lock; the room check below is what catches a request planned from the wrong room. The request also ends as `NotHere` once the tracker has confirmed another room than the door's (`DoorOpenManager.AbandonIfLeftRoom`). On `NotHere` the walker re-plans (`AutoWalkManager.OnDoorReply`), a loop re-syncs and reroutes (`LoopRunner.OnDoorReply`), and the pyramid climb retries the step.
 - `OutboundAttackObserver` does not count `bash <direction>` as a typed attack. The walker's own door bashes were arming the typed-attack hold on the combat engine, and a buff cast on entering the next room then left the fight un-resumed (report `paradigm-20261003-194358`).
 - `RoomTooltipBuilder.PickChance` shows the chance on a door's hint (map tooltip, Room Info, the room detail dialog): `Picklocks − N + 1`, clamped 0–100, and at least `Picklocks + 1` on an "any" lock (user request, 2026-09-30; the Stock rule assumed for Paradigm).
 
@@ -4673,11 +4691,19 @@ Among protectable hazards, a further split governs whether the navigator may off
     picker's human-readable "(ask …)" promise keeps the full name.
 
 ### Room-command refusals
-*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07, level conditions 2026-10-08 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
+*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07, level conditions, `takeitem` / `checkitem` and line order 2026-10-08 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
 
 - **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
-  - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
+  - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `takeitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
   - On failure the engine prints the message's line 1 to you and line 2 to the room (@0x46f360), and the rest of that line doesn't run. With no message number the refusal is silent.
+- **`takeitem <N> [msg]` takes the item from wherever it is held, worn included, and its second number is the message for not having it** *([OBSERVED] 2026-10-08, `_perform_matched_action` @0x470209 in the Stock 1.11p `wccmmud.dll`; Realm: Stock, Paradigm not recorded)*.
+  - It calls `_remove_item_from_inventory` (@0x41b2c8), which takes the first matching slot of the 100-slot inventory, **worn or not**, and unequips the item if that was the last copy (a worn slot holds an item id, not a separate object). Failing that it takes from the 50-slot key ring. So a worn item is taken.
+  - When the item is missing, the items that line had already taken are given back, the second number is printed as a message (@0x470942 → 0x46f360) and the line fails. In `takeitem 811 1368:giveitem 808:text 843` (textblock 842), `1368` is the message for having no opal brooch. The wording of messages `1368` and `1369` is not recorded.
+  - The number is a row of the game's message table, and the first of its texts is what the asker sees *([OBSERVED] 2026-10-08, Stock 1.11p message table; the user says these are the same on Paradigm)*: 1368 is `When the brooch is not forthcoming, he spits in disgust and turns away!` (the room sees `The shopkeeper spits in disgust at %s.`), 1369 is `The shopkeeper frowns in anger when you say you do not have the orb.` (`The shopkeeper frowns in anger at %s.`).
+  - The data writes it both ways *([OBSERVED] 2026-10-08, Paradigm 1.9.1 TBInfo)*: with a message in `takeitem 811 1368` and `takeitem 490 467:message 468:…` (textblock 211), bare in `takeitem 1183` (textblock 4041). (An earlier note asked whether the second number was a message and whether a worn item is taken; both answered from the Stock DLL 2026-10-08.)
+  - **Client policy:** MudPlay offers a trade only for a copy in the pack or on the key ring, never a worn one, on both realms. The game itself would take a worn one from a player who types the `ask` (Stock; not recorded on Paradigm). See *Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*.
+- **`checkitem <N> [msg]` looks through the same 100-slot inventory and then the 50-slot key ring** *([OBSERVED] 2026-10-08, the `checkitem` branch at 0x470f35; Realm: Stock, Paradigm not recorded)*. A worn item passes. A missing one prints the message and fails the line.
+- **A textblock's lines are tried in order, and the first whose action succeeds ends the scan** *([OBSERVED] 2026-10-08, `_perform_special_command` @0x471a30 and `_perform_text_block_as_special_command` @0x471d55; Realm: Stock, Paradigm not recorded)*. A line that fails a check falls through to the next matching line.
 - **`minlevel <N> [msg]` passes at level `N` or higher, and every one in a line is enforced** *([OBSERVED] 2026-10-08, `_perform_matched_action` @0x470209 in the Stock 1.11p `wccmmud.dll`, the `minlevel` branch at 0x470df4)*.
   - The interpreter takes a line one `:` step at a time. At a `minlevel` step it compares the character's level (the word at player+0x94) with `N` and goes on to the next step when the level is `N` or more (`cmp edx,[ebp-0x8]` / `jge 0x471a07`). Below `N` it prints the message if one is named, drops the rest of the line and returns 2.
   - It keeps nothing from one step to the next, so a line with two `minlevel` steps checks both, and running the whole line takes the **highest** of them. A later, lower number never relaxes an earlier one.
@@ -4732,6 +4758,8 @@ Among protectable hazards, a further split governs whether the navigator may off
   after.** The exit stays a plain cardinal move (its cell modifier carries the two spell numbers; `0`
   means no cast on that side).
 - **A post-cast spell can also teleport through a textblock** *([OBSERVED] 2026-10-08, game-data lookup)*: its ability 148 names a TBInfo chain with a `teleport <room> <map>` step, which can sit behind a `checkitem` (so the landing depends on what the character carries). See *Jungle to the Lost City: the Vine Bridge trap and the golden idol*. A spell trap (`Spell Trap: N`) reaches a teleport the same way.
+  - **The lines of such a textblock are tried in order, and the first whose action succeeds ends the scan; a line that fails a check falls through to the next** *([OBSERVED] 2026-10-08, Stock 1.11p `wccmmud.dll` · Realm: Stock, Paradigm not recorded)*. So `checkitem 1281 …:teleport 2431 16` followed by a bare `teleport 2228 16` reads: with the item `16/2431`, otherwise `16/2228`. The interpreter detail is in *Room-command refusals*; the with-idol landing in report `paradigm-20261007-134305` (Paradigm) fits it. (An earlier note asked whether the lines are tried in order; superseded 2026-10-08.)
+  - **The room the exit names is displayed before the post-cast spell runs** *([OBSERVED] 2026-10-08, Stock 1.11p `wccmmud.dll` · Realm: Stock)*, **and the game redisplays the room when the spell teleports the character** *([CONFIRMED] 2026-10-08, user · Realm: both)*: such a step shows two rooms, the one the exit names and then the landing. The detail is in *Jungle to the Lost City: the Vine Bridge trap and the golden idol*. (An earlier note, read from the Stock DLL, said the teleport prints nothing; superseded 2026-10-08 by the user — the DLL read missed the display.)
 - **When the post-cast spell is a *random* teleport, the exit's landing is non-deterministic.** The
   spell's game-data record classifies its landing:
   - ability code **140 = TeleportRoom** — value `0` → a *random* room drawn from the spell's
@@ -4774,6 +4802,18 @@ Among protectable hazards, a further split governs whether the navigator may off
     expanding through a pocket entrance, so from outside the pocket shows only as a spell-wall stub at
     its mouth — but a walker standing *inside* still lays the whole area out, because the pocket's
     internal cast exits are reciprocal (they have return paths) and so are never flagged as entrances.
+  - A post-cast spell that teleports through a textblock is read by
+    `TBInfoCastTeleportResolver.TextblockLandings` *(2026-10-08; reports `paradigm-20261007-134305`,
+    `paradigm-20261007-134824`)*: each line of the chain that carries a `teleport` is one landing, taken
+    in order, with at most one `checkitem` before it. The exit then carries `RoomExit.CastLandings`;
+    its target stays the room its cell names, which the step only passes through. A chain holding
+    anything else (`random`, an ability check, a line that doesn't teleport, a `LinkTo` continuation)
+    is left a plain cardinal. In the stock v1.11p and Paradigm 1.9.1 data the one exit this reads is
+    `16/2273` east (spell 857). When the first landing sits behind a `checkitem`, the exit is an item
+    gate for routing (`RoomExit.CastGateItemId`). `RoomTracker` takes the first display the game
+    shows for the move as the room the exit names and books the landing off it, and reads the second
+    as the landing's own; a party is re-formed there. The detail is in
+    *Jungle to the Lost City: the Vine Bridge trap and the golden idol*.
 
 ### Jungle to the Lost City: the Vine Bridge trap and the golden idol
 *Status: CONFIRMED 2026-10-08 (user); rooms, spells and textblocks [OBSERVED] 2026-10-08, game-data lookup, identical on Stock v1.11p and Paradigm 1.9.1 · Realm: both*
@@ -4786,18 +4826,47 @@ Among protectable hazards, a further split governs whether the navigator may off
   - `16/1512` (Jungle Cave) east to `16/2165` (Earthen Catacombs): `Key: 1281 [or 101 picklocks]`.
   - `16/2273` (Earthen Catacombs) east: `(Cast: pre-0, post-857)`, landing first in `16/2274`. Spell 857 (`golden idol teleport`) carries ability 148 → TBInfo `#2871`: `checkitem 1281 66:teleport 2431 16:text 2872` / `teleport 2228 16:text 2872`.
     - With the idol the character is sent to `16/2431`, the second part of the catacombs, which connects to the Lost City.
-    - Without it the character is sent to `16/2228` instead and doesn't reach that part. *([CONFIRMED] 2026-10-08, user: "if you dont have the idol … you dont get teleported to the secondary part of the catacombs which is connected to the lost city".)*
+    - Without it the character doesn't reach that part. *([CONFIRMED] 2026-10-08, user: "if you dont have the idol … you dont get teleported to the secondary part of the catacombs which is connected to the lost city".)*
+    - Where it is sent instead is `16/2228`, the textblock's second line: a room that reads exactly like the one the exit leads to, so from the player's seat the character seems to have been left in the room. *([CONFIRMED] 2026-10-08, user; [OBSERVED] 2026-10-08, game data, and the line order in *Cast-on-walk exits and random teleports* (Realm: Stock); not seen in a capture.)*
+    - Textblock `#2872`, which both lines name with `text 2872`, is empty *([OBSERVED] 2026-10-08, game data)*.
+    - `16/2228` is not a dead end *([OBSERVED] 2026-10-08, game data, both realms)*: it walks back to `16/2273` in 31 steps, and by the rooms' own exits its only way on to the Lost City bank (`16/320`) is through `16/2273` east again.
 - **Where the idol comes from** *([CONFIRMED] 2026-10-08, user)*: the ship in the lagoon, before the bridge with the trap teleport. In the data: `16/1517` (Ship Captains Quarters), TBInfo `#2892`: `lift latch:giveitem 1281:message 2519`.
-- **The idol passthrough disbands the party, even when everyone lands together** *([OBSERVED] report `paradigm-20261007-134305`, Paradigm)*. The order on the leader's screen:
-  1. The leader steps east and is shown `16/2274` (`Obvious exits: west`, with whatever monsters are in it).
+- **The game prints two room displays for the crossing: `16/2274`, the room passed through, and then the landing** *([CONFIRMED] 2026-10-08, user: the game redisplays the room upon teleporting · Realm: both)*.
+  - **`16/2274` is displayed before the exit's post-spell runs** *([OBSERVED] 2026-10-08, Stock 1.11p `wccmmud.dll` · Realm: Stock)*. `_move_user` (@0x417692), Cast-exit block @0x418815–0x41888c: it casts the exit's pre-spell while the player is still in the origin room and, if the player is still there, puts them in the exit's destination room (0x416ae6), displays that room (`_display_room_desc` @0x418884) and jumps to @0x419618. There, for exit type 0x16 with a post-spell set, it casts the post-spell (`_room_cast_on_user` @0x419648) **after** the display, then prints a prompt and returns (@0x41971c–0x419739). The spell's textblock branch is @0x4749b3 → `_perform_text_block_as_special_command`, and the `teleport` directive's helper is @0x46f887.
+  - So the character already stands at the landing when the display of `16/2274` is read, and what that display lists (`Also here:`, `You notice`, the exits) belongs to `16/2274`. The display that follows is the landing's.
+  - A bare Enter redraws the room the character stands in (the empty-input case of `_execute_input`, @0x450208) *([OBSERVED] 2026-10-08, Stock 1.11p `wccmmud.dll`)*.
+  - **A follower dragged through gets the display of `16/2274` from its own `_move_user`, unless that display is skipped**: @0x4195d2 skips it for move kind 3 when player flag +0x700 bit 0 is set. `[NEEDS CONFIRMATION]` What move kind 3 and that flag are wasn't traced: is a dragged follower shown both rooms, only the landing, or nothing?
+  - (An earlier note, read from the Stock DLL, said the teleport prints nothing, that `_display_room_desc` is called only from `_move_user`, `_cmd_look`, game entry and the empty-input case of `_execute_input`, and that the landing is shown only when asked for; superseded 2026-10-08 by the user — the DLL read missed the display. A note before that had the two displays and asked whether a character crossing alone sees both; the user's statement covers anyone.)
+- **The idol passthrough disbands the party, even when everyone lands together.** The `teleport` directive's helper calls `_stop_following(user, -1)` (@0x46fd7e) on the teleported player and then moves them (0x416ae6 @0x46fd8d) *([OBSERVED] 2026-10-08, Stock 1.11p `wccmmud.dll` · Realm: Stock)*; that is where `<name> is no longer following you.` and `Your party has been disbanded.` come from on this crossing. The order on the leader's screen *([OBSERVED] reports `paradigm-20261007-134305`, `paradigm-20261007-134824`, Paradigm)*:
+  1. The leader steps east and is shown `16/2274` (`Obvious exits: west`, with whatever monsters are in it). In report `paradigm-20261007-134824` that display lists three monsters and ends `The room is barely visible`.
   2. Each follower `walks into the room from the west.` and is then teleported, printing `<name> is no longer following you.`
   3. `Your party has been disbanded.`
-  4. The leader is teleported and shown `16/2431`, with the followers already there (listed on its `Also here:` line in that capture).
-  - Each character is checked for the idol on their own, so a follower without one lands in `16/2228`, apart from the leader. `[NEEDS CONFIRMATION]` Not seen in a capture.
+  4. The leader is teleported and shown `16/2431`, with the followers already there on its `Also here:` line. In report `paradigm-20261007-134824` that display comes in the same second as the crossing, lists only the two members and has no visibility line. (An earlier note took it for the answer to a bare Enter the client sent; superseded 2026-10-08.)
+  - `[NEEDS CONFIRMATION]` Is each character checked for the idol on their own, so that a follower without one lands in `16/2228`, apart from the leader? Not seen in a capture.
   - It is the party-splitting teleport of *CMD-driven room teleports split the party*, reached by a walk instead of a typed command: the party has to be re-invited on landing.
+- **Nothing on screen tells the three rooms apart** *([OBSERVED] 2026-10-08, game data, both realms)*. `16/2274`, `16/2431` and `16/2228` are each `Earthen Catacombs` with the one exit west (to `16/2430`, `16/2430` and `16/2227`), and `16/2430` and `16/2227` are in turn each `Earthen Catacombs` with exits north and east. A character sent to the wrong side sees the same rooms for at least two steps.
+  - `16/2273` reads like the rooms west of the landings too: `Earthen Catacombs` with exits north and east.
+  - The passage is darker than the room before it: `16/2273` is `Light -25`; `16/2274`, `16/2431`, `16/2228`, `16/2430` and `16/2227` are `Light -175`.
+- **The idol is a key-type item that can also be worn** *([OBSERVED] 2026-10-08, game data: `ItemType 7`, `Worn 8`)*. In report `paradigm-20261007-134305` it sat on the key ring (`You have the following keys: golden idol.`) and the leader landed in `16/2431`.
+  - **`checkitem 1281` passes for an idol that is carried, worn or on the key ring** *([OBSERVED] 2026-10-08, Stock 1.11p `wccmmud.dll` · Realm: Stock, Paradigm not recorded)*: `checkitem` looks through the inventory, where worn items live too, and then the key ring; when the item is missing it prints its message and the line fails. The detail is in *Room-command refusals*. `failitem` counts a worn item the same way (*Room-spell hazard shape 3 — buff check (`checkspell` / `failspell`): the desert waterskin*, the sunstone). (An earlier note asked whether a worn idol passes; superseded 2026-10-08.)
 
 **Client use:**
-- None yet for the passthrough: the walker takes the exit as a plain move, steps on from the landing room, and the re-invite is sent from the wrong room (report `paradigm-20261007-134305`).
+- `TBInfoCastTeleportResolver.TextblockLandings` reads the spell's textblock into an ordered list of landings, and `RoomGraphManager.PromoteCastTeleportExits` hangs it on the exit (`RoomExit.CastLandings`). The exit goes on naming `16/2274`, so routes, the map and saved loops are planned as before (the seeded loop `Lost City/Earthen Catacombs (need  idol).loop` lists `16/2274` as a waypoint); that works because `16/2274` and the idol landing `16/2431` both lead west to `16/2430`. See *Cast-on-walk exits and random teleports*.
+- The walk and the loop expect such a step to end in the first landing (`RoomExit.Landing`), not in the room the exit names.
+- **The exit is an item gate for routing** (`RoomExit.CastGateItemId`, read off the `checkitem`; user confirmation 2026-10-08 that the idol is required). `MovementFilter` closes it to a character who doesn't hold item 1281, `ExitGateItems`, `RouteChoicePlanner` and `BlockedExitDescriber` name the idol like any other gate item, and a loop whose leg runs through it has no such leg. Judged on the walker's own pack (a follower's is the `[NEEDS CONFIRMATION]` above), and not at all while the inventory is unread. Before, the exit was planned as free: a character without the idol landed in `16/2228`, re-planned, and was walked round to `16/2273` east again without end.
+  - A walk planned through gates has the exit open whatever is carried (the item was to be fetched on the way), so the step itself is refused too: at the exit, with the inventory read and item 1281 not held, `AutoWalkManager.SendMoveStep` and `LoopRunner.SendMove` end the walk or the loop leg naming the idol instead of stepping through (`RoomTracker.HoldsItem`).
+- `RoomTracker` reads the crossing off the two displays the game prints. The first display that fits `16/2274` while the step is in flight is the room passed through: the landing is booked from it at once, by what the character holds (`InferCastLanding`: the first landing whose item is carried, worn or on the key ring, the order the game tries the lines in; with the inventory unread, the first landing), and the move is confirmed there, so a walk or loop goes on without waiting. The consumers that act on a room display are told that display isn't of our room (`IsPeekSuppressed`, for at most 3 s after the step went out, so a step the game swallowed doesn't go on hiding the room we are still in), and its exits and doors aren't kept: its occupants and floor items aren't handed to the landing. The room is not written as the saved anchor.
+  - The display that follows is the landing's own (`BookCastLanding` marks it owed): it is never kept from the consumers, so the landing's roster, loot and invites are read from it, and nothing is asked of the game. Nothing waits on it either. A walk or loop steps on as soon as the landing is booked, so the display can arrive with that step in flight; it fits the room the step is leaving (`16/2431`, exit west) and not the one it is headed for (`16/2430`, exits north and east), and is read as the first.
+    - It is held against the booking (`VerifyCastLanding`): fitting only another landing, or only `16/2274`, it moves the character there. Here, where all three rooms read alike, it can't disagree; with no engine driving, Paradigm is then asked with `rm`. With an engine driving, a wrong pick stands until a display disagrees, which takes an inventory read that has gone stale or is still missing right after login.
+    - In a landing too dark to show, or for a blind character, the client takes the landing's display to be the line any room display is replaced by (*Dark rooms — no name, no exits, traversal inferred from no bonk*), and `RoomTracker.NoteDarkRoomEntered` / `NoteBlindMove` take one such line after the booking as the landing's and not as the next step arriving (`TakeCastLandingLine`). The same goes when `16/2274` itself was read off a dark or blind line: two lines per crossing. Read as a step, the second put a walk in the dark one room ahead of the character from the landing to the next room shown. `[NEEDS CONFIRMATION]` Neither form of the landing's display has been seen in a capture of this crossing: does the teleport's redisplay print `The room is very dark - you can't see anything.` in the dark, and `You are blind.` for a blind character?
+    - **Client policy:** when the landing's display hasn't come 1.5 s after the booking and the character still stands there with no move in flight (a leader held for the party, a hand-walk, a follower), the tracker sends one bare Enter and reads the answer as the landing's (`OnCastLandingOverdue`). A walk or loop that has stepped on asks nothing.
+  - When no room at all is shown for the step within 1.5 s, the tracker sends the bare Enter itself (`OnCastDisplayOverdue`).
+    - After a follower's drag (per the `[NEEDS CONFIRMATION]` above) the answer is read as the room the character stands in (`PickCastLanding`: the room shown decides when it fits only one landing; what the character holds decides when it fits several). A drag's own display comes with the line that announced the drag or not at all.
+    - After a step of the character's own, that step's display may only be late: the game queues a command behind an action delay (*Wire, prompt & command output → Command rate limit (typing/sending too fast)*). The next display is still read as `16/2274` and kept from the consumers (for up to 3 s after the asking), the one after it as the landing's, and the room isn't asked for a second time. An answer that shows `16/2273` again, with the step never echoed, takes the step off the queue: the game never took it.
+  - A follower dragged on again before any room was shown for the drag through the exit (the leader sees them in the landing's display, re-invites and steps west, as a rule inside the 1.5 s) is settled at the landing its pack points to before the next drag is queued (`SettleUnshownCastDrag`). `16/2273` and `16/2430` read alike (`Earthen Catacombs`, exits north and east), so read against the first drag the display of `16/2430` was taken for a re-look of `16/2273` and the follower stayed a room behind.
+  - After a link dropped mid-crossing, in the dark or blind, and in replay recovery, the landing is used and never `16/2274`, where nobody stays.
+- **Client policy:** a leader's walk or loop tells the party engines the split is of our own making once the crossing is seen, on the display of `16/2274` (`RoomTracker.CastCrossingStarted` → `AutoWalkManager.OnCastCrossingStarted` / `LoopRunner.OnCastCrossingStarted` → `PartyComebackManager.NoteOwnTeleport`, `AutoPartyManager.NotePartySplitTeleport`): the `<name> is no longer following you.` lines aren't taken for members left behind, movement holds in the landing room, and each member is re-invited once listed there, as a rule by the landing's own display. `AutoPartyManager`'s redisplay 2 s into a reform is left as it is for the teleports that land the leader ahead of the members; here it only fires for a member still not seen by then. The announcement is raised once per crossing and goes by the step in flight, not by the engine's run state, so a hold that lands between the step going out and the display doesn't lose it. Nothing is relayed, since the followers are pulled through behind the leader's step. A step the game refused or dropped announces nothing, so no hold goes up for a crossing that didn't happen. Before 2026-10-08 the walk stepped on from the landing, the invites went out from the next room, and the leader backtracked for followers who were beside it (reports `paradigm-20261007-134305`, `paradigm-20261007-134824`).
+- A follower sent to the other side isn't looked for: the reform waits out its window for them and the walk goes on.
 
 ### Quest-gated gateway portals
 *Status: CONFIRMED (game data Paradigm 1.9.1 map 9) · Realm: both (byte-identical across stock and Paradigm data)*
@@ -4904,7 +4973,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     they keep the default teleport-allowed shortest route.
 
 ### Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable
-*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional); OBSERVED 2026-10-08 (Paradigm 1.9.1 game data + reports `paradigm-20261008-173911`, `paradigm-20261008-174023`; the talisman exit and the way round it) · Realm: Paradigm (1.9.1) · per-fact tags inline*
+*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional); OBSERVED 2026-10-08 (Paradigm 1.9.1 game data + reports `paradigm-20261008-173911`, `paradigm-20261008-174023`; the talisman exit and the way round it); CONFIRMED 2026-10-08 (user + report `paradigm-20261008-175938`; the tower and castle key chain inside the city) · Realm: Paradigm (1.9.1) · per-fact tags inline*
 
 - **[CONFIRMED, user 2026-07-23] A walled city can have a "front door" that is a
   keyword→item→summon→kill→key chain, entirely separate from any teleport "backdoor" the map data also
@@ -4933,6 +5002,49 @@ Among protectable hazards, a further split governs whether the navigator may off
   `Key: 806 or 101 picklocks`. The backdoor is **nightblack-portal item 1419**, whose teleport exit into
   map 8 is gated `minlevel 40` — e.g. the portal in `8/992` (Negative Power Plane, TB 9131) lands in
   `8/558` at level 40+.
+- **Inside the dark-elf city the tower and the castle are a second chain: two bosses, each dropping an
+  item the sleazy shopkeeper trades for keys** *([CONFIRMED] 2026-10-08, user; report
+  `paradigm-20261008-175938`)*. In the user's words: kill the captain of the guard and take the opal
+  brooch he drops to the sleazy shopkeeper, who exchanges it for a key that gets you into the dark-elf
+  archmage's tower; kill the archmage and bring his drop back to the shopkeeper for a key that lets you
+  into the dark-elf castle by the moat, and another that opens the dark-elf queen's door.
+  - **The same chain in the data** *([OBSERVED] 2026-10-08, Paradigm 1.9.1 Rooms / Items / Monsters /
+    TBInfo)*:
+    1. **Captain of the guard** (monster 346, `GameLimit` 1, `RegenTime` 2) is the NPC of Officer's
+       Quarters `8/530`, behind `8/524` E `(Door [51 picklocks/strength])`. He drops the **opal brooch
+       (item 811)** at 100% (`DropItem-2`).
+    2. **Sleazy shopkeeper** (monster 348) is the NPC of Musty Store `8/486`. His `GreetTXT` 838 lists
+       `help:840`, `brooch:841`, `orb:844`. `brooch` → 841 → 842 `takeitem 811 1368:giveitem 808:text 843`:
+       the brooch for the **glowing key (item 808**, a key, `UseCount` 1).
+    3. **Dark Tower, Entrance `8/531` W → `8/532`** is `(Key: 808 [or 1000 picklocks])`, and the only
+       walked way into the tower (`8/532` up to the Ritual Chamber `8/558`). From inside, `8/532` E is
+       `(Door [41 picklocks/strength])`.
+    4. **Dark-elf archmage** (monster 345, `GameLimit` 1, `RegenTime` 2) is the NPC of Ritual Chamber
+       `8/558`, behind Spiral Stairway `8/557` S `(Door [51 picklocks/strength])`. He drops the **dark blue
+       orb (item 810)** at 100%, and the nightblack portal (item 839, a room fixture) at 100%.
+    5. The shopkeeper's `orb` → 844 → 845 `takeitem 810 1369:giveitem 809:giveitem 820:text 846`: the orb
+       for **two keys at once**, the **adamantite key (item 809**, `UseCount` 1) and the **moldy key
+       (item 820**, `UseCount` 3).
+    6. **The castle by the moat:** Moatside `8/559` D `(Text: go moat, dive moat, jump moat)` → Black Moat
+       `8/646`; then Black Moat `8/633` D ↔ Rancid Underwater Passage `8/632` U is
+       `(Key: 820 [or 251 picklocks/strength])`. The gatehouse door `8/559` S ↔ `8/560` N is
+       `(Door [1000 picklocks/strength])` both ways; the wheel in `8/560` (`CMD 4100`, `turn wheel`) works
+       it from inside.
+    7. **The queen's door:** Royal Guardroom `8/702` N → Royal Throne Room `8/705` is
+       `(Key: 809 [or 101 picklocks])`. The dark-elf queen (monster 343) is the NPC of `8/705` and drops
+       the golden key (item 813) at 100%, for Vault Antechamber `8/706` N `(Key: 813 [or 1000 picklocks])`.
+  - **A lock skill can replace the two keys of the archmage's link, and not the captain's** *([OBSERVED]
+    2026-10-08, Paradigm 1.9.1 Rooms; confirmed by the user 2026-10-08)*. The tower door `8/531` W is
+    `(Key: 808 [or 1000 picklocks])`, so the glowing key, and with it the captain's opal brooch and the
+    shopkeeper's trade, is needed to reach the archmage on foot at any Picklocks a character will have.
+    The locks a skill can replace are the queen's door (`(Key: 809 [or 101 picklocks])`) and the way in
+    from the moat (`(Key: 820 [or 251 picklocks/strength])`). (An earlier note said the captain's part
+    could be skipped with enough lockpicking; withdrawn by the user 2026-10-08.)
+    - The adamantite key is not needed by a character who can pick the queen's door, nor the moldy key
+      by one who can pick or bash the moat lock. A character who needs neither key needs no orb, and so
+      neither the archmage nor the brooch that leads to him.
+    - How a pick's chance follows from the lock's number is in *Locked doors — picking, opening and
+      bashing* (the Stock rule; Paradigm not recorded).
 - **The map surfaces how to *cross* an item/key gate, but NOT how to *acquire* the gating item (the
   crux of auto-traversal).** The consumption command and required item ride on the exit (`8/398` south
   names `rub orb` + bloodstone orb; `8/461` south names `Key: gate key`). Acquisition provenance lives
@@ -5007,6 +5119,37 @@ Among protectable hazards, a further split governs whether the navigator may off
     (`RouteChoicePlanner.ItemGatesOnPath`, by the item / locked-door block reasons only). The shortcut
     card lists its own route's full needs (`RouteChoice.ShortcutRequirements`; report
     `paradigm-20261008-174023`).
+  - **Client policy** (report `paradigm-20261008-175938`): a walk trades for a door key, and only for a
+    door key, from a route card that names the trade.
+    - A plain trade is an award line that takes one item, once, asks nothing else of the character and
+      is the only line its keyword runs (`ItemGiver.TradeItemId`, `ItemSourceIndex`). The message its
+      `takeitem` names is taken as the giver's refusal (`GiveRefusalLines`), which ends the wait at once
+      where the wording is known; for `1368` and `1369` it isn't, so a refused trade there waits out
+      its 8 s.
+    - It is used only when nothing else certain yields the key: no free give, no shop, no guaranteed
+      summon. A trade never stands in for one of those (`PathItemGiveSources.Trades`).
+    - The item it takes must be in the pack or on the key ring. A worn one is never offered, though
+      the game would take it (*Room-command refusals*): the walk doesn't strip gear the user is wearing.
+    - With the opal brooch in the pack the route card reads `glowing key (ask sleazy shopkeeper, in
+      trade for your opal brooch)`; picking it agrees to that trade
+      (`AppServices.NewJourneyFetch`), walks to `8/486` and sends `ask sleazy shopkeeper brooch`.
+      A walk with no card (an item flagged **Auto-obtain for path** on a sole route, a loop's approach)
+      never trades (`AppServices.ShouldAutoObtainSoleRoute`).
+    - The agreement is for that key, that item and that one journey. It is carried on the walk's
+      `WalkJourney` (`JourneyFetch`, with the items the pick ordered fetched) and read only through
+      `AppServices.AgreedTradeFor`, for a journey whose route was picked on a card. So it is there for
+      that journey's legs, side trips and errand restarts (`AutoWalkManager.ResumeJourney`), and gone
+      when the journey ends: on arrival or failure at its destination, any Stop, death, a profile
+      change, an engine reset, or another walk starting. No later walk can trade on it.
+    - A dropped connection ends the agreement though the journey may stand
+      (`AppServices.EndTradeSession`): a walk picked up after reconnecting fetches as before and
+      trades nothing.
+    - Without the brooch nothing is fetched and the card names the trade instead
+      (`PathItemGiveSources.TradeNote`): `glowing key (sleazy shopkeeper trades one for opal brooch,
+      which captain of the guard drops)`. Killing a boss for the item a trade takes is left to the
+      player.
+    - Other gate items and hazard counters are never traded for: the quest items of a special-exit
+      route stay un-fetched (the 2026-08-18 rule above), and a counter a shop sells is bought.
 
 ### Random-teleport maze (the Warped Asylum)
 *Status: CONFIRMED 2026-07-17 (user design); solvable-room fast path CONFIRMED 2026-08-16 (user) · Realm: both (Paradigm lever handling differs)*
@@ -5723,7 +5866,7 @@ There is no room to drop amethyst pendant here.
 - The giver's line in that wording, `You give <item> to <player>.`, takes the copies out of the pack under the same record-name check.
 - It reads the Stock coin lines on both sides, `You gave <player> <N> <coin>` and `<Player> gave you <N> <coin>`, into the purse and not the pack (`TryApplyCoinHandOver`). The coin is a bare metal (`give`), a full coin noun (`share`), or any other single word, taken as the fifth coin under a board's own name (`HandOverCoinNoun`).
 - It reads the Paradigm coin lines on both sides, `<Player> gives you <N> <coin noun>` and `You give <N> <coin noun> to <player>`, the same way. Those need the full coin noun and no full stop, which is what keeps a counted item line out of the purse.
-- A key handed over moves on the key ring, in either wording: one received goes onto `InventorySnapshot.Keys` (an item of type 7, or a name already on the ring), and one given away comes off the pack first, then the ring (`AddHeld`, `RemoveHeld`, `PatchKeyRing`). Held keys are counted from the ring (`AppServices.CountItemHeld`), so a key that stayed on it after a give kept its door passable to the route planner. The other lines that move an item do the same for a key: `You took`, `You dropped`, `You hid`, a buy and a sell (user asked for get and drop, 2026-10-07; hide, buy and sell follow the same two helpers).
+- A key handed over moves on the key ring, in either wording: one received goes onto `InventorySnapshot.Keys` (an item of type 7, or a name already on the ring), and one given away comes off the pack first, then the ring (`AddHeld`, `RemoveHeld`, `PatchKeyRing`). Held keys are counted from the ring (`AppServices.CountItemHeld`), so a key that stayed on it after a give kept its door passable to the route planner. The other lines that move an item do the same for a key: `You took`, `You dropped`, `You hid`, a buy and a sell (user asked for get and drop, 2026-10-07; hide, buy and sell follow the same two helpers). The fetchers for a route's gate items count the ring as well (`AppServices.CountPathItemCoverage`); read from the pack alone, a door key that had just been handed over, bought or picked up never arrived, and the detour that fetched it waited out its window.
 - None of the parsing is gated on the realm.
 - The client's own party hand-over of a path item sends the uncounted form, `give <item> to <recipient>` (`PartyPathItemGate`). That form prints `<Player> gives you <item>.` on Paradigm (user's screenshot, 2026-10-07: a relayed `@do give black star key to <recipient>`).
 - `InventoryManager.IsReceivedHandOverLine` tells the unrecognized-line watcher that the receiving lines, item or coins, are read. The giver's Stock coin line is already skipped as an engine reply (`EngineReplyLines`, `You gave %s`).
@@ -5746,7 +5889,7 @@ There is no room to drop amethyst pendant here.
 
 **Client use:**
 - `ItemSourceIndex` reads each award line's keyword from the NPC's menu when the line itself leads with a condition, keeps one giver row per keyword (`gift` is a turn-in, `remind` a free hand-over), and collects the message numbers its conditions print on failure; `GiveRefusalLines` holds their wording (Stock table). `PathItemGiveRouter` asks, re-reads the pack, ends the wait at once on the giver's refusal line or after the give window, does not ask again on the same trip, and lets the walk go on (report `paradigm-20261006-095806`).
-- A hand-started loop that can reach none of its rooms freely plans its approach through such a gate and fetches on the way in, as a go-to does (`LoopRunner.Start`, `AppServices.ArmLoopApproachThroughGates`); the jagged bone key ships ticked **Auto-obtain for path**.
+- A hand-started loop that can reach none of its rooms freely plans its approach through such a gate and fetches on the way in, as a go-to does (`LoopRunner.Start`, `AppServices.LoopApproachFetch`); the jagged bone key ships ticked **Auto-obtain for path**.
 
 ### Gang houses and guard emblems
 *Status: CONFIRMED 2026-08-16 (user)*
@@ -6208,11 +6351,18 @@ How MajorMUD parties form, move, lose and regain members, and how party clients 
 - `PartyManager.OnLeftBehind` → `MemberLeftBehind` → `PartyComebackManager` path C: backtrack, re-invite, then `PartyAilmentTracker.NoteInferredHold` (Held chip + `@wait` pause over the full "If leading, wait only" window) and a `@waiting` telepath the follower answers with `@ok` once nothing holds it (`PartyEssentialHandlers.OnWaiting`).
 - **Client policy** (user, 2026-09-26): gated on *Re-invite lost party members*; only a running walk / loop / Auto-Lair goes back.
 - **Client policy** (user, 2026-09-26): a member left behind within 5 s of their own `@ok` (`PartyEssentialHandlers.OkedWithin`) gets the full wait window after rejoining, and their `@ok` is ignored for it (`NotePause(ignoreOk)`). No `@waiting` is sent in that case.
+- **Client policy** (2026-10-08): a member dropped behind a move the engines didn't make is left to the player, whatever engine is up behind it (`RoomTracker.LastMoveWasManual`). That is a move typed by hand, and equally one sent by a macro, a trigger or a relayed `@do`: each reaches the game the same way and pauses the engines as a typed move does, so a recovery started for it was a walk born paused that set off on Resume, 100 s after the member had been fetched by hand (report `paradigm-20260929-221642`). A member an engine's own step leaves behind is gone back for even when a pause lands with it.
+- **Client policy** (2026-10-08): `<name> started to follow you.` for the member being recovered ends the recovery at any stage, not only once the leader has reached them and re-invited (`PartyComebackManager.OnMemberFollowConfirmed`); the walk back is stopped and the interrupted walk, loop or Auto-Lair is put back (reports `paradigm-20261007-134824`, `paradigm-20260929-221642`).
 
 ### Losing the leader disbands the party
 *Status: CONFIRMED*
 
 - **Losing the leader disbands the whole party, whether the leader disconnects or dies.** There is no grace-window auto-invite for a lost leader. On the leader's own death, the party is gone by the time they respawn in the graveyard.
+- **The followers stay where they were** *([OBSERVED] report `paradigm-20260923-092317`, Paradigm)*: a leader whose link dropped re-entered the realm 26 s later in the room it had dropped in, and both followers were still on that room's `Also here:` line.
+
+**Client use:**
+- `PartyReformCoordinator` snapshots the followers at the drop and, on the first room display back in the game, has `PartyManager.BeginLeaderReconnectReform` and `AutoPartyManager.NoteLeaderReconnectReform` hold movement and re-invite each follower once seen in the room.
+- A loop that was running restarts on the first prompt after the reconnect. That prompt comes with the room display the reform fires on and is read before the display's lines, and a loop started bare sent its first step before the reform's hold went up, leaving the followers behind (report `paradigm-20260923-092317`). With a reform still waiting for its room display, `LoopRunner` starts the loop behind `MovementCoordinator.ReconnectReformGate` and drops that gate once the reform has seen the room, when the reform's own holds are up. The held loop is an ordinary paused run: Stop stops it, and a member's `@comeback` interrupts it. **Client policy:** if no room is displayed within 5 s the gate is dropped anyway.
 
 ### Dropping (0 HP) or instant death removes you from the party
 *Status: CONFIRMED; suicide / instant-death detail CONFIRMED 2026-08-25 (user)*

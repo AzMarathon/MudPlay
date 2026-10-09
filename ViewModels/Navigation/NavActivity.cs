@@ -60,6 +60,7 @@ public static class NavActivity
         (MovementCoordinator.AllyDownGate, "Downed Ally", NavActivityKind.Waiting, true),
         (MovementCoordinator.PartyVitalsGate, "party member hurt", NavActivityKind.Waiting, false),
         (MovementCoordinator.MemberDisconnectGate, "member disconnected", NavActivityKind.Waiting, true),
+        (MovementCoordinator.ReconnectReformGate, "re-forming the party", NavActivityKind.Waiting, false),
         (MovementCoordinator.PartyInviteGate, "waiting on an invite", NavActivityKind.Waiting, true),
         (MovementCoordinator.FollowerGate, "following leader", NavActivityKind.Waiting, false),
         // Auto-engines kill switch off — a queued walk / loop / lair is planned but

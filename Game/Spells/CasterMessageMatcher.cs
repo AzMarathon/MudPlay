@@ -221,6 +221,12 @@ public sealed class CasterMessageMatcher
 
     // Whether the template pins each semantic slot, and whether it carries a number.
     public bool PinsTarget => IndexOfRole(PlaceholderRole.Target) >= 0;
+    // True when some slot of the template can hold the name of whoever the spell
+    // was cast on: a pinned {target}, or a generic {s}. A template made only of the
+    // spell's and the caster's names (You cast {spellname}!) reads the same whoever
+    // the spell lands on, so no line built from it can tell one target from another.
+    public bool CanNameTarget =>
+        IndexOfRole(PlaceholderRole.Target) >= 0 || IndexOfRole(PlaceholderRole.Unknown) >= 0;
     public bool PinsSpell => IndexOfRole(PlaceholderRole.Spell) >= 0;
     public bool PinsSource => IndexOfRole(PlaceholderRole.Source) >= 0;
     public bool HasNumber => _numberGroupIndexes.Length > 0;

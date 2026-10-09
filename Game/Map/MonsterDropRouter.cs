@@ -22,7 +22,8 @@ public readonly record struct MonsterDropSpawn(
 // Division of labour with the give and shop routers. All three react to the
 // same NeedsRegistry.NeedPosted event and are mutually exclusive by precedence:
 // a free deterministic give wins (PathItemGiveRouter), else a shop buy
-// (PathItemShopRouter), else — only when neither covers the item — this hunt.
+// (PathItemShopRouter), else a guaranteed summon or a trade the user agreed to on
+// a route card, else — only when nothing certain covers the item — this hunt.
 // A give / shop that exists but is unreachable stays that router's problem; it
 // isn't re-sourced as a hunt.
 //
@@ -63,7 +64,7 @@ public sealed class MonsterDropRouter
 
     private readonly Func<int, IReadOnlyList<MonsterDropSpawn>> _dropSpawnsForItem;
     private readonly Func<int, bool> _anyShopSells;
-    private readonly Func<int, bool> _deterministicGiveExists;
+    private readonly Func<int, bool> _certainSourceExists;
     private readonly Func<RoomKey?> _currentRoom;
     private readonly Func<RoomKey?> _walkDestination;
     private readonly Func<RoomKey, IReadOnlyDictionary<RoomKey, int>> _distancesFrom;
@@ -84,7 +85,7 @@ public sealed class MonsterDropRouter
     public MonsterDropRouter(
         Func<int, IReadOnlyList<MonsterDropSpawn>> dropSpawnsForItem,
         Func<int, bool> anyShopSells,
-        Func<int, bool> deterministicGiveExists,
+        Func<int, bool> certainSourceExists,
         Func<RoomKey?> currentRoom,
         Func<RoomKey?> walkDestination,
         Func<RoomKey, IReadOnlyDictionary<RoomKey, int>> distancesFrom,
@@ -99,7 +100,7 @@ public sealed class MonsterDropRouter
     {
         ArgumentNullException.ThrowIfNull(dropSpawnsForItem);
         ArgumentNullException.ThrowIfNull(anyShopSells);
-        ArgumentNullException.ThrowIfNull(deterministicGiveExists);
+        ArgumentNullException.ThrowIfNull(certainSourceExists);
         ArgumentNullException.ThrowIfNull(currentRoom);
         ArgumentNullException.ThrowIfNull(walkDestination);
         ArgumentNullException.ThrowIfNull(distancesFrom);
@@ -112,7 +113,7 @@ public sealed class MonsterDropRouter
         ArgumentNullException.ThrowIfNull(post);
         _dropSpawnsForItem = dropSpawnsForItem;
         _anyShopSells = anyShopSells;
-        _deterministicGiveExists = deterministicGiveExists;
+        _certainSourceExists = certainSourceExists;
         _currentRoom = currentRoom;
         _walkDestination = walkDestination;
         _distancesFrom = distancesFrom;
@@ -152,10 +153,11 @@ public sealed class MonsterDropRouter
         if (_currentRoom() is not { } cur) return;
         if (_walkDestination() is not { } dest) return;
 
-        // Shop items are PathItemShopRouter's job, and a free deterministic give
-        // is PathItemGiveRouter's — this router only sources what neither covers.
+        // Shop items are PathItemShopRouter's job, and a give, an agreed trade or a
+        // guaranteed summon is another router's. This one only sources what nothing
+        // certain covers.
         if (_anyShopSells(itemId)) return;
-        if (_deterministicGiveExists(itemId)) return;
+        if (_certainSourceExists(itemId)) return;
 
         if (!TrySelectNearestSpawn(cur, itemId, out MonsterDropSpawn spawn, out int distance))
             return;

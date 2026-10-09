@@ -175,18 +175,53 @@ public sealed partial class SettingsWindowViewModel : ObservableObject, IDisposa
 
     private void ApplyAll()
     {
-        List<string> applied = new();
-        foreach (SettingsSectionViewModel s in Sections)
+        (List<string> applied, _) = ApplyDirty(Sections, holdFlagged: false);
+        LogApplied(applied);
+    }
+
+    private void LogApplied(List<string> applied)
+    {
+        if (applied.Count == 0) return;
+        _log.Info("Settings",
+            $"User saved {applied.Count} section(s) to profile '{_profile.CurrentProfileName ?? "(none)"}': {string.Join(", ", applied)}.");
+    }
+
+    // Apply every dirty section, returning the titles applied. With holdFlagged a
+    // dirty section that has a SaveWarning is left as it is and returned as held:
+    // its "Save anyway?" needs an answer, and there is nobody to give one.
+    internal static (List<string> Applied, List<string> Held) ApplyDirty(
+        IEnumerable<SettingsSectionViewModel> sections, bool holdFlagged)
+    {
+        List<string> applied = new(), held = new();
+        foreach (SettingsSectionViewModel s in sections)
         {
             if (!s.IsDirty) continue;
+            if (holdFlagged && s.SaveWarning is not null)
+            {
+                held.Add(s.Title);
+                continue;
+            }
             s.Apply();
             applied.Add(s.Title);
         }
-        if (applied.Count > 0)
-        {
-            _log.Info("Settings",
-                $"User saved {applied.Count} section(s) to profile '{_profile.CurrentProfileName ?? "(none)"}': {string.Join(", ", applied)}.");
-        }
+        return (applied, held);
+    }
+
+    // The client is going down (an exit, or the updater's restart) with this window
+    // still open. The user never pressed Cancel, so what they changed is saved as OK
+    // would save it. Nothing can be asked on the way out: the save-confirm prompt is
+    // skipped, and a section whose warning needs answering stays unsaved and is
+    // named in the log.
+    public void ApplyPendingForExit()
+    {
+        if (IsCommitted || !AnyDirty) return;
+        _log.Info("Settings", "Closing with unsaved Settings changes — saving them.");
+        (List<string> applied, List<string> held) = ApplyDirty(Sections, holdFlagged: true);
+        LogApplied(applied);
+        if (held.Count > 0)
+            _log.Warn("Settings",
+                $"Not saved on the way out, because it needed a \"Save anyway?\" answer: {string.Join(", ", held)}.");
+        IsCommitted = true;
     }
 
     partial void OnSearchTextChanged(string value) => RebuildVisibleSections();

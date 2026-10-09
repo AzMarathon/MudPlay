@@ -291,6 +291,67 @@ public sealed class PathItemGiveRouterTests
         Assert.Equal(GiverA, r.LastGiverRoom);
     }
 
+    // Report paradigm-20261008-175938: a door key the giver trades for an item of
+    // ours. By the time a trade reaches the router it has been agreed to, so it is
+    // walked to and asked for like any give.
+    private static Harness WithTrader()
+    {
+        var h = new Harness();
+        h.Names[808] = "glowing key";
+        h.Givers[808] = new List<GiveSource>
+        {
+            new(GiverA, "ask sleazy shopkeeper brooch", "sleazy shopkeeper, in trade for your opal brooch",
+                TakesItemId: 811),
+        };
+        h.Dist[(Cur, GiverA)] = 3;
+        h.Dist[(GiverA, Dest)] = 2;
+        return h;
+    }
+
+    [Fact]
+    public void Trade_IsAskedForOnce_AndTheWalkResumesWhenTheKeyLands()
+    {
+        Harness h = WithTrader();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(808));
+        r.OnWalkEvent(Finished(GiverA));
+        Assert.Equal(new[] { "ask sleazy shopkeeper brooch", "i" }, h.Sent.Select(Decode).ToArray());
+
+        h.Carry(808);
+        r.OnInventoryChanged();
+
+        Assert.False(r.DetourActive);
+        Assert.Equal(new[] { GiverA, Dest }, h.Walks);
+        Assert.Equal(2, h.Sent.Count);
+    }
+
+    // A trade the giver doesn't make prints nothing we can read, so the wait runs
+    // its window out. It runs out once: the walk goes on to the door without the
+    // key, and its re-announce of the key doesn't send us back to trade again.
+    [Fact]
+    public void Trade_NotMade_WaitsItsWindowOnce_AndIsNotRetriedOnTheTrip()
+    {
+        Harness h = WithTrader();
+        PathItemGiveRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(808));
+        r.OnWalkEvent(Finished(GiverA));
+
+        r.OnGiveTimeout();
+        Assert.False(r.DetourActive);
+        Assert.Equal(new[] { GiverA, Dest }, h.Walks);
+        Assert.Contains(808, r.Declined);
+
+        r.OnNeedPosted(PathNeed(808));
+        r.OnNeedPosted(PathNeed(808));
+        Assert.False(r.DetourActive);
+        Assert.Equal(2, h.Walks.Count);
+        Assert.Equal(2, h.Sent.Count);
+
+        // The walk fails at the door, and with it the trip is over.
+        r.OnWalkEvent(Failed(Dest));
+        Assert.Empty(r.Declined);
+    }
+
     [Fact]
     public void WalkToGiverFails_ResumesToDestination()
     {

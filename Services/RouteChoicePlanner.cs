@@ -1071,6 +1071,8 @@ public static class RouteChoicePlanner
         RoomExitHint.MultiActionHidden or RoomExitHint.Teleport
             when ExitGateItems.Of(in exit) is { Count: > 0 } gateItems =>
             new RouteRequirement(RouteRequirementKind.CarryItem, gateItems),
+        _ when exit.CastGateItemId > 0 =>
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { exit.CastGateItemId }),
         _ => null,
     };
 
@@ -1174,6 +1176,10 @@ public static class RouteChoicePlanner
         RoomExitHint.MultiActionHidden or RoomExitHint.Teleport
             when ExitGateItems.Of(in exit) is { Count: > 0 } gateItems =>
             new RouteRequirement(RouteRequirementKind.CarryItem, gateItems),
+        // A cast-on-walk exit that lands the crosser on the routed side only with an
+        // item in hand (the golden idol's passage).
+        _ when exit.CastGateItemId > 0 && !filter.HoldsGateItem(exit.CastGateItemId, perMember: false) =>
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { exit.CastGateItemId }),
         // A plain cardinal the filter still blocks is a hazard-room entry: resolve
         // the room's cast-on-enter spell to its any-of counter items.
         _ => HazardRequirement(filter, exit.Target),

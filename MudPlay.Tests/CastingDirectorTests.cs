@@ -4722,6 +4722,191 @@ public sealed class CastingDirectorTests
         Assert.Equal("bles Goldar", h.CastsSent[0]);
     }
 
+    // ----- a caster line that can't name its target (report paradigm-20261008-222838) -----
+
+    private static void FreshRound(PartyBlessHarness h)
+    {
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();   // new round frees the between-round slot
+    }
+
+    [Fact]
+    public void PartyBless_CastLineNamesNoTarget_IsTimedFromTheSend_AndTheNextMemberGetsTheirs()
+    {
+        // angelic halo's caster line is "You cast angelic halo!" whoever it goes on.
+        // Waiting for a line naming the member never armed a timer, so the first
+        // member was cast on every round and the second never was.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddAllMembersSlot("halo");
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+
+        h.Director.Evaluate();
+        Assert.Equal("halo Raijin", Assert.Single(h.CastsSent));
+        h.Confirm("You cast angelic halo!");
+
+        FreshRound(h);
+        h.Director.Evaluate();
+        Assert.Equal("halo Goldar", Assert.Single(h.CastsSent));
+        h.Confirm("You cast angelic halo!");
+
+        FreshRound(h);
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        Assert.Equal(new[] { "goldar", "raijin" },
+            h.Director.SnapshotActiveBuffs().Where(t => t.Short == "halo").Select(t => t.Target).OrderBy(t => t));
+    }
+
+    [Fact]
+    public void PartyBless_NoCasterLineAtAll_IsTimedFromTheSend()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("vlwa", "Raijin");
+        h.BuffInfo["vlwa"] = (string.Empty, 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        Assert.Equal("vlwa Raijin", Assert.Single(h.CastsSent));
+
+        FreshRound(h);
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+
+        Game.Spells.ActiveBuffTimer timer = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("raijin", timer.Target);
+        Assert.Equal(h.Now.AddSeconds(300), timer.Until);
+    }
+
+    [Fact]
+    public void PartyBless_TimedFromTheSend_SaysSoOnTheInfoLog()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("halo", "Raijin");
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+
+        LogEntry entry = Assert.Single(
+            h.Log.Snapshot(),
+            e => e.Severity == LogSeverity.Info && e.Message.Contains("party-buff sent"));
+        Assert.Contains("spell=halo", entry.Message);
+        Assert.Contains("target=Raijin", entry.Message);
+        Assert.Contains("names no target", entry.Message);
+        Assert.Contains("duration=420s", entry.Message);
+    }
+
+    [Fact]
+    public void PartyBless_TimedFromTheSend_ARefusedCast_GivesTheTimerBack()
+    {
+        // No line confirms this cast, so the game's refusal is the only word that
+        // it never went on.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("halo", "Raijin");
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You attempt to cast angelic halo, but fail.", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+        FreshRound(h);
+        h.Director.Evaluate();
+        Assert.Equal("halo Raijin", Assert.Single(h.CastsSent));
+    }
+
+    [Fact]
+    public void PartyBless_TimedFromTheSend_AMemberWeCannotSee_GivesTheTimerBack_AndBacksOff()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("halo", "Raijin");
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+        h.InRoom.Remove("Raijin");           // hiding ⇒ absent from "Also here:"
+
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+        h.Confirm("You do not see Raijin here!");
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+        FreshRound(h);
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);           // backed off, not recast every round
+    }
+
+    [Fact]
+    public void PartyBless_TimedFromTheSend_ALaterCannotSeeLine_LeavesTheRunningTimerAlone()
+    {
+        // Minutes on, "You do not see Raijin here!" answers something else the user
+        // typed. It isn't the reply to the cast, and the buff is still on.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("halo", "Raijin");
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Now = h.Now.AddSeconds(60);
+        h.Confirm("You do not see Raijin here!");
+
+        Assert.Equal("raijin", Assert.Single(h.Director.SnapshotActiveBuffs()).Target);
+    }
+
+    [Fact]
+    public void PartyBless_ALineThatNamesItsTarget_StillWaitsForIt()
+    {
+        // Unchanged for the spells whose line does name the member: no line, no timer.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {spellname} on {target}!", 300);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+
+        h.Confirm("You cast bless on Raijin!");
+        Assert.Equal("raijin", Assert.Single(h.Director.SnapshotActiveBuffs()).Target);
+    }
+
+    [Fact]
+    public void ManualCast_OnAMember_OfASpellWhoseLineNamesNoTarget_TimesThatMember()
+    {
+        using PartyBlessHarness h = new();
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+        h.AddMember("Goldar");
+
+        h.Director.NoteManualBuffCast("halo", "rai");
+
+        Game.Spells.ActiveBuffTimer timer = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal("raijin", timer.Target);
+        Assert.Equal("halo", timer.Short);
+    }
+
+    [Fact]
+    public void ManualCast_OfSuchASpell_OnSomeoneOutsideTheParty_TimesNobody()
+    {
+        using PartyBlessHarness h = new();
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+
+        h.Director.NoteManualBuffCast("halo", "zed");
+
+        Assert.Empty(h.Director.SnapshotActiveBuffs());
+    }
+
     [Fact]
     public void PartyBless_DuringCombatOff_NoCast()
     {

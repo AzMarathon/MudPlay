@@ -186,7 +186,12 @@ public sealed class CastingDirector : IDisposable
     private readonly Dictionary<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> _activeUntil = new();
     // The one outstanding party-buff cast awaiting CasterMessage
     // confirmation. CastCoordinator's cooldown guarantees ≤1 in flight.
-    private (string Short, string Target, long DurationSec, int MarginSec, CasterMessageMatcher Matcher)? _pendingPartyCast;
+    // TimedFromSend marks a cast whose caster line can't name its target: no line
+    // will confirm it, so its timer was armed when it was sent and this entry is
+    // kept only to take that timer back if the game refuses the cast. Matcher is
+    // null when the spell has no caster line to match at all.
+    private (string Short, string Target, long DurationSec, int MarginSec, CasterMessageMatcher? Matcher,
+             bool TimedFromSend, DateTime SentAt)? _pendingPartyCast;
     // A HAND-TYPED single-target buff cast (`gbls fuj`) awaiting its success line. We
     // know only the shorthand the user typed after the code; the caster line names the
     // resolved target in full, which we prefix-match against the shorthand to arm that
@@ -1258,10 +1263,42 @@ public sealed class CastingDirector : IDisposable
         // Single-target hand cast — arm a confirm keyed on the caster line, resolving
         // the full target name off it (prefix-matched to the shorthand). No matcher
         // (unresolvable caster template) → fall back to a self timer so it's not lost.
-        if (CasterMessageMatcher.TryCreate(info.Caster) is { } matcher)
+        if (CasterMessageMatcher.TryCreate(info.Caster) is { CanNameTarget: true } matcher)
             _pendingManualCast = (code, prefix, info.DurationSec, PartyBuffMargin(code), matcher);
         else
+            TimeManualCastFromSend(code, prefix, info.DurationSec);
+    }
+
+    // A hand-typed single-target cast of a spell whose caster line can't name its
+    // target: nothing will resolve the name we typed, so it is resolved against the
+    // party now and the timer runs from the send. Ourselves → our own timer; one
+    // member the shorthand fits → theirs; nobody, or more than one → no timer, since
+    // the Buff Watchdog has no row to show it on.
+    private void TimeManualCastFromSend(string code, string prefix, long durationSec)
+    {
+        if (SelfGivenLower().StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && SelfGivenLower().Length > 0)
+        {
             StartSelfBuffTimer(code, SelfBuffMargin(code));
+            return;
+        }
+        if (_party is null) return;
+        string? given = null;
+        foreach (PartyMember m in _party.Members)
+        {
+            if (m.IsSelf) continue;
+            string name = GivenName(m.Name);
+            if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+            if (given is not null) return;   // the shorthand fits two members
+            given = name.ToLowerInvariant();
+        }
+        if (given is null) return;
+
+        int margin = PartyBuffMargin(code);
+        _activeUntil[(given, code)] = (_now().AddSeconds(durationSec), margin, (int)durationSec);
+        NoteSuccessfulCast(code, given);
+        _log?.Info(LogCategory,
+            $"manual party-buff sent spell={code} target={given} — its cast line names no target, so the timer runs "
+            + $"from the send: duration={durationSec}s, recast in {Math.Max(0L, durationSec - margin)}s.");
     }
 
     // Recast lead for a single-target hand cast — the matching unified-list slot's
@@ -1341,6 +1378,19 @@ public sealed class CastingDirector : IDisposable
         if (reason == CastFailureReason.NoTargets) return;
         if (reason == CastFailureReason.AlreadyCastThisRound)
             _betweenRoundSlotUsedAt = _now();
+        // A party buff timed from its send (its caster line names no target) has no
+        // landing to wait for, so the game's refusal is the only word that it never
+        // went on: take the timer back. Same matching and staleness rule as the
+        // self-buff marker below, for the same reason.
+        if (_pendingPartyCast is { TimedFromSend: true } sent
+            && string.Equals(spell, sent.Short, StringComparison.OrdinalIgnoreCase)
+            && _now() - sent.SentAt <= PendingSelfBuffRejectionWindow)
+        {
+            _activeUntil.Remove((sent.Target.Trim().ToLowerInvariant(), sent.Short));
+            _pendingPartyCast = null;
+            _log?.Combat(LogCategory,
+                $"party-buff {sent.Short} on {sent.Target} did not cast (reason={reason}) — dropped the timer armed on its send");
+        }
         if (_pendingSelfBuffShort is not { } shortCode) return;
         if (!string.Equals(spell, shortCode, StringComparison.OrdinalIgnoreCase)) return;
         // Only OUR just-sent recast draws a rejection worth acting on. A rejection
@@ -1578,6 +1628,14 @@ public sealed class CastingDirector : IDisposable
     {
         if (_pendingManualCast is { } man) ConfirmManualCast(man, line.Text);
         if (_pendingPartyCast is not { } p) return;
+        // A cast timed from its send has nothing to wait for, and is kept only for
+        // the game's answer to it. Past that, a "do not see" line is about something
+        // else the user did, and must not take the member's running timer away.
+        if (p.TimedFromSend && _now() - p.SentAt > PendingSelfBuffRejectionWindow)
+        {
+            _pendingPartyCast = null;
+            return;
+        }
 
         // "You do not see <target> here!" — the member is in the party (so in the room)
         // but HIDING, so a single-target cast can't land and the confirm we were waiting
@@ -1590,11 +1648,12 @@ public sealed class CastingDirector : IDisposable
             _hiddenTargets.Add(p.Target.Trim().ToLowerInvariant());
             _log?.Info(LogCategory,
                 $"party-buff target {p.Target} is hidden (\"do not see … here\") — backing off until we move or they reappear.");
+            if (p.TimedFromSend) _activeUntil.Remove((p.Target.Trim().ToLowerInvariant(), p.Short));
             _pendingPartyCast = null;
             return;
         }
 
-        if (!p.Matcher.ConfirmsTarget(line.Text, p.Target)) return;
+        if (p.Matcher?.ConfirmsTarget(line.Text, p.Target) != true) return;
 
         string key = p.Target.Trim().ToLowerInvariant();
         _activeUntil[(key, p.Short)] = (_now().AddSeconds(p.DurationSec), p.MarginSec, (int)p.DurationSec);
@@ -2755,8 +2814,23 @@ public sealed class CastingDirector : IDisposable
         // observer just armed for the same send (engine casts flow through it too).
         _pendingManualCast = null;
         if (_buffInfoByShort?.Invoke(shortCode) is not { } info) return;
-        if (CasterMessageMatcher.TryCreate(info.Caster) is not { } matcher) return;
-        _pendingPartyCast = (shortCode, target, info.DurationSec, marginSec, matcher);
+        CasterMessageMatcher? matcher = CasterMessageMatcher.TryCreate(info.Caster);
+        // A caster line that can't name who the spell went on (You cast {spellname}!,
+        // a fixed line, or none) will never confirm this member. Waiting for one left
+        // the timer unarmed for good, and the buff was cast on the same member every
+        // round while the rest of the party went without (report
+        // paradigm-20261008-222838). So the timer runs from the send, as a self-buff's
+        // does, and is taken back on a refusal (OnCastFailed) or a member we can't see.
+        bool timedFromSend = matcher is not { CanNameTarget: true };
+        _pendingPartyCast = (shortCode, target, info.DurationSec, marginSec, matcher, timedFromSend, _now());
+        if (!timedFromSend) return;
+
+        string key = target.Trim().ToLowerInvariant();
+        _activeUntil[(key, shortCode)] = (_now().AddSeconds(info.DurationSec), marginSec, (int)info.DurationSec);
+        NoteSuccessfulCast(shortCode, key);
+        _log?.Info(LogCategory,
+            $"party-buff sent spell={shortCode} target={target} — its cast line names no target, so the timer runs "
+            + $"from the send: duration={info.DurationSec}s, recast in {Math.Max(0L, info.DurationSec - marginSec)}s.");
     }
 
     // ----- Debuffing — sourced from the combat engine -----------------

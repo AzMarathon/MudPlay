@@ -211,9 +211,11 @@ public static class RouteChoicePrompt
                 // rooms if item needed" off it stays shut, so this path's own
                 // "arming acquisition" promise armed nothing. Forcing the ids opens
                 // it for this walk, which is what the flags asked for.
-                if (plan.Choice is { } sole
-                    && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
-                    services.ForcePathObtain(soleItems);
+                // Items only: no card was shown, so no trade rides on this walk.
+                JourneyFetch? soleFetch = plan.Choice is { } sole
+                    && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems
+                    ? services.NewJourneyFetch(soleItems)
+                    : null;
                 // The walk has to be the route the planner settled on: the items
                 // just forced were worked out for that route, which was planned for
                 // the fewest traps and may teleport. So it is given the route and
@@ -221,7 +223,7 @@ public static class RouteChoicePrompt
                 // was agreed to: it walks into no hazard room uncountered.
                 CommitWalk(services, destination, gated: true, avoidTraps: true, stopForBossRooms: stopsForBossRooms,
                     pickedRoute: plan.Choice?.GatedPath, closedGates: plan.Choice?.ClosedGateItems,
-                    shownOnCard: false);
+                    shownOnCard: false, fetch: soleFetch);
                 return true;
             default:
                 return await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
@@ -272,8 +274,11 @@ public static class RouteChoicePrompt
     // each need the same two full-graph pathfinds — the plain default route (gates +
     // avoids on, teleports allowed) and the avoids-lifted route — so compute each ONCE
     // behind a memoized closure (caches the result, null included) rather than
-    // re-running per fork. Reads the graph / movement filter and settings only; does
-    // no UI or logging, so it's safe to call from a background thread.
+    // re-running per fork. Reads the graph, the movement filter, settings, the
+    // inventory snapshot (taken under the inventory's lock) and the per-set indexes
+    // of where items come from (givers, shop stock, monster drops), which are
+    // rebuilt only when the game-data set is swapped. It does no UI or logging, so
+    // it's safe to call from a background thread.
     private static RoutePlan PlanRouteChoice(
         AppServices services, RoomKey src, RoomKey destination, IReadOnlySet<RoomKey> bossStopRooms)
     {
@@ -418,7 +423,7 @@ public static class RouteChoicePrompt
                     $"route pick {src} -> {destination}: sole route needs {reqSummary}, all auto-obtainable "
                     + $"— arming acquisition and walking, no prompt{shortcutNote}");
             return new(RoutePlanKind.ItemGate, choice,
-                $"route pick {src} -> {destination}: sole route needs {reqSummary} (not auto-obtainable); showing picker{shortcutNote}{avoidAltNote}");
+                $"route pick {src} -> {destination}: sole route needs {reqSummary} (not fetched unasked: {services.GatePickLogNote(choice.Requirements)}); showing picker{shortcutNote}{avoidAltNote}");
         }
 
         return new(RoutePlanKind.ItemGate, choice,
@@ -543,9 +548,14 @@ public static class RouteChoicePrompt
         //   • resolvedCounter: the specific counter the run resolved per hazard
         //     requirement (item + "buy at Pier" / "ask X" / …), so the clause names
         //     that one, not the whole any-of set.
-        Func<int, string?> giveName = itemId => services.PathItemGiveName(itemId, source, destination);
-        Func<int, string?> shopName = itemId => services.PathItemShopName(itemId, source, destination);
-        Func<int, string?> dropName = itemId => services.PathItemDropName(itemId, source);
+        // Each of the three says what this card's main pick itself does about the
+        // item (AppServices.PlanGatePick), so a pick that fetches an unflagged item
+        // names its source and one that only walks somewhere and stops names none.
+        // Worked out below, once it is known which of those this pick is.
+        GatePickSources? gatePick = null;
+        Func<int, string?> giveName = itemId => gatePick?.GiverName(itemId);
+        Func<int, string?> shopName = itemId => gatePick?.BuyOrTradeNote(itemId);
+        Func<int, string?> dropName = itemId => gatePick?.DropperName(itemId);
         Func<RouteRequirement, (int ItemId, string Source)?> resolvedCounter =
             req => resolvedCounters.TryGetValue(req, out (int ItemId, string Source) v) ? v : ((int, string)?)null;
 
@@ -591,6 +601,10 @@ public static class RouteChoicePrompt
 
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
+        gatePick = services.PlanGatePick(
+            choice.Requirements, source, destination,
+            pickFetches: choice.Kind == RouteChoiceKind.ItemGate && hazardEdge is null && buyPauseRoom is null,
+            closedGates: choice.ClosedGateItems);
         if (calcVm is not null && calcDialogTask is not null)
         {
             // Idle path: the "Calculating…" window is already open and painted — fill
@@ -815,17 +829,19 @@ public static class RouteChoicePrompt
                 foreach (int id in floorCounters)
                     if (services.ItemNames.GetName(id) is { Length: > 0 } n)
                         services.SendGameCommand($"get {n}");
-                if (detourCounters.Count > 0)
-                    services.ForcePathObtain(detourCounters);
-                // The route's ITEM gates need the same force, for the same reason:
-                // the pick is the consent. Only the hazard counters were being
-                // forced, so an item-gated pick armed nothing unless the global
-                // search-if-needed preference happened to be on — and the walk then
-                // crossed a gate it had made no arrangements for.
-                if (services.SourceableGateItems(choice.Requirements) is { Count: > 0 } gateItems)
-                    services.ForcePathObtain(gateItems);
+                // The route's ITEM gates need the same force as its hazard counters,
+                // for the same reason: the pick is the consent. Only the hazard
+                // counters were being forced, so an item-gated pick armed nothing
+                // unless the global search-if-needed preference happened to be on —
+                // and the walk then crossed a gate it had made no arrangements for.
+                //
+                // Both go in one order, which the walk carries on its journey. A
+                // trade hands an item of the user's over: picking this card agrees to
+                // the trades it named and to no others, for this journey alone.
                 CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute,
-                    pickedRoute: choice.GatedPath, closedGates: choice.ClosedGateItems);
+                    pickedRoute: choice.GatedPath, closedGates: choice.ClosedGateItems,
+                    fetch: services.NewJourneyFetch(
+                        detourCounters.Concat(services.SourceableGateItems(choice.Requirements)), gatePick.Trades));
                 break;
             case RouteChoiceResult.GatedNoAcquire:
                 // "Send it": walk the gated route but don't arm acquisition — the
@@ -844,14 +860,13 @@ public static class RouteChoicePrompt
                 // buy and the walk crosses. With auto-search off (or if nothing turns up
                 // en route) the shop-buy is the last resort. Auto-search is the driver:
                 // toggling it off mid-route stops the `sea` and leaves the buy running.
-                if (hazardCounterIds.Count > 0)
-                    services.ForcePathObtain(hazardCounterIds);
                 // Picking Search asserts intent to search, so turn auto-search on for
                 // this leg if it's off — the card always actually searches. It flips
                 // back off once the counter lands (found or bought) or the walk ends.
                 services.BeginRouteSearchAutoSearch();
                 CommitWalk(services, destination, gated: true, avoidTraps: !choice.HasFreeRoute,
-                    pickedRoute: choice.GatedPath, closedGates: choice.ClosedGateItems);
+                    pickedRoute: choice.GatedPath, closedGates: choice.ClosedGateItems,
+                    fetch: services.NewJourneyFetch(hazardCounterIds));
                 break;
             case RouteChoiceResult.AvoidOverrideAlt:
                 // "Route through my avoided rooms" — the extra card: override the avoid
@@ -958,7 +973,9 @@ public static class RouteChoicePrompt
         // False for a route the walk must match but no card showed (the sole route
         // whose items are all fetched for it): planned like a picked one, with no
         // hazard room agreed to.
-        bool shownOnCard = true)
+        bool shownOnCard = true,
+        // What the walk is to fetch on its way, and the trades its card named.
+        JourneyFetch? fetch = null)
     {
         IReadOnlyList<string> landings = TeleportsOn(services, pickedRoute, throughGates: gated, closedGates);
         string? teleports = RouteChoicePlanner.DescribeTeleports(landings);
@@ -1002,7 +1019,8 @@ public static class RouteChoicePrompt
             preferTeleportFree: preferTeleportFree,
             pickedRoute: shown,
             keepGatesClosedFor: gated ? closedGates : null,
-            agreedHazardRooms: agreedHazards);
+            agreedHazardRooms: agreedHazards,
+            fetch: fetch);
     }
 
     // Where a card's route teleports, read with the gates stood down that its walk
