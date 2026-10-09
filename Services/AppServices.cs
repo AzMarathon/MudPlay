@@ -5397,6 +5397,8 @@ public sealed class AppServices
         // it had left.
         RoundDamage.SetMonsterHp(MonsterHpEstimates.TargetOf, MonsterHpEstimates.RoomMonsters,
             capAtHp: () => ReadSection<Models.Profile.CombatSettings>(Profile.Current, "Combat").CapRoundTotalsAtMonsterHp);
+        RoundDamage.SetDamageShieldCheck(number =>
+            MonsterCatalog.Get(number) is { } monster && monster.Abilities.Any(a => a.Code == 137));
         RoundDamage.Attributed += line =>
         {
             if (line.Foes > 0) MonsterHpEstimates.NoteAreaDamage(line.Sides.Amount);
