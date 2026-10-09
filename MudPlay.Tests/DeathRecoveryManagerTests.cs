@@ -23,7 +23,7 @@ namespace MudPlay.Tests;
 /// party-pickup flow is a separate concern owned by
 /// <see cref="MudPlay.Game.Remote.PartyComebackManager"/>.)
 /// </summary>
-public sealed class DeathRecoveryManagerTests
+public sealed partial class DeathRecoveryManagerTests
 {
     private sealed class GraphHarness : IDisposable
     {
@@ -63,17 +63,24 @@ public sealed class DeathRecoveryManagerTests
             ]
             """;
 
-        // Stock spill-sweep wiring. Graph is the room graph the sweep plans from;
-        // Walker (when asked for) is the real walker, its moves landing in Sent beside
-        // recovery's own commands; Held stands in for a movement gate; Stays and
-        // StashRooms back the two probes.
+        // Stock spill-sweep wiring, as the app does it. Graph is the room graph the
+        // sweep plans from. Walker (when asked for) is the real walker, its moves
+        // landing in Sent beside recovery's own commands, and Controller the real
+        // movement controller with the sweep listed as a solver. Movement holds and
+        // the hold on sends are read off the real Coordinator's gates. OtherEngine
+        // stands in for a loop / Auto-Lair / errand / following; AutoSearches and
+        // Searched for auto-search; Stays and StashRooms back the last two probes.
         public RoomGraphManager Graph { get; }
         public AutoWalkManager? Walker { get; }
+        public MovementController? Controller { get; }
         public MovementCoordinator Coordinator { get; } = new();
         public AvoidFilter Filter { get; } = new();
-        public bool Held { get; set; }
+        public bool OtherEngine { get; set; }
+        public bool AutoSearches { get; set; }
+        public List<RoomKey> Searched { get; } = new();
         public HashSet<string> Stays { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<RoomKey> StashRooms { get; } = new();
+        private readonly List<IDisposable> _engines = new();
 
         public GraphHarness(string characterName = "Ermias", string graphJson = GraphJson, bool withWalker = false)
         {
@@ -104,7 +111,16 @@ public sealed class DeathRecoveryManagerTests
                 () => GateHeld = false,
                 name => Ac.TryGetValue(name, out int v) ? v : 0);
             Recovery.SetRealmProbe(() => Paradigm);
-            Recovery.AttachSpillSweep(graph.GetRoom, () => Held, StashRooms.Contains);
+            Recovery.AttachSpillSweep(
+                roomLookup: graph.GetRoom,
+                movementHeld: () => Coordinator.IsPaused,
+                isStashRoom: StashRooms.Contains,
+                otherEngineDrives: () => OtherEngine,
+                sendsHeld: () => Coordinator.IsGateAsserted(MovementCoordinator.HealthRecoveryGate)
+                    || Coordinator.IsGateAsserted(MovementCoordinator.ManaRecoveryGate)
+                    || Coordinator.IsGateAsserted(MovementCoordinator.UserGate),
+                autoSearchesRooms: () => AutoSearches,
+                noteRoomSearched: Searched.Add);
             Recovery.SetStaysOnDeathProbe(Stays.Contains);
             // As the app wires it, after recovery's own subscription: the floor list
             // belongs to the room just left, so a genuine room change empties it.
@@ -115,9 +131,23 @@ public sealed class DeathRecoveryManagerTests
             };
             if (withWalker)
             {
-                Walker = new AutoWalkManager(graph, new BfsMapper(graph), Tracker, Coordinator, Filter);
+                BfsMapper bfs = new(graph);
+                Walker = new AutoWalkManager(graph, bfs, Tracker, Coordinator, Filter);
                 Walker.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
                 Recovery.AttachWalker(Walker);
+                LoopRunner loops = new(Tracker, Coordinator, graph: graph, bfs: bfs);
+                loops.SetWireSender(_ => { });
+                LairTimerStore timers = new(cache, graph, Tracker);
+                AutoLairManager autoLair = new(Walker, Tracker, graph, bfs, timers, log: null, coordinator: Coordinator);
+                Controller = new MovementController(Walker, loops, autoLair, Coordinator);
+                Controller.AddSolver(
+                    active: () => Recovery.SpillSweepActive,
+                    held: () => Recovery.SpillSweepHeld,
+                    stop: Recovery.StopSpillSweep);
+                Recovery.SpillSweepStateChanged += Controller.NoteSolverStateChanged;
+                _engines.Add(Controller);
+                _engines.Add(autoLair);
+                _engines.Add(timers);
             }
 
             Profile.LoadBlank();
@@ -142,6 +172,7 @@ public sealed class DeathRecoveryManagerTests
 
         public void Dispose()
         {
+            foreach (IDisposable engine in _engines) engine.Dispose();
             Recovery.Dispose();
             Ground.Dispose();
             Watcher.Dispose();
@@ -605,8 +636,8 @@ public sealed class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
 
-        h.EnterGates();
-        h.FeedSurvey("a platinum mace, a plate mail, and a torch");   // our pile on the floor
+        h.FeedSurvey("a platinum mace, a plate mail, and a torch");   // our pile on the floor,
+        h.EnterGates();                                                // read before the room confirms
 
         // `get` each present pile item (article-insensitive) — NOT `recover corpse`.
         Assert.Contains("get platinum mace", h.Sent);
@@ -639,8 +670,8 @@ public sealed class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
 
-        h.EnterGates();
         h.FeedSurvey("an iron sword");       // only the sword is here; the helm spilled
+        h.EnterGates();
 
         Assert.Contains("get iron sword", h.Sent);
         Assert.DoesNotContain("get steel helm", h.Sent);   // absent → never `get`-spammed
@@ -656,8 +687,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("3 torch");
+        h.EnterGates();
 
         // Stock has no batched `get N item` — send bare `get torch`, once per unit.
         Assert.Equal(3, h.Sent.Count(s => s == "get torch"));
@@ -678,8 +709,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("a torch");
+        h.EnterGates();
         Assert.Contains("get torch", h.Sent);
 
         // The get confirmation is redrawn onto the prompt row (IsPromptLine=true) —
@@ -701,8 +732,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("an iron sword and 1500 gold");   // sword + coins on the floor
+        h.EnterGates();
 
         Assert.Contains("get iron sword", h.Sent);
         Assert.DoesNotContain(h.Sent, s => s.Contains("gold"));   // coins never `get`-ed
@@ -724,8 +755,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("an iron sword");         // helm spilled to a neighbour, sword is here
+        h.EnterGates();
         h.Recovery.FeedTestLine("You took an iron sword.");
         h.Sent.Clear();
         h.Heartbeat();                         // settle the grab (StockSettleTicks = 2)
@@ -802,8 +833,8 @@ public sealed class DeathRecoveryManagerTests
 
         Assert.Equal(new[] { "steel helm" }, h.Latest.ReturnedItems);
 
-        h.EnterGates();
         h.FeedSurvey("an iron sword");
+        h.EnterGates();
         Assert.DoesNotContain("get steel helm", h.Sent);
         h.Recovery.FeedTestLine("You took an iron sword.");
 
@@ -838,11 +869,51 @@ public sealed class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
 
+        h.FeedSurvey("an iron sword and a signet ring");   // someone else's ring on the floor
         h.EnterGates();
         Assert.Equal(new[] { "iron sword" }, h.Latest.UnrecoveredItems);
-        h.FeedSurvey("an iron sword and a signet ring");   // someone else's ring on the floor
         Assert.DoesNotContain("get signet ring", h.Sent);
         h.Recovery.FeedTestLine("You took an iron sword.");
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Contains("wear signet ring", h.Sent);
+    }
+
+    [Fact]
+    public void Stock_ReturnedUnit_IsStruckOnce_NotAgainOnEveryReEntry()
+    {
+        // Three torches, one of them gone for good. Two are out; get one and one is.
+        // Coming back must not strike the returned torch a second time and close the
+        // pile with a torch still on a floor somewhere.
+        using GraphHarness h = new() { Paradigm = false };
+        h.EnterGates();
+        h.Snapshot = SnapWith(Array.Empty<EquippedItem>(), new[] { "3 torch" });
+        h.Recovery.FeedTestLine("Your torch has returned to its rightful place.");
+        h.Tracker.NoteDeath(2, "You have 2 lives left.");
+        h.Recovery.AutoRecover = true;
+
+        h.FeedSurvey("a torch");
+        h.EnterGates();
+        Assert.Equal(new[] { "torch", "torch" }, h.Latest.UnrecoveredItems);
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.Equal(new[] { "torch" }, h.Latest.UnrecoveredItems);
+
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.EnterGates();
+
+        Assert.Equal(new[] { "torch" }, h.Latest.UnrecoveredItems);
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_PileOfNothingButWhatStays_IsDone_AndTheGearGoesBackOn()
+    {
+        using GraphHarness h = new() { Paradigm = false };
+        h.Stays.Add("signet ring");
+        Die(h, new[] { new EquippedItem("signet ring", "Finger") }, Array.Empty<string>());
+        h.Recovery.AutoEquip = true;
+
+        h.EnterGates();
 
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
         Assert.Contains("wear signet ring", h.Sent);
@@ -856,8 +927,8 @@ public sealed class DeathRecoveryManagerTests
             new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
             Array.Empty<string>());
         h.Recovery.AutoRecover = true;
-        h.EnterGates();
         h.FeedSurvey("an iron sword");
+        h.EnterGates();
         h.Recovery.FeedTestLine("You took an iron sword.");
         Assert.Equal(new[] { "steel helm" }, h.Latest.UnrecoveredItems);
 
@@ -880,503 +951,5 @@ public sealed class DeathRecoveryManagerTests
         h.EnterGates();
 
         Assert.Contains("get torch", h.Sent);
-    }
-
-    // ----- Stock spill sweep ------------------------------------------
-
-    // A room filter that only avoids rooms: the walker won't plan into one.
-    private sealed class AvoidFilter : IRoomFilter
-    {
-        public HashSet<RoomKey> Avoided { get; } = new();
-        public bool IsAvoided(RoomKey key) => Avoided.Contains(key);
-    }
-
-    //        4
-    //        │
-    //        2
-    //        │
-    //        1 ── 3        1 is the death room.
-    //
-    // The engine's spill order from 1 is 2, 4, 3: north and on from there first, and
-    // 3 only once the walk has come back for the east exit.
-    private const string CrossJson = """
-        [
-          { "Map Number": 1, "Room Number": 1, "Name": "Crossing", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/2", "S": "0", "E": "1/3", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 2, "Name": "Lane", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/4", "S": "1/1", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 3, "Name": "Yard", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "0", "E": "0", "W": "1/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 4, "Name": "Dead End", "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "1/2", "E": "0", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
-        ]
-        """;
-
-    // The death room with ten ways out, each to a room with one more beyond it: twenty
-    // rooms within reach of a spill, more than one sweep walks to.
-    private static string StarJson()
-    {
-        string[] cols = { "N", "S", "E", "W", "NE", "NW", "SE", "SW", "U", "D" };
-        string[] back = { "S", "N", "W", "E", "SW", "SE", "NW", "NE", "D", "U" };
-        string Row(int room, Dictionary<string, string> exits) =>
-            $"{{ \"Map Number\": 1, \"Room Number\": {room}, \"Name\": \"Room {room}\", \"Light\": 0, \"Shop\": 0, "
-            + "\"Lair\": \"\", \"Delay\": 0, "
-            + string.Join(", ", cols.Select(c => $"\"{c}\": \"{exits.GetValueOrDefault(c, "0")}\"")) + " }";
-        List<string> rows = new() { Row(1, cols.Select((c, i) => (c, i)).ToDictionary(x => x.c, x => $"1/{11 + x.i}")) };
-        for (int i = 0; i < 10; i++)
-        {
-            rows.Add(Row(11 + i, new() { [back[i]] = "1/1", [cols[i]] = $"1/{31 + i}" }));
-            rows.Add(Row(31 + i, new() { [back[i]] = $"1/{11 + i}" }));
-        }
-        return "[" + string.Join(",\n", rows) + "]";
-    }
-
-    // Plays the game's side of a Stock recovery over the harness and the real walker:
-    // each command the client sends is answered as the game would answer it. A move
-    // shows the room it leads to (floor survey first, then the exits line that
-    // confirms it), a `look <dir>` shows the neighbour's floor, a `get` of something
-    // on the floor confirms it, and a `sea` moves the room's hidden items into view.
-    private sealed class SpillWorld : IDisposable
-    {
-        private static readonly Dictionary<string, Direction> Moves = new()
-        {
-            ["n"] = Direction.N, ["s"] = Direction.S, ["e"] = Direction.E, ["w"] = Direction.W,
-            ["ne"] = Direction.NE, ["nw"] = Direction.NW, ["se"] = Direction.SE, ["sw"] = Direction.SW,
-            ["u"] = Direction.U, ["d"] = Direction.D,
-        };
-
-        private readonly Dictionary<RoomKey, List<string>> _floor = new();
-        private readonly Dictionary<RoomKey, List<string>> _hidden = new();
-        private int _answered;
-
-        public GraphHarness H { get; }
-        public RoomKey Here { get; private set; }
-        // A look shows nothing, as through a closed door or past a hidden exit.
-        public bool DoorsClosed { get; set; }
-        // Rooms the game refuses every move into.
-        public HashSet<int> Barred { get; } = new();
-        // Every room walked into by a move the client sent, in order.
-        public List<int> Walked { get; } = new();
-
-        public SpillWorld(string graphJson)
-        {
-            H = new GraphHarness(graphJson: graphJson, withWalker: true) { Paradigm = false };
-        }
-
-        public void Put(int room, params string[] items) => _floor[new RoomKey(1, room)] = items.ToList();
-        public void Hide(int room, params string[] items) => _hidden[new RoomKey(1, room)] = items.ToList();
-
-        // Stand in a room without a command having been sent (the walk before the
-        // death, and being back in the death room for Recover Now).
-        public void Enter(int room)
-        {
-            Here = new RoomKey(1, room);
-            ShowRoom();
-        }
-
-        public void Die(EquippedItem[] worn, string[] carried)
-        {
-            H.Snapshot = SnapWith(worn, carried);
-            H.Tracker.NoteDeath(2, "You have 2 lives left.");
-        }
-
-        // Recover Now from inside the death room, then the given number of heartbeats.
-        public void RecoverNow(int beats)
-        {
-            _answered = H.Sent.Count;
-            Assert.True(H.Recovery.RecoverNow(H.Latest));
-            Run(beats);
-        }
-
-        public void Run(int beats)
-        {
-            for (int i = 0; i < beats; i++)
-            {
-                Answer();
-                H.Heartbeat();
-                Answer();
-            }
-        }
-
-        // Commands sent since the given mark, for asserting on one stretch of a run.
-        public IEnumerable<string> SentSince(int mark) => H.Sent.Skip(mark);
-
-        private void Answer()
-        {
-            while (_answered < H.Sent.Count)
-            {
-                string cmd = H.Sent[_answered++];
-                if (Moves.TryGetValue(cmd, out Direction dir))
-                {
-                    RoomKey target = H.Graph.GetRoom(Here)!.Exits[dir].Target;
-                    if (Barred.Contains(target.Room))
-                    {
-                        H.Tracker.NoteMoveBlocked();
-                        continue;
-                    }
-                    Here = target;
-                    Walked.Add(Here.Room);
-                    ShowRoom();
-                }
-                else if (cmd == "look")
-                {
-                    Survey(Here);
-                }
-                else if (cmd.StartsWith("look ", StringComparison.Ordinal)
-                    && DirectionExtensions.TryFromLongName(cmd[5..], out Direction peek))
-                {
-                    if (!DoorsClosed) Survey(H.Graph.GetRoom(Here)!.Exits[peek].Target);
-                }
-                else if (cmd.StartsWith("get ", StringComparison.Ordinal))
-                {
-                    if (_floor.TryGetValue(Here, out List<string>? floor) && floor.Remove(cmd[4..]))
-                        H.Recovery.FeedTestLine($"You took {cmd[4..]}.");
-                }
-                else if (cmd == "sea" && _hidden.Remove(Here, out List<string>? revealed))
-                {
-                    if (!_floor.TryGetValue(Here, out List<string>? floor)) _floor[Here] = floor = new List<string>();
-                    floor.AddRange(revealed);
-                    Survey(Here);
-                }
-            }
-        }
-
-        private void ShowRoom()
-        {
-            Room room = H.Graph.GetRoom(Here)!;
-            Survey(Here);
-            H.Tracker.NoteRoomObserved(new RoomObservation(room.Name, new HashSet<Direction>(room.Exits.Keys)));
-        }
-
-        private void Survey(RoomKey room)
-        {
-            if (_floor.TryGetValue(room, out List<string>? items) && items.Count > 0)
-                H.FeedSurvey(string.Join(", ", items));
-        }
-
-        public void Dispose() => H.Dispose();
-    }
-
-    private static EquippedItem[] Worn(params string[] names) =>
-        names.Select((n, i) => new EquippedItem(n, i == 0 ? "Weapon Hand" : "Head")).ToArray();
-
-    [Fact]
-    public void Sweep_WalksTheEnginesOrder_GetsWhatItFinds_AndComesBack()
-    {
-        // Every way out of the death room is shut, so the looks show nothing and the
-        // order is the engine's alone. The walker opens what it has to on the way.
-        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
-        w.Enter(1);
-        w.Die(Worn("iron sword", "steel helm"), new[] { "torch", "rope" });
-        w.Put(1, "iron sword");
-        w.Put(2, "steel helm");
-        w.Put(4, "torch");
-        w.Put(3, "rope");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 40);
-
-        // North and on from there before the east exit is come back for.
-        Assert.Equal(new[] { 2, 4, 2, 1, 3, 1 }, w.Walked.ToArray());
-        Assert.Contains("get steel helm", w.H.Sent);
-        Assert.Contains("get torch", w.H.Sent);
-        Assert.Contains("get rope", w.H.Sent);
-        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
-        Assert.Equal(new RoomKey(1, 1), w.Here);   // back where recovery started
-    }
-
-    [Fact]
-    public void Sweep_PeeksTheDeathRoomsExitsInTheEnginesOrder_BeforeItWalks()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-        w.Put(3, "rope");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 40);
-
-        List<string> looks = w.H.Sent.Where(s => s.StartsWith("look ")).ToList();
-        Assert.Equal(new[] { "look north", "look east" }, looks.ToArray());
-        // The look east showed the rope, so that room is walked to first, not north.
-        Assert.Equal(new[] { 3, 1 }, w.Walked.ToArray());
-        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
-    }
-
-    [Fact]
-    public void Sweep_StopsAsSoonAsNothingIsMissing()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword", "steel helm"), Array.Empty<string>());
-        w.Put(1, "iron sword");
-        w.Put(2, "steel helm");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 40);
-
-        Assert.Equal(new[] { 2, 1 }, w.Walked.ToArray());   // never on to 4 or 3
-        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
-    }
-
-    [Fact]
-    public void Sweep_RoomTheWalkerCannotReach_IsSkipped()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.H.Filter.Avoided.Add(new RoomKey(1, 2));   // and 4 lies beyond it
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 40);
-
-        Assert.Equal(new[] { 3, 1 }, w.Walked.ToArray());
-        Assert.Equal(DeathRecoveryStatus.Partial, w.H.Latest.Status);
-        Assert.Equal(new[] { "rope" }, w.H.Latest.UnrecoveredItems);
-        Assert.Contains("every room in the plan was tried", w.H.Latest.RecoveryMessage);
-    }
-
-    [Fact]
-    public void Sweep_RoomTheGameWontLetUsInto_IsGivenUpOn_AndTheRestGoesOn()
-    {
-        // The walker plans a route to 2 and the game refuses the step (a door it
-        // can't open, a trap it won't cross). That stop and the one beyond it are
-        // given up on, and the sweep goes on to the next.
-        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
-        w.Barred.Add(2);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-        w.Put(3, "rope");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 120);
-
-        Assert.Equal(new[] { 3, 1 }, w.Walked.ToArray());
-        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
-    }
-
-    [Fact]
-    public void Sweep_WithItemsStillMissing_SearchesTheTrail_DeathRoomFirst()
-    {
-        // When no floor nearby had room the engine hides the item in a room walked
-        // before the death, starting with the death room itself. Only a search shows
-        // it, and each item is found on its own roll, so a room is searched twice.
-        using SpillWorld w = new(CrossJson);
-        w.Enter(3);
-        w.Enter(1);                                    // the trail: 1, then 3
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-        w.Hide(3, "rope");
-
-        Assert.Equal(new[] { 1, 3 }, w.H.Latest.Trail!.Select(r => r.Room).ToArray());
-
-        w.Enter(1);
-        w.RecoverNow(beats: 80);
-
-        // The three spill rooms, back to the death room to search it, then the trail.
-        Assert.Equal(new[] { 2, 4, 2, 1, 3, 1, 3, 1 }, w.Walked.ToArray());
-        Assert.Equal(3, w.H.Sent.Count(s => s == "sea"));   // twice in 1, once in 3 (found)
-        Assert.Contains("get rope", w.H.Sent);
-        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
-    }
-
-    [Fact]
-    public void Sweep_NeverSearchesAStashRoom()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.H.StashRooms.Add(new RoomKey(1, 3));
-        w.Enter(3);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-        w.Hide(3, "rope");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 80);
-
-        Assert.Equal(2, w.H.Sent.Count(s => s == "sea"));   // the death room only
-        Assert.DoesNotContain("get rope", w.H.Sent);
-        Assert.Equal(DeathRecoveryStatus.Partial, w.H.Latest.Status);
-    }
-
-    [Fact]
-    public void Sweep_WalksToTwelveRoomsAtMost_ThenComesBack()
-    {
-        using SpillWorld w = new(StarJson());
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });   // the rope is nowhere
-
-        w.Enter(1);
-        w.RecoverNow(beats: 200);
-
-        // The engine's order here: north and the room beyond it, then (walking back
-        // through the full death room) each of its other nine exits, and only then
-        // the rooms beyond those. Twelve stops is as far as one sweep goes.
-        Assert.Equal(new[] { 11, 31, 12, 13, 14, 15, 16, 17, 18, 19, 20, 32 },
-            w.Walked.Where(r => r != 1).Distinct().ToArray());
-        Assert.Contains("the limit", w.H.Latest.RecoveryMessage);
-        Assert.Equal(DeathRecoveryStatus.Partial, w.H.Latest.Status);
-        Assert.Equal(new RoomKey(1, 1), w.Here);
-    }
-
-    [Fact]
-    public void Sweep_EmptyDeathRoomFloor_StillStarts()
-    {
-        // An empty floor prints no survey; the grab armed for one would never settle.
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), Array.Empty<string>());
-        w.Put(2, "iron sword");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 40);
-
-        Assert.Equal(new[] { 2, 1 }, w.Walked.ToArray());
-        Assert.Equal(DeathRecoveryStatus.Recovered, w.H.Latest.Status);
-    }
-
-    [Fact]
-    public void Sweep_WaitsForAutoAll()
-    {
-        using SpillWorld w = new(CrossJson);
-        bool autoOn = false;
-        w.H.Recovery.SetAutoEnabledProbe(() => autoOn);
-        w.Enter(1);
-        w.Die(Worn("iron sword", "steel helm"), Array.Empty<string>());
-        w.Put(1, "iron sword");
-        w.Put(2, "steel helm");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 20);
-        Assert.DoesNotContain(w.H.Sent, s => s.StartsWith("look "));
-        Assert.Empty(w.Walked);
-
-        autoOn = true;
-        w.Run(40);
-        Assert.Equal(new[] { 2, 1 }, w.Walked.ToArray());
-    }
-
-    [Fact]
-    public void Sweep_WaitsOutAHostileInTheDeathRoom()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword", "steel helm"), Array.Empty<string>());
-        w.Put(1, "iron sword");
-        w.Put(2, "steel helm");
-        w.H.Hostiles = true;
-
-        w.Enter(1);
-        w.RecoverNow(beats: 20);
-        Assert.Empty(w.Walked);
-
-        w.H.Hostiles = false;
-        w.Run(40);
-        Assert.Equal(new[] { 2, 1 }, w.Walked.ToArray());
-    }
-
-    [Fact]
-    public void Sweep_AWalkTheUserStops_EndsTheSweep_AndStartsNoOther()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-        w.H.Coordinator.AssertGate(MovementCoordinator.UserGate);   // the first leg is planned but held
-        w.H.Held = true;
-
-        w.Enter(1);
-        w.RecoverNow(beats: 20);
-        Assert.Contains("walking to 1/2", w.H.Recovery.SpillSweepState);
-
-        w.H.Walker!.Stop();
-        w.H.Coordinator.ClearGate(MovementCoordinator.UserGate);
-        w.H.Held = false;
-        w.Run(40);
-
-        Assert.Empty(w.Walked);
-        Assert.Equal(WalkState.Idle, w.H.Walker.State);
-        Assert.Contains("stopped", w.H.Latest.RecoveryMessage);
-    }
-
-    [Fact]
-    public void Sweep_StopPressedWhileStandingAtAStop_StartsNoFurtherLeg()
-    {
-        // Between two legs the walker is idle and has no Stopped to raise, so the
-        // user's Stop is handed to the sweep itself.
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-
-        w.Enter(1);
-        w.RecoverNow(beats: 0);
-        while (w.Walked.Count == 0) w.Run(1);   // standing in the first spill room
-        Assert.Contains("getting items at 1/2", w.H.Recovery.SpillSweepState);
-
-        w.H.Recovery.StopSpillSweep("stopped by the user");
-        w.Run(40);
-
-        Assert.Equal(new[] { 2 }, w.Walked.ToArray());
-        Assert.Contains("stopped by the user", w.H.Latest.RecoveryMessage);
-    }
-
-    [Fact]
-    public void Sweep_HeldLeg_IsNotAStall_ButTheTimeRunsOut()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-        w.H.Coordinator.AssertGate(MovementCoordinator.UserGate);
-        w.H.Held = true;
-
-        w.Enter(1);
-        w.RecoverNow(beats: 100);   // far past the 20 s a stalled leg is given
-        Assert.Equal(DeathRecoveryStatus.Partial, w.H.Latest.Status);
-        Assert.Contains("walking to 1/2", w.H.Recovery.SpillSweepState);
-
-        w.Run(600);
-        Assert.Contains("out of time", w.H.Latest.RecoveryMessage);
-    }
-
-    [Fact]
-    public void Sweep_DyingOnTheWay_DropsIt()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-        w.Put(1, "iron sword");
-        w.H.Coordinator.AssertGate(MovementCoordinator.UserGate);
-
-        w.Enter(1);
-        w.RecoverNow(beats: 10);
-        w.H.Tracker.NoteDeath(1, "You have 1 lives left.");
-        w.H.Walker!.Stop("player died");   // as the app's death halt does
-        w.H.Coordinator.ClearGate(MovementCoordinator.UserGate);
-        int mark = w.H.Sent.Count;
-        w.Run(40);
-
-        Assert.Contains("died during the sweep", w.H.Recovery.SpillSweepState);
-        Assert.DoesNotContain(w.SentSince(mark), s => s.StartsWith("look ") || s == "sea");
-    }
-
-    [Fact]
-    public void Paradigm_NeverSweeps()
-    {
-        using SpillWorld w = new(CrossJson);
-        w.H.Paradigm = true;
-        w.Enter(1);
-        w.Die(Worn("iron sword"), new[] { "rope" });
-
-        w.Enter(1);
-        w.RecoverNow(beats: 40);
-
-        Assert.Empty(w.Walked);
-        Assert.DoesNotContain(w.H.Sent, s => s.StartsWith("look ") || s == "sea");
-        Assert.Equal("idle", w.H.Recovery.SpillSweepState);
     }
 }

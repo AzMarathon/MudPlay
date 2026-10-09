@@ -34,8 +34,11 @@ public static class DeathSpillOrder
     };
 
     // The exits an item can leave a room by, in the engine's order. A Remote Action
-    // exit is a typed command in an exit slot and never becomes a Room exit; a Map
-    // Change exit is the one whose target is on another map.
+    // exit is a typed command in an exit slot and never becomes a Room exit. The
+    // engine passes over a Map Change exit by its exit type, which the imported data
+    // doesn't carry: here it is the exit whose target is on another map. Eight Stock
+    // exits of that type stay on their own map (11/38 N, 15/335 N, E and W, 8/988 D,
+    // 1/2312 W, 1/2689 N, 1/2701 SW) and are followed here where the engine isn't.
     public static IEnumerable<(Direction Direction, RoomKey Target)> SpillExits(Room room)
     {
         ArgumentNullException.ThrowIfNull(room);
@@ -54,16 +57,25 @@ public static class DeathSpillOrder
         ArgumentNullException.ThrowIfNull(rooms);
         List<RoomKey> order = new();
         HashSet<RoomKey> listed = new() { deathRoom };
-        Try(deathRoom, depth: 0, rooms, order, listed);
+        Try(deathRoom, depth: 0, rooms, order, listed, new Dictionary<RoomKey, int>());
         return order;
     }
 
+    // goneOnFrom holds, for a room whose exits have all been followed to the end, the
+    // shallowest depth that was done at. Entering it again no shallower lists nothing
+    // new: everything in reach from there was in reach then, and is listed. Passing
+    // it over leaves the order as the engine's and saves the engine's re-walking,
+    // which runs to hundreds of thousands of calls around a ten-exit room. A room
+    // still being gone on from (an ancestor in the walk) has no entry, and is
+    // re-entered as the engine re-enters it: that is what changes the order.
     private static void Try(RoomKey key, int depth, Func<RoomKey, Room?> rooms,
-        List<RoomKey> order, HashSet<RoomKey> listed)
+        List<RoomKey> order, HashSet<RoomKey> listed, Dictionary<RoomKey, int> goneOnFrom)
     {
         if (depth > MaxRoomsBeyondDeathRoom || rooms(key) is not { } room) return;
         if (listed.Add(key)) order.Add(key);
+        if (goneOnFrom.TryGetValue(key, out int done) && done <= depth) return;
         foreach ((Direction _, RoomKey target) in SpillExits(room))
-            Try(target, depth + 1, rooms, order, listed);
+            Try(target, depth + 1, rooms, order, listed, goneOnFrom);
+        goneOnFrom[key] = depth;
     }
 }

@@ -330,6 +330,7 @@ public static class BugReportBuilder
                     string.Join(", ", trail.Select(r => $"{r.Map}/{r.Room}")));
         }
         Kv(sb, "Stock spill sweep", svc.DeathRecovery.SpillSweepState);
+        Kv(sb, "Stock spill sweep held back right now by", svc.DeathRecovery.SpillSweepBlockers);
         if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)
             Kv(sb, "Stock spill sweep rooms, in order", plan);
         return sb.ToString();

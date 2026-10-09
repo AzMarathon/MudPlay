@@ -1900,13 +1900,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // Null when either room is outside the active graph or no route exists.
     // Side-effect-free — nothing is sent and no walk state changes, so a caller can
     // inspect a leg (e.g. a reroute deciding whether it runs dark) without
-    // committing to walk it.
-    public IReadOnlyList<RoomKey>? TryComputeRouteKeys(RoomKey from, RoomKey to)
+    // committing to walk it. avoidTeleports plans it as WalkTo(avoidTeleports: true)
+    // does, for a caller that will walk it that way and is bounding its length.
+    public IReadOnlyList<RoomKey>? TryComputeRouteKeys(RoomKey from, RoomKey to, bool avoidTeleports = false)
     {
         if (_graph.GetRoom(from) is null || _graph.GetRoom(to) is null) return null;
         if (from.Equals(to)) return new[] { from };
 
-        IReadOnlyList<Direction>? path = _bfs.FindPath(from, to, Filter);
+        IReadOnlyList<Direction>? path = _bfs.FindPath(from, to, Filter, refuseTeleports: avoidTeleports);
         if (path is null || path.Count == 0) return null;
         return ExpandRouteKeys(from, path);
     }

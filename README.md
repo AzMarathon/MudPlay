@@ -1,9 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.19**
-> - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
-> - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+> **Version 3.160.0**
+> - Stock death recovery looks for spilled items where the game puts them: out from the death room in the game's own exit order, up to five rooms away, behind doors and hidden exits too
+> - When those rooms are tried and items are still missing, it searches the rooms you walked before dying for hidden items (never a stash room)
+> - The spill sweep runs for a recovery you asked for (Recover Now, or your own walk-to ending in the death room); a loop's or Auto-Lair's arrival there only looks next door
+> - It stops as soon as nothing is missing, walks to 12 rooms at most, and returns to the death room; the toolbar shows it running, so Stop and Pause reach it
+> - It gives way to a loop, Auto-Lair, an errand, following a leader and any walk it didn't start, and sends nothing during a rest, a pause or with Auto-All off
+> - Stock: loyal and major-cursed items, and items that "returned to their rightful place", are no longer waited for
+> - Stock: a partly recovered pile keeps its count when you come back, and an empty death-room floor no longer stalls recovery
+> - Bug report: what the latest pile still misses, the sweep's rooms in order, where it stands and what is holding it back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

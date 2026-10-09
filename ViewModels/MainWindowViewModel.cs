@@ -3374,6 +3374,9 @@ public partial class MainWindowViewModel : ObservableObject
                 AppServices.Current.LoopRunner.NotifyDisconnected();
                 // A move still awaiting its room display will never get one now.
                 AppServices.Current.RoomTracker.NoteConnectionLost();
+                // A Stock spill sweep would time out stop after stop against the dead
+                // wire, or set off again on reconnect.
+                AppServices.Current.DeathRecovery.NotifyDisconnected();
                 // A trade agreed to on a route card is not made after a drop: where
                 // the character stands and how far the trade had got can't be vouched
                 // for. A walk still standing fetches as before, and trades nothing.

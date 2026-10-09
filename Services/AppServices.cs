@@ -7176,11 +7176,26 @@ public sealed class AppServices
         // is holding from one that has stalled, and never searches a stash room. The
         // pile list leaves out what a death doesn't drop.
         DeathRecovery.AttachSpillSweep(
-            RoomGraph.GetRoom,
-            () => MovementCoordinator.IsPaused,
-            Movement.IsStash);
-        DeathRecovery.SetStaysOnDeathProbe(
-            name => Game.Recovery.DeathPileRules.StaysWithCharacter(ItemAbilityCodes(name)));
+            roomLookup: RoomGraph.GetRoom,
+            movementHeld: () => MovementCoordinator.IsPaused,
+            isStashRoom: Movement.IsStash,
+            // The sweep the user asked for gives way to whatever else drives the
+            // character: a loop, Auto-Lair or an errand's walk, any other errand or
+            // solver that has the walker, and a party leader being followed.
+            otherEngineDrives: () =>
+                ErrandOwnsWalk() || ErrandHasTheWalker
+                || LoopRunner.State != Game.Map.LoopState.Idle
+                || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate),
+            // It sends nothing during a rest (helper actions wait one out) or while
+            // the user has paused; Auto-All is its own probe below.
+            sendsHeld: () => RestHeld()
+                || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.UserGate),
+            autoSearchesRooms: () => ReadAutoModeFlag(d => d.AutoSearch)
+                || PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
+            noteRoomSearched: room => AutoSearch.NoteSearchedByOther(room));
+        DeathRecovery.SetStaysOnDeathProbe(EveryItemOfThisNameStaysOnDeath);
+        // The walker's abandoned-combat halt: the sweep ends in place on it.
+        CombatTracker.EngagedTargetAbandoned += _ => DeathRecovery.NoteEngagedTargetAbandoned();
         // Combat-aware re-equip interleaving: recovering a corpse in a room with a
         // live hostile paces the wear/eq burst across combat rounds (each equip
         // breaks the round, same as a between-round cast) instead of firing it all
@@ -8017,6 +8032,13 @@ public sealed class AppServices
         MovementControl.AddSolver(
             active: () => MazeSolver.Active, held: () => MazeSolver.IsHeld, stop: MazeSolver.Cancel);
         MazeSolver.StateChanged += MovementControl.NoteSolverStateChanged;
+        // So does a Stock spill sweep: the walker is idle while it looks through
+        // exits, gets and searches, and Stop and Pause must reach those stretches too.
+        MovementControl.AddSolver(
+            active: () => DeathRecovery.SpillSweepActive,
+            held: () => DeathRecovery.SpillSweepHeld,
+            stop: DeathRecovery.StopSpillSweep);
+        DeathRecovery.SpillSweepStateChanged += MovementControl.NoteSolverStateChanged;
 
         // Gear driven by movement + room, for the While Moving / Bossing sets. Both
         // no-op unless the user enabled + filled the set (AutoEquipCoordinator guards).
@@ -8922,8 +8944,6 @@ public sealed class AppServices
         // A stash transfer is between walks while it searches, collects or deposits,
         // so the walker's own Stopped wouldn't reach it there.
         MovementControl.Stopping += () => StashTransfer.Cancel("stopped by the user");
-        // So is a Stock spill sweep while it peeks, gets or searches at a stop.
-        MovementControl.Stopping += () => DeathRecovery.StopSpillSweep("stopped by the user");
         // So is a walk between two of its legs: standing at a giver, a shop or an
         // item's source, with the coordinator that brought it there about to issue
         // the next leg. The walker says Stopped for a journey left standing, which
@@ -13820,6 +13840,23 @@ public sealed class AppServices
         bool notDroppable = row.TryGetProperty("Not Droppable", out System.Text.Json.JsonElement nd)
             && nd.ValueKind == System.Text.Json.JsonValueKind.Number && nd.GetInt32() != 0;
         return Game.Inventory.ItemDropRule.Refused(notDroppable, ItemAbilityCodes(row), worn);
+    }
+
+    // Whether an item of this name stays on the character through a death: every
+    // item that bears the name must (DeathPileRules.EveryItemOfTheNameStays). The
+    // indexed lookup answers for nearly every name; the table is only walked for a
+    // name whose first item does stay.
+    private bool EveryItemOfThisNameStaysOnDeath(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || GameData.FindRowByName("Items", name) is not { } first) return false;
+        if (!Game.Recovery.DeathPileRules.StaysWithCharacter(ItemAbilityCodes(first))) return false;
+        if (GameData.GetRawTable("Items") is not { } items) return true;
+        string wanted = name.Trim();
+        return Game.Recovery.DeathPileRules.EveryItemOfTheNameStays(items.RootElement.EnumerateArray()
+            .Where(row => row.TryGetProperty("Name", out System.Text.Json.JsonElement n)
+                && n.ValueKind == System.Text.Json.JsonValueKind.String
+                && string.Equals(n.GetString()?.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
+            .Select(ItemAbilityCodes));
     }
 
     // The ability codes an item carries, by name; empty for an item the game data

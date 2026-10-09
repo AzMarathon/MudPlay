@@ -170,4 +170,14 @@ public sealed class DeathSpillOrderTests : IDisposable
         Assert.False(DeathPileRules.StaysWithCharacter(new[] { 82 }));      // Cursed drops
         Assert.False(DeathPileRules.StaysWithCharacter(Array.Empty<int>()));
     }
+
+    [Fact]
+    public void ANameSharedByAnItemThatDrops_IsNotTreatedAsStaying()
+    {
+        int[] loyal = { 100 }, plain = { 4 };
+        Assert.True(DeathPileRules.EveryItemOfTheNameStays(new[] { loyal }));
+        Assert.True(DeathPileRules.EveryItemOfTheNameStays(new[] { loyal, new[] { 83 } }));
+        Assert.False(DeathPileRules.EveryItemOfTheNameStays(new[] { loyal, plain }));
+        Assert.False(DeathPileRules.EveryItemOfTheNameStays(Array.Empty<int[]>()));
+    }
 }
