@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.0**
-> - New in Settings → General, under Global client settings: **Visual impairment: terminal colours**. Choose how the 16 game colours are drawn: Default, Deuteranopia, Protanopia, Tritanopia or Custom
-> - The three colour-blindness choices keep each colour near its usual hue and spread the 16 as far apart as they go for that kind of colour blindness, all readable on black
-> - Custom sets each colour yourself, with a reset per colour and for all; the terminal and Backscroll repaint on Apply
->
-> See the [version history](CHANGELOG.md) for the full changelog.
+> **Version 3.158.1**
+> - Terminal colours: Custom keeps the same two columns as the other choices (normal left, bright right) instead of one long list
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.
