@@ -14,8 +14,8 @@ namespace MudPlay.Game.Map;
 // AgreedHazardRooms are the hazard rooms, uncountered when the route was shown, that
 // lie on the card's route. Picking the card agreed to walking into those. It did not
 // agree to any other hazard room, so they are named one by one: a plan made later
-// from another room opens these and nothing else. Null with PickedRoute is the
-// older blanket consent, good only for the plan made where the route was shown.
+// from another room opens these and nothing else. A picked route that names none
+// agreed to none.
 public sealed record WalkJourney(
     RoomKey Destination,
     bool ThroughGates = false,
@@ -44,8 +44,7 @@ public sealed record WalkJourney(
             + (IgnoreAvoids ? ", through avoided rooms" : "")
             + (AvoidTraps ? ", fewest traps" : "")
             + (!PickedRoute ? ""
-                : AgreedHazardRooms is null ? ", any hazard room on its route agreed to"
-                : AgreedHazardRooms.Count == 0 ? ", no hazard room agreed to"
+                : AgreedHazardRooms is not { Count: > 0 } ? ", no hazard room agreed to"
                 : $", hazard room(s) {string.Join(", ", AgreedHazardRooms)} agreed to");
     }
 }

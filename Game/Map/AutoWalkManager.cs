@@ -1017,8 +1017,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
     //
     // The restart plans from wherever the errand ended, on a route nobody was shown.
     // It may enter the hazard rooms the user agreed to on the card, and no others: a
-    // journey that names none (it was begun with a blanket pickedRoute, or shown no
-    // card) carries no hazard consent across the restart at all.
+    // journey that names none (it was shown no card) has no hazard consent to carry.
     public bool ResumeJourney(WalkJourney journey, bool planThroughAcquirableGates = false)
     {
         ArgumentNullException.ThrowIfNull(journey);
@@ -1032,7 +1031,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             preferTeleportFree: journey.PreferTeleportFree,
             pickedRoute: journey.PickedRoute,
             keepGatesClosedFor: journey.ClosedGates,
-            agreedHazardRooms: journey.AgreedHazardRooms ?? Array.Empty<RoomKey>());
+            agreedHazardRooms: journey.AgreedHazardRooms);
     }
 
     // The teleports a walk the client starts on its own may use, as (room, landing)
@@ -1112,10 +1111,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // carried would take the shortcut and stop at its gate.
         IReadOnlyCollection<int>? keepGatesClosedFor = null,
         // agreedHazardRooms: with pickedRoute, the uncountered hazard rooms on the
-        // route the user was shown. Given, they are the only ones the plan (and each
-        // re-plan, and a restart after an errand) may enter uncountered. Left null,
-        // pickedRoute opens every hazard room, which only suits a plan made from
-        // where the route was shown.
+        // route the user was shown. They are the only ones the plan (and each
+        // re-plan, and a restart after an errand) may enter uncountered; left null
+        // or empty, it enters none.
         IReadOnlyCollection<RoomKey>? agreedHazardRooms = null)
     {
         // A silent walk while a journey stands is one of its legs, and is planned by
@@ -1332,16 +1330,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // leg of a journey keeps the gates its picked route goes round closed.
         // A picked route whose journey names the hazard rooms the user agreed to opens
         // those rooms and no others: agreeing to the river on the card is not
-        // agreeing to whatever hazard lies on a re-plan from somewhere else.
+        // agreeing to whatever hazard lies on a re-plan from somewhere else. There is
+        // no way to open them all: a picked walk that names none, or whose journey
+        // has ended under it (a profile load mid-walk), enters none.
         IReadOnlyCollection<int>? closedGates = _journey?.ClosedGates;
         IReadOnlyCollection<RoomKey>? agreedHazards = pickedRoute ? _journey?.AgreedHazardRooms : null;
         IDisposable? gateScope = !planThroughAcquirableGates ? null
-            : closedGates is not null || agreedHazards is not null
+            : closedGates is not null || agreedHazards is { Count: > 0 }
                 ? Filter?.SuspendAcquirableGatesExcept(
                     closedGates ?? Array.Empty<int>(),
-                    keepUncounteredHazards: !pickedRoute || agreedHazards is not null,
+                    keepUncounteredHazards: true,
                     openHazardRooms: agreedHazards)
-            : pickedRoute ? Filter?.SuspendAcquirableGates()
             : Filter?.SuspendAcquirableGatesButUncounteredHazards();
         IReadOnlyList<Direction>? path;
         IReadOnlyList<WalkStep> expanded;

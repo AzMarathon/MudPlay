@@ -214,12 +214,14 @@ public static class RouteChoicePrompt
                 if (plan.Choice is { } sole
                     && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
                     services.ForcePathObtain(soleItems);
-                // No card was shown, so no route is passed as picked: the walk takes
-                // the shortest way through the gates it is fetching for (round the
-                // ones it isn't), on foot when it can, and with no agreement to walk
-                // into a hazard room.
-                CommitWalk(services, destination, gated: true, stopForBossRooms: stopsForBossRooms,
-                    closedGates: plan.Choice?.ClosedGateItems);
+                // The walk has to be the route the planner settled on: the items
+                // just forced were worked out for that route, which was planned for
+                // the fewest traps and may teleport. So it is given the route and
+                // the same trap rule. No card was shown, though, so nothing on it
+                // was agreed to: it walks into no hazard room uncountered.
+                CommitWalk(services, destination, gated: true, avoidTraps: true, stopForBossRooms: stopsForBossRooms,
+                    pickedRoute: plan.Choice?.GatedPath, closedGates: plan.Choice?.ClosedGateItems,
+                    shownOnCard: false);
                 return true;
             default:
                 return await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
@@ -952,14 +954,18 @@ public static class RouteChoicePrompt
         // ground was walked as 263 steps on foot, and a card that went round the
         // amber talisman's exit was walked straight at it (reports
         // paradigm-20261008-174236, paradigm-20261008-173911).
-        IReadOnlyList<RoomKey>? pickedRoute = null, IReadOnlyCollection<int>? closedGates = null)
+        IReadOnlyList<RoomKey>? pickedRoute = null, IReadOnlyCollection<int>? closedGates = null,
+        // False for a route the walk must match but no card showed (the sole route
+        // whose items are all fetched for it): planned like a picked one, with no
+        // hazard room agreed to.
+        bool shownOnCard = true)
     {
         IReadOnlyList<string> landings = TeleportsOn(services, pickedRoute, throughGates: gated, closedGates);
         string? teleports = RouteChoicePlanner.DescribeTeleports(landings);
         // Walking into a hazard room uncountered is agreed to on a card, for the
         // rooms on that card's route. A gated walk nobody was shown a card for (the
         // sole route whose items are all fetched for it) agrees to none.
-        bool shown = gated && pickedRoute is not null;
+        bool shown = gated && pickedRoute is not null && shownOnCard;
         IReadOnlyList<RoomKey>? agreedHazards = shown
             ? RouteChoicePlanner.UncounteredHazardRooms(services.Movement, pickedRoute) : null;
         preferTeleportFree = RouteChoicePlanner.PickedWalkPrefersTeleportFree(preferTeleportFree, avoidTeleports, landings);

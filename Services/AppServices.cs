@@ -8825,6 +8825,7 @@ public sealed class AppServices
             MonsterDropRouter.Cancel();
             ShortcutSource.Cancel();
             AutoLightShopRouter.Cancel();
+            PvpFlee.CancelComeBack();
         };
         // After the coordinator has seen it: a token the route didn't send (the user
         // used one by hand) ends all movement where we land — nothing walks on from

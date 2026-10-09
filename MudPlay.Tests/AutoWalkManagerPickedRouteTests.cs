@@ -642,19 +642,28 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Assert.Equal(new[] { "n" }, h.Sent);
     }
 
-    // A journey that names no rooms (begun with the blanket pickedRoute, or shown no
-    // card at all) carries no hazard consent across a restart: from the Camp every
-    // way to Dest crosses a hazard, so the walk fails where it stands.
+    // A picked walk that names no rooms agreed to none: there is no "any hazard on
+    // the route" to fall back on. Every way to Dest crosses a hazard, so it never
+    // starts.
+    [Fact]
+    public void APickedWalkThatNamesNoHazardRooms_EntersNone()
+    {
+        Harness h = NewHarness(HazardRooms, Start);
+
+        Assert.False(h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, armItemAcquisition: false, pickedRoute: true));
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Empty(h.Sent);
+    }
+
+    // Nor does its journey carry any across a restart: from the Camp every way to
+    // Dest crosses a hazard, so the walk fails where it stands.
     [Fact]
     public void AnErrandRestartOfAJourneyThatNamesNoRooms_EntersNoHazardRoom()
     {
         Harness h = NewHarness(HazardRooms, Start);
-        h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, armItemAcquisition: false, pickedRoute: true);
-        Assert.Equal("2 step(s)", h.LastPlan);                    // the first plan, where the route was shown
-        WalkJourney journey = h.Walker.Journey!;
-        h.Walker.Stop();
+        var journey = new WalkJourney(Dest, ThroughGates: true, PickedRoute: true);
         h.Tracker.SetLocated(Camp);
-        h.Events.Clear();
 
         Assert.False(h.Walker.ResumeJourney(journey, planThroughAcquirableGates: true));
 
