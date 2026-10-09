@@ -12714,6 +12714,8 @@ public sealed class AppServices
                 _cardCounts[id] = (r, DateTimeOffset.UtcNow);
                 string members = r.CountsByMember.Count == 0 ? "nobody answered"
                     : string.Join(", ", r.CountsByMember.Select(kv => $"{kv.Key} {kv.Value}"));
+                if (r.Unanswered.Count > 0)
+                    members += $"; {string.Join(", ", r.Unanswered)} didn't answer: counted as holding none";
                 Log.Info(Game.Map.AutoSearchManager.LogCategory,
                     $"party gate count: {name} — party of {need} holds {own + r.TotalCount} (you {own}; {members}; "
                     + $"{r.Replied}/{r.Expected} answered)"

@@ -19,13 +19,13 @@ namespace MudPlay.Game.Map;
 // The per-person quota q comes from the item's carry policy (MaxToGet target,
 // MinToKeep floor) — 1 for a rope/grapple, 2–3 for a buff item like waterskin,
 // and 1 for any item with no policy set (the historical one-per-member default).
-// Times the head-count (self + everyone who replied) it gives the total the pool
+// Times the head-count (self + every joined member) it gives the total the pool
 // must hold.
 //
 // Leader — provision the whole party. The leader is the one walking a party
 // route (followers are held by the movement gate), so it owns getting everyone
 // across the gate. For each gated item it probes the party for a count, then
-// treats the party (self + everyone who replied) as one pool that needs q copies
+// treats the party (self + every joined member) as one pool that needs q copies
 // each. Members keep whatever they're holding — nothing is redistributed early.
 // If the pool already holds enough (totalHeld >= q * partySize), the leader
 // immediately coordinates the hand-off so every member reaches q: it gives its
@@ -78,15 +78,25 @@ namespace MudPlay.Game.Map;
 // Scope: multiple copies are acquired by the forwarded shortfall count — a shop
 // detour buys that many, and auto-search stays armed (until the pool is whole)
 // to reveal the rest off the floor. Monster-drop reroute remains single-copy
-// best-effort. Non-responders are treated as outside the pool — the leader
-// provisions only itself and the members that answered, leaving a silent member
-// to its own per-member pipeline.
+// best-effort.
+//
+// A member who doesn't answer. A joined member who never answers the count is in
+// the pool and holds none: the leader's shortfall includes their copies, and the
+// hand-off gives them theirs (user, 2026-10-09: "if a member doesnt answer an
+// @have count, assume they dont have it and fetch them one"). They used to be left
+// out of the pool, so a leader holding its own copy with nobody answering was a
+// party of one, found whole, and nothing was fetched for anyone. The leader hands
+// such a member a copy itself, or tells a member who did answer to; nothing can
+// be asked of the silent one. A member invited and not yet joined is not asked
+// and not in the pool.
 public sealed class PartyPathItemGate
 {
     private const string LogCategory = "AutoSearch";
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<int, int>> NoHoldings =
         new Dictionary<string, IReadOnlyDictionary<int, int>>();
+
+    private static readonly IReadOnlyDictionary<int, int> NoneHeld = new Dictionary<int, int>();
 
     // A route item the leader is provisioning: its name and what each member
     // that replied holds of it and its substitutes (given name → item id → copies).
@@ -138,7 +148,14 @@ public sealed class PartyPathItemGate
 
     // Forward is the shortfall the count sent on to the demand pipeline, 0 when
     // the party held enough and nothing was handed out.
-    private sealed record Counted(object Journey, int SelfTotal, int Forward, DateTimeOffset At);
+    private sealed record Counted(
+        object Journey, int SelfTotal, int Forward, DateTimeOffset At, IReadOnlyList<string> Unanswered);
+
+    // The party as one count found it: what each joined member holds of the item
+    // and its substitutes, and who of them never answered (they are in Members
+    // too, holding nothing).
+    private sealed record PartyPool(
+        Dictionary<string, IReadOnlyDictionary<int, int>> Members, IReadOnlyList<string> Unanswered);
 
     // How long a journey's count stands. Only our own copies and our own hand-offs
     // are seen from here; a member using up or picking up a copy is not.
@@ -368,11 +385,11 @@ public sealed class PartyPathItemGate
         return true;
     }
 
-    private void RememberCount(int id, object? journey, int forward)
+    private void RememberCount(int id, object? journey, int forward, IReadOnlyList<string> unanswered)
     {
         if (journey is null) return;
         int selfTotal = Total(SelfHoldings(id));
-        lock (_gate) _counted[id] = new Counted(journey, selfTotal, forward, _now());
+        lock (_gate) _counted[id] = new Counted(journey, selfTotal, forward, _now(), unanswered);
     }
 
     // The party changed: every count was of the roster that was.
@@ -388,9 +405,11 @@ public sealed class PartyPathItemGate
         {
             lock (_gate)
                 return _counted.Count == 0 ? "(none)" : string.Join("; ", _counted.Select(kv =>
-                    kv.Value.Forward > 0
+                    (kv.Value.Forward > 0
                         ? $"item {kv.Key}: {kv.Value.Forward} to get"
-                        : $"item {kv.Key}: the party holds enough"));
+                        : $"item {kv.Key}: the party holds enough")
+                    + (kv.Value.Unanswered.Count == 0 ? ""
+                        : $" (no answer from {string.Join(", ", kv.Value.Unanswered)}: counted as holding none)")));
         }
     }
 
@@ -644,9 +663,9 @@ public sealed class PartyPathItemGate
 
     // Ask the party about the item and every substitute at once — the probe keeps
     // concurrent queries apart by item name — and fold the replies into what each
-    // member holds. A member who answered any of the queries is in the pool; one
-    // who answered none is a non-responder, as before.
-    private async Task<Dictionary<string, IReadOnlyDictionary<int, int>>> QueryHoldingsAsync(int id)
+    // member holds. A member who answered none of the queries holds none of any
+    // of them, and is in the pool like the rest.
+    private async Task<PartyPool> QueryHoldingsAsync(int id)
     {
         var asks = new List<Task<PartyInventoryProbe.PartyItemResult>>();
         var askedNames = new List<string>();
@@ -671,7 +690,16 @@ public sealed class PartyPathItemGate
 
         var holdings = new Dictionary<string, IReadOnlyDictionary<int, int>>(StringComparer.OrdinalIgnoreCase);
         foreach (KeyValuePair<string, Dictionary<int, int>> kv in byMember) holdings[kv.Key] = kv.Value;
-        return holdings;
+
+        // Unanswered is null on a default result, which has nobody in it.
+        var unanswered = new List<string>();
+        foreach (PartyInventoryProbe.PartyItemResult r in results)
+            foreach (string member in r.Unanswered ?? Array.Empty<string>())
+                if (holdings.TryAdd(member, NoneHeld)) unanswered.Add(member);
+        if (unanswered.Count > 0)
+            _log?.Info(LogCategory,
+                $"path item {id}: {string.Join(", ", unanswered)} didn't answer: counted as holding none");
+        return new PartyPool(holdings, unanswered);
     }
 
     private async Task ProvisionAsync(int id, string name, object? journey, int generation)
@@ -683,7 +711,8 @@ public sealed class PartyPathItemGate
             if (!_pending.TryAdd(id, new Pending(id, name, NoHoldings))) return;
         }
 
-        Dictionary<string, IReadOnlyDictionary<int, int>> others = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        PartyPool pool = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        Dictionary<string, IReadOnlyDictionary<int, int>> others = pool.Members;
         lock (_gate)
         {
             if (generation != _generation || !_pending.ContainsKey(id)) return;   // cleared while probing
@@ -692,7 +721,7 @@ public sealed class PartyPathItemGate
 
         if (TryComplete(id, out bool handedOut))
         {
-            if (!handedOut) RememberCount(id, journey, 0);
+            if (!handedOut) RememberCount(id, journey, 0, pool.Unanswered);
             return;
         }
 
@@ -712,10 +741,10 @@ public sealed class PartyPathItemGate
         if (!_searchEnabled())
             lock (_gate) _pending.Remove(id);
         _forward(new[] { id }, target);
-        RememberCount(id, journey, target);
+        RememberCount(id, journey, target, pool.Unanswered);
     }
 
-    // Redistributes if the pool (self + responders) now holds at least the
+    // Redistributes if the pool (self + every joined member) now holds at least the
     // per-person quota for every member; returns true when the slot is settled
     // (either handed out or nothing to do), false while still short. handedOut
     // says the settling moved copies about, or may have: the count no longer
@@ -731,7 +760,7 @@ public sealed class PartyPathItemGate
         int othersTotal = 0;
         foreach (IReadOnlyDictionary<int, int> held in p.Others.Values) othersTotal += Total(held);
         int q = PerPersonFor(id);
-        int partySize = 1 + p.Others.Count;      // self + everyone who replied
+        int partySize = 1 + p.Others.Count;      // self + every joined member, answered or not
         int totalHeld = Total(self) + othersTotal;
         if (totalHeld < q * partySize) return false; // not enough yet — keep acquiring
 
@@ -819,7 +848,10 @@ public sealed class PartyPathItemGate
     private async Task TryBorrowSpareAsync(int id, string name, object? journey, int generation)
     {
         int q = PerPersonFor(id);
-        Dictionary<string, IReadOnlyDictionary<int, int>> holdings = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        // A member who didn't answer is in the pool holding nothing, so can't be
+        // borrowed from: for a follower the party is, as before, those with a spare.
+        PartyPool pool = await QueryHoldingsAsync(id).ConfigureAwait(true);
+        Dictionary<string, IReadOnlyDictionary<int, int>> holdings = pool.Members;
         if (IsStale(generation)) return;   // reset while probing: ask for nothing
 
         // Might have arrived between the announce and the reply window (an
@@ -844,7 +876,7 @@ public sealed class PartyPathItemGate
         if (holders.Count == 0)
         {
             _forward(new[] { id }, q);
-            RememberCount(id, journey, q);
+            RememberCount(id, journey, q, pool.Unanswered);
             return;
         }
 
@@ -852,7 +884,7 @@ public sealed class PartyPathItemGate
         if (self.Length == 0 || _wireSender is null)
         {
             _forward(new[] { id }, q);
-            RememberCount(id, journey, q);
+            RememberCount(id, journey, q, pool.Unanswered);
             return;
         }
 

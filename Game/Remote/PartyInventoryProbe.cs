@@ -23,8 +23,9 @@ namespace MudPlay.Game.Remote;
 // without their replies crossing wires.
 //
 // A query completes early once every expected responder has replied, or when the
-// QueryWindow elapses (a member who never answers — offline, no ExecuteCommands
-// round-trip, hasn't parsed inventory — simply doesn't count toward the total).
+// QueryWindow elapses. A member who never answers (offline, no ExecuteCommands
+// round-trip, hasn't parsed inventory) adds nothing to the total and is named in
+// the result's Unanswered: still a member, taken to hold none.
 // The expected-responder set mirrors PartyBroadcaster's own filter (non-self,
 // named, joined), so we never wait on a member the broadcast skipped. With no one to ask
 // the task completes synchronously with an empty result, letting the caller fall
@@ -43,6 +44,12 @@ public sealed partial class PartyInventoryProbe : IDisposable
     {
         private static readonly IReadOnlyDictionary<string, int> NoCounts =
             new Dictionary<string, int>();
+
+        // The joined members who were asked and never answered, by given name. They
+        // are part of the party all the same, and are taken to hold none (user,
+        // 2026-10-09). Every reader of a count takes its pool from here and from
+        // CountsByMember, so the route card and the walk can't disagree about it.
+        public IReadOnlyCollection<string> Unanswered { get; init; } = Array.Empty<string>();
 
         // An empty result — no party members to ask, or the probe was disposed.
         public static PartyItemResult Empty(int itemId) => new(itemId, 0, 0, 0, NoCounts);
@@ -184,7 +191,10 @@ public sealed partial class PartyInventoryProbe : IDisposable
 
         p.Tcs.TrySetResult(new PartyItemResult(
             p.ItemId, total, p.Expected, replied,
-            new Dictionary<string, int>(p.Counts, StringComparer.OrdinalIgnoreCase)));
+            new Dictionary<string, int>(p.Counts, StringComparer.OrdinalIgnoreCase))
+        {
+            Unanswered = p.Remaining.ToArray(),
+        });
         _log?.Info("PartyInventory",
             $"@have '{p.Query}' — {replied}/{p.Expected} replied, {total} held across party.");
     }

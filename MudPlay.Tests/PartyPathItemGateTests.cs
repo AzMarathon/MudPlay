@@ -164,6 +164,14 @@ public sealed class PartyPathItemGateTests
         return new PartyInventoryProbe.PartyItemResult(id, total, counts.Length, counts.Length, dict);
     }
 
+    // The same, with joined members who were asked and never answered.
+    private static PartyInventoryProbe.PartyItemResult Answer(
+        int id, string[] unanswered, params (string given, int count)[] counts)
+    {
+        PartyInventoryProbe.PartyItemResult answered = Answer(id, counts);
+        return answered with { Expected = counts.Length + unanswered.Length, Unanswered = unanswered };
+    }
+
     // ----- Off / solo pass-through (leader-agnostic) --------------------------
 
     [Fact]
@@ -1548,4 +1556,143 @@ public sealed class PartyPathItemGateTests
         h.RunPosted();
         Assert.Empty(h.Gate.HoldingWalkFor);
     });
+
+    // ----- A member who doesn't answer -----------------------------------------
+    //
+    // The user's ruling (2026-10-09): "if a member doesnt answer an @have count,
+    // assume they dont have it and fetch them one". Such a member used to be left
+    // out of the pool: with nobody answering, a leader holding its own copy was a
+    // party of one, found whole at once, and nothing was fetched for anyone.
+
+    [Fact]
+    public void Leader_NobodyAnswers_IsShortACopyForEachOfThem() => Inline(() =>
+    {
+        var h = new Harness { IsLeader = true, Journey = new object() };
+        h.Names[1] = "darkwood ring";
+        h.SelfCounts[1] = 1;                          // the leader's own
+        h.Results[1] = Answer(1, new[] { "Bob", "Al" });
+        List<int> provisioned = new();
+        h.Gate.Provisioned += provisioned.Add;
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.Equal((1, 3), Assert.Single(h.ForwardedReq));   // one each for a party of three
+        Assert.Empty(provisioned);                    // nothing settled early
+        Assert.Empty(h.Sent);
+        Assert.True(h.Gate.SearchDemandActive);
+        Assert.Contains("no answer from Bob, Al: counted as holding none", h.Gate.JourneyCountsSummary);
+
+        // One more is not enough for three.
+        h.SelfCounts[1] = 2;
+        h.Gate.OnInventoryChanged();
+        Assert.Empty(provisioned);
+        Assert.Empty(h.Sent);
+
+        // With three in hand the leader hands the two out itself.
+        h.SelfCounts[1] = 3;
+        h.Gate.OnInventoryChanged();
+        Assert.Equal(new[] { "give darkwood ring to Bob\r", "give darkwood ring to Al\r" }, h.Sent);
+        Assert.Equal(new[] { 1 }, provisioned);
+    });
+
+    // Nothing can be asked of the silent member, but a member who answered can be
+    // told to give them a spare.
+    [Fact]
+    public void Leader_OneAnswersWithASpare_OneIsSilent_TheSpareGoesToTheSilentOne()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[1] = "darkwood ring";
+        h.SelfCounts[1] = 1;
+        h.Results[1] = Answer(1, new[] { "Sil" }, ("Bob", 2));
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.Equal("/Bob @do give darkwood ring to Sil\r", Assert.Single(h.Sent));
+        Assert.Empty(h.Forwarded);
+    }
+
+    [Fact]
+    public void Leader_SilentMember_WithNoSpareAnywhere_IsFetchedACopy()
+    {
+        var h = new Harness { IsLeader = true, SearchEnabled = false };
+        h.Names[1] = "darkwood ring";
+        h.SelfCounts[1] = 1;
+        h.Results[1] = Answer(1, new[] { "Sil" }, ("Bob", 1));
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        // Three in the party, two rings among them: the leader's bag must reach two.
+        Assert.Equal((1, 2), Assert.Single(h.ForwardedReq));
+        Assert.Empty(h.Sent);
+    }
+
+    // The probe never asks a member who was invited and hasn't joined, so its
+    // result names nobody for them and the pool is the joined party.
+    [Fact]
+    public void Leader_InvitedMemberNotJoined_IsNotInThePool()
+    {
+        var h = new Harness { IsLeader = true };
+        h.Names[1] = "darkwood ring";
+        h.SelfCounts[1] = 1;
+        h.SetResult(1, ("Bob", 1));                   // the invitee is in neither list
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    // The later legs of the trip decide from the same answer: the same shortfall,
+    // silent members included, without asking.
+    [Fact]
+    public void LaterLeg_ForwardsTheShortfallThatCountedTheSilentMembers()
+    {
+        var h = new Harness { IsLeader = true, SearchEnabled = false, Journey = new object() };
+        h.Names[1] = "darkwood ring";
+        h.SelfCounts[1] = 1;
+        h.Results[1] = Answer(1, new[] { "Bob", "Al" });
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.Equal(1, h.QueryCount);
+        Assert.Equal(new[] { (1, 3), (1, 3) }, h.ForwardedReq);
+    }
+
+    // A silent member holds none of any boat. Asked about three, they are still
+    // one member, and a member who answered about only one of them is not silent.
+    [Fact]
+    public void Leader_SilentMember_HoldsNoneOfAnySubstitute_AndCountsOnce()
+    {
+        var h = BoatHarness(leader: true);
+        h.SearchEnabled = false;
+        h.Results[Raft] = Answer(Raft, new[] { "Sil" }, ("Bob", 0));
+        h.Results[Skiff] = Answer(Skiff, new[] { "Sil", "Bob" });   // Bob's answer about the skiff was lost
+        h.Results[Canoe] = Answer(Canoe, new[] { "Sil" }, ("Bob", 1));
+
+        h.Gate.OnPathItemsRequired(new[] { Raft });
+
+        // Leader, Bob (a canoe) and Sil (nothing): two boats still to get.
+        Assert.Equal((Raft, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    // A follower borrows from members who said they have a spare. One who didn't
+    // answer can't be borrowed from, so the follower's side is as it was.
+    [Fact]
+    public void Follower_SilentMember_ChangesNothing()
+    {
+        var borrow = new Harness();
+        borrow.Names[1] = "rope";
+        borrow.Results[1] = Answer(1, new[] { "Sil" }, ("Bob", 3));
+        borrow.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.Equal("@party give rope to MudPlay\r", Assert.Single(borrow.Sent));
+        Assert.Empty(borrow.Forwarded);
+
+        var none = new Harness();
+        none.Names[1] = "rope";
+        none.Results[1] = Answer(1, new[] { "Sil" }, ("Bob", 1));
+        none.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.Empty(none.Sent);
+        Assert.Equal((1, 1), Assert.Single(none.ForwardedReq));
+    }
 }

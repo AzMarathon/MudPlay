@@ -145,8 +145,45 @@ public sealed class PartyInventoryProbeTests
         await released.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.False(held);
-        // Bob never answered, so he is outside the pool: one copy, for the leader.
-        Assert.Equal((175, 1), Assert.Single(forwarded));
+        // Bob never answered, so he is taken to hold none: a copy each for the two.
+        Assert.Equal((175, 2), Assert.Single(forwarded));
+    }
+
+    // The members who were asked and didn't answer are named, so the route card
+    // and the walk read the same party from one count. An invitee was never asked.
+    [Fact]
+    public async Task WindowClosing_NamesTheMembersWhoDidNotAnswer()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.AddMember("Sil");
+        h.AddMember("Tristian", invited: true);
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(175, "rope");
+        h.Reply("Bob", "yes - 1x 'rope'");
+        h.FireWindows();
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, r.Expected);
+        Assert.Equal(1, r.Replied);
+        Assert.Equal(new[] { "Sil" }, r.Unanswered);
+        Assert.Equal(new[] { "Bob" }, r.CountsByMember.Keys);
+    }
+
+    [Fact]
+    public async Task EveryoneAnswering_LeavesNobodyUnanswered()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(175, "rope");
+        h.Reply("Bob", "no - nothing matching 'rope'");
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Empty(r.Unanswered);
+        Assert.Empty(PartyInventoryProbe.PartyItemResult.Empty(175).Unanswered);
     }
 
     [Fact]
