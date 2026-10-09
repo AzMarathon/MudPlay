@@ -702,7 +702,7 @@ How a character is named, how it earns and spends character points (CP), how exp
 - **A trainer can also stock items** (the Bard Training Room sells songsheets, the Thief Training Room lockpicks) — same 20-slot stock table as a merchant — so a training room is a trainer *and* a merchant at once, not either/or.
 - **Stock refuses `train stats` while a stat is altered** *([OBSERVED] 2026-10-08, `wccmmud.dll` 1.11p `_cmd_train` @0x456f54; the user said the same from memory, 2026-10-08)*. It prints `Your stats are unnaturally altered!  You may not train stats now.` (two spaces after `altered!`, @0x457081) and the form never opens.
   - The test is not current ≠ trained. It calls `_user_has_ability` for each of abilities 44–49 (@0x457010–0x45706a) and refuses when the character has any of them.
-  - `_user_has_ability` (@0x43d570) finds an ability on: an active spell (the 10 spell slots), the race, the class, the player's own ability list (`+0x73a`), a worn item or the wielded weapon, and items carried in the pack (with two exclusions on the item record that weren't decoded).
+  - `_user_has_ability` (@0x43d570) finds an ability on: an active spell (the 10 spell slots), the race, the class, the player's own ability list (`+0x73a`), a worn item or the wielded weapon, and items carried in the pack that are not weapons (`ItemType` 1) and have no wear slot (`Worn` 0) *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_user_has_ability` @0x43d6c9–0x43d6f5; an earlier note said the two exclusions on the item record weren't decoded, superseded 2026-10-09)*. The key ring is not looked at. How the ten spell slots are compared is in *Items, inventory & equipment → Deck of cards (Gypsy)*.
   - So a spell with a stat ability refuses it even when its amount cancels another's, and so does an item with a stat ability, though the item doesn't change the `stat` number (*Wire, prompt & command output → How `stat` marks a modified stat*).
   - The other `train stats` refusals in that routine: `You may not do any training while in tournament mode!` (@0x456f81) and `You may not train your stats here!` (@0x457169, @0x45718e, @0x4571b4: no room, not a trainer, or a trainer for another class).
 - **Paradigm opens `train stats` with a stat altered** *([CONFIRMED] 2026-10-08, user; [OBSERVED] report `paradigm-20260930-160602`)*: the form opened and took a Strength raise with way of the bear up.
@@ -3763,13 +3763,38 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 *Status: CONFIRMED (verbs; bare-CR redisplay user 2026-08-11; visibility user 2026-07-24; burnout line capture 2026-07-11)*
 
 - **`use <item>` readies a light (torch, lantern); `rem <item>` removes it.** Lights follow the same trade-places rule as `eq` — `use`-ing a new light swaps out the current one (if usable).
+- **`[CONFLICT — ask the user]` Stock's engine refuses a second light instead of swapping** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_light` @0x46728e–0x467297; Realm: Stock, Paradigm not recorded)*. With a light already lit, lighting another answers `You already have something lit!` and nothing changes, so on Stock the lit one has to be `rem`'d first. The swap rule in the bullet before this one is confirmed with no realm on it. Question for the user: is the swap rule Paradigm's only, or does Stock swap as well?
+- **Stock: `use <light>` is `light <light>`** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_use` @0x460efc and `_cmd_light` @0x46713b; Realm: Stock, Paradigm not recorded)*. `_cmd_use` hands any `ItemType` 6 item to `_cmd_light`, which checks in this order:
+  - you can't use the item: `You may not light that item!`
+  - it isn't a light: `You cannot light %s!`
+  - a light is already lit: `You already have something lit!`
+  - success: `You lit the %s.`, and the room sees `%s lights %s %s.` (your name, a word not read, the item).
+  - A light with no uses left answers `You must recharge that before you may light it again.` (@0x46739d).
+- **Stock: one light at a time, and it is not a worn slot** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_light` @0x46728e, `_display_inventory_items` @0x439c0b; Realm: Stock, Paradigm not recorded)*. The lit light is a pack item the player record points at, not one of the 20 worn slots. `i` lists it as `<name> (Readied/<N>)`, where `<N>` is its uses divided by 10, rounded down, so it reads 0 for the last nine uses.
+- **Stock: a lit light burns one use per medium character update** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_medium_update_character` @0x422906; Realm: Stock, Paradigm not recorded)*. The length of that update is a sysop timer and isn't in the DLL, so the burn rate in seconds is not recorded.
+- **Stock: `rem <light>` on the lit one answers `You have removed %s and extinguished it.`**, and the room sees `%s removes %s!` *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_remove_armour` @0x41cede–0x41cf70; Realm: Stock, Paradigm not recorded)*. A light that isn't the lit one answers `You do not have %s lit.` Unlike taking off armour or a weapon, it does not break combat.
+- **Stock: a bare `light` prints the room's light band** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_light` @0x467194; Realm: Stock, Paradigm not recorded)*: `The current light level is %s`, with no full stop, e.g. `The current light level is dimly lit`. The band can be read without moving.
+- **Stock: how the light level is built** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_get_light_level` @0x41f09e; Realm: Stock, Paradigm not recorded)*. `light = the room's Light + your Illumination (13) total + for every player in the room, you included, (that player's lit-light value + RoomIllu (14) total)`, capped at 900, and then your BlindingLight (53) total is added on top. The lit-light value is the IlluTarget (54) of the light a player has lit.
+  - So **another player's lit torch or RoomIllu lights the room for everyone in it, and Illumination (13) helps only its owner.**
+  - **Bands** (the words `light` and the dark-room line print): below −200 `pitch black`; −200 to −151 `very dark`; −150 to −101 `barely visible`; −100 to −1 `dimly lit`; 0 to 199 `Regular Light`; 200 to 899 `Daylight`; 900 and up `You are blind!`.
+  - **You can't see when the level is below −150** (`_can_see` @0x46bd46), so only `pitch black` and `very dark` appear in the dark-room line (*Dark rooms — no name, no exits, traversal inferred from no bonk*), or when it is above 900, which only BlindingLight on top of the cap can reach.
 - **`use <light>` only grants the ability to see — it does NOT re-display the room** *(CONFIRMED, user 2026-08-11)*. After lighting in a dark room you must send a **bare carriage return** to redisplay:
   - if the light now lets you see, the full room prints (name / exits / `Also here:`, revealing any monsters that were standing there unseen);
   - if it's still too dark, the "can't see" dark message prints again.
 - **The bare CR is the ONLY way to discover a *standing* (non-attacking) monster in a just-lit room** — the dark display never listed it, and `DarkRoomCombatWatcher` only catches a monster that *swings* (its attack line).
 - **A readied light is visible to other players** *(CONFIRMED, user 2026-07-24)* — an onlooker sees the lit source the way they see worn gear, so it counts as "shown," not hidden.
-- **A readied light burning out prints exactly `Your <item> flickers and goes out.`** *(CONFIRMED, capture 2026-07-11)* (e.g. `Your torch flickers and goes out.`) — one line, period-terminated, no name/exits.
+- **A readied torch burning out prints exactly `Your torch flickers and goes out.`** *(CONFIRMED, capture 2026-07-11)* — one line, period-terminated, no name/exits. (An earlier note gave the line as `Your <item> flickers and goes out.` for every light; superseded 2026-10-09 for Stock, where the line is the item's own, as the bullet after this one records. The capture's realm isn't recorded.)
   - It is the *only* signal the light is gone: the inventory `i` dump still lists the item as readied until the next dump lands, so the display lies about a light that no longer exists in the meantime.
+- **Stock: the burn-out line is per item** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_medium_update_character` @0x42294b–0x422a62, with the 1.11p item records and message table; Realm: Stock, Paradigm not recorded)*. At 0 uses the light goes out and, unless the item is flagged to be kept, leaves the pack. If the item names a message, its first line goes to you and its second to the room; if it names none, you see `%s is no longer lit!` and the room sees `%s's %s just went out.`; if it names a message that doesn't exist, nothing is printed.
+
+  | Item | Line to you |
+  |---|---|
+  | torch (175) | `Your torch flickers and goes out.` |
+  | lantern (176), brass lamp (286), marsh light (692) | `Your lamp runs out of oil, and goes out.` |
+  | moon-lamp (1153) | `The light in the moon-lamp flickers, and goes out.` |
+  | light ball (1085) | `Your light ball disappears out of existance.` |
+  | scaled lantern (1233), glowing pearl (1234) | `scaled lantern is no longer lit!` / `glowing pearl is no longer lit!` |
+  | Eternal Fire (935), incense (284) | nothing (their message numbers, 66 and 121, don't exist) |
 
 **Client use:**
 - Auto-light must send the bare CR after readying the light or it walks past passive mobs (the "lights a torch but doesn't re-check the room" report).
@@ -5456,6 +5481,8 @@ How items are acquired, counted, picked up, dropped and stored in rooms. Also co
 - **The other verbs' bare-count confirmations are not all captured yet.** They have the same shape (`You took/dropped <N> <item>.`, buy/sell), but not every one has been captured from a live session. `give` is captured: see *Giving items and coins to another player (`give`, `share`)*.
 - **[CONFIRMED] Stock: one item per action — `sell dagger` ×10 to sell ten; no quantity argument.** This holds for every verb and every kind of item: `buy <item>` and `sell <item>` each transact exactly one unit.
 - **Gets follow the same split** (user, 2026-09-26): the ground-stack entry's "there is no bulk-get verb, so each `get <name>` grabs a single unit" (2026-07-20) holds on Stock; Paradigm accepts `get <N> <item>` — the capacity-refusal screenshot (see *`get` failure responses*) shows `get 20 torch`.
+- **Stock's `give` has no counted item form either**: a leading number always means coins. See *Giving items and coins to another player (`give`, `share`)*.
+- **Stock's `i` stacks a pile into one counted entry, as Paradigm's does** (the Paradigm form is in this topic's **Client use** list). See *The `i` listing and carried weight*.
 
 **Client use:**
 - The client emits both forms (Paradigm counted, Stock one-per-command) through `CountedCommand.Emit`.
@@ -5507,6 +5534,8 @@ A `get <item>` that can't succeed replies with one of these shapes:
   - Unlike the two shapes above, the item is NOT gone. It's a transient block that clears once weight is shed.
   - No item name is echoed.
   - Confirmed by screenshot: `get 20 torch` succeeds twice, then a third `get 20 tor` while overloaded → `You cannot carry that much!`.
+  - **Stock: the same line also means "no free slot"** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_add_item_to_inventory` @0x41b19e (weight) and @0x41b292–0x41b2bb (slots); Realm: Stock, Paradigm not recorded)*. It prints when the item would take the weight above the max (exactly the max is allowed), and also when all 100 pack slots are in use or, for a key, the key ring is full (50 at most). The line doesn't say which. The weight side is in *The `i` listing and carried weight*.
+- **Stock: `A strange force stops you from getting this item.`** is a second refusal from the same routine *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_add_item_to_inventory` @0x41b15f; Realm: Stock, Paradigm not recorded)*. It prints when the engine's `_add_logical_to_user` test refuses the item; what that test checks wasn't traced. A `buy` goes through the same routine and can print either line (*Money, banks & shops → Buy / sell result lines*).
 
 **Client use (Roomba Mode):**
 - **The first two shapes mean retrying is futile**: the item is gone or un-gettable by that name, so drop it from the sort queue. Correlate to the outstanding get by the echoed word, falling back to the sole pending get for a truncated/absent echo.
@@ -5589,6 +5618,25 @@ There is no room to drop amethyst pendant here.
 - **The sweep is correct but conservative.** It treats a refusal as "this room is full for everything" and re-targets the whole batch, so it gives up on stackable items that would have fitted.
 - **The stacking retry isn't built yet.** Now that the rule is known, the sweep could retry an item that already has a pile in that room's survey (and carries no uses value) before re-targeting it.
 
+### The `i` listing and carried weight
+*Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*
+
+- **`i` prints its parts in a fixed order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_inventory_items` @0x43987d and `_display_users_keys` @0x43a910; Realm: Stock, Paradigm not recorded)*:
+  - `You are carrying ` and then the entries joined by `, `, with no full stop at the end of the line. With nothing at all it is `You are carrying Nothing!`
+  - The coins come first, largest denomination first, each as `<count> <coin name>`.
+  - Then the worn pieces in worn-slot order, each as `<name> (<slot>)`.
+  - Then the lit light, `<name> (Readied/<N>)` (*Movement & navigation → Light sources*).
+  - Then the readied weapon, `<name> (Two handed)` or `<name> (Weapon Hand)`.
+  - Then the rest of the pack, **one entry per item number, with a leading count when more than one is carried and no plural**: `2 torch`.
+  - `You have the following keys: ` and the keys joined by `,`, a counted key as `<count> <name>s` (an `s` is added to a counted key), or `You have no keys`.
+  - `Wealth: <N> copper farthings`, always with that noun.
+  - `Encumbrance: <carried>/<max> - <band> [<pct>%]`.
+- **The slot word comes from the item's `Worn` code** *([OBSERVED] 2026-10-09, same routine, table @0x4801dc; Realm: Stock, Paradigm not recorded)*: 1 `Worn`, 2 `Head`, 3 `Hands`, 4 `Finger`, 5 `Feet`, 6 `Arms`, 7 `Back`, 8 `Neck`, 9 `Legs`, 10 `Waist`, 11 `Torso`, 12 `Off-Hand`, 13 `Finger`, 14 `Wrist`, 15 `Ears`, 16 `Worn`, 17 `Wrist`, 18 `Eyes`, 19 `Face`.
+- **The encumbrance bands are 0–16 `None`, 17–33 `Light`, 34–66 `Medium`, 67 and up `Heavy`** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_inventory_items` @0x439de8; Realm: Stock, Paradigm not recorded)*.
+- **Encumbrance % = (coin weight + weight carried) × 100 / max weight, rounded down** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_get_encumbrance_percent` @0x41f44f–0x41f474; Realm: Stock, Paradigm not recorded)*. A move is refused only above 100 (*Movement & navigation → Per-hop movement speed*).
+- **Weight carried is the `Encum` of everything in the 100 pack slots plus everything on the key ring** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_update_weight_carried` @0x46f064; Realm: Stock, Paradigm not recorded)*. Worn gear and the readied weapon sit in the pack slots too, so they count, and a key weighs what its record says. Coin weight is separate: *Money, banks & shops → Hiding coin in a room (stashing)*.
+- **Max weight is the base scaled by Encum% (ability 96)** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_get_max_weight` @0x41f3d0; Realm: Stock, Paradigm not recorded)*: `base × (100 + Encum% total) / 100`, integer division, never below 1. Encum% is added up over all its sources. The base is in *Character stats & progression → Max encumbrance (carry weight)*.
+
 ### Equip / remove verbs
 *Status: CONFIRMED*
 
@@ -5604,6 +5652,8 @@ There is no room to drop amethyst pendant here.
 - **Equipping into an occupied slot trades places.** If a slot is occupied and you `eq` (or `use`, for a light) another item from your inventory, the new item takes the slot and the old item returns to inventory.
 - **This only works if the new item is actually usable.** Class/level/slot constraints apply, as does a two-hander vs an occupied off-hand, etc. If the new item isn't usable, the swap fails and nothing changes.
 - **So a single-slot swap needs no explicit `rem` first.**
+- **For a light, the Stock engine reads otherwise**: a second light is refused, not swapped in. That is tagged `[CONFLICT — ask the user]` in *Movement & navigation → Light sources*, which is where the question is kept.
+- **Stock: the usability test comes before anything is taken off** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_wear_armour` @0x41c846 and `_ready_weapon` @0x46db3f; Realm: Stock, Paradigm not recorded)*, which is why a refused swap changes nothing. The order of every check is in *Equip / swap result lines*.
 
 ### Named-item uniqueness and paired slots (finger / wrist)
 *Status: CONFIRMED 2026-09-03 (user in-game tests; report `paradigm-20260903-111522`) · Realm: both (eviction slot differs per realm)*
@@ -5621,6 +5671,12 @@ There is no room to drop amethyst pendant here.
   - A set pick bound for the **evicted** slot rides the eq, with no `rem`: it displaces the odd-out sitting there back to the pack.
   - A pick bound for the **other** slot needs its odd-out `rem`med first, or the eq displaces the member the set keeps back to the pack.
   - To swap BOTH members: `eq <new A>` (evicts the odd in the evicted slot), `rem <other odd>`, `eq <new B>` (originally recorded as `eq 3` … `eq 4`). That is **one** `rem`, not two.
+- **Stock: how the engine does it** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_equip` @0x468431, `_find_item_in_inventory` @0x46a2ca–0x46a3ba, `_wear_armour` @0x41c964–0x41ca4d; Realm: Stock, Paradigm not recorded)*:
+  - **"One of each named item" is a search by item number.** `eq` looks for an unworn copy, and a pack entry doesn't count when its item number is in any worn slot, is the readied weapon, or is the lit light. A second copy of something already worn or wielded therefore answers `You do not have %s left unequipped.`, echoing the word typed.
+  - **The 20 worn slots are not tied to body places.** A new piece shares a place with a worn one when both have the same `Worn` code, or both are finger pieces (codes 4 and 13), or both are wrist pieces (codes 14 and 17). Finger and wrist take two pieces; every other code takes one.
+  - **In a full finger or wrist pair the piece taken off is the second one met in worn-slot order**, which is the second-listed in `i`. That agrees with the Stock eviction rule in this topic.
+  - **A worn finger or wrist piece that is cursed (ability 82 or 83) ends an `eq` of another piece of its family with no line of its own** (@0x41ca0e). In any other place a cursed occupant answers `You are already wearing %s and it may not be removed.` (@0x41cbc6).
+- **`[CONFLICT — ask the user]` Stock: the new piece does not always take the slot it emptied** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_wear_armour`: slot chosen @0x41c88f–0x41c8a6, written @0x41cd04; Realm: Stock, Paradigm not recorded)*. The engine picks the lowest-numbered worn slot that was empty **before** anything was taken off and puts the new piece there, and `i` lists worn pieces in slot order. So when a lower slot was free, the new ring or bracelet lists ahead of the one that stayed. The rule in this topic, confirmed for both realms, is that the new piece takes the evicted piece's slot; the user's Stock test (`[amethyst, silver]` + `eq copper` → `[amethyst, copper]`) fits either reading. Question for the user: on Stock, can a swapped-in paired piece list first, ahead of the piece that stayed?
 
 **Client use:**
 - `EquipmentManager.ComposePairedSlotCommands` takes a realm flag (Paradigm ⇒ evict slot 1) and reasons off the reliable `i` order.
@@ -5635,6 +5691,28 @@ There is no room to drop amethyst pendant here.
   - This is where armor differs from a weapon swap: armor names the displaced piece with an explicit removal line, and a weapon does not.
   - The two lines arrive back-to-back but are distinct, and the client matches each on its own.
 - **[OBSERVED] Re-equipping an item that's already worn** draws `You do not have <X> left unequipped.`
+- **Stock: what `eq <armour>` checks, in order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_wear_armour` @0x41c846; Realm: Stock, Paradigm not recorded)*:
+  - all 20 worn slots are full: `You have no more room to wear that item!` (@0x41c8ac). This comes before every other check.
+  - the item has no wear slot (`Worn` 0): `%s may not be worn!` (@0x41cdc3);
+  - you can't use it: `You may not wear that item!` (@0x41c935);
+  - a worn piece sharing its place comes off: the room sees `%s removes %s!` and you see `You have removed %s.` A cursed occupant refuses instead (*Named-item uniqueness and paired slots (finger / wrist)*);
+  - an off-hand piece under a two-hander is refused (*Two-handed weapons and the off-hand block*);
+  - then combat is broken, the room sees `%s wears %s!` and you see `You are now wearing %s.`
+- **Stock: what `eq <weapon>` / `wield <weapon>` checks, in order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_ready_weapon` @0x46db3f; Realm: Stock, Paradigm not recorded)*:
+  - the weapon now readied is cursed (ability 82 or 83): `You cannot remove %s!` (@0x46dbb5). It is the first check, so a cursed weapon blocks every weapon swap.
+  - you can't use the new one: `You may not use that weapon.` (@0x46dd10);
+  - a two-hander with an off-hand piece worn is refused (*Two-handed weapons and the off-hand block*);
+  - then combat is broken, the old weapon comes off with no line to you (the room sees `%s removes %s.`), the room sees `%s wields %s!` and you see `You are now holding %s.`
+- **Stock: two more lines can follow `You are now holding %s.` in the same output** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_ready_weapon` @0x46debc–0x46def6; Realm: Stock, Paradigm not recorded)*:
+  - `This weapon feels heavy in your hands.` when the weapon's strength requirement is above your Strength;
+  - `You are extremely quick and deadly with this weapon.` when the engine's too-fast test (`_is_weapon_too_fast_for_user`) passes and the strength requirement is met. It is the engine saying the Quick-and-Deadly bonus applies with this weapon at the current load (*Timing & rounds → Player physical swings per round: cap and energy formula*).
+- **Stock: what `rem <item>` answers** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_remove_armour` @0x41ce18, `_ready_weapon` @0x46dc08–0x46dc7e; Realm: Stock, Paradigm not recorded)*:
+  - not worn, or not found: `You are not wearing %s.`
+  - cursed (ability 82 or 83): `You cannot remove %s!`
+  - armour: `You have removed %s.`, the room sees `%s removes %s!`, and combat is broken;
+  - the readied weapon: `You now have no weapon readied.`, the room sees `%s removes %s.`, and combat is broken;
+  - a light: *Movement & navigation → Light sources*.
+- **Stock: a bare `eq` prints the inventory**, the same listing as `i` *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_equip` @0x468453; Realm: Stock, Paradigm not recorded)*.
 
 ### Two-handed weapons and the off-hand block
 *Status: OBSERVED (general block); CONFIRMED 2026-08-19 (user report `paradigm-20260819-234712`)*
@@ -5645,6 +5723,10 @@ There is no room to drop amethyst pendant here.
   - Such an item still mechanically fills the off-hand and blocks a 2H wield exactly the same way: `You may not ready a 2-handed weapon with your <item> worn!`, naming the blocking item. The client's own `EquippedItems.Slot` label is taken verbatim from the game's `i` text, so it can disagree with what actually blocks a 2H equip.
 - **The item's declared MDB `Worn` code is the authoritative signal, not its display bucket.**
 - **[OBSERVED report `paradigm-20260926-194514`, Paradigm] The reverse is blocked too.** Wearing an off-hand item while a two-hander is wielded is refused with `You may not wear an off-hand item while you have a 2-handed weapon readied.`
+- **Stock has both lines and the same rule** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_ready_weapon` @0x46dd2b–0x46dd82, `_wear_armour` @0x41cc9d–0x41ccbc; Realm: Stock)*:
+  - **A weapon is two-handed when its `WeaponType` is 1 or 3.** `i` tags such a weapon `(Two handed)`.
+  - **Only a worn piece with `Worn` code 12 blocks readying one**: `You may not ready a 2-handed weapon with your %s worn!`, naming the piece. That is the declared code, as the rule in this topic says, not the word `i` prints.
+  - **The reverse refusal is a Stock line too**: an item with `Worn` code 12 under a readied two-hander answers `You may not wear an off-hand item while you have a 2-handed weapon readied.`
 
 **Client use:**
 - `EquipmentManager.PrependTwoHandOffHandConflictRems` rems the conflicting piece before a set that changes the hands.
@@ -5656,6 +5738,8 @@ There is no room to drop amethyst pendant here.
 - **No effect in the game force-unequips gear** (no disarm / removal effects). Worn state changes *only* from commands the player or the client issues.
 - **Worn gear persists across logins.** You log back in wearing whatever you had on. There's no re-equip-on-connect step to do, because the loadout is already correct.
 - **The one exception is the rare cleanup EP-zap.** When an evil character's alignment drops below an item's Evil-Point threshold, the game force-removes it. Re-equipping then fails with `You may not use that weapon.` (weapon) / `You may not wear that item!` (armor).
+- **`[CONFLICT — ask the user]` Stock's engine has a second forced removal: a cast that lifts curses takes cursed worn pieces off** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cast_no_target` @0x4410e3–0x44115b, `_cast_user_target` @0x445c08, `_monster_cast` @0x4284dd–0x428521; Realm: Stock, Paradigm not recorded)*. One branch of the cast routines walks the target's worn slots and calls the remove routine in its forced mode, which skips the `You cannot remove %s!` check, for each piece that has Cursed (82), or has CursedMajor (83) with a value above 0 and below the caster's level. The lines are the ordinary `You have removed %s.` / `%s removes %s!`. Which spell ability drives that branch wasn't traced. The rule at the head of this topic, confirmed with no realm on it, says no effect in the game force-unequips gear. Question for the user: does a remove-curse cast take cursed gear off on Stock, and is the no-forced-unequip rule about hostile effects (disarms) only?
+- **Stock: the check that takes off gear you can no longer use also runs at login, and it covers the readied weapon as well as the 20 worn slots** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_update_allowed_worn_items` @0x414b38, called from `_load_player` @0x416108; Realm: Stock, Paradigm not recorded)*. It is the same check the EP-zap runs (*Item wear restrictions (ability-code flags)*: `Your <item> has been removed.`). Gear that is still usable stays on across a login, as the rule in this topic says.
 
 **Client use:**
 - The client must not fire a speculative `eq` before the first `i` dump lands. The desired gear is already worn, so a blind equip only draws the already-on refusal (or the EP-zap refusal).
@@ -5695,7 +5779,7 @@ There is no room to drop amethyst pendant here.
 ### Abilities of carried items
 *Status: mixed (per-bullet tags) · Realm: both for the Stealth penalty of a carried item; the engine internals are Stock only*
 
-- **Stock totals a carried item's abilities when it is not a weapon and has no wear slot** *([OBSERVED] 2026-10-07, `wccmmud.dll` 1.11p `_get_user_ability_value` @ `0x43d038`)*. The routine adds an ability up over the class and race, the active spells, the 20 worn slots (`0x62c`), one further item slot (`0x624`, not identified), and the 100 pack slots (`0xd8`). A pack item is skipped when its `ItemType` is 1 (weapon; item field `0x2f4`) or it has a wear slot (`Worn`, item field `0x398`, not 0). Keys aren't in the pack slots: `_add_item_to_inventory` files an `ItemType` 7 item on the key ring (`0x334`, 50 at most).
+- **Stock totals a carried item's abilities when it is not a weapon and has no wear slot** *([OBSERVED] 2026-10-07, `wccmmud.dll` 1.11p `_get_user_ability_value` @ `0x43d038`)*. The routine adds an ability up over the class and race, the active spells, the 20 worn slots (`0x62c`), the readied weapon (`0x624`), and the 100 pack slots (`0xd8`). (An earlier note said the `0x624` slot was not identified; superseded 2026-10-09: `_ready_weapon` writes the new weapon's number there @0x46de3b, and `_display_inventory_items` prints it as `(Weapon Hand)` / `(Two handed)`.) A pack item is skipped when its `ItemType` is 1 (weapon; item field `0x2f4`) or it has a wear slot (`Worn`, item field `0x398`, not 0). Keys aren't in the pack slots: `_add_item_to_inventory` files an `ItemType` 7 item on the key ring (`0x334`, 50 at most).
 - **So the Stealth stat itself drops while such an item is carried** *([OBSERVED] 2026-10-07, `_calculate_secondary_stats` @ `0x41a424`, Stock)*: Stealth (`0x5fa`) is the base (see *Character stats & progression → Stealth base*) plus the ability 27 total, floored at 0.
 - **The items with a Stealth penalty that applies from the pack** *([OBSERVED] 2026-10-07, imported Items on both sets: `ItemType` 10, `Worn` 0, ability 27)*:
 
@@ -5710,6 +5794,11 @@ There is no room to drop amethyst pendant here.
 
 - **Paradigm: carrying a log raft stops a sneak from taking** *([CONFIRMED] 2026-10-07, user; report `paradigm-20261007-213809`)*. In the capture the raft was bought at Stealth 131 and 76% encumbrance, and the next 14 `sn` in a row answered `Attempting to sneak...You don't think you're sneaking.` That is the Stock arithmetic: 131 − 125 = 6, less 10 for the load (see *Movement & navigation → Sneaking — commands, equip order, and the sneak state machine*).
 - **Paradigm's `stat` shows Stealth already lowered while the raft is in the pack** *([CONFIRMED] 2026-10-07, user: "if you have a log raft in your pack and you type stat, you see the raft subtracting from your stealth")*, the same as the Stock engine's stored figure.
+- **Stock: how an ability total is built** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_get_user_ability_value` @0x43d038; Realm: Stock, Paradigm not recorded)*:
+  - **Seven abilities take the highest single value instead of adding up**: 22 Accuracy, 71 Confusion, 72 ShockShield, 87 Speed, 101 ConfuseMsg, 105 Accuracy2, 106 Accuracy3 (@0x43d088–0x43d0ad). Each source replaces the running figure only when it is larger, and with no source the result is 0. Every other ability is summed.
+  - **An active spell carrying ability 124 (NegateAbility) with value N forces the total of ability N to 0**, whatever the other sources give (@0x43d20f–0x43d234).
+  - **A spell ability stored with value 0 uses the value saved for that active-spell slot**, which is the amount rolled when the spell was cast (@0x43d1a9–0x43d209).
+  - **A total counts a spell in any of the ten active slots.** The has-ability test (`_user_has_ability`) can miss one; that quirk is in *Deck of cards (Gypsy)*.
 
 **Client use:**
 - `ItemNameStore.PackStealthOf` reads the modifier with the engine's rule (not a weapon, no wear slot).
@@ -5723,6 +5812,8 @@ There is no room to drop amethyst pendant here.
   - MajorMUD stores **`-1`** for a truly unlimited item (the common case, e.g. *shimmering greatsword*, *jeweled longsword*), and occasionally **`0`**. **Both are unlimited.**
   - This matches MMUD Explorer's own normalisation `If uses <= 0 Then uses = -1`.
   - Stock's engine skips a `-1` item entirely when charging a use, and counts anything else down by one; an item can only be used up when a use lands it on exactly `0` (a per-item flag can still keep it). So a stored `0` becomes `-1` on first use and never runs out *([OBSERVED] `wccmmud.dll` 1.11p `_deduct_item_charge`)*.
+- **Stock: what prints when the last charge goes** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_deduct_item_charge` @0x41b5f4–0x41b693; Realm: Stock, Paradigm not recorded)*. An item that names a message prints that message, the same one a light prints when it burns out (*Movement & navigation → Light sources*). An item that names none prints `It's uses gone, %s disappears from your inventory!`, spelled that way.
+- **Stock's `look <item>` shows no charge count** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_item_desc` @0x439697 and the DLL's strings; Realm: Stock)*. It prints the item's description lines and an optional long text, and the DLL holds no `Uses remaining` string. Paradigm's `look` does show one (*Deck of cards (Gypsy)*: `Uses remaining: 9999`). The one count Stock shows is a lit light's, in `i`.
 
 - **A one-charge item that doesn't recharge (`UseCount` 1, `Retain After Uses` 0) has exactly its one charge while held.** Examples are learn-spell scrolls and a bola. It's gone once used, so a `look` for its charges tells nothing. *(**Client policy**, user, 2026-09-26; report `paradigm-20260926-220239`.)*
 
@@ -5731,6 +5822,15 @@ There is no room to drop amethyst pendant here.
 - The Spell Book renders `<= 0` as the word "Unlimited" (never a raw "-1 uses").
 - `ItemChargeTracker` (Paradigm) never looks at a one-charge non-recharging item, and reports it as 1 (`ItemChargeMeta.IsSingleUseConsumable`).
 - `ItemChargeTracker` (Paradigm) reads a held item's count once with `look`, then counts each use down on the item's use line (`AppServices.BuildItemUseLinePredicate`) instead of looking again (report `paradigm-20261002-140153`). A use answered `You have already cast a spell this round!` is left uncounted (*Deck of cards (Gypsy)*). A use with neither answer, and the last charge, are settled by a `look`.
+
+### Eating and drinking (`eat`, `drink`)
+*Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*
+
+- **`eat <item>` finds only food (`ItemType` 4) and `drink <item>` only drinks (`ItemType` 5)** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_eat` @0x4673c3, `_cmd_drink` @0x467574; Realm: Stock, Paradigm not recorded)*. Anything else isn't found by them.
+- **The lines are `You eat the %s.` and `You drink the %s.`**; the room sees `%s eats %s.` / `%s drinks %s.`, unless you are hidden, when the room line is skipped. (Item spells can print the same wording as their own message: *Wire, prompt & command output → Fixed command replies (refusals and housekeeping notices)*.)
+- **The item's abilities then run as a `use` with no target, and a charge is taken only when that reports success** (*Equip → use → restore swap for a readied buff item*).
+- **A drink with no uses left answers `There is nothing more that %s can do for you.`** (@0x467717). Food with no uses left, an item of the wrong kind, and an item you can't use get no line from these commands.
+- **Neither command reads or writes a hunger or thirst value.** Both end a rest (*Health, resting & recovery → What ends a rest*).
 
 ### Equip → use → restore swap for a readied buff item
 *Status: CONFIRMED 2026-08-06 (user); 2H-weapon + off-hand-buff exception CONFIRMED 2026-08-26 (user)*
@@ -5748,6 +5848,15 @@ There is no room to drop amethyst pendant here.
   - `You attempt to cast %s, but fail.`, `Your spell fails!`, `Your power fails!`;
   - `Your spell has no effect in this room!` and `You must specify a target for that spell!`.
   - Once the cast is under way it reports success whatever the spell's textblock then does, so a refusal printed by the textblock (*Deck of cards (Gypsy)*: `Nothing happens.`) does spend one.
+- **Stock: what the second word of `use <item> <word>` does** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_use` @0x460f54–0x4610ad; Realm: Stock, Paradigm not recorded)*:
+  - It is looked up as a target: a player, a monster, an item or a spell. **A word that matches nothing is ignored and the item is used with no target.**
+  - For a key (`ItemType` 7) it must be a direction; otherwise the use fails with no line.
+  - A light (`ItemType` 6) goes to the `light` command (*Movement & navigation → Light sources*).
+- **Stock: what a `use` does with the item's abilities** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_use_no_target` @0x44a630, `_use_player_target` @0x44ac25, `_use_monster_target` @0x44af2e, `_use_item_target` @0x44b180, `_use_spell_target` @0x44b220; Realm: Stock, Paradigm not recorded)*:
+  - **With no target:** Heal (18) prints `You receive %d hit points.` and HealMana (150) prints `You receive %d mana.`; CastsSp (43) casts the spell, and the cast's result is the use's result.
+  - **On a player:** the same two lines go to the **target**, followed by a fresh prompt for them; CastsSp casts the spell on them.
+  - **On a monster or an item only CastsSp does anything**, and only if you could cast that spell yourself. A refusal there is silent.
+  - **`use <item> <spell name>` does nothing**: no line, and no charge is taken.
 - **A buff item can live in ANY equip slot, not just weapon / off-hand.** A warhorn is off-hand, a charged amulet is neck, etc.
 - **Restore is slot-specific.** `eq <item>` puts the item into **its own** slot and displaces only what was there.
 - **1H weapon buff:** displaces the **weapon hand**, so restore the weapon.
@@ -5787,7 +5896,9 @@ There is no room to drop amethyst pendant here.
   - the deck: `failability 15 1114` → `Nothing happens.` Paradigm's textblock 9821 runs it after `cast 5145` (`card shuffle`), which has just removed the eight deck cards, so a redraw passes. Stock's 9365 has no shuffle before it.
 - **Stock's deck cannot be drawn again while a card is up** *([OBSERVED] 2026-10-02, `wccmmud.dll` 1.11p; Realm: Stock)*.
   - The textblock handler's `failability <ability> <message>` step calls `_user_has_ability`. When it is true the step prints the message and stops the chain; when false the chain carries on. So with a card up, `use deck` prints `You grab your deck of cards and draw...`, then `Nothing happens.`, and the `random 9264` table never runs.
-  - `_user_has_ability` looks through the ten active-spell slots, then race, class, the character's own ability list and worn items. For the spell in active slot *i* it only compares that spell's abilities when the spell's own ability slot *i* is non-zero. A card has three to six abilities, so a card sitting in a later active-spell slot is not seen. [NEEDS CONFIRMATION] In play, does Stock's deck draw again when four or more spell effects were already up before the card landed?
+  - `_user_has_ability` looks through the ten active-spell slots, then race, class, the character's own ability list and worn items, then the readied weapon and the pack items that are not weapons and have no wear slot (the last two added 2026-10-09 from the same routine, @0x43d6a5 and @0x43d6c9–0x43d6f5; the key ring is not scanned). For the spell in active slot *i* it only compares that spell's abilities when the spell's own ability slot *i* is non-zero. A card has three to six abilities, so a card sitting in a later active-spell slot is not seen. [NEEDS CONFIRMATION] In play, does Stock's deck draw again when four or more spell effects were already up before the card landed?
+    - **The slot test is how the code is compiled** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_user_has_ability` @0x43d5c2–0x43d5dc; Realm: Stock)*: the "slot in use" test reads the spell's ability slot *i*, the outer index, and the compare reads slot *j*. So a spell whose *n* abilities are packed from slot 0 is seen only while it sits in active slot 0 to *n*−1, and a card in a slot numbered at or above its ability count lets the deck draw again. The question stays open only because which active slot a new spell takes was not read.
+    - `_get_user_ability_value` does not share the quirk: its spell loop tests and reads the same slot (@0x43d199), so an ability *total* counts a spell in any active slot (*Abilities of carried items*).
   - **That refused use still spends a charge.** `_cmd_use` calls `_deduct_item_charge` only when the use routine reports success, and for a cast item that is `_cast_no_target`'s result. The textblock runs inside the cast as one of the spell's abilities and its outcome is discarded: once the cast has got that far the routine returns success. So `Nothing happens.` costs one of the Stock deck's 100 uses.
   - [NEEDS CONFIRMATION] On Paradigm, does `use deck` answer `Nothing happens.` while a fortune teller's reading (490–502, not removed by the shuffle) is up?
 - **A use takes the between-round cast slot, the same as a buff spell, and it can be used cycle after cycle** *([CONFIRMED] 2026-10-02, user)*.
@@ -5869,14 +5980,26 @@ There is no room to drop amethyst pendant here.
 - **[OBSERVED] Paradigm has also printed `<Player> just gave you <item>.`** (report `paradigm-20260926-102406`, a party leader handing recovered gear back: `<Player> just gave you shimmering white robes.`, as quoted when the parser for it was written; the capture was not re-read on 2026-10-07).
 - **[NEEDS CONFIRMATION] Why Paradigm has shown both item wordings.** The user's idea (2026-10-07, "probably"): the counted item commands (see *Item batching: Paradigm counted commands vs Stock one-per-command*). The 2026-10-07 captures show the count is not what picks the wording: a `give` with no count, with a count of 1 and with a count of 2 all print `gives you` / `You give`. That leaves the reworked command having replaced the older line, which would make `just gave you` a line from before the change; nothing on record dates it. Question for the user: can Paradigm still print `just gave you`, and from what? (An earlier note asked whether one command prints both or two commands print one each; superseded 2026-10-07.)
 - **[OBSERVED] `gives you` is not a Stock engine line** (2026-10-07, `wccmmud.dll` 1.11p and its message table `wccmsg2`). The engine has no such string, and the table holds it only as NPC flavour naming one giver and one item (`Dhelvanen gives you a green potion.`). So the Stock engine cannot say why Paradigm prints two item wordings.
-- **[OBSERVED] Stock: the item lines are `You just gave %s to %s.` to the giver, `%s just gave you %s.` to the one given, and `%s just gave %s something.` to the room** (`wccmmud.dll` 1.11p strings, in that order; all three are printed by `_cmd_give`, which has no other item wording). Next to them: `You may not give that item away!`, `%s cannot accept your offer.`, `%s refuses your offer.`, `Why would you want to give to that?`, `You do not have %s left unequipped.`
+- **[OBSERVED] Stock: the item lines are `You just gave %s to %s.` to the giver, `%s just gave you %s.` to the one given, and `%s just gave %s something.` to the room** (`wccmmud.dll` 1.11p strings, in that order; all three are printed by `_cmd_give`, which has no other item wording). Next to them: `You may not give that item away!`, `%s cannot accept your offer.`, `%s refuses your offer.`, `Why would you want to give to that?` (An earlier note listed `You do not have %s left unequipped.` with these; superseded 2026-10-09: that string is printed by `_cmd_equip` @0x468505, the function after `_cmd_give`, not by `give`.)
+- **[OBSERVED] Stock: a leading positive number always means coins** *(2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_give` @0x4677a4–0x46803d; Realm: Stock, Paradigm not recorded)*. When the first word after `give` is a number above 0, the engine takes the coin branch: the next word must match a coin name (`copper farthings`, `silver nobles`, `gold crowns`, `platinum pieces`, or the board's fifth coin; a partial match will do) and the word after it must be `to`, or the answer is `Syntax: GIVE {amount} {currency} TO {someone}`. So Stock has no counted item give: `give 2 darkwood ring to fuj` gets the syntax line.
+  - **`give` needs at least four words** (@0x467778). With fewer it is not handled as a give at all.
+  - **A coin give at something that isn't a player, or at a player hidden from you, answers `Why would you want to give to that?`** (@0x467856, @0x4678ad). The item branch answers nothing in those two cases.
+- **[OBSERVED] Stock: what an item give checks, in order** *(2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_give` @0x46805b–0x4683ee; Realm: Stock, Paradigm not recorded)*:
+  - the item isn't in the pack: no line;
+  - the item is flagged not to be given (the item-record byte wasn't identified), or it is cursed (ability 82 or 83), worn, and the only copy held: `You may not give that item away!`
+  - the word after the item isn't `to`, the target isn't a player, or the target is hidden from you: no line;
+  - the target has gifts switched off: `%s refuses your offer.` The coin branch and `share` test the same flag.
+  - the target can't take it, for the reasons a `get` is refused (*`get` failure responses*: too heavy, no free slot): the item stays with the giver, who sees `%s cannot accept your offer.`
+  - otherwise the three lines above.
+- **[NEEDS CONFIRMATION] Is `%s refuses your offer.` the `set receive` toggle?** The flag `give` tests is flipped by a `set` option whose strings sit beside `receive` in the DLL: `You will now accept items/currency from other players.` and `You will refuse any gifts from other players.` (`_cmd_set` @0x4590e1–0x45914d; the option word itself wasn't tied to the flag by an address). If so, a hand-over to a party member who has switched receiving off fails with `<Player> refuses your offer.` on Stock.
 - **[OBSERVED] Stock: a coin give has its own lines, one pair per denomination**: `You gave %s %d copper` / `%s gave you %d copper` (and `silver`, `gold`, `platinum`, then `You gave %s %d %s` / `%s gave you %d %s`), with `%s just gave %s some coins.` to the room and `You do not have that much copper!` / `You do not have that many %s!` as the refusals.
   - Each string ends at the denomination: there is no `just`, no coin noun and no full stop (the bytes after `copper` are a carriage return and the string's end; an earlier note said what follows the denomination was not recorded, superseded 2026-10-07).
   - The fifth pair prints the fifth coin's name from a pointer the engine fills at start-up, so its text is whatever the board named that coin.
   - The syntax line is `Syntax: GIVE {amount} {currency} TO {someone}`.
-  - The count printed is what the recipient kept. `_cmd_give` moves the whole amount, then hands coins back one at a time, up to 500, while a weight check on the recipient fails, and prints the remainder.
+  - The count printed is what the recipient kept. `_cmd_give` first cuts the amount down to what the recipient has room for, `3 × (their max weight − (their coin weight + weight carried))`, and to 0 when that is negative *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_give` @0x467909–0x46794a; Realm: Stock)*. It then moves that amount, hands coins back one at a time, up to 500, while a weight check on the recipient fails, and prints the remainder. (An earlier note said it moves the whole amount before the hand-back; superseded 2026-10-09.)
+    - So a recipient with no room left gets `You gave %s 0 copper`, and the refusal `You do not have that much copper!` compares the giver's coins with the cut-down amount, not the typed one.
 - **[OBSERVED] Stock: `share` prints the same shape with the coin's full name**: `You gave %s %d %s` / `%s gave you %d %s`, the last `%s` from `_proper_currency_name` (the engine's name tables read `copper farthings`, `silver nobles`, `gold crowns`, `platinum pieces`, and the singulars `copper farthing` … `platinum piece`), and `%s just gave %s some coins.` to the room (`_share_currency`).
-- **[NEEDS CONFIRMATION]** the client also reads a coin hand-over worded like the Stock item line, `<Player> just gave you <N> <coin noun>.` and `You just gave <N> <coin noun> to <player>.`, which is none of the Stock strings and none of the Paradigm captures. Question for the user: does any realm print a coin give that way? (An earlier note asked how Paradigm words a coin give; answered by the 2026-10-07 captures.)
+- **[NEEDS CONFIRMATION]** the client also reads a coin hand-over worded like the Stock item line, `<Player> just gave you <N> <coin noun>.` and `You just gave <N> <coin noun> to <player>.`, which is none of the Stock strings and none of the Paradigm captures. Question for the user: does any realm print a coin give that way? (An earlier note asked how Paradigm words a coin give; answered by the 2026-10-07 captures.) Settled for Stock 2026-10-09 from the DLL: it is not a Stock line. `_cmd_give` (@0x467744–0x468430) pushes every give string there is, the only ones with `just` are the item lines and the room's coin line `%s just gave %s some coins.`, which carries no number, and the message table `wccmsg2` has no row containing `just gave`. The question stays open for Paradigm.
 - **An NPC's give is a different thing**: its line is textblock flavour and proves nothing (see *NPC keyword hand-over detection*). `Dhelvanen gives you a green potion.` and `The gnome commander gives you the heavy bloodstone orb.` (Stock message table) have the shape of the Paradigm player line, and differ from it in wording the item their own way rather than by its record name.
 - **Client policy** (user, 2026-10-07): both item wordings and the coin lines are read on every realm, whichever realm they were first seen on.
 - **Client policy** (user, 2026-10-07): in the Stock coin line, any single word that isn't `copper`, `silver`, `gold` or `platinum` is counted as the fifth coin, since a board names that coin itself.
@@ -5941,6 +6064,8 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   else; the other four are stable across the target realms.
 - **Value ladder (in copper):** 1 silver = 10, 1 gold = 100, 1 platinum = 10 000, 1 runic = 1 000 000.
 - **Wealth is consolidated in copper farthings** (the game's `Wealth:` line).
+- **Stock: the ladder is fixed in the engine** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` start-up code @0x402352–0x402370; Realm: Stock, Paradigm not recorded)*. Four rates are written once at start-up: 10 copper to a silver, 10 silver to a gold, 100 gold to a platinum, 100 platinum to the fifth coin. No other write to them was found, so a board can rename the fifth coin but not revalue it.
+- **Stock: the fifth coin has one name for singular and plural** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` start-up code @0x4017a8; Realm: Stock, Paradigm not recorded)*. The plural and singular name tables point at the same text, which start-up fills from the board's configuration. So one of that coin prints whatever noun the board typed, plural or not, where the other four have a singular (`1 gold crown`).
 
 ### Coin wire wording
 *Status: CONFIRMED*
@@ -6043,6 +6168,7 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   loaded.
 - **Coin weight is 1 unit per 3 coins regardless of denomination**, which is why a withdraw/retrieval in
   large denominations is far cheaper to carry than the same value in copper.
+  - **Stock rounds down per denomination, not on the total** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_get_coin_weight` @0x41f354–0x41f3c4; Realm: Stock, Paradigm not recorded)*: each coin's count is divided by 3 on its own and the five results are added. Two coins of each of the five kinds weigh nothing.
 - **A stash room holds two kinds of coin:** **visible** coin (present on entry, or dropped by a kill via
   `N <coin> drop to the ground.`), which is fine to collect, and **search-revealed** coin (the pile we
   just stashed), which must **not** be re-grabbed.
@@ -6096,6 +6222,23 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   confirmed, so it mis-attributes the *next* room's coin to the stash room just left — report
   `paradigm-20260829-212158`.
 
+### How a charge takes coins, and when the purse is re-bucketed
+*Status: [OBSERVED] 2026-10-09 (Stock 1.11p `wccmmud.dll`) · Realm: Stock*
+
+- **Affordability is total wealth in copper**, whatever coins make it up *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_check_currency` @0x41ed8a; Realm: Stock, Paradigm not recorded)*.
+- **Every charge is a copper total, paid from the largest coin down, never overpaying, and breaking one bigger coin when it runs short** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_deduct_currency` @0x41edca, loop @0x41ee55–0x41ef5b; Realm: Stock, Paradigm not recorded)*:
+  - while the amount still owed is at least one fifth coin and you hold one, one is taken; then the same for platinum, gold, silver and copper, in that order;
+  - if something is still owed, **one** coin of the smallest larger denomination you hold is broken into the next one down (a silver into 10 copper, else a gold into 10 silver, else a platinum into 100 gold, else a fifth coin into 100 platinum), and the loop goes round again.
+  - Example: a price of 150 copper with 2 gold crowns and nothing else takes one gold, breaks the other into 10 silver and takes 5 of them. The purse ends with 5 silver.
+- **The amount a line prints is the list of coins actually handed over**, largest first: ` <n> <coin>` per denomination used, joined by `,`, with the singular noun for a count of 1 (@0x41ef6b–0x41f08b). When no coin was taken it prints ` nothing`. So a Stock buy can read `You just bought rope and grapple for 1 gold crown, 5 silver nobles.`
+- **What pays this way**: `buy` (items, healing, curing), a level-up `train`, `deposit`, an exit toll, and a textblock `price` directive, which charges with nothing printed (*Repeated `price` directives add up*).
+  - **The toll line** is `You just paid` + the coin list + ` in toll charges.` (`_move_user` @0x417e3c–0x417e69). The gate itself is in *Movement & navigation → Toll exits*.
+  - **The Stock training fee is `level × 5 × (100 + the trainer shop's Markup%) / 100` silver nobles**, `level` being the level before the train (`_train_level` @0x41e95b–0x41e990). Short of it: `You do not have the money required for your training.` The success line's `<cost>` is that coin list, e.g. `You hand over 1 gold crown, 5 silver nobles and you receive training to attain level 4.` (@0x41e9d1–0x41e9df). The trainer rules are in *Character stats & progression → Trainers: level band, class restriction, and `train stats`*.
+- **`sell`, `deposit` and `withdraw` re-bucket the whole purse upward afterwards** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cleanup_currency` @0x41ebc0, called from `_sell_item` @0x41c75e, `_deposit_gold` @0x41d57c and `_withdraw_gold` @0x41d614; Realm: Stock, Paradigm not recorded)*. Copper is turned into the largest coins it makes (fifth coin at 1,000,000, platinum at 10,000, gold at 100, silver at 10), then 10 silver become a gold, 100 gold a platinum and 100 platinum a fifth coin.
+  - So after `You sold …`, `You deposit …` or `You withdrew …` the carried coins are **not** the old counts plus or minus the line. A sale's proceeds are added as copper and then everything is merged upward, coin already held included: 15 silver held before a sale become 1 gold and 5 silver.
+  - Because coin weight is counted per denomination (*Hiding coin in a room (stashing)*), a sale or a bank visit also lowers the coin weight.
+  - No call to it was found in `buy`, `give` or `train`: after those the purse is as the charge left it.
+
 ### Bank commands: balance / withdraw / deposit
 *Status: CONFIRMED 2026-07-19 (user, capture); `bank` output CONFIRMED 2026-09-07 (user + screenshots) · Realm: both (the `bank` header differs — Stock appends ` (#N)`)*
 
@@ -6105,6 +6248,12 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   - A character that has never used any bank gets **no output at all** from `bank`, just the next prompt. *([CONFIRMED] 2026-09-27, user screenshot.)*
   - A bank shows from the first deposit on, even once it's back to zero. *([CONFIRMED] 2026-09-27, user.)*
   - So an empty reply is an answer (no deposits anywhere), not a failure.
+- **`[CONFLICT — ask the user]` Stock's engine shows only the bank you are standing in** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_bankbook` @0x468902–0x468982; Realm: Stock, Paradigm not recorded)*. `bank` is the bankbook command on Stock: in the engine's command-word table `ban` through `bankbook`, and `bal` through `balance`, reach `_cmd_bankbook` (dispatch table @0x4137a6). That routine has two paths:
+  - **in a room whose shop is a bank (`ShopType` 7)** it prints the balance block for that one bank and nothing else, and any argument gets `Syntax: BANKBOOK`;
+  - **anywhere else** it prints every bankbook, 30 at most (`_display_users_bankbooks` @0x433442), and `bankbook <n>` prints bank number `<n>` alone.
+
+  The two bullets at the head of this topic, confirmed with the realm given as both, say `bank` lists every bank from any room and that a bank never used stays hidden. Question for the user: on Stock, does `bank` typed inside a bank show only that bank, and does it show a zero-balance block there for a bank never used? (`[NEEDS CONFIRMATION]` on the second half: the engine reading has the in-bank path print whatever record it is handed, and a blank one for a bank never used; that part was not followed to the end.)
+- **Stock: `bankbook` does not end a rest**, where `deposit` and `withdraw` do *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_bankbook` @0x4688b7–0x46898e, which writes neither the resting nor the meditating flag; Realm: Stock)*. See *Health, resting & recovery → What ends a rest*.
 - **It never shows party members' banks.** Bank balances can only be seen for yourself. Party on-hand cash is visible separately via `@wealth`, which reports **carried** coin only, never deposits.
 - **Output is one two-line block per bank, repeated** — a `Your balance at …` header, then
   `On deposit: <N> copper farthings [<G> gold crowns]`:
@@ -6137,6 +6286,17 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
 - **`dep <amount>` deposits (amount in copper).** The confirmation names the actual carried
   denominations (`You deposit 5 platinum pieces, 29 gold crowns, 7 silver nobles.`) — see *Coin wire
   wording*.
+- **Stock: what `deposit` and `withdraw` check, in order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_deposit` @0x468529, `_cmd_withdraw` @0x4686df; Realm: Stock, Paradigm not recorded)*:
+  - not in a bank (no shop in the room, or one that isn't `ShopType` 7): `You cannot DEPOSIT if you are not in a bank!` / `You cannot WITHDRAW if you are not in a bank!`
+  - the wrong number of words (fewer than two for a deposit, anything but two for a withdrawal): `Syntax: DEPOSIT {Amount to deposit in copper}` / `Syntax: WITHDRAW {Amount to withdraw in copper}`
+  - an amount longer than 9 characters, or one that isn't a number above 0: `Please specify a more reasonable amount.` So one command moves at most 999,999,999 copper, and `with all` gets this line.
+- **Stock: a deposit of more than you carry prints nothing to you**, the same way an over-withdraw does *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_deposit_gold` @0x41d50b–0x41d515, `_withdraw_gold` @0x41d5bd–0x41d5c3; Realm: Stock, Paradigm not recorded)*.
+- **Stock: the room is told either way** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_deposit` @0x46861a–0x46865f, `_cmd_withdraw` @0x4687d0–0x468815; Realm: Stock, Paradigm not recorded)*: `You see %s making a deposit.` / `You see %s making a withdrawal.` go to the room whether or not any money moved.
+- **Stock: a withdrawal has no weight test** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_withdraw_gold` @0x41d5c8–0x41d614; Realm: Stock, Paradigm not recorded)*. Once the balance covers the amount the copper is added to the purse, and the whole purse is then re-bucketed (*How a charge takes coins, and when the purse is re-bucketed*). The line uses the singular for one coin: `You withdrew 1 copper farthing.`
+- **Stock: `The bank cannot accept your deposit at this time.`** is the engine's overflow guard *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_deposit_gold` @0x41d528; Realm: Stock, Paradigm not recorded)*: the balance would pass 4,294,967,295 copper.
+- **Stock prints the `On deposit:` copper figure without thousands commas** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_bank_balance` @0x43b3df; Realm: Stock, Paradigm not recorded)*. The bracketed gold figure is the balance divided by 100, with commas, then `.` and the two-digit remainder.
+- **Stock: `borrow` and `repay` do nothing** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_borrow` @0x468895, `_cmd_repay` @0x4688a6; Realm: Stock, Paradigm not recorded)*: both handlers return at once.
+- **Stock: a bank room's full description ends with the conversion rates** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_conversion_rates` @0x4376b9, called from `_display_LONG_room_desc` @0x437a18; Realm: Stock, Paradigm not recorded)*: `The currency conversion rates are:` and then `100 platinum pieces == 1 <fifth coin>`, `100 gold crowns == 1 platinum piece`, `10 silver nobles == 1 gold crown`, `10 copper farthings == 1 silver noble`. That is five more lines in the verbose display of a bank room.
 
 **Client use:**
 - BankBalanceProbe.
@@ -6164,6 +6324,12 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   - **Paradigm/GreaterMUD:** `sell = (baseCopper/2) × (1 + Fix((Charm − 50)/5)/100)`.
 - **Charm no-op.** Charm 0 or exactly 50 leaves BUY at retail; the two SELL branches both land on
   ~half base at Charm 50.
+- **Stock: the engine's own BUY arithmetic** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_buy_item` @0x41c120–0x41c184; Realm: Stock, Paradigm not recorded)*: `price = (110 − Charm/5) × ((100 + Markup) × base / 100) / 100`, with `base` the item's price in copper and every division an integer one. It is the BUY formula of this topic, with three points the formula doesn't show:
+  - **A base above 100,000 copper is divided by 100 first and the result multiplied by 100 at the end**, so anything dearer than 10 platinum is priced in whole gold crowns.
+  - **Charm 50 to 54 all price at ×1.00**, and each 5 Charm is 1%.
+  - **The engine has no Charm 0 case** (a Charm of 0 would pay ×1.10). Charm 0 as "unknown, price at 50" is the data viewer's and the client's convention, not engine behaviour.
+- **Stock: the SELL formula of this topic is the engine's, exactly** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_sell_item` @0x41c65b–0x41c673; Realm: Stock)*: `(Charm/2 + 25) × base / 100`, integer division, and the shop's markup is never read.
+- **Stock: the currency code picks the coin the price is in** (0 copper, 1 silver, 2 gold, 3 platinum, 4 the fifth coin) *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_buy_item` @0x41c0ac–0x41c115, `_sell_item` @0x41c5e7–0x41c650; Realm: Stock)*.
 
 **Client use:**
 - The MMUD Explorer data viewer wraps charm-scaled totals above 4,294,967,295 copper (a legacy 32-bit overflow
@@ -6193,6 +6359,12 @@ How coin is named, valued, dropped, collected, hidden and banked, and how shops 
   column, but nothing spawns on its own).
 - **The MMUD Explorer data viewer's stock table columns are `# | Name | Max | Regen | Cost`**, Cost being the buy price
   at the chosen Charm with `Markup%` applied.
+- **Stock: which `ShopType` values the engine treats specially** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_buy_item` @0x41b86f, `_display_shop_items` @0x439efc–0x439f18; Realm: Stock, Paradigm not recorded)*: 5 is a healer, 7 a bank, 8 a trainer, 11 a gang shop and 12 the gang-house deed office. **Every other type takes the same ordinary 20-slot buy and sell path**; the engine has no test for 10. In the 1.11p Shops table type 0 is the commonest (51 shops, against 36 of type 10), and types 1, 2, 3, 4, 6 and 9 are ordinary merchants too, as is the item stock of a healer or a trainer.
+- **Stock: how a slot restocks** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_check_initiate_restocking` @0x45b58c, `_restock_items` @0x45b6f6; Realm: Stock, Paradigm not recorded)*:
+  - **One roll per `Time-N` minutes, not one per missing unit.** Each time a slot's timer comes due and its stock is below `Max-N`, the engine rolls 1–100 and restocks when the roll is **under** `%-N`: stock goes up by `Amount-N`, capped at `Max-N`. The timer is then set `Time-N` minutes ahead whether or not it restocked (@0x45b768–0x45b82c). (`%-N` 100 is certain only if the roll never comes up 100, which this reading did not settle.)
+  - **At start-up every shop is walked once**, gang shops left out. A slot with a `Time-N` gets its stock cut to `Max-N` and a timer whose first delay is random, 1 minute to `Time-N` (@0x45b697–0x45b6df).
+  - **A slot with `Time-N` 0 gets one roll at start-up and never restocks again** (@0x45b5d2–0x45b63a): no timer is made for it. The 1.11p table has three such slots with a `%-N` above 0; the other 329 `Time-N` 0 slots have `%-N` 0.
+- **Stock: a sale adds one to the shop's stock only while the stock is below `Max-N`** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_sell_item` @0x41c585–0x41c5b2; Realm: Stock, Paradigm not recorded)*. At or over the cap, a slot whose `Max-N` is 0 included, the shop still buys and pays and the item is gone. So a no-stock slot only comes to hold what players sold up to its `Max-N`.
 
 **Client use:**
 - **Data-model gap for the loot feature.** `ShopStockIndex` today reads only `Item-N` (item → shops
@@ -6237,6 +6409,14 @@ glass jug               5               2 gold crowns
   Paradigm 1.9.1 data, sold in different shops *([OBSERVED] game data; user 2026-10-05)*.
 - **The readout ends at the prompt, with no line of its own after the last row** *([OBSERVED]
   2026-10-05, report `paradigm-20261005-091552`)*.
+- **Stock: the exact layout** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_shop_items` @0x439eb5; Realm: Stock, Paradigm not recorded)*:
+  - `The following items are for sale here:` and a blank line; then `Item` + 26 spaces + `Quantity` + 4 spaces + `Price`; then 54 dashes. That is the header the 2026-10-05 Paradigm capture in this topic shows. The 2026-07-10 sample block at the head of this topic is narrower (20 spaces, 8 spaces, 47 dashes) and its realm isn't recorded; it is not the Stock 1.11p spacing.
+  - Each row is `%-29.29s %-8d %5d %-8s`: the name left-justified and **cut to 29 characters**, the quantity left-justified in 8, the price right-justified in 5, then the coin's **plural** name whatever the price. So on Stock all three columns are fixed fields, which is why a wide price starts left of the `Price` header. A zero-price row ends in `Free` in place of the price and coin.
+  - The suffix is nothing, ` (Too powerful)` or ` (You can't use)`.
+- **Stock: `(Too powerful)` is the scroll's spell level against yours, and every other reason prints `(You can't use)`** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_user_can_use_spell` @0x420309, the one place the flag behind the suffix is set; Realm: Stock)*. That agrees with the two suffix rules in this topic.
+- **Stock: the listed price is not what you pay** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_shop_items` @0x43a20b–0x43a225; Realm: Stock, Paradigm not recorded)*. It is the item's price × (100 + Markup) / 100 in the item's own coin, with no Charm in it. `buy` applies Charm to the copper value (*Shop prices — buy & sell*), so with Charm outside 50–54 the charge differs from the listing.
+- **Stock: only slots with stock above 0 are listed, and a shop with nothing in stock prints nothing at all**, header included, since the header is printed with the first row *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_display_shop_items` @0x43a17f; Realm: Stock, Paradigm not recorded)*.
+- **Stock: `list` with any argument is not a list, and the command has its own refusals** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_list` @0x45391f, `_display_shop_items` @0x439efc; Realm: Stock, Paradigm not recorded)*. With no shop in the room: `You cannot LIST if you are not in a shop!` In a bank it prints `Banking services:`, `Deposit Rate: ??` and `Loan Rate: ??`, with the question marks.
 
 **Client use:**
 - The `(You can't use)` suffix does **not** gate auto-buy. If the user flagged the item AutoBuy, buy it
@@ -6264,11 +6444,35 @@ glass jug               5               2 gold crowns
 | Sell — worthless | `You sold <item> for 0 copper farthings.` |
 | Sell — shop refuses | `You cannot sell <item> here.` |
 
+- **Stock: the buy line's amount can be a list of coins**, `You just bought %s for 1 gold crown, 5 silver nobles.`: it prints the coins actually taken (*How a charge takes coins, and when the purse is re-bucketed*).
+- **Stock: what `buy <item>` checks, in order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_buy` @0x4539b7, `_buy_item` @0x41b86f; Realm: Stock, Paradigm not recorded)*:
+  - one word only: `Syntax: BUY {item}`
+  - no shop in the room: the command is handed to the room's own command text block if the room has one, and otherwise the answer is `You cannot BUY if you are not in a shop!`
+  - the name matches none of the shop's 20 slot items: `%s is not a known item.`, echoing what was typed. The match is a partial one, an exact name wins, and two or more partial matches print the engine's multiple-match list and nothing else.
+  - the item is one of the shop's slots but its stock is 0: `You cannot buy %s here!`, with the item's full name (@0x41bf4e);
+  - you can't pay: `You cannot afford %s.` (@0x41c19a);
+  - you can't take it: `You cannot carry that much!` or `A strange force stops you from getting this item.` (*Items, inventory & equipment → `get` failure responses*), and nothing is charged or taken from stock (@0x41c2d0–0x41c2da);
+  - success: the room sees `You see %s buy a %s.`, you see the buy line, and the stock drops by one (@0x41c303–0x41c37a).
+  - So **"out of stock" and "this shop never sells it" are different lines**, and the money test comes before the carry test.
+- **Stock: a healer (`ShopType` 5) sells healing by the hit point** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_buy_item` @0x41b8ff; Realm: Stock, Paradigm not recorded)*. `buy healing` costs **2 copper per missing hit point** and prints `You hand over` + the coin list + ` and all your wounds are healed.`; short of it: `You do not have sufficient funds to buy full healing!` A cure bought without the money answers `You do not have sufficient funds to buy curing!` (the cure itself is in *Spells, buffs & conditions → Poison and damage over time — ticks, stacking and cures*). The 1.11p table has one healer, shop 4 `Temple`.
+- **Stock: `buy training` at a trainer (`ShopType` 8) runs the level-up**, the same as `train` *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_buy_item` @0x41bbb9; Realm: Stock, Paradigm not recorded)*.
+- **Stock: what `sell <item>` checks, in order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_sell` @0x453be1, `_sell_item` @0x41c43c; Realm: Stock, Paradigm not recorded)*:
+  - one word only: `Syntax: SELL {item}`
+  - no shop in the room: `You cannot SELL if you are not in a shop!`
+  - a gang shop (`ShopType` 11): `You may not sell items to a gang shop.`
+  - the item isn't in the pack: `You don't have %s to sell!`, echoing what was typed;
+  - the item is cursed (ability 82 or 83), worn, and the only copy held: `You may not sell that item!`
+  - the item is in none of the shop's slots: `You cannot sell %s here.`
+  - otherwise it is sold: the room sees `You see %s sell a %s.`
+- **Stock: a sale always pays in copper and says so** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_sell_item` @0x41c6c4; Realm: Stock, Paradigm not recorded)*: `You sold %s for %s %s.` names the amount in `copper farthings`, or `copper farthing` for exactly 1. The proceeds are added as copper and the purse is then re-bucketed (*How a charge takes coins, and when the purse is re-bucketed*).
+- **Stock: `appraise <item>` quotes the sale without making it** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_cmd_appraise` @0x46973f, which runs `_sell_item` in its quote mode; Realm: Stock, Paradigm not recorded)*. After the same refusals as `sell` it prints `You would get %s %s for your %s.` (the amount, `copper farthings`, the item) and nothing changes hands. It needs an item word and a shop in the room, else it prints nothing of its own, and it does not end a rest.
+
 ### Selling to a shop — what it buys, and no `list` needed
 *Status: CONFIRMED 2026-09-28 (user) · Realm: both*
 
 - **A shop buys back an item that's in its inventory listing.** Standing in that shop's room, `sell <item>` sells it.
 - **`sell` needs no `list` first.** Reading the shop's stock is a wasted command when all you're doing is selling.
+- **Stock: the test is the item's number against the shop's 20 slots, and nothing else** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_sell_item` @0x41c578–0x41c5dd; Realm: Stock)*. The slot's stock level and cap play no part in whether the shop buys. What the sale does to the stock is in *Shop stock & restock data*, the refusals and `appraise` in *Buy / sell result lines*.
 
 **Client use:**
 - `AutoSellManager` sells on arriving in a shop room whose shop lists the item (`ShopStockIndex.ShopsSelling` against `Room.Shop`), holding movement on `SellingGate` until the results land. It used to wait for a `list` readout. Auto-buy still reads the `list`.
@@ -6294,8 +6498,9 @@ glass jug               5               2 gold crowns
   An escalating tier ladder is different: the jail `bribe guard` line is read top-down and charges only
   the last tier you can afford (*Movement & navigation → Jail `bribe guard` — cell-hop helper with an
   escalating toll*).
-- **The coin is named by the directive's trailing letter** (R runic / P platinum / G gold / S silver),
-  else copper.
+- **On Stock the amount is always copper** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `price` handler @0x46f3fa–0x46f455; Realm: Stock, Paradigm not recorded)*. The handler reads the amount as a plain number and charges it as copper; it has no code for a letter. No `price` directive in either imported set (v1.11p and Paradigm 1.9.1, checked 2026-10-09) carries one. (An earlier note said the coin is named by the directive's trailing letter (R runic / P platinum / G gold / S silver),
+  else copper. That reading is the MMUD Explorer data viewer's decoder convention, which the client's decoder copies; it is not from the Stock engine, and whether Paradigm's engine reads a letter is not recorded. Superseded 2026-10-09 for Stock.)
+- **Stock: a `price` charge prints nothing, and a failed one ends the line** *([OBSERVED] 2026-10-09, same handler; Realm: Stock, Paradigm not recorded)*. After a charge that succeeds the line carries on to its next directive, which is how repeats add up; a charge the player can't cover stops the line there. The coins are taken as for any other charge (*How a charge takes coins, and when the purse is re-bucketed*).
 - **Example — Seher'Sahham (monster #715, 16/2666), `ask Seher'Sahham activate`:** TB #2778 is
   `price 100000 2446` ×10, then `message 2447`, then `teleport 637 16` — a **1 runic** fare
   (10 × 100,000 copper) to Damp Cavern, Wellspring (16/637). The same data ships in stock and Paradigm.
@@ -6721,8 +6926,14 @@ What happens when a character dies — the death threshold, lives, effect wipe, 
 - **Stock spill-over, in detail** *([CONFIRMED] 2026-09-26, user)*:
   - Dying on Stock spills the items you carried into **the death room**.
   - If that room fills before all your items are down, the rest spill into **one connected room** through a cardinal or diagonal exit or up/down (N/S/E/W/NE/NW/SE/SW/U/D only). Once that room fills too, another exit is picked and the same happens.
-  - This repeats **up to roughly 5 rooms away**. Which exit is picked first is not known.
+  - This repeats **up to roughly 5 rooms away**. (An earlier note said which exit is picked first is not known; settled for Stock 2026-10-09 from the DLL, in the bullet after this group.)
   - It only happens on Stock, because **Paradigm rooms have no item cap**.
+- **Stock: where each item goes, in the engine's order** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_dispose_of_item_in_room` @0x41989a, `_dispose_of_item_in_trail` @0x4199aa, called per item from `_check_kill_user` @0x419dfd–0x419e5c; Realm: Stock)*. Each item is placed on its own:
+  - **The death room's visible floor first.** If it is full, the engine walks outward **depth-first through the exits in the order N, S, E, W, NE, NW, SE, SW, U, D**, taking at each room the first exit that leads somewhere and is not a map-change exit (type 8) or an action exit (type 12) (@0x41991f–0x41993d). It goes on from the room it just tried before it comes back for the next exit, and it nests at most six rooms deep: the death room and five more (@0x4198bb).
+  - **Doors, locks and hidden exits are not looked at**, so items can land behind a closed door or a hidden exit.
+  - **If that finds no room, the last 20 rooms the dead player walked through are tried**, each on its visible floor and then on its **hidden** side (@0x4199fc). An item can end up stashed in a room on the way to the death room, where only a `search` shows it.
+  - **If that fails too, a fixed fallback room is tried** (room 164 of map 1, which is not in the imported Rooms table), and after that the item is gone: `Your %s has returned to its rightful place.` (@0x419e5c).
+  - **Loyal (ability 100) and CursedMajor (ability 83) items are not spilled** unless a player flag that wasn't identified is set (@0x419d96–0x419dc4).
 
 ### Corpse recovery (`recover corpse`)
 *Status: CONFIRMED 2026-08-03 (user + captures) · Realm: Paradigm (Stock has no corpse — see *Deathpile — where the items go*)*
