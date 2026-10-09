@@ -1721,7 +1721,7 @@ public sealed partial class CombatManager
         if (normalHit >= magical) return false;         // normal already hits → keep it
 
         // Normal can't hit. Swap only if the alternate actually clears the bar.
-        return _itemMagic.HitMagic(settings.AlternateWeapon) >= magical;
+        return AlternateHitMagic(settings) >= magical;
     }
 
     // True when neither configured weapon can damage the current target, so a
@@ -1739,7 +1739,7 @@ public sealed partial class CombatManager
             return false;
 
         if (!string.IsNullOrWhiteSpace(settings.AlternateWeapon)
-            && !WeaponCannotHit(_itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1,
+            && !WeaponCannotHit(AlternateHitMagic(settings),
                 resolvedSpecies, monsterNumber, _alternateWeaponFailedMonsters))
             return false;
 
@@ -1772,10 +1772,12 @@ public sealed partial class CombatManager
         bool normalFailed = !string.IsNullOrEmpty(species) && _normalWeaponFailedMonsters.Contains(species);
         bool altFailed = !string.IsNullOrEmpty(species) && _alternateWeaponFailedMonsters.Contains(species);
         if (magical <= 0 && !normalFailed && !altFailed) return string.Empty;
-        return $" (needs hit magic {magical}; normal weapon hits {NormalHitMagic(settings)}" +
+        return $" (needs hit magic {magical}; normal attack `{settings.NormalAttackCommand}` hits {NormalHitMagic(settings)}" +
+               (MartialArtsCommand.IsStrike(settings.NormalAttackCommand) ? " as a martial-arts strike, weapon not used" : string.Empty) +
                (normalFailed ? ", no effect seen" : string.Empty) +
-               $"; alternate hits {_itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1}" +
-               (altFailed ? ", no effect seen" : string.Empty) + "; -1 = unknown)";
+               $"; alternate `{settings.AlternateAttackCommand}` hits {AlternateHitMagic(settings)}" +
+               (altFailed ? ", no effect seen" : string.Empty) +
+               $"; the character's own hit magic is {Math.Max(0, _innateHitMagic?.Invoke() ?? 0)}; -1 = unknown)";
     }
 
     // The magic-hit level of the weapon that swings on the normal side, or -1 when
@@ -1784,7 +1786,10 @@ public sealed partial class CombatManager
     // land and whatever is on the hand does the swinging, so that weapon is judged
     // instead: a profile still naming the plain weapon a magical one replaced wrote
     // off every monster that needs magic to hit (report paradigm-20261007-182916).
-    private int NormalHitMagic(CombatSettings settings)
+    private int NormalHitMagic(CombatSettings settings) =>
+        AttackHitMagic(settings.NormalAttackCommand, NormalWeaponHitMagic(settings));
+
+    private int NormalWeaponHitMagic(CombatSettings settings)
     {
         if (_itemMagic is null) return -1;
         int configured = _itemMagic.HitMagic(settings.NormalWeapon);
@@ -1798,6 +1803,36 @@ public sealed partial class CombatManager
             && string.Equals(worn.Trim(), settings.AlternateWeapon.Trim(), StringComparison.OrdinalIgnoreCase))
             return configured;
         return _itemMagic.HitMagic(worn);
+    }
+
+    // For the bug report: what the gate weighs besides the weapons.
+    internal (int Innate, string? NormalCommand, string? AlternateCommand) SnapshotHitMagicInputs()
+    {
+        CombatSettings settings = _readSettings();
+        return (Math.Max(0, _innateHitMagic?.Invoke() ?? 0), settings.NormalAttackCommand, settings.AlternateAttackCommand);
+    }
+
+    // The same for the alternate side: its weapon under its own attack command.
+    private int AlternateHitMagic(CombatSettings settings) =>
+        AttackHitMagic(settings.AlternateAttackCommand, _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1);
+
+    // The magic-hit level an attack lands with, or -1 when unknown (callers fail
+    // open). A class or race can carry hit magic of its own (a Mystic, a
+    // Witchunter), and the weapon is only half the answer:
+    //   - a martial-arts strike is thrown without the weapon, so it lands with the
+    //     character's own hit magic and nothing else. Judging it by the weapon in
+    //     hand wrote off every monster the weapon couldn't touch, and a Mystic
+    //     walked past (and was bitten by) monsters its punches hurt.
+    //   - a weapon swing has both: added together on Stock, the higher of the two
+    //     on Paradigm. An unknown weapon stays unknown unless the character's own
+    //     is the answer either way, which it can't tell from here.
+    // GAME_MECHANICS "Weapons: "no effect" lines and the magical-weapon requirement".
+    private int AttackHitMagic(string? attackCommand, int weaponHit)
+    {
+        int innate = Math.Max(0, _innateHitMagic?.Invoke() ?? 0);
+        if (MartialArtsCommand.IsStrike(attackCommand)) return innate;
+        if (weaponHit < 0) return -1;
+        return _hitMagicAdds?.Invoke() == true ? weaponHit + innate : Math.Max(weaponHit, innate);
     }
 
     // Both configured weapons proved ineffective against the current target (a "no
@@ -1871,7 +1906,7 @@ public sealed partial class CombatManager
 
         CombatSettings settings = _readSettings();
         int normalHit = NormalHitMagic(settings);
-        int altHit = _itemMagic?.HitMagic(settings.AlternateWeapon) ?? -1;
+        int altHit = AlternateHitMagic(settings);
         foreach ((int number, string species) in _speciesByNumber)
         {
             int magical = _monsterMagic?.MagicalLevel(number) ?? -1;
@@ -2016,7 +2051,7 @@ public sealed partial class CombatManager
         if (normalHit < 0) return null;                                 // unknown normal weapon → fail open
         if (normalHit >= magical) return null;                          // normal hits
 
-        int altHit = _itemMagic.HitMagic(settings.AlternateWeapon);
+        int altHit = AlternateHitMagic(settings);
         if (altHit < 0) return null;                                    // unknown alt weapon → fail open
         if (altHit >= magical) return null;                             // alt hits
 

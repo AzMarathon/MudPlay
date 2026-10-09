@@ -1430,18 +1430,34 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - **Mana fallback under Spells-first:** below the Normal's min-mana → consider the Alt; if mana is at or above the Alt's min-mana use the Alt, else fall back to physical. Once dropped off the Normal for mana, the per-target mana-drop latch applies (see the "Once dropped, stay dropped" rule in this topic).
 
 ### Weapons: "no effect" lines and the magical-weapon requirement
-*Status: "no effect" lines OBSERVED; magical-weapon and hit-magic rules CONFIRMED*
+*Status: "no effect" lines OBSERVED; magical-weapon and hit-magic rules CONFIRMED; the character's own hit magic and the strike rule tagged per bullet · Realm: differs (how a weapon and the character combine)*
 
 - **`Your weapon has no effect against this monster!`** *([OBSERVED])* — the current weapon can't hurt this monster; the client swaps to the configured alternate weapon.
-- **`Your fists have no effect against this monster!`** *([OBSERVED])* — you're swinging bare-handed (no weapon in hand, or it left your hand).
+- **`Your fists have no effect against this monster!`** *([OBSERVED])* — you're swinging bare-handed (no weapon in hand, or it left your hand), **or a punch couldn't hurt the monster**. A kick or a jumpkick prints **`Your feet have no effect against this monster!`** instead. *([OBSERVED] 2026-10-08, Stock `wccmmud.dll` 1.11p `_attack_user_monster`: one format, `Your %s have no effect against this monster!`, filled with `fists`, or `feet` for attack types 2 and 3.)*
 - **A magical creature needs a magical weapon (or a spell) to be damaged** *([CONFIRMED])*. Physical un-hittability is deterministic from game data: a weapon can damage a monster iff the weapon's magical "hit" level is at least the monster's magical-defense level (`ItemMagic.HitMagic(weapon) >= MonsterMagic.MagicalLevel(monster)`; a monster whose `MagicalLevel <= 0` is hittable by any weapon).
+- **The character has hit magic of its own, and it counts before the weapon does.** *([OBSERVED] 2026-10-08, Stock `wccmmud.dll` 1.11p `_attack_user_monster`.)* The engine works it out in this order:
+  - The monster's magic level is the sum of its `Magical` (ability 28) values.
+  - The character's `HitMagic` (ability 142, read with `_get_user_ability_value`) is taken off it. That reading adds up the character's own ability slots, active spell effects, race, class and worn items.
+  - If nothing is left, any attack hurts the monster.
+  - If something is left and the attack is **bare-handed or a punch, kick or jumpkick** (attack types 1, 2, 3), it is refused with the fists / feet line. The weapon in hand is not consulted.
+  - If something is left and it is a **weapon attack**, the wielded weapon's `Magical` (ability 28) has to cover what is left, or the weapon line prints.
+- **Which classes carry it** *([OBSERVED] 2026-10-08, game-data lookup of every set's `Classes` table)*: **Mystic** `HitMagic` 5 on Stock sets and **6 on Paradigm**; **Witchunter** 10 on both. No race carries it. On items, ability 142 appears only on weapons; ability 28 appears on weapons and on a great deal of armour and jewellery.
+- **A Mystic's martial arts and a Witchunter hit anything, whatever the weapon's hit magic** *([CONFIRMED] 2026-10-08, user: "mystic martial arts are like witchunters... they both can hit anything regardless of hitmagic", and of Witchunters, "they can hit anything with any weapon that they can use")*. In the data's terms that is the class value covering the levels ordinary monsters have: 1 to 5 on Stock, 1 to 6 on Paradigm.
+  - `[NEEDS CONFIRMATION]` Paradigm has monsters above the Mystic's 6: the demon imp (#1033, #1052, #1088, #2855, Magical 9) and the haunting spirit (#505, Magical 10). Does a Mystic's strike hurt them? By the class value it would not, and the client treats them as out of its reach until a hit is seen.
+  - Levels 99 and up (Madame Alexia, Horner the Hide, the ghost knight, the Guildmaster and the other 999s, the Spacelord) are past every class value.
+- **How a weapon and the character combine differs by realm.**
+  - **Stock:** they add. A swing hurts the monster iff the character's `HitMagic` plus the weapon's `Magical` reaches the monster's level. *([OBSERVED] 2026-10-08, the routine above.)*
+  - **Paradigm:** the higher of the two counts, not the sum. *([OBSERVED] 2026-10-08, MMUD-Explorer's `bGreaterMUD` branch, whose comment reads "hitmagic (stock is cumulative)". `[NEEDS CONFIRMATION]` against the game.)*
+  - **A martial-arts strike ignores the weapon on both.** MMUD-Explorer drops the weapon's hit magic for a martial-arts attack ("ignored: MA attack"). (On Stock the routine above would still count a wielded weapon's ability 142 toward a strike, since it sums worn items; the client doesn't, which only matters to a strike against a monster above the class value.)
 - **When the deterministic check can't decide** (weapon unknown to the tables), the `Your weapon has no effect` line is the reactive backstop — the client records the species as un-hittable by that weapon.
 - **Spells are not bound by this physical gate** — an attack spell can damage a magical creature that no configured weapon can touch. So when the whole weapon path is exhausted (normal weapon can't hit, and either no alternate is configured or the alternate also can't hit), the *Physical first* action order falls back to the attack-spell cascade for that target rather than swinging uselessly.
-- **Hit-magic (the "magical" to-hit level) only matters on weapons** *([CONFIRMED])*. It's the weapon's magical hit level compared above against a monster's magical defense; nothing else consults it. If a non-weapon item (armour / jewellery) carries a hit-magic ability value it's inert — the game ignores it.
+- **Hit-magic (the "magical" to-hit level) only matters on weapons** *([CONFIRMED])*. It's the weapon's magical hit level compared above against a monster's magical defense; nothing else consults it. If a non-weapon item (armour / jewellery) carries a hit-magic ability value it's inert — the game ignores it. (The Stock routine agrees for ability 28, which it reads from the wielded weapon alone. This is about items: a class's own `HitMagic` is the character's, covered above.)
 
 **Client use:**
 - UI that surfaces the hit-magic stat (e.g. the Item Finder) shows it on weapon rows only and blanks it everywhere else.
-- The hit check judges the weapon that will swing (`CombatManager.NormalHitMagic`): the configured normal weapon while the character has it, and the weapon on the hand when they don't, since the swap to a weapon not carried can't land. Report `paradigm-20261007-182916`: a profile still naming a plain `shortsword` wrote off the ice sorceress (#108, Magical 1) as unhittable with a `silver rapier` (Magical 1) in hand. The skip line in the log now carries the numbers (`WeaponGateNote`).
+- The hit check judges the weapon that will swing (`CombatManager.NormalWeaponHitMagic`): the configured normal weapon while the character has it, and the weapon on the hand when they don't, since the swap to a weapon not carried can't land. Report `paradigm-20261007-182916`: a profile still naming a plain `shortsword` wrote off the ice sorceress (#108, Magical 1) as unhittable with a `silver rapier` (Magical 1) in hand. The skip line in the log now carries the numbers (`WeaponGateNote`).
+- `CombatManager.AttackHitMagic` is what each side's attack lands with. A strike command (`MartialArtsCommand.IsStrike`; see *Martial-arts strikes are class-innate*) lands with the class's and race's own hit magic (`ClassCapabilities.InnateHitMagic`) and nothing from the weapon. A weapon attack combines the two by realm as above. A Mystic punching (`pu`) with a golden sickle (Magical 2) in hand was judged by the sickle and walked past every monster needing 3 or 4, written off as Unkillable while its punches were hurting them. Reports `paradigm-20260928-164335`, `paradigm-20260929-220653`, `paradigm-20260930-182409`, `paradigm-20261002-192542`, `paradigm-20261007-150934`, `paradigm-20261008-113129`, `paradigm-20261008-181821`, `paradigm-20261008-181901`, `paradigm-20261008-182349`, `paradigm-20261008-182456`, `paradigm-20261008-183736`, `paradigm-20261008-183931`.
+- A fists or feet line drawn by a strike is booked like the weapon line (`CombatManager.OnFistsNoEffect`): the species is written off for that attack and the next pick moves on. From a weapon attack it still means the hand is empty, and the weapon is put back.
 
 ### Attack-command "no effect" fallback
 *Status: Client policy (report `paradigm-20260809-131642`)*
@@ -1454,6 +1470,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
 - **Martial-arts strikes (Punch / Kick / Jumpkick) are class-innate abilities, not a function of the trained Martial Arts skill.** A class grants a strike by listing its ability id in an `Abil-0..9` slot: **Punch = 29, Kick = 30, Jumpkick = 35**.
 - **Mystic carries all three at value 1** across every observed stock + Paradigm set; no other class carries any.
 - **The Martial Arts *skill* stat can be raised by items/races without unlocking the strikes.**
+- **The strikes' commands are `punch`, `kick` and `jumpkick`, and are usually typed short.** `pu` is in every capture of a Mystic's fight *([OBSERVED], report `paradigm-20261008-183931`)*. `ki` and `ju` *([CONFIRMED in part] 2026-10-08, user: "pu", "ki (i think, i always typed kick)" and "ju"; `[NEEDS CONFIRMATION]` the exact shortest forms the game accepts. They are not in `wccmmud.dll`, whose command words come from outside it.)* **Client policy:** an attack command whose first word is a lead of two letters or more of one of the three is a strike (`MartialArtsCommand.IsStrike`).
 
 **Client use:**
 - The Character Info combat panel gates each strike row on the class ability — not on `MartialArts > 0`.
@@ -4225,11 +4242,14 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **The lava / volcano biome is this same shape** *([CONFIRMED via game data, Paradigm 1.9.1])*.
   - `Spell:526` "magma heat" (`Abil-0 1` Damage, a leaf spell — no EndCast chain) covers ~1000 rooms (Lava Tube / "salamander tubes", Magma/Molten River, Jagged Obsidian Field, Volcano Magma Tunnels, etc.); `Spell:218` "temple of fire fire" covers the Temple-of-Fire / Volcano-heart rooms.
   - Both are negated by **either** the **magma amulet (item 487)** or the **phoenix feather (item 1000)** — each has `NegateSpell = [526, 218]`, and they're the only two items that do.
+  - **The phoenix feather protects only while it is worn** *([CONFIRMED] 2026-10-08, user: a lot of the volcano's rooms "require wearing a phoenix feather to protect from magma heat"; [OBSERVED] report `paradigm-20261008-202210`, Paradigm)*. In `Infernal Cavern` (`16/10109`, `Spell:526`) a character carrying the feather with another neck piece on took `You are seared by the flames for 48 damage!` about every 6 s (31 to 58 a hit) for as long as it stood there; with the feather worn (`phoenix feather (Neck)`) no such line came, over stretches of 35 s and 23 s in the same room, and the line was back 3 s after the feather came off. The magma amulet, and the other `NegateSpell` pieces with a wear slot (fish-helm, swamp boots, trollskin boots), are not recorded. *[NEEDS CONFIRMATION]: does every `NegateSpell` item with a wear slot have to be worn, or is this the feather's own rule?*
 - **Misty Bog swamp damage** *([CONFIRMED by user, report `paradigm-20260829-203409`])* — `Spell:485` (the bog zone's entry spell) is negated by **either** the **swamp boots (item 925)** or the **trollskin boots (item 1232)** — both share `NegateSpell = [485, 5682]`, an any-of group exactly like the lava amulet/feather pair.
   - A player who equips a *different* group member they already own (swamp boots) is just as protected as one wearing the sourced item.
 
 **Client use:**
 - `RoomHazardIndex` already indexes the lava counters (one any-of group {487, 1000}), so the router treats lava like any protectable hazard: avoid unless the player carries a counter. By severity, lava sits with the river as *survivable* damage, while the desert is *grave* (see *Hazard severity — survivable damage vs grave*).
+- `RoomHazardIndex.RoomHazard.IsSatisfiedBy` asks only whether a counter is carried, and no engine wears one: a carried, unworn feather reads as protected (report `paradigm-20261008-202210`).
+- A gear swap leaves a worn counter on while the character is in the hazard's room or one next to it: `EquipmentManager.KeepRoomProtection` withholds the `rem` and the set's own item for that slot (both slots of a paired family), fed by `AppServices.WornRoomHazardCounters`; a Location rule ending inside the hazard leaves the item on too (`ClearSlotOverride`). Report `paradigm-20261008-202210`.
 - The route picker/walker only ever resolve to *sourcing* one representative item from a multi-item group (whichever the acquisition pipeline can actually reach — here, trollskin via a shop). The client's path-item tracking accepts **any** member of the any-of group, so equipping a different group member counts as protected (fixed for report `paradigm-20260829-203409`, when tracking was still pinned to the one item it originally chose).
 
 ### Room-spell hazard shape 2 — TextBlock action guarded by `failitem <itemNum>`
@@ -4608,11 +4628,17 @@ Among protectable hazards, a further split governs whether the navigator may off
     picker's human-readable "(ask …)" promise keeps the full name.
 
 ### Room-command refusals
-*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
+*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07, level conditions 2026-10-08 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
 
 - **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
   - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
   - On failure the engine prints the message's line 1 to you and line 2 to the room (@0x46f360), and the rest of that line doesn't run. With no message number the refusal is silent.
+- **`minlevel <N> [msg]` passes at level `N` or higher, and every one in a line is enforced** *([OBSERVED] 2026-10-08, `_perform_matched_action` @0x470209 in the Stock 1.11p `wccmmud.dll`, the `minlevel` branch at 0x470df4)*.
+  - The interpreter takes a line one `:` step at a time. At a `minlevel` step it compares the character's level (the word at player+0x94) with `N` and goes on to the next step when the level is `N` or more (`cmp edx,[ebp-0x8]` / `jge 0x471a07`). Below `N` it prints the message if one is named, drops the rest of the line and returns 2.
+  - It keeps nothing from one step to the next, so a line with two `minlevel` steps checks both, and running the whole line takes the **highest** of them. A later, lower number never relaxes an earlier one.
+  - `maxlevel <N> [msg]` is the mirror: it passes at level `N` or lower (0x470e94).
+  - A staged hand-out uses it: textblock `9630` on Paradigm 1.9.1 is `class 5:message 1432:message 1422:random 9645:minlevel 40:message 2622:giveitem 2011:minlevel 41:message 2622:giveitem 1877:minlevel 47:message 2622:giveitem 1878:message 2622`, so each level bracket stops one gift further along (Stock 1.11p has the same block with gates `41` and `47`).
+  - The level a quest chain asks for is in *Quests → Quest level gates*.
 - **A refused command never redisplays the room**, the same as a refused move (see *Refused ("bonked") moves*).
 - **Three conditions look at the monsters in the room** *([OBSERVED] 2026-10-07, `_perform_matched_action` in the Stock 1.11p `wccmmud.dll`)*. Each reads the room's 15 monster slots:
   - **`nomonsters [msg]` passes only when every slot is empty.** Any monster record in the room refuses the line: an NPC or a non-hostile monster counts the same as a hostile. Players never count.
@@ -4660,6 +4686,7 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **A `(Cast: pre-N, post-M)` exit fires a spell as part of the walk — pre-N before the move, post-M
   after.** The exit stays a plain cardinal move (its cell modifier carries the two spell numbers; `0`
   means no cast on that side).
+- **A post-cast spell can also teleport through a textblock** *([OBSERVED] 2026-10-08, game-data lookup)*: its ability 148 names a TBInfo chain with a `teleport <room> <map>` step, which can sit behind a `checkitem` (so the landing depends on what the character carries). See *Jungle to the Lost City: the Vine Bridge trap and the golden idol*. A spell trap (`Spell Trap: N`) reaches a teleport the same way.
 - **When the post-cast spell is a *random* teleport, the exit's landing is non-deterministic.** The
   spell's game-data record classifies its landing:
   - ability code **140 = TeleportRoom** — value `0` → a *random* room drawn from the spell's
@@ -4702,6 +4729,30 @@ Among protectable hazards, a further split governs whether the navigator may off
     expanding through a pocket entrance, so from outside the pocket shows only as a spell-wall stub at
     its mouth — but a walker standing *inside* still lays the whole area out, because the pocket's
     internal cast exits are reciprocal (they have return paths) and so are never flagged as entrances.
+
+### Jungle to the Lost City: the Vine Bridge trap and the golden idol
+*Status: CONFIRMED 2026-10-08 (user); rooms, spells and textblocks [OBSERVED] 2026-10-08, game-data lookup, identical on Stock v1.11p and Paradigm 1.9.1 · Realm: both*
+
+- **The Vine Bridge is a trapped exit that scatters a party.** `16/1206` (Vine Bridge, Mists) east to `16/1207` is a `Spell Trap: 851` exit.
+  - Spell 851 (`bridge trigger spell`) carries ability 148 → TBInfo `#2775`: `random 2776`. TBInfo `#2776` teleports whoever trips it to one of six **Shallow Jungle, Mud Pit** rooms, each line `message 2475:teleport <room> 16:cast 850`: `16/1264`, `16/1247`, `16/1248`, `16/1272`, `16/1276`, `16/1283`.
+  - *([CONFIRMED] 2026-10-08, user)* If the trap isn't disarmed it splits the party up into different rooms of the shallow jungle. Before going on, the leader has to recover everyone by walking to where each dropped in.
+  - *([CONFIRMED] 2026-10-08, user)* If the trap is disarmed, the party walks through the Tree of Life unhindered.
+- **The golden idol (item 1281) is needed to reach the Lost City from the jungle side** *([CONFIRMED] 2026-10-08, user)*. Lost City to the jungle needs no idol; jungle to the Lost City does. Two exits ask for it:
+  - `16/1512` (Jungle Cave) east to `16/2165` (Earthen Catacombs): `Key: 1281 [or 101 picklocks]`.
+  - `16/2273` (Earthen Catacombs) east: `(Cast: pre-0, post-857)`, landing first in `16/2274`. Spell 857 (`golden idol teleport`) carries ability 148 → TBInfo `#2871`: `checkitem 1281 66:teleport 2431 16:text 2872` / `teleport 2228 16:text 2872`.
+    - With the idol the character is sent to `16/2431`, the second part of the catacombs, which connects to the Lost City.
+    - Without it the character is sent to `16/2228` instead and doesn't reach that part. *([CONFIRMED] 2026-10-08, user: "if you dont have the idol … you dont get teleported to the secondary part of the catacombs which is connected to the lost city".)*
+- **Where the idol comes from** *([CONFIRMED] 2026-10-08, user)*: the ship in the lagoon, before the bridge with the trap teleport. In the data: `16/1517` (Ship Captains Quarters), TBInfo `#2892`: `lift latch:giveitem 1281:message 2519`.
+- **The idol passthrough disbands the party, even when everyone lands together** *([OBSERVED] report `paradigm-20261007-134305`, Paradigm)*. The order on the leader's screen:
+  1. The leader steps east and is shown `16/2274` (`Obvious exits: west`, with whatever monsters are in it).
+  2. Each follower `walks into the room from the west.` and is then teleported, printing `<name> is no longer following you.`
+  3. `Your party has been disbanded.`
+  4. The leader is teleported and shown `16/2431`, with the followers already there (listed on its `Also here:` line in that capture).
+  - Each character is checked for the idol on their own, so a follower without one lands in `16/2228`, apart from the leader. `[NEEDS CONFIRMATION]` Not seen in a capture.
+  - It is the party-splitting teleport of *CMD-driven room teleports split the party*, reached by a walk instead of a typed command: the party has to be re-invited on landing.
+
+**Client use:**
+- None yet for the passthrough: the walker takes the exit as a plain move, steps on from the landing room, and the re-invite is sent from the wrong room (report `paradigm-20261007-134305`).
 
 ### Quest-gated gateway portals
 *Status: CONFIRMED (game data Paradigm 1.9.1 map 9) · Realm: both (byte-identical across stock and Paradigm data)*
@@ -6327,6 +6378,20 @@ How MajorMUD quests are structured in the game data (kill steps, NPC dialogue st
 
 **Client use:**
 - `QuestCrawler` counts each `addability` to a non-flag code as a stat reward, and `CompletedQuestBonuses` adds them all up — right for both realms. Every `giveability` target is read as a quest flag, never summed as a stat, which matches Stock's keep-the-highest rule.
+
+### Quest level gates
+*Status: Stock [OBSERVED] 2026-10-08 (`_perform_matched_action` in the 1.11p `wccmmud.dll`; TBInfo of `data-Paradigm-1.9.1` and `data-v1.11p`); the same rule on Paradigm per the user 2026-10-08, and report `paradigm-20260925-123004` · Realm: both*
+
+- **A quest chain asks for the highest `minlevel` in it.** The engine checks each `minlevel` when the chain reaches it and stops the chain at the first one the character is below, so every gate ahead of the `giveability` has to be met (the interpreter rule is in *Movement & navigation → Room-command refusals*).
+- **Meditate (flag `187`, textblock `9046`) carries two gates in each class's chain.**
+  - **Paradigm 1.9.1:** the two numbers match for every class (`20` for classes 5 / 12 / 13, `23` for 4 / 6 / 10 / 11, `27` for 3 / 9 / 14) except class 15 (Mystic): `check class:class 15:minlevel 27 2614:takeitem 1351:message 2639:message 2640:addexp 5000:minlevel 23:failability 187:giveability 187 1:failitem 3314:giveitem 3314:text 9026`. A Mystic needs level **27**. Report `paradigm-20260925-123004` (a level-23 Mystic) says the same: it "isn't until 27"; the capture holds no refusal line.
+  - **Stock 1.11p:** every class's chain opens with `minlevel 20 2614` and the second gate is the class's own (`20`, `23` or `27`; there is no class 15), e.g. `check class:class 3:minlevel 20 2614:takeitem 1351:message 2639:message 2640:addexp 5000:minlevel 27:failability 187:giveability 187 1:text 9026`. The class's own number is never the lower one in any of the ten chains.
+  - Message `2614` in the Stock table is `Dhelvanen shakes his head. "This is not what I requested."`. The second gate names no message, so it refuses silently.
+  - **On Stock, handing the item in below the class's level destroys it** *([CONFIRMED] 2026-10-08, user: "if you turned in the 50 diamonds and got the token then try to hand it in without being the correct level, it gets destroyed"; [OBSERVED] 2026-10-08, the interpreter above)*. The steps between the two gates (`takeitem 1351`, the magical rune, and `addexp 5000`) have already run when the second gate refuses, and that branch gives nothing back: a class-3 character who hands the rune over at level 20 to 26 loses it without learning Meditate. On Paradigm 1.9.1 each chain's first gate is already the class's own level, so the refusal comes before the rune is taken.
+- **In both imported sets no other chain that touches an ability flag holds two different `minlevel` numbers** *([OBSERVED] 2026-10-08, game data)*. The only other line with differing gates is the staged hand-out in textblock `9630`, which grants no flag.
+
+**Client use:**
+- `QuestCrawler.HighestGate`: `ParseChain`, `ParseValueChain` and `DiscoverTierLadders` read a chain's gate as its highest `minlevel`. Taking the last number announced Meditate to a Paradigm class-15 character at level 23 (report `paradigm-20260925-123004`).
 
 ### Quest kill steps & monster placement
 *Status: CONFIRMED 2026-07-16 (user)*

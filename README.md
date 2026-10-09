@@ -1,8 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.1**
-> - A bash, pick or open the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever
+> **Version 3.153.19**
+> - A bash the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever
 > - A door attempt is dropped once the map shows you in another room than the door's
 > - A pause that comes and goes while a door is being opened (a party `@wait` / `@ok`) no longer restarts the walk underneath it
 > - A Paradigm `rm` answered before a move sent just after it has landed no longer cancels that move

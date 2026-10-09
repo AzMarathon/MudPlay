@@ -136,8 +136,8 @@ public sealed class QuestCrawlerTests : IDisposable
     public void Crawl_PerClassSkillQuest_ResolvesViewingClassGate_NotGlobalMinimum()
     {
         // Meditate (flag 187): a class-restricted skill quest gated per class — an
-        // intro `minlevel 20` shared by every branch, then a per-class `minlevel`
-        // (last-wins) that is the real requirement. Only Paladin(3)/Cleric(4)/Priest(5)
+        // intro `minlevel 20` shared by every branch, then a per-class `minlevel`; the
+        // game enforces both, so the higher is the requirement. Only Paladin(3)/Cleric(4)/Priest(5)
         // can learn it here. The viewing class must see *its own* gate; a class outside
         // the list — or no class at all — must see no gate, never the global minimum of
         // the other classes' gates (which would surface a misleading "Level 20" on a
@@ -156,6 +156,56 @@ public sealed class QuestCrawlerTests : IDisposable
         Assert.Equal(0, Find(QuestCrawler.Crawl(CacheWithTbInfo(chains), classId: 1), 187, 0).RequiredLevel);
         // Classless default profile → no gate either.
         Assert.Equal(0, Find(QuestCrawler.Crawl(CacheWithTbInfo(chains), classId: null), 187, 0).RequiredLevel);
+    }
+
+    [Fact]
+    public void Crawl_ChainWithTwoLevelGates_RequiresTheHigher_WhicheverComesFirst()
+    {
+        // Paradigm's Meditate block: every class repeats one number in both gates except
+        // class 15, whose chain reads `minlevel 27` then `minlevel 23`. The game stops a
+        // chain at the first gate the character is below, so that class needs 27 — reading
+        // the later number announced the quest four levels early (report
+        // paradigm-20260925-123004).
+        string[] chains =
+        {
+            "check class:class 4:minlevel 23 2614:takeitem 1351:message 2639:message 2640:addexp 5000:minlevel 23:failability 187:giveability 187 1:text 9026",
+            "check class:class 15:minlevel 27 2614:takeitem 1351:message 2639:message 2640:addexp 5000:minlevel 23:failability 187:giveability 187 1:failitem 3314:giveitem 3314:text 9026",
+        };
+
+        CrawledQuest mystic = Find(QuestCrawler.Crawl(CacheWithTbInfo(chains), classId: 15), 187, 0);
+        Assert.Equal(27, mystic.RequiredLevel);
+        Assert.Equal(27, mystic.ClassLevels![15]);
+        Assert.Equal(23, mystic.ClassLevels[4]);
+
+        Assert.Equal(23, Find(QuestCrawler.Crawl(CacheWithTbInfo(chains), classId: 4), 187, 0).RequiredLevel);
+    }
+
+    [Fact]
+    public void Crawl_TierLadder_ReadsTheHigherOfTwoGatesInOneChain()
+    {
+        // The middle chain's own gate is 20; a lower number later in it doesn't relax
+        // that, so the flag keeps three tiers rather than folding the middle one into L10.
+        IReadOnlyList<CrawledQuest> quests = QuestCrawler.Crawl(
+            CacheWithTbInfo(
+                "minlevel 10:giveability 126 4",
+                "minlevel 20:giveability 126 7:minlevel 10",
+                "minlevel 30:giveability 126 10"),
+            classId: null);
+
+        Assert.Equal(new[] { 10, 20, 30 }, quests.Where(q => q.Flag == 126).Select(q => q.RequiredLevel).OrderBy(l => l));
+    }
+
+    [Fact]
+    public void Crawl_ValueLadder_ReadsTheHigherOfTwoGatesInOneChain()
+    {
+        IReadOnlyList<CrawledQuest> quests = QuestCrawler.Crawl(
+            CacheWithTbInfo(
+                "class 2:minlevel 15:giveability 50 1:giveitem 100",
+                "class 2:checkability 50 1:addability 50 1:giveitem 300",
+                "class 2:minlevel 50:checkability 50 2:addability 50 1:minlevel 40:giveitem 500"),
+            classId: 2);
+
+        Assert.Equal(new[] { 15, 50 }, quests.Where(q => q.Flag == 50).OrderBy(q => q.Step).Select(q => q.RequiredLevel));
     }
 
     [Fact]

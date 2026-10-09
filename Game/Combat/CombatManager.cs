@@ -1040,6 +1040,19 @@ public sealed partial class CombatManager : IDisposable
     private Func<string, bool?>? _hasItem;
     public void SetCarriedCheck(Func<string, bool?> hasItem) => _hasItem = hasItem;
 
+    // The hit magic the character has of its own, from class and race, and whether
+    // the realm adds a weapon's magic on top of it (Stock) or takes the higher of
+    // the two (Paradigm). Unset reads as none of its own.
+    private Func<int>? _innateHitMagic;
+    private Func<bool>? _hitMagicAdds;
+    public void SetInnateHitMagic(Func<int> innate, Func<bool> addsToWeapon)
+    {
+        ArgumentNullException.ThrowIfNull(innate);
+        ArgumentNullException.ThrowIfNull(addsToWeapon);
+        _innateHitMagic = innate;
+        _hitMagicAdds = addsToWeapon;
+    }
+
     public void SetWeaponActuator(
         Action<string?, string?, bool> swapWeapon, Action? prepBackstabArmor = null,
         Func<string?>? readWornWeapon = null)
@@ -2587,8 +2600,22 @@ public sealed partial class CombatManager : IDisposable
     // isn't hitting, or one that left our hand). Drop the target so the next
     // observation re-decides and re-hands the weapon to the actuator, which
     // re-equips it when live gear shows it's no longer worn.
-    private void OnFistsNoEffect(MatchResult _)
+    //
+    // When the attack in use is a martial-arts strike the line means something
+    // else: the strike itself can't hurt this monster (its magic is past the
+    // character's own hit magic). That is the weapon line's case, so it is handled
+    // as one: the species is booked as failed and the next pick moves on.
+    private void OnFistsNoEffect(MatchResult match)
     {
+        CombatSettings settings = _readSettings();
+        string? inUse = _usingAlternateWeapon ? settings.AlternateAttackCommand : settings.NormalAttackCommand;
+        if (MartialArtsCommand.IsStrike(inUse))
+        {
+            _log?.Combat(LogCategory, $"`{inUse}` had no effect — the strike can't hurt this monster");
+            OnWeaponNoEffect(match);
+            return;
+        }
+
         _log?.Warn(LogCategory, "fists-no-effect — forcing a weapon re-pick from live gear");
         _usingAlternateWeapon = false;
 
