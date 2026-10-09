@@ -1,5 +1,13 @@
 # Version history
 
+## 3.153.18
+
+- A `rest` or `meditate` typed by hand no longer re-wears Default pieces the moment the Pre-rest set goes on: slots the set leaves blank keep what you put on (a phoenix feather was swapped off in the lava caverns)
+- The gear readout keeps showing the Pre-rest set through such a rest instead of flipping to Default
+- A gear-set swap never takes off (or wears over) the item protecting you from the room you are in or the next one, such as a phoenix feather in the volcano
+- Bug report lists the gear set last applied
+- bug reports addressed: paradigm-20261008-202210
+
 ## 3.153.16
 
 - Quests: a quest with two level gates in one step now needs the higher one, as the game does

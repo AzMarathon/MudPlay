@@ -462,6 +462,17 @@ public sealed class EquipmentManager
         if (HoldGear($"override:{slot}", () => ClearSlotOverride(name), $"location-equip revert of '{name}'")) return;
         _overriddenSlots.Remove(slot);
 
+        // The location item is also what counters the hazard of the room we are in
+        // now (the rule's area ended, the lava didn't). The slot goes back to the
+        // gear sets, which hold it the same way until the hazard is behind us.
+        if (_roomProtection?.Invoke() is { } protecting
+            && protecting.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            _log?.Info(LogCategory,
+                $"location-equip: exited area — '{name}' stays on, it protects you in this room");
+            return;
+        }
+
         string? setItem = CurrentSetItemFor(slot);
         if (!string.IsNullOrEmpty(setItem)
             && !string.Equals(setItem, name, StringComparison.OrdinalIgnoreCase))
@@ -707,7 +718,61 @@ public sealed class EquipmentManager
     {
         List<string> cmds = PrependTwoHandOffHandConflictRems(set, snap.EquippedItems, _isTwoHanded,
             BuildApplyCommandsCore(set, snap, fillFromInventory, armorOnly));
-        return DropLocationOwnedSlots(set, cmds);
+        return KeepRoomProtection(set, snap, DropLocationOwnedSlots(set, cmds));
+    }
+
+    // The worn items that are what keeps the character safe where it stands: the
+    // counter to the hazard of this room or of a room next to it (a phoenix feather
+    // in the lava caverns). Unset → nothing is protected.
+    private Func<IReadOnlyCollection<string>>? _roomProtection;
+    public void SetRoomProtectionProbe(Func<IReadOnlyCollection<string>> wornCounters) =>
+        _roomProtection = wornCounters;
+
+    // Strip from a set's apply whatever would take a room's protection off: the
+    // `rem` of the protecting item, and the set's own item for the slot it sits in
+    // (wearing that one evicts it). The counter only works while it is worn, so a
+    // swap that replaced it left the character burning for the whole rest (report
+    // paradigm-20261008-202210). Both slots of a paired family are held, since an
+    // `eq` into a full pair evicts whichever the realm picks. Once the character is
+    // out of the hazard the next apply of the set dresses the slot as usual.
+    private List<string> KeepRoomProtection(EquipmentSet set, InventorySnapshot snap, List<string> cmds)
+    {
+        if (cmds.Count == 0 || _roomProtection?.Invoke() is not { Count: > 0 } protecting) return cmds;
+
+        var drop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var kept = new List<string>();
+        foreach (string name in protecting)
+        {
+            EquippedItem worn = snap.EquippedItems.FirstOrDefault(
+                e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrEmpty(worn.Name)) continue;   // not worn: nothing to protect
+            drop.Add($"rem {worn.Name.Trim()}");
+            if ((_resolveItemSlot?.Invoke(worn.Name) ?? EquipmentSlotMap.FromWornString(worn.Slot)) is not { } slot)
+                continue;
+            EquipmentSlot family = FamilyOf(slot);
+            foreach (EquipmentSlotEntry e in set.Slots)
+            {
+                string? setItem = e.ItemName?.Trim();
+                if (string.IsNullOrEmpty(setItem) || FamilyOf(e.Slot) != family) continue;
+                if (string.Equals(setItem, worn.Name, StringComparison.OrdinalIgnoreCase)) continue;
+                drop.Add($"{Verb(e.Slot)} {setItem}");
+            }
+            // With the pair's wears withheld, the `rem` that made room for one of
+            // them would only take a piece off and put nothing on.
+            foreach (EquippedItem other in snap.EquippedItems)
+                if ((_resolveItemSlot?.Invoke(other.Name) ?? EquipmentSlotMap.FromWornString(other.Slot)) is { } otherSlot
+                    && FamilyOf(otherSlot) == family)
+                    drop.Add($"rem {other.Name.Trim()}");
+            kept.Add(worn.Name.Trim());
+        }
+        if (drop.Count == 0) return cmds;
+
+        int withheld = cmds.RemoveAll(drop.Contains);
+        if (withheld > 0)
+            _log?.Info(LogCategory,
+                $"gear set '{set.Name}' leaves {string.Join(", ", kept)} on — it protects you in this room "
+                + $"({withheld} command(s) withheld)");
+        return cmds;
     }
 
     // Strip this set's wear/eq for any slot a location rule currently owns, so a
