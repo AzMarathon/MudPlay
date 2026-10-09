@@ -3409,9 +3409,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // Whoever was in the room is not known to be there when we are
                 // back: left standing, the roster is re-issued while offline (the
                 // Auto-Combat toggle, the PvP fight stopped above) and acted on.
-                AppServices.Current.RoomClassifier.NoteConnectionLost();
-                // A drop our own Hangup-monster hang-up caused turns the watch off
-                // for the first minute back in the game.
+                AppServices.Current.RoomClassifier.NoteGameLeft();
+                // A drop with a Hangup monster in sight turns the watch off for the
+                // first minute back in the game.
                 AppServices.Current.MonsterHangup.NoteDisconnected();
 
                 // Categorise: if the user clicked Disconnect, the flag was
@@ -3478,6 +3478,10 @@ public partial class MainWindowViewModel : ObservableObject
                 }
                 else if (_lastDisconnectCause == DisconnectCause.HangupInitiated && pvpReconnect is { } pvp)
                 {
+                    // The Hangup-monster watch's minute off is for a reconnect the
+                    // user makes. This one dials and enters on its own, and would
+                    // stand the character beside the monster with nobody watching.
+                    AppServices.Current.MonsterHangup.CancelHold();
                     SchedulePvpReconnect(pvp.Delay, pvp.EnterRealm);
                 }
                 else

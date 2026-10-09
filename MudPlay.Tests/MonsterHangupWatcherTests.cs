@@ -101,7 +101,7 @@ public sealed class MonsterHangupWatcherTests
             Outcome = EscapeOutcome.HungUp;
             Relationships[Ogre] = MonsterRelationship.Hangup;
             Feed("Also here: ogre.");
-            Classifier.NoteConnectionLost();
+            Classifier.NoteGameLeft();
             Watcher.NoteDisconnected();
         }
 
@@ -280,6 +280,27 @@ public sealed class MonsterHangupWatcherTests
         Assert.StartsWith("troll (#9)", h.HangUps[1]);
     }
 
+    // A name the roster could not place is looked at again once `who` supplies a
+    // record. That is the same room display with one more monster known on it:
+    // the one already answered is not answered again, the new one is.
+    [Fact]
+    public void AMonsterPlacedLater_InsideTheSameDisplay_IsAnsweredOnce()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre, gorgon.");
+        Assert.Single(h.HangUps);
+
+        h.AddMonster(10, "gorgon");
+        h.Relationships[10] = MonsterRelationship.Hangup;
+        h.Classifier.ReclassifyUnknown();
+        h.Classifier.ReclassifyUnknown();
+        h.Classifier.ReemitCurrent();
+
+        Assert.Equal(2, h.HangUps.Count);
+        Assert.StartsWith("gorgon (#10)", h.HangUps[1]);
+    }
+
     [Fact]
     public void ARosterWithoutIt_EndsTheSighting()
     {
@@ -365,7 +386,7 @@ public sealed class MonsterHangupWatcherTests
         h.Feed("Also here: ogre.");
         h.HangUps.Clear();
 
-        h.Classifier.NoteConnectionLost();
+        h.Classifier.NoteGameLeft();
         h.Watcher.NoteDisconnected();
         h.Outcome = EscapeOutcome.HungUp;
         h.Classifier.ReemitCurrent();
@@ -384,7 +405,7 @@ public sealed class MonsterHangupWatcherTests
         h.Feed("Also here: ogre.");
         h.HangUps.Clear();
 
-        h.Classifier.NoteConnectionLost();
+        h.Classifier.NoteGameLeft();
         h.Watcher.NoteDisconnected();
         h.Outcome = EscapeOutcome.HungUp;
         h.Feed("A giant rat scurries into the room from north.");
@@ -469,7 +490,7 @@ public sealed class MonsterHangupWatcherTests
         h.Tick(60);
         Assert.Equal(2, h.HangUps.Count);
 
-        h.Classifier.NoteConnectionLost();
+        h.Classifier.NoteGameLeft();
         h.Watcher.NoteDisconnected();
         h.Feed("Also here: ogre.");
         h.Watcher.NoteInGamePrompt();
@@ -509,9 +530,132 @@ public sealed class MonsterHangupWatcherTests
         Assert.Empty(h.WarnLines);
     }
 
+    // A low-HP or PvP hang-up had gone out a moment before the monster was seen,
+    // and the line drops for it: the monster was in sight, so the reconnect gets
+    // its minute all the same.
+    [Fact]
+    public void ADropRightAfterSeeingItDuringAnotherEscape_TurnsTheWatchOff()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.AlreadyEscaping };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Classifier.NoteGameLeft();
+        h.Watcher.NoteDisconnected();
+        h.Outcome = EscapeOutcome.HungUp;
+        h.Feed("Also here: ogre.");
+        h.Watcher.NoteInGamePrompt();
+
+        Assert.Equal("Hangup watch off 1:00", h.Watcher.HoldText);
+        Assert.Single(h.HangUps);
+    }
+
+    // The other escape may have been a wimpy jump, which drops no line: nothing is
+    // waited on, nothing is warned about, and a drop long after is not ours.
+    [Fact]
+    public void SeeingItDuringAnotherEscape_OwesNoDrop()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.AlreadyEscaping };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Feed("Also here: ogre.");
+
+        h.Clock += TimeSpan.FromSeconds(11);
+        h.Outcome = EscapeOutcome.Jumped;
+        h.Feed("Also here: ogre.");
+        Assert.Equal(2, h.HangUps.Count);
+        Assert.Empty(h.WarnLines);
+
+        h.Classifier.NoteGameLeft();
+        h.Watcher.NoteDisconnected();
+        Assert.Equal("none", h.Watcher.DescribeHold());
+    }
+
+    // The minute is for a reconnect the user makes. The PvP response's own
+    // dial-back enters the game unattended, so it gets none.
+    [Fact]
+    public void AnAutomaticReconnect_GetsNoMinute()
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+
+        h.Watcher.CancelHold();
+        h.Watcher.CancelHold();
+        Assert.Equal("none", h.Watcher.DescribeHold());
+        Assert.Single(h.InfoLines, line => line.Contains("the reconnect is automatic"));
+
+        h.Watcher.NoteInGamePrompt();
+        h.Feed("Also here: ogre.");
+
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Empty(h.Notices);
+        Assert.Equal(2, h.HangUps.Count);
+    }
+
+    // Out at the board's menu when the minute ends, nothing is sent there; the
+    // monster is answered on the way back into the game.
+    [Fact]
+    public void WhenTheMinuteEndsAtTheBoardsMenu_TheAnswerWaitsForTheGame()
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+        h.Watcher.NoteInGamePrompt();
+        h.Feed("Also here: ogre.");
+
+        h.AtBoardMenu = true;
+        h.Tick(60);
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Single(h.HangUps);
+        Assert.Single(h.InfoLines, line => line.Contains("board's menu"));
+
+        h.AtBoardMenu = false;
+        h.Watcher.NoteBackInGame();
+        Assert.Equal(2, h.HangUps.Count);
+    }
+
+    // A carrier loss inside the minute neither restarts nor ends it: it runs out
+    // on the clock, offline or not, and the next room display is answered.
+    [Fact]
+    public void ASecondDropDuringTheMinute_LetsItRunOut()
+    {
+        using Harness h = new();
+        h.HangUpAndDrop();
+        h.Watcher.NoteInGamePrompt();
+        h.Feed("Also here: ogre.");
+        h.Tick(10);
+
+        h.Classifier.NoteGameLeft();
+        h.Watcher.NoteDisconnected();
+        Assert.Equal("Hangup watch off 0:50", h.Watcher.HoldText);
+
+        h.Tick(50);
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Equal("none", h.Watcher.DescribeHold());
+        Assert.Equal("Hangup watch back on", h.Notices.Last());
+        Assert.Single(h.HangUps);
+
+        h.Watcher.NoteInGamePrompt();
+        h.Feed("Also here: ogre.");
+        Assert.Null(h.Watcher.HoldText);
+        Assert.Equal(2, h.HangUps.Count);
+    }
+
+    [Fact]
+    public void ADisposedWatcher_CountsNothingDown()
+    {
+        Harness h = new();
+        h.HangUpAndDrop();
+        h.Watcher.NoteInGamePrompt();
+        int changes = h.HoldChanges;
+
+        h.Dispose();
+        h.Tick(60);
+
+        Assert.Equal(changes, h.HoldChanges);
+        Assert.Single(h.Notices);
+    }
+
     [Theory]
     [InlineData(EscapeOutcome.Jumped)]
-    [InlineData(EscapeOutcome.AlreadyEscaping)]
     [InlineData(EscapeOutcome.NotSent)]
     [InlineData(EscapeOutcome.HangupsDisabled)]
     public void ADropThatWasNotOurHangUp_TurnsNothingOff(EscapeOutcome outcome)
@@ -521,7 +665,7 @@ public sealed class MonsterHangupWatcherTests
         h.Feed("Also here: ogre.");
         h.HangUps.Clear();
 
-        h.Classifier.NoteConnectionLost();
+        h.Classifier.NoteGameLeft();
         h.Watcher.NoteDisconnected();
         h.Watcher.NoteInGamePrompt();
         h.Outcome = EscapeOutcome.HungUp;

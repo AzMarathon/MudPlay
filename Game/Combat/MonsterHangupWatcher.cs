@@ -34,12 +34,14 @@ namespace MudPlay.Game.Combat;
 // here stops a running loop from walking back to the monster and jumping again,
 // just as nothing does after a low-HP jump.
 //
-// After a hang-up from here, the watch is off for a minute once the character is
-// back in the game (user, 2026-10-09: "the auto-hang feature should be suppressed
-// for a minute with a countdown timer visible somewhere"), so a manual reconnect
-// into the same room is not hung up on at once. The minute starts at the first game
-// prompt after the reconnect, so the login does not eat it, and when it ends the
-// roster is read again.
+// After a hang-up for a monster seen here, the watch is off for a minute once the
+// character is back in the game (user, 2026-10-09: "if a user manually reconnects
+// ... the auto-hang feature should be suppressed for a minute with a countdown
+// timer visible somewhere"), so a manual reconnect into the same room is not hung
+// up on at once. The minute starts at the first game prompt after the reconnect, so
+// the login does not eat it, and when it ends the roster is read again. It is for a
+// reconnect the user makes: the PvP response's own dial-back cancels it
+// (CancelHold), or it would stand the character beside the monster unattended.
 public sealed class MonsterHangupWatcher : IDisposable
 {
     public const string LogCategory = "MonsterHangup";
@@ -70,6 +72,7 @@ public sealed class MonsterHangupWatcher : IDisposable
     private string? _heldFor;
 
     private DateTimeOffset? _hungUpAt;      // our exit command went out; the drop is awaited
+    private DateTimeOffset? _escapeSeenAt;  // a Hangup monster was seen just after another path's escape went out
     private bool _holdArmed;                // dropped by our hang-up; the minute starts at the next game prompt
     private DateTimeOffset? _holdUntil;     // the minute is running
     private bool _holdSightingLogged;
@@ -133,12 +136,16 @@ public sealed class MonsterHangupWatcher : IDisposable
         : _holdArmed ? "watch off: the minute starts at the first game prompt after the reconnect"
         : "none";
 
-    // The connection dropped. If it was our hang-up that dropped it, the watch is
-    // off until a minute into the next stay in the game.
+    // The connection dropped. If it dropped with a Hangup monster in sight (our
+    // hang-up, or a low-HP or PvP hang-up that had just gone out when the monster
+    // was seen), the watch is off until a minute into the next stay in the game.
     public void NoteDisconnected()
     {
-        bool ours = _hungUpAt is { } at && _now() - at < DropLimit;
+        DateTimeOffset now = _now();
+        bool ours = (_hungUpAt is { } hungUp && now - hungUp < DropLimit)
+                    || (_escapeSeenAt is { } seen && now - seen < DropLimit);
         _hungUpAt = null;
+        _escapeSeenAt = null;
         EndSighting();
         _displayAt = null;
         if (!ours || _holdArmed) return;
@@ -146,6 +153,23 @@ public sealed class MonsterHangupWatcher : IDisposable
         _holdSightingLogged = false;
         _log?.Info(LogCategory,
             $"the line dropped for a Hangup monster: the watch is off until {HoldLength.TotalSeconds:0}s after the next game prompt");
+    }
+
+    // The dial-back that follows this drop is automatic (the PvP response's own
+    // reconnect). The minute is for a user who came back to look: nobody is looking
+    // now, so a Hangup monster still there is answered at once.
+    public void CancelHold()
+    {
+        if (!_holdArmed) return;
+        _holdArmed = false;
+        _log?.Info(LogCategory, "the reconnect is automatic, so the watch stays on after it");
+    }
+
+    // Back in the game from the board's menu: a sighting held there (the room is
+    // displayed ahead of the first prompt) is answered now.
+    public void NoteBackInGame()
+    {
+        if (_classifier.Current is { } roster) OnEntitiesObserved(roster);
     }
 
     // A game prompt: the character is in the game. The first one after our hang-up
@@ -169,6 +193,7 @@ public sealed class MonsterHangupWatcher : IDisposable
         bool held = _holdUntil is not null;
         _holdTicks++;
         _hungUpAt = null;
+        _escapeSeenAt = null;
         _holdArmed = false;
         _holdUntil = null;
         _holdSightingLogged = false;
@@ -201,6 +226,8 @@ public sealed class MonsterHangupWatcher : IDisposable
 
     private void OnEntitiesObserved(RoomEntitiesObservation obs)
     {
+        // At names a room display: only a fresh "Also here:" parse stamps a new one,
+        // while a re-emit or a reclassified roster carries the stamp it had.
         if (obs.Source == RoomObservationSource.AlsoHere && obs.At != _displayAt)
         {
             _displayAt = obs.At;
@@ -265,7 +292,9 @@ public sealed class MonsterHangupWatcher : IDisposable
                 Record($"{what} seen {_describeRoom()}: its relationship is Hangup, jumped to the wimpy location in place of the hang-up");
                 break;
             case EscapeOutcome.AlreadyEscaping:
-                // Not ours, so it arms no hold after the reconnect.
+                // Kept apart from _hungUpAt: the escape may have been a jump, and no
+                // drop is owed for one.
+                _escapeSeenAt = _now();
                 Record($"{what} seen {_describeRoom()}: its relationship is Hangup, and another escape had just gone out, so nothing more was sent");
                 break;
             default:
@@ -338,5 +367,9 @@ public sealed class MonsterHangupWatcher : IDisposable
         _log?.Info(LogCategory, what);
     }
 
-    public void Dispose() => _classifier.EntitiesObserved -= OnEntitiesObserved;
+    public void Dispose()
+    {
+        _holdTicks++;
+        _classifier.EntitiesObserved -= OnEntitiesObserved;
+    }
 }

@@ -3669,6 +3669,21 @@ public sealed class HealthManagerTests
         Assert.Contains("=x", h.SentLines);
     }
 
+    // Only an escape that went out counts. One that could not be sent leaves
+    // nothing to repeat, so the hang-up asked for right after it goes out.
+    [Fact]
+    public void AnEscapeThatWasNotSent_HoldsOffNothing()
+    {
+        using Harness h = new() { HangupCommand = null };
+        h.SetPrompt(hp: 200, maxHp: 200);
+        Assert.Equal(EscapeOutcome.NotSent, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        h.HangupCommand = "=x";
+
+        Assert.Equal(EscapeOutcome.HungUp, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+        Assert.Equal(1, h.SentLines.Count(line => line == "=x"));
+    }
+
     // A clock set back must not stretch the moment into a held-off hang-up.
     [Fact]
     public void AClockSetBack_DoesNotHoldOffTheNextEscape()

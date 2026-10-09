@@ -5794,10 +5794,20 @@ public sealed class AppServices
         OutboundMovement.AtBoardMenu = () => InGameCapture.AtBoardMenu;
         InGameCapture.AtBoardMenuChanged += atMenu =>
         {
-            if (!atMenu) { EngineGate.Release(BoardMenuHold); return; }
+            if (!atMenu)
+            {
+                EngineGate.Release(BoardMenuHold);
+                // The room is displayed ahead of the first prompt on the way back
+                // in: a Hangup monster read off it while still "at the menu" is
+                // answered now.
+                MonsterHangup.NoteBackInGame();
+                return;
+            }
             EngineGate.Hold(BoardMenuHold);
             MessageCandidateWatcher.NotifyLeftForMenu();
             StatlineReconcile.Arm();
+            // Whoever was in the room is not known to be there on the way back in.
+            RoomClassifier.NoteGameLeft();
         };
         // Same in-game gate arms unrecognized-line capture: nothing before the first
         // realm prompt (splash / login menu / connect banner) stages a candidate.

@@ -292,13 +292,13 @@ public sealed class RoomEntityClassifierTests
     // (nothing can act on one offline), a re-emit has nothing to replay, and the
     // first arrival after the reconnect starts a roster of its own.
     [Fact]
-    public void NoteConnectionLost_DropsTheRoster_WithoutAnObservation()
+    public void NoteGameLeft_DropsTheRoster_WithoutAnObservation()
     {
         using Harness h = new();
         h.AddMonster(1, "giant rat");
         h.Feed("Also here: giant rat.");
 
-        h.Classifier.NoteConnectionLost();
+        h.Classifier.NoteGameLeft();
         h.Classifier.ReemitCurrent();
 
         Assert.Null(h.Classifier.Current);

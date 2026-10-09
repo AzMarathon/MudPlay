@@ -1824,7 +1824,13 @@ public sealed class HealthManager : IDisposable
         // the same room roster): the danger is answered, so no second exit command
         // and no @panic behind it. Not latched: if we are still here and still in
         // danger once the moment has passed, this fires as normal.
-        if (EscapeJustWentOut($"HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}")) return true;
+        // Debug: this is asked on every prompt and roster change inside the window.
+        if (EscapeJustWentOut(out TimeSpan since))
+        {
+            _log?.Debug(LogCategory,
+                $"low-HP hang-up (HP {_state.Hp}/{_state.MaxHp} <= hang-trigger={hangTrigger}) not sent: an escape went out {since.TotalMilliseconds:0} ms ago");
+            return true;
+        }
 
         _hangFired = true;
 
@@ -1850,15 +1856,13 @@ public sealed class HealthManager : IDisposable
     private static readonly TimeSpan EscapeRepeatWindow = TimeSpan.FromSeconds(2);
     private DateTimeOffset? _escapeSentAt;
 
-    private bool EscapeJustWentOut(string reason)
+    private bool EscapeJustWentOut(out TimeSpan since)
     {
+        since = default;
         if (_escapeSentAt is not { } at) return false;
-        TimeSpan since = _now() - at;
+        since = _now() - at;
         // A clock set back must not stretch the window.
-        if (since < TimeSpan.Zero || since >= EscapeRepeatWindow) return false;
-        _log?.Debug(LogCategory,
-            $"escape ({reason}) not repeated: one went out {since.TotalMilliseconds:0} ms ago");
-        return true;
+        return since >= TimeSpan.Zero && since < EscapeRepeatWindow;
     }
 
     // The low-HP escape action, shared by our own emergency hangup
@@ -1887,7 +1891,12 @@ public sealed class HealthManager : IDisposable
     // pvpResponse only words the hang-up penalty log line (SetHangupPenaltyLog).
     private EscapeOutcome ExecuteEscape(HealthSettings s, string reason, bool allowCarrierDrop, bool pvpResponse)
     {
-        if (EscapeJustWentOut(reason)) return EscapeOutcome.AlreadyEscaping;
+        if (EscapeJustWentOut(out TimeSpan since))
+        {
+            _log?.Info(LogCategory,
+                $"escape ({reason}) not repeated: one went out {since.TotalMilliseconds:0} ms ago");
+            return EscapeOutcome.AlreadyEscaping;
+        }
 
         if (s.SysGotoWimpyInsteadOfHanging
             && !string.IsNullOrWhiteSpace(s.SysGotoWimpyLocation)
