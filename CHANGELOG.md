@@ -1,5 +1,10 @@
 # Version history
 
+## 3.154.1
+
+- Closing MudPlay or restarting for an update with Settings open saves the changes you hadn't applied yet
+- A change Settings would have warned about first (a statline missing HP, mana or resting) is left unsaved on the way out, and logged
+
 ## 3.154.0
 
 - CP plan is typed from the trained stats and CP Left on the `train stats` screen, so a buff on `stat` no longer throws it off

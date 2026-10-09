@@ -3929,9 +3929,28 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop)
             return;
-        if (desktop.MainWindow is MudPlay.Views.MainWindow main) main.MarkExitConfirmed();
+        if (desktop.MainWindow is MudPlay.Views.MainWindow main)
+        {
+            main.MarkExitConfirmed();
+            // Before the shutdown, not from the main window's Closing handler: the
+            // shutdown may close the Settings window first, and its edits go with it.
+            (main.DataContext as MainWindowViewModel)?.SavePendingSettingsForExit();
+        }
         desktop.Shutdown();
     });
+
+    // The client is exiting with the Settings window open: save its pending edits
+    // (SettingsWindowViewModel.ApplyPendingForExit). Run on every exit path, ahead
+    // of the profile's own save. A section that fails to save must not stop the exit.
+    public void SavePendingSettingsForExit()
+    {
+        if (_settings?.DataContext is not SettingsWindowViewModel vm) return;
+        try { vm.ApplyPendingForExit(); }
+        catch (Exception ex)
+        {
+            AppServices.Current.Log.Error("Settings", $"Saving the open Settings window on exit failed: {ex.Message}");
+        }
+    }
 
     // Stand the live session down for the self-updater's restart, and report what the
     // relaunched build has to restore. Called once the new build is staged and
