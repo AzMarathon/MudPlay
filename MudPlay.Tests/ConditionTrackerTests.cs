@@ -1,3 +1,4 @@
+using System.Linq;
 using MudPlay.Game.Conditions;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
@@ -50,7 +51,117 @@ public sealed class ConditionTrackerTests
                 .Invoke(Tracker, new object[] { emitted });
         }
 
+        public void FeedAt(string text, DateTimeOffset when)
+        {
+            var emitted = new LineExtractor.EmittedLine(
+                text, Array.Empty<CellAttributes>(), when, IsPromptLine: false);
+            typeof(ConditionTracker)
+                .GetMethod("OnLine",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(Tracker, new object[] { emitted });
+        }
+
         public void Dispose() => Tracker.Dispose();
+    }
+
+    // ----- one applied line, several spells: the cast line says which ----------
+
+    // The three records that print "You are enveloped in darkness": globe of
+    // darkness and darkness take the light away, blind globe is a blindness and
+    // prints no cast line of its own.
+    private static Harness DarknessHarness()
+    {
+        Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("globe of darkness", MessageFlags.None,
+            "You are enveloped in darkness!", "The unnatural darkness lifts.") with
+        {
+            TargetMessage = "A bubble of pure darkness appears and begins to expand!",
+            WitnessMessage = "The {source} makes a clutching gesture!",
+        });
+        h.Messages.Messages.Add(MakeRecord("darkness", MessageFlags.None,
+            "You are enveloped in darkness", "The unnatural darkness lifts") with
+        {
+            CasterMessage = "Darkness is everywhere, suffocating you like a cloak!",
+            TargetMessage = "The {source} exudes a strange, overpowering aura.",
+        });
+        h.Messages.Messages.Add(MakeRecord("blind globe", MessageFlags.Blinded,
+            "You are enveloped in darkness", "The unnatural darkness lifts"));
+        return h;
+    }
+
+    [Fact]
+    public void SharedAppliedLine_TheSpellWhoseCastLineWasJustSeen_IsTheOneApplied()
+    {
+        // A nanati shadow's globe of darkness set Blinded through blind globe's
+        // record, and the party was asked to cure a blindness nobody had.
+        using Harness h = DarknessHarness();
+
+        h.Feed("The thin nanati shadow makes a clutching gesture!");
+        h.Feed("A bubble of pure darkness appears and begins to expand!");
+        h.Feed("You are enveloped in darkness!");
+
+        Assert.False(h.Tracker.IsBlinded);
+        Assert.Equal(new[] { "globe of darkness" }, h.Applied.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void SharedAppliedLine_WithNoCastLineSeen_AppliesEveryRecordAsBefore()
+    {
+        // blind globe prints nothing when it is cast, so its applied line arrives
+        // alone, and is a blindness.
+        using Harness h = DarknessHarness();
+
+        h.Feed("You are enveloped in darkness!");
+
+        Assert.True(h.Tracker.IsBlinded);
+        Assert.Equal(3, h.Applied.Count);
+    }
+
+    [Fact]
+    public void SharedAppliedLine_ACastLineFromLongAgo_DoesNotDecide()
+    {
+        using Harness h = DarknessHarness();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+
+        h.FeedAt("A bubble of pure darkness appears and begins to expand!", t0);
+        h.FeedAt("You are enveloped in darkness!", t0.AddSeconds(30));
+
+        Assert.True(h.Tracker.IsBlinded);
+    }
+
+    [Fact]
+    public void SharedAppliedLine_AfterTheGlobeLifts_ABlindGlobeStillBlinds()
+    {
+        using Harness h = DarknessHarness();
+        DateTimeOffset t0 = DateTimeOffset.UtcNow;
+
+        h.FeedAt("A bubble of pure darkness appears and begins to expand!", t0);
+        h.FeedAt("You are enveloped in darkness!", t0.AddSeconds(1));
+        h.FeedAt("The unnatural darkness lifts.", t0.AddSeconds(2));
+        Assert.False(h.Tracker.IsBlinded);
+
+        h.FeedAt("You are enveloped in darkness!", t0.AddSeconds(20));
+
+        Assert.True(h.Tracker.IsBlinded);
+    }
+
+    [Fact]
+    public void AppliedLineSharedByRecordsWithTheSameFlags_IsNotNarrowedByACastLine()
+    {
+        // Five buffs print "You feel protected!"; they all latch together, as they
+        // always did, whichever one's cast line was seen.
+        using Harness h = new();
+        h.Messages.Messages.Add(MakeRecord("armour", MessageFlags.None, "You feel protected!", "The armour fades.") with
+        {
+            CasterMessage = "You cast armour on {target}!",
+        });
+        h.Messages.Messages.Add(MakeRecord("shield", MessageFlags.None, "You feel protected!", "The shield fades."));
+
+        h.Feed("You cast armour on Raijin!");
+        h.Feed("You feel protected!");
+
+        Assert.Equal(2, h.Applied.Count);
     }
 
     private static MessageRecord MakeRecord(

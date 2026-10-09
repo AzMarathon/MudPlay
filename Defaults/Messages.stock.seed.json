@@ -2152,8 +2152,8 @@
   {
     "Id": "15621148faa53da3",
     "Name": "globe of darkness",
-    "Flags": "Blinded",
-    "RawFlagsHex": 1,
+    "Flags": "None",
+    "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "A bubble of pure darkness appears and begins to expand!",
     "WitnessMessage": "The {s} makes a clutching gesture!",
@@ -7338,7 +7338,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "The {source} explodes in a spray of venom!",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "The hordeling screeches violently!",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -19039,7 +19039,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "Vultures circle high overhead.\nA shimmering image appears to the west!\nA shimmering image appears to the east!\nA shimmering image appears to the north!\nA shimmering image appears to the south!\nThe howl of some awful beast can be heard far over the dunes.",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -19056,7 +19056,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "Vultures circle high overhead.\nA shimmering image appears to the west!\nA shimmering image appears to the east!\nA shimmering image appears to the north!\nA shimmering image appears to the south!\nThe howl of some awful beast can be heard far over the dunes.",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -19141,7 +19141,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "A heated wind howls through the passageway, kicking up sand and dust.\nBeast-like screams echo unnervingly throughout the passageways.\nThe clicking sound of scrabbling claws can be heard from down the passage.\nEerie lights dance about further down the passageway.",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
@@ -19175,7 +19175,7 @@
     "RawFlagsHex": 0,
     "CasterMessage": "{null}",
     "TargetMessage": "{null}",
-    "WitnessMessage": "{null}",
+    "WitnessMessage": "Doors on this level creak and thump!",
     "AppliedMessage": "{null}",
     "AppliedEndsWith": "{null}",
     "Links": [
