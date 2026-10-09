@@ -10,15 +10,17 @@
     <UserControl.Resources>
         <!-- One of the 16 terminal colours: its name, a swatch that opens a picker
              under the Custom scheme, a sample of text in it on the terminal's
-             black, and (Custom only) a Reset back to the standard colour. -->
+             black, and (Custom only) a Reset back to the standard colour. Kept
+             narrow enough that two of these, Reset included, sit side by side in
+             the section's 640 width. -->
         <DataTemplate x:Key="TerminalColorRow" x:DataType="vm:TerminalColorRowViewModel">
-            <Grid ColumnDefinitions="118,Auto,Auto,Auto" Margin="0,3">
+            <Grid ColumnDefinitions="104,Auto,Auto,Auto" Margin="0,3">
                 <TextBlock Grid.Column="0" Classes="FieldLabel" Text="{Binding Label}"
                            VerticalAlignment="Center"/>
                 <Button Grid.Column="1" Padding="2" VerticalAlignment="Center"
                         IsEnabled="{Binding CanEdit}"
                         ToolTip.Tip="This colour as it is drawn. Under Custom, click to pick another.">
-                    <Border Width="46" Height="18"
+                    <Border Width="38" Height="18"
                             Background="{Binding Brush}"
                             BorderBrush="{StaticResource ChromeBorderSoftBrush}"
                             BorderThickness="1"
@@ -35,13 +37,13 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
-                <Border Grid.Column="2" Background="Black" Margin="8,0,0,0" Padding="8,2"
+                <Border Grid.Column="2" Background="Black" Margin="6,0,0,0" Padding="6,2"
                         VerticalAlignment="Center"
                         CornerRadius="{StaticResource CornerSm}">
-                    <TextBlock Text="Sample text" Foreground="{Binding Brush}"
+                    <TextBlock Text="Sample" Foreground="{Binding Brush}"
                                FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </Border>
-                <Button Grid.Column="3" Content="Reset" Margin="8,0,0,0"
+                <Button Grid.Column="3" Content="Reset" Margin="6,0,0,0" Padding="8,3"
                         VerticalAlignment="Center"
                         IsVisible="{Binding CanEdit}"
                         Command="{Binding ResetCommand}"
@@ -615,12 +617,17 @@
                                            Foreground="{StaticResource ChromeFgSecBrush}"
                                            FontSize="{StaticResource FontSizeSm}"
                                            TextWrapping="Wrap" Margin="0,2,0,6"/>
-                                <WrapPanel Orientation="Horizontal">
-                                    <ItemsControl ItemsSource="{Binding NormalRows}" Margin="0,0,28,0"
+                                <!-- Normal colours on the left, bright on the right, for
+                                     every choice. A Grid, not a wrapping panel: the
+                                     Reset buttons Custom adds must not drop the bright
+                                     column underneath. -->
+                                <Grid ColumnDefinitions="Auto,Auto">
+                                    <ItemsControl Grid.Column="0" ItemsSource="{Binding NormalRows}"
+                                                  Margin="0,0,20,0"
                                                   ItemTemplate="{StaticResource TerminalColorRow}"/>
-                                    <ItemsControl ItemsSource="{Binding BrightRows}"
+                                    <ItemsControl Grid.Column="1" ItemsSource="{Binding BrightRows}"
                                                   ItemTemplate="{StaticResource TerminalColorRow}"/>
-                                </WrapPanel>
+                                </Grid>
                                 <Button Content="Restore standard colours" Margin="0,8,0,0"
                                         HorizontalAlignment="Left"
                                         IsVisible="{Binding IsCustom}"

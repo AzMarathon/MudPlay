@@ -1,5 +1,9 @@
 # Version history
 
+## 3.158.1
+
+- Terminal colours: Custom keeps the same two columns as the other choices (normal left, bright right) instead of one long list
+
 ## 3.158.0
 
 - New in Settings → General, under Global client settings: **Visual impairment: terminal colours**. Choose how the 16 game colours are drawn: Default, Deuteranopia, Protanopia, Tritanopia or Custom
