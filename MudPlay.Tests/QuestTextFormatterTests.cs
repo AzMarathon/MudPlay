@@ -236,6 +236,43 @@ public sealed class QuestTextFormatterTests
     }
 
     [Fact]
+    public void Step_KillStep_TwoRecordsOfOneMonster_NamesItOnceWithEachPlacedRoomOnce()
+    {
+        // Two spells off two records of the same boss run the step; the first has no
+        // placement, the second stands in two rooms, one of them shared with a third record.
+        string root = Path.Combine(Path.GetTempPath(), "mudplay-questtext-tests-" + Path.GetRandomFileName());
+        string dir = Path.Combine(root, "alpha");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "Monsters.json"), """
+            [
+              { "Number": 2203, "Name": "dark phoenix", "DeathSpell": 5272 },
+              { "Number": 700, "Name": "dark phoenix", "DeathSpell": 871 },
+              { "Number": 701, "Name": "dark phoenix", "DeathSpell": 871 }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(dir, "Spells.json"), """
+            [
+              { "Number": 5272, "Name": "phoenix text a", "Targets": 1 },
+              { "Number": 871, "Name": "phoenix text b", "Targets": 1 }
+            ]
+            """);
+        GameDataCache set = new(root);
+        set.SwitchSet("alpha");
+        QuestStep first = MakeStep(18, null, "Spell #5272");
+        QuestStep second = MakeStep(18, null, "Spell #871");
+        var placement = new Dictionary<int, IReadOnlyList<RoomKey>>
+        {
+            [700] = new[] { new RoomKey(16, 2160), new RoomKey(16, 2161) },
+            [701] = new[] { new RoomKey(16, 2160) },
+        };
+
+        Assert.Equal("(16/2160) (16/2161) kill dark phoenix",
+            QuestTextFormatter.StepOrNull(set, first, placement, sameStep: new[] { first, second }));
+        // On its own the unplaced record still narrates, room-less.
+        Assert.Equal("kill dark phoenix", QuestTextFormatter.StepOrNull(set, first, placement));
+    }
+
+    [Fact]
     public void Step_SpellThatIsNoMonstersDeath_IsNotAKill()
     {
         Assert.Equal("obtain #100",

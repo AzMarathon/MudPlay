@@ -316,4 +316,37 @@ public sealed class ProfileMigrationsTests
         Assert.Equal(10, edited.Spells.PriorityPriorityBuffs);
         Assert.Equal(1, edited.Spells.PriorityCuring);
     }
+
+    // ----- v9: quest step ticks saved before the drafts gained kill lines -----
+
+    [Fact]
+    public void ProfileWithStepTicks_IsMarkedForTheTickMove()
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 8,
+            QuestLog = new List<QuestProgress> { new(128, 30) { CheckedSteps = new List<int> { 0, 1 } } },
+        };
+
+        Assert.True(ProfileMigrations.Apply(profile));
+
+        Assert.True(profile.QuestTicksPredateKillSteps);
+        Assert.Equal(new[] { 0, 1 }, profile.QuestLog[0].CheckedSteps);   // moved later, with the game data
+    }
+
+    [Fact]
+    public void ProfileWithoutStepTicks_IsNotMarked()
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 8,
+            QuestLog = new List<QuestProgress> { new(133, 0) { Complete = true } },
+        };
+
+        Assert.True(ProfileMigrations.Apply(profile));
+
+        Assert.False(profile.QuestTicksPredateKillSteps);
+        // A profile made at this version starts with ticks that already count the new way.
+        Assert.False(new CharacterProfile().QuestTicksPredateKillSteps);
+    }
 }

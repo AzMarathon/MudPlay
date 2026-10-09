@@ -75,7 +75,7 @@
                     <!-- Conditions and gives, as runs in the order the line goes through them. -->
                     <ItemsControl ItemsSource="{Binding Parts}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:QuestFlagStepRow+Part">
+                            <DataTemplate x:DataType="vm:QuestFlagStepPartRow">
                                 <Grid ColumnDefinitions="118,*" Margin="0,0,0,5">
                                     <TextBlock Classes="Part" Text="{Binding Label}" TextWrapping="Wrap"/>
                                     <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Text}"/>

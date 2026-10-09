@@ -146,6 +146,14 @@ public sealed partial class QuestSectionViewModel : WorkshopSectionViewModel
             QuestAlignGood = _profile.Current?.QuestAlignGood ?? false;
             QuestAlignNeutral = _profile.Current?.QuestAlignNeutral ?? false;
             QuestAlignEvil = _profile.Current?.QuestAlignEvil ?? false;
+            // Ticks saved before the drafts gained their kill lines are put back on their
+            // steps before anything reads them.
+            if (_profile.Current is { } loaded && QuestTickMigration.Apply(loaded, _gameData, _quests.Resolve))
+            {
+                _profile.Save();
+                AppServices.CurrentOrNull?.Log.Info("Quests",
+                    "Quest step ticks saved before kill steps were drafted have been moved onto their steps.");
+            }
             _allCards.Clear();
             _bonusesByCard.Clear();
             _abilityAwardByCard.Clear();

@@ -11,7 +11,7 @@ public sealed class QuestFlagStepRow
         ArgumentNullException.ThrowIfNull(entry);
         Heading = $"{number}. {entry.Heading}";
         Do = string.Join('\n', entry.Do);
-        Parts = entry.Parts.Select(p => new Part(p.Label, string.Join('\n', p.Lines))).ToList();
+        Parts = entry.Parts.Select(p => new QuestFlagStepPartRow(p.Label, string.Join('\n', p.Lines))).ToList();
         Also = string.Join('\n', entry.Also);
         LaterLabel = entry.LaterLabel;
         Later = string.Join('\n', entry.Later);
@@ -22,7 +22,7 @@ public sealed class QuestFlagStepRow
     public string Do { get; }
 
     // The line's conditions and gives, as runs in the order it goes through them.
-    public IReadOnlyList<Part> Parts { get; }
+    public IReadOnlyList<QuestFlagStepPartRow> Parts { get; }
     public string Also { get; }
     public string LaterLabel { get; }
     public string Later { get; }
@@ -31,6 +31,4 @@ public sealed class QuestFlagStepRow
     public bool HasDo => Do.Length > 0;
     public bool HasAlso => Also.Length > 0;
     public bool HasLater => LaterLabel.Length > 0;
-
-    public sealed record Part(string Label, string Text);
 }
