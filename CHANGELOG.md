@@ -1,9 +1,17 @@
 # Version history
 
-## 3.159.28
+## 3.160.1
 
 - Navigation map: the Spells overlay can colour spell rooms by teleport — red when the room's spell teleports you outright or on a random roll, yellow when it does so only under a condition (an item, your class or level, an empty room), green when it doesn't
 - In that mode the room tooltip and the Legend name the colours
+
+## 3.160.0
+
+- Items a hang-up penalty dropped are picked up on re-entering the game
+- Only on a realm set to drop items, and never more than it drops
+- The gear set last equipped is applied again for pieces that came back
+- Loops and walks wait for the check
+- Never changes when the client hangs up
 
 ## 3.159.27
 
