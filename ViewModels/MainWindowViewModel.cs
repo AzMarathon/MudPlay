@@ -1389,6 +1389,9 @@ public partial class MainWindowViewModel : ObservableObject
         // ObserveOutbound still fires on this path, so the `train stats` send is
         // what arms the tracker and raises the gate in the first place.
         AppServices.Current.AutoTrain.SetWireSender(SendUserInput);
+        // It also reads the form it is about to type into: the trained stats and CP
+        // Left stand on the terminal grid, which only this session holds.
+        AppServices.Current.AutoTrain.SetScreenReader(BuildVisibleScreenText);
         // TrainerWalk sends `train` / `stat` only OUTSIDE the form (bare `train`
         // has no Point Cost Chart, so it never raises MenuOwnsKeyboard; `stat`
         // fires post-training), so it stays on the gate-wrapped pipeline.

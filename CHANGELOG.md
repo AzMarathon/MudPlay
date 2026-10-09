@@ -1,5 +1,13 @@
 # Version history
 
+## 3.153.1
+
+- CP plan is typed from the trained stats and CP Left on the `train stats` screen, so a buff on `stat` no longer throws it off
+- A plan row is cleared only once the game shows its CP was spent
+- `stat` values marked as modified have gear and the listed effects taken off; one that can't be accounted for is flagged on the CP Allocation tab and not planned from
+- Stock: the CP plan waits while a stat is altered, as the game refuses `train stats` then; the refusal line is recognised
+- bug reports addressed: paradigm-20260930-160602
+
 ## 3.153.0
 
 - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder

@@ -118,6 +118,11 @@ public sealed class TrainerWalkManager : IDisposable
     public TimeSpan TrainConfirmTimeout { get; } = TimeSpan.FromSeconds(8);
     // How long to wait for the post-train stat refresh before giving up on CP.
     public TimeSpan StatRefreshTimeout { get; } = TimeSpan.FromSeconds(8);
+    // How often, and how many times, a run parked at the trainer reads `stat` again
+    // while a stat is altered, before it leaves the CP plan for later.
+    public TimeSpan AlteredStatsRereadDelay { get; } = TimeSpan.FromSeconds(20);
+    private const int MaxAlteredStatsRereads = 6;
+    private int _alteredStatsRereads;
 
     // Raised when IsBusy / CanTrainNow may have changed.
     public event Action? StateChanged;
@@ -358,7 +363,8 @@ public sealed class TrainerWalkManager : IDisposable
         {
             int banked = CountBankableAbove(_stats.Level);   // only the reserve message needs it
             _log?.Info("AutoTrain",
-                banked > 0 && !TrainBudgetCalculator.WithinCeiling(_stats.Level, ceiling)
+                _autoTrain.HoldReason is { } hold ? hold
+                : banked > 0 && !TrainBudgetCalculator.WithinCeiling(_stats.Level, ceiling)
                     ? $"Nothing to train — at the level ceiling ({ceiling}); {banked} banked level{(banked == 1 ? "" : "s")} held."
                 : banked > 0
                     ? $"Nothing to train — keeping {banked} banked level{(banked == 1 ? "" : "s")} in reserve."
@@ -928,6 +934,7 @@ public sealed class TrainerWalkManager : IDisposable
         _spellTripTried = false;
         _spellsOnly = false;
         _fundingWithSpells = false;
+        _alteredStatsRereads = 0;
     }
 
     private void OnWalkEvent(WalkEvent e)
@@ -1171,16 +1178,23 @@ public sealed class TrainerWalkManager : IDisposable
         bool hasPlan = _profile.Current?.CharacterPlan?.Any(e => e.Level == targetLevel) ?? false;
         if (wantCp && hasPlan)
         {
-            _log?.Info("AutoTrain", $"Applying CP plan through level {targetLevel}.");
-            _cpTargetLevel = targetLevel;
-            _autoTrain.TrainNow();
-            if (_autoTrain.IsBusy)
+            if (_autoTrain.HoldReason is { } hold)
             {
-                _phase = Phase.ApplyingCp;
-                StateChanged?.Invoke();
-                return;
+                if (WaitOutAlteredStats(hold)) return;
             }
-            // Nothing affordable to apply — leave the plan rows in place.
+            else
+            {
+                _log?.Info("AutoTrain", $"Applying CP plan through level {targetLevel}.");
+                _cpTargetLevel = targetLevel;
+                _autoTrain.TrainNow();
+                if (_autoTrain.IsBusy)
+                {
+                    _phase = Phase.ApplyingCp;
+                    StateChanged?.Invoke();
+                    return;
+                }
+                // Nothing affordable to apply — leave the plan rows in place.
+            }
         }
 
         // Levelled up (or reconciled) but applied no CP — keep the plan rows (per
@@ -1188,7 +1202,35 @@ public sealed class TrainerWalkManager : IDisposable
         FinishWithReport();
     }
 
-    // The CP keystroke replay has committed (raises + SAVE on the wire). Clear the
+    // Stock refuses `train stats` while a stat is altered (GAME_MECHANICS "Trainers:
+    // level band, class restriction, and `train stats`"), so a run standing at the
+    // trainer with one marked on its `stat` screen waits there and reads `stat`
+    // again, rather than send a command the game will bounce. The wait is bounded:
+    // a buff something keeps recasting would otherwise park the run for good. False
+    // once the tries are used up; the plan row stays for a later pass.
+    private bool WaitOutAlteredStats(string hold)
+    {
+        if (_alteredStatsRereads >= MaxAlteredStatsRereads)
+        {
+            _log?.Info("AutoTrain", "Stats are still altered — leaving the CP plan for later; plan rows kept.");
+            return false;
+        }
+        if (_alteredStatsRereads++ == 0)
+            _log?.Info("AutoTrain",
+                $"{hold} Waiting at the trainer and re-reading `stat` every "
+                + $"{AlteredStatsRereadDelay.TotalSeconds:0}s, up to {MaxAlteredStatsRereads} times.");
+        int session = ++_sessionId;   // retires the read timeout of the screen just parsed
+        _ = RereadStatAfterAsync(session);
+        return true;
+    }
+
+    private async Task RereadStatAfterAsync(int session)
+    {
+        await Task.Delay(AlteredStatsRereadDelay);
+        if (_sessionId == session && _phase == Phase.RefreshingStats) SendStatRefresh();
+    }
+
+    // The CP pass was checked as applied (AutoTrainManager.PlanCommitted). Clear the
     // fulfilled plan rows now instead of letting the grid linger until the menu-exit
     // prompt round-trip (or AutoTrainManager's exit-grace fallback) releases the run.
     // The run itself still finishes on the idle transition in OnAutoTrainStateChanged.
@@ -1210,13 +1252,14 @@ public sealed class TrainerWalkManager : IDisposable
     {
         if (_phase == Phase.ApplyingCp && !_autoTrain.IsBusy)
         {
-            // Rows are cleared only by OnCpPlanCommitted, which fires when the
-            // keystroke replay actually committed the raises + SAVE. Reaching idle
-            // without that signal means the replay never ran (trainer screen never
-            // opened / aborted) — keep the plan rows so a later attempt can retry,
-            // and leave _cpApplied false so the report reflects "CP not applied".
+            // Rows are cleared only by OnCpPlanCommitted, which fires when the pass
+            // was checked as applied. Reaching idle without that signal means it
+            // wasn't (the screen never opened, the game refused, or no CP was
+            // spent) — keep the plan rows so a later attempt can retry, and leave
+            // _cpApplied false so the report reflects "CP not applied".
             if (!_cpApplied)
-                _log?.Info("AutoTrain", "CP plan not applied (trainer screen didn't open) — plan rows kept.");
+                _log?.Info("AutoTrain",
+                    $"CP plan not applied ({_autoTrain.LastApplyNote ?? "trainer screen didn't open"}) — plan rows kept.");
             FinishWithReport();
             return;
         }

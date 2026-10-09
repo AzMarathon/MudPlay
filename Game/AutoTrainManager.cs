@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading.Tasks;
 using MudPlay.Game.Calculators;
 using MudPlay.Game.Inventory;
+using MudPlay.Game.Train;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
+using MudPlay.Services.Patterns;
 
 namespace MudPlay.Game;
 
@@ -30,13 +33,17 @@ namespace MudPlay.Game;
 // we weren't at a trainer) we abort cleanly. MenuExited is likewise marker-driven
 // and never fires on Paradigm, so InputMenuExited is also our exit signal.
 //
-// The plan targets are recomputed against live unspent CP + race bounds via
-// CpPlanCalculator.ClampRowToBudget, so the engine never tries to overspend,
-// and only the current level's planned raises are typed (absolute values —
-// self-correcting against the field's starting value). Sessions are id-tagged
-// so a late timeout / exit-watchdog from a finished run can't disturb a newer
-// one. The manager never touches Family Name / appearance fields, and the
-// form's QUIT option means a misfire that bails leaves stats unchanged.
+// What gets typed is decided with the form on screen. The form shows the trained
+// stats and the CP left, with no spell in them, so when it can be read the plan
+// is worked from it; the `stat` screen's figures (less gear and the effects it
+// listed) are the fallback, and only when every modified stat on that screen is
+// accounted for. Targets are clamped to the CP on hand via
+// CpPlanCalculator.ClampRowToBudget and typed as absolute values. Whether the
+// plan took is then checked against the form (or the CP on a follow-up `stat`)
+// before anything is reported as applied. Sessions are id-tagged so a late
+// timeout / exit-watchdog from a finished run can't disturb a newer one. The
+// manager never touches Family Name / appearance fields, and the form's QUIT
+// option means a misfire that bails leaves stats unchanged.
 public sealed class AutoTrainManager : IDisposable
 {
     private enum Phase { Idle, AwaitingMenu, Replaying }
@@ -46,35 +53,51 @@ public sealed class AutoTrainManager : IDisposable
     private readonly InventoryManager _inventory;
     private readonly ProfileService _profile;
     private readonly TrainerMenuTracker _trainer;
+    private readonly MessageStore _messages;
+    private readonly IDisposable _refusalSub;
     private readonly LogService? _log;
     private readonly WireSender _wire = new();
+    private Func<string>? _readScreen;
 
     private Phase _phase = Phase.Idle;
     private int _sessionId;
     private int _lastLevel;
     private IReadOnlyList<string> _sequence = Array.Empty<string>();
 
+    // The pass in flight (STR/INT/WIL/AGL/HEA/CHM): the plan row it is working
+    // toward, the stats it starts from, and what it will type. The last two are
+    // provisional until the form is up (PlanFromForm).
+    private int[] _rowTargets = Array.Empty<int>();
+    private int[] _current = Array.Empty<int>();
+    private int[] _target = Array.Empty<int>();
+    private int _cost;                       // CP the typed raises should take
+    private int _cpAtStart;                  // CP on the last `stat` before the pass
+    private TrainStatsScreen? _formBefore;   // the form as first read, null when unreadable
+    // The pass has left the form and is still settling whether it took.
+    private bool _verifying;
+
     // Delay between keystrokes so the server's form redraw keeps pace.
-    public int KeystrokeDelayMs { get; } = 200;
+    public int KeystrokeDelayMs { get; set; } = 200;
     // Grace after `train stats` for the stat box to render before we check the
     // command-driven input-menu signal and begin the replay (the realm-
     // independent fallback for menus whose marker row never scrolls).
-    public TimeSpan MenuRenderDelay { get; } = TimeSpan.FromMilliseconds(1200);
+    public TimeSpan MenuRenderDelay { get; set; } = TimeSpan.FromMilliseconds(1200);
     // How long to wait for the trainer screen after sending `train stats`.
-    public TimeSpan MenuEntryTimeout { get; } = TimeSpan.FromSeconds(6);
+    public TimeSpan MenuEntryTimeout { get; set; } = TimeSpan.FromSeconds(6);
     // Grace after the final keystroke before force-releasing the latch if no
     // exit prompt arrives.
-    public TimeSpan ExitGrace { get; } = TimeSpan.FromSeconds(4);
+    public TimeSpan ExitGrace { get; set; } = TimeSpan.FromSeconds(4);
+    // Grace for the confirming `stat` screen to arrive + parse when the form
+    // couldn't be read and the CP has to be compared instead.
+    public TimeSpan StatVerifyDelay { get; set; } = TimeSpan.FromMilliseconds(1500);
 
     // Raised when CanTrainNow / IsBusy may have changed.
     public event Action? StateChanged;
 
-    // Raised once the CP keystroke replay has finished sending — the plan's
-    // raises and the SAVE that commits them are on the wire. Fires before the
-    // menu-exit prompt arrives and before the ExitGrace latch releases, so
-    // subscribers that only need "the CP is committed" (e.g. clearing fulfilled
-    // plan rows) can react immediately instead of waiting for the server
-    // round-trip.
+    // Raised once a pass is known to have applied its plan row: the form showed
+    // every stat of the row trained, or exactly the row's cost left the character.
+    // Subscribers clear the fulfilled row on it. A pass that typed its keystrokes
+    // and spent nothing never raises this.
     public event Action? PlanCommitted;
 
     // The plan level a replay started off the user's own `train stats` is applying,
@@ -84,32 +107,36 @@ public sealed class AutoTrainManager : IDisposable
     public int? ManualApplyLevel { get; private set; }
 
     // Raised after a semi-manual ApplyTargets run (the CP-Alloc "Apply this level"
-    // button): true when a follow-up `stat` shows the raw stats reached the applied
-    // targets, false on abort (not at a trainer) or mismatch. The auto/TrainNow path
-    // does NOT fire this — only an explicit ApplyTargets does.
+    // button): true when the row was checked as applied, false on abort (not at a
+    // trainer, refused) or when it wasn't. The auto/TrainNow path does NOT fire
+    // this — only an explicit ApplyTargets does.
     public event Action<bool>? ApplyTargetsCompleted;
 
-    // This session is an explicit "apply this level" (verify via `stat` + report on
-    // completion) rather than the plan-by-level TrainNow.
+    // Why the last pass did not apply its row, in words for the user. Null after a
+    // pass that did, and while one is in flight.
+    public string? LastApplyNote { get; private set; }
+
+    // This session is an explicit "apply this level" (reports on completion) rather
+    // than the plan-by-level TrainNow.
     private bool _explicitApply;
-    private int[] _applyTarget = Array.Empty<int>();
-    // Grace after the CP replay for the confirming `stat` screen to arrive + parse
-    // before we compare the raw stats to the target.
-    public TimeSpan StatVerifyDelay { get; } = TimeSpan.FromMilliseconds(1500);
 
     public AutoTrainManager(PlayerStats stats, GameDataCache gameData, InventoryManager inventory,
-                            ProfileService profile, TrainerMenuTracker trainer, LogService? log = null)
+                            ProfileService profile, TrainerMenuTracker trainer, MessageStore messages,
+                            MessageRouter router, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
         ArgumentNullException.ThrowIfNull(inventory);
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(trainer);
+        ArgumentNullException.ThrowIfNull(messages);
+        ArgumentNullException.ThrowIfNull(router);
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
         _profile = profile;
         _trainer = trainer;
+        _messages = messages;
         _log = log;
         _lastLevel = stats.Level;
 
@@ -118,88 +145,105 @@ public sealed class AutoTrainManager : IDisposable
         _trainer.InputMenuEntered += OnManualTrainStatsEntered;
         _trainer.MenuExited += OnMenuExited;
         _trainer.InputMenuExited += OnInputMenuExited;
+        _refusalSub = router.Subscribe(KnownPatterns.TrainStatsAltered, OnStatsAlteredRefusal);
     }
 
     public void SetWireSender(Action<byte[]> sender) => _wire.Bind(sender);
     internal List<byte[]> LastSentForTests => _wire.LastSentForTests;
 
-    // True while a train session (our send → exit) is in flight.
-    public bool IsBusy => _phase != Phase.Idle;
+    // Binds the read of the visible terminal screen, as newline-joined rows, that
+    // the form is read from. The grid belongs to the terminal session, so the
+    // main-window view model supplies it alongside the wire sender.
+    public void SetScreenReader(Func<string> visibleScreenText) => _readScreen = visibleScreenText;
 
-    // True when the current level has a planned, affordable raise to apply.
-    public bool CanTrainNow => TryResolveTargets(out _, out _);
+    // True while a train session (our send → exit → checked) is in flight.
+    public bool IsBusy => _phase != Phase.Idle || _verifying;
+
+    // True when the current level has a planned raise to apply: an affordable one
+    // by the `stat` reading, or, when that reading can't be trusted, a row and CP
+    // for the form to settle.
+    public bool CanTrainNow => TryResolveTargets(out _, out _, out _, out _);
+
+    // Why the current level's plan row can't be applied right now though it is
+    // waiting, or null. Stock refuses `train stats` while a stat is altered.
+    public string? HoldReason
+    {
+        get
+        {
+            TryResolveTargets(out _, out _, out _, out string? hold);
+            return hold;
+        }
+    }
 
     // Begin a train run for the current level's plan. No-op when already busy, no
-    // wire is bound, or there's nothing affordable to raise. Drives the screen
+    // wire is bound, or there's nothing to raise. Drives the screen
     // asynchronously; subscribe to StateChanged for progress.
     public void TrainNow()
     {
-        if (_phase != Phase.Idle || !_wire.IsBound) return;
-        if (!TryResolveTargets(out int[] current, out int[] target)) return;
-
-        _sequence = AutoTrainSequenceBuilder.Build(current, target);
-        int session = ++_sessionId;
-        _phase = Phase.AwaitingMenu;
-        ManualApplyLevel = null;
+        if (IsBusy || !_wire.IsBound) return;
+        if (!TryResolveTargets(out int[] current, out int[] target, out int[] row, out string? hold))
+        {
+            if (hold is not null) _log?.Info("AutoTrain", hold);
+            return;
+        }
+        BeginPass(current, target, row, explicitApply: false, manualLevel: null);
         _log?.Info("AutoTrain", "Sent `train stats` — awaiting trainer screen.");
         _wire.Send("train stats");
-        StateChanged?.Invoke();
-        _ = AwaitMenuTimeoutAsync(session);
-        _ = AwaitRenderThenReplayAsync(session);
+        AwaitMenu();
     }
 
-    // Semi-manual "apply this level": apply an EXPLICIT set of raw-stat targets at
-    // the trainer the user is standing at (no plan-by-level resolve, no walk). The
-    // caller (CP-Alloc tab) validates affordability first. Uses the same
-    // send-`train stats` → await-menu → replay machinery; on completion fires
-    // ApplyTargetsCompleted — true when the confirming `stat` shows the raw stats
-    // reached the targets, false on abort (not at a trainer) / mismatch. No-op when
-    // already busy, no wire, wrong-length arrays, or nothing to raise.
+    // Semi-manual "apply this level": apply an EXPLICIT plan row at the trainer the
+    // user is standing at (no plan-by-level resolve, no walk). The caller (CP-Alloc
+    // tab) passes the baseline it shows and the row; both are settled again from
+    // the form once it is up. Uses the same send-`train stats` → await-menu →
+    // replay machinery; on completion fires ApplyTargetsCompleted. No-op when
+    // already busy, no wire or wrong-length arrays.
     public void ApplyTargets(int[] current, int[] target)
     {
-        if (_phase != Phase.Idle || !_wire.IsBound) return;
+        if (IsBusy || !_wire.IsBound) return;
         if (current is not { Length: 6 } || target is not { Length: 6 }) return;
-        if (!AutoTrainSequenceBuilder.HasRaise(current, target)) return;
 
-        _applyTarget = target;
-        _explicitApply = true;
-        _sequence = AutoTrainSequenceBuilder.Build(current, target);
-        int session = ++_sessionId;
-        _phase = Phase.AwaitingMenu;
-        ManualApplyLevel = null;
+        CharacterPlanContext ctx = ResolveContext();
+        if (StatsAlteredHold(ctx) is { } hold)
+        {
+            LastApplyNote = hold;
+            _log?.Info("AutoTrain", hold);
+            ApplyTargetsCompleted?.Invoke(false);
+            return;
+        }
+        if (ctx.Reading.State != StatReadingState.Unexplained
+            && !AutoTrainSequenceBuilder.HasRaise(current, target)) return;
+
+        BeginPass(current, target, target, explicitApply: true, manualLevel: null);
         _log?.Info("AutoTrain", "Apply this level — sent `train stats`.");
         _wire.Send("train stats");
+        AwaitMenu();
+    }
+
+    private void BeginPass(int[] current, int[] target, int[] row, bool explicitApply, int? manualLevel)
+    {
+        _current = current;
+        _target = target;
+        _rowTargets = row;
+        _explicitApply = explicitApply;
+        _formBefore = null;
+        _cost = 0;
+        _cpAtStart = _stats.Cp;
+        LastApplyNote = null;
+        _sequence = AutoTrainSequenceBuilder.Build(current, target);
+        ++_sessionId;
+        _phase = Phase.AwaitingMenu;
+        ManualApplyLevel = manualLevel;
+        // What the `stat` screen marked and what was made of it, so a log read
+        // shows which figures this pass set out from.
+        if (ResolveContext().Reading.Describe() is { } said) _log?.Info("AutoTrain", said);
+    }
+
+    private void AwaitMenu()
+    {
         StateChanged?.Invoke();
-        _ = AwaitMenuTimeoutAsync(session);
-        _ = AwaitRenderThenReplayAsync(session);
-    }
-
-    // After an explicit apply's CP replay, send `stat` and (once it has arrived)
-    // compare the freshly-resolved RAW stats to the target — the "confirm via stat
-    // on exit" the CP-Alloc button reports on.
-    private async Task VerifyExplicitApplyAsync(int session)
-    {
-        _wire.Send("stat");
-        await Task.Delay(StatVerifyDelay);
-        if (_sessionId != session) return;
-        bool ok = ExplicitTargetsReached();
-        _explicitApply = false;
-        _log?.Info("AutoTrain", ok
-            ? "Apply this level — `stat` confirms the plan was applied."
-            : "Apply this level — `stat` did not confirm the plan (unchanged / not at a trainer).");
-        ApplyTargetsCompleted?.Invoke(ok);
-    }
-
-    // True when the live RAW stats (displayed minus equipment, via CharacterPlanContext)
-    // have reached every target — training can't lower a stat, so "reached" is >=.
-    private bool ExplicitTargetsReached()
-    {
-        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory);
-        if (!ctx.HasCharacter || _applyTarget.Length != 6) return false;
-        int[] now = ToArray(ctx.Baseline);
-        for (int i = 0; i < 6; i++)
-            if (now[i] < _applyTarget[i]) return false;
-        return true;
+        _ = AwaitMenuTimeoutAsync(_sessionId);
+        _ = AwaitRenderThenReplayAsync(_sessionId);
     }
 
     // Fire the explicit-apply failure report if this aborted session was one.
@@ -216,6 +260,7 @@ public sealed class AutoTrainManager : IDisposable
         if (_sessionId == session && _phase == Phase.AwaitingMenu)
         {
             _phase = Phase.Idle;
+            LastApplyNote = "the trainer screen never opened";
             _log?.Info("AutoTrain", "Trainer screen never opened (not at a trainer?) — aborted.");
             ReportExplicitApplyAborted();
             StateChanged?.Invoke();
@@ -255,28 +300,40 @@ public sealed class AutoTrainManager : IDisposable
     // short-circuits it.)
     private void OnManualTrainStatsEntered()
     {
-        if (_phase != Phase.Idle) return;                        // our own flow already drives it
+        if (IsBusy) return;                                      // our own flow already drives it
         if (!ReadAutoTrainerSettings().AutoTrainStats) return;   // checkbox off → hand-allocate
-        if (!TryResolveTargets(out int[] current, out int[] target))
+        if (!TryResolveTargets(out int[] current, out int[] target, out int[] row, out string? hold))
         {
             // Say why, or a report of "the plan didn't fire" reads as a bug — usually it's
             // a `train stats` before the `train` that earns this level's CP.
-            if (_profile.Current?.CharacterPlan is { Count: > 0 })
+            if (hold is not null)
+                _log?.Info("AutoTrain", hold);
+            else if (_profile.Current?.CharacterPlan is { Count: > 0 })
                 _log?.Info("AutoTrain",
                     $"Auto-train stats — nothing in the CP plan to apply at level {_stats.Level} with {_stats.Cp} CP "
                     + "(no row for this level, or it's already applied); allocate by hand, or `train` first.");
             return;
         }
 
-        _sequence = AutoTrainSequenceBuilder.Build(current, target);
-        int session = ++_sessionId;
-        _phase = Phase.AwaitingMenu;
-        ManualApplyLevel = _stats.Level;
+        BeginPass(current, target, row, explicitApply: false, manualLevel: _stats.Level);
         _log?.Info("AutoTrain",
             "Auto-train stats — you opened the train-stats screen; applying the CP plan.");
+        AwaitMenu();
+    }
+
+    // Stock answered `train stats` with its refusal: the form isn't coming. Named
+    // here so the abort says what happened instead of guessing "not at a trainer".
+    private void OnStatsAlteredRefusal(MatchResult _)
+    {
+        if (_phase != Phase.AwaitingMenu) return;
+        _phase = Phase.Idle;
+        ManualApplyLevel = null;
+        LastApplyNote = "the game refused `train stats` because a spell or item is altering a stat";
+        _log?.Info("AutoTrain",
+            "The game refused `train stats`: a spell or item is altering a stat. Plan kept — "
+            + "it can be applied once that is gone.");
+        ReportExplicitApplyAborted();
         StateChanged?.Invoke();
-        _ = AwaitMenuTimeoutAsync(session);
-        _ = AwaitRenderThenReplayAsync(session);
     }
 
     // The character's live AutoTrainer settings (the "AutoTrainer" profile section), or
@@ -299,9 +356,60 @@ public sealed class AutoTrainManager : IDisposable
     private void StartReplay()
     {
         _phase = Phase.Replaying;
+        PlanFromForm();
         StateChanged?.Invoke();
         _ = ReplayAsync(_sessionId);
     }
+
+    // The form is up: settle what to type from what it shows. It carries the
+    // trained stats and the CP left, so a buff on the `stat` screen can't reach the
+    // plan from here. When it can't be read, the `stat` figures stand only if that
+    // screen's modified stats were all accounted for; otherwise nothing is typed
+    // and the pass just walks out of the form.
+    private void PlanFromForm()
+    {
+        CharacterPlanContext ctx = ResolveContext();
+        int[] min = ToArray(ctx.RaceMin);
+        int[] max = ToArray(ctx.RaceMax);
+
+        _formBefore = TrainStatsScreen.TryRead(_readScreen?.Invoke());
+        if (_formBefore is { } form)
+        {
+            int[] wanted = CpPlanCalculator.ClampRowToBudget(
+                form.Stats, _rowTargets, min, max, int.MaxValue, ctx.Realm, null, out _);
+            int[] affordable = CpPlanCalculator.ClampRowToBudget(
+                form.Stats, _rowTargets, min, max, form.CpLeft, ctx.Realm, null, out _cost);
+            _current = form.Stats;
+            _target = affordable;
+            if (_explicitApply && !affordable.SequenceEqual(wanted))
+            {
+                // "Apply this level" spends the whole row or none of it.
+                _target = form.Stats;
+                _cost = 0;
+                LastApplyNote = $"this level's CP doesn't line up with the {form.CpLeft} CP Left the trainer shows";
+            }
+            _log?.Info("AutoTrain",
+                $"Trainer screen shows {Describe(form.Stats)}, CP Left {form.CpLeft} — "
+                + (AutoTrainSequenceBuilder.HasRaise(_current, _target)
+                    ? $"typing {Describe(_target)}."
+                    : "nothing to raise."));
+        }
+        else if (ctx.Reading.State == StatReadingState.Unexplained)
+        {
+            _target = _current;
+            LastApplyNote = "the trainer screen couldn't be read, and the last `stat` showed "
+                + $"{UnmodifiedStats.Names(ctx.Reading.Unexplained)} modified by something the client can't put a number on";
+            _log?.Info("AutoTrain", $"Typing nothing — {LastApplyNote}.");
+        }
+        else
+        {
+            CpPlanCalculator.ClampRowToBudget(_current, _target, min, max, int.MaxValue, ctx.Realm, null, out _cost);
+        }
+        _sequence = AutoTrainSequenceBuilder.Build(_current, _target);
+    }
+
+    private static string Describe(int[] s) =>
+        $"STR {s[0]} INT {s[1]} WIL {s[2]} AGL {s[3]} HEA {s[4]} CHM {s[5]}";
 
     // The in-game prompt returned after `train stats`. Realm-independent (it's
     // the command-driven signal, not the marker), so it's both our "not at a
@@ -313,6 +421,7 @@ public sealed class AutoTrainManager : IDisposable
         {
             _phase = Phase.Idle;
             ManualApplyLevel = null;
+            LastApplyNote = "the trainer screen didn't open";
             _log?.Info("AutoTrain", "Trainer screen didn't open (not at a trainer?) — aborted.");
             ReportExplicitApplyAborted();
             StateChanged?.Invoke();
@@ -326,29 +435,45 @@ public sealed class AutoTrainManager : IDisposable
 
     private async Task ReplayAsync(int session)
     {
-        foreach (string payload in _sequence)
+        _verifying = true;
+        try
         {
-            if (_sessionId != session || _phase != Phase.Replaying) return;
-            _wire.Send(payload);
+            for (int i = 0; i < _sequence.Count - 1; i++)
+            {
+                if (FormLost(session)) return;
+                _wire.Send(_sequence[i]);
+                await Task.Delay(KeystrokeDelayMs);
+            }
+            if (FormLost(session)) return;
+
+            // Every field has been entered and only SAVE is left, so the form now
+            // shows what the save will keep.
+            TrainStatsScreen? formAfter =
+                _formBefore is null ? null : TrainStatsScreen.TryRead(_readScreen?.Invoke());
+            _wire.Send(_sequence[^1]);
             await Task.Delay(KeystrokeDelayMs);
+            // Nudge the room back onto the screen. Stock redisplays it on leaving the
+            // train screen; other realms (MMUD Reborn) don't, and with no room display
+            // there's nothing for the tracker to land on — the client sat idle after a
+            // successful train until the user pressed Enter by hand (report
+            // stock-20260913-233911). A bare return is a no-op where the realm already
+            // redisplays, so it's safe to send unconditionally.
+            _wire.Send(string.Empty);
+
+            CpApplyOutcome outcome = _formBefore is { } before && formAfter is not null
+                ? CpApplyCheck.FromForm(before, formAfter, _rowTargets)
+                : await CheckByStatAsync();
+            if (_sessionId != session) return;
+            Conclude(outcome);
         }
-        // Nudge the room back onto the screen. Stock redisplays it on leaving the
-        // train screen; other realms (MMUD Reborn) don't, and with no room display
-        // there's nothing for the tracker to land on — the client sat idle after a
-        // successful train until the user pressed Enter by hand (report
-        // stock-20260913-233911). A bare return is a no-op where the realm already
-        // redisplays, so it's safe to send unconditionally.
-        _wire.Send(string.Empty);
-
-        _log?.Info("AutoTrain", "Applied plan; saved + exited trainer.");
-        // CP raises + SAVE are on the wire — let "plan committed" subscribers
-        // (the plan-grid cleanup) react now, ahead of the menu-exit round-trip.
-        PlanCommitted?.Invoke();
-        ManualApplyLevel = null;
-
-        // An explicit "apply this level" run confirms via `stat` then reports so the
-        // CP-Alloc button clears its row only on verified success.
-        if (_explicitApply) _ = VerifyExplicitApplyAsync(session);
+        finally
+        {
+            if (_sessionId == session)
+            {
+                _verifying = false;
+                StateChanged?.Invoke();
+            }
+        }
 
         // Safety: if the exit prompt never fires, release the latch after a grace.
         await Task.Delay(ExitGrace);
@@ -370,6 +495,55 @@ public sealed class AutoTrainManager : IDisposable
         }
     }
 
+    // The pass can't go on typing: a newer session replaced it, or the form closed
+    // under it (the prompt came back mid-replay). A form that closed early saved
+    // whatever it had, which nobody checked, so the row is kept.
+    private bool FormLost(int session)
+    {
+        if (_sessionId != session) return true;
+        if (_phase == Phase.Replaying) return false;
+        LastApplyNote = "the trainer screen closed before the plan was typed";
+        Conclude(CpApplyOutcome.NothingSpent);
+        return true;
+    }
+
+    // The form couldn't be read, so compare the CP either side of it: send `stat`
+    // and see what left the character. Skipped when nothing was typed.
+    private async Task<CpApplyOutcome> CheckByStatAsync()
+    {
+        if (!AutoTrainSequenceBuilder.HasRaise(_current, _target)) return CpApplyOutcome.NothingSpent;
+        _wire.Send("stat");
+        await Task.Delay(StatVerifyDelay);
+        bool wholeRow = !AutoTrainSequenceBuilder.HasRaise(_target, _rowTargets);
+        return CpApplyCheck.FromStat(_cpAtStart, _stats.Cp, _cost, wholeRow);
+    }
+
+    // Report the pass. Only a checked-as-applied row raises PlanCommitted, which is
+    // what clears it from the plan.
+    private void Conclude(CpApplyOutcome outcome)
+    {
+        if (outcome == CpApplyOutcome.Applied)
+        {
+            LastApplyNote = null;
+            _log?.Info("AutoTrain", "Applied plan; saved + exited trainer.");
+            PlanCommitted?.Invoke();
+        }
+        else
+        {
+            LastApplyNote ??= outcome == CpApplyOutcome.Partial
+                ? "only part of this level's plan was spent"
+                : "no CP was spent";
+            _log?.Info("AutoTrain", $"CP plan not applied — {LastApplyNote}. Plan row kept.");
+        }
+        ManualApplyLevel = null;
+
+        if (_explicitApply)
+        {
+            _explicitApply = false;
+            ApplyTargetsCompleted?.Invoke(outcome == CpApplyOutcome.Applied);
+        }
+    }
+
     private void OnMenuExited()
     {
         if (_phase == Phase.Idle) return;
@@ -385,26 +559,56 @@ public sealed class AutoTrainManager : IDisposable
         StateChanged?.Invoke();
     }
 
-    // Resolve the current level's affordable target stats from the saved plan.
-    // current/target are length-6 (STR/INT/WIL/AGL/HEA/CHM); false when there's
-    // no character, no plan row for this level, or no affordable raise.
-    private bool TryResolveTargets(out int[] current, out int[] target)
+    private CharacterPlanContext ResolveContext() =>
+        CharacterPlanContext.Resolve(_stats, _gameData, _inventory, _messages);
+
+    // Stock refuses `train stats` outright while a stat is altered, so with one
+    // marked on the last `stat` screen there is no point opening the trainer.
+    private static string? StatsAlteredHold(CharacterPlanContext ctx) =>
+        ctx.Realm == RealmType.Stock
+        && ctx.Reading.State != StatReadingState.Unverified
+        && ctx.Reading.Modified != StatSet.None
+            ? $"CP plan held — `stat` shows {UnmodifiedStats.Names(ctx.Reading.Modified)} altered, and the game "
+              + "won't open `train stats` until that is gone."
+            : null;
+
+    // Resolve the current level's plan row. row is the row itself, current/target
+    // what a pass would start from and type (all length-6, STR/INT/WIL/AGL/HEA/CHM).
+    // False when there's no character, no plan row for this level, nothing to
+    // raise, or the row is held (hold says why).
+    private bool TryResolveTargets(out int[] current, out int[] target, out int[] row, out string? hold)
     {
         current = Array.Empty<int>();
         target = Array.Empty<int>();
+        row = Array.Empty<int>();
+        hold = null;
 
-        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory);
+        CharacterPlanContext ctx = ResolveContext();
         if (!ctx.HasCharacter) return false;
         if (_profile.Current?.CharacterPlan is not { } plan) return false;
 
-        CpPlanEntry? row = null;
+        CpPlanEntry? entry = null;
         foreach (CpPlanEntry e in plan)
-            if (e.Level == _stats.Level) { row = e; break; }
-        if (row is null) return false;
+            if (e.Level == _stats.Level) { entry = e; break; }
+        if (entry is null) return false;
+
+        hold = StatsAlteredHold(ctx);
+        if (hold is not null) return false;
 
         int[] prev = ToArray(ctx.Baseline);
+        row = ToArray(entry);
+        if (ctx.Reading.State == StatReadingState.Unexplained)
+        {
+            // The `stat` figures can't say what is left to raise. The form can, so
+            // with CP in hand the pass goes ahead and settles it there.
+            if (_stats.Cp <= 0) return false;
+            current = prev;
+            target = row;
+            return true;
+        }
+
         int[] clamped = CpPlanCalculator.ClampRowToBudget(
-            prev, ToArray(row), ToArray(ctx.RaceMin), ToArray(ctx.RaceMax), _stats.Cp, ctx.Realm, null, out _);
+            prev, row, ToArray(ctx.RaceMin), ToArray(ctx.RaceMax), _stats.Cp, ctx.Realm, null, out _);
         if (!AutoTrainSequenceBuilder.HasRaise(prev, clamped)) return false;
 
         current = prev;
@@ -422,5 +626,6 @@ public sealed class AutoTrainManager : IDisposable
         _trainer.InputMenuEntered -= OnManualTrainStatsEntered;
         _trainer.MenuExited -= OnMenuExited;
         _trainer.InputMenuExited -= OnInputMenuExited;
+        _refusalSub.Dispose();
     }
 }

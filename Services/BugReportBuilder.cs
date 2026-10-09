@@ -1330,6 +1330,7 @@ public static class BugReportBuilder
         var plan = profile.CharacterPlan;
         sb.Append("\n**CP allocation plan (CharacterPlan)** (").Append(plan?.Count ?? 0).Append(")\n\n");
         sb.Append(plan is { Count: > 0 } ? Json(plan) : "_(none)_\n");
+        AppendPlanBaseline(sb, svc);
 
         var quests = profile.QuestLog;
         sb.Append("\n**Quest log (QuestLog)** (").Append(quests?.Count ?? 0).Append(")\n\n");
@@ -1342,6 +1343,39 @@ public static class BugReportBuilder
         sb.Append("\n**Players seen (PlayersSeen)**: ").Append(seen?.Count ?? 0).Append('\n');
 
         return sb.ToString();
+    }
+
+    // The baseline the CP plan is measured from, and how it was reached: what the
+    // last `stat` screen marked as modified, what came off each stat for gear and
+    // for the effects that screen listed, and what couldn't be accounted for.
+    private static void AppendPlanBaseline(StringBuilder sb, AppServices svc)
+    {
+        var ctx = Game.Calculators.CharacterPlanContext.Resolve(
+            svc.PlayerStats, svc.GameData, svc.Inventory, svc.Messages);
+        sb.Append("\n**CP plan baseline (worked back from the last `stat` screen)**\n\n");
+        if (!ctx.HasCharacter)
+        {
+            sb.Append("_(no character / race resolved)_\n");
+            return;
+        }
+        var r = ctx.Reading;
+        Game.PlayerStats s = svc.PlayerStats;
+        static string Row(int[] v) => $"STR {v[0]} INT {v[1]} WIL {v[2]} AGL {v[3]} HEA {v[4]} CHM {v[5]}";
+        sb.Append("- reading: ").Append(r.State)
+          .Append(s.ModifiedMarksRead ? " (modified marks read)" : " (no modified marks on record)").Append('\n');
+        sb.Append("- marked modified: ").Append(r.Modified).Append('\n');
+        sb.Append("- shown: ").Append(Row(new[] { s.Strength, s.Intellect, s.Willpower, s.Agility, s.Health, s.Charm })).Append('\n');
+        sb.Append("- taken off for worn gear: ").Append(Row(r.Equipment)).Append('\n');
+        sb.Append("- taken off for listed effects: ").Append(Row(r.Effects)).Append('\n');
+        sb.Append("- unmodified (before the race floor): ").Append(Row(r.Base)).Append('\n');
+        sb.Append("- not accounted for: ").Append(r.Unexplained).Append('\n');
+        foreach (string note in r.EffectNotes)
+            sb.Append("- effect: ").Append(note).Append('\n');
+        sb.Append("- effect lines on that screen: ").Append(s.ActiveEffects.Count == 0
+            ? "(none)"
+            : string.Join(" | ", s.ActiveEffects.Select(e => e.Timed ? e.Text + " (timed)" : e.Text))).Append('\n');
+        sb.Append("- auto-train hold: ").Append(svc.AutoTrain.HoldReason ?? "(none)").Append('\n');
+        sb.Append("- last CP pass not applied because: ").Append(svc.AutoTrain.LastApplyNote ?? "(n/a)").Append('\n');
     }
 
     private static string BuildMovement(AppServices svc)

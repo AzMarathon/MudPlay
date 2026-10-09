@@ -493,6 +493,12 @@ public static class KnownPatterns
     // point re-sending until the purse is fixed).
     public const string TrainNoMoney = "train.no-money";
 
+    // "Your stats are unnaturally altered!  You may not train stats now." — Stock
+    // refusing `train stats` while a spell or item is altering a stat. The form
+    // never opens (GAME_MECHANICS "Trainers: level band, class restriction, and
+    // `train stats`").
+    public const string TrainStatsAltered = "train.stats-altered";
+
     // ----- Main menu -----------------------------------------------------
     // BBSes customise the banner version + realm name + prompt text, but
     // the menu options themselves are stable across customisations.

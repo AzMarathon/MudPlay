@@ -73,6 +73,18 @@ public sealed partial class PlayerStats : ObservableObject
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _health;
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _charm;
 
+    // Which of the six the last `stat` screen marked as modified (bright red, and on
+    // Stock a leading `*`): the value shown is not the trained one. Only meaningful
+    // while ModifiedMarksRead is true.
+    [ObservableProperty] [field: Owner(typeof(StatParser))] private StatSet _modifiedStats;
+    // The last `stat` screen was read whole and every one of the six carried a
+    // readable mark. False from a profile's saved snapshot, while a screen is still
+    // printing, and for a screen with no colour to read.
+    [ObservableProperty] [field: Owner(typeof(StatParser))] private bool _modifiedMarksRead;
+    // The active effects that same screen listed under the stats.
+    [ObservableProperty] [field: Owner(typeof(StatParser))]
+    private IReadOnlyList<StatusEffectLine> _activeEffects = Array.Empty<StatusEffectLine>();
+
     // ----- Secondary skills ---------------------------------------------
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _perception;
     [ObservableProperty] [field: Owner(typeof(StatParser))] private int _stealth;

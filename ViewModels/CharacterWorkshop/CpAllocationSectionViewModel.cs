@@ -16,7 +16,8 @@ using MudPlay.Views.CharacterWorkshop;
 namespace MudPlay.ViewModels.CharacterWorkshop;
 
 // CP ALLOCATION section — the editable per-level character-point plan. The
-// baseline is the live raw-base stats (current stats minus equipment bonuses);
+// baseline is the live raw-base stats (the `stat` screen's values minus equipment
+// and the effects that screen listed, with a note when one can't be accounted for);
 // each grid row is a planned future level whose target STR/INT/WIL/AGL/HEA/CHM
 // the user edits, with Total CP earned / CP Left recomputed live via
 // CpPlanCalculator (race-min cost curve, race-max clamp, cumulative carryover).
@@ -34,6 +35,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private readonly CpPlanState _planState;
     private readonly TrainerWalkManager _trainerWalk;
     private readonly AutoTrainManager _autoTrain;
+    private readonly MessageStore _messages;
     private Control? _view;
     private bool _suppress;
     // The cell most recently edited by the user, so an overspend trims that cell
@@ -98,16 +100,25 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     public bool HasStatusText => !string.IsNullOrEmpty(StatusText);
 
+    // What the last `stat` screen marked as modified and how the baseline dealt
+    // with it. Null when it marked nothing.
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBaselineNote))]
+    private string? _baselineNote;
+
+    public bool HasBaselineNote => !string.IsNullOrEmpty(BaselineNote);
+
     // Captured on RefreshBaseline; inputs to the recalc.
     private CpPlanEntry _baseline = new();
     private CpPlanEntry _raceMin = new();
     private CpPlanEntry _raceMax = new();
     private RealmType _realm;
+    private UnmodifiedStats _reading = UnmodifiedStats.None;
 
     public CpAllocationSectionViewModel(PlayerStats stats, GameDataCache gameData,
                                         InventoryManager inventory, ProfileService profile,
                                         CpPlanState planState, TrainerWalkManager trainerWalk,
-                                        AutoTrainManager autoTrain)
+                                        AutoTrainManager autoTrain, MessageStore messages)
     {
         ArgumentNullException.ThrowIfNull(stats);
         ArgumentNullException.ThrowIfNull(gameData);
@@ -116,6 +127,8 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         ArgumentNullException.ThrowIfNull(planState);
         ArgumentNullException.ThrowIfNull(trainerWalk);
         ArgumentNullException.ThrowIfNull(autoTrain);
+        ArgumentNullException.ThrowIfNull(messages);
+        _messages = messages;
         _stats = stats;
         _gameData = gameData;
         _inventory = inventory;
@@ -362,7 +375,7 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private bool CanApplyLevel() =>
         !AutoTrainBusy && !_autoTrain.IsBusy && HasCharacter && SelectedRow is not null;
 
-    // The explicit apply reported back: clear the row only on a `stat`-verified success.
+    // The explicit apply reported back: clear the row only when it was checked as applied.
     private void OnApplyLevelCompleted(bool ok)
     {
         if (ok && SelectedRow is { } row)
@@ -377,7 +390,9 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         }
         else if (!ok)
         {
-            ActionMessage = "Couldn't confirm the training — nothing cleared (are you at a trainer?).";
+            ActionMessage = _autoTrain.LastApplyNote is { } why
+                ? $"Nothing cleared — {why}."
+                : "Couldn't confirm the training — nothing cleared (are you at a trainer?).";
         }
         SyncAutoTrain();
     }
@@ -398,6 +413,14 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         }
         int[] prev = ToArr(_baseline);
         int[] rowTargets = ToArr(SelectedRow.ToEntry());
+        // With a modified stat the baseline can't vouch for, neither check below
+        // means anything. The trainer form shows the real values and settles both.
+        if (_reading.State == StatReadingState.Unexplained)
+        {
+            current = prev;
+            target = rowTargets;
+            return true;
+        }
         int[] clamped = CpPlanCalculator.ClampRowToBudget(
             prev, rowTargets, ToArr(_raceMin), ToArr(_raceMax), _stats.Cp, _realm, null, out _);
         if (!clamped.SequenceEqual(rowTargets))
@@ -422,8 +445,10 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
 
     private void RefreshBaseline()
     {
-        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory);
+        CharacterPlanContext ctx = CharacterPlanContext.Resolve(_stats, _gameData, _inventory, _messages);
         HasCharacter = ctx.HasCharacter;
+        _reading = ctx.Reading;
+        BaselineNote = DescribeReading(ctx);
         if (!ctx.HasCharacter) return;
 
         _baseline = ctx.Baseline;
@@ -435,6 +460,20 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
         _lastEditedStat = null;   // baseline-driven recompute, not a cell edit
         RefreshStatTips();
         RecalcGrid();
+    }
+
+    // The note under the toggles: what the screen marked, and what that means for
+    // training here. Stock won't open the trainer while a stat is altered; Paradigm
+    // will, and its form shows the real values whatever the baseline says.
+    private static string? DescribeReading(CharacterPlanContext ctx)
+    {
+        if (!ctx.HasCharacter || ctx.Reading.Describe() is not { } said) return null;
+        if (ctx.Realm == RealmType.Stock)
+            return said + " The game won't open `train stats` until that is gone.";
+        return ctx.Reading.State == StatReadingState.Unexplained
+            ? said + " The baseline below may be off until a `stat` is read without it; Train now and "
+                   + "Apply this level take the real values from the trainer screen."
+            : said;
     }
 
     // Rebuild the six column tooltips from the live raw-base stats + realm. Anchored
@@ -548,6 +587,10 @@ public sealed partial class CpAllocationSectionViewModel : WorkshopSectionViewMo
     private void ReconcileTrainedRows()
     {
         if (_suppress || !HasCharacter || Rows.Count == 0) return;
+        // Rows are deleted here on the baseline's word alone, so it has to be a
+        // reading that checked out: a buffed Strength can meet a row's target while
+        // the row's CP is still unspent.
+        if (_reading.State != StatReadingState.Accounted) return;
         int level = _stats.Level;
 
         List<CpPlanRowViewModel> fulfilled =

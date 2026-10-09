@@ -6043,7 +6043,8 @@ public sealed class AppServices
         // Needs Inventory (raw-base = live - gear) + TrainerMenu (screen enter/
         // exit gating, already wired to char-mode). Wire-sender bound in
         // MainWindowViewModel.
-        AutoTrain = new Game.AutoTrainManager(PlayerStats, GameData, Inventory, Profile, TrainerMenu, Log);
+        AutoTrain = new Game.AutoTrainManager(PlayerStats, GameData, Inventory, Profile, TrainerMenu,
+            Messages, Router, Log);
 
         // EquipmentManager + the @equip <set> handler. The engine
         // reads saved gear sets off the char profile, diffs against Inventory's
