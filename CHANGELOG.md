@@ -1,10 +1,18 @@
 # Version history
 
-## 3.153.1
+## 3.153.16
 
 - Quests: a quest with two level gates in one step now needs the higher one, as the game does
 - Paradigm: Meditate is announced to a Mystic at level 27, not 23
 - bug reports addressed: paradigm-20260925-123004
+
+## 3.153.15
+
+- Fixed: a Mystic attacking with punch, kick or jumpkick walked past monsters that need hit magic (and didn't fight back when they attacked): the client judged the strike by the weapon in hand, which a strike doesn't use
+- A class's own hit magic now counts: a Mystic's strikes and a Witchunter's swings hurt magical monsters whatever the weapon
+- A `Your fists / feet have no effect` line from a strike writes that monster off, like the weapon line does
+- Stopping movement yourself (Stop, or a party member's `@stop`) now puts the auto toggles back to their base modes, as a walk-to arriving does, so Auto-Combat switched off for a trip comes back
+- bug reports addressed: paradigm-20260928-164335, paradigm-20260929-220653, paradigm-20260930-182409, paradigm-20261002-192542, paradigm-20261007-150934, paradigm-20261008-113129, paradigm-20261008-181821, paradigm-20261008-181901, paradigm-20261008-182349, paradigm-20261008-182456, paradigm-20261008-183736, paradigm-20261008-183931, paradigm-20260923-163805, paradigm-20260923-163843, paradigm-20260923-164004
 
 ## 3.153.0
 

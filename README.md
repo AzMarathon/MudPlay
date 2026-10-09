@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.1**
+> **Version 3.153.16**
 > - Quests: a quest with two level gates in one step now needs the higher one, as the game does
 > - Paradigm: Meditate is announced to a Mystic at level 27, not 23
 >

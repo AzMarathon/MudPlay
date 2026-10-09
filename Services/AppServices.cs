@@ -1787,6 +1787,24 @@ public sealed class AppServices
     public Game.Stealth.SneakGuard SneakGuard { get; private set; } = null!;
     public Game.Stealth.CarriedStealthPenalty CarriedStealth { get; private set; } = null!;
 
+    // The hit magic the character's class and race carry of their own, from the
+    // active game data. Asked on every combat decision, so the last answer is kept
+    // until the class, race or data set changes.
+    private (string? Class, string? Race, string? Set, int Value) _innateHitMagic = (null, null, null, 0);
+    public int InnateHitMagic()
+    {
+        string? cls = PlayerStats.Class, race = PlayerStats.Race, set = GameData.ActiveSet;
+        if (_innateHitMagic.Class == cls && _innateHitMagic.Race == race && _innateHitMagic.Set == set)
+            return _innateHitMagic.Value;
+        int value = 0;
+        if (!string.IsNullOrWhiteSpace(cls))
+            value += Game.Calculators.ClassCapabilities.InnateHitMagic(GameData.FindRowByName("Classes", cls));
+        if (!string.IsNullOrWhiteSpace(race))
+            value += Game.Calculators.ClassCapabilities.InnateHitMagic(GameData.FindRowByName("Races", race));
+        _innateHitMagic = (cls, race, set, value);
+        return value;
+    }
+
     // The rooms of every boss flagged "stop before entering" on the active realm.
     // Resolved live, so a realm swap or an edit on the Bosses tab takes effect at
     // the next walk.
@@ -2520,6 +2538,10 @@ public sealed class AppServices
     // toolbar Stop): a Run / Sprint start's turned-off autos come back or stay off
     // per Settings → Other. Registered by the main window's view-model.
     public Action? NoteUserStoppedRun { get; set; }
+
+    // A remote @stop paused movement. Set by MainWindowViewModel, which resets the
+    // auto toggles to the character's base modes as it does for the Stop button.
+    public Action? NoteRemoteStop { get; set; }
 
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
@@ -6346,6 +6368,9 @@ public sealed class AppServices
         Combat.SetCarriedCheck(name => Inventory.Snapshot.LastUpdated == default
             ? null
             : HeldItemNames().Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        // The class's and race's own hit magic (a Mystic's strikes, a Witchunter's
+        // swings). Stock adds a weapon's magic to it; Paradigm takes the higher.
+        Combat.SetInnateHitMagic(InnateHitMagic, () => GameData.ActiveRealm != Game.RealmType.ParaMud);
 
         // Let an auto-fire gear-set apply defer the weapon slot to combat while it
         // holds a per-monster alternate-weapon override, so the Default set's
@@ -8070,6 +8095,7 @@ public sealed class AppServices
         MoveRemote = new Game.Remote.MovePlayerHandler(
             RemoteCommands, RoomSearch, RoomGraph, RoomTracker, Walker, Loops, LoopRunner,
             Lairs, AutoLair, MovementCoordinator, MovementControl, Favorites, Bosses, Bfs, LoopShare);
+        MoveRemote.Stopped = () => NoteRemoteStop?.Invoke();
 
         // Leader-side @comeback. Snapshots the running movement
         // engine, stops it (stop-and-restart, NOT a coordinator gate —

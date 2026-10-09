@@ -23,6 +23,7 @@ public static class ClassCapabilities
     private const int PunchAbilityId = 29;
     private const int KickAbilityId = 30;
     private const int JumpKickAbilityId = 35;
+    private const int HitMagicAbilityId = 142;
     private const int MaxRecordAbilSlots = 10;
 
     // Class names that can learn Smash, or null meaning "assume every class can"
@@ -107,6 +108,18 @@ public static class ClassCapabilities
     public static bool ClassHasPunch(JsonElement? classRow) => HasAbility(classRow, PunchAbilityId);
     public static bool ClassHasKick(JsonElement? classRow) => HasAbility(classRow, KickAbilityId);
     public static bool ClassHasJumpKick(JsonElement? classRow) => HasAbility(classRow, JumpKickAbilityId);
+
+    // The hit magic a class or race carries of its own (Abil-0..9 == 142): what a
+    // Mystic's strikes and a Witchunter's swings hurt magical monsters with,
+    // whatever weapon is or isn't in hand. 0 when the record has none.
+    public static int InnateHitMagic(JsonElement? classOrRaceRow)
+    {
+        if (classOrRaceRow is not JsonElement data || data.ValueKind != JsonValueKind.Object) return 0;
+        int total = 0;
+        for (int i = 0; i < MaxRecordAbilSlots; i++)
+            if (GetInt(data, $"Abil-{i}") == HitMagicAbilityId) total += GetInt(data, $"AbilVal-{i}");
+        return total;
+    }
 
     private static bool HasAbility(JsonElement? row, int abilityId)
     {
