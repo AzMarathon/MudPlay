@@ -6719,6 +6719,13 @@ public sealed class AppServices
                 AutoDiscard.OnRoomEntered(arrived.Key);
         };
         AutoDiscard.PacedSender = cmds => InventoryAction.SendPaced(cmds);
+        AutoDiscard.SendsQueued = () => InventoryAction.HasPacedCommandsQueued;
+        // A hide gets no answer of its own while the send gate is up, and on Stock
+        // none in the dark or blind (GAME_MECHANICS "Hiding items in a room").
+        AutoDiscard.CanHideHere = () =>
+            !EngineGate.IsLocked && !RoomTracker.IsInDarkRoom && !Conditions.IsBlinded;
+        // A held hide is for a copy still to be got rid of; sold, it is gone.
+        Inventory.ItemSold += (name, count, _) => AutoDiscard.ReleaseHeld(name, count);
         // Discards sent to another character's game, or before a death emptied
         // the pack, will never be answered. (A dropped connection is the main
         // window's to report.)
@@ -8721,6 +8728,9 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
+        // Hides a full room refused were kept back for the sweep; it may have left
+        // the character somewhere with room.
+        GhSweep.PhaseChanged += () => { if (!GhSweep.IsActive) AutoDiscard.RecheckHeldHides(); };
 
         // Shop-source routing (PR C). On a one-shot walk-to that needs an
         // uncarried Item/Ticket-gate item a shop sells, detour to the

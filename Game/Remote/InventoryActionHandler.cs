@@ -190,6 +190,9 @@ public sealed class InventoryActionHandler : IDisposable
     // The game ignored a command for coming too fast.
     public void NoteRateLimited() => _pacer?.NoteRateLimited();
 
+    // True while the pacer holds commands it hasn't sent yet.
+    public bool HasPacedCommandsQueued => _pacer is { Pending: > 0 };
+
     // Item commands from elsewhere (the Chest Offload tab's discards, the
     // auto-discard engine's held hides on entering a room) that should share the
     // sweeps' pacing.

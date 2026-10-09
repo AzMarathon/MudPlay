@@ -69,9 +69,11 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private CurrencyHoldings _simCoin = CurrencyHoldings.Empty;
 
     private bool _simulating;
-    // The refused-hide note on the status line, and the item it is about.
-    private string _hideNote = "";
-    private string? _hideNoteItem;
+    // The tab's own note on the status line: a refused hide (with the item it is
+    // about, so it can come down when that hide is over) or the answer to the last
+    // button press (no item; it comes down on the next press).
+    private string _note = "";
+    private string? _noteItem;
     private Dictionary<int, Room> _shopRoom = new();               // shop id → serving room (first found), rebuilt each render
 
     [ObservableProperty] private int _charm;
@@ -147,6 +149,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         _inventory.ItemDropped += OnItemDropped;
         _inventory.ItemHidden += OnItemHidden;
         _discard.HideRefused += OnHideRefused;
+        _discard.HeldHideEnded += OnHeldHideEnded;
 
         // Test-only "Simulate Chest" button, revealed by the Log pane's "Simulate
         // Chest button" toggle (session-only, off by default). Mirror its live value.
@@ -226,18 +229,43 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         if (_simulating || FindRow(name) is null) return;
         _log?.Info(LogCategory, $"hide of {name} refused (no room to hide it here) — row kept, tried again in the next room");
         if (_tour.IsRunning) return;
-        _hideNoteItem = name;
-        _hideNote = $"No room to hide {name} here — it stays in your pack and is tried again in the next room you enter.";
-        SellStatus = _hideNote;
+        ShowNote($"No room to hide {name} here — it stays in your pack and is tried again in the next room you enter.", name);
     });
 
-    // The refusal note is about one item's hide: it comes down once that item has
-    // left the pack, unless something else has taken the line since.
-    private void ClearHideNote(string name)
+    // The held hide is over, landed or called off: its note no longer holds.
+    private void OnHeldHideEnded(string name) => Dispatcher.UIThread.Post(() =>
     {
-        if (!string.Equals(_hideNoteItem, name, StringComparison.OrdinalIgnoreCase)) return;
-        _hideNoteItem = null;
-        if (SellStatus == _hideNote) SellStatus = "";
+        if (string.Equals(_noteItem, name, StringComparison.OrdinalIgnoreCase)) ClearNote();
+    });
+
+    private void ShowNote(string text, string? heldItem = null)
+    {
+        _note = text;
+        _noteItem = heldItem;
+        SellStatus = text;
+    }
+
+    // Take the tab's note down, unless something else has taken the line since.
+    private void ClearNote()
+    {
+        if (_note.Length > 0 && SellStatus == _note) SellStatus = "";
+        _note = "";
+        _noteItem = null;
+    }
+
+    // A button was pressed: what the last press was told is stale. A refused-hide
+    // note stays, since its hide is still waiting.
+    private void ClearActionNote()
+    {
+        if (_noteItem is null) ClearNote();
+    }
+
+    // The player has other plans for these items (a sale, off the list): a hide of
+    // theirs still waiting for a room would take the copy first, or take one of
+    // the player's own once the chest's is gone.
+    private void CallOffHeldHides(IEnumerable<string> names)
+    {
+        foreach (string name in names) _discard.ReleaseHeld(name, int.MaxValue, byHandOnly: true);
     }
 
     // How a listed item left the pack, by the game's own confirmation.
@@ -246,7 +274,6 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private void ReconcileConfirmed(string name, int count, Departure how)
     {
         if (_simulating || count <= 0) return;
-        ClearHideNote(name);
         string did = how.ToString().ToLowerInvariant();
         if (FindRow(name) is not (ChestOffloadShopGroup group, ChestOffloadItemRow row))
         {
@@ -511,7 +538,9 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // rebuilds the view.
     private void RemoveItem(ChestOffloadItemRow item)
     {
+        ClearActionNote();
         if (_simulating) { RemoveRow(item); return; }
+        CallOffHeldHides(new[] { item.Name });
         _chests.RemoveItem(item.Name);
     }
 
@@ -519,10 +548,15 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void ClearList()
     {
+        ClearActionNote();
         if (_simulating)
         {
             _simulating = false;
             _simCoin = CurrencyHoldings.Empty;
+        }
+        else
+        {
+            CallOffHeldHides(ShopGroups.SelectMany(g => g.Items).Select(r => r.Name));
         }
         _chests.Clear();
         RebuildLoot();
@@ -546,15 +580,25 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // Sell All: a one-stop tour of this shop (sells here when standing in it).
     private void SellGroup(ChestOffloadShopGroup group)
     {
+        ClearActionNote();
         _log?.Info(LogCategory, $"Sell All '{group.ShopName}' — {group.Items.Count} item(s)");
-        if (StopFor(group.Shop, group.ShopName, group.Items) is { } stop) _tour.Start(new[] { stop });
+        if (StopFor(group.Shop, group.ShopName, group.Items) is { } stop) StartTour(new[] { stop });
     }
 
     private void SellItem(ChestOffloadItemRow item)
     {
+        ClearActionNote();
         if (item.SellQty <= 0) return;
         string shopName = GroupOf(item)?.ShopName ?? $"Shop #{item.CurrentShop}";
-        if (StopFor(item.CurrentShop, shopName, new[] { item }) is { } stop) _tour.Start(new[] { stop });
+        if (StopFor(item.CurrentShop, shopName, new[] { item }) is { } stop) StartTour(new[] { stop });
+    }
+
+    // A sale walks rooms before it sells, and a held hide goes out in the first new
+    // room: it would hide the item on the way to the shop.
+    private void StartTour(IReadOnlyList<ChestSellTour.Stop> stops)
+    {
+        CallOffHeldHides(stops.SelectMany(s => s.Items).Select(i => i.Name));
+        _tour.Start(stops);
     }
 
     // Sell Tour: read the inventory fresh (so the list's counts are the truth), show
@@ -564,6 +608,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private async System.Threading.Tasks.Task SellTour()
     {
+        ClearActionNote();
         if (_tour.IsRunning) { SellStatus = "A sell tour is already running — cancel it first."; return; }
         if (_simulating) { SellStatus = "Simulated chests can't be sold — Clear list first."; return; }
         await ReadInventoryAsync();
@@ -600,7 +645,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
                     "anything you already had stays in your pack. A running loop or Auto-Lair stops for the walk.");
         bool go = await AppServices.Current.Confirm.ConfirmAsync("Sell Tour", body.ToString(), "Start tour");
         if (!go) return;
-        _tour.Start(stops);
+        StartTour(stops);
     }
 
     [CommunityToolkit.Mvvm.Input.RelayCommand]
@@ -672,6 +717,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // (ReconcileConfirmed), so a blocked discard leaves the plan intact.
     private void DropItem(ChestOffloadItemRow item)
     {
+        ClearActionNote();
         if (item.Gained <= 0 || RefuseSimulatedDiscard()) return;
         List<string> commands = new();
         QueueDiscard(commands, item);
@@ -683,7 +729,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     private bool RefuseSimulatedDiscard()
     {
         if (!_simulating) return false;
-        SellStatus = "Simulated chests can't be dropped — Clear list first.";
+        ShowNote("Simulated chests can't be dropped — Clear list first.");
         return true;
     }
 
@@ -699,11 +745,13 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
                 (sent < item.Gained ? $" (of {item.Gained}; the rest already sent or not carried)" : " (whole stack)"));
             return;
         }
-        string why = _discard.HeldFor(item.Name) > 0
-            ? "it is waiting for the next room to be hidden"
+        // Until an `i` has been read the pack is unknown, and nothing is sent for a
+        // copy that can't be shown to be carried.
+        string why = !_inventory.IsLoaded ? "your inventory hasn't been read yet (type i)"
+            : _discard.HeldFor(item.Name) > 0 ? "it is waiting for the next room to be hidden"
             : "it was already sent, or is no longer in your pack";
         _log?.Info(LogCategory, $"discard of {item.Name} not sent: {why}");
-        if (!_tour.IsRunning) SellStatus = $"{item.Name}: nothing sent — {why}.";
+        if (!_tour.IsRunning) ShowNote($"{item.Name}: nothing sent — {why}.");
     }
 
     // Alternate shops that also buy this item, nearest first, minus the one it's in.
@@ -762,6 +810,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // confirms, so a blocked discard stays visible.
     private void DropAllGroup(ChestOffloadShopGroup group)
     {
+        ClearActionNote();
         if (RefuseSimulatedDiscard()) return;
         _log?.Info(LogCategory, $"Drop All '{group.ShopName}' — {group.Items.Count} item(s)");
         List<string> commands = new();
@@ -787,6 +836,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         _inventory.ItemDropped -= OnItemDropped;
         _inventory.ItemHidden -= OnItemHidden;
         _discard.HideRefused -= OnHideRefused;
+        _discard.HeldHideEnded -= OnHeldHideEnded;
         if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
         _log?.Info(LogCategory, "tab closed");
     }

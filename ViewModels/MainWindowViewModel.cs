@@ -3396,7 +3396,8 @@ public partial class MainWindowViewModel : ObservableObject
                 // fight after reconnect (report paradigm-20260827-203548).
                 AppServices.Current.Combat.OnDisconnected();
                 // The replies to discards still on the wire went with the connection.
-                AppServices.Current.AutoDiscard.Reset("disconnected");
+                // Hides a full room refused stay held: the pack is as it was.
+                AppServices.Current.AutoDiscard.Reset("disconnected", keepHeld: true);
 
                 // Categorise: if the user clicked Disconnect, the flag was
                 // set in DisconnectInternalAsync. Otherwise check for a
@@ -6438,6 +6439,8 @@ public partial class MainWindowViewModel : ObservableObject
     partial void OnIsAutoGetItemsActiveChanged(bool value)
     {
         PersistAutoModeFlag("AutoGetItems", value, d => d.AutoGetItems = value);
+        // The auto-discard engine's held hides waited for its switch.
+        if (value) AppServices.Current.AutoDiscard.RecheckHeldHides();
         if (!_climbDrivingEngines) _climbTurnedOffGetItems = false;
         MaybeEndSprintOnManualEngineEnable(value);
     }

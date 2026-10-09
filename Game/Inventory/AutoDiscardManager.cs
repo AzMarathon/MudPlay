@@ -42,7 +42,10 @@ namespace MudPlay.Game.Inventory;
 //
 // A hide the room has no room for (Stock only: its rooms cap their hidden items)
 // keeps the item and is sent again in each new room the character enters until
-// it lands (user, 2026-10-09). It is never turned into a drop.
+// it lands (user, 2026-10-09). It is never turned into a drop. The hold is for a
+// hide still wanted: selling the item, dropping it, hiding it by hand, or taking
+// it off the Chest Offload list calls the hold off (ReleaseHeld), since by then
+// any copy left in the pack may be one the player means to keep.
 //
 // A hide for a copy that isn't in the pack is worse than wasted: Stock's engine
 // doesn't answer it, and the line then falls through to speech. So no hide goes
@@ -63,6 +66,41 @@ public sealed class AutoDiscardManager : IDisposable
     // keep (0 = discard all).
     public sealed record ResolvedDiscard(int Number, string Name, bool Discard, int KeepCount);
 
+    // Copies of one item by who sent their hide. The engine's own answer to its
+    // master switch; a by-hand surface's never did.
+    private readonly record struct Copies(int ByHand, int Engine)
+    {
+        public int Total => ByHand + Engine;
+
+        public static Copies Of(int count, bool byHand) => byHand ? new(count, 0) : new(0, count);
+
+        public Copies Plus(Copies other) => new(ByHand + other.ByHand, Engine + other.Engine);
+
+        // Split off up to `count` copies, the by-hand ones first: which copy a
+        // line is about can't be told, and by-hand is the one the player is
+        // watching.
+        public (Copies Taken, Copies Left) Take(int count)
+        {
+            int hand = Math.Clamp(count, 0, ByHand);
+            int engine = Math.Clamp(count - hand, 0, Engine);
+            return (new(hand, engine), new(ByHand - hand, Engine - engine));
+        }
+    }
+
+    // One item's refused hides.
+    private sealed class HeldHide
+    {
+        // The name to send.
+        public required string Name { get; init; }
+        // Refused, waiting for a room that hasn't refused them.
+        public Copies Waiting;
+        // Sent again and not yet answered. These are in _hidesInFlight as well.
+        public int Out;
+        // The room that last refused it, or the one its last retry went out in.
+        public RoomKey? TriedIn;
+        public int Count => Waiting.Total + Out;
+    }
+
     private readonly Func<IReadOnlyList<string>> _carried;
     private readonly Func<string, ResolvedDiscard?> _resolve;
     private readonly Func<bool> _isEnabled;
@@ -78,21 +116,16 @@ public sealed class AutoDiscardManager : IDisposable
 
     // item Number → hides sent (the engine's, a by-hand surface's, a retry's) but
     // not yet confirmed by a self "You hid X.".
-    private readonly Dictionary<int, int> _hidesInFlight = new();
+    private readonly Dictionary<int, Copies> _hidesInFlight = new();
 
     // item Number → discard hides not yet claimed by the transaction-log
     // forwarder, so a hide that is a discard is kept out of the stash ledger.
     private readonly Dictionary<int, int> _suppressLog = new();
 
-    // item Number → copies whose hide the room refused, kept until the character
-    // stands in another room. The name is the one to send.
-    private readonly Dictionary<int, (string Name, int Count)> _held = new();
+    // item Number → the copies whose hide a room refused.
+    private readonly Dictionary<int, HeldHide> _held = new();
 
-    // Items with a held hide sent again and not yet settled, so its landing can be
-    // told from an ordinary one in the log.
-    private readonly HashSet<int> _retrying = new();
-
-    // The room the character stands in, as last confirmed.
+    // The room the character stands in, as last confirmed. Null while unknown.
     private RoomKey? _room;
 
     // Whether a discard was sent or answered since the last full inventory read.
@@ -111,9 +144,7 @@ public sealed class AutoDiscardManager : IDisposable
         {
             if (_hideMode == value) return;
             _hideMode = value;
-            if (value || _held.Count == 0) return;
-            _log?.Info(LogCategory, $"hide when discarding turned off: {DescribeHeld()} no longer waiting for a room");
-            _held.Clear();
+            if (!value) EndAllHeld("hide when discarding turned off");
         }
     }
 
@@ -125,6 +156,10 @@ public sealed class AutoDiscardManager : IDisposable
     // this engine never sent (typed, a stash room's, Hide All's) doesn't raise it.
     public event Action<string>? HideRefused;
 
+    // Nothing of this item is held any more: its hide landed, or the hold was
+    // called off, given up or forgotten.
+    public event Action<string>? HeldHideEnded;
+
     // True while a Roomba sweep is underway. Auto-discard is held off for the whole
     // sweep so it can't bin an item Roomba is in the middle of relocating — Roomba
     // sorts auto-discard-flagged items into their labeled rooms instead. Normal
@@ -132,6 +167,16 @@ public sealed class AutoDiscardManager : IDisposable
     // accumulated. Wired by AppServices to GhSweepManager.IsActive; defaults to
     // never-suppress.
     public Func<bool> SuppressDuringSweep { get; set; } = static () => false;
+
+    // False while a hide sent now would get no answer of its own: the engine send
+    // gate is up (the send is dropped unsent), or the character can't see (Stock
+    // answers a hide in the dark or blind with the can't-see line and hides
+    // nothing). Held hides wait; the engine's own hides are not sent.
+    public Func<bool> CanHideHere { get; set; } = static () => true;
+
+    // True while the pacer still has discards queued that were counted when they
+    // were handed to it. They are not unanswered yet, only unsent.
+    public Func<bool> SendsQueued { get; set; } = static () => false;
 
     // Sends a batch a few at a time. A room's worth of held hides goes out right
     // after a move, when Stock queues commands behind the move's delay and drops
@@ -177,10 +222,16 @@ public sealed class AutoDiscardManager : IDisposable
     // item down to its keep floor.
     public void OnInventoryChanged()
     {
+        // Whatever kept a held hide back on arriving here (a sweep, the engine's
+        // switch, the send gate, the dark) may have cleared since.
+        RecheckHeldHides();
+
         if (!_isEnabled() || _wireSender is null) return;
         // A Roomba sweep is sorting the house — don't bin an item it may be
         // relocating; Roomba sorts auto-discard-flagged items itself.
         if (SuppressDuringSweep()) return;
+        // Sent now it would be lost and still counted as on its way.
+        if (HideMode && !CanHideHere()) return;
 
         // Group carried copies by resolved item Number so duplicate name strings
         // ("a torch", "a torch") count as two of one item.
@@ -204,7 +255,7 @@ public sealed class AutoDiscardManager : IDisposable
 
             _log?.Info(LogCategory, $"discard {toDrop}x item={item.Name} via {DiscardVerb} (keep {item.KeepCount})");
             // The count-prefixed confirmation clears in-flight by N below.
-            Offload(Send, number, item.Name, toDrop, byHand: false);
+            Offload(Send, number, item.Name, Copies.Of(toDrop, byHand: false));
         }
     }
 
@@ -221,26 +272,46 @@ public sealed class AutoDiscardManager : IDisposable
         if (string.IsNullOrWhiteSpace(name) || _resolve(name) is not { } item) return (verb, 0);
         int free = Math.Min(count, CarriedCopies(item.Number)) - SpokenFor(item.Number);
         if (free <= 0) return (verb, 0);
-        Offload(send, item.Number, name, free, byHand: true);
+        Offload(send, item.Number, name, Copies.Of(free, byHand: true));
         return (verb, free);
     }
 
-    // Copies of `name` whose hide a room refused, waiting for the next one.
+    // Copies of `name` whose hide a room refused and that have not landed since.
     public int HeldFor(string name)
-        => _resolve(name) is { } item && _held.TryGetValue(item.Number, out (string Name, int Count) h) ? h.Count : 0;
+        => _resolve(name) is { } item && _held.TryGetValue(item.Number, out HeldHide? held) ? held.Count : 0;
 
     // Every held hide, and how many hides are out with no answer yet, for the bug
     // report.
-    public IReadOnlyList<(string Name, int Count)> HeldHides => _held.Values.ToList();
-    public int UnansweredHides => _hidesInFlight.Values.Sum();
+    public IReadOnlyList<(string Name, int Count)> HeldHides
+        => _held.Values.Select(h => (h.Name, h.Count)).ToList();
+    public int UnansweredHides => _hidesInFlight.Values.Sum(c => c.Total);
+
+    // Call off held hides of an item: it was sold, dropped, hidden by hand, or
+    // taken off the list it was being discarded from. The copy the hold was for
+    // is gone or wanted again, and a retry would hide some other copy. A by-hand
+    // surface calling off its own asks for byHandOnly, leaving the engine's.
+    public void ReleaseHeld(string name, int count, bool byHandOnly = false)
+    {
+        if (count <= 0 || _resolve(name) is not { } item) return;
+        if (!_held.TryGetValue(item.Number, out HeldHide? held)) return;
+        Copies from = byHandOnly ? held.Waiting with { Engine = 0 } : held.Waiting;
+        Copies released = from.Take(count).Taken;
+        if (released.Total == 0) return;
+        held.Waiting = new Copies(held.Waiting.ByHand - released.ByHand, held.Waiting.Engine - released.Engine);
+        if (held.Count == 0)
+            EndHeld(item.Number, $"held hide of {held.Name} called off ({released.Total})");
+        else
+            _log?.Info(LogCategory, $"held hide of {held.Name} called off ({released.Total}), {held.Count} still held");
+    }
 
     // Copies of an item a discard is already out for, or waiting on a room for.
     private int SpokenFor(int number)
-        => _inFlight.GetValueOrDefault(number) + _hidesInFlight.GetValueOrDefault(number)
-           + (_held.TryGetValue(number, out (string Name, int Count) h) ? h.Count : 0);
+        => _inFlight.GetValueOrDefault(number) + _hidesInFlight.GetValueOrDefault(number).Total
+           + (_held.TryGetValue(number, out HeldHide? held) ? held.Waiting.Total : 0);
 
-    // Copies of an item in the pack. The carried list holds single entries and,
-    // after an `i`, a stack as one entry with its count in front ("3 moonstone").
+    // Copies of an item in the pack: an entry is a stack with its count in front
+    // ("3 moonstone"). AppServices.CountInPack does the same sum off the snapshot;
+    // this one goes through the resolver the class is handed, as its tests do.
     private int CarriedCopies(int number)
     {
         int copies = 0;
@@ -254,45 +325,55 @@ public sealed class AutoDiscardManager : IDisposable
     // copy. A hide is counted until its "You hid X." and registered so the
     // transaction log can tell it from a stash. A by-hand drop is not counted:
     // a repeat of it only earns the game's private "You don't have X to drop!".
-    private void Offload(Action<string> send, int number, string name, int count, bool byHand)
+    private void Offload(Action<string> send, int number, string name, Copies copies)
     {
-        if (count <= 0) return;
+        if (copies.Total <= 0) return;
         _trafficSinceRead = true;
         if (HideMode)
         {
-            _hidesInFlight[number] = _hidesInFlight.GetValueOrDefault(number) + count;
-            _suppressLog[number] = _suppressLog.GetValueOrDefault(number) + count;
+            _hidesInFlight[number] = _hidesInFlight.GetValueOrDefault(number).Plus(copies);
+            _suppressLog[number] = _suppressLog.GetValueOrDefault(number) + copies.Total;
         }
-        else if (!byHand)
+        else if (copies.Engine > 0)
         {
-            _inFlight[number] = _inFlight.GetValueOrDefault(number) + count;
+            _inFlight[number] = _inFlight.GetValueOrDefault(number) + copies.Engine;
         }
-        CountedCommand.Emit(send, DiscardVerb, count, name, _isParadigm());
+        CountedCommand.Emit(send, DiscardVerb, copies.Total, name, _isParadigm());
     }
 
     // Clear a pending drop when our own "You dropped X." confirmation arrives.
     // PlayerDrops is a combined pattern (Groups[0] = the other-player name for
     // "<name> drops X.", empty for the self "You dropped X." branch); only the
-    // self branch confirms a command we sent.
+    // self branch confirms a command we sent. A drop of an item whose hide is held
+    // calls the hold off.
     private void OnDropLine(MatchResult m)
     {
         if (m.Groups.Count < 2) return;
         if (!string.IsNullOrEmpty(m.Groups[0])) return;   // another player's drop
-        Settle(_inFlight, m.Groups[1]);
+        (int count, string name) = CountedCommand.SplitLeadingCount(m.Groups[1]);
+        if (_resolve(name) is not { } item) return;
+        if (Reduce(_inFlight, item.Number, count)) _trafficSinceRead = true;
+        ReleaseHeld(item.Name, count);
     }
 
     // Clear a pending hide when our own "You hid X." confirmation arrives.
     // UserHides is a self-only single-group pattern (Groups[0] = the hidden item),
     // so unlike PlayerDrops there's no other-player branch to filter out. Coin
-    // hides ("You hid 10 gold.") don't resolve to an item, so they fall through
-    // Settle's resolve guard harmlessly.
+    // hides ("You hid 10 gold.") don't resolve to an item and fall through.
     private void OnHideLine(MatchResult m)
     {
         if (m.Groups.Count < 1) return;
-        if (Settle(_hidesInFlight, m.Groups[0]) is not { } item) return;
-        if (!_retrying.Contains(item.Number) || SpokenFor(item.Number) > 0) return;
-        _retrying.Remove(item.Number);
-        _log?.Info(LogCategory, $"held hide of {item.Name} landed in {_room}");
+        (int count, string name) = CountedCommand.SplitLeadingCount(m.Groups[0]);
+        if (_resolve(name) is not { } item) return;
+        int ours = TakeFlight(item.Number, count).Total;
+        if (ours > 0) _trafficSinceRead = true;
+        if (!_held.TryGetValue(item.Number, out HeldHide? held)) return;
+
+        held.Out -= Math.Min(held.Out, ours);
+        // A hide nobody here sent (typed, Hide All) put a held copy away itself.
+        if (count > ours) ReleaseHeld(item.Name, count - ours);
+        if (_held.ContainsKey(item.Number) && held.Count == 0)
+            EndHeld(item.Number, $"held hide of {held.Name} landed in {_room}");
     }
 
     // The room has no room left for hidden items. The copy stays in the pack and
@@ -307,57 +388,71 @@ public sealed class AutoDiscardManager : IDisposable
         if (!TryConsumeSuppressedHide(token)) return;
         (int count, string name) = CountedCommand.SplitLeadingCount(token);
         if (_resolve(name) is not { } item) return;
-        Reduce(_hidesInFlight, item.Number, count);
+        Copies refused = TakeFlight(item.Number, count);
+        if (refused.Total == 0) return;
         if (!HideMode)
         {
             _log?.Info(LogCategory, $"hide of {item.Name} refused, no room here: not held, hide when discarding is off");
             return;
         }
-        int waiting = (_held.TryGetValue(item.Number, out (string Name, int Count) h) ? h.Count : 0) + count;
-        _held[item.Number] = (item.Name, waiting);
-        _log?.Info(LogCategory, $"hide of {item.Name} refused, no room here: {waiting} held for the next room");
+        if (!_held.TryGetValue(item.Number, out HeldHide? held))
+            _held[item.Number] = held = new HeldHide { Name = item.Name };
+        held.Out -= Math.Min(held.Out, refused.Total);
+        held.Waiting = held.Waiting.Plus(refused);
+        held.TriedIn = _room;
+        _log?.Info(LogCategory, $"hide of {item.Name} refused, no room here: {held.Waiting.Total} held for the next room");
         HideRefused?.Invoke(item.Name);
     }
 
     // The character stands in a room, by the room tracker's confirmed reading. A
-    // redisplay of the same room is not an arrival: that room has refused already.
+    // redisplay of the same room is not an arrival.
     public void OnRoomEntered(RoomKey room)
     {
         if (_room is { } here && here.Equals(room)) return;
         _room = room;
-        RetryHeldHides();
+        RecheckHeldHides();
     }
 
-    // Send each held hide once in the room just entered. A refusal here holds it
-    // again for the room after.
-    private void RetryHeldHides()
+    // Send each held hide once in the room the character stands in, unless that
+    // room is the one that refused it. A refusal here holds it again for the room
+    // after. Safe to call whenever something that kept the hides back may have
+    // cleared: it sends nothing while the position is unknown.
+    public void RecheckHeldHides()
     {
-        if (_held.Count == 0) return;
+        if (_held.Count == 0 || _room is not { } here) return;
         // The gates the engine's own offloads wait on; the copies stay held.
-        if (_wireSender is null || SuppressDuringSweep()) return;
+        if (_wireSender is null || SuppressDuringSweep() || !CanHideHere()) return;
 
         List<string> commands = new();
-        foreach ((int number, (string name, int count)) in _held.ToList())
+        foreach ((int number, HeldHide held) in _held.ToList())
         {
-            _held.Remove(number);
-            // An item flagged for auto-discard is the engine's to offload, and its
-            // switch is off; a by-hand discard never answered to that switch.
-            if (_resolve(name) is { Discard: true } && !_isEnabled())
+            if (held.Waiting.Total == 0 || here.Equals(held.TriedIn)) continue;
+
+            // The engine's copies are its own only while the item is still flagged.
+            if (held.Waiting.Engine > 0 && _resolve(held.Name) is not { Discard: true })
             {
-                _log?.Info(LogCategory, $"held hide of {name} given up: auto-discard is off");
-                _retrying.Remove(number);
-                continue;
+                _log?.Info(LogCategory, $"held hide of {held.Name}: no longer flagged for auto-discard, {held.Waiting.Engine} let go");
+                held.Waiting = held.Waiting with { Engine = 0 };
             }
-            int copies = Math.Min(count, CarriedCopies(number) - SpokenFor(number));
-            if (copies <= 0)
+            // A copy that has left the pack some other way has nothing to hide.
+            int free = CarriedCopies(number) - _inFlight.GetValueOrDefault(number)
+                       - _hidesInFlight.GetValueOrDefault(number).Total;
+            if (held.Waiting.Total > free)
             {
-                _log?.Info(LogCategory, $"held hide of {name} forgotten: no longer carried");
-                _retrying.Remove(number);
-                continue;
+                _log?.Info(LogCategory, $"held hide of {held.Name}: {held.Waiting.Total - Math.Max(free, 0)} no longer carried, forgotten");
+                held.Waiting = held.Waiting.Take(free).Taken;
             }
-            _log?.Info(LogCategory, $"retrying held hide of {copies}x {name} in {_room}");
-            _retrying.Add(number);
-            Offload(commands.Add, number, name, copies, byHand: false);
+            if (held.Count == 0) { EndHeld(number, $"held hide of {held.Name} given up"); continue; }
+
+            // The engine's copies wait for its switch; a by-hand discard never did.
+            Copies due = _isEnabled() ? held.Waiting : held.Waiting with { Engine = 0 };
+            if (due.Total == 0) continue;
+
+            held.Waiting = new Copies(held.Waiting.ByHand - due.ByHand, held.Waiting.Engine - due.Engine);
+            held.Out += due.Total;
+            held.TriedIn = here;
+            _log?.Info(LogCategory, $"retrying held hide of {due.Total}x {held.Name} in {here}");
+            Offload(commands.Add, number, held.Name, due);
         }
         if (commands.Count == 0) return;
         if (PacedSender is { } paced) paced(commands);
@@ -369,60 +464,100 @@ public sealed class AutoDiscardManager : IDisposable
     // read-to-read stretch passes with no discard sent or answered, whatever is
     // still counted never will be (a refusal with no line of its own, a command
     // the game dropped for coming too fast): forget it, or it would block every
-    // later discard of that item and swallow a later stash's ledger row.
+    // later discard of that item and swallow a later stash's ledger row. A retry
+    // lost that way goes back to waiting for a room.
     public void OnFullInventoryRead()
     {
         foreach (int number in _hidesInFlight.Keys.Concat(_suppressLog.Keys).Concat(_held.Keys).Distinct().ToList())
         {
             int carried = CarriedCopies(number);
-            Cap(_hidesInFlight, number, carried);
+            CapFlight(number, carried);
             Cap(_suppressLog, number, carried);
-            if (!_held.TryGetValue(number, out (string Name, int Count) h) || h.Count <= carried) continue;
-            if (carried <= 0) _held.Remove(number);
-            else _held[number] = (h.Name, carried);
+            if (!_held.TryGetValue(number, out HeldHide? held)) continue;
+            held.Out = Math.Min(held.Out, _hidesInFlight.GetValueOrDefault(number).Total);
+            held.Waiting = held.Waiting.Take(carried).Taken;
+            if (held.Count == 0) EndHeld(number, $"held hide of {held.Name} forgotten: no longer carried");
         }
 
-        if (!_trafficSinceRead && (_hidesInFlight.Count > 0 || _suppressLog.Count > 0))
+        // Discards still queued in the pacer were counted when handed over. They
+        // are unsent, not unanswered, and forgetting them would let a second press
+        // send for copies the queue is about to take.
+        bool queued = SendsQueued();
+        if (!_trafficSinceRead && !queued && (_hidesInFlight.Count > 0 || _suppressLog.Count > 0))
         {
-            _log?.Info(LogCategory,
-                $"{_hidesInFlight.Values.Sum()} hide(s) never answered: no longer counted as on their way");
+            foreach ((int number, HeldHide held) in _held.ToList())
+            {
+                if (held.Out == 0) continue;
+                Copies back = TakeFlight(number, held.Out).Plus(held.Waiting).Take(CarriedCopies(number)).Taken;
+                held.Out = 0;
+                held.Waiting = back;
+                if (held.Count == 0) EndHeld(number, $"held hide of {held.Name} forgotten: no longer carried");
+                else _log?.Info(LogCategory, $"retry of {held.Name} never answered: {back.Total} held again for the next room");
+            }
+            if (_hidesInFlight.Count > 0)
+                _log?.Info(LogCategory, $"{UnansweredHides} hide(s) never answered: no longer counted as on their way");
             _hidesInFlight.Clear();
             _suppressLog.Clear();
-            _retrying.Clear();
         }
-        _trafficSinceRead = false;
+        _trafficSinceRead = queued;
     }
 
     // Nothing sent before this point will be answered (a death empties the pack,
     // a dropped connection loses the replies, another character has its own pack).
-    public void Reset(string reason)
+    // A dropped connection leaves the pack as it was, so with keepHeld the refused
+    // copies go on waiting, each still tied to the room that refused it: the
+    // character comes back into that same room.
+    public void Reset(string reason, bool keepHeld = false)
     {
-        if (_inFlight.Count + _hidesInFlight.Count + _held.Count > 0)
-            _log?.Info(LogCategory,
-                $"{reason}: {_inFlight.Values.Sum() + _hidesInFlight.Values.Sum()} unanswered discard(s)"
-                + (_held.Count > 0 ? $" and held hides ({DescribeHeld()})" : "") + " forgotten");
+        int unanswered = _inFlight.Values.Sum() + UnansweredHides;
+        if (unanswered > 0) _log?.Info(LogCategory, $"{reason}: {unanswered} unanswered discard(s) forgotten");
+        if (keepHeld)
+        {
+            foreach ((int number, HeldHide held) in _held)
+            {
+                held.Waiting = held.Waiting.Plus(TakeFlight(number, held.Out));
+                held.Out = 0;
+            }
+        }
+        else
+        {
+            EndAllHeld(reason);
+        }
         _inFlight.Clear();
         _hidesInFlight.Clear();
         _suppressLog.Clear();
-        _held.Clear();
-        _retrying.Clear();
         _room = null;
         _trafficSinceRead = false;
     }
 
-    private string DescribeHeld()
-        => string.Join(", ", _held.Values.Select(h => $"{h.Count} {h.Name}"));
-
-    // Take the item named in a self drop/hide confirmation off its count, so the
-    // Changed event that confirmation raises doesn't re-send. Paradigm confirms a
-    // batched offload in one counted line ("You dropped 5 orc-head."), so strip
-    // the count and clear that many. Returns the item when the line names one.
-    private ResolvedDiscard? Settle(Dictionary<int, int> counts, string itemToken)
+    // One item's hold is over: say why, and tell whoever is showing it.
+    private void EndHeld(int number, string message)
     {
-        (int count, string name) = CountedCommand.SplitLeadingCount(itemToken);
-        if (_resolve(name) is not { } item) return null;
-        if (Reduce(counts, item.Number, count)) _trafficSinceRead = true;
-        return item;
+        if (!_held.Remove(number, out HeldHide? held)) return;
+        _log?.Info(LogCategory, message);
+        HeldHideEnded?.Invoke(held.Name);
+    }
+
+    private void EndAllHeld(string reason)
+    {
+        foreach ((int number, HeldHide held) in _held.ToList())
+            EndHeld(number, $"{reason}: held hide of {held.Count} {held.Name} given up");
+    }
+
+    // Take up to `count` hides of an item off the in-flight count; what came off.
+    private Copies TakeFlight(int number, int count)
+    {
+        if (!_hidesInFlight.TryGetValue(number, out Copies flight)) return default;
+        (Copies taken, Copies left) = flight.Take(count);
+        if (left.Total == 0) _hidesInFlight.Remove(number);
+        else _hidesInFlight[number] = left;
+        return taken;
+    }
+
+    private void CapFlight(int number, int max)
+    {
+        if (_hidesInFlight.TryGetValue(number, out Copies flight) && flight.Total > max)
+            TakeFlight(number, flight.Total - max);
     }
 
     // Lower a count by up to `by`, dropping the entry at zero. False when there
