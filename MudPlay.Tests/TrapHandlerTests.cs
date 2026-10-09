@@ -69,6 +69,20 @@ public sealed class TrapHandlerTests
         Assert.Equal("disarm trap n\r", Encoding.Latin1.GetString(Assert.Single(wire)));
     }
 
+    // The acceptance goes back before the disarm starts, so the asker knows someone
+    // has the trap.
+    [Fact]
+    public void Trap_Accepted_SaysSoFirst()
+    {
+        var (engine, _, _, players, _) = Setup();
+        SeedPlayer(players, "Raijin", PlayerRemoteControls.ExecuteCommands);
+
+        engine.DispatchForTests(Telepath("Raijin", "@trap n"));
+
+        Assert.Equal("/Raijin {Attempting to disarm trap n.}\r",
+            Encoding.Latin1.GetString(engine.LastSentForTests[0]));
+    }
+
     [Fact]
     public void Trap_LongFormDirection_NormalisedToShort()
     {

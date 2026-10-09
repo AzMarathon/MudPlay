@@ -198,6 +198,11 @@ public static class BugReportBuilder
         Kv(sb, "PvP response", svc.PvpResponse.LastResponse
             + (svc.PvpFlee.IsActive ? "; fleeing to the flee room now" : ""));
         Kv(sb, "PvP fight", $"{svc.PvpFight.Describe()}; last: {svc.PvpFight.LastReport}");
+        // The last monster with the Hangup relationship seen in the room, where,
+        // and what came of it; then the minute's hold after a reconnect, which
+        // explains one that was seen and not hung up on.
+        Kv(sb, "Hangup-relationship monster", svc.MonsterHangup.LastSighting);
+        Kv(sb, "Hangup watch hold", svc.MonsterHangup.DescribeHold());
         Kv(sb, "PvP attacks on us", svc.PvpAttacks.Recent.Count == 0
             ? "(none this session)"
             : string.Join("; ", svc.PvpAttacks.Recent.Select(a =>
@@ -1492,6 +1497,7 @@ public static class BugReportBuilder
                     : "(unknown room)");
             Kv(sb, "Loop step in flight", svc.LoopRunner.IsStepInFlight.ToString());
             Kv(sb, "Loop waiting on a trap disarm", svc.LoopRunner.IsAwaitingTrapDisarm.ToString());
+            Kv(sb, "Trap asked of the party", svc.TrapDelegation.Describe());
             Kv(sb, "Loop command held for an empty room", svc.LoopRunner.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         }
         // A loop set aside by a dropped link restarts on the first prompt back in the

@@ -189,7 +189,9 @@
             <StackPanel Spacing="2">
                 <CheckBox Content="Help leader open doors"
                           IsChecked="{Binding HelpLeaderOpenDoors, Mode=TwoWay}"
-                          ToolTip.Tip="Pitch in when the leader is forcing a door — bashes or picks the lock depending on the Other → 'Pick locks instead of bashing' toggle."/>
+                          ToolTip.Tip="Pitch in when the leader is bashing a door — bashes or picks the lock depending on the Other → 'Pick locks instead of bashing' toggle. Only a bash can be helped: the room is shown the leader's bash attempts, and nothing while they pick a lock."/>
+                <TextBlock Foreground="{StaticResource ChromeFgMutedBrush}" FontSize="11" Margin="24,0,0,2" TextWrapping="Wrap"
+                           Text="Only works while the leader bashes: a leader picking the lock shows the room nothing to react to."/>
                 <CheckBox Content="Ignore @wait when leading"
                           IsChecked="{Binding IgnoreWaitWhenLeading, Mode=TwoWay}"
                           ToolTip.Tip="When leading, drop incoming @wait broadcasts from party members — use this character's own Wait-if-members-below threshold instead of pausing on every member's personal wait setting."/>

@@ -2063,6 +2063,40 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Finished);
     }
 
+    // A party member's answer arrives in the { } of a remote reply.
+    [Theory]
+    [InlineData("{Trap to the north disarmed.}")]
+    [InlineData("{No trap to the north to disarm.}")]
+    [InlineData("{No trap to the north to disarm (failed 5 times; taking it as clear).}")]
+    public void Walker_ARemoteClearReply_CrossesTheExit(string reply)
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        FakeTrapEnqueuer trap = new();
+        h.Walker.SetTrapEnqueuer(trap.Enqueue);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        trap.Calls[0].Reply(reply);
+
+        Assert.Equal("n\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+    }
+
+    // Nobody in the party took the trap: the same position as nobody being able.
+    [Fact]
+    public void Walker_TrapNobodyTook_IsWalkedThrough()
+    {
+        Harness h = NewHarness(TrapGraphJson);
+        FakeTrapEnqueuer trap = new();
+        h.Walker.SetTrapEnqueuer(trap.Enqueue);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 2));
+
+        trap.Calls[0].Reply(MudPlay.Game.TrapReply.Unanswered);
+
+        Assert.Equal("n\r", Encoding.Latin1.GetString(Assert.Single(h.Sent)));
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
     [Fact]
     public void Walker_TrapDisarmFailure_FailsTheWalk()
     {
@@ -2072,7 +2106,7 @@ public sealed class AutoWalkManagerTests : IDisposable
         h.Tracker.SetLocated(new RoomKey(1, 1));
         h.Walker.WalkTo(new RoomKey(1, 2));
 
-        trap.Calls[0].Reply("Couldn't find trap to the north (20 attempts).");
+        trap.Calls[0].Reply("Couldn't disarm the trap to the north (5 attempts).");
 
         Assert.Equal(WalkState.Idle, h.Walker.State);
         Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
