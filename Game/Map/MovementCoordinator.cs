@@ -177,10 +177,10 @@ public sealed class MovementCoordinator
     public const string PartyInviteGate = "PartyInvite";
 
     // Asserted by PartyPathItemGate from a walk's start until the party has said how
-    // many of a route item each member holds. The answer decides whether the walk
-    // turns aside to fetch copies, and a walk that set off during the round trip
-    // went the wrong way for it (report paradigm-20261009-011133). Never longer than
-    // the party probe's own reply window. Engine-wait tier.
+    // many of a route item each member holds, for a walk that answer can turn aside
+    // to fetch copies: one that set off during the round trip went the wrong way
+    // for it (report paradigm-20261009-011133). Ends with the party probe's reply
+    // window, and is capped by its owner just past it. Engine-wait tier.
     public const string PartyItemCountGate = "PartyItemCount";
 
     // Asserted by PartyFollowerMovementGate while the local character is a

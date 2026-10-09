@@ -26,7 +26,7 @@ namespace MudPlay.Game.Remote;
 // QueryWindow elapses (a member who never answers — offline, no ExecuteCommands
 // round-trip, hasn't parsed inventory — simply doesn't count toward the total).
 // The expected-responder set mirrors PartyBroadcaster's own filter (non-self,
-// named), so we never wait on a member the broadcast skipped. With no one to ask
+// named, joined), so we never wait on a member the broadcast skipped. With no one to ask
 // the task completes synchronously with an empty result, letting the caller fall
 // straight through to its fallback.
 public sealed partial class PartyInventoryProbe : IDisposable
@@ -118,6 +118,9 @@ public sealed partial class PartyInventoryProbe : IDisposable
         foreach (PartyMember m in _party.Members)
         {
             if (m.IsSelf) continue;
+            // Invited and not yet joined: they can't answer, and waiting on them
+            // ran every count to the end of its window. The broadcast skips them too.
+            if (m.IsInvited) continue;
             if (string.IsNullOrEmpty(m.Name)) continue;
             pending.Remaining.Add(GivenName(m.Name));
         }
@@ -127,7 +130,7 @@ public sealed partial class PartyInventoryProbe : IDisposable
             return Task.FromResult(PartyItemResult.Empty(itemId));
 
         _pending.Add(pending);
-        _broadcaster.Broadcast($"@have {itemName}");
+        _broadcaster.Broadcast($"@have {itemName}", skipInvited: true);
         _armWindow(() => Complete(pending));
         return pending.Tcs.Task;
     }

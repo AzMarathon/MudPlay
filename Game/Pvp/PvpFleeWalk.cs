@@ -56,7 +56,9 @@ public sealed class PvpFleeWalk : IDisposable
         _comeBackAfter = comeBackAfter;
         _run++;
         IsActive = true;
-        if (_walker.WalkTo(destination, planThroughAcquirableGates: true))
+        // No item announce: a flee fetches nothing on its way, and the announce is
+        // where a party is asked who holds a gate item, which can hold the walk.
+        if (_walker.WalkTo(destination, planThroughAcquirableGates: true, armItemAcquisition: false))
         {
             _startSprint();
             _log?.Warn(LogCategory,

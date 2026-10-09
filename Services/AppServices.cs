@@ -6755,7 +6755,7 @@ public sealed class AppServices
             // fulfillers (the reliable acquire path), so it must stay open on a forced
             // obtain even with master auto-search off — that's what lets the buy-at-shop
             // fallback fire when searching is off or turns nothing up.
-            isEnabled: () => Fetch is { HasItems: true },
+            isEnabled: () => JourneyHasFetchOrder,
             // Searching is only a plausible way to get an item nobody hands over on
             // demand. An NPC keyword give (free, or a trade agreed to) or a guaranteed
             // room-command summon is already being walked to, so a `sea` in every
@@ -6789,7 +6789,10 @@ public sealed class AppServices
         PartyPathItemGate = new Game.Map.PartyPathItemGate(
             isCarried: IsItemCarried,
             selfCount: CountItemCarried,
-            query: (id, name) => PartyInventory.QueryAsync(id, name),
+            // The count a route card took a moment ago is the one its walk decides on.
+            query: (id, name) => TakeCardCount(id) is { } counted
+                ? Task.FromResult(counted)
+                : PartyInventory.QueryAsync(id, name),
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             perPersonQuantity: PathPerPersonQuantity,
@@ -6807,7 +6810,15 @@ public sealed class AppServices
             holdWalk: reason => MovementCoordinator.AssertGate(
                 Game.Map.MovementCoordinator.PartyItemCountGate, nameof(PartyPathItemGate), reason),
             releaseWalk: reason => MovementCoordinator.ClearGate(
-                Game.Map.MovementCoordinator.PartyItemCountGate, nameof(PartyPathItemGate), reason));
+                Game.Map.MovementCoordinator.PartyItemCountGate, nameof(PartyPathItemGate), reason),
+            // The answer turns a walk aside only through a posted need and a router
+            // free to act on it. Every other walk that crosses a ticked item's gate
+            // (a bank run, a sell trip, a trainer trip, a flee) would stand out the
+            // count and then go exactly where it was going.
+            canTurnWalkAside: () => JourneyHasFetchOrder && !ErrandOwnsWalk()
+                && (LoopRunner.State == Game.Map.LoopState.Idle || LoopRunner.IsApproachInFlight),
+            armHoldCap: expired => ScheduleOnce(PartyInventory.QueryWindow + TimeSpan.FromSeconds(2), expired),
+            journey: () => Walker.Journey);
         // The leader coordinates redistribution once acquisition makes the
         // party whole — re-check on every inventory change.
         Inventory.Changed += PartyPathItemGate.OnInventoryChanged;
@@ -6816,7 +6827,11 @@ public sealed class AppServices
         // Handed out: the gate the party was short for is open again.
         PartyPathItemGate.Provisioned += ClearPartyShortGateItem;
         // A count is about one roster; a member joining or leaving voids it.
-        PartyState.Members.CollectionChanged += (_, _) => ClearPartyShortGateItems("the party changed");
+        PartyState.Members.CollectionChanged += (_, _) =>
+        {
+            ClearPartyShortGateItems("the party changed");
+            PartyPathItemGate.ForgetCounts();
+        };
 
         // Per-walk forced-obtain (the route picker's "obtain then cross" choice):
         // drop an item from the override once it's covered — the item itself or
@@ -7233,6 +7248,10 @@ public sealed class AppServices
             if (e.Kind is Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed
                 or Game.Map.WalkEventKind.Finished)
                 PartyPathItemGate.OnWalkEnded();
+            // A card's count is for the walk that card starts. Not on Stopped: the
+            // walk a card replaces stops just before the card's own walk announces.
+            if (e.Kind is Game.Map.WalkEventKind.Failed or Game.Map.WalkEventKind.Finished)
+                _cardCounts.Clear();
         };
 
         // Fold each entered hazard room's counter into the same walk-start item
@@ -8692,9 +8711,8 @@ public sealed class AppServices
             // start for the party's count is still an approach: the need is posted
             // while that hold stands.
             engineWalkActive: () =>
-                AutoLair.IsActive
-                || (LoopRunner.State != Game.Map.LoopState.Idle && !LoopRunner.IsApproachInFlight)
-                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
+                ErrandOwnsWalk()
+                || (LoopRunner.State != Game.Map.LoopState.Idle && !LoopRunner.IsApproachInFlight),
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
@@ -8718,8 +8736,7 @@ public sealed class AppServices
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
-                AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
+                ErrandOwnsWalk() || LoopRunner.State != Game.Map.LoopState.Idle,
             // The shared detour walk supersedes silently — without that, arriving at
             // the shop fired a Stopped into this router and abandoned the detour on
             // arrival (the "sat idle at the shop, never bought" bug).
@@ -8753,8 +8770,7 @@ public sealed class AppServices
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
-                AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
+                ErrandOwnsWalk() || LoopRunner.State != Game.Map.LoopState.Idle,
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
@@ -8789,8 +8805,7 @@ public sealed class AppServices
             itemName: ItemNames.GetName,
             isEnabled: IsAutoObtainForPath,
             engineWalkActive: () =>
-                AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
+                ErrandOwnsWalk() || LoopRunner.State != Game.Map.LoopState.Idle,
             confirm: (title, body) => Confirm.ConfirmAsync(title, body, "Reroute"),
             walkTo: WalkToForPathItemDetour,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
@@ -12500,6 +12515,14 @@ public sealed class AppServices
     // nothing here has to remember to clear it.
     private Game.Map.JourneyFetch? Fetch => Walker.Journey?.Fetch;
 
+    // The gate on posting a path-item need at all: the journey under way was told
+    // to fetch something. Without one, nothing is fetched and no walk is turned aside.
+    private bool JourneyHasFetchOrder => Fetch is { HasItems: true };
+
+    // An errand has the walker. No path-item router takes a walk from one, so the
+    // party's count can't turn such a walk aside either.
+    private bool ErrandOwnsWalk() => AutoLair.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring;
+
     private bool FetchesForJourney(int itemId) => Fetch?.Fetches(itemId) == true;
 
     // The item the user agreed to hand over for keyId on the journey under way, or
@@ -12563,6 +12586,27 @@ public sealed class AppServices
     private volatile IReadOnlyDictionary<int, (int Need, int OthersHeld)> _partyGateCounts =
         new Dictionary<int, (int, int)>();
 
+    // The members' answers behind each count above, kept for the walk the card
+    // starts: PartyPathItemGate decides on the numbers the card showed instead of
+    // asking the same question a moment later and holding the walk for it. Taken
+    // once, since the hand-offs and purchases that follow move the numbers, and
+    // dropped with the counts (the party changed, another walk is being planned).
+    // Read and written on the UI thread only.
+    private readonly Dictionary<int, Game.Remote.PartyInventoryProbe.PartyItemResult> _cardCounts = new();
+
+    // The card counts no walk has taken yet, for the bug report.
+    public string CardCountSummary => _cardCounts.Count == 0 ? "(none)"
+        : string.Join(", ", _cardCounts.Keys.Select(id => ItemNames.GetName(id) ?? $"item #{id}"));
+
+    private Game.Remote.PartyInventoryProbe.PartyItemResult? TakeCardCount(int itemId)
+    {
+        if (!_cardCounts.Remove(itemId, out Game.Remote.PartyInventoryProbe.PartyItemResult counted)) return null;
+        Log.Info(Game.Map.AutoSearchManager.LogCategory,
+            $"party gate count: item {itemId} — the walk uses the route card's count "
+            + $"({counted.Replied}/{counted.Expected} answered, {counted.TotalCount} held) and doesn't ask again");
+        return counted;
+    }
+
     // Short while the leader's own copies plus what the members reported don't
     // reach one each. The leader's count is read live, so buying the missing
     // copies opens the gate without another round of asking.
@@ -12598,6 +12642,7 @@ public sealed class AppServices
 
     private void ClearPartyShortGateItem(int itemId)
     {
+        _cardCounts.Remove(itemId);
         if (!_partyGateCounts.ContainsKey(itemId)) return;
         var next = new Dictionary<int, (int, int)>(_partyGateCounts);
         next.Remove(itemId);
@@ -12608,6 +12653,7 @@ public sealed class AppServices
 
     private void ClearPartyShortGateItems(string why)
     {
+        _cardCounts.Clear();
         if (_partyGateCounts.Count == 0) return;
         _partyGateCounts = new Dictionary<int, (int, int)>();
         Log.Info(Game.Map.AutoSearchManager.LogCategory, $"party gate count: dropped — {why}");
@@ -12639,6 +12685,7 @@ public sealed class AppServices
                 int need = 1 + r.Expected;
                 int own = CountItemCarried(id);
                 next[id] = (need, r.TotalCount);
+                _cardCounts[id] = r;
                 string members = r.CountsByMember.Count == 0 ? "nobody answered"
                     : string.Join(", ", r.CountsByMember.Select(kv => $"{kv.Key} {kv.Value}"));
                 Log.Info(Game.Map.AutoSearchManager.LogCategory,
