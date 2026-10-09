@@ -601,7 +601,7 @@ Hovering a room shows its details in a tooltip:
 **Getting past obstacles.** En route, MudPlay clears most of what stands between you and a destination, stopping only when it hits something it genuinely can't solve:
 
 - **Doors** — closed or locked, handled by key, pick, or bash. If the game won't let you bash at all (no weapon in hand, or no bash skill) it tries picking, then the key, instead. It follows doors other people open and close, or that lock again by themselves, in the room you're standing in, so it opens a door that's been shut on you before walking into it. If the game answers a bash or a pick with *Your command had no effect.*, or an open with *That is not a door or a gate!* (there's no door that way where you're standing), or the map shows you've ended up in another room while the door was being worked on, it stops working the door, re-checks where you are and re-routes from there instead of trying the same door again. A pause that comes and goes mid-door (a party `@wait` then `@ok`, a short fight) doesn't restart the door either: the walk carries on from the bash it already sent. Once a door is open it steps through like any other move: bashing or opening a door ends a sneak, so with auto-sneak on it re-sneaks first, and a monster that walks in meanwhile is dealt with before it leaves.
-- **Traps** — disarmed before you step through, on a walk-to, a loop or an Auto-Lair run alike, or delegated to a capable party member when you can't disarm. With *Utilize disarm traps if able* off, or nobody able, it walks through. A disarm ends a sneak, so with auto-sneak on it re-sneaks before crossing. A failed disarm stops the walk or loop rather than walking into a trap that's there.
+- **Traps** — disarmed before you step through, on a walk-to, a loop or an Auto-Lair run alike, or delegated to a capable party member when you can't disarm. With *Utilize self or party members to disarm traps* off, nobody able, or nobody in the party taking the trap when asked, it walks through. A disarm ends a sneak, so with auto-sneak on it re-sneaks before crossing. A failed disarm stops the walk or loop rather than walking into a trap that's there.
 - **Hidden exits** — searched out and revealed. The game won't search while you're blind (`sea` just answers *You are blind.*), so the walker waits there and searches once you can see again.
 - **NPC ask-transport** — a sealed room whose only way out is asking a resident NPC to port you elsewhere (the Floating Citadel's Grey Lord ports you to Town Square). It sends the `ask <npc> <keyword>` for you, so those pockets aren't dead-ends. A **class-restricted** one (the barmaid's bard-only jump) is offered only to the right class; everyone else is routed around it. And because some are a **skill roll** that can quietly fail, the walker confirms it actually arrived and **re-asks until it does**.
 - **Action-gated exits** — a lever or switch in *another* room (the magenta "Action required" stubs). If the exit is already open where you stand — someone else pulled the levers, or the game says *The exit to the west just opened!* — it simply walks through. Otherwise it drives a go-pull-return detour, visiting each lever room on the way past then crossing the primed exit — even when a lever alcove is itself behind another action-gated door (it opens each inner door first). When a lever room on your route can't be walked back to, the detour runs one-way instead: it leaves the route there, works through the remaining lever rooms and comes out at the exit. Long detours are fine — the two-lever gate on the way to the new master assassin is a ~230-step round trip. Only a very deep (4+ levels) or self-referential puzzle, or a single detour over 400 steps, is left unsolved: those fail cleanly at plan time (*"route needs an action-gated exit the walker can't auto-solve"*) and log the exit that stopped it. When the way to a lever room crosses a gate you could get past (a room hazard you carry no counter for, an item or key gate), a walk you start yourself opens the **route picker** with that walk as the only route, exactly as it does for a gate on the route itself: obtain the counter and cross, or cross unprotected where the hazard is survivable. Pick one and the walk runs the whole detour, levers included; **Details…** lists every step of it. Where the picker has nothing to offer (a door you can't open, a level gate) or isn't in play (a loop, a party `@goto`), the walk fails and names the exit, the lever room and what's in the way.
@@ -952,7 +952,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@do <command>` — sends the command verbatim to the game (the highest-trust command).
 - `@kill <target>` — retargets your combat onto the named monster this round. On a PvP realm, naming a player who is in your room starts a fight with that player instead (Settings → PvP).
 - `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
-- `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts.
+- `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts. Your client answers `{Attempting to disarm trap <dir>.}` when it takes the job, then the result when it's done.
 - `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
 - `@equip <set>` — wears one of your saved gear sets. Name it by its keyword, its name, or the short names **default**, **backstab**, **resthp**, **restma**, **moving** and **bossing** (e.g. `@equip backstab`). `@equip-all` wears the Default set. (The older dashed `@equip-backstab` still works, for party members on earlier versions.)
 - `@equip <set> update` — rewrites that set to **exactly what you're wearing right now**: every worn piece fills its slot (a second ring or bracelet takes slot 2), every unworn slot goes back to *no change*, and the set's alternate-weapon entries are left as they were. It's saved to your character at once, and an open Equipment Manager tab refreshes to show it. It won't run mid gear-swap, or before your inventory has been read once (an `i`) — an unread inventory would empty the set.
@@ -960,7 +960,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin. `@drop-all full` drops **everything** held (worn gear, the readied light, keys and coins); `@drop-all coins` and `@drop-all keys` drop just those.
 - `@hide-all [full|coins|keys]` — the same four sweeps as `@drop-all`, but **hidden** in the room with `hide <item>` instead of dropped: only someone who searches the room will find it. Like drop, it takes worn gear directly, and a stack goes in one counted `hide` on Paradigm, one per item on Stock. (It always names the item — a bare `hide` would hide you instead.)
 - `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
-- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant, and both are silenced while the toolbar's *Disable hangups* toggle is on.
+- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant. A player you gave that grant is always obeyed: the toolbar's *Disable hangups* toggle stops the client hanging up on its own, not these two commands.
 
 ### Hand out permissions
 
@@ -1685,7 +1685,7 @@ Beyond the engines, you can script your own automation. All three editors live i
 
 Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove** button, and a grid of what you've already made. **Double-click a row to edit it.** There's no separate save step — each editor's **Save** button writes to disk immediately, and the list's **Enabled** column shows a ✓ for the ones that are live.
 
-- **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in; click **Capture** again to abort), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement. **Esc is a bindable key** — you can put it on a macro or a shortcut; an unbound Esc still passes through to the game as usual.
+- **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in; click **Capture** again to abort), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. (A `;` at the start of a word, as in `;o`, is part of the command and is sent as typed.) Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement. **Esc is a bindable key** — you can put it on a macro or a shortcut; an unbound Esc still passes through to the game as usual.
 - **Aliases** expand a **typed word into a longer command** — a shorthand you invent, so `cast heal bob` can send `c 'heal' bob`. See **Writing an alias** just below for a full walkthrough.
 - **Triggers** are **auto-responses to game text** — when a line matches, MudPlay fires a reply. Give the trigger a **Name**, then set:
   - Every trigger belongs to the **character** it was made on, like macros and aliases. (Triggers could once be saved "to the game data" and shared by every character on it. Each character from then took its own copy of those the first time it loaded under this version; a new character starts with the default triggers.)
@@ -2167,7 +2167,9 @@ The toolbar across the top controls what you see:
 
 ## Talking
 
-Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands.
+Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. A `;` that starts a word is not a separator: it is sent to the game as typed, so the game's own commands that begin with one (`;o`, or `/bob @do ;o`) go out whole, and so does a `;)` in chat. The same holds in the terminal, and in macros, aliases, triggers, events, loop commands and the pre-/post-rest commands. To send such a command after another on one line, put a space before it: `n; ;o` (or `n^M ;o`) sends `n` and then `;o`. In a line you type you can also double it: `;;time` sends `;time`, and `n;;time` sends `n` and then `;time`. (Macros, aliases, triggers, events and loop commands don't read `;;` that way: there a doubled separator is an empty step.)
+
+**`;o` and `=x`.** Sending `;o` (typed, from a macro or alias, or relayed by a remote `@do`) drops the connection and MudPlay dials straight back in and logs in again, whatever the BBS tab's reconnect triggers say. Sending `=x` drops the connection and MudPlay stays off until you connect again. Either counts only if the board hangs up within a few seconds of it.
 
 **↑ / ↓** recall what you sent before, and the chevron at the right edge of the box opens a list of recent commands to pick from. **Tab** completes the word at your cursor against your carried, worn, and key-ring item names, the same as the terminal (**Settings → General**) — press it again, or **Shift+Tab**, to step through other matches.
 
@@ -2713,8 +2715,8 @@ See the [Keybindings](#keybindings) section below — the rebind dialog is launc
 ### Disable hangups (toolbar toggle)
 
 **Default:** Off
-**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not a remote `@hangup`, not the emergency low-HP hangup, not a monster whose relationship is **Hangup**, nothing — only you disconnecting manually will end the session.
-**Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. A monster whose relationship is **Hangup** is then treated like a Neutral one: left alone on sight, and fought back if it attacks you. One narrow exception still fires even with this on: a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
+**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not the emergency low-HP hangup, not a PvP response, not a partymate's `@panic`, not a monster whose relationship is **Hangup**. What still ends the session is you disconnecting, or someone you trust asking for it.
+**Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. A monster whose relationship is **Hangup** is then treated like a Neutral one: left alone on sight, and fought back if it attacks you. Three things still go through with this on: a remote `@hangup` or `@relog` from a player you gave the **Hangup/disconnect** grant (they are requests, not the client's own decision); a log-off command you send yourself (`;o`, `=x`); and a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
 
 ### Sprint Mode (toolbar toggle)
 
@@ -3672,6 +3674,7 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 
 **Default:** Off
 **What it does:** When you see your party leader failing to bash a locked door, you automatically pitch in (bashing or picking, depending on your own door-preference setting).
+**Important notes:** It only works while the leader **bashes**. The game shows the room each bash attempt, and that line is what this reacts to. A leader who picks the lock instead shows the room nothing while they try, so there is nothing to pitch in on.
 
 ### Ignore @wait when leading
 
@@ -4366,6 +4369,16 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** On
 **What it does:** When a walk-to, a loop or an Auto-Lair run crosses a trapped exit, MudPlay tries to disarm it before stepping through, using your own skill or, if you don't have it, a party member who does. Turning this off walks straight through and takes any trap damage. See *How Traps and disarming work* for the odds.
+
+**Handing a trap to a party member.** When you can't disarm and a party member's class or race can, MudPlay says `@trap <direction>` to the room and waits:
+
+1. A member's MudPlay that takes the job answers at once with `{Attempting to disarm trap <dir>.}`. That is how yours knows someone has it.
+2. That member disarms. If the trap goes off and drops them under their own *rest if below*, they rest first and then try again.
+3. They report the result: `{Trap to the <dir> disarmed.}` (or *already disarmed*, or *No trap to the <dir> to disarm.*) and you step through; `{Couldn't disarm the trap to the <dir> (N attempts).}` and your walk stops rather than walking into it.
+
+With more than one able member, the first to report the way clear moves you on, and one giving up doesn't stop the walk while another is still working. Answers are read from say and from telepath (a sneaking member answers by telepath so it keeps its sneak).
+
+**If nobody accepts within 10 seconds**, nobody is going to: the able member isn't running MudPlay, hasn't given you the **Execute commands** grant on their Players tab, or isn't in the room. MudPlay then walks through the trap, the same as when nobody in the party can disarm, and says so in the program log.
 
 ### @trap max disarms
 

@@ -78,8 +78,6 @@ public sealed class HealthManager : IDisposable
     // ManaRecovery gates. Surfaces in MovementCoordinator.History.
     public const string AsserterName = "HealthManager";
 
-    private static readonly char[] CommandChainSplit = new[] { ';', '\n' };
-
     private readonly PlayerState _state;
     private readonly MovementCoordinator _coordinator;
     private readonly Func<HealthSettings> _readSettings;
@@ -2692,21 +2690,12 @@ public sealed class HealthManager : IDisposable
         }
     }
 
-    // Send pre-/post-rest chain — split on ; or ^M / newline (the documented
-    // HealthSettings convention), trim each fragment, send each as its own wire
-    // line. Empty / whitespace-only input is a no-op so leaving the field blank
-    // just skips the pre/post phase.
+    // Send the pre-/post-rest chain: one wire line per command, split by the same
+    // rule macros, triggers and aliases use. A blank field skips the phase.
     private void SendChained(string raw)
     {
-        if (string.IsNullOrWhiteSpace(raw)) return;
-        // Normalise `^M` to a newline so the single split below handles
-        // both chaining markers.
-        string normalised = raw.Replace("^M", "\n", StringComparison.OrdinalIgnoreCase);
-        foreach (string part in normalised.Split(CommandChainSplit,
-            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-        {
+        foreach (string part in MacroStore.SplitCommandSteps(raw))
             SendCommand(part);
-        }
     }
 
     private void SendCommand(string text)

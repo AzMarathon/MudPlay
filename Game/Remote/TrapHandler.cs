@@ -97,6 +97,9 @@ public sealed class TrapHandler : IDisposable
         // captures (channel, sender) so when the manager invokes it
         // later from any state-machine terminal point, the reply
         // routes back via the same channel the @trap arrived on.
+        // Accepted: say so before starting, so the asker knows someone has the trap
+        // and waits for the result instead of walking into it.
+        ctx.Reply(TrapReply.Attempting(direction));
         _manager.Enqueue(direction, ctx.Sender, text => ctx.Reply(text));
     }
 }
