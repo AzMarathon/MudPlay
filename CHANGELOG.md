@@ -1,9 +1,15 @@
 # Version history
 
-## 3.157.7
+## 3.157.9
 
 - Profile lists no longer fail when another client renames or removes a BBS at that moment
 - Test suite: the Conversation window, profile-listing and auto-train tests no longer fail at random in a full run
+
+## 3.157.8
+
+- Globe of darkness is no longer taken for a blindness: no `@blind` call to the party and no cure blindness cast for it
+- The desert's and two dungeon room spells' flavor lines, and the hordeling's death screech, are recognised
+- bug reports addressed: unrecognized-lines-20261008-214608
 
 ## 3.157.6
 

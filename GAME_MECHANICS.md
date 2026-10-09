@@ -3502,6 +3502,20 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 **Client use:**
 - Both message seeds carry the cultists' line as one record linked to the fifteen monsters (`WitnessMessage`), so `MessageCandidateWatcher` no longer stages it. Nothing acts on the line.
 
+### Room-spell flavor lines
+*Status: [OBSERVED] 2026-10-08, game data (Spells and TBInfo, Stock 1.11p and Paradigm 1.9.1) with the wording from the Stock message table; each line also seen on Paradigm in the unrecognized-lines export of 2026-10-08 · Realm: both*
+
+- **A room's spell can do nothing but print a line.** The spell's ability 148 names a textblock that rolls `random <block>`; in that block most of the roll does nothing (`addexp 0`) and a few bands are `message <N>`, a row of the game's message table printed to the room. The lines mean nothing to the game state.
+- **The desert** (*desert spell* #683 and *desert spell 2* #684, map 12; textblocks 2655 / 2660, messages 2018–2023): `Vultures circle high overhead.`, `A shimmering image appears to the west!` / `…east!` / `…north!` / `…south!`, `The howl of some awful beast can be heard far over the dunes.`
+  - The same roll's last band is the spell's real work (`random 2700`: summons, and the heat of *Room-spell hazard shape 3 — buff check (`checkspell` / `failspell`): the desert waterskin* in *Movement & navigation*).
+- **cleanup 2** (#692; textblock 2520, messages 1969–1972): `A heated wind howls through the passageway, kicking up sand and dust.`, `Beast-like screams echo unnervingly throughout the passageways.`, `The clicking sound of scrabbling claws can be heard from down the passage.`, `Eerie lights dance about further down the passageway.` The same block's other bands are trap rolls (`testskill traps 20 …:message 2090`, `You avoid a trap, using your expertise in knowledge of traps!`), which are not flavor.
+- **cleanup 3** (#700; textblock 2528, message 2083): `Doors on this level creak and thump!`, printed as the spell works the level's doors by `remoteaction`.
+- **Silvermere, the temple and the darkwood forest** (#918, #925, #915) are the same kind; their wordings are in the message seeds.
+- **A hordeling's death prints `The hordeling screeches violently!`** beside its death spell's `The hordeling explodes in a spray of venom!` (venom explosion #427, the hordeling's `DeathSpell`). The screech is the third text of message row 1185, the row that holds the hordeling's own `rips` attack lines *([OBSERVED] 2026-10-08, Stock message table; seen once on Paradigm at a hordeling's death)*. The user reads it as a spell line (2026-10-08); which spell or event prints it was not traced, so it is kept on the death spell's record.
+
+**Client use:**
+- Both message seeds carry each set as the room spell's `WitnessMessage`, one wording per line, and the screech on venom explosion's record, so `MessageCandidateWatcher` no longer stages them. Nothing acts on the lines.
+
 ### Monster movement lines
 
 *Status: CONFIRMED 2026-09-09 (user) for yellow-indexed arrival names; CONFIRMED 2026-09-24 (user + contributor capture, PR #690) for generic movement lines*
@@ -3637,10 +3651,17 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 - **A character carrying more than their max encumbrance can't move and sees `You are too heavy to move`.** *([CONFIRMED] user; trailing punctuation not recorded — the client matches the phrase `too heavy to move` on an unquoted line.)*
 - **It is not a hold.** `freedom` / `cure paralysis` don't clear it.
+- **Globe of darkness is not a blindness** *([CONFIRMED] 2026-10-08, user: "its a spell that removes illu from you, effectively making you blind, but it isnt enumerated as a blind"; data [OBSERVED] 2026-10-08, Stock 1.11p and Paradigm 1.9.1)*.
+  - **globe of darkness #440** carries IlluTarget (54) −9999 and Illumination (13) −9999, AC −5 and Accuracy −15, and no BlindUser (107). It takes the light away, so the room can't be seen, but `site` (cure blindness #87: ability 73 on 107) does not lift it. **darkness #933** has the same abilities.
+  - On Paradigm *blessed vision* (#1316 / #5583) does lift it, by RemovesSpell (122) on 440, 443, 933 and 1102 among others; Stock's blessed vision carries no such list.
+  - **blind globe #1033** is the one that is a blindness (BlindUser 107 as its first ability). All three print the same applied line, `You are enveloped in darkness` (the globe's record adds a `!`), and the same wear-off, `The unnatural darkness lifts`.
+  - What tells them apart is the cast: the globe prints `The <monster> makes a clutching gesture!` and `A bubble of pure darkness appears and begins to expand!` just ahead of the applied line; darkness prints `The <monster> exudes a strange, overpowering aura.`; blind globe prints nothing.
+  - **A nanati shadow's globe lifts when the shadow dies** *([CONFIRMED] 2026-10-08, user: "the shadow also removes the spell, on its death which is kind of unique... there arent many monsters in the game that remove debuffs they applied when they die")*. In the capture the kill prints `The nanati lets out a shriek and fades away!` and then `The unnatural darkness lifts.`
+  - **Client use:** `ConditionTracker.OutrankedByAnnouncedCast`. When one applied line fits several records that don't all carry the same flags, and the cast line of one of them was seen in the 3 s before, only that one is applied. With no cast line seen they all are, as before, which is right for blind globe. The Stock seed's `Blinded` flag on globe of darkness was cleared 2026-10-08. Before, a shadow's globe set Blinded and had the party asked for a cure with `@blind`.
 - **Over the max means no moving at all, and `i` is where it shows.** *([CONFIRMED] 2026-10-03, user.)* Current weight above the max shown by `i` is the whole condition; the refusal line only appears when a move is tried.
 - **Weakness works the same way: it is a carry-capacity debuff, not a hold.** *([CONFIRMED] 2026-10-03, user; data [OBSERVED] Paradigm 1.9.1 and Stock 1.11p.)* **weakness #424** carries **Encum% (96) −25**, Accuracy −10 and MaxDamage, `Dur` 40, and no HoldPerson / Paralyze code. `cure paralysis` and `freedom` do not remove it. It only stops a character already near the max. This is the reason for the 90% encumbrance pickup limits on coin and items (user, 2026-10-03).
   - Its lines are the frail ones: `You feel weak and powerless` / `You feel your strength return`. Eight records share that applied line (weakness #424, weakness touch #127, frail #949 / #956 / #5445, red beam #1067 / #1191, red wave #1072), so the wire can't say which landed.
-  - **globe of darkness #440** was the same case in the Paradigm seed: flagged `MovementPrevented` with no hold code (IlluTarget −9999, Illu −9999, AC −5, Accuracy −15). Unmarked 2026-10-03 (user). The Stock seed flags it `Blinded`.
+  - **globe of darkness #440** was the same case in the Paradigm seed: flagged `MovementPrevented` with no hold code (IlluTarget −9999, Illu −9999, AC −5, Accuracy −15). Unmarked 2026-10-03 (user). The Stock seed flagged it `Blinded` until 2026-10-08; see the globe of darkness bullet under *Ailment identification — which spells cause disease / poison / blind / hold*.
   - The seeds flagged weakness `MovementPrevented` until 2026-10-03 (a flag carried in with the record, backed by no ability code). Because the applied line is shared, every frail read as a hold: the loop stood for the whole duration and cast `cure paralysis` into it (report `paradigm-20261003-201253`).
 - **The Stock refusal is `You are too heavy to move anywhere!`** — see *Per-hop movement speed*.
 - **It clears one of two ways:** drop items until the weight is under the (lowered) max shown by `i`, or wait for the debuff that lowered the max to wear off.
