@@ -158,6 +158,7 @@ public sealed partial class CombatManager : IDisposable
     private Func<bool>? _takeSneakBrokeOnEntry;
     // True while a plain walk-to (travel) drives — self-defense stands down then.
     private Func<bool>? _selfDefenseSuppressedByTravel;
+    private Func<bool>? _hangupWatchOff;
     private Func<int, bool>? _hasSeeHidden;
     private Func<bool>? _seeHiddenClearActive;
     // HealthManager's engage-to-clear signal: a room hostile is blocking a needed
@@ -1187,6 +1188,16 @@ public sealed partial class CombatManager : IDisposable
     {
         ArgumentNullException.ThrowIfNull(isTravellingWalkTo);
         _selfDefenseSuppressedByTravel = isTravellingWalkTo;
+    }
+
+    // Wire the read of MonsterHangupWatcher.WatchIsOff: true while no hang-up will
+    // come for a Hangup-relationship monster (Disable Hangups on, or the minute
+    // after a reconnect). Self-defence then fights one back when it attacks. Unset
+    // ⇒ a Hangup monster is never fought back.
+    public void SetHangupWatchOffProbe(Func<bool> hangupWatchOff)
+    {
+        ArgumentNullException.ThrowIfNull(hangupWatchOff);
+        _hangupWatchOff = hangupWatchOff;
     }
 
     // Wire the "backstab failed → flee" action — bound in AppServices to
@@ -3955,10 +3966,12 @@ public sealed partial class CombatManager : IDisposable
     // line — each carries the attacker's name in group 0). When auto-combat is
     // engaging this room (so _isEnabled: auto-combat on AND not a do-not-attack /
     // combat-suppressed room) and the attacker's relationship lets us fight back —
-    // Friend, Enemy, or Neutral, but NOT Flee / Hangup: a Hangup monster is answered
-    // with a hang-up on sight (MonsterHangupWatcher), and a Flee monster is only
-    // kept out of the fight, with no run of its own — mark its instance
-    // user-engaged so the engine takes it over,
+    // Friend, Enemy, or Neutral, but NOT Flee, and Hangup only while no hang-up
+    // will come for it: a Hangup monster is answered with a hang-up on sight
+    // (MonsterHangupWatcher), so it is fought back only with Disable Hangups on or
+    // in the minute after a reconnect (user, 2026-10-09: "fight back"), and a Flee
+    // monster is only kept out of the fight, with no run of its own — mark its
+    // instance user-engaged so the engine takes it over,
     // even a Friend it would normally leave alone or a neutral we never provoked.
     // Report paradigm-20260921-132800: a hand-attacked Friend (a Friend-relationship
     // NPC) kept hitting the player every round while the engine sat idle, because a
@@ -3977,7 +3990,8 @@ public sealed partial class CombatManager : IDisposable
 
         MonsterRelationship rel = ResolveOverlay(cand.MonsterNumber).Relationship
                                   ?? MonsterRelationship.Enemy;
-        if (rel is MonsterRelationship.Flee or MonsterRelationship.Hangup) return;
+        if (rel == MonsterRelationship.Flee) return;
+        if (rel == MonsterRelationship.Hangup && _hangupWatchOff?.Invoke() != true) return;
 
         if (!_userEngagedInstances.Add(cand.RawName)) return;   // already engaged — nothing new
         _log?.Combat(LogCategory,

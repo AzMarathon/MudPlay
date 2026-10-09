@@ -7,6 +7,8 @@
 > - After reconnecting from such a hang-up the watch is off for a minute, counted down beside the status bar's connection light
 > - The room's list of who is here no longer outlives a disconnect
 > - Hang-ups called for in the same moment (low HP, a PvP enemy, a Hangup monster) send one exit command, not one each
+> - During a fight with a player the PvP actions come first: a Hangup monster is hung up on when the fight ends
+> - With Disable hangups on, or in the minute after a reconnect, a Hangup monster that attacks is fought back
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

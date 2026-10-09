@@ -4098,13 +4098,18 @@ public sealed class AppServices
         GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
         // Built ahead of the combat tracker and engine, like PvpRoom: a monster whose
         // relationship is Hangup is answered before their handlers can start a fight
-        // in the room. Health and InGameCapture are built further down, so they are
-        // reached through lambdas; a method group would be read here, while they
-        // are still null.
+        // in the room. Health, PvpFight and InGameCapture are built further down, so
+        // they are reached through lambdas; a method group would be read here, while
+        // they are still null.
         MonsterHangup = new Game.Combat.MonsterHangupWatcher(
             RoomClassifier,
             resolveOverlay: ResolveMonsterOverlay,
             hangUp: reason => Health.HangUpForMonster(reason),
+            hangupsDisabled: () =>
+                ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups,
+            // The fight's end re-issues the roster (PvpFight.ActiveChanged, below),
+            // which is when a monster held for it is answered.
+            pvpFightActive: () => PvpFight.IsActive,
             atBoardMenu: () => InGameCapture.AtBoardMenu,
             describeRoom: DescribeRosterRoom,
             // UI-thread one-shot, for the once-a-second countdown of the hold.
@@ -5356,6 +5361,9 @@ public sealed class AppServices
             Walker.State == Game.Map.WalkState.Walking
             && LoopRunner.State == Game.Map.LoopState.Idle
             && !AutoLair.IsActive);
+        // A Hangup-relationship monster is fought back only while no hang-up will
+        // come for it.
+        Combat.SetHangupWatchOffProbe(() => MonsterHangup.WatchIsOff);
         // A fresh hide re-arms the surprise round for the stationary hidden opener:
         // when the FSM latches Hidden, re-open so a monster that wanders in is a
         // genuine backstab target again (no gear swap — equipping would break hide).

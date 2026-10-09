@@ -32,6 +32,8 @@ public sealed class MonsterHangupWatcherTests
         public Dictionary<int, MonsterRelationship> Relationships { get; } = new();
         public bool OverlayUnreadable { get; set; }
         public bool AtBoardMenu { get; set; }
+        public bool HangupsDisabled { get; set; }
+        public bool PvpFightActive { get; set; }
 
         // What HealthManager.HangUpForMonster answers. Jumped by default: an
         // escape that went out and left the session up, so a test of sightings is
@@ -53,6 +55,8 @@ public sealed class MonsterHangupWatcherTests
                 Classifier,
                 resolveOverlay: ResolveOverlay,
                 hangUp: hangUp ?? (reason => { HangUps.Add(reason); return Outcome; }),
+                hangupsDisabled: () => HangupsDisabled,
+                pvpFightActive: () => PvpFightActive,
                 atBoardMenu: () => AtBoardMenu,
                 describeRoom: () => "in Town Square (1/5)",
                 schedule: (_, callback) => Scheduled.Add(callback),
@@ -747,6 +751,65 @@ public sealed class MonsterHangupWatcherTests
 
         Assert.Empty(h.HangUps);
         Assert.Single(h.InfoLines, line => line.Contains("board's menu"));
+    }
+
+    // The PvP actions win (user, 2026-10-09): during a fight with a player nothing
+    // is asked for, and the roster re-issued at its end is answered.
+    [Fact]
+    public void DuringAFightWithAPlayer_NothingIsAskedFor_UntilItEnds()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp, PvpFightActive = true };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+        h.Feed("A giant rat scurries into the room from north.");
+
+        Assert.Empty(h.HangUps);
+        Assert.Contains("the PvP actions come first", Assert.Single(h.InfoLines));
+        Assert.False(h.Watcher.WatchIsOff);
+
+        h.PvpFightActive = false;
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.HangUps);
+    }
+
+    // What self-defence reads: true only while no hang-up will come by the user's
+    // choice or for the minute after a reconnect.
+    [Fact]
+    public void WatchIsOff_WithDisableHangups_AndForTheMinuteAfterAReconnect()
+    {
+        using Harness h = new();
+        Assert.False(h.Watcher.WatchIsOff);
+
+        h.HangupsDisabled = true;
+        Assert.True(h.Watcher.WatchIsOff);
+        h.HangupsDisabled = false;
+
+        h.HangUpAndDrop();
+        Assert.True(h.Watcher.WatchIsOff);      // from the drop, through the login
+        h.Watcher.NoteInGamePrompt();
+        h.Tick(59);
+        Assert.True(h.Watcher.WatchIsOff);
+        h.Tick();
+        Assert.False(h.Watcher.WatchIsOff);
+    }
+
+    // Nothing automatic responds in all-off mode, and the menu is not the game:
+    // a hang-up held for those does not turn self-defence on.
+    [Theory]
+    [InlineData(EscapeOutcome.AllOff, false)]
+    [InlineData(EscapeOutcome.HungUp, true)]
+    public void WatchIsOff_IsNotSetByTheOtherHolds(EscapeOutcome outcome, bool atBoardMenu)
+    {
+        using Harness h = new() { Outcome = outcome, AtBoardMenu = atBoardMenu };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+
+        h.Feed("Also here: ogre.");
+
+        Assert.Single(h.InfoLines);
+        Assert.False(h.Watcher.WatchIsOff);
     }
 
     // The whole path through HealthManager: the exit command, the carrier drop and
