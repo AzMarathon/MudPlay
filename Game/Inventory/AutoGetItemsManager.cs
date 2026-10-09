@@ -351,24 +351,14 @@ public sealed class AutoGetItemsManager : IDisposable
             return;
         }
 
-        if (text.StartsWith("You notice ", StringComparison.Ordinal)
-            && !text.EndsWith('.'))
-        {
+        if (FloorListLine.OpensWrappedList(text))
             _noticeBuffer = text;
-        }
     }
 
     private void ProcessMultiLine(string completeLine)
     {
-        const string prefix = "You notice ";
-        if (!completeLine.StartsWith(prefix, StringComparison.Ordinal)) return;
-        string body = completeLine[prefix.Length..].TrimEnd();
-        const string suffix = " here.";
-        if (body.EndsWith(suffix, StringComparison.Ordinal))
-            body = body[..^suffix.Length];
-        else if (body.EndsWith('.'))
-            body = body[..^1];
-        DispatchList(body);
+        if (FloorListLine.TryReadList(completeLine, out string body))
+            DispatchList(body);
     }
 
     // Split the survey list into entries, resolve each against game data, and
