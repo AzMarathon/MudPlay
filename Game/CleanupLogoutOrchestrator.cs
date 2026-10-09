@@ -24,8 +24,23 @@ namespace MudPlay.Game;
 // menus exit past it entirely (report stock-20260904-230111: exiting landed on
 // the door post-game screen then the BBS games menu, neither of which shows
 // that row, so the disconnect only ever came from the blind timeout below).
-// Both the saved line and the main-menu row still complete the logout; the
-// double-timeout is the last-ditch fallback if neither is seen.
+// Both the saved line and the main-menu row still complete the logout, and so
+// does the Stock engine's own out-of-the-game prompt, "[MAJORMUD]: "
+// (NoteRealmLeftPrompt): the saved sentence is most likely a text block the board
+// can reword, the prompt after it is fixed in the engine. The double-timeout is
+// the last-ditch fallback if none is seen.
+//
+// The game can call the exit wait off ("Your meditation has been interrupted - you
+// may not exit now!", KnownPatterns.RealmExitInterrupted; GAME_MECHANICS "Realm
+// exit / logoff sequence"): an attack does it, and on Stock so does a typed
+// `break`. The character is then still in the game, most likely with something
+// swinging at it, so the engine goes back to waiting for a safe room, and that
+// room has to read safe for a whole combat round before the exit goes out again:
+// an attacker swings once a round, and each exit sent ends a fight in progress
+// (`*Combat Off*` on Stock). The safe check can't see every attacker (another
+// player, a monster set not to be attacked, one unseen in the dark), so the
+// retries are capped; past the cap the exit stands and the timeouts below decide,
+// as they do when no confirmation is seen at all.
 //
 // "Safe" is supplied by the host via SetSafePredicate — in production it's "no
 // engageable hostiles in the room AND not mid-combat"
@@ -62,6 +77,13 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     private readonly WireSender _wire = new();
     private readonly IDisposable _menuSub;
     private readonly IDisposable _savedSub;
+    private readonly IDisposable _interruptedSub;
+
+    // How many times the game has called our exit off this cycle, whether the next
+    // exit owes the settle below, and since when the room has read safe for it.
+    private int _interruptions;
+    private bool _settleOwed;
+    private DateTime? _safeSinceUtc;
 
     private Func<bool>? _isSafe;
     private Func<bool>? _isConnected;
@@ -88,6 +110,16 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     // between the realm and the menu.
     public TimeSpan MenuWaitTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
+    // After the game called an exit off, how long the room must read safe without
+    // a break before the exit is sent again: one combat round, the longest an
+    // attacker goes between swings.
+    public TimeSpan InterruptSettle { get; set; } = TickEngine.CombatTickInterval;
+
+    // How many called-off exits are answered with another try. At this many the
+    // room has read safe each time and something still stopped the exit, so the
+    // safe check can't see it and trying again would only repeat the cycle.
+    public int MaxInterruptions { get; set; } = 3;
+
     // The command that exits the realm to the main menu. The user's MajorMUD
     // exits with a bare `x`.
     public string ExitCommand { get; set; } = "x";
@@ -111,6 +143,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         _cleanup.WarningObserved += OnWarningObserved;
         _menuSub = _router.Subscribe(KnownPatterns.MainMenuEnterRealm, OnMainMenuLine);
         _savedSub = _router.Subscribe(KnownPatterns.RealmExitSaved, OnRealmExitSaved);
+        _interruptedSub = _router.Subscribe(KnownPatterns.RealmExitInterrupted, OnRealmExitInterrupted);
     }
 
     // Bind the wire sink used to send the exit command. The host supplies the
@@ -140,6 +173,9 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         StopTimer();
         Phase = CleanupLogoutPhase.Idle;
         _exitRetried = false;
+        _interruptions = 0;
+        _settleOwed = false;
+        _safeSinceUtc = null;
     }
 
     public void Dispose()
@@ -149,6 +185,7 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         _cleanup.WarningObserved -= OnWarningObserved;
         _menuSub.Dispose();
         _savedSub.Dispose();
+        _interruptedSub.Dispose();
         StopTimer();
     }
 
@@ -191,6 +228,41 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         CompleteLogout();
     }
 
+    // The engine's out-of-the-game prompt arrived (WirePromptScanner, which sees it
+    // at a prompt position only). It is no line, so it reaches us from the wire
+    // scanner and not the router. Counts only while our own exit is out: the same
+    // prompt stands on a board's menus at other times.
+    public void NoteRealmLeftPrompt()
+    {
+        if (Phase != CleanupLogoutPhase.Exiting) return;
+        _log?.Log(LogSeverity.Info, "CleanupLogout",
+            "The game's own menu prompt is showing — out of the realm; dropping carrier, auto-reconnect redials after cleanup.");
+        CompleteLogout();
+    }
+
+    private void OnRealmExitInterrupted(MatchResult _)
+    {
+        // Ours only while our own exit is counting out; the same line answers a
+        // wait the user started by hand.
+        if (Phase != CleanupLogoutPhase.Exiting) return;
+        _interruptions++;
+        if (_interruptions >= MaxInterruptions)
+        {
+            if (_interruptions == MaxInterruptions)
+                _log?.Log(LogSeverity.Warn, "CleanupLogout",
+                    $"The exit was called off {_interruptions} times with the room reading safe each time — "
+                    + "whatever stops it can't be seen from here. Not waiting again: the exit is re-sent "
+                    + "once on the timeout and the carrier dropped after that.");
+            return;
+        }
+
+        Phase = CleanupLogoutPhase.Pending;
+        _settleOwed = true;
+        _safeSinceUtc = null;
+        _log?.Log(LogSeverity.Info, "CleanupLogout",
+            $"The exit was called off — exiting again once the room has read safe for {InterruptSettle.TotalSeconds:0} s.");
+    }
+
     // Single FSM step. Runs on the safe-poll timer and once inline when the
     // warning first arms us.
     private void Evaluate()
@@ -209,7 +281,17 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
         switch (Phase)
         {
             case CleanupLogoutPhase.Pending:
-                if (_isSafe?.Invoke() ?? false) BeginExit();
+                if (!(_isSafe?.Invoke() ?? false))
+                {
+                    _safeSinceUtc = null;
+                    break;
+                }
+                if (_settleOwed)
+                {
+                    _safeSinceUtc ??= NowProvider();
+                    if (NowProvider() - _safeSinceUtc.Value < InterruptSettle) break;
+                }
+                BeginExit();
                 break;
 
             case CleanupLogoutPhase.Exiting:
@@ -233,6 +315,8 @@ public sealed class CleanupLogoutOrchestrator : IDisposable
     {
         Phase = CleanupLogoutPhase.Exiting;
         _exitRetried = false;
+        _settleOwed = false;
+        _safeSinceUtc = null;
         SendExit("room clear — sending exit to reach the main menu");
     }
 

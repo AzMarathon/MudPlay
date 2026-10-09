@@ -16,6 +16,80 @@ public sealed class WirePromptScannerTests
         return seen;
     }
 
+    // ----- the engine's out-of-the-game prompt -----
+
+    private static int CountRealmLeft(WirePromptScanner scanner, Action feed)
+    {
+        int seen = 0;
+        scanner.RealmLeftPromptObserved += () => seen++;
+        feed();
+        return seen;
+    }
+
+    [Fact]
+    public void RealmLeftPrompt_AtARowStart_FiresOnce()
+    {
+        WirePromptScanner s = new();
+        int seen = CountRealmLeft(s, () =>
+        {
+            s.Append(B("Your character has been saved. Thanks.\r\n[MAJORMUD]: "));
+            s.Append(B(""));
+            s.Append(B("x"));                    // more bytes with the prompt still in the carryover
+        });
+        Assert.Equal(1, seen);
+    }
+
+    [Fact]
+    public void RealmLeftPrompt_SplitAcrossReads_StillFires()
+    {
+        WirePromptScanner s = new();
+        int seen = CountRealmLeft(s, () =>
+        {
+            s.Append(B("...............\r\n[MAJOR"));
+            s.Append(B("MUD]: "));
+        });
+        Assert.Equal(1, seen);
+    }
+
+    [Fact]
+    public void RealmLeftPrompt_SeenTwice_FiresTwice()
+    {
+        WirePromptScanner s = new();
+        int seen = CountRealmLeft(s, () =>
+        {
+            s.Append(B("\r\n[MAJORMUD]: "));
+            s.Append(B("x\r\n[MAJORMUD]: "));
+        });
+        Assert.Equal(2, seen);
+    }
+
+    // Quoted in chat, or anywhere but the start of a row, it is ordinary text.
+    [Theory]
+    [InlineData("Bob gossips: [MAJORMUD]: is where you land\r\n")]
+    [InlineData("You say \"[MAJORMUD]:\"\r\n")]
+    [InlineData("[HP=27/MA=31]:look\r\nThe sign reads [MAJORMUD]: welcome\r\n")]
+    public void RealmLeftPrompt_InsideOtherText_DoesNotFire(string wire)
+    {
+        WirePromptScanner s = new();
+        Assert.Equal(0, CountRealmLeft(s, () => s.Append(B(wire))));
+    }
+
+    // A custom statline may carry the same words; that is the game's statline, with
+    // the character still in the realm.
+    [Fact]
+    public void RealmLeftPrompt_AsPartOfTheActiveStatline_DoesNotFire()
+    {
+        WirePromptScanner s = new();
+        s.InstallRegex(new System.Text.RegularExpressions.Regex(
+            @"\[MAJORMUD\]: HP=(?<hp>-?\d+) MA=(?<mana>\d+)>"));
+        var prompts = Collect(s);
+
+        int seen = CountRealmLeft(s, () => s.Append(B("\r\n[MAJORMUD]: HP=27 MA=31>")));
+
+        Assert.Single(prompts);
+        Assert.Equal(0, seen);
+    }
+
     [Fact]
     public void SimpleStatline_EmitsOneObservation()
     {

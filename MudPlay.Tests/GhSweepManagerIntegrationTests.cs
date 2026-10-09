@@ -1251,6 +1251,38 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Dispose();
     }
 
+    // "A strange force stops you from getting this item." is the game refusing the
+    // item itself. It refuses it every time, so the item is left where it lies
+    // under a reason of its own and the get is not sent again.
+    [Fact]
+    public void GetRefusedByAStrangeForce_IsLeftInPlace_NotRetried()
+    {
+        SweepHarness h = NewSweepHarness(_root, _scratchBbs);
+
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        Assert.True(h.Sweep.Start());
+
+        h.Feed("You notice a war hammer here.");
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("B", Direction.S);
+        h.Observe("C", Direction.N, Direction.S);
+        h.Observe("A", Direction.N);
+        Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
+
+        h.Observe("C", Direction.N, Direction.S);
+        Assert.Equal("get war hammer", h.Sent[^1]);
+        int getsSent = h.Sent.Count(c => c == "get war hammer");
+
+        h.Feed("A strange force stops you from getting this item.");
+
+        Assert.Equal(0, h.Sweep.PendingMoveCount);
+        Assert.Contains(h.Sweep.LeftInPlace,
+            l => l.ItemName == "war hammer" && l.Reason == GhLeftReason.RefusedByGame);
+        Assert.Equal(getsSent, h.Sent.Count(c => c == "get war hammer"));
+
+        h.Dispose();
+    }
+
     [Fact]
     public void GetCurrencySyntax_BracketFormIsStillRecognised()
     {

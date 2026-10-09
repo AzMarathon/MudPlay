@@ -119,6 +119,7 @@ public sealed partial class RoombaLogViewModel : ObservableObject, IDisposable
     {
         GhLeftReason.TooHeavy => "too heavy to carry",
         GhLeftReason.GoneBySortTime => "gone by sort time",
+        GhLeftReason.RefusedByGame => "the game won't let it be picked up",
         GhLeftReason.AllDestinationsFull => "every room that takes it is full",
         GhLeftReason.NotActuallyCarried => "not in inventory — the pickup never landed",
         GhLeftReason.CouldNotComplete => "couldn't be sorted this sweep — no room or headroom",

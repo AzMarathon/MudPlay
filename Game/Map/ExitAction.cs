@@ -30,8 +30,14 @@ namespace MudPlay.Game.Map;
 // commands are alternatives that ALL depend on the same held item, so the
 // exit is impassable without it — MovementFilter routes around a
 // multi-action exit whose required item isn't in hand.
+//
+// Rolled marks a step whose room command passes through a `testskill`: the game
+// rolls against a stat before the reveal fires, so the command can be answered
+// and the exit still stay shut. The engines send such a step again when the
+// move after it bonks.
 public sealed record ExitAction(
     int StepNumber,
     IReadOnlyList<string> Commands,
     RoomKey? RemoteSourceRoom,
-    int RequiredItemId = 0);
+    int RequiredItemId = 0,
+    bool Rolled = false);

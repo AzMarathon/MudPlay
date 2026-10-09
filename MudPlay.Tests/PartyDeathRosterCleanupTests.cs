@@ -86,6 +86,22 @@ public sealed class PartyDeathRosterCleanupTests
         Assert.Contains("uninvite Raijin\r", h.Uninvited);
     }
 
+    // The Stock engine's room line for a player's death is "<Name> is dead.". It
+    // records the death the same way; with no invited row left behind (Stock takes
+    // the dead member off the list) nothing is sent.
+    [Fact]
+    public void StockDeathLine_RecordsTheDeath_AndUninvitesOnlyAnInvitedRow()
+    {
+        using Harness h = new();
+        PartyMember m = h.Add("Raijin");
+
+        h.Feed("Raijin is dead.");
+        Assert.Empty(h.Uninvited);                 // no invited row: nothing to clear
+
+        m.IsInvited = true;                        // a realm that keeps the slot
+        Assert.Contains("uninvite Raijin\r", h.Uninvited);
+    }
+
     [Fact]
     public void DefersUntilCombatClears()
     {

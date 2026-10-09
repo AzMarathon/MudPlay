@@ -60,6 +60,21 @@ public sealed partial class WirePromptScanner
     // StatlineReconciler decides what a run of these means.
     public event Action<string>? PromptShapeUnmatched;
 
+    // The Stock engine's own prompt once the character is out of the game. The
+    // engine prints it after every way out of the realm, and unlike the "character
+    // has been saved" text before it a board can't reword it (GAME_MECHANICS "Realm
+    // exit / logoff sequence").
+    private const string RealmLeftPrompt = "[MAJORMUD]:";
+
+    // Fired once for each RealmLeftPrompt that stands where a prompt goes: at the
+    // start of a wire row, and not inside text the active statline pattern took for
+    // its own (a custom statline may carry the same words).
+    public event Action? RealmLeftPromptObserved;
+
+    // Buffer offset the next search for RealmLeftPrompt starts from, so one prompt
+    // left sitting in the carryover is reported once.
+    private int _realmLeftScanFrom;
+
     // Buffer offset just past the last statline-shaped text reported unmatched.
     // Unmatched text isn't consumed (it may be the head of a prompt the active
     // pattern completes on the next read), so this keeps it from re-firing.
@@ -146,6 +161,7 @@ public sealed partial class WirePromptScanner
         int lastEnd = 0;
         int previousAcceptedEnd = -1;
         bool activeMatched = false;
+        List<(int Start, int End)>? statlineSpans = null;
         foreach (Match m in _statusLine.Matches(text))
         {
             if (!IsPromptBoundary(text, m.Index, previousAcceptedEnd)) continue;
@@ -153,6 +169,7 @@ public sealed partial class WirePromptScanner
             // (a custom template without %h) — that's no mismatch to correct,
             // just nothing to observe.
             activeMatched = true;
+            (statlineSpans ??= new()).Add((m.Index, m.Index + m.Length));
             if (!int.TryParse(m.Groups["hp"].Value, out int hp)) continue;
 
             string typeRaw = m.Groups["type"].Value;
@@ -186,6 +203,8 @@ public sealed partial class WirePromptScanner
         }
 
         if (activeMatched) _matchedSinceSend = true;
+
+        ScanForRealmLeftPrompt(text, statlineSpans);
 
         // Mismatch detection: the active pattern matched nothing here, yet
         // statline-shaped text sits where the prompt goes — the start of a
@@ -235,6 +254,24 @@ public sealed partial class WirePromptScanner
         }
     }
 
+    private void ScanForRealmLeftPrompt(string text, List<(int Start, int End)>? statlineSpans)
+    {
+        int from = Math.Min(_realmLeftScanFrom, text.Length);
+        int at;
+        while ((at = text.IndexOf(RealmLeftPrompt, from, StringComparison.Ordinal)) >= 0)
+        {
+            from = at + RealmLeftPrompt.Length;
+            bool insideStatline = false;
+            if (statlineSpans is not null)
+                foreach ((int start, int end) in statlineSpans)
+                    if (at >= start && at < end) { insideStatline = true; break; }
+            if (insideStatline || !IsPromptBoundary(text, at, previousAcceptedEnd: -1)) continue;
+            RealmLeftPromptObserved?.Invoke();
+        }
+        // Keep the tail that could still be the head of the prompt split across reads.
+        _realmLeftScanFrom = Math.Max(from, text.Length - (RealmLeftPrompt.Length - 1));
+    }
+
     private void MarkPromptBoundary()
     {
         int offset = _buffer.Length;
@@ -274,6 +311,7 @@ public sealed partial class WirePromptScanner
         if (count <= 0) return;
         _buffer.Remove(0, count);
         _unmatchedScanFrom = Math.Max(0, _unmatchedScanFrom - count);
+        _realmLeftScanFrom = Math.Max(0, _realmLeftScanFrom - count);
         _tailReportedFrom = _tailReportedFrom >= count ? _tailReportedFrom - count : -1;
 
         int write = 0;
@@ -322,6 +360,7 @@ public sealed partial class WirePromptScanner
         _promptBoundaries.Clear();
         _promptBoundaries.Add(0);
         _unmatchedScanFrom = 0;
+        _realmLeftScanFrom = 0;
         _matchedSinceSend = false;
         _tailReportedFrom = -1;
         _state = StripState.Normal;

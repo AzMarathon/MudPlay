@@ -349,6 +349,128 @@ public sealed class CombatManagerTests
         Assert.Equal("a giant rat", h.LastSent);
     }
 
+    // The swing is re-sent until the game answers it with *Combat Engaged*. After
+    // that the game repeats it each round by itself, and a fumble line (some other
+    // command's, or the round's own) must not start the attack over.
+    [Fact]
+    public void OnActionFailed_OnceEngaged_DoesNotResendTheAttack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        Assert.Single(h.Sent);
+
+        Assert.True(h.Combat.OnActionFailed());      // not engaged yet: re-sent
+        Assert.True(h.Combat.OnActionFailed());      // and again, for as long as it fumbles
+        Assert.Equal(3, h.Sent.Count);
+
+        h.Feed("*Combat Engaged*");                  // it went through
+
+        Assert.False(h.Combat.OnActionFailed());     // nothing re-sent: the swing isn't owed
+        Assert.Equal(3, h.Sent.Count);
+        Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
+        Assert.False(h.Combat.AttackAlreadyEngaged("cast bless"));
+    }
+
+    // The whole decision a fumble line goes through, with the send gate the engines
+    // share standing in for the last client command and its replay.
+    private static (EngineSendGate Gate, Action<byte[]> Send) GateOver(Harness h)
+    {
+        EngineSendGate gate = new();
+        return (gate, gate.WrapEngineSender(h.Sent.Add));
+    }
+
+    // Engaged weapon fight, and the command the fumble ate was a heal: the heal goes
+    // out again and no attack does. Only the attack is held back once engaged.
+    [Fact]
+    public void HandleFumble_EngagedFight_ReplaysAFumbledHeal_AndSendsNoAttack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        (EngineSendGate gate, Action<byte[]> send) = GateOver(h);
+        send(Encoding.Latin1.GetBytes("mihe\r"));               // a between-round heal
+        int before = h.Sent.Count;
+
+        h.Combat.HandleFumble(gate.LastClientCommandText, gate.ReplayLastClientCommand);
+
+        Assert.Equal(before + 1, h.Sent.Count);
+        Assert.Equal("mihe", h.LastSent);
+        Assert.Equal(1, h.Sent.Count(b => Encoding.Latin1.GetString(b) == "a giant rat\r"));
+    }
+
+    // Engaged, and the last thing the client sent IS the swing: nothing goes out,
+    // from the combat engine or from the gate's replay.
+    [Fact]
+    public void HandleFumble_EngagedFight_LastCommandIsTheSwing_SendsNothing()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        (EngineSendGate gate, Action<byte[]> send) = GateOver(h);
+        h.Feed("Also here: giant rat.");
+        send(Encoding.Latin1.GetBytes("a giant rat\r"));        // the gate saw the swing go out
+        h.Feed("*Combat Engaged*");
+        int before = h.Sent.Count;
+
+        h.Combat.HandleFumble(gate.LastClientCommandText, gate.ReplayLastClientCommand);
+
+        Assert.Equal(before, h.Sent.Count);
+    }
+
+    // Not engaged yet: the swing itself is re-sent, once, and the gate's replay is
+    // not asked for on top of it.
+    [Fact]
+    public void HandleFumble_NotEngaged_ResendsTheSwing_AndSkipsTheReplay()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        int replays = 0;
+
+        h.Combat.HandleFumble("mihe", () => replays++);
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("a giant rat", h.LastSent);
+        Assert.Equal(0, replays);
+    }
+
+    // No fight at all: whatever the client sent last is re-fired, as it always was.
+    [Fact]
+    public void HandleFumble_NoFight_ReplaysTheLastClientCommand()
+    {
+        using Harness h = new();
+        int replays = 0;
+
+        h.Combat.HandleFumble("use waterskin", () => replays++);
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(1, replays);
+    }
+
+    // *Combat Off* ends the engagement, and so does a fresh attack going out: each
+    // attack is unanswered until its own Engaged line.
+    [Fact]
+    public void Engagement_EndsOnCombatOff_AndOnAFreshAttack()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        h.Feed("Also here: giant rat.");
+        h.Feed("*Combat Engaged*");
+        Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
+        Assert.True(h.Combat.AttackAlreadyEngaged("A Giant Rat"));
+
+        h.Feed("*Combat Off*");
+        Assert.False(h.Combat.AttackAlreadyEngaged("a giant rat"));
+
+        h.Feed("*Combat Engaged*");
+        Assert.True(h.Combat.AttackAlreadyEngaged("a giant rat"));
+        h.Combat.NoteUnattributedDeath();
+        h.Feed("Also here: giant rat.");             // a fresh rat: a fresh attack goes out
+        Assert.Equal("a giant rat", h.LastSent);
+        Assert.False(h.Combat.AttackAlreadyEngaged("a giant rat"));
+    }
+
     [Fact]
     public void OnActionFailed_NoOp_WhenNoTarget()
     {
@@ -814,6 +936,52 @@ public sealed class CombatManagerTests
 
         Assert.Equal("attack giant rat", h.LastSent);
     }
+
+    // `ki` was once the recommended short form of kick and the game doesn't take
+    // it. The command still goes out as set; the log says why nothing happens,
+    // once, not at every swing.
+    [Fact]
+    public void AttackCommandKi_SentAsSet_AndWarnedOnce()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackCommand = "ki";
+        h.AddMonster(1, "giant rat", killable: true);
+
+        static bool IsKiWarning(LogEntry e) =>
+            e.Severity == LogSeverity.Warn && e.Message.Contains("`ki`") && e.Message.Contains("`kic`");
+        int KiSwings() => h.Sent.Count(b => Encoding.Latin1.GetString(b) == "ki giant rat\r");
+
+        // Several swings in one connection: each kill is followed by a fresh rat.
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("ki giant rat", h.LastSent);
+        h.Combat.NoteUnattributedDeath();
+        h.Feed("Also here: giant rat.");
+        h.Combat.NoteUnattributedDeath();
+        h.Feed("Also here: giant rat.");
+        Assert.True(KiSwings() >= 2, $"expected repeated swings, saw {KiSwings()}");
+        Assert.Equal(1, h.Log.Snapshot().Count(IsKiWarning));
+
+        // A new connection says it again, once.
+        h.Combat.OnDisconnected();
+        int before = KiSwings();
+        h.Feed("Also here: giant rat.");
+        Assert.True(KiSwings() > before);
+        Assert.Equal(2, h.Log.Snapshot().Count(IsKiWarning));
+    }
+
+    [Theory]
+    [InlineData("ki", true)]
+    [InlineData("KI", true)]
+    [InlineData("ki giant rat", true)]
+    [InlineData("kic", false)]
+    [InlineData("kick", false)]
+    [InlineData("k", false)]
+    [InlineData("kill", false)]
+    [InlineData("a", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void MartialArtsCommand_KnowsTheKickLeadTheGameDoesNotTake(string? command, bool dead) =>
+        Assert.Equal(dead, MartialArtsCommand.IsDeadKickLead(command));
 
     [Fact]
     public void BlankAttackCommand_DefaultsToLetterA()
@@ -2523,7 +2691,8 @@ public sealed class CombatManagerTests
     [Theory]
     [InlineData("pu", true)]
     [InlineData("PUNCH", true)]
-    [InlineData("ki", true)]
+    [InlineData("ki", false)]        // the game takes kick from `kic`; `ki` is no command
+    [InlineData("kic", true)]
     [InlineData("kick", true)]
     [InlineData("ju", true)]
     [InlineData("jumpk", true)]

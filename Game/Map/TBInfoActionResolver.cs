@@ -62,15 +62,16 @@ public static class TBInfoActionResolver
     // One room-CMD remoteaction that reveals a hidden exit: the keyword the player
     // types, the room whose exit it opens, and the direction index of that exit
     // (0..9 = N,S,E,W,NE,NW,SE,SW,U,D — the RemoteAction arg order the game uses).
-    public readonly record struct RemoteActionExit(string Keyword, int RoomNumber, int DirectionIndex);
+    // Rolled: a `testskill` stands between the keyword and the remoteaction.
+    public readonly record struct RemoteActionExit(string Keyword, int RoomNumber, int DirectionIndex, bool Rolled = false);
 
     // Yields each `<keyword>:…:remoteaction <room> <msg> <var> <dir>` line in a
     // room's CMD chain as a RemoteActionExit. Unlike EnumerateRemoteActionKeywords
     // (tooltip-only — keyword alone), this carries the room + direction the action
     // reveals so the graph build can promote that hidden exit into a routable,
-    // satisfiable action. A middle `testskill` is ignored here: the walker just
-    // issues the keyword and the reveal follows (a zero-difficulty check never
-    // fails; a real one is a separate concern the dispatch would surface).
+    // satisfiable action. A `testskill` ahead of the remoteaction doesn't change
+    // what is typed, but its roll can miss (on Stock even at difficulty 0), so it
+    // is reported as Rolled for the engines to retry on.
     public static IEnumerable<RemoteActionExit> EnumerateRemoteActions(TBInfoStore store, int roomCmd)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -90,11 +91,13 @@ public static class TBInfoActionResolver
             string keyword = parts[0];
             if (string.IsNullOrWhiteSpace(keyword)) continue;
 
+            bool rolled = false;
             for (int i = 1; i < parts.Length; i++)
             {
+                if (parts[i].StartsWith("testskill", StringComparison.OrdinalIgnoreCase)) rolled = true;
                 if (!parts[i].StartsWith("remoteaction", StringComparison.OrdinalIgnoreCase)) continue;
                 if (TryParseRemoteAction(parts[i], out int room, out int dir) && room > 0 && dir is >= 0 and <= 9)
-                    yield return new RemoteActionExit(keyword, room, dir);
+                    yield return new RemoteActionExit(keyword, room, dir, rolled);
                 break;
             }
         }

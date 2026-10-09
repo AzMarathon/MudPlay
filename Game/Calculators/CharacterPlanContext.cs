@@ -23,9 +23,10 @@ public readonly record struct CharacterPlanContext(
 {
     // The baseline may be acted on by itself: plan rows rewritten against it,
     // rows pruned as trained, keystrokes worked out from it. Every marked stat
-    // has to be accounted for, and on Stock none may be marked at all: what a
-    // Stock cast adds to a stat is not settled (GAME_MECHANICS "How `stat` marks
-    // a modified stat"), and Stock never trains with a stat altered anyway.
+    // has to be accounted for, and on Stock none may be marked at all: a Stock
+    // cast can add a per-cast roll the screen doesn't state (GAME_MECHANICS "How
+    // `stat` marks a modified stat"), and Stock refuses `train stats` with a stat
+    // altered anyway.
     public bool BaselineTrusted =>
         HasCharacter
         && Reading.State == StatReadingState.Accounted
