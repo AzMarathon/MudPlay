@@ -1,12 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.24**
-> - A `;` that starts a word is sent to the game as typed (`;o`, `/name @do ;o`, a `;)` in chat) instead of splitting the line; `n;s` still sends two commands
-> - Typing `;;` before a word keeps one `;` for the game: `;;time` sends `;time`
-> - Sending `;o` drops the connection and reconnects; sending `=x` drops it and stays off
-> - `@hangup` and `@relog` are obeyed with Disable Hangups on
-> - Events and the pre-/post-rest commands split their commands by the same rule as macros, aliases and triggers
+> **Version 3.159.25**
+> - Settings → Party: "Help leader open doors" says it only works while the leader bashes (a leader picking a lock shows the room nothing)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
