@@ -1,5 +1,11 @@
 # Version history
 
+## 3.153.16
+
+- Quests: a quest with two level gates in one step now needs the higher one, as the game does
+- Paradigm: Meditate is announced to a Mystic at level 27, not 23
+- bug reports addressed: paradigm-20260925-123004
+
 ## 3.153.15
 
 - Fixed: a Mystic attacking with punch, kick or jumpkick walked past monsters that need hit magic (and didn't fight back when they attacked): the client judged the strike by the weapon in hand, which a strike doesn't use
