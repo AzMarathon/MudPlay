@@ -87,13 +87,15 @@ public sealed class GhSweepManager : IDisposable
     private static readonly TimeSpan InventoryVerificationTimeout = TimeSpan.FromSeconds(3);
 
     // A dispatched `get` can come back as a failure this manager must act on
-    // rather than retry forever. Three shapes, all confirmed live (GAME_MECHANICS.md):
+    // rather than retry forever. Four shapes (GAME_MECHANICS "`get` failure responses"):
     //   "You don't see <echo> here."  — the item is genuinely gone (recon's snapshot
     //       went stale, or another player took it); <echo> is whatever followed `get`.
     //   "Syntax: GET [Amount] [Currency]" — the game misparsed the item name as a
     //       currency get; retrying the same name can't help.
     //   "You cannot carry that much!" — a capacity refusal; the item is still there,
     //       our tracked working-weight drifted low, so resync (not strand).
+    //   "A strange force stops you from getting this item." — the game won't let
+    //       this character take it; permanent for the item, so it is left alone.
     private static readonly Regex GetNotHereRegex = new(
         @"^\s*You don't see (?<echo>.+?) here\.\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -110,6 +112,9 @@ public sealed class GhSweepManager : IDisposable
     private static readonly Regex GetCannotCarryRegex = new(
         @"^\s*You cannot carry that much!\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex GetStrangeForceRegex = new(
+        @"^\s*A strange force stops you from getting this item\.\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     // The DROP counterpart of the currency misparse — note the BRACES, where the
     // get form uses brackets. Names no item, exactly like the get form, but with
@@ -1985,6 +1990,20 @@ public sealed class GhSweepManager : IDisposable
                     : gets.Count == 1 ? gets[0] : null;
             if (failed is not null)
                 StrandFailedGet(failed, "game misparsed the get as a currency command");
+            return;
+        }
+        // The game's own refusal names no item either, and is attributed the same
+        // way. It is permanent for the item (user, 2026-10-09): asking again every
+        // lap would only be refused again.
+        if (GetStrangeForceRegex.IsMatch(line.Text))
+        {
+            PendingSortMove? refused =
+                _lastQueuedCommand is { Verb: "get", Move: { } sent } && gets.Contains(sent)
+                    ? sent
+                    : gets.Count == 1 ? gets[0] : null;
+            if (refused is not null)
+                StrandFailedGet(refused, "the game won't let it be picked up (a strange force)",
+                    GhLeftReason.RefusedByGame);
         }
     }
 
@@ -2096,11 +2115,12 @@ public sealed class GhSweepManager : IDisposable
     // Remove a failed get from the queue (so it stops being retried and no longer
     // blocks completion), record it under LeftInPlace, and advance the dispatch
     // exactly as a real confirmation would.
-    private void StrandFailedGet(PendingSortMove move, string reason)
+    private void StrandFailedGet(PendingSortMove move, string reason,
+        GhLeftReason why = GhLeftReason.GoneBySortTime)
     {
         _pending.Remove(move);
         _outstandingDispatch.Remove(move);
-        _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, GhLeftReason.GoneBySortTime));
+        _leftInPlace.Add(new GhSweepItemFound(move.From, move.ItemName, why));
         _log?.Info(LogCategory,
             $"get failed for {move.ItemName} at {move.From} — {reason}; not retrying");
         PhaseChanged?.Invoke();

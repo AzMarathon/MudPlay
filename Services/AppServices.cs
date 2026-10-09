@@ -1910,6 +1910,8 @@ public sealed class AppServices
     private IDisposable[]? _alignmentMovedSubs;
     private IDisposable? _equipWearFailSub;
     private IDisposable? _equipWieldFailSub;
+    private IDisposable? _equipCannotBeWornSub;
+    private IDisposable[]? _wornPieceRemovedSubs;
 
     // Auto-equip trigger coordinator. Subscribes to
     // Game.PlayerState's position / combat signals and, when the
@@ -2304,6 +2306,11 @@ public sealed class AppServices
     // <dir> --" line is the only move signal that keeps the map located instead
     // of drifting to Lost. Subscribes to the router for app lifetime.
     public Game.Map.FollowMoveObserver FollowMove { get; private set; } = null!;
+
+    // The character's `set follow` mode, read off the `pro` sheet and the command's
+    // replies. In Blind mode a follow move prints no room for FollowMove's
+    // prediction to be confirmed against.
+    public Game.FollowModeTracker FollowModes { get; private set; } = null!;
 
     // Recognises a manually-typed spell cast-code on the wire and arms the
     // combat engine's between-round-cast resume, so a hand-cast that breaks
@@ -3392,6 +3399,7 @@ public sealed class AppServices
         // predicate + connection check + disconnect callback are wired by
         // MainWindowViewModel (they depend on VM-level connection state).
         CleanupLogout = new Game.CleanupLogoutOrchestrator(Cleanup, Router, Log);
+        PromptScanner.RealmLeftPromptObserved += () => CleanupLogout.NoteRealmLeftPrompt();
 
         // Bridge: load persisted panel layouts on profile load; snapshot back
         // into the profile DTO just before serialization on save.
@@ -3863,6 +3871,8 @@ public sealed class AppServices
         // NoteMoveSent the tracker keeps its old anchor, mismatches every new room
         // and falls to Lost within a few rooms.
         FollowMove = new Game.Map.FollowMoveObserver(Router, RoomTracker, Log);
+        FollowModes = new Game.FollowModeTracker(Router, Log);
+        Profile.ProfileLoaded += _ => FollowModes.Reset();
 
         // HiddenExitRevealManager — walker's sea-retry loop for
         // SearchableHidden exits. Subscribes to RoomTracker.StateChanged
@@ -6289,6 +6299,17 @@ public sealed class AppServices
                 LearnFromEvilOnlyRefusal(Equipment.NoteWeaponRefused());
                 AlignmentCheck.RequestVerify();
             });
+        // A piece that can't be worn at all blocks its slot and teaches nothing about
+        // alignment: no learning, no alignment check.
+        _equipCannotBeWornSub = Router.Subscribe(
+            Services.Patterns.KnownPatterns.UserEquipCannotBeWorn,
+            m => Equipment.NoteCannotBeWorn(m.Groups.Count > 0 ? m.Groups[0] : null));
+        // A "no more room" block lasts only while every worn slot is taken.
+        _wornPieceRemovedSubs = new[]
+        {
+            Router.Subscribe(Services.Patterns.KnownPatterns.UserRemoved, _ => Equipment.NoteWornPieceRemoved()),
+            Router.Subscribe(Services.Patterns.KnownPatterns.AlignmentGearRemoved, _ => Equipment.NoteWornPieceRemoved()),
+        };
 
         // Hold auto-rest while a gear-set swap streams its paced wear/rem commands —
         // each stands the character up, and without this the rest engine re-sends
@@ -6429,10 +6450,11 @@ public sealed class AppServices
         // re-fired here (ReplayLastClientCommand skips bare moves): a fumbled step already
         // reverts + re-sends via the walker, so a second send would desync position. A
         // command the USER typed is never re-fired — it never flowed through the gate.
+        // An attack is re-sent only until `*Combat Engaged*` answers it: once the fight
+        // is under way a fumble line starts no fresh attack, weapon or spell (user,
+        // 2026-10-09). Everything else is re-fired as before.
         Conditions.ActionFailed += _ =>
-        {
-            if (!Combat.OnActionFailed()) EngineGate.ReplayLastClientCommand();
-        };
+            Combat.HandleFumble(EngineGate.LastClientCommandText, EngineGate.ReplayLastClientCommand);
 
         // CashManager. Subscribes to cash-on-ground
         // / cash-picked-up / cash-dropped patterns and dispatches
@@ -6993,6 +7015,8 @@ public sealed class AppServices
             // respawn-pending), so it can key its owed search and clear a search
             // deferred in the room we died in (report paradigm-20260820-090736).
             AutoSearch.OnRoomChanged(t.NewRoom?.Key);
+            // A buy queue is for the shop it was read in; a death leaves that room too.
+            AutoBuy.OnRoomChanged();
             if (t.NewRoom is null) return;   // the other engines have nothing to do on death
             AutoGetItems.OnRoomChanged();
             GroundItems.OnRoomChanged();

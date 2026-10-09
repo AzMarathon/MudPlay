@@ -324,6 +324,41 @@ public sealed class CombatManagerSpellsTests
         Assert.Equal("blast", h.LastSent);
     }
 
+    // The fumble re-fire must not repeat an attack spell the game has engaged: a
+    // cast of the announced spell is this engine's own attack, with its target or
+    // bare (a room spell). Anything else isn't, and neither is the spell before its
+    // own *Combat Engaged* has come.
+    [Fact]
+    public void AttackAlreadyEngaged_KnowsTheAnnouncedAttackSpell()
+    {
+        using Harness h = new();
+        h.Settings.NormalAttackSpell = new CombatSpellSlot { SpellName = "nuke", MinEnemies = 1 };
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        Assert.Equal("nuke giant rat", h.LastSent);
+
+        Assert.False(h.Combat.AttackAlreadyEngaged("nuke giant rat"));   // announced, not answered yet
+
+        h.Feed("*Combat Engaged*");
+
+        Assert.True(h.Combat.AttackAlreadyEngaged("nuke giant rat"));
+        Assert.True(h.Combat.AttackAlreadyEngaged("NUKE giant rat"));
+        Assert.True(h.Combat.AttackAlreadyEngaged("nuke"));
+        Assert.False(h.Combat.AttackAlreadyEngaged("nuker giant rat"));  // another word
+        Assert.False(h.Combat.AttackAlreadyEngaged("mihe"));
+        Assert.False(h.Combat.AttackAlreadyEngaged(null));
+
+        // The decision as a whole: the cast is not replayed, a heal is.
+        int replays = 0;
+        h.Combat.HandleFumble("nuke giant rat", () => replays++);
+        Assert.Equal(0, replays);
+        h.Combat.HandleFumble("mihe", () => replays++);
+        Assert.Equal(1, replays);
+
+        h.Feed("*Combat Off*");
+        Assert.False(h.Combat.AttackAlreadyEngaged("nuke giant rat"));
+    }
+
     // Report paradigm-20260923-091205: engaged one mob single-target, then a 2nd mob
     // ARRIVES mid-fight (count crosses MinEnemies=2). The "already engaged" guard used to
     // return without re-deciding, so the room kept getting single-target pecks until the

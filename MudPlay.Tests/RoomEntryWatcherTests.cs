@@ -252,6 +252,21 @@ public sealed class RoomEntryWatcherTests
         Assert.DoesNotContain(h.Arrivals, a => a.Kind == EntityKind.Monster);
     }
 
+    // The Stock engine's wording of the same notice: "sneak in from", not "sneaking".
+    [Fact]
+    public void SneakNotice_StockWording_ClassifiedAsPlayer()
+    {
+        using Harness h = new();
+        string line = "You notice Gronx sneak in from the north.";
+        h.Feed(line, h.AttrsWithFg(line, index: 11));
+
+        Assert.Single(h.Arrivals);
+        Assert.Equal(EntityKind.Player, h.Arrivals[0].Kind);
+        Assert.Equal("Gronx", h.Arrivals[0].Name);
+        Assert.Equal("north", h.Arrivals[0].Direction);
+        Assert.Null(h.Observations[0].Entities[0].MonsterNumber);
+    }
+
     // ----- direction tolerance -----------------------------------------
 
     [Theory]

@@ -6,18 +6,27 @@ namespace MudPlay.Game.Combat;
 // lines and the magical-weapon requirement").
 public static class MartialArtsCommand
 {
-    // The strikes' command words. Players usually type them short (`pu`, `ki`,
-    // `ju`), so any lead of two letters or more counts.
-    private static readonly string[] Strikes = { "punch", "kick", "jumpkick" };
-    private const int ShortestForm = 2;
+    // The strikes' command words and the shortest lead the game takes for each, on
+    // both realms: `pu`, `kic`, `ju`. `ki` is no command (GAME_MECHANICS
+    // "Martial-arts strikes are class-innate").
+    private static readonly (string Word, int ShortestForm)[] Strikes =
+    {
+        ("punch", 2), ("kick", 3), ("jumpkick", 2),
+    };
 
     public static bool IsStrike(string? attackCommand)
     {
         if (string.IsNullOrWhiteSpace(attackCommand)) return false;
         string word = attackCommand.Trim().Split(' ', 2)[0];
-        if (word.Length < ShortestForm) return false;
-        foreach (string strike in Strikes)
-            if (strike.StartsWith(word, StringComparison.OrdinalIgnoreCase)) return true;
+        foreach ((string strike, int shortest) in Strikes)
+            if (word.Length >= shortest && strike.StartsWith(word, StringComparison.OrdinalIgnoreCase))
+                return true;
         return false;
     }
+
+    // `ki` looks like kick typed short and was once recommended for it, but the
+    // game takes kick from `kic`: sent as an attack, `ki <monster>` does nothing.
+    public static bool IsDeadKickLead(string? attackCommand) =>
+        !string.IsNullOrWhiteSpace(attackCommand)
+        && attackCommand.Trim().Split(' ', 2)[0].Equals("ki", StringComparison.OrdinalIgnoreCase);
 }

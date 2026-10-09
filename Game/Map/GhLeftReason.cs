@@ -8,6 +8,9 @@ public enum GhLeftReason
     NoMatchingRoom,
     // A `get` for it failed because it was gone by sort time (decayed / taken).
     GoneBySortTime,
+    // The game refused the `get` outright ("A strange force stops you from getting
+    // this item."). It will refuse it every time, so the item stays where it lies.
+    RefusedByGame,
     // Too heavy to ever carry within the working encumbrance budget, so no
     // delivery could free enough room to move it.
     TooHeavy,

@@ -188,6 +188,24 @@ internal static class SpecialExitDispatch
         return SpecialExitSend.NotHandled;
     }
 
+    // How many times a rolled reveal is sent again after the move behind it bonked,
+    // before the step is handed to the engine's ordinary blocked-move handling. The
+    // same patience a winch pull gets, for the same reason: each try is a stat roll.
+    public const int RolledRevealRetryCap = 10;
+
+    // The command of a same-room reveal that rolls (ExitAction.Rolled), when this
+    // exit is one TrySendSynchronous opens by sending it; null for every other exit.
+    // A winch is pulled, and pulled again, by WinchManager.
+    public static string? RolledRevealCommand(RoomExit exit)
+    {
+        if (exit.Hint != RoomExitHint.MultiActionHidden || exit.MultiAction is not { } data) return null;
+        if (data.HasRemoteActions || data.Actions.Count < data.RequiredActionCount) return null;
+        if (WinchManager.IsWinchExit(exit)) return null;
+        foreach (ExitAction action in data.Actions)
+            if (action.Rolled && action.Commands.Count > 0) return action.Commands[0];
+        return null;
+    }
+
     private static string? TeleportKeyword(
         RoomExit exit, Room? sourceRoom, Func<RoomKey, RoomKey, string?>? teleportResolver)
         => exit.TextCommands is { Count: > 0 } teleCmds

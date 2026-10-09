@@ -329,6 +329,13 @@ public static class BugReportBuilder
         Kv(sb, "In party", party.IsInParty.ToString());
         Kv(sb, "Self is leader", party.SelfIsLeader.ToString());
         Kv(sb, "Leader", party.LeaderName ?? "(none)");
+        // Blind means a follow move prints no room for the map to confirm against.
+        Kv(sb, "Follow mode (set follow)", svc.FollowModes.Mode switch
+        {
+            Game.FollowMode.Blind => "Blind",
+            Game.FollowMode.Normal => "Normal",
+            _ => "(not seen — no `pro` sheet or `set follow` reply this session)",
+        });
         // What puts `par` on the wire. A "member's HP was stale / the heal came
         // late" report turns on whether anything was polling at all.
         Kv(sb, "par is sent", svc.PartyPoller.ParTriggerSummary);
@@ -628,6 +635,9 @@ public static class BugReportBuilder
         // recast-interval block left this stuck, and the character never attacked
         // again for the rest of the fight).
         Kv(sb, "Combat off (stuck?)", svc.Combat.CombatOff.ToString());
+        // While true a confusion fumble re-sends no attack: the game answered the
+        // last one with *Combat Engaged* and is repeating it itself.
+        Kv(sb, "Engaged since last attack", svc.Combat.EngagedSinceLastAttack.ToString());
         // True when Auto-Combat is off but a room hostile is blocking a needed rest
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
@@ -1445,6 +1455,11 @@ public static class BugReportBuilder
                 ? $"{running.Name} — step {loop.CurrentIndex + 1}/{loop.StepCount}"
                 : "(none)");
         Kv(sb, "Loop holding for a command's replies", loop.AwaitingCommandReplies ? "yes" : "no");
+        // A room command that opens an exit on a stat roll is sent again when the
+        // move behind it bonks; a count stuck at the cap is a reveal that never took.
+        Kv(sb, "Rolled-reveal re-sends on the step in flight (walk / loop)",
+            $"{svc.Walker.RolledRevealRetries} / {loop.RolledRevealRetries} of "
+            + Game.Map.SpecialExitDispatch.RolledRevealRetryCap);
         if (loop.CurrentLoop is { } curLoop)
         {
             Kv(sb, "Loop approach target",

@@ -1120,6 +1120,14 @@ public partial class MainWindowViewModel : ObservableObject
         // knows to adjust the set instead of the engine silently skipping it.
         AppServices.Current.Equipment.SlotBlockedAnnounced += OnEquipSlotBlocked;
 
+        // `set follow blind` is on: say so once in the terminal. Posted, since it is
+        // raised from inside the message pump.
+        AppServices.Current.FollowModes.BlindNoticed += () =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalStatus(
+                "[Follow mode is Blind: following prints no room, so the map can't track you as a "
+                + "follower — `set follow normal` turns the room displays back on]",
+                TerminalStatusKind.Notice));
+
         // Room-display + movement-refusal parsers feeding RoomTracker.
         // Same per-session LineExtractor binding shape as the who/look
         // parsers above.

@@ -1,9 +1,29 @@
 # Version history
 
-## 3.159.2
+## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
 - The program log says what the realm takes when a hang-up goes out, and the bug report lists it; when the client hangs up is unchanged
+
+## 3.159.18
+
+- Auto-light relights a spare when a Stock lamp, lantern, moon-lamp, light ball or other light burns out, not only a torch
+- A player seen sneaking in is read on Stock too (`You notice <name> sneak in from the <dir>.`)
+- A party member's death is read from Stock's `<name> is dead.` as well as `<name> has died.`
+- `who` on Stock: a row ending in `EDITED` no longer carries the word into the title or gang
+- A martial-arts strike is told by the game's own short forms: kick from `kic`, not `ki` (a saved `ki` draws a warning in the log)
+- A typed `sm` no longer counts as taking the round's attack (smash starts at `sma`), and `aa <direction>` is a door bash like `bash <direction>`
+- Auto-buy moves on to the next ware when a buy is refused as out of stock, not sold here or too much to carry, and drops its queue on leaving the shop
+- Cleanup log-off: an exit the game calls off waits for the room to stay safe for a round and exits again, up to three times, instead of dropping the connection mid-fight
+- A stunned follower left behind on Stock asks the leader to come back
+- Four more fixed Stock game replies are kept out of the unrecognized-lines list
+- Cleanup log-off on Stock also finishes on the game's own `[MAJORMUD]:` prompt, not only the board's "character has been saved" message
+- Roomba leaves an item alone once the game refuses it with `A strange force stops you from getting this item.`
+- A gear-set piece the game says can't be worn (`<item> may not be worn!`, `You have no more room to wear that item!`) blocks its slot without being read as an alignment change
+- A room command that opens a hidden exit on a stat roll (`clear rubble`) is sent again when the step after it finds the way still shut
+- Confusion: a fumbled attack is re-sent only until `*Combat Engaged*`; a fumble in a fight under way no longer starts the attack over
+- `set follow blind` is noticed (from `pro` or the command's reply) with a one-time warning that the map can't track a follower in that mode; the mode is in the bug report
+- `who` in Stock's technical style (`set style technical`) is read like the usual list
 
 ## 3.159.1
 

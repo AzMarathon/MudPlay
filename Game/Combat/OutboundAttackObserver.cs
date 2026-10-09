@@ -8,17 +8,20 @@ namespace MudPlay.Game.Combat;
 // taking this round's attack, so the engine must not re-send its own auto-attack until
 // the next round.
 //
-// The recognised verbs are the attack-command prefixes MajorMUD honours: "a" / "at" /
-// "att" (attack), "aa" (alternate attack), "bash" / "sm" / "sma" / "smash", and "bs"
-// (backstab). Only the first whitespace-delimited token is the verb; the remainder is
-// the target ("a giant rat").
+// The recognised verbs are attack-command prefixes MajorMUD honours: "a" / "at" /
+// "att" (attack), "aa" and "bash" (both the bash command), "sma" / "smash", and "bs"
+// (backstab). "sm" is not among them: smash starts at "sma", and the game takes "sm"
+// for no command at all (GAME_MECHANICS "Command words and abbreviations"). Only the
+// first whitespace-delimited token is the verb; the remainder is the target ("a giant
+// rat").
 //
-// "bash <direction>" is the exception: MajorMUD reads a direction after `bash` as the
-// door on that exit, not a monster, so it's no attack at all. Counting it as one made
-// every door the walker bashed open hold the engine's attack for the round, and a buff
-// cast in the next room then left the fight un-resumed (report
-// paradigm-20261003-194358). The game only takes the door reading when the room has
-// that exit; a monster targeted by a bare direction letter is rare enough to give up.
+// "bash <direction>" (or "aa <direction>", the same command) is the exception:
+// MajorMUD reads a direction after `bash` as the door on that exit, not a monster, so
+// it's no attack at all. Counting it as one made every door the walker bashed open
+// hold the engine's attack for the round, and a buff cast in the next room then left
+// the fight un-resumed (report paradigm-20261003-194358). The game only takes the door
+// reading when the room has that exit; a monster targeted by a bare direction letter
+// is rare enough to give up.
 //
 // Unlike casts, the combat engine's OWN physical attacks DO flow through this observer
 // (SendAttack rides the same wrapped SendUserInput path). So the observer can't tell a
@@ -34,7 +37,7 @@ public sealed class OutboundAttackObserver
 
     private static readonly HashSet<string> AttackVerbs = new(StringComparer.OrdinalIgnoreCase)
     {
-        "a", "at", "att", "aa", "bash", "smash", "sm", "sma", "bs",
+        "a", "at", "att", "aa", "bash", "smash", "sma", "bs",
     };
 
     private readonly Action<string, string?> _onAttackCommand;
@@ -64,6 +67,7 @@ public sealed class OutboundAttackObserver
     }
 
     private static bool IsDoorBash(string verb, string? target)
-        => verb.Equals("bash", StringComparison.OrdinalIgnoreCase)
+        => (verb.Equals("bash", StringComparison.OrdinalIgnoreCase)
+                || verb.Equals("aa", StringComparison.OrdinalIgnoreCase))
             && DirectionExtensions.TryFromToken(target, out _);
 }

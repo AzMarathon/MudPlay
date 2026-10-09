@@ -1512,6 +1512,90 @@ public sealed class EquipmentManagerTests
         Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
     }
 
+    // "<item> may not be worn!" names the piece: the slot of that name is blocked,
+    // whatever else is still unanswered ahead of it.
+    [Fact]
+    public void NoteCannotBeWorn_Named_BlocksThatItemsSlot()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "painted shield"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+
+        Assert.Equal("painted shield", mgr.NoteCannotBeWorn("painted shield"));
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+    }
+
+    // "You have no more room to wear that item!" names nothing and goes to the
+    // oldest armour attempt, never the weapon.
+    [Fact]
+    public void NoteCannotBeWorn_Unnamed_BlocksTheOldestArmourAttempt()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Weapon, "unholy blade"),
+            Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+
+        Assert.Equal("evil cuirass", mgr.NoteCannotBeWorn(null));
+
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Weapon));
+    }
+
+    // "No more room" is true only while every worn slot is taken: its block is
+    // lifted when a piece comes off. An item with no wear slot never gains one, so
+    // that block stays.
+    [Fact]
+    public void NoMoreRoomBlock_LiftsWhenAWornPieceComesOff_TheNoSlotBlockStays()
+    {
+        EquipmentSet set = SetWithId("s1",
+            Entry(EquipmentSlot.Head, "iron helm"),
+            Entry(EquipmentSlot.Torso, "painted shield"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+        mgr.NoteCannotBeWorn("painted shield");      // names the item: permanent
+        mgr.NoteCannotBeWorn(null);                  // no more room: the helm, for now
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+
+        // A refresh that finds both wearable lifts neither: both are the game's word.
+        mgr.RefreshBlocksForSet(set);
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+
+        mgr.NoteWornPieceRemoved();
+
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Head));
+        Assert.True(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
+    // A piece the user tried by hand isn't one of ours: nothing is blocked.
+    [Fact]
+    public void NoteCannotBeWorn_NamingSomethingWeDidNotSend_BlocksNothing()
+    {
+        EquipmentSet set = SetWithId("s1", Entry(EquipmentSlot.Torso, "evil cuirass"));
+        EquipmentManager mgr = BlockManager(
+            new EquipmentSettings { Sets = { set } }, InventorySnapshot.Empty,
+            restrictsEquip: _ => false);
+
+        mgr.ApplyBySetId("s1");
+
+        Assert.Null(mgr.NoteCannotBeWorn("torch"));
+        Assert.False(mgr.IsSlotBlocked("s1", EquipmentSlot.Torso));
+    }
+
     [Fact]
     public void NoteEquipSucceeded_DequeuesSoNextRefusalBlocksTheNextPiece()
     {

@@ -29,6 +29,11 @@ public sealed class EngineReplyLinesTests
     [InlineData("Please be more specific.  You could have meant any of these:")]
     [InlineData("-- old gypsy woman")]
     [InlineData("-- old gypsy man")]
+    // Stock refusals and notices nothing reads.
+    [InlineData("You already have something lit!")]
+    [InlineData("This weapon feels heavy in your hands.")]
+    [InlineData("You are extremely quick and deadly with this weapon.")]
+    [InlineData("A concealed passage opens to the north.")]
     public void EngineReplies_Match(string line) => Assert.True(EngineReplyLines.Matches(line));
 
     [Theory]
