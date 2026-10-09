@@ -93,7 +93,7 @@ internal static partial class QuestTextFormatter
     //   (map/room) `command` (item note)
     // The Called-From location's rooms become clickable (map/room) links (all of
     // them, for a multi-room list); a player command is backtick-wrapped as the
-    // literal to type; a command-less step sourced from a monster's textblock is
+    // literal to type; a command-less step whose script a monster's death runs is
     // narrated "kill <monster> (<drop>)" and a bare item grant "obtain <item>",
     // matching how the seed guides read. Items the step needs / turns in trail as
     // a parenthetical note. Falls back to a bare "Step N" label when the crawl
@@ -122,22 +122,27 @@ internal static partial class QuestTextFormatter
 
         int monster = 0;
         bool monsterLoc = TryMonsterRef(s.Location, out monster);
-        bool isKill = monsterLoc && string.IsNullOrWhiteSpace(s.Command);
+        bool hasCommand = !string.IsNullOrWhiteSpace(s.Command);
+        IReadOnlyList<int> killTargets = hasCommand ? Array.Empty<int>() : KillTargets(gameData, s.Location);
 
-        // Room link(s): a monster-anchored step (a kill target, or an NPC the step
-        // asks) links that monster's placement room; a room-anchored step links its
-        // own Called-From room.
-        string rooms = monsterLoc ? MonsterRoomLinks(monster, monsterRooms) : RoomLinks(s.Location);
+        // Room link(s): a kill step links where its target stands, an ask step the NPC
+        // it asks, and a room-anchored step its own Called-From room. A step that hangs
+        // off an NPC with nothing to ask (a keyword the NPC shows by itself) has no room
+        // to send the player to.
+        string rooms = killTargets.Count > 0
+                ? string.Join(" ", killTargets.Select(m => MonsterRoomLinks(m, monsterRooms)).Where(l => l.Length > 0).Distinct())
+            : monsterLoc ? (hasCommand ? MonsterRoomLinks(monster, monsterRooms) : string.Empty)
+            : RoomLinks(s.Location);
         if (rooms.Length > 0) segments.Add(rooms);
 
-        if (!string.IsNullOrWhiteSpace(s.Command))
+        if (hasCommand)
         {
             segments.Add($"`{s.Command!.Trim()}`");
             if (granted.Length > 0) segments.Add($"(get {granted})");
         }
-        else if (isKill)
+        else if (killTargets.Count > 0)
         {
-            string name = MonsterName(gameData, monster);
+            string name = string.Join(" or ", killTargets.Select(m => MonsterName(gameData, m)).Distinct());
             segments.Add(granted.Length > 0 ? $"kill {name} ({granted})" : $"kill {name}");
         }
         else if (granted.Length > 0)
@@ -194,7 +199,7 @@ internal static partial class QuestTextFormatter
             : string.Join(" ", RoomRef().Matches(location)
                 .Select(m => string.Create(CultureInfo.InvariantCulture, $"({m.Groups[1].Value}/{m.Groups[2].Value})")));
 
-    // A kill step's room link(s): every room the quest places the target monster in,
+    // A kill or ask step's room link(s): every room the quest places the monster in,
     // as space-joined (map/room) tokens, drawn from the pre-built placement map so no
     // per-step room scan happens. Empty when the monster has no resolved placement —
     // the kill step then renders room-less rather than offering a dead link.
@@ -205,8 +210,23 @@ internal static partial class QuestTextFormatter
                 string.Create(CultureInfo.InvariantCulture, $"({k.Map}/{k.Room})")))
             : string.Empty;
 
-    // The step's monster anchor, if any: a "Monster #N" location. A command-less
-    // monster step is a kill (narrated "kill <monster> (<drop>)"); a monster step
+    // The monsters whose death runs the step's script: its Called-From names the spell
+    // at the end of their death-spell chain. Empty for any other step — a script that
+    // hangs off a monster itself is that NPC's dialogue, not its death (GAME_MECHANICS
+    // "Quest kill steps & monster placement").
+    private static IReadOnlyList<int> KillTargets(GameDataCache gameData, string? location)
+    {
+        if (string.IsNullOrWhiteSpace(location)) return Array.Empty<int>();
+        IReadOnlyDictionary<int, IReadOnlyList<int>> deaths = QuestDeathSpells.For(gameData);
+        List<int> targets = new();
+        foreach (Match m in SpellRef().Matches(location))
+            if (int.TryParse(m.Groups[1].Value, out int spell) && deaths.TryGetValue(spell, out IReadOnlyList<int>? monsters))
+                foreach (int id in monsters)
+                    if (!targets.Contains(id)) targets.Add(id);
+        return targets;
+    }
+
+    // The step's monster anchor, if any: a "Monster #N" location. A monster step
     // carrying an "ask <npc> ..." command is an NPC dialogue step re-anchored on that
     // NPC by QuestStepGraph so the guide can link its room.
     private static bool TryMonsterRef(string? location, out int number)
@@ -341,6 +361,10 @@ internal static partial class QuestTextFormatter
     // "Room 9/1259" inside a Called-From string — a location's room reference.
     [GeneratedRegex(@"Room\s+(\d+)/(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex RoomRef();
+
+    // "Spell #604" inside a Called-From string — a script a spell runs.
+    [GeneratedRegex(@"Spell\s+#(\d+)", RegexOptions.IgnoreCase)]
+    private static partial Regex SpellRef();
 
     // "Monster #39" inside a Called-From string — a monster-sourced chain.
     [GeneratedRegex(@"Monster\s+#(\d+)", RegexOptions.IgnoreCase)]

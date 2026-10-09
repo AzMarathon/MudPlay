@@ -72,19 +72,17 @@
                         <TextBlock Classes="Part" Text="Do"/>
                         <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Do}"/>
                     </Grid>
-                    <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasNeeds}">
-                        <TextBlock Classes="Part" Text="Needs"/>
-                        <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Needs}"/>
-                    </Grid>
-                    <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasGives}">
-                        <TextBlock Classes="Part" Text="Gives"/>
-                        <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Gives}"/>
-                    </Grid>
-                    <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasCheckedAfterwards}">
-                        <TextBlock Classes="Part" Text="Checked afterwards"
-                                   ToolTip.Tip="Conditions the line only reaches after it has changed the flag (or, on a line that leaves the flag alone, after it has started giving). They don't hold that back; they decide whether the rest of the line runs."/>
-                        <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding CheckedAfterwards}"/>
-                    </Grid>
+                    <!-- Conditions and gives, as runs in the order the line goes through them. -->
+                    <ItemsControl ItemsSource="{Binding Parts}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:QuestFlagStepRow+Part">
+                                <Grid ColumnDefinitions="118,*" Margin="0,0,0,5">
+                                    <TextBlock Classes="Part" Text="{Binding Label}" TextWrapping="Wrap"/>
+                                    <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Text}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                     <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasAlso}">
                         <TextBlock Classes="Part" Text="Also in the script"
                                    ToolTip.Tip="Steps shown exactly as the game data writes them: what they do isn't established, so they aren't put into words."/>
@@ -158,7 +156,7 @@
                     </Expander>
 
                     <TextBlock Classes="Note"
-                               Text="Steps are ordered by the value the flag must hold going in, then by the value the step leaves; a line that sets the flag without checking it sits just ahead of the steps for that value. A script line runs left to right and stops at the first condition that fails, so anything written before that condition has already happened; Script shows the order. On Stock, a step that sets a flag keeps the higher value when the character already holds more. “Also in the script” lists the steps exactly as the game data writes them."/>
+                               Text="Steps are ordered by the value the flag must hold going in, then by the value the step leaves; a line that sets the flag without checking it sits just ahead of the steps for that value. A script line runs left to right and stops at the first condition that fails, so each step lists what it needs and gives in the order the line goes through them: something given ahead of a condition is given whatever that condition says. On Stock, a step that sets a flag keeps the higher value when the character already holds more. “Also in the script” lists the steps exactly as the game data writes them."/>
                 </StackPanel>
             </ScrollViewer>
 

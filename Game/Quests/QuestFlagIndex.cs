@@ -51,9 +51,11 @@ public sealed class QuestFlagIndex
     // the visited-set plus this bound keeps a malformed cycle from spinning.
     private const int MaxWalkSteps = 512;
 
-    // Roots named in a line's Sources text before it is cut short.
-    private const int MaxSourcesNamed = 4;
     private const int MaxCastByLength = 90;
+
+    // How far a chain of random draws is followed back: a table drawn by a line of a table
+    // drawn by a line … The data nests one or two deep.
+    private const int MaxDrawDepth = 4;
 
     private static readonly Dictionary<string, QuestFlagRelation> s_verbs =
         new(StringComparer.OrdinalIgnoreCase)
@@ -153,7 +155,7 @@ public sealed class QuestFlagIndex
                     List<(QuestFlagRelation Rel, int Flag, int Value)> abilities = ParseAbilities(text);
                     if (abilities.Count == 0 || !seenText.Add(text)) continue;
 
-                    QuestFlagLine line = builder.Build(number, order, withCallers: true);
+                    QuestFlagLine line = builder.Build(number, order, new HashSet<int>());
                     foreach ((QuestFlagRelation rel, int flag, int value) in abilities)
                     {
                         if (!linesByFlag.TryGetValue(flag, out List<QuestFlagLine>? flagLines))
@@ -275,7 +277,9 @@ public sealed class QuestFlagIndex
             return roots;
         }
 
-        public QuestFlagLine Build(int number, int order, bool withCallers)
+        // drawnFor holds the tables already being read further down the chain of draws, so a
+        // table that draws itself (or a chain that loops) is not followed round again.
+        public QuestFlagLine Build(int number, int order, HashSet<int> drawnFor)
         {
             TbRow row = _tb[number];
             string[] rawLines = (row.Action ?? string.Empty).Split('\n');
@@ -286,12 +290,15 @@ public sealed class QuestFlagIndex
             List<SourceRoot> roots = RootsOf(number);
 
             List<QuestFlagLine> callers = new();
-            if (withCallers && _drawers.TryGetValue(number, out List<(int Block, int Order)>? drawers))
+            if (drawnFor.Count < MaxDrawDepth
+                && _drawers.TryGetValue(number, out List<(int Block, int Order)>? drawers))
             {
+                HashSet<int> inner = new(drawnFor) { number };
                 HashSet<(int, string)> seenCaller = new();
                 foreach ((int block, int callerOrder) in drawers)
                 {
-                    QuestFlagLine caller = Build(block, callerOrder, withCallers: false);
+                    if (inner.Contains(block)) continue;
+                    QuestFlagLine caller = Build(block, callerOrder, inner);
                     if (seenCaller.Add((block, caller.Script.Raw))) callers.Add(caller);
                 }
             }
@@ -299,7 +306,7 @@ public sealed class QuestFlagIndex
             return new QuestFlagLine(
                 number, order, script, CleanText(row.CalledFrom),
                 ResolveTriggers(number, script, row.CalledFrom, roots),
-                RollChance(script, rawLines), _owner.SourcesText(roots, Names), script.LevelText,
+                RollChance(script, rawLines), _owner.Sources(roots, Names), script.LevelText,
                 string.Join(", ", script.Classes.Select(Names.Class)),
                 string.Join(", ", script.Races.Select(Names.Race)),
                 ItemsText(script, Names), callers);
@@ -436,26 +443,21 @@ public sealed class QuestFlagIndex
         return string.Join(", ", parts);
     }
 
-    private string SourcesText(List<SourceRoot> roots, QuestScriptNames names)
+    private List<QuestFlagSource> Sources(List<SourceRoot> roots, QuestScriptNames names)
     {
-        List<string> parts = new();
+        List<QuestFlagSource> sources = new();
         foreach (SourceRoot root in roots)
         {
             if (root.Kind == QuestFlagSourceKind.Textblock) continue;
-            if (parts.Count == MaxSourcesNamed)
-            {
-                parts.Add($"+{roots.Count - MaxSourcesNamed} more");
-                break;
-            }
             string name = ResolveSourceName(root, names);
-            parts.Add(root.Kind switch
+            sources.Add(new QuestFlagSource(root.Kind, root.Number, root.Map, root.Room, root.Kind switch
             {
                 QuestFlagSourceKind.Room    => $"room {name} ({root.Map}/{root.Room})",
                 QuestFlagSourceKind.Monster => $"monster {name} (#{root.Number})",
                 _                           => $"spell {name} (#{root.Number}{CastBy(root.Number)})",
-            });
+            }));
         }
-        return string.Join(", ", parts);
+        return sources;
     }
 
     // What the Spells table lists as casting a spell, word for word, so a script that hangs

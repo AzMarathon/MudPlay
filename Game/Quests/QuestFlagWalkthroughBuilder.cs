@@ -25,14 +25,16 @@ namespace MudPlay.Game.Quests;
 // them. cast and summon stay verbatim with the name of the record they point at.
 //
 // A line runs left to right and stops at the first condition that fails ("Room-command
-// refusals"), so the reading is in step order: what a line asks before it changes the flag is
-// what the change needs, a condition written after it is only checked afterwards, and a check
-// on an ability the line has itself just changed is judged by the value the line left there —
-// when the line's own earlier steps pin that value — or else quoted without a verdict.
+// refusals"), so the reading keeps the order: conditions and gives come out as alternating
+// runs, and a give only depends on the conditions written before it. A check on an ability the
+// line has itself just changed is judged by the value the line left there — when the line's own
+// steps since pin that value, with nothing in between that could run a spell or other script —
+// or else quoted without a verdict.
 public static class QuestFlagWalkthroughBuilder
 {
     private const int MaxRoomsNamed = 6;
     private const int MaxPlacementsNamed = 3;
+    private const int MaxOtherRootsNamed = 4;
 
     // monsterRooms is where each monster stands (RoomSearchService.QuestKillRooms); without it
     // an NPC or a kill target is named with no room.
@@ -49,33 +51,35 @@ public static class QuestFlagWalkthroughBuilder
             return new QuestFlagWalkthrough(flag, flagName, Array.Empty<CrawledQuest>(), string.Empty, string.Empty,
                 Array.Empty<QuestFlagStepEntry>(), Array.Empty<QuestFlagStepEntry>(), Array.Empty<int>());
 
-        // Random tables whose lines change the flag: a line that draws from one is part of
-        // the flag's own steps even when it leaves the flag alone itself.
-        HashSet<int> changingTables = lines
-            .Where(l => l.Callers.Count > 0 && l.Script.Steps.Any(s => IsChangeOf(s, flag)))
-            .Select(l => l.Textblock)
-            .ToHashSet();
+        // A line drawn from a random table is read once behind each chain of lines that
+        // draws it, since their conditions stand in front of it.
+        List<(QuestFlagLine Line, List<QuestFlagLine> Chain)> readings = new();
+        foreach (QuestFlagLine line in lines)
+            foreach (List<QuestFlagLine> chain in ChainsOf(line))
+                readings.Add((line, chain));
 
-        // Lines that say the same thing fold into one entry, keeping the first one's place. A
-        // line drawn from a random table is read once behind each line that draws it, since
-        // that line's conditions stand in front of it.
+        // Random tables that lead to a change of the flag: a line that draws from one is part
+        // of the flag's own steps even when it leaves the flag alone itself.
+        HashSet<int> changingTables = new();
+        foreach ((QuestFlagLine line, List<QuestFlagLine> chain) in readings)
+        {
+            if (chain.Count == 0 || !line.Script.Steps.Any(s => IsChangeOf(s, flag))) continue;
+            changingTables.Add(line.Textblock);
+            foreach (QuestFlagLine caller in chain.Skip(1)) changingTables.Add(caller.Textblock);
+        }
+
+        // Readings that say the same thing fold into one entry, keeping the first one's place.
         List<List<Described>> groups = new();
         Dictionary<string, List<Described>> byKey = new(StringComparer.Ordinal);
-        foreach (QuestFlagLine line in lines)
+        foreach ((QuestFlagLine line, List<QuestFlagLine> chain) in readings)
         {
-            IEnumerable<QuestFlagLine?> callers = line.Callers.Count > 0
-                ? line.Callers
-                : Enumerable.Repeat<QuestFlagLine?>(null, 1);
-            foreach (QuestFlagLine? caller in callers)
+            Described d = Describe(line, chain, flag, index, names, changingTables);
+            if (!byKey.TryGetValue(d.Key, out List<Described>? group))
             {
-                Described d = Describe(line, caller, flag, index, names, changingTables);
-                if (!byKey.TryGetValue(d.Key, out List<Described>? group))
-                {
-                    byKey[d.Key] = group = new List<Described>();
-                    groups.Add(group);
-                }
-                group.Add(d);
+                byKey[d.Key] = group = new List<Described>();
+                groups.Add(group);
             }
+            group.Add(d);
         }
 
         List<List<Described>> ordered = groups
@@ -108,9 +112,26 @@ public static class QuestFlagWalkthroughBuilder
             steps, withoutFlag, otherFlags);
     }
 
+    // The chains of drawing lines that lead to a line, outermost first; one empty chain for a
+    // line nothing draws.
+    private static IEnumerable<List<QuestFlagLine>> ChainsOf(QuestFlagLine line)
+    {
+        if (line.Callers.Count == 0)
+        {
+            yield return new List<QuestFlagLine>();
+            yield break;
+        }
+        foreach (QuestFlagLine caller in line.Callers)
+            foreach (List<QuestFlagLine> outer in ChainsOf(caller))
+            {
+                outer.Add(caller);
+                yield return outer;
+            }
+    }
+
     // ----- One line -----
 
-    // What a line asks of an ability before it changes it.
+    // What a line asks of an ability.
     private sealed class FlagCondition
     {
         public bool Without;
@@ -130,23 +151,33 @@ public static class QuestFlagWalkthroughBuilder
     // What the line's own steps establish about an ability's value once the line has changed it.
     private enum Certainty { Unknown, Absent, Exact }
 
-    // An ability as the line goes along: what it asked of it, and what it then left there.
+    // An ability as the line goes along: what it has asked of it since anything else could
+    // have changed it, and what it then left there.
     private sealed class AbilityTrack
     {
-        public readonly FlagCondition Asked = new();
+        public FlagCondition Asked = new();
         public bool Changed;
         public Certainty State;
         public int Value;
     }
 
-    // The conditions of one part of a line: those the change needs, or those checked afterwards.
-    private sealed class Conditions
+    // One run of the line: conditions, or things it gives.
+    private sealed class Part
     {
+        public bool IsCheck;
+        // The step that could run a spell or other script just ahead of these conditions.
+        public string? After;
+
+        public int MinLevel, MaxLevel;
+        public bool HasClass;
+        public readonly List<int> Races = new();
+        public FlagCondition? Subject;
         public readonly List<(int Ability, FlagCondition Condition)> Flags = new();
         public readonly List<int> Held = new(), MustNotHold = new(), InRoom = new();
-        public readonly List<(int Item, int Count)> Taken = new();
+        public readonly List<(int Item, int Count)> Taken = new(), Given = new();
         public readonly List<(int Amount, int Count)> Prices = new();
-        public readonly List<string> Monsters = new(), Alignment = new();
+        public readonly List<string> Monsters = new(), Alignment = new(), Gives = new();
+        public readonly List<string> SubjectChanges = new();
 
         public FlagCondition FlagFor(int ability)
         {
@@ -156,65 +187,39 @@ public static class QuestFlagWalkthroughBuilder
             Flags.Add((ability, added));
             return added;
         }
-
-        public List<string> ToLines(QuestScriptNames names)
-        {
-            List<string> lines = new();
-            foreach ((int ability, FlagCondition condition) in Flags)
-                lines.Add(OtherConditionText(condition, AbilityLabel(ability)));
-            foreach (int item in Held)
-                if (!Taken.Exists(t => t.Item == item)) lines.Add($"Have {ItemLabel(names, item)}");
-            foreach ((int item, int count) in Taken)
-                lines.Add($"Taken from you: {Times(count)}{ItemLabel(names, item)}");
-            foreach (int item in MustNotHold)
-                lines.Add($"Must not have {ItemLabel(names, item)}");
-            foreach (int item in InRoom)
-                lines.Add($"{ItemLabel(names, item)} must be in the room");
-            foreach ((int amount, int count) in Prices)
-                lines.Add(count > 1
-                    ? $"Costs {Num((long)amount * count)} copper ({Num(count)} × {Num(amount)})"
-                    : $"Costs {Num(amount)} copper");
-            lines.AddRange(Monsters);
-            if (Alignment.Count > 0)
-                lines.Add("Alignment, as the script writes it: " + string.Join(", ", Alignment));
-            return lines;
-        }
     }
 
     private sealed class Described
     {
         public required QuestFlagLine Line { get; init; }
-        public QuestFlagLine? Caller { get; init; }
+        public required List<QuestFlagLine> Chain { get; init; }
         public required string Key { get; init; }
         public required string Heading { get; init; }
         public int Rank { get; init; }
         public int HighKey { get; init; }
         public int Leaves { get; init; }
         public bool OnlyWithout { get; init; }
-        public string? LevelNeed { get; init; }
+        public required List<Part> Parts { get; init; }
         public required List<int> Classes { get; init; }
-        public string? RaceNeed { get; init; }
-        public required List<string> Needs { get; init; }
-        public required List<string> Gives { get; init; }
-        public required List<string> After { get; init; }
         public required List<string> Also { get; init; }
         public string LaterLabel { get; init; } = string.Empty;
         public required List<string> Later { get; init; }
         public required List<int> OtherFlags { get; init; }
     }
 
-    // caller is the line that draws this line's textblock at random, when there is one: its
-    // steps up to that draw run first, so they are read in front of the line's own.
+    // chain is the lines that draw this line's textblock at random, outermost first: each
+    // one's steps up to its draw run first, so they are read in front of the line's own.
     private static Described Describe(
-        QuestFlagLine line, QuestFlagLine? caller, int flag, QuestFlagIndex index,
+        QuestFlagLine line, List<QuestFlagLine> chain, int flag, QuestFlagIndex index,
         QuestScriptNames names, HashSet<int> changingTables)
     {
         List<QuestScriptStep> steps = new();
-        if (caller is not null)
+        for (int i = 0; i < chain.Count; i++)
         {
-            foreach (QuestScriptStep step in caller.Script.Steps)
+            int drawn = (i + 1 < chain.Count ? chain[i + 1] : line).Textblock;
+            foreach (QuestScriptStep step in chain[i].Script.Steps)
             {
-                if (step.Verb == "random" && step.Int(0) == line.Textblock) break;
+                if (step.Verb == "random" && step.Int(0) == drawn) break;
                 steps.Add(step);
             }
         }
@@ -222,16 +227,46 @@ public static class QuestFlagWalkthroughBuilder
         bool hasSubjectChange = steps.Exists(s => IsChangeOf(s, flag));
 
         List<(int Ability, AbilityTrack Track)> tracks = new();
+        List<Part> parts = new();
         FlagCondition subject = new(), lateSubject = new();
-        Conditions needs = new(), after = new();
-        List<string> effects = new(), gives = new(), also = new(), later = new();
-        List<(int Item, int Count)> given = new();
-        List<int> otherFlags = new();
+        List<string> effects = new(), also = new(), later = new();
+        List<int> otherFlags = new(), classes = new();
         int? setTo = null, drawsTable = null;
-        int added = 0;
-        bool subjectChanged = false, gave = false, inTail = false;
-        string? stoppedAt = null, unsettledAt = null;
+        int added = 0, levelFloor = 0, levelCeiling = 0;
+        bool gave = false, inTail = false;
+        // The first step that could have run a spell or other script, and the latest one not
+        // yet named on a run of conditions.
+        string? ranOther = null, ranOtherPending = null;
+        string? stoppedAt = null, unsettledAt = null, lateReason = null;
         string laterLabel = string.Empty;
+
+        Part Checks()
+        {
+            if (parts.Count == 0 || !parts[^1].IsCheck)
+            {
+                parts.Add(new Part { IsCheck = true, After = ranOtherPending });
+                ranOtherPending = null;
+            }
+            return parts[^1];
+        }
+
+        Part Gives()
+        {
+            if (parts.Count == 0 || parts[^1].IsCheck) parts.Add(new Part());
+            gave = true;
+            return parts[^1];
+        }
+
+        // A spell or another textblock may change any ability, so what the line knew of
+        // them — a value it left, or a value it asked for and has not yet built on — is gone.
+        void Forget()
+        {
+            foreach ((_, AbilityTrack track) in tracks)
+            {
+                if (track.Changed) track.State = Certainty.Unknown;
+                else track.Asked = new FlagCondition();
+            }
+        }
 
         foreach (QuestScriptStep step in steps)
         {
@@ -242,10 +277,6 @@ public static class QuestFlagWalkthroughBuilder
             }
 
             int? a = step.Int(0), b = step.Int(1);
-            // Once the line has changed the flag, or on a line that leaves the flag alone once
-            // it has given something, a condition no longer stands in front of that.
-            bool late = hasSubjectChange ? subjectChanged : gave;
-            Conditions bucket = late ? after : needs;
             switch (step.Verb)
             {
                 // failability <ability> [message] is the settled form; one written with more
@@ -253,22 +284,35 @@ public static class QuestFlagWalkthroughBuilder
                 case "failability" when a is > 0 && step.Args.Count <= 2:
                 case "checkability" or "testability" when a is > 0 && b is not null:
                 {
-                    int ability0 = a!.Value;
-                    AbilityTrack track = TrackFor(tracks, ability0);
-                    if (ability0 != flag) AddOnce(otherFlags, ability0);
+                    int ability = a!.Value;
+                    AbilityTrack track = TrackFor(tracks, ability);
+                    if (ability != flag) AddOnce(otherFlags, ability);
                     if (!track.Changed)
                     {
                         track.Asked.Apply(step.Verb, b ?? 0);
-                        FlagCondition shown = ability0 == flag
-                            ? (late ? lateSubject : subject)
-                            : bucket.FlagFor(ability0);
-                        shown.Apply(step.Verb, b ?? 0);
+                        bool leading = parts.Count == 0 || (parts.Count == 1 && parts[0].IsCheck);
+                        Part part = Checks();
+                        if (ability != flag)
+                        {
+                            part.FlagFor(ability).Apply(step.Verb, b ?? 0);
+                            break;
+                        }
+
+                        // A check on the flag is the line's entry condition unless something
+                        // ran first that could have changed the flag — or, on a line that
+                        // never changes it, the line has already started giving.
+                        bool demoted = ranOther is not null || (!hasSubjectChange && gave);
+                        if (demoted)
+                            lateReason ??= ranOther is not null ? $"checked after `{ranOther}`" : "checked after the line's gives";
+                        (demoted ? lateSubject : subject).Apply(step.Verb, b ?? 0);
+                        if (demoted || !leading)
+                            (part.Subject ??= new FlagCondition()).Apply(step.Verb, b ?? 0);
                         break;
                     }
 
                     // The line has already changed this ability, so the check reads what the
                     // line left there.
-                    string label = ability0 == flag ? "the flag" : AbilityLabel(ability0);
+                    string label = ability == flag ? "the flag" : AbilityLabel(ability);
                     string left = track.State == Certainty.Absent ? $"cleared {label}" : $"left {label} at {Num(track.Value)}";
                     bool? passes = Passes(track, step.Verb, b ?? 0);
                     if (passes == true)
@@ -294,113 +338,131 @@ public static class QuestFlagWalkthroughBuilder
                 case "giveability" or "addability" when a is > 0 && b is not null:
                 case "removeability" when a is > 0:
                 {
-                    int ability0 = a!.Value;
+                    int ability = a!.Value;
                     int amount = b ?? 0;
-                    bool onSubject = ability0 == flag;
-                    bool questFlag = onSubject || step.Verb != "addability" || index.IsQuestFlag(ability0);
-                    Change(TrackFor(tracks, ability0), step.Verb, amount);
-                    gave = true;
-                    if (onSubject)
+                    Change(TrackFor(tracks, ability), step.Verb, amount);
+                    Part part = Gives();
+                    if (ability == flag)
                     {
-                        subjectChanged = true;
                         if (step.Verb == "giveability") { effects.Add($"sets {Num(amount)}"); setTo = amount; added = 0; }
                         else if (step.Verb == "addability") { effects.Add(amount >= 0 ? $"adds {Num(amount)}" : $"takes off {Num(-amount)}"); added += amount; }
                         else { effects.Add("clears the flag"); setTo = 0; added = 0; }
+                        part.SubjectChanges.Add($"This flag: {effects[^1]}");
                     }
-                    else if (!questFlag)
+                    else if (step.Verb == "addability" && !index.IsQuestFlag(ability))
                     {
                         // An addability to something no script grants with giveability is a
                         // stat reward, the rule the quest crawl uses.
-                        gives.Add($"{QuestScriptNames.Ability(ability0)} {amount.ToString("+#;-#;0", CultureInfo.InvariantCulture)}");
+                        part.Gives.Add($"{QuestScriptNames.Ability(ability)} {amount.ToString("+#;-#;0", CultureInfo.InvariantCulture)}");
                     }
                     else
                     {
-                        AddOnce(otherFlags, ability0);
-                        gives.Add(step.Verb switch
+                        AddOnce(otherFlags, ability);
+                        part.Gives.Add(step.Verb switch
                         {
-                            "giveability" => $"Sets {AbilityLabel(ability0)} to {Num(amount)}",
-                            "addability"  => $"Adds {Num(amount)} to {AbilityLabel(ability0)}",
-                            _             => $"Clears {AbilityLabel(ability0)}",
+                            "giveability" => $"Sets {AbilityLabel(ability)} to {Num(amount)}",
+                            "addability"  => $"Adds {Num(amount)} to {AbilityLabel(ability)}",
+                            _             => $"Clears {AbilityLabel(ability)}",
                         });
                     }
                     break;
                 }
 
-                // The line's level, class and race come off the parsed line as a whole.
-                case "minlevel" or "maxlevel" or "class" or "race" when a is > 0:
+                // Every level gate is enforced, so one no stricter than an earlier one adds
+                // nothing and is left to the Script line.
+                case "minlevel" when a is int level && level > 0:
+                    if (level > levelFloor) Checks().MinLevel = levelFloor = level;
+                    break;
+                case "maxlevel" when a is int level && level > 0:
+                    if (levelCeiling == 0 || level < levelCeiling) Checks().MaxLevel = levelCeiling = level;
+                    break;
+                case "class" when a is int id && id > 0:
+                    Checks().HasClass = true;
+                    AddOnce(classes, id);
+                    break;
+                case "race" when a is int id && id > 0:
+                    AddOnce(Checks().Races, id);
                     break;
 
                 case "checkitem" when a is int item && item > 0:
-                    AddOnce(bucket.Held, item);
+                    AddOnce(Checks().Held, item);
                     break;
                 case "takeitem" when a is int item && item > 0:
-                    Count(bucket.Taken, item);
+                    Count(Checks().Taken, item);
                     break;
                 case "failitem" when a is int item && item > 0:
-                    AddOnce(bucket.MustNotHold, item);
+                    AddOnce(Checks().MustNotHold, item);
                     break;
                 case "roomitem" when a is int item && item > 0:
-                    AddOnce(bucket.InRoom, item);
+                    AddOnce(Checks().InRoom, item);
                     break;
                 // The amount is copper when the step names no coin; one that carries anything
                 // but an amount and a message number is quoted.
                 case "price" when a is int amount && amount > 0 && step.Args.Count <= 2
                                   && (step.Args.Count == 1 || b is not null):
-                    Count(bucket.Prices, amount);
+                    Count(Checks().Prices, amount);
                     break;
                 case "nomonsters":
-                    AddOnce(bucket.Monsters, "No monster in the room (an NPC counts as one)");
+                    AddOnce(Checks().Monsters, "No monster in the room (an NPC counts as one)");
                     break;
                 case "monsters":
-                    AddOnce(bucket.Monsters, "A monster in the room");
+                    AddOnce(Checks().Monsters, "A monster in the room");
                     break;
                 case "needmonster" when a is int monster && monster > 0:
-                    AddOnce(bucket.Monsters, $"{names.Monster(monster)} (monster {Id(monster)}) in the room");
+                    AddOnce(Checks().Monsters, $"{names.Monster(monster)} (monster {Id(monster)}) in the room");
                     break;
                 // The threshold's meaning isn't settled, so the step is quoted; its trailing
                 // number is the refusal message and is left off.
                 case "goodaligned" or "evilaligned" when step.Args.Count > 0:
-                    AddOnce(bucket.Alignment, $"{step.Verb} {step.Args[0]}");
+                    AddOnce(Checks().Alignment, $"{step.Verb} {step.Args[0]}");
                     break;
 
                 case "giveitem" when a is int item && item > 0:
-                    Count(given, item);
-                    gave = true;
+                    Count(Gives().Given, item);
                     break;
                 case "addexp" when a is int exp && exp > 0:
-                    gives.Add($"{Num(exp)} experience");
-                    gave = true;
+                    Gives().Gives.Add($"{Num(exp)} experience");
                     break;
                 case "learnspell" when a is int spell && spell > 0:
-                    gives.Add($"Teaches the spell {names.Spell(spell)} (spell {Id(spell)})");
-                    gave = true;
+                    Gives().Gives.Add($"Teaches the spell {names.Spell(spell)} (spell {Id(spell)})");
                     break;
                 case "teleport" when a is int room && room > 0 && b is int map && map > 0:
-                    gives.Add($"Teleports you to {names.Room(map, room)} ({Id(map)}/{Id(room)})");
-                    gave = true;
+                    Gives().Gives.Add($"Teleports you to {names.Room(map, room)} ({Id(map)}/{Id(room)})");
                     break;
 
-                case "cast" when a is int spell && spell > 0:
-                    AddRaw(also, $"{step.Raw}  [spell: {names.Spell(spell)}]");
+                // A message prints a line and nothing else, so it breaks no run.
+                case "message":
+                    AddRaw(also, step.Raw);
                     break;
+
+                // cast, random and text hand over to a spell or another textblock: a check on
+                // the flag written after one is no longer what the line asks going in.
+                case "cast" or "random" or "text":
+                    if (step.Verb == "cast" && a is int castSpell && castSpell > 0)
+                        AddRaw(also, $"{step.Raw}  [spell: {names.Spell(castSpell)}]");
+                    else
+                        AddRaw(also, step.Raw);
+                    if (step.Verb == "random" && a is int table && changingTables.Contains(table)) drawsTable ??= table;
+                    ranOther ??= step.Raw;
+                    ranOtherPending = step.Raw;
+                    Forget();
+                    break;
+
                 case "summon" when a is int monster && monster > 0:
                     AddRaw(also, $"{step.Raw}  [monster: {names.Monster(monster)}]");
+                    Forget();
                     break;
-                case "random" when a is int table && changingTables.Contains(table):
-                    drawsTable ??= table;
-                    AddRaw(also, step.Raw);
-                    break;
+                // What a quoted step does isn't settled, so nothing the line knew of an
+                // ability's value is carried across it.
                 default:
                     AddRaw(also, step.Raw);
+                    Forget();
                     break;
             }
         }
 
-        // Items first: they are what a player is usually after.
-        gives.InsertRange(0, given.Select(g => $"{Times(g.Count)}{ItemLabel(names, g.Item)}"));
-
-        // A line that never changes the flag and only checks it after its gives is still
-        // described by that check, marked as coming late.
+        // A line that only checks the flag late is still described by that check, marked as
+        // coming late.
         bool lateCheck = !subject.Any && lateSubject.Any;
         FlagCondition shownSubject = lateCheck ? lateSubject : subject;
         int leaves = (setTo ?? shownSubject.Low ?? shownSubject.High ?? 0) + added;
@@ -412,38 +474,23 @@ public static class QuestFlagWalkthroughBuilder
             : effects.Count > 0 && leaves > 0 ? (2 * leaves) - 1
             : 0;
 
-        List<string> afterLines = after.ToLines(names);
-        if (lateSubject.Any)
-        {
-            string text = OtherConditionText(lateSubject, "this flag");
-            afterLines.Insert(0, char.ToUpperInvariant(text[0]) + text[1..]);
-        }
-
         // A change to the flag written behind that check is not one the heading can promise.
         string? laterChange = later.Select(QuestScriptStep.Parse)
             .Where(s => IsChangeOf(s, flag)).Select(s => s.Raw).FirstOrDefault();
-        QuestScriptLine own = line.Script;
-        int minLevel = Math.Max(own.MinLevel, caller?.Script.MinLevel ?? 0);
-        int maxLevel = LowestSet(own.MaxLevel, caller?.Script.MaxLevel ?? 0);
-        List<int> races = (caller?.Script.Races ?? Array.Empty<int>()).Concat(own.Races).Distinct().ToList();
 
         return new Described
         {
             Line = line,
-            Caller = caller,
-            Key = KeyOf(line, caller, steps),
-            Heading = HeadingText(shownSubject, lateCheck, effects, drawsTable, stoppedAt, unsettledAt, laterChange),
+            Chain = chain,
+            Key = KeyOf(line, chain, steps),
+            Heading = HeadingText(shownSubject, lateCheck ? lateReason : null, effects, drawsTable, stoppedAt, unsettledAt, laterChange),
             Rank = rank,
             HighKey = shownSubject.High ?? (shownSubject.Without && shownSubject.Low is null ? 0 : int.MaxValue),
             Leaves = leaves,
             OnlyWithout = shownSubject.Without && shownSubject.Low is null && shownSubject.High is null
                           && effects.Count == 0 && drawsTable is null && laterChange is null,
-            LevelNeed = LevelNeed(minLevel, maxLevel),
-            Classes = (caller?.Script.Classes ?? Array.Empty<int>()).Concat(own.Classes).Distinct().ToList(),
-            RaceNeed = races.Count > 0 ? "Race: " + string.Join(", ", races.Select(names.Race)) : null,
-            Needs = needs.ToLines(names),
-            Gives = gives,
-            After = afterLines,
+            Parts = parts,
+            Classes = classes,
             Also = also,
             LaterLabel = laterLabel,
             Later = later,
@@ -457,7 +504,8 @@ public static class QuestFlagWalkthroughBuilder
                || ((step.Verb == "giveability" || step.Verb == "addability") && step.Int(1) is not null));
 
     // What the line knows of the ability's value going into its own change: nothing unless
-    // its earlier steps pinned it, by asking for it to be absent or to be one exact value.
+    // its steps since the last spell or other script pinned it, by asking for it to be absent
+    // or to be one exact value.
     private static void Change(AbilityTrack track, string verb, int amount)
     {
         if (!track.Changed)
@@ -508,32 +556,35 @@ public static class QuestFlagWalkthroughBuilder
     };
 
     // Two readings fold together when they are the same script reached the same way: apart
-    // from the class step (the entry lists the classes) and the wording of a typed command
-    // (the entry lists every wording). Any other difference keeps them apart.
-    private static string KeyOf(QuestFlagLine line, QuestFlagLine? caller, List<QuestScriptStep> steps)
+    // from which class a class step names (the entry lists the classes) and the wording of a
+    // typed command (the entry lists every wording). Any other difference keeps them apart.
+    private static string KeyOf(QuestFlagLine line, List<QuestFlagLine> chain, List<QuestScriptStep> steps)
     {
         System.Text.StringBuilder sb = new();
         foreach (QuestScriptStep step in steps)
-        {
-            if (step.Verb == "class" && step.Int(0) is > 0) continue;
-            sb.Append(step.Raw).Append(':');
-        }
+            sb.Append(step.Verb == "class" && step.Int(0) is > 0 ? "class" : step.Raw).Append(':');
         sb.Append('|').Append(line.Script.RollBand?.ToString(CultureInfo.InvariantCulture)).Append('|');
-        foreach (QuestTrigger t in line.Triggers.Concat(caller?.Triggers ?? Array.Empty<QuestTrigger>()))
+        foreach (QuestTrigger t in TriggersOf(line, chain))
         {
             sb.Append((int)t.Kind).Append('/').Append(t.Monster).Append('/').Append(t.Map).Append('/').Append(t.Room);
             if (t.Kind != QuestTriggerKind.RoomCommand) sb.Append('/').Append(t.Command);
             sb.Append(';');
         }
-        if (caller is not null) sb.Append("|from ").Append(caller.Textblock);
+        foreach (QuestFlagLine caller in chain) sb.Append("|from ").Append(caller.Textblock);
         // With no way in established, only lines of one textblock are the same script.
         if (line.Triggers.Count == 0)
             sb.Append('|').Append(line.Textblock).Append('/').Append(line.Script.Command);
         return sb.ToString();
     }
 
+    private static IEnumerable<QuestTrigger> TriggersOf(QuestFlagLine line, List<QuestFlagLine> chain)
+        => line.Triggers.Concat(chain.SelectMany(c => c.Triggers));
+
+    private static IEnumerable<QuestTrigger> AllTriggers(QuestFlagLine line)
+        => line.Triggers.Concat(line.Callers.SelectMany(AllTriggers));
+
     private static string HeadingText(
-        FlagCondition subject, bool lateCheck, List<string> effects, int? drawsTable,
+        FlagCondition subject, string? lateReason, List<string> effects, int? drawsTable,
         string? stoppedAt, string? unsettledAt, string? laterChange)
     {
         List<string> parts = new();
@@ -563,12 +614,12 @@ public static class QuestFlagWalkthroughBuilder
 
         if (parts.Count == 0) return $"No check on the flag → {effect}";
         string condition = string.Join(" and ", parts);
-        if (lateCheck) condition += ", checked after the line's gives";
+        if (lateReason is not null) return $"{char.ToUpperInvariant(condition[0])}{condition[1..]}, {lateReason} → {effect}";
         if (subject.Without && parts.Count == 1 && effects.Count > 0) return $"Start — {condition} → {effect}";
         return $"{char.ToUpperInvariant(condition[0])}{condition[1..]} → {effect}";
     }
 
-    private static string OtherConditionText(FlagCondition c, string label)
+    private static string ConditionText(FlagCondition c, string label)
     {
         List<string> parts = new();
         if (c.Without) parts.Add($"Without {label}");
@@ -578,17 +629,9 @@ public static class QuestFlagWalkthroughBuilder
             parts.Add($"{label} at least {Num(atLeast)}");
         else if (c.High is int atMost)
             parts.Add($"{label} at most {Num(atMost)}");
-        return string.Join("; ", parts);
+        string text = string.Join("; ", parts);
+        return text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
     }
-
-    private static string? LevelNeed(int minLevel, int maxLevel)
-    {
-        if (minLevel > 0 && maxLevel > 0) return $"Level {Num(minLevel)} to {Num(maxLevel)}";
-        if (minLevel > 0) return $"Level {Num(minLevel)} or higher";
-        return maxLevel > 0 ? $"Level {Num(maxLevel)} or lower" : null;
-    }
-
-    private static int LowestSet(int a, int b) => a == 0 ? b : b == 0 ? a : Math.Min(a, b);
 
     // ----- One entry -----
 
@@ -597,25 +640,21 @@ public static class QuestFlagWalkthroughBuilder
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms)
     {
         Described first = group[0];
-
-        List<string> needs = new();
-        if (first.LevelNeed is { } level) needs.Add(level);
         List<int> classes = group.SelectMany(d => d.Classes).Distinct().ToList();
-        if (classes.Count > 0) needs.Add("Class: " + string.Join(", ", classes.Select(names.Class)));
-        if (first.RaceNeed is { } race) needs.Add(race);
-        needs.AddRange(first.Needs);
 
         // Lines of one textblock that differ only in the typed command are one script; the
         // first is quoted and the rest counted, since Do already lists every wording. A line
-        // drawn at random is quoted behind the line that draws it.
+        // drawn at random is quoted behind the lines that draw it.
         List<string> script = new();
-        List<(string Body, int At, int More)> quoted = new();
         foreach (Described d in group)
         {
-            if (d.Caller is not { } caller) continue;
-            string callerText = $"Textblock #{Id(caller.Textblock)}: {caller.Script.Raw}";
-            if (!script.Contains(callerText)) script.Add(callerText);
+            foreach (QuestFlagLine caller in d.Chain)
+            {
+                string callerText = $"Textblock #{Id(caller.Textblock)}: {caller.Script.Raw}";
+                if (!script.Contains(callerText)) script.Add(callerText);
+            }
         }
+        List<(string Body, int At, int More)> quoted = new();
         foreach (Described d in group)
         {
             QuestScriptLine line = d.Line.Script;
@@ -636,8 +675,78 @@ public static class QuestFlagWalkthroughBuilder
                 script.Insert(at + 1, $"    (and {Num(more)} more {(more == 1 ? "line" : "lines")} with the other {(more == 1 ? "wording" : "wordings")} of the command, otherwise the same)");
 
         return new QuestFlagStepEntry(
-            first.Heading, DoLines(group, names, monsterRooms), needs, first.Gives, first.After, first.Also,
+            first.Heading, DoLines(group, names, monsterRooms), PartsOf(first.Parts, classes, names), first.Also,
             first.LaterLabel, first.Later, script, first.OtherFlags);
+    }
+
+    // The runs in words, labelled by where they stand: what is given ahead of every condition
+    // comes whatever the conditions say, and each later run only follows the ones before it.
+    private static List<QuestFlagStepPart> PartsOf(List<Part> parts, List<int> classes, QuestScriptNames names)
+    {
+        // The flag's own change is in the heading; it is repeated among the gives only when
+        // the line checks things at more than one point, to show where the change falls.
+        bool showChange = parts.Count(p => p.IsCheck) > 1;
+        bool anyChecks = parts.Exists(p => p.IsCheck);
+        List<QuestFlagStepPart> shown = new();
+        int checks = 0, givesAfterChecks = 0;
+        bool classShown = false;
+        foreach (Part part in parts)
+        {
+            List<string> lines = new();
+            string label;
+            if (part.IsCheck)
+            {
+                if (part.MinLevel > 0 && part.MaxLevel > 0) lines.Add($"Level {Num(part.MinLevel)} to {Num(part.MaxLevel)}");
+                else if (part.MinLevel > 0) lines.Add($"Level {Num(part.MinLevel)} or higher");
+                else if (part.MaxLevel > 0) lines.Add($"Level {Num(part.MaxLevel)} or lower");
+                if (part.HasClass && !classShown && classes.Count > 0)
+                {
+                    lines.Add("Class: " + string.Join(", ", classes.Select(names.Class)));
+                    classShown = true;
+                }
+                if (part.Races.Count > 0) lines.Add("Race: " + string.Join(", ", part.Races.Select(names.Race)));
+                if (part.Subject is { } subject) lines.Add(ConditionText(subject, "this flag"));
+                foreach ((int ability, FlagCondition condition) in part.Flags)
+                    lines.Add(ConditionText(condition, AbilityLabel(ability)));
+                foreach (int item in part.Held)
+                    if (!part.Taken.Exists(t => t.Item == item)) lines.Add($"Have {ItemLabel(names, item)}");
+                foreach ((int item, int count) in part.Taken)
+                    lines.Add($"Taken from you: {Times(count)}{ItemLabel(names, item)}");
+                foreach (int item in part.MustNotHold)
+                    lines.Add($"Must not have {ItemLabel(names, item)}");
+                foreach (int item in part.InRoom)
+                    lines.Add($"{ItemLabel(names, item)} must be in the room");
+                foreach ((int amount, int count) in part.Prices)
+                    lines.Add(count > 1
+                        ? $"Costs {Num((long)amount * count)} copper ({Num(count)} × {Num(amount)})"
+                        : $"Costs {Num(amount)} copper");
+                lines.AddRange(part.Monsters);
+                if (part.Alignment.Count > 0)
+                    lines.Add("Alignment, as the script writes it: " + string.Join(", ", part.Alignment));
+                // A run that holds only the flag's own entry check (it is in the heading) shows
+                // nothing, but what follows it still comes after a check.
+                label = checks == 0 ? "Needs" : "Then checks";
+                if (part.After is not null) label += $" (after `{part.After}`)";
+                checks++;
+                if (lines.Count == 0) continue;
+            }
+            else
+            {
+                // Items first: they are what a player is usually after.
+                lines.AddRange(part.Given.Select(g => $"{Times(g.Count)}{ItemLabel(names, g.Item)}"));
+                lines.AddRange(part.Gives);
+                if (showChange) lines.AddRange(part.SubjectChanges);
+                if (lines.Count == 0) continue;
+
+                label = !anyChecks ? "Gives"
+                    : checks == 0 ? "First, whatever the checks say"
+                    : givesAfterChecks == 0 ? "Gives"
+                    : "Then gives";
+                if (checks > 0) givesAfterChecks++;
+            }
+            shown.Add(new QuestFlagStepPart(label, lines));
+        }
+        return shown;
     }
 
     private static List<string> DoLines(
@@ -645,9 +754,7 @@ public static class QuestFlagWalkthroughBuilder
         IReadOnlyDictionary<int, IReadOnlyList<RoomKey>>? monsterRooms)
     {
         List<string> lines = new();
-        List<QuestTrigger> triggers = group
-            .SelectMany(d => d.Line.Triggers.Concat(d.Caller?.Triggers ?? Array.Empty<QuestTrigger>()))
-            .ToList();
+        List<QuestTrigger> triggers = group.SelectMany(d => TriggersOf(d.Line, d.Chain)).ToList();
 
         // Room commands: every wording, then every room that takes them.
         List<string> typed = new();
@@ -698,25 +805,55 @@ public static class QuestFlagWalkthroughBuilder
             // With a textblock in between, name both the parent and where its chain starts;
             // a line hanging straight off a room, spell or monster needs only the one.
             bool viaTextblock = head.CalledFrom.Contains("Textblock", StringComparison.OrdinalIgnoreCase);
+            string roots = RootsText(head.Roots);
             if (head.CalledFrom.Length == 0)
                 lines.Add("The data records nothing that calls this textblock");
-            else if (viaTextblock || head.Sources.Length == 0)
+            else if (viaTextblock || roots.Length == 0)
                 lines.Add($"Reached from {head.CalledFrom}");
-            if (head.Sources.Length > 0)
-                lines.Add(viaTextblock ? $"That chain of textblocks starts at {head.Sources}" : $"Reached from {head.Sources}");
+            if (roots.Length > 0)
+                lines.Add(viaTextblock ? $"That chain of textblocks starts at {roots}" : $"Reached from {roots}");
+        }
+        else
+        {
+            // The line's other starting points, which no way in accounts for — here or behind
+            // another line that draws it.
+            List<QuestTrigger> every = AllTriggers(head).ToList();
+            List<QuestFlagSource> others = head.Roots.Where(r => !every.Exists(t => Accounts(t, r))).ToList();
+            if (others.Count > 0) lines.Add($"Also reached from {RootsText(others)}");
         }
 
-        string band = head.Script.RollBand is int top
-            ? $"the band up to {Num(top)}" + (head.RollChance is double chance
-                ? $" ({chance.ToString("0.#", CultureInfo.InvariantCulture)}% of draws)" : string.Empty)
-            : string.Empty;
-        if (group[0].Caller is { } caller)
-            lines.Add($"Then a random draw: textblock #{Id(caller.Textblock)} draws from textblock #{Id(head.Textblock)} "
-                + $"with `random {Id(head.Textblock)}`" + (band.Length > 0 ? $", and this outcome is {band}" : string.Empty));
-        else if (band.Length > 0)
-            lines.Add($"One outcome of a random draw from textblock #{Id(head.Textblock)}: {band}");
+        List<QuestFlagLine> chain = group[0].Chain;
+        for (int i = 0; i < chain.Count; i++)
+        {
+            QuestFlagLine drawn = i + 1 < chain.Count ? chain[i + 1] : head;
+            string band = BandText(drawn);
+            lines.Add($"Then a random draw: textblock #{Id(chain[i].Textblock)} draws from textblock #{Id(drawn.Textblock)} "
+                + $"with `random {Id(drawn.Textblock)}`" + (band.Length > 0 ? $", and this outcome is {band}" : string.Empty));
+        }
+        if (chain.Count == 0 && BandText(head) is { Length: > 0 } own)
+            lines.Add($"One outcome of a random draw from textblock #{Id(head.Textblock)}: {own}");
         return lines;
     }
+
+    private static bool Accounts(QuestTrigger trigger, QuestFlagSource root) => trigger.Kind switch
+    {
+        QuestTriggerKind.RoomCommand => root.Kind == QuestFlagSourceKind.Room && trigger.Map == root.Map && trigger.Room == root.Room,
+        QuestTriggerKind.Kill        => root.Kind == QuestFlagSourceKind.Spell && trigger.Spell == root.Number,
+        _                            => root.Kind == QuestFlagSourceKind.Monster && trigger.Monster == root.Number,
+    };
+
+    private static string RootsText(IReadOnlyList<QuestFlagSource> roots)
+    {
+        List<string> named = roots.Take(MaxOtherRootsNamed).Select(r => r.Text).ToList();
+        if (roots.Count > MaxOtherRootsNamed) named.Add($"+{Num(roots.Count - MaxOtherRootsNamed)} more");
+        return string.Join(", ", named);
+    }
+
+    private static string BandText(QuestFlagLine line)
+        => line.Script.RollBand is int top
+            ? $"the band up to {Num(top)}" + (line.RollChance is double chance
+                ? $" ({chance.ToString("0.#", CultureInfo.InvariantCulture)}% of draws)" : string.Empty)
+            : string.Empty;
 
     private static string Placement(
         int monster, string lead, QuestScriptNames names,

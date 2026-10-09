@@ -5,9 +5,10 @@ namespace MudPlay.Game.Quests;
 //
 // Order is the line's position in its textblock (lines are tried top to bottom). RollChance is
 // the share of draws that land on this line when it is one band of a random table, else null.
-// Sources names the monster / room / spell records the line's Called-From chain starts at.
-// Callers are the lines that draw from this line's textblock with a `random` step — the
-// conditions on those lines stand in front of this one. A caller carries no callers of its own.
+// Roots are the monster / room / spell records the line's Called-From chain starts at (empty
+// when it reaches none). Callers are the lines that draw from this line's textblock with a
+// `random` step — the conditions on those lines stand in front of this one — each with its own
+// callers when it sits in a drawn table itself.
 public sealed record QuestFlagLine(
     int Textblock,
     int Order,
@@ -15,7 +16,7 @@ public sealed record QuestFlagLine(
     string CalledFrom,
     IReadOnlyList<QuestTrigger> Triggers,
     double? RollChance,
-    string Sources,
+    IReadOnlyList<QuestFlagSource> Roots,
     string Level,
     string Classes,
     string Races,
