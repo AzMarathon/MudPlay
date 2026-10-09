@@ -4908,7 +4908,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     they keep the default teleport-allowed shortest route.
 
 ### Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable
-*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional) · Realm: Paradigm (1.9.1) · per-fact tags inline*
+*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional); OBSERVED 2026-10-08 (Paradigm 1.9.1 game data + reports `paradigm-20261008-173911`, `paradigm-20261008-174023`; the talisman exit and the way round it) · Realm: Paradigm (1.9.1) · per-fact tags inline*
 
 - **[CONFIRMED, user 2026-07-23] A walled city can have a "front door" that is a
   keyword→item→summon→kill→key chain, entirely separate from any teleport "backdoor" the map data also
@@ -4967,6 +4967,25 @@ Among protectable hazards, a further split governs whether the navigator may off
     (who may be dead), or from hidden player-made stashes. So even though it shortens the trip,
     detouring to fetch it can fail — the client presents it as the player's own call (the slaver-leader
     detour may or may not net out ahead, depending on what the player is doing), never an auto-obtain.
+- *[OBSERVED 2026-10-08 — Paradigm 1.9.1 room data and TBInfo; reports `paradigm-20261008-173911`,
+  `paradigm-20261008-174023`]* **The talisman exit and the way round it, from Dragon's Teeth Hills:**
+  - **The exit that needs the talisman** is north out of `2/687` (Dragon's Teeth Hills) into `2/2578`
+    (Secret Passage), `Hidden/Needs 1 Actions, any order`; the action is `hold up talisman`,
+    `hold up amber talisman` or `lift up talisman`, `(Item: 815)`. `2/2578` goes on west to `8/837`.
+    From `2/2578` the exit back south opens with `pull lever` / `push lever` / `move lever` and no item.
+  - **Without the item the game answers** `You don't have amber talisman to use!` and the move north
+    then gets `There is no exit in that direction!`.
+  - **The way round** is the room command at `2/487` (Dragon's Teeth Hills), TBInfo `308`: `go hole`,
+    `enter hole` or `crawl hole` (`message 774:cast 336:message 766:text 306`), which lands in `2/1306`
+    (Stone Tunnel, Hole Up). `2/1306`'s own `CMD 307` (`go hole` / `enter hole` / `crawl hole` /
+    `climb hole`, `teleport 487 2`) goes back up.
+  - **Both ways still cross the orb gate and the Black Steel Gate**: south out of `8/398` (item 807),
+    then `8/461 → 8/462` (`Key: 806 [or 101 picklocks]`). So the talisman route needs the talisman
+    **and** the orb. **Client policy:** a character whose Picklocks meets the 101 on that exit is
+    planned through the gate without its key, on either route.
+  - **Route lengths** *(the client's route search over the 1.9.1 data, for a level-25 character with
+    Picklocks 119)*: `2/687 → 8/492` is 147 steps through the talisman exit and 237 round it;
+    `2/687 → 8/530` is 156 and 246.
 - **Client use:**
   - **Why the front door mattered for pathing:** the backdoor portal is the *shorter* graph route, so a
     blocked walk-to that re-probed by ignoring **all** gates surfaced it and blamed "a level
@@ -4982,6 +5001,16 @@ Among protectable hazards, a further split governs whether the navigator may off
     optional shortcut (so the walk takes the reliable way and any gate item the crosser already holds
     surfaces as "— you have it"), reports only genuinely-required unheld items, and offers the shortcut
     separately (`RouteChoice.ShortcutItems` / `ShortcutStepCount`) with the rooms it would save.
+  - The walk that card starts plans with the shortcut's gates kept closed
+    (`RouteChoice.ClosedGateItems` → `AutoWalkManager.WalkTo(keepGatesClosedFor:)`, held on the
+    walk's `WalkJourney` for re-plans, detour legs and errand restarts through
+    `AutoWalkManager.ResumeJourney`). Before 2026-10-08 it planned with every gate open and walked to
+    the talisman exit (report `paradigm-20261008-173911`).
+  - A gate counts as a shortcut's only when it stops the crosser: a keyed door they can pick or bash
+    doesn't, so the gate key is no longer named beside the talisman
+    (`RouteChoicePlanner.ItemGatesOnPath`, by the item / locked-door block reasons only). The shortcut
+    card lists its own route's full needs (`RouteChoice.ShortcutRequirements`; report
+    `paradigm-20261008-174023`).
 
 ### Random-teleport maze (the Warped Asylum)
 *Status: CONFIRMED 2026-07-17 (user design); solvable-room fast path CONFIRMED 2026-08-16 (user) · Realm: both (Paradigm lever handling differs)*

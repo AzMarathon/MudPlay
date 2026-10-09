@@ -111,5 +111,10 @@ public sealed class PvpFleeWalk : IDisposable
         });
     }
 
+    // The user stopped while the come-back was waiting out its delay in the flee
+    // room. The walker is idle then and raises nothing, so the stop is told here:
+    // the walk or run fled from is not picked back up.
+    public void CancelComeBack() => _run++;
+
     public void Dispose() => _walker.Event -= OnWalkEvent;
 }
