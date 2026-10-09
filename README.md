@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.20**
+> **Version 3.159.25**
 > - Settings → Party: "Help leader open doors" says it only works while the leader bashes (a leader picking a lock shows the room nothing)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

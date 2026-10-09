@@ -95,9 +95,12 @@ public sealed class MacroStore
     // between them. Empty / whitespace-only fragments are dropped so a trailing
     // separator doesn't fire an empty line.
     public static IReadOnlyList<string> SplitCommandSteps(string? command)
+        => Steps(command, typed: false);
+
+    private static IReadOnlyList<string> Steps(string? command, bool typed)
     {
         if (string.IsNullOrEmpty(command)) return Array.Empty<string>();
-        string[] parts = Fragments(command);
+        string[] parts = Fragments(command, typed);
         List<string> steps = new(parts.Length);
         foreach (string p in parts)
         {
@@ -113,7 +116,7 @@ public sealed class MacroStore
     public static IReadOnlyList<string> SplitCommandStepsKeepingEnters(string? command)
     {
         if (string.IsNullOrEmpty(command)) return Array.Empty<string>();
-        string[] parts = Fragments(command);
+        string[] parts = Fragments(command, typed: false);
         List<string> steps = new(parts.Length);
         for (int i = 0; i < parts.Length; i++)
         {
@@ -123,14 +126,63 @@ public sealed class MacroStore
         return steps;
     }
 
-    // Normalise every separator to `;` (^M is two chars; newlines may be \r\n or
-    // \n), then a single split covers all three.
-    private static string[] Fragments(string command) => command
-        .Replace("^M", ";", StringComparison.Ordinal)
-        .Replace("\r\n", ";", StringComparison.Ordinal)
-        .Replace('\r', ';')
-        .Replace('\n', ';')
-        .Split(';');
+    // A newline, ^M (two chars, either case) and `;` each end a command, except a `;`
+    // that starts a word: at the start of a line or after a space, with a character
+    // right behind it. That one belongs to the game, whose own commands can begin with
+    // it (`;o`, `/name @do ;o`), so it is sent as typed. `n;s`, `n; s` and `n ; s`
+    // still split; `n; ;o` sends `n` and then `;o`. The `;` in `open chest^M;look`
+    // follows a break, not a space, so it stays a separator.
+    //
+    // In a line the player typed, `;;` right before a character also keeps one `;`
+    // for the game: `;;time` sends `;time`, `n;;time` sends `n` then `;time`. Stored
+    // command lists don't read it that way, since a doubled separator there has
+    // always been an empty step (a bare Enter in a loop waypoint).
+    private static string[] Fragments(string command, bool typed)
+    {
+        string[] lines = command
+            .Replace("^M", HardBreak, StringComparison.OrdinalIgnoreCase)
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+        List<string> parts = new(lines.Length);
+        foreach (string line in lines)
+        {
+            int start = 0;
+            for (int i = 0; i < line.Length; i++)
+            {
+                char c = line[i];
+                if (c != ';' && c != HardBreak[0]) continue;
+                if (c == ';' && typed && IsDoubledBeforeText(line, i))
+                {
+                    // The first `;` ends the command before it; the second opens the next.
+                    parts.Add(line[start..i]);
+                    start = ++i;
+                    continue;
+                }
+                if (c == ';' && StartsAWord(line, i)) continue;
+                parts.Add(line[start..i]);
+                start = i + 1;
+            }
+            parts.Add(line[start..]);
+        }
+        return parts.ToArray();
+    }
+
+    // Stands in for ^M while a command is split: a break that is neither a `;` nor a
+    // line start, and that no command can contain.
+    private const string HardBreak = "\u0001";
+
+    private static bool StartsAWord(string line, int semicolon)
+    {
+        bool opensWord = semicolon == 0 || char.IsWhiteSpace(line[semicolon - 1]);
+        return opensWord && IsText(line, semicolon + 1);
+    }
+
+    private static bool IsDoubledBeforeText(string line, int semicolon) =>
+        semicolon + 1 < line.Length && line[semicolon + 1] == ';' && IsText(line, semicolon + 2);
+
+    private static bool IsText(string line, int index) =>
+        index < line.Length && line[index] is not (';' or '\u0001') && !char.IsWhiteSpace(line[index]);
 
     // Split a line the PLAYER just typed (terminal / conversation input) into
     // the commands it should send. Lets a player rapid-fire several commands
@@ -141,9 +193,9 @@ public sealed class MacroStore
     // input wrapper around SplitCommandSteps; engines never route through it.
     public static IReadOnlyList<string> SplitTypedInput(string text)
     {
-        if (text.IndexOf(';') < 0 && !text.Contains("^M", StringComparison.Ordinal))
+        if (text.IndexOf(';') < 0 && !text.Contains("^M", StringComparison.OrdinalIgnoreCase))
             return new[] { text };
-        IReadOnlyList<string> steps = SplitCommandSteps(text);
+        IReadOnlyList<string> steps = Steps(text, typed: true);
         return steps.Count > 0 ? steps : new[] { text };
     }
 
