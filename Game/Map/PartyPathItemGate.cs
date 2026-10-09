@@ -57,11 +57,15 @@ namespace MudPlay.Game.Map;
 // that decision asked for has been started. Only the round trip holds it: the
 // leader's wait for copies to arrive afterwards does not. A walk nothing would
 // turn aside (no fetch order on its journey, or an errand that owns the walker)
-// is never held: its count runs for the hand-offs while it walks on.
+// is not held for that: its count runs for the hand-offs while it walks on. The
+// one exception is a leader carrying spares of the item. The count is then what
+// hands them out, and a leader that walked on meanwhile reached the gate and
+// crossed it ahead of the gives, leaving the party behind.
 //
 // A journey asks once. The answer stands for the journey's later legs and its
-// re-plans, which decide again from it without asking, until the numbers move:
-// our own copies change, a hand-off is made, or the party changes.
+// re-plans, which decide again from it without asking, until the numbers move
+// (our own copies change, a hand-off is made, the party changes) or it is two
+// minutes old: a member's own copies can change unseen.
 //
 // Substitutes. A hazard counter is an any-of group (any boat crosses the river),
 // but the route announces one representative item. Every count here is COVERAGE
@@ -111,6 +115,7 @@ public sealed class PartyPathItemGate
     private readonly Func<bool> _canTurnWalkAside;
     private readonly Func<Action, IDisposable>? _armHoldCap;
     private readonly Func<object?> _journey;
+    private readonly Func<DateTimeOffset> _now;
     private readonly LogService? _log;
     private readonly object _gate = new();
     private readonly Dictionary<int, Pending> _pending = new();
@@ -133,7 +138,11 @@ public sealed class PartyPathItemGate
 
     // Forward is the shortfall the count sent on to the demand pipeline, 0 when
     // the party held enough and nothing was handed out.
-    private sealed record Counted(object Journey, int SelfTotal, int Forward);
+    private sealed record Counted(object Journey, int SelfTotal, int Forward, DateTimeOffset At);
+
+    // How long a journey's count stands. Only our own copies and our own hand-offs
+    // are seen from here; a member using up or picking up a copy is not.
+    private static readonly TimeSpan CountStandsFor = TimeSpan.FromMinutes(2);
 
     public PartyPathItemGate(
         Func<int, bool> isCarried,
@@ -161,7 +170,8 @@ public sealed class PartyPathItemGate
         // window; disposing the handle cancels it.
         Func<Action, IDisposable>? armHoldCap = null,
         // The trip the walk being announced belongs to, by reference.
-        Func<object?>? journey = null)
+        Func<object?>? journey = null,
+        Func<DateTimeOffset>? now = null)
     {
         ArgumentNullException.ThrowIfNull(isCarried);
         ArgumentNullException.ThrowIfNull(selfCount);
@@ -194,6 +204,7 @@ public sealed class PartyPathItemGate
         _canTurnWalkAside = canTurnWalkAside ?? (static () => true);
         _armHoldCap = armHoldCap;
         _journey = journey ?? (static () => null);
+        _now = now ?? (static () => DateTimeOffset.UtcNow);
         _log = log;
     }
 
@@ -323,7 +334,7 @@ public sealed class PartyPathItemGate
 
             // A count already in flight (the second leg of a boat route, a walk
             // started over the one that asked) is the one this walk waits for.
-            if (!BeginCount(id, name, out int generation)) continue;
+            if (!BeginCount(id, name, leader, out int generation)) continue;
             _post(() => _ = CountAsync(id, name, leader, journey, generation));
         }
         if (passthrough is not null) _forward(passthrough, 1);
@@ -335,15 +346,17 @@ public sealed class PartyPathItemGate
     // same journey decides again from that answer without asking: it forwards the
     // same shortfall (so a router that had to stand down is offered it again), or
     // nothing when the party held enough. The answer stops standing when our own
-    // copies of the item have changed, and it is dropped when a hand-off is made
-    // or the party changes: the numbers have moved, so the next leg asks afresh.
+    // copies of the item have changed or it has grown old, and it is dropped when
+    // a hand-off is made or the party changes: the numbers have moved, or may
+    // have, so the next leg asks afresh.
     private bool ReusesJourneyCount(int id, string name, object? journey)
     {
         Counted? known;
         lock (_gate) known = _counted.GetValueOrDefault(id);
         if (known is null) return false;
         if (journey is null || !ReferenceEquals(known.Journey, journey)
-            || Total(SelfHoldings(id)) != known.SelfTotal)
+            || Total(SelfHoldings(id)) != known.SelfTotal
+            || _now() - known.At > CountStandsFor)
         {
             lock (_gate) _counted.Remove(id);
             return false;
@@ -359,7 +372,7 @@ public sealed class PartyPathItemGate
     {
         if (journey is null) return;
         int selfTotal = Total(SelfHoldings(id));
-        lock (_gate) _counted[id] = new Counted(journey, selfTotal, forward);
+        lock (_gate) _counted[id] = new Counted(journey, selfTotal, forward, _now());
     }
 
     // The party changed: every count was of the roster that was.
@@ -398,11 +411,16 @@ public sealed class PartyPathItemGate
     public event Action? HoldingWalkForChanged;
 
     // Start the count of an item for the walk being announced, and hold that walk
-    // for it when the answer can turn it aside. False when the count is already in
-    // flight, so the caller starts no second one: the walk waits on that one.
-    private bool BeginCount(int id, string name, out int generation)
+    // for it when the answer can turn it aside, or when a leader has spares that
+    // the count will hand out. False when the count is already in flight, so the
+    // caller starts no second one: the walk waits on that one.
+    private bool BeginCount(int id, string name, bool leader, out int generation)
     {
-        bool hold = _canTurnWalkAside();
+        bool turnsAside = _canTurnWalkAside();
+        // Spares in a leader's pack: bought for the party a moment ago, most often.
+        // Walking on while the party is asked took the leader through the gate
+        // before the gives went out, and the gate carries only those holding one.
+        bool spares = leader && Total(SelfHoldings(id)) > PerPersonFor(id);
         bool fresh;
         lock (_gate)
         {
@@ -413,48 +431,53 @@ public sealed class PartyPathItemGate
         _log?.Info(LogCategory,
             (fresh ? $"asking the party who holds {name} (path item {id})"
                    : $"the party is already being asked who holds {name} (path item {id})")
-            + (hold ? " — the walk waits for the answer"
-                    : " — nothing would turn this walk aside, so it goes on meanwhile"));
-        if (hold) HoldWalk(id, name, fresh);
+            + (turnsAside ? " — the walk waits for the answer"
+                : spares ? " — the walk waits: there are spares to hand out first"
+                : " — nothing would turn this walk aside, so it goes on meanwhile"));
+        if (turnsAside || spares) HoldWalk(id, name, fresh);
         return fresh;
     }
 
     private void HoldWalk(int id, string name, bool freshCount)
     {
-        bool assert, joined;
+        bool assert, waits, joined;
         lock (_gate)
         {
             _holdEpoch++;
             assert = !_holdingWalk;
             _holdingWalk = true;
-            _waitingOn.Add(id);
+            waits = _waitingOn.Add(id);
             joined = !_heldFor.Contains(name);
             if (joined) _heldFor.Add(name);
         }
-        if (assert)
+        try
         {
-            try
+            if (assert) _holdWalk?.Invoke($"asking the party who holds {name}");
+            ArmHoldCap();
+        }
+        catch
+        {
+            // The count that would take this hold down is not posted yet, so what
+            // was put up here is taken back, or the walk stands for good and so does
+            // every later walk that needs this item. The coordinator puts its gate up
+            // before it tells its listeners, so one that threw has left the gate up.
+            // A hold that was already in force stays: other counts are behind it,
+            // and its own limit is still armed.
+            lock (_gate)
             {
-                _holdWalk?.Invoke($"asking the party who holds {name}");
-            }
-            catch
-            {
-                // The coordinator puts its gate up before it tells its listeners, so
-                // one that threw has left the gate up, and the count that would take
-                // it down is not posted yet. Take everything back, or the walk stands
-                // for good and so does every later walk that needs this item.
-                lock (_gate)
+                if (freshCount) _counting.Remove(id);
+                if (waits) _waitingOn.Remove(id);
+                if (joined) _heldFor.Remove(name);
+                if (assert)
                 {
-                    if (freshCount) _counting.Remove(id);
                     _waitingOn.Clear();
                     _heldFor.Clear();
                     _holdingWalk = false;
                 }
-                _releaseWalk?.Invoke("the hold could not be raised");
-                throw;
             }
+            if (assert) _releaseWalk?.Invoke("the hold could not be raised");
+            throw;
         }
-        ArmHoldCap();
         if (!assert && joined) HoldingWalkForChanged?.Invoke();
     }
 

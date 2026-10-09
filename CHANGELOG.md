@@ -1,6 +1,6 @@
 # Version history
 
-## 3.158.4
+## 3.158.5
 
 - A route card's trade trip starts with the first step, in a party too
 - A party walk sent to fetch an item waits for the party's count before setting off

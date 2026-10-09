@@ -7307,7 +7307,7 @@ public sealed class AppServices
             if (e.Kind is not (Game.Map.WalkEventKind.Stopped or Game.Map.WalkEventKind.Failed
                 or Game.Map.WalkEventKind.Finished))
                 return;
-            if (Fetch is { HasItems: true }) return;
+            if (JourneyHasFetchOrder) return;
             PathItemSubstitutes.Clear();
             // Walk over before the counter landed — undo a "search en route"
             // auto-search flip so it doesn't leak on past the leg it was for.
@@ -7444,8 +7444,7 @@ public sealed class AppServices
             carriedCount: CountItemCarried,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoLight),
             engineWalkActive: () =>
-                AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
-                || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
+                ErrandOwnsWalk() || LoopRunner.State != Game.Map.LoopState.Idle,
             walkTo: LightDetourWalkTo,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
@@ -12515,12 +12514,13 @@ public sealed class AppServices
     // nothing here has to remember to clear it.
     private Game.Map.JourneyFetch? Fetch => Walker.Journey?.Fetch;
 
-    // The gate on posting a path-item need at all: the journey under way was told
-    // to fetch something. Without one, nothing is fetched and no walk is turned aside.
+    // The journey under way still has something it was told to fetch. This is the
+    // gate on posting a path-item need at all: without it nothing is fetched and no
+    // walk is turned aside.
     private bool JourneyHasFetchOrder => Fetch is { HasItems: true };
 
-    // An errand has the walker. No path-item router takes a walk from one, so the
-    // party's count can't turn such a walk aside either.
+    // An errand has the walker. No detour router (a path item's, the light's) takes
+    // a walk from one, so the party's count can't turn such a walk aside either.
     private bool ErrandOwnsWalk() => AutoLair.IsActive || AutoDeposit.IsRerouting || SellDetour.IsDetouring;
 
     private bool FetchesForJourney(int itemId) => Fetch?.Fetches(itemId) == true;
@@ -12591,20 +12591,46 @@ public sealed class AppServices
     // asking the same question a moment later and holding the walk for it. Taken
     // once, since the hand-offs and purchases that follow move the numbers, and
     // dropped with the counts (the party changed, another walk is being planned).
+    // Nothing ties an entry to the card's own walk: it goes to the first walk that
+    // asks about the item. So one nobody took is dropped when its card is closed
+    // without a pick, and refused once it is two minutes old; a bank run an hour
+    // later decided its hand-off from the numbers of a card long gone.
     // Read and written on the UI thread only.
-    private readonly Dictionary<int, Game.Remote.PartyInventoryProbe.PartyItemResult> _cardCounts = new();
+    private readonly Dictionary<int, (Game.Remote.PartyInventoryProbe.PartyItemResult Count, DateTimeOffset TakenAt)>
+        _cardCounts = new();
+
+    private static readonly TimeSpan CardCountGoodFor = TimeSpan.FromMinutes(2);
 
     // The card counts no walk has taken yet, for the bug report.
     public string CardCountSummary => _cardCounts.Count == 0 ? "(none)"
-        : string.Join(", ", _cardCounts.Keys.Select(id => ItemNames.GetName(id) ?? $"item #{id}"));
+        : string.Join(", ", _cardCounts.Select(kv =>
+            $"{ItemNames.GetName(kv.Key) ?? $"item #{kv.Key}"} ({(DateTimeOffset.UtcNow - kv.Value.TakenAt).TotalSeconds:0}s old)"));
 
     private Game.Remote.PartyInventoryProbe.PartyItemResult? TakeCardCount(int itemId)
     {
-        if (!_cardCounts.Remove(itemId, out Game.Remote.PartyInventoryProbe.PartyItemResult counted)) return null;
+        if (!_cardCounts.Remove(itemId,
+                out (Game.Remote.PartyInventoryProbe.PartyItemResult Count, DateTimeOffset TakenAt) card))
+            return null;
+        TimeSpan age = DateTimeOffset.UtcNow - card.TakenAt;
+        if (age > CardCountGoodFor)
+        {
+            Log.Info(Game.Map.AutoSearchManager.LogCategory,
+                $"party gate count: item {itemId} — the route card's count is {age.TotalSeconds:0}s old, so the party is asked again");
+            return null;
+        }
         Log.Info(Game.Map.AutoSearchManager.LogCategory,
             $"party gate count: item {itemId} — the walk uses the route card's count "
-            + $"({counted.Replied}/{counted.Expected} answered, {counted.TotalCount} held) and doesn't ask again");
-        return counted;
+            + $"({card.Count.Replied}/{card.Count.Expected} answered, {card.Count.TotalCount} held) and doesn't ask again");
+        return card.Count;
+    }
+
+    // The route card was closed without a pick: its counts were for a walk that
+    // never started.
+    public void DropCardCounts(string why)
+    {
+        if (_cardCounts.Count == 0) return;
+        _cardCounts.Clear();
+        Log.Info(Game.Map.AutoSearchManager.LogCategory, $"party gate count: the route card's answers dropped — {why}");
     }
 
     // Short while the leader's own copies plus what the members reported don't
@@ -12685,7 +12711,7 @@ public sealed class AppServices
                 int need = 1 + r.Expected;
                 int own = CountItemCarried(id);
                 next[id] = (need, r.TotalCount);
-                _cardCounts[id] = r;
+                _cardCounts[id] = (r, DateTimeOffset.UtcNow);
                 string members = r.CountsByMember.Count == 0 ? "nobody answered"
                     : string.Join(", ", r.CountsByMember.Select(kv => $"{kv.Key} {kv.Value}"));
                 Log.Info(Game.Map.AutoSearchManager.LogCategory,
@@ -12747,7 +12773,7 @@ public sealed class AppServices
     // outstanding (obtained, or the walk was abandoned and the forced set cleared).
     private void RestoreRouteSearchAutoSearchIfDone(string reason)
     {
-        if (!_autoSearchFlippedForRouteSearch || Fetch is { HasItems: true }) return;
+        if (!_autoSearchFlippedForRouteSearch || JourneyHasFetchOrder) return;
         _autoSearchFlippedForRouteSearch = false;
         SetAutoSearchEnabled?.Invoke(false);
         Log.Info(Game.Map.AutoSearchManager.LogCategory,
@@ -12971,7 +12997,7 @@ public sealed class AppServices
         RoomHazardIndex.RoomHazard? hazard =
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
         if (hazard is null) return System.Array.Empty<int>();
-        if (Fetch is not { HasItems: true }) return hazard.MandatoryItems;
+        if (!JourneyHasFetchOrder) return hazard.MandatoryItems;
 
         System.Collections.Generic.List<int> items = new(hazard.MandatoryItems);
         foreach (System.Collections.Generic.IReadOnlyList<int> group in hazard.RequirementGroups)
@@ -13107,6 +13133,7 @@ public sealed class AppServices
         // Outstanding needs and deferred pickups / searches.
         Needs.Clear();
         PartyPathItemGate.Clear();
+        ClearPartyShortGateItems(reason);
         Cash.CancelDeferredCollect(reason);
         AutoGetItems.CancelDeferredCollect(reason);
         AutoSearch.OnRoomChanged(null);

@@ -60,6 +60,8 @@ public sealed class PartyPathItemGateTests
         // The hold's own time limit: each arming's callback, and how many were cancelled.
         public readonly List<Action> Caps = new();
         public int CapsCancelled;
+        public bool CapThrows;
+        public DateTimeOffset Now = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
         public int ChipRefreshes;
         public readonly PartyPathItemGate Gate;
 
@@ -107,10 +109,12 @@ public sealed class PartyPathItemGateTests
                 canTurnWalkAside: () => CanTurnAside,
                 armHoldCap: expired =>
                 {
+                    if (CapThrows) throw new InvalidOperationException("no timer");
                     Caps.Add(expired);
                     return new Cancel(() => CapsCancelled++);
                 },
-                journey: () => Journey);
+                journey: () => Journey,
+                now: () => Now);
             Gate.HoldingWalkForChanged += () => ChipRefreshes++;
             if (bindWire)
                 Gate.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b)));
@@ -1096,16 +1100,55 @@ public sealed class PartyPathItemGateTests
     {
         var h = new Harness { IsLeader = true, CanTurnAside = false };
         h.Names[1] = "rope";
-        h.SelfCounts[1] = 2;
-        h.SetResult(1, ("Bob", 0));
+        h.SelfCounts[1] = 1;                          // our own copy and no more
+        h.SetResult(1, ("Bob", 2), ("Al", 0));
 
         h.Gate.OnPathItemsRequired(new[] { 1 });
 
         Assert.Equal(1, h.QueryCount);
-        Assert.Equal("give rope to Bob\r", Assert.Single(h.Sent));
+        Assert.Equal("/Bob @do give rope to Al\r", Assert.Single(h.Sent));
         Assert.Empty(h.Timeline);          // no hold, no release
         Assert.Empty(h.Caps);
     }
+
+    // The walk on from the shop: the copies are bought, so the fetch order is
+    // empty and nothing would turn the walk aside. But the count now is what hands
+    // the spares out, and a leader that walked on meanwhile crossed the gate before
+    // the gives went out. The gate takes across only those holding one.
+    [Fact]
+    public void LeaderCarryingSpares_IsHeldUntilTheHandOffIsDecided() => Inline(() =>
+    {
+        var h = new Harness { IsLeader = true, CanTurnAside = false };
+        h.Names[1] = "darkwood ring";
+        h.SelfCounts[1] = 3;                          // one of its own, two just bought
+        var open = h.HoldCountsOpen(1);
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.True(h.WalkHeld);
+        Assert.Empty(h.Sent);
+
+        open[1].SetResult(Answer(1, ("Bob", 0), ("Al", 0)));
+
+        Assert.Equal(new[] { "give darkwood ring to Bob\r", "give darkwood ring to Al\r" }, h.Sent);
+        Assert.False(h.WalkHeld);
+    });
+
+    [Fact]
+    public void FollowerCarryingSpares_IsNotHeldForThem() => Inline(() =>
+    {
+        // A follower with fewer than its quota asks; "spares" is a leader's word.
+        var h = new Harness { CanTurnAside = false };
+        h.Names[1] = "waterskin";
+        h.PerPerson[1] = 3;
+        h.SelfCounts[1] = 2;
+        h.HoldCountsOpen(1);
+
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        Assert.Equal(1, h.QueryCount);
+        Assert.False(h.WalkHeld);
+    });
 
     [Fact]
     public void WalkTheAnswerCannotTurnAside_IsNotHeldByACountStillOut() => Inline(() =>
@@ -1219,6 +1262,45 @@ public sealed class PartyPathItemGateTests
         Assert.Equal(new[] { 1 }, h.Forwarded);
     }
 
+    [Fact]
+    public void HoldWhoseLimitCannotBeArmed_IsTakenBackToo()
+    {
+        var h = new Harness { CapThrows = true };
+        h.Names[1] = "rope";
+
+        Assert.Throws<InvalidOperationException>(() => h.Gate.OnPathItemsRequired(new[] { 1 }));
+
+        Assert.False(h.WalkHeld);
+        Assert.Empty(h.Gate.HoldingWalkFor);
+        Assert.Equal(0, h.QueryCount);
+
+        h.CapThrows = false;
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.Equal(1, h.QueryCount);
+        Assert.False(h.WalkHeld);
+    }
+
+    // An item that can't join a hold leaves the hold, and the counts behind it, alone.
+    [Fact]
+    public void ItemThatCannotJoinAHold_LeavesTheHoldInForce() => Inline(() =>
+    {
+        var h = new Harness();
+        h.Names[1] = "rope";
+        h.Names[2] = "log raft";
+        var open = h.HoldCountsOpen(1, 2);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        h.CapThrows = true;
+        Assert.Throws<InvalidOperationException>(() => h.Gate.OnPathItemsRequired(new[] { 2 }));
+
+        Assert.True(h.WalkHeld);
+        Assert.Equal(new[] { "rope" }, h.Gate.HoldingWalkFor);
+        Assert.Equal(1, h.QueryCount);                // item 2 was never asked about
+
+        open[1].SetResult(Answer(1, ("Bob", 0)));
+        Assert.False(h.WalkHeld);                     // released by the count it did wait on
+    });
+
     // ----- A journey asks once ---------------------------------------------------
     //
     // Every leg of a trip announces its route again, and so does a re-plan. The
@@ -1313,6 +1395,32 @@ public sealed class PartyPathItemGateTests
         h.Gate.Clear();
         h.Gate.OnPathItemsRequired(new[] { 1 });
         Assert.Equal(4, h.QueryCount);
+    }
+
+    // Only our own copies and our own hand-offs are seen from here. A member who
+    // used a copy up, or picked one up, is found out by asking again.
+    [Fact]
+    public void LaterLeg_OnceTheAnswerIsTwoMinutesOld_AsksAgain()
+    {
+        var h = new Harness { IsLeader = true, Journey = new object() };
+        h.Names[1] = "rope";
+        h.SelfCounts[1] = 1;
+        h.SetResult(1, ("Bob", 1));
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+
+        h.Now += TimeSpan.FromSeconds(119);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.Equal(1, h.QueryCount);
+
+        h.Now += TimeSpan.FromSeconds(2);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.Equal(2, h.QueryCount);
+        Assert.Equal(2, h.Count("hold"));             // held by the usual rule
+
+        // And the fresh answer stands for its own two minutes.
+        h.Now += TimeSpan.FromSeconds(60);
+        h.Gate.OnPathItemsRequired(new[] { 1 });
+        Assert.Equal(2, h.QueryCount);
     }
 
     [Fact]
