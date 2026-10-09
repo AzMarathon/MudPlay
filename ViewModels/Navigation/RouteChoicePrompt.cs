@@ -214,11 +214,12 @@ public static class RouteChoicePrompt
                 if (plan.Choice is { } sole
                     && services.SourceableGateItems(sole.Requirements) is { Count: > 0 } soleItems)
                     services.ForcePathObtain(soleItems);
-                // avoidTraps as for a picked sole route: the planner chose this route
-                // for the fewest traps, and the walk has to plan by the same rule to
-                // be that route.
-                CommitWalk(services, destination, gated: true, avoidTraps: true, stopForBossRooms: stopsForBossRooms,
-                    pickedRoute: plan.Choice?.GatedPath, closedGates: plan.Choice?.ClosedGateItems);
+                // No card was shown, so no route is passed as picked: the walk takes
+                // the shortest way through the gates it is fetching for (round the
+                // ones it isn't), on foot when it can, and with no agreement to walk
+                // into a hazard room.
+                CommitWalk(services, destination, gated: true, stopForBossRooms: stopsForBossRooms,
+                    closedGates: plan.Choice?.ClosedGateItems);
                 return true;
             default:
                 return await RunPickerAsync(services, destination, src, plan.Choice!, previewSink, calcVm, calcDialogTask, startMode);
@@ -579,8 +580,12 @@ public static class RouteChoicePrompt
         // gets no note.
         bool gatedStopsShort = hazardEdge is not null || buyPauseRoom is not null;
         Func<RouteChoiceResult, string?> teleportsOn = r =>
-            RouteChoicePlanner.DescribeTeleports(RouteChoicePlanner.TeleportLandings(
-                services.RoomGraph, RouteACardWalks(choice, r, gatedStopsShort), services.Movement));
+            RouteChoicePlanner.DescribeTeleports(TeleportsOn(
+                services, RouteACardWalks(choice, r, gatedStopsShort),
+                throughGates: choice.Kind == RouteChoiceKind.ItemGate
+                    && r is RouteChoiceResult.Gated or RouteChoiceResult.GatedNoAcquire
+                        or RouteChoiceResult.SearchEnRoute or RouteChoiceResult.Shortcut,
+                closedGates: r == RouteChoiceResult.Shortcut ? null : choice.ClosedGateItems));
 
         RouteChoiceDialogViewModel vm;
         Task<RouteChoiceResult?> dialogTask;
@@ -863,20 +868,28 @@ public static class RouteChoicePrompt
                 int shortcutItem = sci[0];
                 if (services.IsItemCarried(shortcutItem))
                 {
-                    CommitWalk(services, destination, gated: false, pickedRoute: choice.ShortcutPath);
+                    // Fewest traps, as the card's route was planned (a sole route's is).
+                    CommitWalk(services, destination, gated: false, avoidTraps: true, pickedRoute: choice.ShortcutPath);
                     break;
                 }
+                // A walk this pick replaces is stopped out loud: taken over silently,
+                // its detour routers never hear of it and go on to issue its next leg.
+                services.Walker.Stop("superseded by a shortcut pick");
                 // The trip to the item's source and on from it goes through the detour
                 // walk, which starts no journey of its own. Declared here it is the
                 // user's walk for both legs (never held to the automatic-walk teleport
-                // list, the shortcut's own teleports kept for the leg that takes it),
-                // and it replaces the journey of any walk this pick supersedes.
-                services.Walker.BeginJourney(new WalkJourney(
-                    destination,
-                    PreferTeleportFree: RouteChoicePlanner.PickedWalkPrefersTeleportFree(
-                        requested: true, avoidTeleports: false,
-                        RouteChoicePlanner.TeleportLandings(services.RoomGraph, choice.ShortcutPath, services.Movement))));
-                if (!services.ShortcutSource.TryBegin(shortcutItem, destination))
+                // list, the shortcut's own teleports kept for the leg that takes it).
+                services.Walker.BeginJourney(CardJourney(
+                    services, destination, choice.ShortcutPath, closedGates: null));
+                // If the item doesn't turn up the walk goes the long way, which is the
+                // main card's route and not this one's: it takes teleports as that
+                // card showed and goes round the gates that card went round. Left on
+                // the shortcut's rules, a shortcut that walks sent the long way round
+                // on foot too, past the teleport its card names.
+                WalkJourney theLongWay = CardJourney(
+                    services, destination, choice.GatedPath, choice.ClosedGateItems);
+                if (!services.ShortcutSource.TryBegin(shortcutItem, destination,
+                        beforeLongRoute: () => services.Walker.BeginJourney(theLongWay)))
                     CommitWalk(services, destination, gated: false);
                 break;
             // null → cancelled: walk nothing (and leave any manual pause intact —
@@ -941,9 +954,14 @@ public static class RouteChoicePrompt
         // paradigm-20261008-174236, paradigm-20261008-173911).
         IReadOnlyList<RoomKey>? pickedRoute = null, IReadOnlyCollection<int>? closedGates = null)
     {
-        IReadOnlyList<string> landings =
-            RouteChoicePlanner.TeleportLandings(services.RoomGraph, pickedRoute, services.Movement);
+        IReadOnlyList<string> landings = TeleportsOn(services, pickedRoute, throughGates: gated, closedGates);
         string? teleports = RouteChoicePlanner.DescribeTeleports(landings);
+        // Walking into a hazard room uncountered is agreed to on a card, for the
+        // rooms on that card's route. A gated walk nobody was shown a card for (the
+        // sole route whose items are all fetched for it) agrees to none.
+        bool shown = gated && pickedRoute is not null;
+        IReadOnlyList<RoomKey>? agreedHazards = shown
+            ? RouteChoicePlanner.UncounteredHazardRooms(services.Movement, pickedRoute) : null;
         preferTeleportFree = RouteChoicePlanner.PickedWalkPrefersTeleportFree(preferTeleportFree, avoidTeleports, landings);
         if (pickedRoute is { Count: > 1 })
             services.Log.Info(LogCat,
@@ -951,7 +969,9 @@ public static class RouteChoicePrompt
                 + (teleports is null ? "on foot (a re-plan keeps to walking)" : $"takes {teleports}")
                 + (gated ? ", planned through its gates" : "")
                 + (closedGates is { Count: > 0 }
-                    ? $", going round the gates that need item(s) {string.Join("/", closedGates)}" : ""));
+                    ? $", going round the gates that need item(s) {string.Join("/", closedGates)}" : "")
+                + (agreedHazards is { Count: > 0 }
+                    ? $", walking into hazard room(s) {string.Join(", ", agreedHazards)} as picked" : ""));
 
         // Abandon a paused walk-in-progress BEFORE clearing the gate. Clearing
         // UserGate synchronously resumes a Paused walker (OnCoordinatorPauseChanged
@@ -974,11 +994,32 @@ public static class RouteChoicePrompt
             avoidTraps: avoidTraps,
             ignoreAvoids: ignoreAvoids,
             preferTeleportFree: preferTeleportFree,
-            // Every walk committed here is one the user started and, where the route
-            // forked, chose: a gated pick may cross a hazard as picked.
-            pickedRoute: gated,
-            keepGatesClosedFor: gated ? closedGates : null);
+            pickedRoute: shown,
+            keepGatesClosedFor: gated ? closedGates : null,
+            agreedHazardRooms: agreedHazards);
     }
+
+    // Where a card's route teleports, read with the gates stood down that its walk
+    // plans through: whether a hop can be walked instead of teleported is judged by
+    // the exits open to that plan, which for a gated card are not the ones open now.
+    private static IReadOnlyList<string> TeleportsOn(
+        AppServices services, IReadOnlyList<RoomKey>? route, bool throughGates, IReadOnlyCollection<int>? closedGates)
+    {
+        using (throughGates ? services.Movement.SuspendAcquirableGatesExcept(closedGates ?? Array.Empty<int>()) : null)
+            return RouteChoicePlanner.TeleportLandings(services.RoomGraph, route, services.Movement);
+    }
+
+    // The journey of a card whose walk goes out through the detour walk, leg by leg,
+    // and so never passes CommitWalk: the card's destination, its teleports and the
+    // gates it goes round, planned for the fewest traps as a sole route's card is.
+    private static WalkJourney CardJourney(
+        AppServices services, RoomKey destination, IReadOnlyList<RoomKey>? route,
+        IReadOnlyCollection<int>? closedGates)
+        => new(destination,
+            AvoidTraps: true,
+            PreferTeleportFree: RouteChoicePlanner.PickedWalkPrefersTeleportFree(
+                requested: true, avoidTeleports: false, TeleportsOn(services, route, throughGates: true, closedGates)),
+            ClosedGates: closedGates is { Count: > 0 } ? closedGates : null);
 
     // The route a card's walk follows, or null when its walk follows none of the
     // routes drawn: the base card of a route that stops short (gatedStopsShort)

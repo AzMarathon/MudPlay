@@ -868,6 +868,21 @@ public static class RouteChoicePlanner
         return landings;
     }
 
+    // The hazard rooms on a card's route the crosser holds no counter for, in route
+    // order: what picking a card that crosses them agrees to, room by room. The walk
+    // is given this list, not a general licence, so nothing but these rooms opens
+    // to it later (AutoWalkManager.WalkTo's agreedHazardRooms).
+    public static IReadOnlyList<RoomKey> UncounteredHazardRooms(MovementFilter filter, IReadOnlyList<RoomKey>? keys)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        var rooms = new List<RoomKey>();
+        if (keys is null) return rooms;
+        for (int i = 1; i < keys.Count; i++)   // the room they stand in is not one they step into
+            if (!rooms.Contains(keys[i]) && filter.IsUncounteredHazardRoom(keys[i]))
+                rooms.Add(keys[i]);
+        return rooms;
+    }
+
     // Whether the walk a picked card starts prefers to go on foot (a teleport only
     // when walking is impossible, on this plan and on every re-plan). True for a
     // route that walks. A route that teleports was shown doing so and picked, and

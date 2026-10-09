@@ -1014,6 +1014,11 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // flee, a party comeback): a walk to its destination by its own rules, so a
     // route that went round a gate still does. An errand that restarts through the
     // acquirable gates, to get back from wherever it ended, says so.
+    //
+    // The restart plans from wherever the errand ended, on a route nobody was shown.
+    // It may enter the hazard rooms the user agreed to on the card, and no others: a
+    // journey that names none (it was begun with a blanket pickedRoute, or shown no
+    // card) carries no hazard consent across the restart at all.
     public bool ResumeJourney(WalkJourney journey, bool planThroughAcquirableGates = false)
     {
         ArgumentNullException.ThrowIfNull(journey);
@@ -1026,7 +1031,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             ignoreAvoids: journey.IgnoreAvoids,
             preferTeleportFree: journey.PreferTeleportFree,
             pickedRoute: journey.PickedRoute,
-            keepGatesClosedFor: journey.ClosedGates);
+            keepGatesClosedFor: journey.ClosedGates,
+            agreedHazardRooms: journey.AgreedHazardRooms ?? Array.Empty<RoomKey>());
     }
 
     // The teleports a walk the client starts on its own may use, as (room, landing)
@@ -1104,7 +1110,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // hand. The picked route goes round the exits that need them (an optional
         // shortcut's item, which is never fetched), so a plan that assumed them
         // carried would take the shortcut and stop at its gate.
-        IReadOnlyCollection<int>? keepGatesClosedFor = null)
+        IReadOnlyCollection<int>? keepGatesClosedFor = null,
+        // agreedHazardRooms: with pickedRoute, the uncountered hazard rooms on the
+        // route the user was shown. Given, they are the only ones the plan (and each
+        // re-plan, and a restart after an errand) may enter uncountered. Left null,
+        // pickedRoute opens every hazard room, which only suits a plan made from
+        // where the route was shown.
+        IReadOnlyCollection<RoomKey>? agreedHazardRooms = null)
     {
         // A silent walk while a journey stands is one of its legs, and is planned by
         // the journey's rules where it states none of its own.
@@ -1124,8 +1136,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // A side trip (to a giver, a shop) is the user's walk, so the
                 // automatic-walk list doesn't apply; but no card showed its route, so
                 // it goes on foot unless that is impossible. The teleport a card named
-                // was agreed for the journey's own route only.
+                // was agreed for the journey's own route only, and "Walk it, don't
+                // teleport" is a refusal that holds for the side trip too.
                 preferTeleportFree ??= true;
+                avoidTeleports |= standing.AvoidTeleports;
             }
             _log?.Info("Walker",
                 $"leg to {destination} of the journey to {standing.Destination} ({(toGoal ? "its destination" : "a side trip")}): "
@@ -1183,7 +1197,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 _journey = new WalkJourney(
                     destination, planThroughAcquirableGates, armItemAcquisition, avoidTeleports, avoidTraps,
                     ignoreAvoids, preferTeleportFree, pickedRoute,
-                    keepGatesClosedFor is { Count: > 0 } ? keepGatesClosedFor : null);
+                    keepGatesClosedFor is { Count: > 0 } ? keepGatesClosedFor : null,
+                    pickedRoute ? agreedHazardRooms : null);
                 _journeyStopsAt = null;
             }
             _legToJourneyGoal = IsJourneyGoal(destination);
@@ -1315,9 +1330,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // before any stepping so the live filter re-gates for mid-walk replans.
         // A route nobody picked keeps an uncountered hazard room closed, and every
         // leg of a journey keeps the gates its picked route goes round closed.
+        // A picked route whose journey names the hazard rooms the user agreed to opens
+        // those rooms and no others: agreeing to the river on the card is not
+        // agreeing to whatever hazard lies on a re-plan from somewhere else.
+        IReadOnlyCollection<int>? closedGates = _journey?.ClosedGates;
+        IReadOnlyCollection<RoomKey>? agreedHazards = pickedRoute ? _journey?.AgreedHazardRooms : null;
         IDisposable? gateScope = !planThroughAcquirableGates ? null
-            : _journey?.ClosedGates is { } closedGates
-                ? Filter?.SuspendAcquirableGatesExcept(closedGates, keepUncounteredHazards: !pickedRoute)
+            : closedGates is not null || agreedHazards is not null
+                ? Filter?.SuspendAcquirableGatesExcept(
+                    closedGates ?? Array.Empty<int>(),
+                    keepUncounteredHazards: !pickedRoute || agreedHazards is not null,
+                    openHazardRooms: agreedHazards)
             : pickedRoute ? Filter?.SuspendAcquirableGates()
             : Filter?.SuspendAcquirableGatesButUncounteredHazards();
         IReadOnlyList<Direction>? path;
@@ -1878,8 +1901,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
     {
         if (State == WalkState.Idle)
         {
-            // No walk to stop, but a journey may be standing between two of its legs.
-            EndJourney();
+            // No walk to stop, but a journey may be standing between two of its legs
+            // (at a giver, waiting on the hand-over). The coordinator about to issue
+            // the next leg hears of a stop only through this event, so it is raised
+            // for the journey: without it the leg went out after the user's Stop.
+            if (_journey is { } standing)
+                Raise(new WalkEvent(WalkEventKind.Stopped, reason, standing.Destination));
             return;
         }
         RoomKey? dest = _destination;

@@ -89,6 +89,28 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         ]
         """;
 
+    // Two ways from Start to Dest, each through a hazard room (spell 700) the
+    // crosser holds no counter for: the River, two steps, and the Swamp, three by way
+    // of the Camp. From the Camp it is the other way about: the Swamp is two steps,
+    // the River three.
+    //   1/1 Start ─E─ 1/2 River ─E─ 1/9 Dest
+    //     └S─ 1/5 Camp ─E─ 1/6 Swamp ─N─┘
+    private const string HazardRooms = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "Start", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/5", "E": "1/2", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "River", "Spell": 700, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "1/9", "W": "1/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 5, "Name": "Camp", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/1", "S": "0", "E": "1/6", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 6, "Name": "Swamp", "Spell": 700, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/9", "S": "0", "E": "0", "W": "1/5", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 9, "Name": "Dest", "Spell": 0, "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/6", "E": "0", "W": "1/2", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static readonly RoomKey Start = new(1, 1), River = new(1, 2), Camp = new(1, 5), Swamp = new(1, 6);
     private static readonly RoomKey Hills = new(1, 1), Lake = new(1, 4), Dest = new(1, 9), Giver = new(1, 10);
     private static readonly RoomKey Grove = new(1, 10), Trail = new(1, 11), Arch = new(7, 131), Shop = new(1, 20);
     private static readonly int[] Talisman = { 815 };
@@ -118,6 +140,9 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), rooms);
         File.WriteAllText(Path.Combine(_root, "alpha", "Lairs.json"), "[]");
+        // Spell 700 is a room hazard that item 42 counters.
+        File.WriteAllText(Path.Combine(_root, "alpha", "Spells.json"), """[ { "Number": 700, "Abil-0": 1, "AbilVal-0": 25 } ]""");
+        File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """[ { "Number": 42, "NegateSpell-0": 700 } ]""");
         File.WriteAllText(Path.Combine(_root, "alpha", "TBInfo.json"),
             """[ { "Number": 100, "Action": "go arch:teleport 131 7\n" } ]""");
         GameDataCache cache = new(_root);
@@ -136,6 +161,10 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
             InventoryReadyProbe = () => true,
             ItemCarriedProbe = _ => carriesEverything,
         };
+        RoomHazardIndex hazards = new(cache);
+        hazards.OnActiveSetChanged("alpha");
+        filter.Hazards = hazards;
+        filter.RoomEntrySpellProbe = key => graph.GetRoom(key)?.Spell ?? 0;
         AutoWalkManager walker = new(graph, bfs, tracker, coordinator, filter);
         Harness h = new()
         {
@@ -375,10 +404,27 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         h.Walker.WalkTo(Trail, supersedeSilently: true);
         Assert.Equal(WalkState.Idle, h.Walker.State);
         Assert.NotNull(h.Walker.Journey);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Stopped);
+
+        h.Walker.Stop("user stop");
+
+        Assert.Null(h.Walker.Journey);
+        // Said out loud, for the coordinator waiting to issue the next leg: an idle
+        // walker raises nothing on its own, and the leg went out after the Stop.
+        WalkEvent stopped = Assert.Single(h.Events, e => e.Kind == WalkEventKind.Stopped);
+        Assert.Equal(Arch, stopped.Destination);
+        Assert.Equal("user stop", stopped.Detail);
+    }
+
+    // With no journey standing there is nothing to stop and nothing is said.
+    [Fact]
+    public void StopWhileIdleWithNoJourney_RaisesNothing()
+    {
+        Harness h = NewHarness(TeleportRooms, Trail, carriesEverything: true);
 
         h.Walker.Stop();
 
-        Assert.Null(h.Walker.Journey);
+        Assert.Empty(h.Events);
     }
 
     // A silent walk with no journey standing is nobody's leg: it is its own journey,
@@ -554,5 +600,110 @@ public sealed class AutoWalkManagerPickedRouteTests : IDisposable
         Play(h);
 
         Assert.Equal(new[] { "go arch" }, h.Sent);
+    }
+
+    // ----- hazard rooms: agreed to on a card, room by room ------------------
+
+    // What "cross unprotected" on the River card commits: through the gates, the
+    // picked route, and the one hazard room on it.
+    private static bool PickTheRiverCard(Harness h) =>
+        h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, armItemAcquisition: false,
+            pickedRoute: true, agreedHazardRooms: new[] { River });
+
+    [Fact]
+    public void ThePickedCardsHazardRoom_IsTheOneTheWalkEnters()
+    {
+        Harness h = NewHarness(HazardRooms, Start);
+
+        PickTheRiverCard(h);
+
+        Assert.Equal("2 step(s)", h.LastPlan);
+        Play(h);
+        Assert.Equal(new[] { "e" }, h.Sent);
+    }
+
+    // An errand (a sell detour, a flee, a party comeback) stops the walk and leaves
+    // the character somewhere else. From the Camp the shortest way to Dest is through
+    // the Swamp, a hazard room nobody was shown. The walk picked back up keeps it
+    // closed and goes back round by the River it was agreed to cross.
+    [Fact]
+    public void AnErrandRestartFromOffTheRoute_KeepsAHazardNobodyAgreedToClosed()
+    {
+        Harness h = NewHarness(HazardRooms, Start);
+        PickTheRiverCard(h);
+        WalkJourney journey = h.Walker.Journey!;
+        h.Walker.Stop();
+        h.Tracker.SetLocated(Camp);
+
+        h.Walker.ResumeJourney(journey, planThroughAcquirableGates: true);
+
+        Assert.Equal("3 step(s)", h.LastPlan);                    // N, E, E by the River; not E, N by the Swamp
+        Play(h);
+        Assert.Equal(new[] { "n" }, h.Sent);
+    }
+
+    // A journey that names no rooms (begun with the blanket pickedRoute, or shown no
+    // card at all) carries no hazard consent across a restart: from the Camp every
+    // way to Dest crosses a hazard, so the walk fails where it stands.
+    [Fact]
+    public void AnErrandRestartOfAJourneyThatNamesNoRooms_EntersNoHazardRoom()
+    {
+        Harness h = NewHarness(HazardRooms, Start);
+        h.Walker.WalkTo(Dest, planThroughAcquirableGates: true, armItemAcquisition: false, pickedRoute: true);
+        Assert.Equal("2 step(s)", h.LastPlan);                    // the first plan, where the route was shown
+        WalkJourney journey = h.Walker.Journey!;
+        h.Walker.Stop();
+        h.Tracker.SetLocated(Camp);
+        h.Events.Clear();
+
+        Assert.False(h.Walker.ResumeJourney(journey, planThroughAcquirableGates: true));
+
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Started);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Empty(h.Sent);
+    }
+
+    // A re-plan of the walk itself, thrown off its route, opens no more than the
+    // restart does.
+    [Fact]
+    public void AReplanFromOffTheRoute_OpensOnlyTheAgreedHazardRoom()
+    {
+        Harness h = NewHarness(HazardRooms, Start);
+        PickTheRiverCard(h);
+        h.Walker.PauseForRecovery("tracker desync");
+        h.Tracker.SetLocated(Camp);
+
+        h.Walker.ResumeAfterRecovery(Camp);
+
+        Assert.Equal("3 step(s)", h.LastPlan);
+    }
+
+    // A gated walk nobody was shown a card for (a sole route whose items are all
+    // fetched for it) agrees to no hazard room, from the first plan on.
+    [Fact]
+    public void AGatedWalkWithNoCard_EntersNoHazardRoom()
+    {
+        Harness h = NewHarness(HazardRooms, Start);
+
+        Assert.False(h.Walker.WalkTo(Dest, planThroughAcquirableGates: true));
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // "Walk it, don't teleport" is a refusal, and holds on a side trip as well: with
+    // no way there on foot the side trip fails, where one of any other walk the user
+    // started would take the teleport.
+    [Fact]
+    public void ASideTripOfAWalkItJourney_NeverTeleports()
+    {
+        Harness h = NewHarness(TeleportRooms, Grove, carriesEverything: true);
+        h.Walker.WalkTo(Arch, avoidTeleports: true, preferTeleportFree: true);
+        h.Filter.MarkAvoided(Trail);
+        h.Events.Clear();
+
+        h.Walker.WalkTo(Shop, supersedeSilently: true);
+
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Failed);
+        Assert.Empty(h.Sent);
     }
 }

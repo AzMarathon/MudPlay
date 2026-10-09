@@ -111,8 +111,13 @@ public interface IRoomFilter
     // item in keepClosed stays shut unless that item is carried. For a walk whose
     // route was chosen as the way round those gates, so its plan can't quietly go
     // through one. keepUncounteredHazards adds the rule of
-    // SuspendAcquirableGatesButUncounteredHazards.
-    IDisposable SuspendAcquirableGatesExcept(IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false)
+    // SuspendAcquirableGatesButUncounteredHazards, and openHazardRooms then names the
+    // hazard rooms that open all the same: the ones the user saw on a route card and
+    // agreed to walk into. Agreeing to those is not agreeing to any other, so a plan
+    // from somewhere else (a restart after an errand) opens these and no more.
+    IDisposable SuspendAcquirableGatesExcept(
+        IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false,
+        IReadOnlyCollection<RoomKey>? openHazardRooms = null)
         => keepUncounteredHazards ? SuspendAcquirableGatesButUncounteredHazards() : SuspendAcquirableGates();
 
     // The default-implementation's inert scope — disposing it does nothing.

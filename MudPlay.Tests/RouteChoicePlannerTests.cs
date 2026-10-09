@@ -798,6 +798,32 @@ public sealed class RouteChoicePlannerTests
         });
     }
 
+    // Picking a card that crosses a hazard agrees to the hazard rooms on that card's
+    // route, by name. This is the list the walk is given.
+    [Fact]
+    public void UncounteredHazardRooms_AreTheOnesOnTheCardsRoute_TheCrosserHoldsNoCounterFor()
+    {
+        RoomKey[] route = { new(1, 1), new(1, 5), new(1, 9) };
+        bool carriesCounter = false;
+        WithGraph(HazardOnlyRoomsJson, (_, _, filter) =>
+        {
+            Assert.Equal(new[] { new RoomKey(1, 5) }, RouteChoicePlanner.UncounteredHazardRooms(filter, route));
+            Assert.Empty(RouteChoicePlanner.UncounteredHazardRooms(filter, null));
+
+            carriesCounter = true;
+            Assert.Empty(RouteChoicePlanner.UncounteredHazardRooms(filter, route));
+        },
+        spellsJson: HazardSpellsJson,
+        itemsJson: HazardItemsJson,
+        wireHazards: (index, filter) =>
+        {
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 5) ? 700 : 0;
+            filter.InventoryReadyProbe = () => true;
+            filter.ItemCarriedProbe = id => carriesCounter && id == 42;
+        });
+    }
+
     // The whole of the third report's fix is this decision: a picked route that
     // teleports is walked with teleports allowed, and one that walks keeps the walk
     // on foot. "Walk it" is never overridden, nor is an explicit "Teleport".

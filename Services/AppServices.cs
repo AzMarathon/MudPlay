@@ -7373,14 +7373,14 @@ public sealed class AppServices
         AutoLightShopRouter = new Game.Light.AutoLightShopRouter(
             shopRoomsSellingItem: ShopRoomsSellingItem,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
-            walkDestination: () => Walker.Destination,
+            walkDestination: LightDetourWalkDestination,
             distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
             carriedCount: CountItemCarried,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoLight),
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
-            walkTo: key => Walker.WalkTo(key),
+            walkTo: LightDetourWalkTo,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         AutoLightProvisioner.SetProvisioner(AutoLightShopRouter.OnBuyRequested);
@@ -8812,6 +8812,20 @@ public sealed class AppServices
         // A stash transfer is between walks while it searches, collects or deposits,
         // so the walker's own Stopped wouldn't reach it there.
         MovementControl.Stopping += () => StashTransfer.Cancel("stopped by the user");
+        // So is a walk between two of its legs: standing at a giver, a shop or an
+        // item's source, with the coordinator that brought it there about to issue
+        // the next leg. The walker says Stopped for a journey left standing, which
+        // stands them down; this covers Stop reaching them with no journey to say it
+        // for, so a leg never goes out after the user stopped.
+        MovementControl.Stopping += () =>
+        {
+            PathItemGiveRouter.Cancel();
+            PathItemShopRouter.Cancel();
+            PathItemSummonRouter.Cancel();
+            MonsterDropRouter.Cancel();
+            ShortcutSource.Cancel();
+            AutoLightShopRouter.Cancel();
+        };
         // After the coordinator has seen it: a token the route didn't send (the user
         // used one by hand) ends all movement where we land — nothing walks on from
         // there — and either way the followers it drops aren't left-behind members.
@@ -12626,6 +12640,31 @@ public sealed class AppServices
     {
         using (SuspendGatesAsTheJourneyDoes())
             return Bfs.DistanceBetween(a, b, Movement);
+    }
+
+    // The walk a light-buying detour interrupts, as the journey it was. The detour's
+    // walk to the shop is a walk of its own and ends that journey, so it is kept
+    // here for the walk back: resumed from the bare room the walker had been heading
+    // for, the walk had lost its route (the gates it went round, how it takes
+    // teleports), and caught on a side trip it went back to the giver's room.
+    private Game.Map.WalkJourney? _lightDetourJourney;
+
+    private Game.Map.RoomKey? LightDetourWalkDestination()
+    {
+        _lightDetourJourney = Walker.State != Game.Map.WalkState.Idle ? Walker.Journey : null;
+        return _lightDetourJourney?.Destination ?? Walker.Destination;
+    }
+
+    private void LightDetourWalkTo(Game.Map.RoomKey key)
+    {
+        if (_lightDetourJourney is { } interrupted && interrupted.Destination.Equals(key)
+            && !ReferenceEquals(Walker.Journey, interrupted))
+        {
+            _lightDetourJourney = null;
+            Walker.ResumeJourney(interrupted);
+            return;
+        }
+        Walker.WalkTo(key);
     }
 
     // The acquirable gates stood down the way the walker stands them down for the

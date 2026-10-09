@@ -10,6 +10,12 @@ namespace MudPlay.Game.Map;
 // automatic-walk teleport setting. ClosedGates are gate items a plan through the
 // acquirable gates must not count as in hand: the picked route goes round the exits
 // that need them.
+//
+// AgreedHazardRooms are the hazard rooms, uncountered when the route was shown, that
+// lie on the card's route. Picking the card agreed to walking into those. It did not
+// agree to any other hazard room, so they are named one by one: a plan made later
+// from another room opens these and nothing else. Null with PickedRoute is the
+// older blanket consent, good only for the plan made where the route was shown.
 public sealed record WalkJourney(
     RoomKey Destination,
     bool ThroughGates = false,
@@ -19,7 +25,8 @@ public sealed record WalkJourney(
     bool IgnoreAvoids = false,
     bool? PreferTeleportFree = null,
     bool PickedRoute = false,
-    IReadOnlyCollection<int>? ClosedGates = null)
+    IReadOnlyCollection<int>? ClosedGates = null,
+    IReadOnlyCollection<RoomKey>? AgreedHazardRooms = null)
 {
     // "on foot unless walking is impossible, going round the gates that need
     // item(s) 815", for the program log and the bug report.
@@ -35,6 +42,10 @@ public sealed record WalkJourney(
         return teleports
             + (ClosedGates is { Count: > 0 } ? $", going round the gates that need item(s) {string.Join("/", ClosedGates)}" : "")
             + (IgnoreAvoids ? ", through avoided rooms" : "")
-            + (AvoidTraps ? ", fewest traps" : "");
+            + (AvoidTraps ? ", fewest traps" : "")
+            + (!PickedRoute ? ""
+                : AgreedHazardRooms is null ? ", any hazard room on its route agreed to"
+                : AgreedHazardRooms.Count == 0 ? ", no hazard room agreed to"
+                : $", hazard room(s) {string.Join(", ", AgreedHazardRooms)} agreed to");
     }
 }
