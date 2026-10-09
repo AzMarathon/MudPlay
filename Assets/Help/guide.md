@@ -900,7 +900,7 @@ Every remote command is the `@`-word typed into **telepath, gangpath, or say**. 
 | `@goto` | `<destination>` | walks you to a saved GOTO favorite, a searched room (coords / name / acronym), or a boss. When a party follower asks their leader, the follower's map draws the leader's route (see **`@path` on the map**) |
 | `@loop` | `<name>`, ≥2 coords, `last`, or `send [name]` / `send yes` / `send no` | starts a saved loop, an ad-hoc coordinate loop, or (`@loop last`) re-runs the last loop run this session — including an ad-hoc one that was never saved. `@loop send` asks for a copy of one of their loops instead (see *Getting a loop from another player* below) |
 | `@lair` | `<name>` or coords | starts an Auto-Lair setup |
-| `@stop` | — | pauses your movement |
+| `@stop` | — | pauses your movement, and puts your auto toggles back to their base modes (see *Base modes*) |
 | `@rego` | — | resumes it |
 
 A new movement command overrides an `@stop`: after `@stop`, an `@goto` / `@loop` / `@lair` abandons the pause and starts the new movement straight away — you don't need `@rego` first (use `@rego` only to resume the *same* thing you paused).
@@ -1626,7 +1626,14 @@ The **Action menu** also carries commands you fire once, on demand, rather than 
 
 ## Base modes
 
-The Settings → General **"Auto-Engines base modes"** checkboxes are your character's default engine states. The live toolbar settles to them **every time you load the character** — so a character always comes up in its configured defaults, not in whatever transient state the last session happened to end in — and the toggles also **snap back to them at the start of a loop or Auto-Lair**, and when a **walk-to arrives** at its destination. So you can flip combat off to travel somewhere and it returns to your defaults when you get there or the circuit begins (or next time you load the character). Only arriving counts: a walk you stop, one that fails, or one an errand takes over mid-route (a bank trip or sell detour replanning it) leaves your toggles as they are.
+The Settings → General **"Auto-Engines base modes"** checkboxes are your character's default engine states. The live toolbar settles to them **every time you load the character** — so a character always comes up in its configured defaults, not in whatever transient state the last session happened to end in — and the toggles also **snap back to them at the start of a loop or Auto-Lair**, when a **walk-to arrives** at its destination, and when **you stop movement yourself**: the Stop button or its hotkey, the Navigation window's Stop, or a party member's `@stop`. So you can flip combat off to travel somewhere and it returns to your defaults when you get there, when you stop, or when the circuit begins (or next time you load the character), even if you forget to turn it back on.
+
+What doesn't reset them:
+
+- A walk that **fails**, or one an **errand takes over** mid-route (a bank trip or sell detour replanning it): your toggles stay as they are.
+- **Pause** on its own (the Pause button): only Stop and `@stop` reset.
+- A **Run or Sprint start** you stop before it has begun: its own box in Settings → Other decides whether Auto-Combat comes back or Sprint Mode ends.
+- While **Sprint Mode** is on: the autos it switched off come back when Sprint ends, not on a stop.
 
 (A character created before these checkboxes existed adopts its current live modes as its base the first time it loads, so nothing changes until you edit the boxes.)
 
@@ -2539,7 +2546,7 @@ With a real font selected (JetBrains Mono or a system font, not MX437), the zoom
 **Default:** On — Auto-Combat, Auto-Nuke, Auto-Heal, Auto-Rest, Auto-Bless, Auto-Get Items, Auto-Get Cash, Auto-Sneak. Off — Auto-Light, Auto-Hide, Auto-Search, Auto-Train.
 **What it does:** Each checkbox is the base on/off state for one automation engine: Auto-Combat (fighting), Auto-Nuke (offensive AoE/debuff spells), Auto-Heal (heal and cure casts, and aiding a downed party member), Auto-Rest (stopping to rest or meditate), Auto-Bless (buffing), Auto-Light (keeping a light lit), Auto-Get Items (picking up ground loot), Auto-Get Cash (picking up coin), Auto-Sneak and Auto-Hide (the two stealth engines), Auto-Search (searching for hidden things), and Auto-Train (the Auto-Trainer tab's leveling automation).
 **When you might change it:** Set the automation posture a character should return to — e.g. a scout that should never auto-fight, or a healer that should always rest.
-**Important notes:** These are your character's **base** engine states, not the live toolbar toggles. They're applied when the character loads, and the live toggles snap back to them at the start of a loop or Auto-Lair run — so you can flip an engine off to travel somewhere and have it return to your baseline when the circuit begins. See **Automation → Base modes** for the full picture.
+**Important notes:** These are your character's **base** engine states, not the live toolbar toggles. They're applied when the character loads, and the live toggles snap back to them at the start of a loop or Auto-Lair run, when a walk-to arrives, and when you stop movement yourself (Stop, or a party member's `@stop`) — so you can flip an engine off to travel somewhere and have it return to your baseline when you get there, stop, or the circuit begins. See **Automation → Base modes** for the full picture.
 
 ### Allow hangup in all-off mode
 
@@ -2995,7 +3002,14 @@ Only **one 0-energy between-round spell** fires per combat round (the game's own
 
 **Default:** `a` (both)
 **What it does:** The literal command word MudPlay sends each round to attack — `a` is the standard MajorMUD attack alias. The Alternate command is used instead whenever you're swinging your configured alternate weapon, since some off-hand or two-handed weapons want a different verb.
-**When you might change it:** Only if your class or realm uses a non-standard attack word.
+**When you might change it:** Only if your class or realm uses a non-standard attack word. A Mystic sets it to a martial-arts strike: `punch`, `kick` or `jumpkick`, usually typed short (`pu`, `ki`, `ju`).
+
+**Monsters that need magic to hit.** Some monsters can only be hurt by an attack with enough *hit magic*. Before it fights one, MudPlay checks whether your attack can hurt it, and leaves alone (walks past) a monster nothing you have can damage. What it weighs:
+
+- **A weapon attack** (`a`, `bash`, `smash`): the weapon's hit magic together with your class's own. A **Witchunter** carries enough of its own to hurt a magical monster with any weapon it can use.
+- **A martial-arts strike** (`punch`, `kick`, `jumpkick`): your class's own hit magic only. A strike doesn't use the weapon, so whatever you are holding makes no difference. A **Mystic's** strikes hurt magical monsters this way, whatever weapon is in hand.
+- If neither attack can hurt it, your attack spells are tried instead; with none that can land, the monster is skipped. The Program Log says why on a `skip un-actionable` line, with the level the monster needs and what each attack lands with.
+- The game has the last word: a `Your weapon has no effect…`, `Your fists have no effect…` or `Your feet have no effect…` line writes that monster off for that attack for the rest of the room.
 
 ### Weapon slots (Normal / Alternate / Backstab weapon)
 

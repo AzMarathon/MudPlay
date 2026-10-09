@@ -857,6 +857,15 @@ public static class BugReportBuilder
         static string FailSet(IReadOnlyList<string> s) => s.Count == 0 ? "(none)" : string.Join(", ", s);
         Kv(sb, "Weapon-no-effect this room — normal", FailSet(failNormal));
         Kv(sb, "Weapon-no-effect this room — alternate", FailSet(failAlt));
+        // What the hit-magic gate weighs besides the weapon: the class's and race's
+        // own hit magic, and whether an attack command is a strike that doesn't use
+        // the weapon at all.
+        (int innate, string? normalCommand, string? alternateCommand) = svc.Combat.SnapshotHitMagicInputs();
+        static string AttackKind(string? command) =>
+            Game.Combat.MartialArtsCommand.IsStrike(command) ? "martial-arts strike, weapon not used" : "weapon attack";
+        Kv(sb, "Character's own hit magic (class + race)", innate.ToString());
+        Kv(sb, "Normal attack", $"`{normalCommand}` — {AttackKind(normalCommand)}");
+        Kv(sb, "Alternate attack", $"`{alternateCommand}` — {AttackKind(alternateCommand)}");
         sb.Append('\n');
 
         sb.Append("Engine engageability of monsters known in the current room (weapon/spell magic gates + verdict) (")
@@ -874,7 +883,7 @@ public static class BugReportBuilder
               .Append(" — **").Append(r.Assessment).Append("**")
               .Append(", Magical ").Append(Lvl(r.Magical))
               .Append(", SpellImmu ").Append(Lvl(r.SpellImmu))
-              .Append(", weapon HitMagic normal=").Append(Lvl(r.NormalWeaponHit))
+              .Append(", attack hit magic normal=").Append(Lvl(r.NormalWeaponHit))
               .Append(" alt=").Append(Lvl(r.AltWeaponHit));
             if (!string.IsNullOrWhiteSpace(r.UnengageableReason))
                 sb.Append(" — ").Append(r.UnengageableReason);
