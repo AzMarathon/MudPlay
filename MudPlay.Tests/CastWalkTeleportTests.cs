@@ -50,28 +50,32 @@ public sealed class CastWalkTeleportTests : IDisposable
     private static readonly RoomKey Pit = new(16, 3103);
     private const int Idol = 1281;
 
-    // The idol's passage as the game data has it: the antechamber's east exit names
-    // 16/2274, and that room, both landings and the rooms west of them are the same
-    // one-exit and two-exit "Catacombs" twice over. The side without the idol is no
-    // dead end: it walks back round to the approach. Beside it, a ledge whose
+    // The idol's passage with the names and exits the game data gives its rooms,
+    // because the look-alikes are the point: every room here is "Earthen
+    // Catacombs"; 16/2273, whose east exit names 16/2274, has exits north and east,
+    // and so do 16/2430 and 16/2227, the rooms west of the landings; 16/2274 and
+    // both landings have the one exit west. (A fixture that named them apart hid a
+    // follower left a room behind.) What lies beyond is made up to close the walk:
+    // 16/2272 with only its exit south, the Lost City, and the way round that
+    // makes the side without the idol no dead end. Beside it, a ledge whose
     // pass-through room and landing look nothing alike, and a fork whose two
     // landings do not look alike either.
     private const string Rooms = """
         [
-          { "Map Number": 16, "Room Number": 2272, "Name": "Approach", "N": "0", "S": "16/2273", "E": "0", "W": "0",
+          { "Map Number": 16, "Room Number": 2272, "Name": "Earthen Catacombs", "N": "0", "S": "16/2273", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 16, "Room Number": 2273, "Name": "Antechamber", "N": "16/2272", "S": "0",
+          { "Map Number": 16, "Room Number": 2273, "Name": "Earthen Catacombs", "N": "16/2272", "S": "0",
             "E": "16/2274 (Cast: pre-0, post-857)", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 16, "Room Number": 2274, "Name": "Catacombs", "N": "0", "S": "0", "E": "0", "W": "16/2430",
+          { "Map Number": 16, "Room Number": 2274, "Name": "Earthen Catacombs", "N": "0", "S": "0", "E": "0", "W": "16/2430",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 16, "Room Number": 2431, "Name": "Catacombs", "N": "0", "S": "0", "E": "0", "W": "16/2430",
+          { "Map Number": 16, "Room Number": 2431, "Name": "Earthen Catacombs", "N": "0", "S": "0", "E": "0", "W": "16/2430",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 16, "Room Number": 2228, "Name": "Catacombs", "N": "0", "S": "0", "E": "0", "W": "16/2227",
+          { "Map Number": 16, "Room Number": 2228, "Name": "Earthen Catacombs", "N": "0", "S": "0", "E": "0", "W": "16/2227",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 16, "Room Number": 2430, "Name": "Catacombs", "N": "16/2500", "S": "0", "E": "16/2431", "W": "0",
+          { "Map Number": 16, "Room Number": 2430, "Name": "Earthen Catacombs", "N": "16/2500", "S": "0", "E": "16/2431", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 16, "Room Number": 2227, "Name": "Catacombs", "N": "16/2226", "S": "0", "E": "16/2228", "W": "0",
+          { "Map Number": 16, "Room Number": 2227, "Name": "Earthen Catacombs", "N": "16/2226", "S": "0", "E": "16/2228", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
           { "Map Number": 16, "Room Number": 2500, "Name": "Lost City", "N": "0", "S": "16/2430", "E": "0", "W": "16/2272",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
@@ -273,7 +277,7 @@ public sealed class CastWalkTeleportTests : IDisposable
 
         h.Tracker.NoteMoveSent(Direction.E);
         Assert.True(h.Tracker.IsPeekSuppressed());      // its "Also here:" isn't our room's
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
@@ -284,7 +288,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.False(h.Tracker.IsPeekSuppressed());     // the next display is the landing's
         Assert.Empty(h.Timers);
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));   // the room we asked for
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the room we asked for
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
@@ -303,7 +307,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         DateTimeOffset t0 = DateTimeOffset.UtcNow;
         h.Tracker.SetLocated(Antechamber, t0);
         h.Tracker.NoteMoveSent(Direction.E, t0);
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W), t0.AddMilliseconds(100));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W), t0.AddMilliseconds(100));
 
         h.RunTimers();
 
@@ -312,7 +316,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Equal(1, h.Redisplays);
         Assert.False(h.Tracker.IsPeekSuppressed(t0.AddMilliseconds(200)));
         // A display long after isn't held against the booking.
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W), t0.AddSeconds(30));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W), t0.AddSeconds(30));
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
     }
 
@@ -324,7 +328,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Antechamber);
 
         h.Tracker.NoteMoveSentByObserver(Direction.E);
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
@@ -345,7 +349,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Antechamber);
 
         h.Tracker.NoteMoveSent(Direction.E);
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(new RoomKey(16, landing), h.Tracker.State.CurrentRoom!.Key);
@@ -356,7 +360,7 @@ public sealed class CastWalkTeleportTests : IDisposable
 
         // The room asked for fits both landings: a deduction still, so where the
         // realm can name the room, it is asked.
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(new RoomKey(16, landing), h.Tracker.State.CurrentRoom!.Key);
         Assert.Single(resyncAsked);
@@ -437,9 +441,10 @@ public sealed class CastWalkTeleportTests : IDisposable
     }
 
     // And when the wait for a room runs out on such a step, the room asked for is
-    // the one we never left: it is read as that, and nothing is booked.
+    // the one we never left: the step is taken off the queue, so the tracker stands
+    // there instead of waiting on it for good, and nothing is booked.
     [Fact]
-    public void Tracker_StepNeverAnswered_TheRoomAskedForIsTheOneWeNeverLeft()
+    public void Tracker_StepNeverAnswered_TheRoomAskedForTakesItOffTheQueue()
     {
         Harness h = NewHarness();
         int crossings = 0;
@@ -449,18 +454,49 @@ public sealed class CastWalkTeleportTests : IDisposable
 
         h.RunTimers();
         Assert.Equal(1, h.Redisplays);
-        Assert.False(h.Tracker.IsPeekSuppressed());     // the room asked for is ours
-        h.Tracker.NoteRoomObserved(Obs("Antechamber", Direction.N, Direction.E));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
 
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(Antechamber, h.Tracker.State.CurrentRoom!.Key);
+        Assert.False(h.Tracker.IsPeekSuppressed());
         Assert.Equal(0, crossings);
         Assert.Null(h.Tracker.LastCastLanding);
     }
 
-    // The room passed through is too dark to show: the step is read off the dark
-    // line as ever, and the landing, which may be lit, is asked for.
+    // A step of our own can simply be late: the game queues a command behind an
+    // action delay. Its display then comes after we asked, ahead of the answer, and
+    // is the room passed through like any other: hidden from the consumers, its
+    // exits and doors not kept, and the room not asked for a second time.
     [Fact]
-    public void Tracker_RoomPassedThroughIsDark_BooksTheLandingAndAsksForIt()
+    public void Tracker_OwnStepLate_ItsDisplayAfterTheAskingIsStillTheRoomPassedThrough()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(Antechamber);
+        h.Tracker.NoteMoveSent(Direction.E);
+        h.RunTimers();                                  // 1.5 s with no room: asked
+        Assert.Equal(1, h.Redisplays);
+
+        Assert.True(h.Tracker.IsPeekSuppressed());
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the step's own display
+
+        Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Null(h.Tracker.State.ObservedExitDirections);
+        Assert.True(h.Tracker.CastLandingAwaitsDisplay);
+        Assert.Equal(1, h.Redisplays);
+        Assert.False(h.Tracker.IsPeekSuppressed());
+
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the answer
+
+        Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
+        Assert.False(h.Tracker.CastLandingAwaitsDisplay);
+    }
+
+    // The room passed through is too dark to show: the step is read off the dark
+    // line as ever and the landing booked, but not asked for. The answer would be
+    // another dark line, which says nothing about the landing and reads like the
+    // next step arriving.
+    [Fact]
+    public void Tracker_RoomPassedThroughIsDark_BooksTheLandingWithoutAsking()
     {
         Harness h = NewHarness();
         int crossings = 0;
@@ -472,26 +508,80 @@ public sealed class CastWalkTeleportTests : IDisposable
 
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
         Assert.Equal(1, crossings);
-        Assert.Equal(1, h.Redisplays);
+        Assert.Equal(0, h.Redisplays);
+        Assert.False(h.Tracker.CastLandingAwaitsDisplay);
         Assert.Empty(h.Timers);
     }
 
-    // A crossing is announced once, whatever is printed after it.
+    // The passage's rooms are darker than the one before it. A walk with too little
+    // light is carried by the dark lines alone, one per step: with the landing
+    // asked for, the answer's dark line confirmed the step west before it was
+    // taken, and every step after it, the tracker a room ahead until a lit room.
     [Fact]
-    public void Tracker_DarkLineAfterTheCrossing_AnnouncesNothingMore()
+    public void Walker_InTheDark_EachDarkLineConfirmsOneStep()
     {
         Harness h = NewHarness();
+        AutoWalkManager walker = NewWalker(h);
+        h.Tracker.SetLocated(Antechamber);
+        Assert.True(walker.WalkTo(LostCity));
+
+        h.Tracker.NoteDarkRoomEntered();                // the room passed through
+
+        Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+        Assert.Equal(new[] { "e\r", "w\r" }, h.Sent.Select(b => Encoding.Latin1.GetString(b)));
+
+        h.Tracker.NoteDarkRoomEntered();                // the step west
+
+        Assert.Equal(Beyond, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(new[] { "e\r", "w\r", "n\r" }, h.Sent.Select(b => Encoding.Latin1.GetString(b)));
+        Assert.Equal(0, h.Redisplays);
+    }
+
+    // A lit room passed through and a landing too dark to show: the landing was
+    // asked for, so the first dark line is the answer to that and not the walk's
+    // next step arriving.
+    [Fact]
+    public void Walker_LandingTooDarkToShow_TheAnswerIsNotTheNextStep()
+    {
+        Harness h = NewHarness();
+        AutoWalkManager walker = NewWalker(h);
         int crossings = 0;
         h.Tracker.CastCrossingStarted += _ => crossings++;
         h.Tracker.SetLocated(Antechamber);
-        h.Tracker.NoteMoveSent(Direction.E);
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        Assert.True(walker.WalkTo(LostCity));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
+        Assert.Equal(new[] { "e\r", "\r", "w\r" }, h.Sent.Select(b => Encoding.Latin1.GetString(b)));
 
-        h.Tracker.NoteDarkRoomEntered();
+        h.Tracker.NoteDarkRoomEntered();                // the answer: the landing is dark
 
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+        Assert.False(h.Tracker.CastLandingAwaitsDisplay);
+        Assert.Equal(3, h.Sent.Count);
+
+        h.Tracker.NoteDarkRoomEntered();                // the step west
+
+        Assert.Equal(Beyond, h.Tracker.State.CurrentRoom!.Key);
         Assert.Equal(1, crossings);
         Assert.Equal(1, h.Redisplays);
+    }
+
+    // A cast step left at the head of the queue by a dark line (typed ahead of the
+    // step before it) gets its wait for a room like any other.
+    [Fact]
+    public void Tracker_CastStepLeftAtTheHeadByADarkLine_GetsItsWait()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(Approach);
+        h.Tracker.NoteMoveSent(Direction.S);
+        h.Tracker.NoteMoveSent(Direction.E);
+        Assert.Empty(h.Timers);
+
+        h.Tracker.NoteDarkRoomEntered();                // the step south
+
+        Assert.Equal(Antechamber, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Single(h.Timers);
     }
 
     // A follower dragged through is shown the same one room, when shown any, and is
@@ -505,7 +595,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Antechamber);
 
         h.Tracker.NoteFollowMove(Direction.E);
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(new RoomKey(16, landing), h.Tracker.State.CurrentRoom!.Key);
@@ -530,12 +620,46 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
         Assert.False(h.Tracker.IsPeekSuppressed());     // the room asked for is ours
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(new RoomKey(16, landing), h.Tracker.State.CurrentRoom!.Key);
         Assert.Contains("asked for", h.Tracker.LastCastLanding!.Value.Basis);
         Assert.Equal(1, h.Redisplays);                  // not asked a second time
+    }
+
+    // The leader's own Enter lists the follower in the landing, the invite goes out,
+    // the follower rejoins and the leader steps west: three round trips, as a rule
+    // well inside the wait. The drag west then arrives behind a drag east that was
+    // shown no room, and the room it ends in reads exactly like the one the first
+    // drag left (16/2273 and 16/2430: "Earthen Catacombs", north and east). Read
+    // against the first drag, that display was hidden from the consumers and then
+    // thrown away as a re-look, the follower a room behind for good. The first drag
+    // is settled at its landing instead, and the display is the second drag's.
+    [Fact]
+    public void Tracker_FollowerShownNoRoom_DraggedOnInsideTheWait_KeepsUp()
+    {
+        Harness h = NewHarness();
+        int crossings = 0;
+        h.Tracker.CastCrossingStarted += _ => crossings++;
+        h.Tracker.SetLocated(Antechamber);
+        h.Tracker.NoteFollowMove(Direction.E);
+        Assert.Single(h.Timers);
+
+        h.Tracker.NoteFollowMove(Direction.W);
+
+        Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+        Assert.Contains("dragged on", h.Tracker.LastCastLanding!.Value.Basis);
+        Assert.Equal(1, crossings);
+        Assert.Empty(h.Timers);                         // nothing left to ask about
+        Assert.False(h.Tracker.IsPeekSuppressed());     // the next display is the second drag's
+
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
+
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+        Assert.Equal(Beyond, h.Tracker.State.CurrentRoom!.Key);
+        Assert.Equal(0, h.Redisplays);
     }
 
     // Asked for with no room shown, the display is of where we stand: one that fits
@@ -562,15 +686,15 @@ public sealed class CastWalkTeleportTests : IDisposable
         Harness h = NewHarness();
         h.Tracker.SetLocated(Antechamber);
         h.Tracker.NoteMoveSent(Direction.E);
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));     // the room passed through
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));     // the room passed through
 
         h.Tracker.NoteMoveSent(Direction.W);
 
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
         Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));     // the landing, asked for
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.N, Direction.E));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));     // the landing, asked for
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(Beyond, h.Tracker.State.CurrentRoom!.Key);
@@ -586,7 +710,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.NoteMoveSent(Direction.E);
         h.Tracker.NoteConnectionLost();
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
@@ -622,13 +746,13 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Approach);
 
         Assert.True(walker.WalkTo(LostCity));
-        h.Tracker.NoteRoomObserved(Obs("Antechamber", Direction.N, Direction.E));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
 
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("e\r", h.SentText(1));
         Assert.Equal(0, splits);                    // nothing shows the step happened yet
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));   // the room passed through
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the room passed through
 
         Assert.Equal(1, splits);
         Assert.Equal(WalkState.Paused, walker.State);
@@ -636,7 +760,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Equal(3, h.Sent.Count);
         Assert.Equal("\r", h.SentText(2));          // the landing room, asked for
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));   // the landing, the party in it
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the landing, the party in it
 
         Assert.Equal(WalkState.Paused, walker.State);
         Assert.Equal(3, h.Sent.Count);              // no step out of the landing room
@@ -666,7 +790,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Coordinator.AssertGate(MovementCoordinator.PartyWaitGate);
         Assert.Equal(WalkState.Paused, walker.State);
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));   // the room passed through
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the room passed through
 
         Assert.Equal(1, splits);
     }
@@ -683,12 +807,12 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Antechamber);
         Assert.True(walker.WalkTo(LostCity));
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(new[] { "e\r", "\r", "w\r" }, h.Sent.Select(b => Encoding.Latin1.GetString(b)));
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));               // the landing, asked for
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.N, Direction.E));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));               // the landing, asked for
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
 
         Assert.Equal(Beyond, h.Tracker.State.CurrentRoom!.Key);
         Assert.Equal("n\r", h.SentText(3));
@@ -710,11 +834,12 @@ public sealed class CastWalkTeleportTests : IDisposable
 
         Assert.True(walker.WalkTo(LostCity, planThroughAcquirableGates: true, armItemAcquisition: false));
         Assert.Equal("s\r", h.SentText(0));
-        h.Tracker.NoteRoomObserved(Obs("Antechamber", Direction.N, Direction.E));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
 
         Assert.Single(h.Sent);                      // no step east
         Assert.Contains("golden idol", events.Single(e => e.Kind == WalkEventKind.Failed).Detail);
         Assert.Equal(WalkState.Idle, walker.State);
+        Assert.Null(walker.Journey);                // a leg to the journey's destination: it ends with it
     }
 
     // The step's bytes went out and the game threw them away. Nobody moved, so
@@ -771,7 +896,7 @@ public sealed class CastWalkTeleportTests : IDisposable
 
         Assert.True(walker.WalkTo(LostCity));
         router.Dispatch(Line("Also here: bone warrior."));                   // the room passed through
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
         router.Dispatch(Line("Tank is no longer following you."));
         router.Dispatch(Line("Healer is no longer following you."));
 
@@ -781,7 +906,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Equal(new[] { "e\r", "\r" }, h.Sent.Select(b => Encoding.Latin1.GetString(b)));
 
         router.Dispatch(Line("Also here: Tank, Healer."));                   // the landing room, asked for
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Contains("invite Tank\r", partySent);
         Assert.Contains("invite Healer\r", partySent);
@@ -807,7 +932,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Antechamber);
 
         Assert.True(walker.WalkTo(LostCity));
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(0, splits);
         Assert.Equal("w\r", h.SentText(h.Sent.Count - 1));
@@ -825,7 +950,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Approach);
 
         Assert.True(walker.WalkTo(Antechamber));
-        h.Tracker.NoteRoomObserved(Obs("Antechamber", Direction.N, Direction.E));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
 
         Assert.Equal(0, splits);
     }
@@ -882,7 +1007,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Equal("e\r", h.SentText(0));
         Assert.Equal(0, splits);
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));   // the room passed through
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the room passed through
 
         Assert.Equal(1, splits);
         Assert.Equal(WithIdol, h.Tracker.State.CurrentRoom!.Key);
@@ -890,7 +1015,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         Assert.Equal(2, h.Sent.Count);
         Assert.Equal("\r", h.SentText(1));          // the landing room, asked for
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));   // the landing
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));   // the landing
 
         Assert.Equal(LoopState.Paused, runner.State);
         Assert.Equal(2, h.Sent.Count);              // held in the landing room
@@ -915,7 +1040,7 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Coordinator.AssertGate(MovementCoordinator.PartyWaitGate);
         Assert.Equal(LoopState.Paused, runner.State);
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(1, splits);
     }
@@ -931,11 +1056,11 @@ public sealed class CastWalkTeleportTests : IDisposable
         h.Tracker.SetLocated(Antechamber);
         Assert.True(runner.Start(PassageLoop()));
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.W));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.W));
 
         Assert.Equal(new[] { "e\r", "\r", "w\r" }, h.Sent.Select(b => Encoding.Latin1.GetString(b)));
 
-        h.Tracker.NoteRoomObserved(Obs("Catacombs", Direction.N, Direction.E));
+        h.Tracker.NoteRoomObserved(Obs("Earthen Catacombs", Direction.N, Direction.E));
 
         Assert.Equal(Beyond, h.Tracker.State.CurrentRoom!.Key);
     }
