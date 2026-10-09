@@ -256,6 +256,10 @@ public partial class MainWindow : Window
             if (AppServices.Current.Profile.Current is { } profile)
                 profile.PendingReconnectLeader = null;
 
+            // Unsaved edits in an open Settings window are saved too: closing the
+            // client is not a Cancel. Ahead of the profile save, which writes them.
+            if (DataContext is MainWindowViewModel exiting) exiting.SavePendingSettingsForExit();
+
             try { AppServices.Current.Profile.Save(); }
             catch (Exception ex)
             {

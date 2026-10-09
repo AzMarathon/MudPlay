@@ -4846,6 +4846,24 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void PartyBless_TimedFromTheSend_ALaterCannotSeeLine_LeavesTheRunningTimerAlone()
+    {
+        // Minutes on, "You do not see Raijin here!" answers something else the user
+        // typed. It isn't the reply to the cast, and the buff is still on.
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("halo", "Raijin");
+        h.BuffInfo["halo"] = ("You cast {spellname}!", 420);
+        h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Now = h.Now.AddSeconds(60);
+        h.Confirm("You do not see Raijin here!");
+
+        Assert.Equal("raijin", Assert.Single(h.Director.SnapshotActiveBuffs()).Target);
+    }
+
+    [Fact]
     public void PartyBless_ALineThatNamesItsTarget_StillWaitsForIt()
     {
         // Unchanged for the spells whose line does name the member: no line, no timer.

@@ -20,12 +20,19 @@ public partial class SettingsWindow : Window
         // after construction when the host assigns DataContext.
         DataContextChanged += (_, _) => HookCloseRequested();
 
-        // Title-bar X / Alt-F4 / parent-window-close: treat as Cancel
-        // (discard pending edits) so the window can't sneak past the
-        // user's explicit commit decision. Routed through DiscardChanges
-        // rather than DiscardAndClose to avoid re-entering Close.
-        Closing += (_, _) =>
+        // Title-bar X / Alt-F4 on this window: treat as Cancel (discard pending
+        // edits) so the window can't sneak past the user's explicit commit
+        // decision. Routed through DiscardChanges rather than DiscardAndClose to
+        // avoid re-entering Close.
+        //
+        // The client closing takes this window with it, and that is not a Cancel:
+        // the main window saves the pending edits on its way out
+        // (MainWindowViewModel.SavePendingSettingsForExit). Nothing is discarded
+        // here then, also because the exit can still be called off at its confirm
+        // prompt, and the edits must be here when it is.
+        Closing += (_, e) =>
         {
+            if (e.CloseReason != WindowCloseReason.WindowClosing) return;
             if (DataContext is SettingsWindowViewModel vm && !vm.IsCommitted)
             {
                 vm.DiscardChanges();

@@ -365,6 +365,7 @@ public static class BugReportBuilder
             ? "(nobody)" : string.Join(", ", svc.PartyDisconnectMovement.PendingMembers));
         Kv(sb, "Recovering member", svc.PartyComeback.RecoveringMember is { } rec
             ? (svc.PartyComeback.RecoveringLeftBehind ? $"{rec} (left behind by our move)" : rec)
+              + $" — {svc.PartyComeback.RecoveryPhase}"
             : "(none in flight)");
         Kv(sb, "Recovery reach (rooms)", svc.PartyComeback.ReturnDistanceRooms.ToString());
         Kv(sb, "Recovery given up, resume kept for", svc.PartyComeback.ParkedResumeSummary ?? "(none)");
@@ -1465,6 +1466,14 @@ public static class BugReportBuilder
             Kv(sb, "Loop waiting on a trap disarm", svc.LoopRunner.IsAwaitingTrapDisarm.ToString());
             Kv(sb, "Loop command held for an empty room", svc.LoopRunner.AwaitingEmptyRoom ? "yes — clearing the room first" : "no");
         }
+        // A loop set aside by a dropped link restarts on the first prompt back in the
+        // game, held until the party reform has seen the room when one is pending: a
+        // "walked off without the party after a relog" report needs which it was.
+        Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
+            ? $"'{pendingLoop}' — on the next in-game prompt"
+            : svc.LoopRunner.ReconnectResumeHeldForReform
+                ? "restarted — held until the party reform has seen the room"
+                : "(none pending)");
         // Settings → Cash + Items "No combat during an auto-sell detour / auto-deposit trip".
         Kv(sb, "Auto-Combat held off for a detour", svc.DetourCombat.HeldFor ?? "(no)");
         Kv(sb, "Staged loop", loop.StagedLoop?.Name ?? "(none)");
@@ -1601,6 +1610,15 @@ public static class BugReportBuilder
         Kv(sb, "Open-door exits",
             roomState.OpenDoorDirections is { Count: > 0 } doors
                 ? string.Join(", ", doors) : "(none)");
+        // The last exit whose spell teleported us on, where the tracker put us and
+        // what it went by. Its landings can look alike (the golden idol's do), so a
+        // "map shows me on the wrong side" report needs the reasoning.
+        Kv(sb, "Last cast-on-walk teleport", svc.RoomTracker.LastCastLanding is { } cast
+            ? $"{cast.From} → {cast.Landing} at {cast.At.ToLocalTime():HH:mm:ss} ({cast.Basis})"
+            : "(none this session)");
+        // The landing is booked off the room passed through and then asked for; a
+        // roster or loot read that never happened there shows as this still set.
+        Kv(sb, "Cast-on-walk landing booked, its room not shown yet", svc.RoomTracker.CastLandingAwaitsDisplay.ToString());
         // RoomTracker anchors its timestamps in UTC (DateTimeOffset.UtcNow); the
         // rest of the report uses local .Now. The two are the same absolute
         // instant so all the tracker's comparisons work either way, but printing
@@ -1715,6 +1733,23 @@ public static class BugReportBuilder
             bfs.FindPath(here, target, filter, ignoreExitGates: true);
         Kv(sb, "Physical route (all gates ignored)",
             physical is { Count: > 0 } ? $"{physical.Count} step(s)" : "none — graph-disconnected");
+
+        // The gates the route card named, and what the client makes of each: whether
+        // a pick of the card would fetch a door key, and any trade that yields it.
+        if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs })
+        {
+            IReadOnlyList<int> fetchable = svc.SourceableGateItems(reqs);
+            Kv(sb, "Gate items on the route through gates", string.Join("; ", reqs.Select(r =>
+            {
+                string items = string.Join("/", r.ItemIds.Select(id => $"{id} {svc.ItemNames.GetName(id) ?? "?"}"));
+                if (r.Carried) return $"{r.Kind} {items} (carried)";
+                if (r.Kind != RouteRequirementKind.DoorKey) return $"{r.Kind} {items}";
+                string source = fetchable.Contains(r.ItemIds[0])
+                    ? " — a route card's pick fetches it" : " — nothing fetches it";
+                string trade = svc.GiveSources.TradeNote(r.ItemIds[0]) is { } note ? $" — {note}" : string.Empty;
+                return $"{r.Kind} {items}{source}{trade}";
+            })));
+        }
 
         if (RouteChoicePlanner.PlanBlocked(bfs, filter, graph, here, target) is { } b)
         {
@@ -1838,6 +1873,14 @@ public static class BugReportBuilder
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
+        // Both ride on the journey ("Route this walk keeps to" above), so with no
+        // journey standing there is nothing to list.
+        Game.Map.JourneyFetch? fetch = svc.Walker.Journey?.Fetch;
+        Kv(sb, "Journey's items to fetch", fetch is not { HasItems: true } ? "(none)" : string.Join(", ", fetch.Items));
+        Kv(sb, "Journey's trades agreed to on its route card",
+            fetch is not { Trades.Count: > 0 } ? "(none)" : string.Join(", ", fetch.Trades.Select(t =>
+                $"{t.Key} {svc.ItemNames.GetName(t.Key) ?? "?"} for {t.Value} {svc.ItemNames.GetName(t.Value) ?? "?"}"
+                + (svc.AgreedTradeFor(t.Key) is null ? " (not in force)" : " (in force)"))));
         Kv(sb, "Shop-buy detour active", svc.PathItemShopRouter.DetourActive.ToString());
         Kv(sb, "Monster-drop hunt detour active", svc.MonsterDropRouter.DetourActive.ToString());
         Kv(sb, "Summon detour active", svc.PathItemSummonRouter.DetourActive.ToString()

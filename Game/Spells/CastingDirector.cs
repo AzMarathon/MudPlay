@@ -1628,6 +1628,14 @@ public sealed class CastingDirector : IDisposable
     {
         if (_pendingManualCast is { } man) ConfirmManualCast(man, line.Text);
         if (_pendingPartyCast is not { } p) return;
+        // A cast timed from its send has nothing to wait for, and is kept only for
+        // the game's answer to it. Past that, a "do not see" line is about something
+        // else the user did, and must not take the member's running timer away.
+        if (p.TimedFromSend && _now() - p.SentAt > PendingSelfBuffRejectionWindow)
+        {
+            _pendingPartyCast = null;
+            return;
+        }
 
         // "You do not see <target> here!" — the member is in the party (so in the room)
         // but HIDING, so a single-target cast can't land and the confirm we were waiting

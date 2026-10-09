@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MudPlay.Game.Map;
@@ -258,5 +259,56 @@ public sealed class TBInfoCastTeleportResolverTests : IDisposable
 
         Assert.True(results.Single(r => r.Keyword == "transport").WholeParty);
         Assert.False(results.Single(r => r.Keyword == "hop").WholeParty);
+    }
+
+    // ----- a spell that teleports through its textblock ----------------
+
+    private static SpellFormulaInput TextblockSpell(int block) => new()
+    {
+        Abilities = new[] { new SpellAbility(148, block) },
+    };
+
+    // Spell 857 "golden idol teleport" (both realms): ability 148 → TBInfo 2871. With
+    // the idol (item 1281) the caster lands in 16/2431, without it in 16/2228.
+    [Fact]
+    public void TextblockLandings_ItemGatedLineThenBareLine_ReadsBothInOrder()
+    {
+        const string tbinfo = """
+            [ { "Number": 2871, "LinkTo": 0,
+                "Action": "checkitem 1281 66:teleport 2431 16:text 2872\nteleport 2228 16:text 2872\n",
+                "Called From": "Spell #857" } ]
+            """;
+        (TBInfoStore store, _) = NewSet(tbinfo, "[]");
+
+        var landings = TBInfoCastTeleportResolver.TextblockLandings(TextblockSpell(2871), store);
+
+        Assert.Equal(new[] { (1281, new RoomKey(16, 2431)), (0, new RoomKey(16, 2228)) }, landings);
+    }
+
+    // A chain it can't predict is left alone: a random table, an ability check, a
+    // line that goes somewhere other than a teleport.
+    [Theory]
+    [InlineData("random 2776\n")]
+    [InlineData("checkability 134 9:teleport 10 1\nteleport 11 1\n")]
+    [InlineData("message 3264:teleport 2252 12:nomonsters:random 4176\n")]
+    [InlineData("checkitem 5 66:cast 12\nteleport 11 1\n")]
+    public void TextblockLandings_ChainItCannotJudge_IsNull(string action)
+    {
+        string tbinfo = System.Text.Json.JsonSerializer.Serialize(new[]
+        {
+            new Dictionary<string, object> { ["Number"] = 50, ["LinkTo"] = 0, ["Action"] = action },
+        });
+        (TBInfoStore store, _) = NewSet(tbinfo, "[]");
+
+        Assert.Null(TBInfoCastTeleportResolver.TextblockLandings(TextblockSpell(50), store));
+    }
+
+    [Fact]
+    public void TextblockLandings_SpellWithoutATextblock_IsNull()
+    {
+        (TBInfoStore store, _) = NewSet("[]", "[]");
+        SpellFormulaInput spell = new() { Abilities = new[] { new SpellAbility(140, 5) } };
+
+        Assert.Null(TBInfoCastTeleportResolver.TextblockLandings(spell, store));
     }
 }
