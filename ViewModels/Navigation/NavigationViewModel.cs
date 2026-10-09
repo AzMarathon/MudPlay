@@ -169,6 +169,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             _services.ExpResolver, _services.Loops, _services.GameData, _services.Movement,
             _services.LoopSimulationSource, _services.Log, () => ExpEstimator, ShowSimulatedRouteOnMap);
         _services.SimulatorSnapshotProvider = () => Simulator.ToSnapshot();
+        _services.NavigationModeProvider = DescribeModeForReport;
         // A character simulation was played with the old character / game data.
         _services.Profile.ProfileLoaded += OnProfileLoadedDropSimulation;
         _services.GameData.ActiveSetChanged += OnActiveSetDropSimulation;
@@ -274,6 +275,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.MapComparison.Changed -= OnMapComparisonChanged;
         _services.MovementCoordinator.PauseStateChanged -= OnPauseChanged;
         _services.MovementCoordinator.GatesChanged -= OnGatesChanged;
+        _services.NavigationModeProvider = null;
         _services.MovementControl.PausedByTypedMoveChanged -= RefreshActivityStatus;
         _services.AutoDeposit.ReroutingChanged -= OnTripChanged;
         _services.SellDetour.DetouringChanged -= OnTripChanged;
@@ -707,6 +709,17 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 break;
         }
 
+        // A loop started from somewhere other than this window's Run — the toolbar,
+        // the Manage dialog, a hotkey, a remote @loop — while the builder is open on
+        // that same loop (loaded, or the last-run loop it opens with) or on nothing.
+        // The builder has nothing left to do; left open, the running loop stayed
+        // drawn as the red builder line with the window still in build mode (report
+        // paradigm-20261008-225930). A different loop being built is the user's draft
+        // and stays.
+        if (e.Kind == LoopEventKind.Started && CloseBuilderForLoopStartedElsewhere())
+            _services.Log?.Info("Navigation",
+                $"loop '{e.Detail}' started while the builder was open on it (or empty): left build mode");
+
         // Pause opened the builder from the running loop. A resume from anywhere —
         // the toolbar, a hotkey, not just this window's Run — closes it again unless
         // it was edited; otherwise the running loop stayed drawn as the red builder
@@ -734,6 +747,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // next room observation.
         RaiseTopBarStatus();
         OnPropertyChanged(nameof(CurrentNavProgress));
+    }
+
+    private bool CloseBuilderForLoopStartedElsewhere()
+    {
+        if (CurrentMode != NavigationMode.LoopBuild) return false;
+        if (_services.LoopRunner.CurrentLoop is not { } started) return false;
+        if (LoopBuilder is { HasClicks: true } open && BuilderClicksDifferFrom(open, started)) return false;
+        _loopBuilderOpenedByPause = false;
+        ToggleLoopMode();
+        return true;
     }
 
     private void RefreshLoopOverlays()
@@ -3046,6 +3069,30 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // phase strip (IsAutoLairing) takes precedence.
     public bool IsLairBuilding =>
         CurrentMode == NavigationMode.AutoLair && !IsAutoLairing;
+
+    partial void OnCurrentModeChanging(NavigationMode oldValue, NavigationMode newValue)
+    {
+        // Which control or event switched the mode isn't known down here, so the line
+        // carries what was running: a build mode entered with a loop under way is the
+        // case a report needs explained.
+        if (oldValue == newValue) return;
+        _services.Log?.Info("Navigation",
+            $"window mode {oldValue} → {newValue} (loop runner {_services.LoopRunner.State}"
+            + $"{(_services.LoopRunner.CurrentLoop is { } l ? $" '{l.Name}'" : "")}, "
+            + $"user pause {(LoopUserPaused ? "on" : "off")}, builder opened by a pause: {(_loopBuilderOpenedByPause ? "yes" : "no")})");
+    }
+
+    // For the bug report: the window's mode and what the loop builder holds.
+    public string DescribeModeForReport()
+    {
+        string builder = LoopBuilder is not { } b ? "closed"
+            : $"open, {b.Clicks.Count} click(s)"
+              + (_loopBuilderOpenedByPause ? ", opened by a pause" : "")
+              + (_services.LoopRunner.CurrentLoop is { } running
+                    ? BuilderClicksDifferFrom(b, running) ? ", differs from the running loop" : ", same as the running loop"
+                    : "");
+        return $"{CurrentMode}; loop builder {builder}";
+    }
 
     partial void OnCurrentModeChanged(NavigationMode value)
     {

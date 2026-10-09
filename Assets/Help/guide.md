@@ -317,6 +317,8 @@ A **loop** is a saved circuit of rooms MudPlay walks over and over, fighting and
 
 You can start building a loop **while a walk-to is running** — building only collects rooms, it never moves you, so your walk continues uninterrupted. Clicking **Go** in the Navigation menu then hands movement over: it stops the walk and starts the loop. The **toolbar** Start / Stop / Pause buttons still control the *walk* itself, so reach for those to stop (or pause) the walk without starting the loop.
 
+The builder closes by itself when the loop it holds (or an empty builder) is started from somewhere else: the toolbar's Start, the Manage dialog's Run, or a remote `@loop`. The map then shows the running loop, not the red build line. A different loop you were in the middle of building is kept.
+
 To put yourself (or a party member) back on the **last loop run this session** without reopening the builder, use the **`@loop last`** remote command — it re-runs it even if it was an ad-hoc loop that was never saved. This works regardless of the "Load last ran loop" setting above.
 
 Or build it off the map: **Navigation Management → New Loop** opens an editor where you add rooms by name or key, name and annotate the loop, and set per-waypoint options. While that editor is open, you can also **left-click rooms on the Navigation map** to append them to the waypoint list — the same way the on-map builder works, without typing keys.

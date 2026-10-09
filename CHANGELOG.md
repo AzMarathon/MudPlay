@@ -1,5 +1,11 @@
 # Version history
 
+## 3.157.11
+
+- Starting a loop from the toolbar, the Manage dialog or `@loop` closes the map's loop builder when it holds that loop, so the running loop is no longer drawn as the build line
+- Program log and bug report record the Navigation window's mode and what switched it
+- bug reports addressed: paradigm-20261008-225930
+
 ## 3.157.10
 
 - Unrecognized Lines no longer fills with counterstrike damage, party members' gear swaps (wields too), glancing blows, other people's dodges and door work, a look at a player, or the tail of a wrapped exits row
