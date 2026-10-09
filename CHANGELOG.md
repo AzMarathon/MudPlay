@@ -1,5 +1,10 @@
 # Version history
 
+## 3.157.2
+
+- Closing MudPlay or restarting for an update with Settings open saves the changes you hadn't applied yet
+- A change Settings would have warned about first (a statline missing HP, mana or resting) is left unsaved on the way out, and logged
+
 ## 3.157.1
 
 - A pick the game answers with `Your command had no effect.`, or an open answered `That is not a door or a gate!` (no door that way here), ends the door attempt and re-routes, as a bash already did
