@@ -1,5 +1,4 @@
 using System.Collections.Specialized;
-using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MudPlay.Models.GameData;
 using MudPlay.Services;
@@ -407,7 +406,7 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         // their timers at full duration, and suppressed the real cast's confirm. Buff
         // timers anchor on the typed cast code instead.
         MessageRecord? actionFailed = null;
-        if (!StatusEffectReadout().IsMatch(text) && _inStatScreen?.Invoke() != true)
+        if (!StatusEffectLine.HasCountdown(text) && _inStatScreen?.Invoke() != true)
         {
             foreach ((string pattern, MessageRecord r) in _appliedIndex)
             {
@@ -521,12 +520,6 @@ public sealed partial class ConditionTracker : ObservableObject, IDisposable
         }
         return false;
     }
-
-    // Matches a trailing remaining-time parenthetical — "(411s)", "(6m 51s)", "(1h)" —
-    // the tell of a `stat` status readout of an already-active effect. A fresh-cast
-    // effect line ("You feel lucky!") has none, so this never suppresses a real cast.
-    [GeneratedRegex(@"\(\d+[dhms]( \d+[dhms])*\)\s*$", RegexOptions.CultureInvariant)]
-    private static partial Regex StatusEffectReadout();
 
     // A single game line can match many catalogue records that share the same
     // effect text — every bless-proc item plus the bless spell all emit "You feel

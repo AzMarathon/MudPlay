@@ -1,11 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.19**
-> - A bash the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever
-> - A door attempt is dropped once the map shows you in another room than the door's
-> - A pause that comes and goes while a door is being opened (a party `@wait` / `@ok`) no longer restarts the walk underneath it
-> - A Paradigm `rm` answered before a move sent just after it has landed no longer cancels that move
+> **Version 3.154.0**
+> - CP plan is typed from the trained stats and CP Left on the `train stats` screen, so a buff on `stat` no longer throws it off
+> - The trainer screen must show what was typed before it is saved; if it doesn't, MudPlay stops and leaves the screen open
+> - `train stats` is never sent into a trainer screen that is already open
+> - A plan row is cleared only once the game shows its CP was spent
+> - `stat` values marked as modified are worked back to the trained ones (the listed effects, and worn gear on Paradigm); one that can't be accounted for is flagged on the CP Allocation tab, and rows aren't rewritten or pruned from it
+> - Stock: the CP plan waits while a stat is altered, as the game refuses `train stats` then; new **Wait for altered stats at the trainer** setting on the Auto-Trainer tab (120 s by default, 0 = don't wait)
+> - Opening `train stats` yourself is only typed into when the plan has something to raise
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

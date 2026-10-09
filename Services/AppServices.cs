@@ -982,6 +982,10 @@ public sealed class AppServices
     // by TrainerWalk, which owns the walk-to-trainer + level-up.
     public Game.AutoTrainManager AutoTrain { get; }
 
+    // What each effect line a `stat` screen listed does to the six trainable
+    // stats, by the message catalogue and the Spells table.
+    public Game.Spells.ListedEffectCatalog ListedEffects { get; }
+
     // Trainer-walk coordinator: resolves the nearest allowed, level-appropriate
     // trainer, walks there, trains, and applies the CP plan. Backs the CP
     // Allocation tab's Train Now + the armed auto-train.
@@ -6072,7 +6076,9 @@ public sealed class AppServices
         // Needs Inventory (raw-base = live - gear) + TrainerMenu (screen enter/
         // exit gating, already wired to char-mode). Wire-sender bound in
         // MainWindowViewModel.
-        AutoTrain = new Game.AutoTrainManager(PlayerStats, GameData, Inventory, Profile, TrainerMenu, Log);
+        ListedEffects = new Game.Spells.ListedEffectCatalog(Messages, GameData);
+        AutoTrain = new Game.AutoTrainManager(PlayerStats, Stats, GameData, Inventory, Profile, TrainerMenu,
+            ListedEffects, Router, Log);
 
         // EquipmentManager + the @equip <set> handler. The engine
         // reads saved gear sets off the char profile, diffs against Inventory's
