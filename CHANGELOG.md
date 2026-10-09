@@ -7,6 +7,12 @@
 - A flag number typed in the Quest Flags filter shows that flag only
 - A saved column layout no longer hides new columns on a table without a column picker
 
+## 3.158.2
+
+- Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor
+- A look at a player's corpse is no longer listed as an unrecognized line
+- bug reports addressed: paradigm-20261009-001932
+
 ## 3.158.1
 
 - Terminal colours: Custom keeps the same two columns as the other choices (normal left, bright right) instead of one long list
