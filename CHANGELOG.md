@@ -8,6 +8,34 @@
 - Loops and walks wait for the check
 - Never changes when the client hangs up
 
+## 3.159.26
+
+- A trap handed to a party member: their client now says it has accepted, and every result it reports is understood (a "No trap" or "Couldn't disarm" answer no longer leaves the walk waiting)
+- A sneaking member's telepathed trap answer is read
+- If nobody accepts a handed-over trap in 10 seconds, the walk goes through it instead of waiting forever
+
+## 3.159.25
+
+- Settings → Party: "Help leader open doors" says it only works while the leader bashes (a leader picking a lock shows the room nothing)
+
+## 3.159.24
+
+- A `;` that starts a word is sent to the game as typed (`;o`, `/name @do ;o`, a `;)` in chat) instead of splitting the line; `n;s` still sends two commands
+- Typing `;;` before a word keeps one `;` for the game: `;;time` sends `;time`
+- Sending `;o` drops the connection and reconnects; sending `=x` drops it and stays off
+- `@hangup` and `@relog` are obeyed with Disable Hangups on
+- Events and the pre-/post-rest commands split their commands by the same rule as macros, aliases and triggers
+- bug reports addressed: paradigm-20261009-081205
+
+## 3.159.21
+
+- The inventory is read again after a death, so gear handed back afterwards can be put on with a gear set (it used to read as already worn until you typed `i`)
+- bug reports addressed: paradigm-20261009-105244
+
+## 3.159.20
+
+- A buff is no longer recast because the game refused something you typed in the same round (`You have already cast a spell this round!` answering your own `use` or cast, not the client's)
+
 ## 3.159.19
 
 - Settings → BBS: a realm can record the board's hang-up penalty, with the HP lost and items dropped for a hang-up in PvP and, separately, in combat with monsters
