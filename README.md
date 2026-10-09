@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.20**
+> **Version 3.159.21**
 > - The inventory is read again after a death, so gear handed back afterwards can be put on with a gear set (it used to read as already worn until you typed `i`)
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

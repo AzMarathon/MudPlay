@@ -118,10 +118,13 @@ public sealed class CastCoordinator : IDisposable
     // stale from an external send is the same ambiguity the server's own message
     // already carries, not something this coordinator can resolve further.
     private string? _lastSpellSent;
+    // Read for the command echoed ahead of a refusal that names no spell.
+    private readonly MessageRouter _router;
 
     public CastCoordinator(MessageRouter router, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(router);
+        _router = router;
         _log = log;
         _fizzleSub    = router.Subscribe(KnownPatterns.CastFizzled,          OnFizzle);
         _noManaSub    = router.Subscribe(KnownPatterns.CastNoMana,           OnNoMana);
@@ -315,8 +318,23 @@ public sealed class CastCoordinator : IDisposable
     // it could retry ISTO before casting HSTO". Block only when the rejected cast was on the
     // ATTACK slot; a between-round rejection still fires CastFailed (so the debuff rolls back and
     // re-offers next round) but leaves the attack slot free to fire this round.
+    //
+    // The line names no spell either, so it used to be pinned on the cast code sent
+    // last. The command echoed just ahead of it says what it really answers: when that
+    // is something else (the user typing `use coin bag` two seconds after a flux of
+    // ours had landed), the round's slot was spent but no cast of ours was refused, and
+    // the failure carries that command in place of our spell so nobody rolls anything
+    // back (a mana flux that had rolled 87 was recast into a 16 this way).
     private void OnAlreadyThisRound(MatchResult _)
     {
+        if (AnswersAnotherCommand() is { } other)
+        {
+            _log?.Info(LogCategory,
+                $"cast failed reason=AlreadyCastThisRound for '{other}', not our last cast "
+                + $"({_lastSpellSent}); the round's slot is spent and nothing of ours is taken back");
+            CastFailed?.Invoke(CastFailureReason.AlreadyCastThisRound, "already-cast-this-round-other-command", other);
+            return;
+        }
         if (_lastCastWasAttackSlot)
         {
             BlockAndLog(CastFailureReason.AlreadyCastThisRound, "already-cast-this-round");
@@ -326,6 +344,19 @@ public sealed class CastCoordinator : IDisposable
             $"cast failed reason=AlreadyCastThisRound (between-round slot; attack slot unaffected) "
             + $"spell={_lastSpellSent ?? "<unknown>"}");
         CastFailed?.Invoke(CastFailureReason.AlreadyCastThisRound, "already-cast-this-round-between", _lastSpellSent);
+    }
+
+    // The command the refusal being dispatched answers, when one was echoed ahead of it
+    // and it is not the cast code we sent last. Null when no echo was read (a statline
+    // the extractor can't split) or nothing was sent yet: the refusal then keeps its old
+    // reading as ours.
+    private string? AnswersAnotherCommand()
+    {
+        if (_lastSpellSent is not { Length: > 0 } ours) return null;
+        if (_router.CommandEchoedBeforeLine?.Trim() is not { Length: > 0 } echoed) return null;
+        int space = echoed.IndexOf(' ');
+        string word = space < 0 ? echoed : echoed[..space];
+        return word.Equals(ours, StringComparison.OrdinalIgnoreCase) ? null : echoed;
     }
 
     private void OnInterrupted(MatchResult _) =>
