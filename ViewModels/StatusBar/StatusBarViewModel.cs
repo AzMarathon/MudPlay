@@ -92,8 +92,13 @@ public sealed class StatusBarViewModel : IDisposable
             if (StatusBarValues.SourceProperty(def.Id) is { } property)
             {
                 Watch(property, item);
-                // The reconnect countdown is part of the connection item's text.
-                if (def.Id == "connection") Watch(nameof(MainWindowViewModel.ReconnectCountdownText), item);
+                // The reconnect countdown and the Hangup-watch hold are part of the
+                // connection item's text.
+                if (def.Id == "connection")
+                {
+                    Watch(nameof(MainWindowViewModel.ReconnectCountdownText), item);
+                    Watch(nameof(MainWindowViewModel.HangupWatchHoldText), item);
+                }
             }
             else _polled.Add(item);
             if (def.Id == "tick") _tickItems.Add(item);

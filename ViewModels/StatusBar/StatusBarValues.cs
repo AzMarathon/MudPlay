@@ -47,9 +47,9 @@ public static class StatusBarValues
             "tick" => main.CombatTickText,
             "hptick" => main.HpTickText,
             "matick" => main.MaTickText,
-            "connection" => main.IsReconnectCountdownVisible
-                ? $"{main.ConnectionStatusText} · {main.ReconnectCountdownText}"
-                : main.ConnectionStatusText,
+            "connection" => string.Join(" · ",
+                new[] { main.ConnectionStatusText, main.ReconnectCountdownText, main.HangupWatchHoldText }
+                    .Where(part => part.Length > 0)),
 
             "profile" => svc.Profile.CurrentProfileName ?? string.Empty,
             "name" => stats.Name,

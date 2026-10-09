@@ -10,6 +10,9 @@ namespace MudPlay.Game.Map;
 // direction so two characters work the lock together. Verb is pick <dir>
 // or bash <dir> per OtherSettings.PicklocksOverBash.
 //
+// Only a bashing leader can be helped: the game shows the room each bash
+// attempt, and nothing while someone picks a lock.
+//
 // Gated on PartySettings.HelpLeaderOpenDoors (off by default) and an
 // active party. The leader match implies we're a follower — the leader is
 // someone other than us — so no explicit self-is-leader check is needed:

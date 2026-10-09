@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.20**
+> **Version 3.159.28**
 > - Chest Offload's Drop and Drop All hide the items when Settings → Other → Hide items when discarding is ticked, and a hidden item leaves the list
 > - A discard's hide that a full room refuses (Stock) keeps the item and is sent again in each new room entered until it lands; never dropped instead
 > - No hide is sent for a copy that isn't in the pack or is already on its way, so a second Drop before the game answers sends nothing

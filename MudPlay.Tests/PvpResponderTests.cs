@@ -25,6 +25,14 @@ public sealed class PvpResponderTests
         public PvpAttackWatcher Attacks { get; }
         public PvpResponder Responder { get; }
 
+        // The Hangup-monster watch, wired as the app wires it: built ahead of the
+        // responder, so its handler reads each roster first and has to ask the
+        // responder whether the roster is its to answer.
+        public MonsterMessageStore Monsters { get; } = new();
+        public MonsterHangupWatcher MonsterWatch { get; }
+        public HashSet<int> HangupMonsters { get; } = new();
+        public List<string> MonsterHangUps { get; } = new();
+
         public bool PvpEnabled { get; set; } = true;
         public PvpSettings Settings { get; set; } = new();
         public DateTimeOffset Clock { get; set; } = new(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
@@ -44,7 +52,19 @@ public sealed class PvpResponderTests
         public Harness()
         {
             DefaultPatterns.Seed(Router);
-            Classifier = new RoomEntityClassifier(Router, new MonsterMessageStore(), Players, new LogService());
+            Classifier = new RoomEntityClassifier(Router, Monsters, Players, new LogService());
+            MonsterWatch = new MonsterHangupWatcher(
+                Classifier,
+                resolveOverlay: number => new MonsterOverlay
+                {
+                    Relationship = HangupMonsters.Contains(number) ? MonsterRelationship.Hangup : null,
+                },
+                hangUp: reason => { MonsterHangUps.Add(reason); return Game.Health.EscapeOutcome.Jumped; },
+                hangupsDisabled: () => false,
+                pvpHandles: roster => Responder!.IsAnswering(roster),
+                atBoardMenu: () => false,
+                describeRoom: () => "in Town Square",
+                schedule: (_, _) => { });
             Room = new PvpRoomSafety(
                 Router, Classifier,
                 pvpEnabled: () => PvpEnabled, inParty: Party.HasMember,
@@ -85,8 +105,16 @@ public sealed class PvpResponderTests
         public void Feed(string line) => Router.Dispatch(new LineExtractor.EmittedLine(
             line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false));
 
+        public void AddHangupMonster(int number, string name)
+        {
+            Monsters.Messages.Add(new MonsterMessageRecord(
+                Id: $"M{number}", Name: name, Links: new[] { new GameDataLink("Monsters", number) }));
+            HangupMonsters.Add(number);
+        }
+
         public void Dispose()
         {
+            MonsterWatch.Dispose();
             Responder.Dispose();
             Attacks.Dispose();
             PartySplit.Dispose();
@@ -140,6 +168,59 @@ public sealed class PvpResponderTests
 
         h.Feed("Bob moves to attack you!");
 
+        Assert.Empty(h.HangUps);
+    }
+
+    // ----- a Hangup monster on the same roster ---------------------------
+    //
+    // "pvp actions win" (user, 2026-10-09). The monster watch reads each roster
+    // ahead of the response, so it asks whether the roster is the response's.
+
+    [Theory]
+    [InlineData(PvpAction.HangUp)]
+    [InlineData(PvpAction.Flee)]
+    [InlineData(PvpAction.Attack)]
+    public void EnemyAndHangupMonsterOnOneDisplay_ThePvpActionAnswers_NotTheMonsterWatch(PvpAction action)
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = action } };
+        h.MarkEnemy("Bob");
+        h.AddHangupMonster(7, "ogre");
+
+        h.Feed("Also here: Bob, ogre.");
+
+        Assert.Empty(h.MonsterHangUps);
+        // Asking did not use up the response's quiet time: it answered this roster.
+        Assert.Equal(1, h.HangUps.Count + h.RoomFlees.Count + h.Fights.Count);
+    }
+
+    [Fact]
+    public void OnceTheEnemyHasLeft_TheNextRosterAnswersTheMonster()
+    {
+        using Harness h = new() { Settings = new PvpSettings { Action = PvpAction.Flee } };
+        h.MarkEnemy("Bob");
+        h.AddHangupMonster(7, "ogre");
+        h.Feed("Also here: Bob, ogre.");
+        Assert.Empty(h.MonsterHangUps);
+
+        h.Classifier.RemoveDepartedPlayer("Bob");
+
+        Assert.Equal("ogre (#7) is here, relationship Hangup", Assert.Single(h.MonsterHangUps));
+    }
+
+    [Theory]
+    [InlineData(false, true, false)]   // PvP off for the realm
+    [InlineData(true, false, false)]   // the player is not an Enemy
+    [InlineData(true, true, true)]     // the Enemy is in our party
+    public void WhereThePvpResponseDoesNotApply_TheMonsterIsHungUpOnAsBefore(bool pvpEnabled, bool enemy, bool inParty)
+    {
+        using Harness h = new() { PvpEnabled = pvpEnabled, Settings = new PvpSettings { Action = PvpAction.HangUp } };
+        if (enemy) h.MarkEnemy("Bob");
+        if (inParty) h.Party.Members.Add(new PartyMember { Name = "Bob" });
+        h.AddHangupMonster(7, "ogre");
+
+        h.Feed("Also here: Bob, ogre.");
+
+        Assert.Single(h.MonsterHangUps);
         Assert.Empty(h.HangUps);
     }
 

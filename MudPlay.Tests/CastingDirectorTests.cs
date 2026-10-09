@@ -2469,6 +2469,41 @@ public sealed class CastingDirectorTests
     }
 
     [Fact]
+    public void SelfBuff_AlreadyCastThisRound_ForACommandTheUserTyped_KeepsItsTimer()
+    {
+        // The buff went out and landed; the user then typed an item use into the same
+        // round and the game refused that. The refusal names no spell, and the command
+        // echoed ahead of it is not the buff's: the buff's timer must stand.
+        using CureHarness h = new();
+        h.Spells.BlessSlots[1] = "mshi";
+        h.BuffInfo["mshi"] = (string.Empty, 300);
+        h.Health.BlessIfAboveMa = 0;
+        h.State.MaxMa = 100;
+        h.State.Ma = 100;
+        h.State.InCombat = false;
+        h.RecordCondition("mshi", MessageFlags.None,
+            applied: "You feel protected!", endsWith: "Your mageshield shimmers and fades.");
+
+        h.Director.Evaluate();
+        Assert.Single(h.CastsSent);
+
+        DateTimeOffset at = DateTimeOffset.UtcNow;
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "[HP=609/MA=330]:", Array.Empty<CellAttributes>(), at, IsPromptLine: true));
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "use coin", Array.Empty<CellAttributes>(), at, IsPromptLine: false));
+        h.Router.Dispatch(new LineExtractor.EmittedLine(
+            "You have already cast a spell this round!", Array.Empty<CellAttributes>(),
+            DateTimeOffset.UtcNow, IsPromptLine: false));
+
+        h.CastsSent.Clear();
+        h.Cast.OnCombatTick();
+        h.Director.NotifyRoundComplete();
+        h.Director.Evaluate();
+        Assert.Empty(h.CastsSent);
+    }
+
+    [Fact]
     public void SnapshotActiveBuffs_ReflectsArmedTimers_ClearedByReset()
     {
         // The Buff Watchdog reads live timers through this snapshot — each armed

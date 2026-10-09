@@ -99,7 +99,7 @@ Each logon step is a **Message** to wait for and a **Response** to send when it 
 - **You don't need a final "enter the realm" step.** Once your steps reach the game's entry menu, MudPlay sends the entry command for you — and it does so even if your steps don't perfectly reach the end, so an automatic reconnect after a drop still lands you back in the game.
 - **You don't need a step for the bulletin pager.** If the board pages news or bulletins with *"(N)onstop, (Q)uit, or (C)ontinue?"* during login, MudPlay presses Enter for you each time it appears and carries on with your steps — useful since that prompt only shows up on days there's something new to read.
 
-(The one time it won't auto-enter is right after you hang up on purpose — a manual `@hangup` or a hang-up-on-low-HP / hang-up-when-naked rule — so you can read the screen and enter manually.)
+(The one time it won't auto-enter is right after you hang up on purpose — a manual `@hangup`, a hang-up-on-low-HP / hang-up-when-naked rule, or a monster whose relationship is **Hangup** — so you can read the screen and enter manually.)
 
 With that saved, **Connect** (Alt+H, or File → Connect) and MudPlay logs you in.
 
@@ -215,7 +215,7 @@ A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it land
 
 MudPlay normally leaves **Friend** and passive **Neutral** monsters alone. But if one turns hostile and starts swinging at you — you provoked it, or it just attacks — the engine **fights back**: any monster actively attacking you is engaged and finished, even one it would otherwise walk past. This is always on whenever **Auto-Combat** is on.
 
-Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup** (you run from / hang up on those instead of standing to fight), and any room you've marked **"do not attack"** (self-defense honours that too). Everything else — Friend, Enemy, Neutral — you defend against.
+Exemptions: monsters whose Game Data relationship is **Flee** or **Hangup**, and any room you've marked **"do not attack"** (self-defense honours that too). A **Hangup** monster draws a hang-up the moment it is seen, before it can attack (see *What each Relationship does* under Game Data → the monster record). The exception is when no hang-up is coming for it, with the toolbar's **Disable hangups** on or in the minute after a reconnect: then a Hangup monster that attacks you is fought back like any other. A **Flee** monster is only left alone: it is not attacked and not fought back, and MudPlay does not start a run from it. Everything else — Friend, Enemy, Neutral — you defend against.
 
 Self-defense is also suppressed while you're on a **walk-to** — an evil character crossing a guarded town, say, keeps running to their destination rather than stopping to fight the guards (a losing trade at low levels). It stays active when you're **idle, looping, or Auto-Lairing** (all farming/holding, where fighting back is what you want).
 
@@ -601,7 +601,7 @@ Hovering a room shows its details in a tooltip:
 **Getting past obstacles.** En route, MudPlay clears most of what stands between you and a destination, stopping only when it hits something it genuinely can't solve:
 
 - **Doors** — closed or locked, handled by key, pick, or bash. If the game won't let you bash at all (no weapon in hand, or no bash skill) it tries picking, then the key, instead. It follows doors other people open and close, or that lock again by themselves, in the room you're standing in, so it opens a door that's been shut on you before walking into it. If the game answers a bash or a pick with *Your command had no effect.*, or an open with *That is not a door or a gate!* (there's no door that way where you're standing), or the map shows you've ended up in another room while the door was being worked on, it stops working the door, re-checks where you are and re-routes from there instead of trying the same door again. A pause that comes and goes mid-door (a party `@wait` then `@ok`, a short fight) doesn't restart the door either: the walk carries on from the bash it already sent. Once a door is open it steps through like any other move: bashing or opening a door ends a sneak, so with auto-sneak on it re-sneaks first, and a monster that walks in meanwhile is dealt with before it leaves.
-- **Traps** — disarmed before you step through, on a walk-to, a loop or an Auto-Lair run alike, or delegated to a capable party member when you can't disarm. With *Utilize disarm traps if able* off, or nobody able, it walks through. A disarm ends a sneak, so with auto-sneak on it re-sneaks before crossing. A failed disarm stops the walk or loop rather than walking into a trap that's there.
+- **Traps** — disarmed before you step through, on a walk-to, a loop or an Auto-Lair run alike, or delegated to a capable party member when you can't disarm. With *Utilize self or party members to disarm traps* off, nobody able, or nobody in the party taking the trap when asked, it walks through. A disarm ends a sneak, so with auto-sneak on it re-sneaks before crossing. A failed disarm stops the walk or loop rather than walking into a trap that's there.
 - **Hidden exits** — searched out and revealed. The game won't search while you're blind (`sea` just answers *You are blind.*), so the walker waits there and searches once you can see again.
 - **NPC ask-transport** — a sealed room whose only way out is asking a resident NPC to port you elsewhere (the Floating Citadel's Grey Lord ports you to Town Square). It sends the `ask <npc> <keyword>` for you, so those pockets aren't dead-ends. A **class-restricted** one (the barmaid's bard-only jump) is offered only to the right class; everyone else is routed around it. And because some are a **skill roll** that can quietly fail, the walker confirms it actually arrived and **re-asks until it does**.
 - **Action-gated exits** — a lever or switch in *another* room (the magenta "Action required" stubs). If the exit is already open where you stand — someone else pulled the levers, or the game says *The exit to the west just opened!* — it simply walks through. Otherwise it drives a go-pull-return detour, visiting each lever room on the way past then crossing the primed exit — even when a lever alcove is itself behind another action-gated door (it opens each inner door first). When a lever room on your route can't be walked back to, the detour runs one-way instead: it leaves the route there, works through the remaining lever rooms and comes out at the exit. Long detours are fine — the two-lever gate on the way to the new master assassin is a ~230-step round trip. Only a very deep (4+ levels) or self-referential puzzle, or a single detour over 400 steps, is left unsolved: those fail cleanly at plan time (*"route needs an action-gated exit the walker can't auto-solve"*) and log the exit that stopped it. When the way to a lever room crosses a gate you could get past (a room hazard you carry no counter for, an item or key gate), a walk you start yourself opens the **route picker** with that walk as the only route, exactly as it does for a gate on the route itself: obtain the counter and cross, or cross unprotected where the hazard is survivable. Pick one and the walk runs the whole detour, levers included; **Details…** lists every step of it. Where the picker has nothing to offer (a door you can't open, a level gate) or isn't in play (a loop, a party `@goto`), the walk fails and names the exit, the lever room and what's in the way.
@@ -952,7 +952,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@do <command>` — sends the command verbatim to the game (the highest-trust command).
 - `@kill <target>` — retargets your combat onto the named monster this round. On a PvP realm, naming a player who is in your room starts a fight with that player instead (Settings → PvP).
 - `@heal` — asks a configured party healer to heal whoever's low (only a healer responds).
-- `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts.
+- `@trap <dir>` — disarm a trap in that direction; `@trap stop` aborts. Your client answers `{Attempting to disarm trap <dir>.}` when it takes the job, then the result when it's done.
 - `@train` — trains (and applies your CP plan, if Auto-train-stats is on) — assumes you're already at a trainer.
 - `@equip <set>` — wears one of your saved gear sets. Name it by its keyword, its name, or the short names **default**, **backstab**, **resthp**, **restma**, **moving** and **bossing** (e.g. `@equip backstab`). `@equip-all` wears the Default set. (The older dashed `@equip-backstab` still works, for party members on earlier versions.)
 - `@equip <set> update` — rewrites that set to **exactly what you're wearing right now**: every worn piece fills its slot (a second ring or bracelet takes slot 2), every unworn slot goes back to *no change*, and the set's alternate-weapon entries are left as they were. It's saved to your character at once, and an open Equipment Manager tab refreshes to show it. It won't run mid gear-swap, or before your inventory has been read once (an `i`) — an unread inventory would empty the set.
@@ -960,7 +960,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin. `@drop-all full` drops **everything** held (worn gear, the readied light, keys and coins); `@drop-all coins` and `@drop-all keys` drop just those.
 - `@hide-all [full|coins|keys]` — the same four sweeps as `@drop-all`, but **hidden** in the room with `hide <item>` instead of dropped: only someone who searches the room will find it. Like drop, it takes worn gear directly, and a stack goes in one counted `hide` on Paradigm, one per item on Stock. (It always names the item — a bare `hide` would hide you instead.)
 - `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
-- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant, and both are silenced while the toolbar's *Disable hangups* toggle is on.
+- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant. A player you gave that grant is always obeyed: the toolbar's *Disable hangups* toggle stops the client hanging up on its own, not these two commands.
 
 ### Hand out permissions
 
@@ -1686,7 +1686,7 @@ Beyond the engines, you can script your own automation. All three editors live i
 
 Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove** button, and a grid of what you've already made. **Double-click a row to edit it.** There's no separate save step — each editor's **Save** button writes to disk immediately, and the list's **Enabled** column shows a ✓ for the ones that are live.
 
-- **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in; click **Capture** again to abort), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement. **Esc is a bindable key** — you can put it on a macro or a shortcut; an unbound Esc still passes through to the game as usual.
+- **Macros** bind a **key chord to a command.** Click **Add**, press **Capture** and hit the key combo (release the main key to lock it in; click **Capture** again to abort), then type the **Command** to send. Split it into several lines with `^M` or `;` — each fragment fires as its own command. (A `;` at the start of a word, as in `;o`, is part of the command and is sent as typed.) Macros work while you're typing in the terminal; new profiles start with the numpad pre-wired to compass movement. **Esc is a bindable key** — you can put it on a macro or a shortcut; an unbound Esc still passes through to the game as usual.
 - **Aliases** expand a **typed word into a longer command** — a shorthand you invent, so `cast heal bob` can send `c 'heal' bob`. See **Writing an alias** just below for a full walkthrough.
 - **Triggers** are **auto-responses to game text** — when a line matches, MudPlay fires a reply. Give the trigger a **Name**, then set:
   - Every trigger belongs to the **character** it was made on, like macros and aliases. (Triggers could once be saved "to the game data" and shared by every character on it. Each character from then took its own copy of those the first time it loaded under this version; a new character starts with the default triggers.)
@@ -1940,6 +1940,30 @@ A monster's **Greet** row shows every keyword you can ask it as a collapsible tr
 
 Even *without* Kill on sight, if you hand-attack a passive neutral yourself (a manual swing or combat cast), the engine takes over and finishes it — hitting a neutral turns it hostile, so it's treated like an enemy until it dies and the walker holds in the room — so you don't have to keep swinging manually; the other un-engaged neutrals stay passive and rest-safe.
 
+**What each Relationship does.**
+
+- **Enemy** — fought on sight. A monster with nothing set is an Enemy.
+- **Neutral** — left alone unless it attacks you, you attack it, or **Kill on sight** is ticked.
+- **Friend** — never attacked on sight. If it attacks you, self-defense fights back.
+- **Flee** — never attacked and never fought back. That is all it does: MudPlay does not start a run from it.
+- **Hangup** — MudPlay hangs up as soon as that monster is seen in your room by name. No monster ships set to Hangup; it only applies to the ones you set.
+
+**How Hangup works.**
+
+- **What counts as seeing it.** The monster is on the room's **Also here:** line, or a line says it came into the room. It does not wait for the monster to attack. The hang-up goes out before the combat engine can start a fight in that room.
+- **It is the Health tab's hang-up.** MudPlay sends your **Game exit command** and closes the connection. The realm's hang-up penalty line is logged as for any other hang-up. MudPlay does not dial back in, and the next connect stops at the menu so you can read the screen and enter yourself.
+- **The wimpy jump takes its place.** With **Sys goto wimpy instead of hanging** set up, MudPlay jumps there instead of hanging up, and you stay connected. As after a low-HP jump, a running loop or walk is not stopped: if it brings you back to the monster, MudPlay jumps again.
+- **Disable hangups stops it.** With the toolbar's **Disable hangups** on, nothing is sent (no hang-up and no wimpy jump), and the program log says once that the monster was seen. The monster is still not attacked on sight, but if it attacks you it is fought back (with Auto-Combat on), the way a Neutral monster is. Turn Disable hangups off while the monster is still there and the next change in the room's list hangs up.
+- **A fight with a player comes first.** While MudPlay is fighting another player, the PvP actions win: no hang-up goes out for a Hangup monster. The same holds while a player you marked **Enemy** is in the room on a PvP realm, whichever PvP action is set: the PvP response answers that room. The program log says once why, and when the fight ends or the player has left, with the monster still in the room, it is hung up on then. The Health tab's own hang-up works in PvP as it always has.
+- **All-off mode stops it.** It follows General → **Allow hangup in all-off mode** exactly as the low-HP hang-up does. With Auto-Heal and Auto-Rest both off and that option not ticked, a Hangup monster is not hung up on, and the program log says once why. Tick the option and it is.
+- **Once per sighting.** One room display is one sighting: there is one hang-up for it, however many other monsters come and go. A new **Also here:** line (the next room, or the same room displayed again) is a new sighting, and so is a Hangup monster that walks in after the first was answered. This only matters when the first answer did not end the session: a wimpy jump, a missing exit command, Disable hangups or all-off mode.
+- **After you reconnect: one minute off.** After the connection has dropped with a Hangup monster in sight (MudPlay hung up for it, or a low-HP or PvP hang-up went out as it was seen), the watch is off for your first minute back in the game, so the monster still standing there does not hang you up at once. This is for a reconnect you make yourself: when the PvP response dials back in on its own, there is no minute off. The minute starts at your first game prompt after reconnecting, not while you log in. While it runs, the status bar shows **Hangup watch off 0:59** in amber beside the connection light, counting down each second, and the terminal has one notice when it starts and one when it ends. (A status bar layout with no connection item shows only the terminal notices.) During the minute, as with **Disable hangups** on, the Hangup monster is not attacked on sight, but if it attacks you it is fought back. When the minute ends, a Hangup monster still in the room is hung up on then. To stay longer, turn **Disable hangups** on or change the monster's relationship. Loading another character clears it.
+- **At the board's menu.** If you have left the game for the board's menu, nothing is sent: the exit command would be a menu choice there. A Hangup monster in the room when you come back in is hung up on at your first game prompt.
+- **One hang-up at a time.** When low HP, a PvP enemy and a Hangup monster call for a hang-up in the same moment, one goes out. Any other asked for within two seconds of it sends nothing more (no second exit command, penalty line or `@panic`).
+- **When no names are shown.** A room too dark to see in, or a move made while you are blind, lists nobody, so nothing happens. In a dark room the monster is first named by an attack line (its own on you, or a party member moving to attack it), and that is when it is seen. A `look` into the next room does not count.
+- **Monsters that share a name.** The setting belongs to one monster record. A name on the screen is first looked for among the monsters the game data places in the room you are in, then matched to the first record with that name. As you walk into a room its **Also here:** line is read before the move is confirmed, so the room looked in is the one you are leaving and the first record with that name is usually the one read: set Hangup on that one. Once you are standing in the room (it is displayed again, or the monster walks in) it is that room's own monsters that are looked at. Combat reads the same record. A name that matches no record does nothing.
+- **In the log and the bug report.** The program log has one `[MonsterHangup]` line naming the monster and the room for each sighting, saying what was done or why nothing was. A bug report's Session section has a **Hangup-relationship monster** line with the last one and a **Hangup watch hold** line with the seconds left.
+
 **Where the override saves.** The **Use** dropdown chooses the tier — **Only for this character**, **Only for this realm** (the realm of the BBS your character plays), or **For all characters (global)** — then **OK** writes it and the row's Use column updates to match. Priority when the same record is set at more than one tier is character → realm → global → installed defaults, so a character edit always wins over a global one for that character.
 
 The dropdown also offers **Installed defaults**: picking it and saving **resets the record** — after a confirm it wipes your character, BBS, *and* global edits for that one record and restores the seeded value (the row returns to **Def**). This is the only way to clear a lower-priority edit that a higher tier is shadowing.
@@ -2144,7 +2168,9 @@ The toolbar across the top controls what you see:
 
 ## Talking
 
-Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands.
+Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. A `;` that starts a word is not a separator: it is sent to the game as typed, so the game's own commands that begin with one (`;o`, or `/bob @do ;o`) go out whole, and so does a `;)` in chat. The same holds in the terminal, and in macros, aliases, triggers, events, loop commands and the pre-/post-rest commands. To send such a command after another on one line, put a space before it: `n; ;o` (or `n^M ;o`) sends `n` and then `;o`. In a line you type you can also double it: `;;time` sends `;time`, and `n;;time` sends `n` and then `;time`. (Macros, aliases, triggers, events and loop commands don't read `;;` that way: there a doubled separator is an empty step.)
+
+**`;o` and `=x`.** Sending `;o` (typed, from a macro or alias, or relayed by a remote `@do`) drops the connection and MudPlay dials straight back in and logs in again, whatever the BBS tab's reconnect triggers say. Sending `=x` drops the connection and MudPlay stays off until you connect again. Either counts only if the board hangs up within a few seconds of it.
 
 **↑ / ↓** recall what you sent before, and the chevron at the right edge of the box opens a list of recent commands to pick from. **Tab** completes the word at your cursor against your carried, worn, and key-ring item names, the same as the terminal (**Settings → General**) — press it again, or **Shift+Tab**, to step through other matches.
 
@@ -2631,8 +2657,8 @@ Each of the three made choices keeps every colour near its usual hue, so red is 
 ### Allow hangup in all-off mode
 
 **Default:** Off
-**What it does:** Normally, if every Auto-* engine above is off, MudPlay does nothing at all — including the emergency low-HP hangup. Turning this on carves out one exception: even with everything off, MudPlay still disconnects you if your HP drops below the Health tab's "Hang up if below" threshold.
-**Important notes:** Depends on the Health tab's threshold to know when to fire. It's silenced entirely if the toolbar's "Disable hangups" toggle is on — that flag always wins.
+**What it does:** Normally, if every Auto-* engine above is off, MudPlay does nothing at all — including the emergency low-HP hangup and the hang-up for a monster whose relationship is **Hangup**. Turning this on carves out the exception: even with everything off, MudPlay still disconnects you if your HP drops below the Health tab's "Hang up if below" threshold, and still hangs up when a Hangup monster is seen.
+**Important notes:** The low-HP hang-up depends on the Health tab's threshold to know when to fire. Both hang-ups go by **Auto-Heal** and **Auto-Rest**: with both of those off they count as off and need this option, whatever else is on. It's silenced entirely if the toolbar's "Disable hangups" toggle is on — that flag always wins.
 
 ### Re-enable on reconnect (11 checkboxes)
 
@@ -2690,8 +2716,8 @@ See the [Keybindings](#keybindings) section below — the rebind dialog is launc
 ### Disable hangups (toolbar toggle)
 
 **Default:** Off
-**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not a remote `@hangup`, not the emergency low-HP hangup, nothing — only you disconnecting manually will end the session.
-**Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. One narrow exception still fires even with this on: a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
+**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not the emergency low-HP hangup, not a PvP response, not a partymate's `@panic`, not a monster whose relationship is **Hangup**. What still ends the session is you disconnecting, or someone you trust asking for it.
+**Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. A monster whose relationship is **Hangup** is then treated like a Neutral one: left alone on sight, and fought back if it attacks you. Three things still go through with this on: a remote `@hangup` or `@relog` from a player you gave the **Hangup/disconnect** grant (they are requests, not the client's own decision); a log-off command you send yourself (`;o`, `=x`); and a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
 
 ### Sprint Mode (toolbar toggle)
 
@@ -2968,7 +2994,7 @@ Once `sys st` has answered even once, it's trusted for the rest of the session a
 **Important notes:** These settings only **record the board's rule**. They do **not** change when MudPlay hangs up, and no hang-up is held back, delayed or swapped for something else because of them. Whether and when MudPlay hangs up stays with the toolbar's **Disable hangups** toggle, the **Health** tab's hang-up trigger, the **PvP** tab's actions, and a partymate's `@panic` (unless you ignore it).
 
 Where the record shows up:
-- **The program log.** When MudPlay sends a hang-up (the Health tab's, the PvP response's, or one from `@panic`, `@hangup` or `@relog`) on a realm with a penalty recorded, one `[Hangup]` line says what the board takes: for example *This realm penalises a hang-up in PvP: 25–50% of max HP and up to 3 items.* It names the PvP side when a fight with a player is under way or the hang-up is the PvP response's, and the monster side when you are in combat. When MudPlay can't tell either way it gives the whole rule without picking a side. A hang-up from a fight with a monster on a realm that only penalises PvP logs nothing. A hang-up you make yourself with the Connect / Disconnect button is not logged this way.
+- **The program log.** When MudPlay sends a hang-up (the Health tab's, the PvP response's, one for a monster whose relationship is **Hangup**, or one from `@panic`, `@hangup` or `@relog`) on a realm with a penalty recorded, one `[Hangup]` line says what the board takes: for example *This realm penalises a hang-up in PvP: 25–50% of max HP and up to 3 items.* It names the PvP side when a fight with a player is under way or the hang-up is the PvP response's, and the monster side when you are in combat. When MudPlay can't tell either way it gives the whole rule without picking a side. A hang-up from a fight with a monster on a realm that only penalises PvP logs nothing. A hang-up you make yourself with the Connect / Disconnect button is not logged this way.
 - **Bug reports.** The Session section's **Realm hang-up penalty** line carries the recorded penalties, or `none`.
 
 ### Boss cleanup time / Boss cleanup zone
@@ -3649,6 +3675,7 @@ These two boxes are gone from this tab. Each buff has its own **Cast while resti
 
 **Default:** Off
 **What it does:** When you see your party leader failing to bash a locked door, you automatically pitch in (bashing or picking, depending on your own door-preference setting).
+**Important notes:** It only works while the leader **bashes**. The game shows the room each bash attempt, and that line is what this reacts to. A leader who picks the lock instead shows the room nothing while they try, so there is nothing to pitch in on.
 
 ### Ignore @wait when leading
 
@@ -3759,6 +3786,8 @@ Whatever is ticked, `par` is only sent while you're in a party and **Auto Heal**
 Settings → PvP. What MudPlay does about a player you marked **Enemy** (Game Data → Players) who is in the room with you, or about any player who attacks you. Nothing on this tab is acted on unless the realm you are playing has **PvP is enabled on this realm** ticked on the BBS tab; the tab says so when it isn't. The care taken with room attacks around other players is described under *Room attacks and other players (PvP realms)* in Combat, and needs nothing set here.
 
 **Who is answered.** Party members never. A **Friend** never, even one who attacks you, unless *Flip a Friend to Enemy if they attack you* is ticked. A **Neutral** is left alone until they attack you; that marks them Enemy on the spot, saved, and the response follows. An **Enemy** is answered on sight. A player's own **PvP response** in Game Data → Players replaces the action chosen here for that one player.
+
+**A Hangup monster waits for PvP.** While a fight with a player is under way, or an Enemy is in the room, a monster whose relationship is **Hangup** is not hung up on; it is when the fight ends or the Enemy has left, if it is still there. The Health tab's hang-up is not held back.
 
 **One response per encounter.** A player just answered is not answered again for 30 seconds on sight, or 10 seconds when they attack. The terminal shows each response as `[PvP: …]`, and the program log carries it under `PvP`.
 
@@ -4341,6 +4370,16 @@ Settings → Other. A catch-all tab for safety thresholds and walker (auto-pathi
 
 **Default:** On
 **What it does:** When a walk-to, a loop or an Auto-Lair run crosses a trapped exit, MudPlay tries to disarm it before stepping through, using your own skill or, if you don't have it, a party member who does. Turning this off walks straight through and takes any trap damage. See *How Traps and disarming work* for the odds.
+
+**Handing a trap to a party member.** When you can't disarm and a party member's class or race can, MudPlay says `@trap <direction>` to the room and waits:
+
+1. A member's MudPlay that takes the job answers at once with `{Attempting to disarm trap <dir>.}`. That is how yours knows someone has it.
+2. That member disarms. If the trap goes off and drops them under their own *rest if below*, they rest first and then try again.
+3. They report the result: `{Trap to the <dir> disarmed.}` (or *already disarmed*, or *No trap to the <dir> to disarm.*) and you step through; `{Couldn't disarm the trap to the <dir> (N attempts).}` and your walk stops rather than walking into it.
+
+With more than one able member, the first to report the way clear moves you on, and one giving up doesn't stop the walk while another is still working. Answers are read from say and from telepath (a sneaking member answers by telepath so it keeps its sneak).
+
+**If nobody accepts within 10 seconds**, nobody is going to: the able member isn't running MudPlay, hasn't given you the **Execute commands** grant on their Players tab, or isn't in the room. MudPlay then walks through the trap, the same as when nobody in the party can disarm, and says so in the program log.
 
 ### @trap max disarms
 

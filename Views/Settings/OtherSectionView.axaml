@@ -83,7 +83,7 @@
             <TextBlock Classes="FieldLabel" Text="Traps:" Margin="0,12,0,0"/>
             <CheckBox Content="Utilize self or party members to disarm traps"
                       IsChecked="{Binding UtilizeDisarmTrapsIfAble, Mode=TwoWay}"
-                      ToolTip.Tip="When checked (default): at a trapped exit the walker tries to disarm before moving — first yourself if you have the Traps skill, otherwise it delegates to a capable party member via @trap on say. When unchecked: the walker walks straight through trapped exits with no disarm attempt."/>
+                      ToolTip.Tip="When checked (default): at a trapped exit the walker tries to disarm before moving — first yourself if you have the Traps skill, otherwise it asks a capable party member with @trap on say and waits for their MudPlay to accept and report the result (if nobody accepts in 10 seconds it walks through). When unchecked: the walker walks straight through trapped exits with no disarm attempt."/>
 
             <!-- @trap auto-disarm attempt cap. -->
             <Grid ColumnDefinitions="180,Auto,*" RowDefinitions="Auto" Margin="0,12,0,0" ColumnSpacing="8" RowSpacing="4">
