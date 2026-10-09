@@ -4670,6 +4670,7 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **A `(Cast: pre-N, post-M)` exit fires a spell as part of the walk — pre-N before the move, post-M
   after.** The exit stays a plain cardinal move (its cell modifier carries the two spell numbers; `0`
   means no cast on that side).
+- **A post-cast spell can also teleport through a textblock** *([OBSERVED] 2026-10-08, game-data lookup)*: its ability 148 names a TBInfo chain with a `teleport <room> <map>` step, which can sit behind a `checkitem` (so the landing depends on what the character carries). See *Jungle to the Lost City: the Vine Bridge trap and the golden idol*. A spell trap (`Spell Trap: N`) reaches a teleport the same way.
 - **When the post-cast spell is a *random* teleport, the exit's landing is non-deterministic.** The
   spell's game-data record classifies its landing:
   - ability code **140 = TeleportRoom** — value `0` → a *random* room drawn from the spell's
@@ -4712,6 +4713,30 @@ Among protectable hazards, a further split governs whether the navigator may off
     expanding through a pocket entrance, so from outside the pocket shows only as a spell-wall stub at
     its mouth — but a walker standing *inside* still lays the whole area out, because the pocket's
     internal cast exits are reciprocal (they have return paths) and so are never flagged as entrances.
+
+### Jungle to the Lost City: the Vine Bridge trap and the golden idol
+*Status: CONFIRMED 2026-10-08 (user); rooms, spells and textblocks [OBSERVED] 2026-10-08, game-data lookup, identical on Stock v1.11p and Paradigm 1.9.1 · Realm: both*
+
+- **The Vine Bridge is a trapped exit that scatters a party.** `16/1206` (Vine Bridge, Mists) east to `16/1207` is a `Spell Trap: 851` exit.
+  - Spell 851 (`bridge trigger spell`) carries ability 148 → TBInfo `#2775`: `random 2776`. TBInfo `#2776` teleports whoever trips it to one of six **Shallow Jungle, Mud Pit** rooms, each line `message 2475:teleport <room> 16:cast 850`: `16/1264`, `16/1247`, `16/1248`, `16/1272`, `16/1276`, `16/1283`.
+  - *([CONFIRMED] 2026-10-08, user)* If the trap isn't disarmed it splits the party up into different rooms of the shallow jungle. Before going on, the leader has to recover everyone by walking to where each dropped in.
+  - *([CONFIRMED] 2026-10-08, user)* If the trap is disarmed, the party walks through the Tree of Life unhindered.
+- **The golden idol (item 1281) is needed to reach the Lost City from the jungle side** *([CONFIRMED] 2026-10-08, user)*. Lost City to the jungle needs no idol; jungle to the Lost City does. Two exits ask for it:
+  - `16/1512` (Jungle Cave) east to `16/2165` (Earthen Catacombs): `Key: 1281 [or 101 picklocks]`.
+  - `16/2273` (Earthen Catacombs) east: `(Cast: pre-0, post-857)`, landing first in `16/2274`. Spell 857 (`golden idol teleport`) carries ability 148 → TBInfo `#2871`: `checkitem 1281 66:teleport 2431 16:text 2872` / `teleport 2228 16:text 2872`.
+    - With the idol the character is sent to `16/2431`, the second part of the catacombs, which connects to the Lost City.
+    - Without it the character is sent to `16/2228` instead and doesn't reach that part. *([CONFIRMED] 2026-10-08, user: "if you dont have the idol … you dont get teleported to the secondary part of the catacombs which is connected to the lost city".)*
+- **Where the idol comes from** *([CONFIRMED] 2026-10-08, user)*: the ship in the lagoon, before the bridge with the trap teleport. In the data: `16/1517` (Ship Captains Quarters), TBInfo `#2892`: `lift latch:giveitem 1281:message 2519`.
+- **The idol passthrough disbands the party, even when everyone lands together** *([OBSERVED] report `paradigm-20261007-134305`, Paradigm)*. The order on the leader's screen:
+  1. The leader steps east and is shown `16/2274` (`Obvious exits: west`, with whatever monsters are in it).
+  2. Each follower `walks into the room from the west.` and is then teleported, printing `<name> is no longer following you.`
+  3. `Your party has been disbanded.`
+  4. The leader is teleported and shown `16/2431`, with the followers already there (listed on its `Also here:` line in that capture).
+  - Each character is checked for the idol on their own, so a follower without one lands in `16/2228`, apart from the leader. `[NEEDS CONFIRMATION]` Not seen in a capture.
+  - It is the party-splitting teleport of *CMD-driven room teleports split the party*, reached by a walk instead of a typed command: the party has to be re-invited on landing.
+
+**Client use:**
+- None yet for the passthrough: the walker takes the exit as a plain move, steps on from the landing room, and the re-invite is sent from the wrong room (report `paradigm-20261007-134305`).
 
 ### Quest-gated gateway portals
 *Status: CONFIRMED (game data Paradigm 1.9.1 map 9) · Realm: both (byte-identical across stock and Paradigm data)*
