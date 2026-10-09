@@ -1787,6 +1787,24 @@ public sealed class AppServices
     public Game.Stealth.SneakGuard SneakGuard { get; private set; } = null!;
     public Game.Stealth.CarriedStealthPenalty CarriedStealth { get; private set; } = null!;
 
+    // The hit magic the character's class and race carry of their own, from the
+    // active game data. Asked on every combat decision, so the last answer is kept
+    // until the class, race or data set changes.
+    private (string? Class, string? Race, string? Set, int Value) _innateHitMagic = (null, null, null, 0);
+    public int InnateHitMagic()
+    {
+        string? cls = PlayerStats.Class, race = PlayerStats.Race, set = GameData.ActiveSet;
+        if (_innateHitMagic.Class == cls && _innateHitMagic.Race == race && _innateHitMagic.Set == set)
+            return _innateHitMagic.Value;
+        int value = 0;
+        if (!string.IsNullOrWhiteSpace(cls))
+            value += Game.Calculators.ClassCapabilities.InnateHitMagic(GameData.FindRowByName("Classes", cls));
+        if (!string.IsNullOrWhiteSpace(race))
+            value += Game.Calculators.ClassCapabilities.InnateHitMagic(GameData.FindRowByName("Races", race));
+        _innateHitMagic = (cls, race, set, value);
+        return value;
+    }
+
     // The rooms of every boss flagged "stop before entering" on the active realm.
     // Resolved live, so a realm swap or an edit on the Bosses tab takes effect at
     // the next walk.
@@ -2520,6 +2538,10 @@ public sealed class AppServices
     // toolbar Stop): a Run / Sprint start's turned-off autos come back or stay off
     // per Settings → Other. Registered by the main window's view-model.
     public Action? NoteUserStoppedRun { get; set; }
+
+    // A remote @stop paused movement. Set by MainWindowViewModel, which resets the
+    // auto toggles to the character's base modes as it does for the Stop button.
+    public Action? NoteRemoteStop { get; set; }
 
     // Folder CRUD over the shared per-BBS Loops directory that holds
     // both Loops and Lairs. Create / rename
@@ -3949,6 +3971,13 @@ public sealed class AppServices
             MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.HealthRecoveryGate)
             || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.ManaRecoveryGate);
         Door.SetRestHold(RestHeld);
+        // A door request belongs to the room it was asked in; once the tracker is
+        // sure of another, the door manager drops it rather than work some other
+        // room's exit.
+        Door.SetConfirmedRoomProbe(() =>
+            RoomTracker.State.Confidence == Game.Map.RoomConfidence.Confirmed
+                ? RoomTracker.State.CurrentRoom?.Key
+                : null);
         Winch.SetRestHold(RestHeld);
         HiddenSearch.SetRestHold(RestHeld);
         TrapDisarm.SetRestHold(RestHeld);
@@ -6077,6 +6106,9 @@ public sealed class AppServices
         Equipment.SetRealmProbe(() => GameData.ActiveRealm == Game.RealmType.ParaMud);
         // @equip <set> update rewrites a set on the character profile — persist it.
         Equipment.SetEquipmentSaver(() => Profile.Save());
+        // A gear swap never takes off the worn counter to a hazard of the room we
+        // are in, or of the next room over.
+        Equipment.SetRoomProtectionProbe(WornRoomHazardCounters);
         EquipRemote = new Game.Remote.EquipHandler(RemoteCommands, Equipment);
 
         // Location-based auto-equip: re-evaluated on every room transition (fires
@@ -6319,13 +6351,13 @@ public sealed class AppServices
                 // swap AND the recovery-complete Default revert together; the revert
                 // runs first and no-ops against the not-yet-streamed pre-rest set, then
                 // the pre-rest swap lands last and strands the medi/pre-rest gear
-                // (report paradigm-20260903-111227). Now that the pre-rest set is
-                // actually worn and recovery is done, re-fire the Default revert (it
-                // will diff correctly this time). OnRecoveryComplete self-guards on
-                // combat + using-rest-sets; the Default swap it fires re-enters here
-                // with Default worn, so this terminates after one correction.
-                if (!Health.IsRecoveringRest && CurrentEquippedIsPreRestSet())
-                    AutoEquip.OnRecoveryComplete();
+                // (report paradigm-20260903-111227). Now that the pre-rest set has gone
+                // out, the coordinator re-fires the Default revert — only when a rest
+                // really did just finish, never for a set worn with no rest behind it.
+                // The Default swap it fires re-enters here with Default current, so
+                // this terminates after one correction.
+                if (CurrentEquippedIsPreRestSet())
+                    AutoEquip.OnPreRestSetStreamed();
                 // If this swap streamed during a live fight (swap-to-Default-on-combat),
                 // its wear/eq burst breaks the swing on Paradigm — arm combat's
                 // interrupt resume so the imminent *Combat Off* re-engages instead of
@@ -6346,6 +6378,9 @@ public sealed class AppServices
         Combat.SetCarriedCheck(name => Inventory.Snapshot.LastUpdated == default
             ? null
             : HeldItemNames().Any(n => n.Equals(name, StringComparison.OrdinalIgnoreCase)));
+        // The class's and race's own hit magic (a Mystic's strikes, a Witchunter's
+        // swings). Stock adds a weapon's magic to it; Paradigm takes the higher.
+        Combat.SetInnateHitMagic(InnateHitMagic, () => GameData.ActiveRealm != Game.RealmType.ParaMud);
 
         // Let an auto-fire gear-set apply defer the weapon slot to combat while it
         // holds a per-monster alternate-weapon override, so the Default set's
@@ -8070,6 +8105,7 @@ public sealed class AppServices
         MoveRemote = new Game.Remote.MovePlayerHandler(
             RemoteCommands, RoomSearch, RoomGraph, RoomTracker, Walker, Loops, LoopRunner,
             Lairs, AutoLair, MovementCoordinator, MovementControl, Favorites, Bosses, Bfs, LoopShare);
+        MoveRemote.Stopped = () => NoteRemoteStop?.Invoke();
 
         // Leader-side @comeback. Snapshots the running movement
         // engine, stops it (stop-and-restart, NOT a coordinator gate —
@@ -12695,6 +12731,32 @@ public sealed class AppServices
             $"no reachable counter source for items [{string.Join(",", counters)}] "
             + $"from {source.Map}/{source.Room} to {destination.Map}/{destination.Room}");
         return null;
+    }
+
+    // The worn items that counter a room-entry hazard of the room we stand in or of
+    // a room one step away (so a swap at the edge of a lava field doesn't strip the
+    // feather on the way in). A counter only protects while it is worn (GAME_MECHANICS
+    // "Room-spell hazard shape 1"), so these are what a gear swap must leave alone.
+    public IReadOnlyCollection<string> WornRoomHazardCounters()
+    {
+        if (RoomTracker.State.CurrentRoom is not { } here) return Array.Empty<string>();
+        HashSet<int>? counters = null;
+        AddCounters(here.Spell);
+        foreach (Game.Map.RoomExit exit in here.Exits.Values)
+            AddCounters(RoomGraph.GetRoom(exit.Target)?.Spell ?? 0);
+        if (counters is null) return Array.Empty<string>();
+
+        List<string>? worn = null;
+        foreach (Game.Inventory.EquippedItem e in Inventory.Snapshot.EquippedItems)
+            if (ItemNames.FindByName(e.Name) is int id && counters.Contains(id))
+                (worn ??= new List<string>()).Add(e.Name);
+        return worn ?? (IReadOnlyCollection<string>)Array.Empty<string>();
+
+        void AddCounters(int spell)
+        {
+            if (spell <= 0 || RoomHazards.HazardForSpell(spell) is not { } hazard) return;
+            foreach (int item in hazard.ProtectingItems) (counters ??= new HashSet<int>()).Add(item);
+        }
     }
 
     // True when every room-entry hazard on `path` that the player has NO counter

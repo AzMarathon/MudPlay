@@ -365,6 +365,9 @@ public sealed class MovePlayerHandler : IDisposable
     // idle @stop arms the gate directly to still register an explicit hold for
     // whatever starts next. Idempotent: a second @stop while already user-paused
     // just re-confirms.
+    // An @stop just took hold (not a repeat of one already holding).
+    public Action? Stopped { get; set; }
+
     private void OnStop(RemoteCommandContext ctx)
     {
         if (_controller.IsUserPaused)
@@ -374,6 +377,7 @@ public sealed class MovePlayerHandler : IDisposable
         }
         if (_controller.IsActive) _controller.Pause();
         else _coordinator.AssertGate(MovementCoordinator.UserGate, nameof(MovePlayerHandler));
+        Stopped?.Invoke();
 
         string here = DescribeCurrentRoom();
         ctx.Reply(here.Length > 0

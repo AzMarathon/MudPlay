@@ -1069,6 +1069,211 @@ public sealed class AutoEquipCoordinatorTests
         Assert.Equal(expectSwap, applied.Contains("mana-set"));
     }
 
+    // ===== a pre-rest set worn with no rest behind it =====
+
+    // Meditating by hand above every rest floor wears Pre-rest Mana and nothing else.
+    // The Default set used to be applied in the same instant (no rest gate held read as
+    // "the rest is over"), and against a worn list the pre-rest swap hadn't reached yet
+    // it re-wore the Default piece in each slot the pre-rest set leaves alone — taking
+    // off a neck piece put on by hand (report paradigm-20261008-202210).
+    [Fact]
+    public void MeditateByHand_WearsOnlyThePreRestSet_LeavingItsUnsetSlotsAlone()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            new EquipmentSet
+            {
+                Trigger = EquipTriggerType.Default, Enabled = true, Id = "default-set", Name = "Default",
+                Slots = { new(EquipmentSlot.Head, "turban"), new(EquipmentSlot.Neck, "stone") },
+            },
+            new EquipmentSet
+            {
+                Trigger = EquipTriggerType.PreRestMana, Enabled = true, Id = "mana-set", Name = "Pre-rest Mana",
+                Slots = { new(EquipmentSlot.Head, "wizard hat") },
+            });
+        InventorySnapshot worn = InventorySnapshot.Empty with
+        {
+            EquippedItems = new[] { new EquippedItem("turban", "Head"), new EquippedItem("feather", "Neck") },
+            CarriedItems = new[] { "wizard hat", "stone" },
+            LastUpdated = DateTimeOffset.UtcNow,
+        };
+        var equipment = new EquipmentManager(
+            readEquipment: () => cfg,
+            getSnapshot: () => worn,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { });
+        AutoEquipCoordinator? hooked = null;
+        // The swap-finished hook as the app wires it.
+        equipment.ApplyingChanged += applying =>
+        {
+            if (!applying && equipment.CurrentSetId == "mana-set") hooked!.OnPreRestSetStreamed();
+        };
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: equipment.ApplyBySetId,
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true,
+            restJustEnded: () => false);
+        hooked = coord;
+
+        player.Position = PlayerPosition.Meditating;
+
+        Assert.Equal(new[] { "wear wizard hat" },
+            equipment.LastSentForTests.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')));
+        Assert.Equal("mana-set", equipment.CurrentSetId);
+    }
+
+    // ===== a gear swap never strips the room's protection =====
+
+    private static (EquipmentManager Equipment, EquipmentSettings Config) HazardRig(
+        IReadOnlyCollection<string> wornCounters, params EquippedItem[] worn)
+    {
+        EquipmentSettings cfg = Config(
+            new EquipmentSet
+            {
+                Trigger = EquipTriggerType.Default, Enabled = true, Id = "default-set", Name = "Default",
+                Slots =
+                {
+                    new(EquipmentSlot.Head, "turban"), new(EquipmentSlot.Neck, "stone"),
+                    new(EquipmentSlot.Finger1, "gold ring"), new(EquipmentSlot.Finger2, "pearl ring"),
+                },
+            });
+        InventorySnapshot snap = InventorySnapshot.Empty with
+        {
+            EquippedItems = worn,
+            CarriedItems = new[] { "turban", "stone", "gold ring", "pearl ring" },
+            LastUpdated = DateTimeOffset.UtcNow,
+        };
+        var equipment = new EquipmentManager(
+            readEquipment: () => cfg,
+            getSnapshot: () => snap,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { });
+        equipment.SetRoomProtectionProbe(() => wornCounters);
+        return (equipment, cfg);
+    }
+
+    private static string[] Sent(EquipmentManager equipment) =>
+        equipment.LastSentForTests.Select(b => System.Text.Encoding.Latin1.GetString(b).TrimEnd('\r')).ToArray();
+
+    // In a lava room the phoenix feather on the neck is what stops the burning. The
+    // Default set names another neck piece; applying it there dresses every other
+    // slot and leaves the feather where it is.
+    [Fact]
+    public void ApplyingASet_InAHazardRoom_LeavesTheWornCounterOn()
+    {
+        (EquipmentManager equipment, _) = HazardRig(new[] { "phoenix feather" },
+            new EquippedItem("wizard hat", "Head"), new EquippedItem("phoenix feather", "Neck"));
+
+        equipment.ApplyBySetId("default-set");
+
+        string[] sent = Sent(equipment);
+        Assert.Contains("wear turban", sent);
+        Assert.DoesNotContain("wear stone", sent);
+        Assert.DoesNotContain(sent, c => c.Contains("phoenix feather"));
+    }
+
+    // Out of the hazard the same apply dresses the neck as the set says.
+    [Fact]
+    public void ApplyingASet_AwayFromAnyHazard_DressesTheSlotAsUsual()
+    {
+        (EquipmentManager equipment, _) = HazardRig(Array.Empty<string>(),
+            new EquippedItem("wizard hat", "Head"), new EquippedItem("phoenix feather", "Neck"));
+
+        equipment.ApplyBySetId("default-set");
+
+        Assert.Contains("wear stone", Sent(equipment));
+    }
+
+    // A counter that is only carried isn't protecting anything, so nothing is held for it.
+    [Fact]
+    public void ACounterThatIsNotWorn_HoldsNoSlot()
+    {
+        (EquipmentManager equipment, _) = HazardRig(new[] { "phoenix feather" },
+            new EquippedItem("wizard hat", "Head"));
+
+        equipment.ApplyBySetId("default-set");
+
+        Assert.Contains("wear stone", Sent(equipment));
+    }
+
+    // A counter on one of a pair (a ring, a wristband) holds both: putting a ring on
+    // a full pair evicts whichever one the realm picks, and that could be the counter.
+    [Fact]
+    public void ACounterOnAPairedSlot_HoldsBothOfThePair()
+    {
+        (EquipmentManager equipment, _) = HazardRig(new[] { "ring of cooling" },
+            new EquippedItem("wizard hat", "Head"), new EquippedItem("ring of cooling", "Finger"),
+            new EquippedItem("iron ring", "Finger"));
+
+        equipment.ApplyBySetId("default-set");
+
+        string[] sent = Sent(equipment);
+        Assert.Contains("wear turban", sent);
+        Assert.DoesNotContain(sent, c => c.Contains("ring"));
+    }
+
+    // The swap-finished revert is for a rest that ended while its gear was going on:
+    // it needs a rest that really just finished, and no gate still held.
+    [Theory]
+    [InlineData(false, false, false)]   // no rest behind the set — typed by hand
+    [InlineData(true, false, true)]     // the rest finished under the swap
+    [InlineData(true, true, false)]     // still recovering
+    public void PreRestSetStreamed_RevertsToDefault_OnlyAfterAFinishedRest(
+        bool restJustEnded, bool gateHeld, bool expectDefault)
+    {
+        var player = new PlayerState { Position = PlayerPosition.Meditating };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestMana, enabled: true, "mana-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => gateHeld,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true,
+            restJustEnded: () => restJustEnded);
+
+        coord.OnPreRestSetStreamed();
+
+        Assert.Equal(expectDefault, applied.Contains("default-set"));
+    }
+
+    // A pre-rest set worn for a sit with no gate behind it comes off at the stand.
+    [Fact]
+    public void MeditateByHand_ThenStand_GoesBackToDefault()
+    {
+        var player = new PlayerState { Position = PlayerPosition.Standing };
+        EquipmentSettings cfg = Config(
+            SetFor(EquipTriggerType.Default, enabled: true, "default-set"),
+            SetFor(EquipTriggerType.PreRestMana, enabled: true, "mana-set"));
+        var applied = new List<string>();
+
+        using var coord = new AutoEquipCoordinator(
+            player,
+            readEquipment: () => cfg,
+            hpGateAsserted: () => false,
+            maGateAsserted: () => false,
+            applyBySetId: id => { applied.Add(id); return EquipResult.Applied; },
+            wornLoadoutKnown: () => true,
+            isAutoEnabled: () => true,
+            restJustEnded: () => false);
+
+        player.Position = PlayerPosition.Meditating;
+        coord.OnPreRestSetStreamed();
+        Assert.Equal(new[] { "mana-set" }, applied);
+
+        player.Position = PlayerPosition.Standing;
+        Assert.Equal(new[] { "mana-set", "default-set" }, applied);
+    }
+
     // Before `rest` goes out, the pre-rest set the held gates call for goes on; a
     // set already worn (NoChange) or a fight means no swap and no wait.
     [Fact]

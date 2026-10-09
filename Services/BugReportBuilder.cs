@@ -277,6 +277,17 @@ public static class BugReportBuilder
         // fight. Answers a "why did/didn't my gear swap when a mob showed up" report.
         Kv(sb, "Swap to Default on combat",
             (svc.Profile.Current?.Equipment?.SwapToDefaultOnCombat ?? false) ? "on" : "off");
+        // The loadout the client believes is on — a gear report turns on whether that
+        // matches the worn list under Inventory.
+        // What a gear swap is holding on because it counters the room's hazard.
+        IReadOnlyCollection<string> roomCounters = svc.WornRoomHazardCounters();
+        Kv(sb, "Worn hazard counters a gear swap leaves on (this room or the next)",
+            roomCounters.Count == 0 ? "(none)" : string.Join(", ", roomCounters));
+        Kv(sb, "Gear set last applied",
+            svc.Equipment.CurrentSetId is { } currentSetId
+                ? svc.Profile.Current?.Equipment?.Sets.FirstOrDefault(s => s.Id == currentSetId)?.Name
+                    ?? "(a set this profile no longer has)"
+                : "(none this session)");
         // A set picked from the Equip menu turns every automatic gear swap off — the
         // first thing to rule out in a "my gear stopped swapping" report.
         Kv(sb, "Gear set held from the Equip menu",
@@ -850,6 +861,15 @@ public static class BugReportBuilder
         static string FailSet(IReadOnlyList<string> s) => s.Count == 0 ? "(none)" : string.Join(", ", s);
         Kv(sb, "Weapon-no-effect this room — normal", FailSet(failNormal));
         Kv(sb, "Weapon-no-effect this room — alternate", FailSet(failAlt));
+        // What the hit-magic gate weighs besides the weapon: the class's and race's
+        // own hit magic, and whether an attack command is a strike that doesn't use
+        // the weapon at all.
+        (int innate, string? normalCommand, string? alternateCommand) = svc.Combat.SnapshotHitMagicInputs();
+        static string AttackKind(string? command) =>
+            Game.Combat.MartialArtsCommand.IsStrike(command) ? "martial-arts strike, weapon not used" : "weapon attack";
+        Kv(sb, "Character's own hit magic (class + race)", innate.ToString());
+        Kv(sb, "Normal attack", $"`{normalCommand}` — {AttackKind(normalCommand)}");
+        Kv(sb, "Alternate attack", $"`{alternateCommand}` — {AttackKind(alternateCommand)}");
         sb.Append('\n');
 
         sb.Append("Engine engageability of monsters known in the current room (weapon/spell magic gates + verdict) (")
@@ -867,7 +887,7 @@ public static class BugReportBuilder
               .Append(" — **").Append(r.Assessment).Append("**")
               .Append(", Magical ").Append(Lvl(r.Magical))
               .Append(", SpellImmu ").Append(Lvl(r.SpellImmu))
-              .Append(", weapon HitMagic normal=").Append(Lvl(r.NormalWeaponHit))
+              .Append(", attack hit magic normal=").Append(Lvl(r.NormalWeaponHit))
               .Append(" alt=").Append(Lvl(r.AltWeaponHit));
             if (!string.IsNullOrWhiteSpace(r.UnengageableReason))
                 sb.Append(" — ").Append(r.UnengageableReason);
@@ -1753,6 +1773,7 @@ public static class BugReportBuilder
         Game.Map.DoorOpenManager door = svc.Door;
         Kv(sb, "Door FSM", $"{door.CurrentState}"
             + (door.CurrentDirection is { } dd ? $", dir={dd}" : string.Empty)
+            + (door.CurrentDoorRoom is { } dr ? $", door in {dr}" : string.Empty)
             + (door.QueueDepth > 0 ? $", queued={door.QueueDepth}" : string.Empty));
         Game.Map.HiddenExitRevealManager hidden = svc.HiddenSearch;
         Kv(sb, "Hidden-exit search", hidden.IsBusy

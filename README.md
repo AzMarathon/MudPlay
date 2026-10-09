@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.1**
+> **Version 3.155.2**
 > - A door key an NPC trades for an item you carry is fetched on the way: with the opal brooch in hand, a walk into the dark-elf archmage's tower trades it to the sleazy shopkeeper for the glowing key
 > - Without that item the route card names the trade and what drops the item, in place of the bare key name
 > - A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window

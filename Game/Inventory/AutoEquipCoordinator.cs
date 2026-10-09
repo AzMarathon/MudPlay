@@ -741,6 +741,24 @@ public sealed class AutoEquipCoordinator : IDisposable
         Fire(EquipTriggerType.Default);
     }
 
+    // A swap just finished streaming and left a pre-rest set as the loadout. The
+    // revert to Default is owed only when the rest that set was for is already over:
+    // its recovery-complete revert ran before the gear was on, and would leave the
+    // character walking on in rest gear (report paradigm-20260903-111227). "No rest
+    // gate held" alone doesn't say that — a rest or meditate typed by hand, or a
+    // top-off while the party waits, never had one, and reverting there re-wore the
+    // Default piece in every slot the pre-rest set leaves alone, over whatever had
+    // been put on by hand (report paradigm-20261008-202210). Such a set comes off at
+    // the stand instead.
+    public void OnPreRestSetStreamed()
+    {
+        if (_hpGateAsserted() || _maGateAsserted()) return;
+        if (_restJustEnded?.Invoke() != true) return;
+        _log?.Info(EquipmentManager.LogCategory,
+            "the rest finished while its gear was going on — reverting to Default");
+        OnRecoveryComplete();
+    }
+
     private void OnPositionChanged(PlayerPosition from, PlayerPosition to)
     {
         if (from == to) return;
@@ -767,7 +785,10 @@ public sealed class AutoEquipCoordinator : IDisposable
             // OnMovementStarted re-applies travel gear on the resume (otherwise the
             // idempotency guard thinks we're still travelling and never re-wears it).
             _inMovementSet = false;
-            Fire(restType);
+            bool ungated = !(_hpGateAsserted() || _maGateAsserted());
+            if (Fire(restType) && ungated)
+                _log?.Info(EquipmentManager.LogCategory,
+                    $"sat down with no rest gate held — '{restType}' stays on until the stand");
         }
         else if (to == PlayerPosition.Standing && IsRestPosture(from))
         {

@@ -1,11 +1,41 @@
 # Version history
 
-## 3.153.1
+## 3.155.2
 
 - A door key an NPC trades for an item you carry is fetched on the way: with the opal brooch in hand, a walk into the dark-elf archmage's tower trades it to the sleazy shopkeeper for the glowing key
 - Without that item the route card names the trade and what drops the item, in place of the bare key name
 - A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window
 - bug reports addressed: paradigm-20261008-175938
+
+## 3.153.19
+
+- A bash the game answers with `Your command had no effect.` (no door that way here) ends the door attempt and re-routes, instead of re-bashing forever
+- A door attempt is dropped once the map shows you in another room than the door's
+- A pause that comes and goes while a door is being opened (a party `@wait` / `@ok`) no longer restarts the walk underneath it
+- A Paradigm `rm` answered before a move sent just after it has landed no longer cancels that move
+- bug reports addressed: paradigm-20260924-053941
+
+## 3.153.18
+
+- A `rest` or `meditate` typed by hand no longer re-wears Default pieces the moment the Pre-rest set goes on: slots the set leaves blank keep what you put on (a phoenix feather was swapped off in the lava caverns)
+- The gear readout keeps showing the Pre-rest set through such a rest instead of flipping to Default
+- A gear-set swap never takes off (or wears over) the item protecting you from the room you are in or the next one, such as a phoenix feather in the volcano
+- Bug report lists the gear set last applied
+- bug reports addressed: paradigm-20261008-202210
+
+## 3.153.16
+
+- Quests: a quest with two level gates in one step now needs the higher one, as the game does
+- Paradigm: Meditate is announced to a Mystic at level 27, not 23
+- bug reports addressed: paradigm-20260925-123004
+
+## 3.153.15
+
+- Fixed: a Mystic attacking with punch, kick or jumpkick walked past monsters that need hit magic (and didn't fight back when they attacked): the client judged the strike by the weapon in hand, which a strike doesn't use
+- A class's own hit magic now counts: a Mystic's strikes and a Witchunter's swings hurt magical monsters whatever the weapon
+- A `Your fists / feet have no effect` line from a strike writes that monster off, like the weapon line does
+- Stopping movement yourself (Stop, or a party member's `@stop`) now puts the auto toggles back to their base modes, as a walk-to arriving does, so Auto-Combat switched off for a trip comes back
+- bug reports addressed: paradigm-20260928-164335, paradigm-20260929-220653, paradigm-20260930-182409, paradigm-20261002-192542, paradigm-20261007-150934, paradigm-20261008-113129, paradigm-20261008-181821, paradigm-20261008-181901, paradigm-20261008-182349, paradigm-20261008-182456, paradigm-20261008-183736, paradigm-20261008-183931, paradigm-20260923-163805, paradigm-20260923-163843, paradigm-20260923-164004
 
 ## 3.153.0
 
