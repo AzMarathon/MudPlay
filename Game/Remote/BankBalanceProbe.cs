@@ -7,10 +7,12 @@ using MudPlay.Terminal;
 
 namespace MudPlay.Game.Remote;
 
-// Self-only bank-balance probe + passive parser. The `bank` command lists every
-// bank the character has ever deposited at, one block per bank, from ANY room —
-// it's a global account query, not a room action (a bank never used stays hidden;
-// one used then emptied shows 0). Blocks look like:
+// Self-only bank-balance probe + passive parser. Outside a bank the `bank` command
+// lists every bank the character has ever deposited at, one block per bank (a bank
+// never used stays hidden; one used then emptied shows 0). Typed inside a bank it
+// shows that bank alone, on both realms (GAME_MECHANICS "Bank commands: balance /
+// withdraw / deposit"), so a reply taken there says nothing about the other banks.
+// Blocks look like:
 //   Your balance at Bank of Godfrey is:            (Paradigm)
 //   On deposit: 19578816 copper farthings [195,788.16 gold crowns]
 //   Your balance at Bank of Godfrey (#8) is:       (Stock — adds the shop number)
@@ -26,6 +28,7 @@ public sealed partial class BankBalanceProbe : IDisposable
 {
     private readonly Action<string> _send;
     private readonly Action<Action> _armWindow;
+    private readonly Func<bool> _inBankRoom;
     private readonly LogService? _log;
     private LineExtractor? _lines;
     private readonly Dictionary<string, long> _balances = new(StringComparer.OrdinalIgnoreCase);
@@ -52,20 +55,24 @@ public sealed partial class BankBalanceProbe : IDisposable
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex OnDeposit();
 
-    public BankBalanceProbe(Action<string> send, LogService? log = null)
-        : this(send, armWindow: null, log) { }
+    public BankBalanceProbe(Action<string> send, Func<bool>? inBankRoom = null, LogService? log = null)
+        : this(send, armWindow: null, inBankRoom, log) { }
 
-    internal BankBalanceProbe(Action<string> send, Action<Action>? armWindow, LogService? log = null)
+    internal BankBalanceProbe(Action<string> send, Action<Action>? armWindow,
+        Func<bool>? inBankRoom = null, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(send);
         _send = send;
         _armWindow = armWindow ?? DefaultArmWindow;
+        _inBankRoom = inBankRoom ?? (static () => false);
         _log = log;
     }
 
-    // True once this session has seen a `bank` listing: a parsed balance, or a
-    // query whose reply window closed (an empty reply means no bank was ever used).
-    // Before that every balance is unknown, not zero.
+    // True once this session has seen the whole `bank` listing: a balance parsed, or
+    // a query's reply window closed (an empty reply means no bank was ever used),
+    // while the character stood outside a bank. Before that every balance is
+    // unknown, not zero. A reply taken inside a bank shows that one bank, so it
+    // updates that balance and leaves this false: the others are still unseen.
     public bool HasListing { get; private set; }
 
     // Last-known deposit per bank name (case-insensitive) — a copy so callers
@@ -119,8 +126,9 @@ public sealed partial class BankBalanceProbe : IDisposable
         TaskCompletionSource<IReadOnlyDictionary<string, long>> tcs =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending.Add(tcs);
+        bool insideBank = _inBankRoom();
         _send("bank");
-        _armWindow(() => Complete(tcs));
+        _armWindow(() => Complete(tcs, wholeListing: !insideBank));
         return tcs.Task;
     }
 
@@ -150,16 +158,19 @@ public sealed partial class BankBalanceProbe : IDisposable
                 NumberStyles.Integer, CultureInfo.InvariantCulture, out long copper))
         {
             _balances[name] = copper;
-            HasListing = true;
+            if (!_inBankRoom()) HasListing = true;
             _log?.Info("BankBalance", $"{name}: {copper:N0} copper on deposit");
             _pendingName = null;
         }
     }
 
-    private void Complete(TaskCompletionSource<IReadOnlyDictionary<string, long>> tcs)
+    private void Complete(TaskCompletionSource<IReadOnlyDictionary<string, long>> tcs, bool wholeListing)
     {
         if (!_pending.Remove(tcs)) return;
-        HasListing = true;
+        if (wholeListing) HasListing = true;
+        else if (!HasListing)
+            _log?.Info("BankBalance", "`bank` was asked inside a bank, which shows that bank only: "
+                + "the other banks stay unknown until it is asked outside one.");
         tcs.TrySetResult(LastKnown);
     }
 

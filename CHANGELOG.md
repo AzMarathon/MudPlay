@@ -1,8 +1,38 @@
 # Version history
 
-## 3.158.3
+## 3.159.1
 
 - Game Data Browser → Monsters: new **BS Def** column (backstab defence) in the column picker, with a range filter
+
+## 3.159.0
+
+- Game Data Browser → Quest Flags: one row per script line, with **Command**, **Level**, **Class**, **Race** and **Items** columns
+- Double-click a Quest Flags row for **Quest Flag Steps**: that flag's steps in walking order, with what to type or kill and what each needs and gives
+- A flag number typed in the Quest Flags filter shows that flag only
+- Quest tab: a drafted step that happens on a monster's death now reads **kill <monster>** with its room, instead of *obtain <item>* or nothing
+- A saved column layout no longer hides new columns on a table without a column picker
+
+## 3.158.9
+
+- Round totals: a monster's damage shield striking back (the razor boar's spines) is credited to that monster, not to "unknown" or to no attacker
+- A strike-back in wording the client hasn't seen is still credited when the game data gives the monster just hit a damage shield
+- bug reports addressed: paradigm-20261009-023430
+
+## 3.158.8
+
+- Players Seen: double-click a row to open the map on the room that player was last seen in, flashed green like an `@where` reply
+
+## 3.158.7
+
+- A `bank` reply taken while standing in a bank, which shows that bank alone, no longer counts as the full list of your deposits; train funding and the route picker ask again from outside one
+
+## 3.158.6
+
+- A route card's trade trip starts with the first step, in a party too
+- A party walk sent to fetch an item waits for the party's count before setting off
+- An invited member who hasn't joined is no longer waited on for item counts
+- A party member who doesn't answer an item count is fetched a copy too
+- bug reports addressed: paradigm-20261009-011133
 
 ## 3.158.2
 

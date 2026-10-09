@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using MudPlay.Game;
@@ -38,8 +39,8 @@ public sealed class PartyInventoryProbeTests
             Probe = new PartyInventoryProbe(Broadcaster, Chat, State, armWindow: Windows.Add, log: null);
         }
 
-        public void AddMember(string name, bool self = false)
-            => State.Members.Add(new PartyMember { Name = name, IsSelf = self });
+        public void AddMember(string name, bool self = false, bool invited = false)
+            => State.Members.Add(new PartyMember { Name = name, IsSelf = self, IsInvited = invited });
 
         public void GoInParty() => State.IsInParty = true;
 
@@ -73,6 +74,116 @@ public sealed class PartyInventoryProbeTests
         Assert.Equal(0, r.Expected);
         Assert.False(r.AnyHeld);
         Assert.Empty(h.Wire);   // no broadcast fired
+    }
+
+    // An invited member who hasn't joined can't answer, and waiting on them ran
+    // every count to the end of its window.
+    [Fact]
+    public async Task Query_OnlyInvitedMember_ReturnsEmptyImmediately()
+    {
+        var h = new Harness();
+        h.AddMember("Tristian", invited: true);
+        h.GoInParty();
+
+        PartyInventoryProbe.PartyItemResult r = await h.Probe.QueryAsync(175, "rope");
+
+        Assert.Equal(0, r.Expected);
+        Assert.Empty(h.Wire);
+        Assert.Empty(h.Windows);
+    }
+
+    [Fact]
+    public async Task Query_InvitedMember_IsNeitherAskedNorWaitedFor()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.AddMember("Tristian", invited: true);
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(175, "rope");
+        Assert.Equal("/Bob @have rope\r", Assert.Single(h.Wire.Select(Encoding.Latin1.GetString)));
+
+        h.Reply("Bob", "yes - 1x 'rope'");            // the one joined member answers
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, r.Expected);                  // done without the window closing
+        Assert.Equal(1, r.TotalCount);
+    }
+
+    // The walk a count holds is let go when the probe's reply window closes on a
+    // member who never answers: the one release that rests on the probe's own timer.
+    [Fact]
+    public async Task WindowClosing_OnASilentMember_ReleasesTheWalkItsCountHeld()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.GoInParty();
+        bool held = false;
+        List<(int Id, int Qty)> forwarded = new();
+        var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new Game.Map.PartyPathItemGate(
+            isCarried: _ => false,
+            selfCount: _ => 0,
+            query: (id, name) => h.Probe.QueryAsync(id, name),
+            itemName: _ => "rope",
+            isEnabled: _ => true,
+            perPersonQuantity: _ => 1,
+            searchEnabled: () => false,
+            inParty: () => true,
+            selfIsLeader: () => true,
+            selfGivenName: () => "MudPlay",
+            forward: (ids, qty) => forwarded.Add((ids[0], qty)),
+            post: a => a(),
+            holdWalk: _ => held = true,
+            releaseWalk: _ => { held = false; released.TrySetResult(); });
+
+        gate.OnPathItemsRequired(new[] { 175 });
+        Assert.True(held);
+        Assert.Single(h.Windows);
+
+        h.FireWindows();                              // nobody answered in time
+        await released.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(held);
+        // Bob never answered, so he is taken to hold none: a copy each for the two.
+        Assert.Equal((175, 2), Assert.Single(forwarded));
+    }
+
+    // The members who were asked and didn't answer are named, so the route card
+    // and the walk read the same party from one count. An invitee was never asked.
+    [Fact]
+    public async Task WindowClosing_NamesTheMembersWhoDidNotAnswer()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.AddMember("Sil");
+        h.AddMember("Tristian", invited: true);
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(175, "rope");
+        h.Reply("Bob", "yes - 1x 'rope'");
+        h.FireWindows();
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, r.Expected);
+        Assert.Equal(1, r.Replied);
+        Assert.Equal(new[] { "Sil" }, r.Unanswered);
+        Assert.Equal(new[] { "Bob" }, r.CountsByMember.Keys);
+    }
+
+    [Fact]
+    public async Task EveryoneAnswering_LeavesNobodyUnanswered()
+    {
+        var h = new Harness();
+        h.AddMember("Bob");
+        h.GoInParty();
+
+        Task<PartyInventoryProbe.PartyItemResult> q = h.Probe.QueryAsync(175, "rope");
+        h.Reply("Bob", "no - nothing matching 'rope'");
+        PartyInventoryProbe.PartyItemResult r = await q.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Empty(r.Unanswered);
+        Assert.Empty(PartyInventoryProbe.PartyItemResult.Empty(175).Unanswered);
     }
 
     [Fact]

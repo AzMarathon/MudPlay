@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.3**
+> **Version 3.159.1**
 > - Game Data Browser → Monsters: new **BS Def** column (backstab defence) in the column picker, with a range filter
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
