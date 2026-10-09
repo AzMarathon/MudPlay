@@ -960,7 +960,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@get-all` / `@drop-all` / `@deposit-all` — pick up everything on the ground / drop everything unworn / bank all excess coin. `@drop-all full` drops **everything** held (worn gear, the readied light, keys and coins); `@drop-all coins` and `@drop-all keys` drop just those.
 - `@hide-all [full|coins|keys]` — the same four sweeps as `@drop-all`, but **hidden** in the room with `hide <item>` instead of dropped: only someone who searches the room will find it. Like drop, it takes worn gear directly, and a stack goes in one counted `hide` on Paradigm, one per item on Stock. (It always names the item — a bare `hide` would hide you instead.)
 - `@invite` / `@join` — ask you to invite the sender into your party, or to join theirs.
-- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant, and both are silenced while the toolbar's *Disable hangups* toggle is on.
+- `@hangup` — drops your connection and stays down (no auto-reconnect), so you can read the screen and log back in by hand. `@relog` — the opposite: cleanly exits, then reconnects and auto-logs back in. Both need the **Hangup/disconnect** grant. A player you gave that grant is always obeyed: the toolbar's *Disable hangups* toggle stops the client hanging up on its own, not these two commands.
 
 ### Hand out permissions
 
@@ -2143,7 +2143,9 @@ The toolbar across the top controls what you see:
 
 ## Talking
 
-Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. A `;` that starts a word is not a separator: it is sent to the game as typed, so the game's own commands that begin with one (`;o`, or `/bob @do ;o`) go out whole, and so does a `;)` in chat. The same holds in the terminal, and in macros, aliases, triggers, events, loop commands and the pre-/post-rest commands. To send such a command after another on one line, put a space before it: `n; ;o` (or `n^M ;o`) sends `n` and then `;o`.
+Type into the input box at the bottom and press **Enter** (or click **Send**) to send the line to the game — you still type the game's own chat commands (`gos hi`, `/bob hey`, and so on). This is the input box where your **aliases** expand and where `;` or `^M` splits one line into several commands. A `;` that starts a word is not a separator: it is sent to the game as typed, so the game's own commands that begin with one (`;o`, or `/bob @do ;o`) go out whole, and so does a `;)` in chat. The same holds in the terminal, and in macros, aliases, triggers, events, loop commands and the pre-/post-rest commands. To send such a command after another on one line, put a space before it: `n; ;o` (or `n^M ;o`) sends `n` and then `;o`. In a line you type you can also double it: `;;time` sends `;time`, and `n;;time` sends `n` and then `;time`. (Macros, aliases, triggers, events and loop commands don't read `;;` that way: there a doubled separator is an empty step.)
+
+**`;o` and `=x`.** Sending `;o` (typed, from a macro or alias, or relayed by a remote `@do`) drops the connection and MudPlay dials straight back in and logs in again, whatever the BBS tab's reconnect triggers say. Sending `=x` drops the connection and MudPlay stays off until you connect again. Either counts only if the board hangs up within a few seconds of it.
 
 **↑ / ↓** recall what you sent before, and the chevron at the right edge of the box opens a list of recent commands to pick from. **Tab** completes the word at your cursor against your carried, worn, and key-ring item names, the same as the terminal (**Settings → General**) — press it again, or **Shift+Tab**, to step through other matches.
 
@@ -2689,8 +2691,8 @@ See the [Keybindings](#keybindings) section below — the rebind dialog is launc
 ### Disable hangups (toolbar toggle)
 
 **Default:** Off
-**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not a remote `@hangup`, not the emergency low-HP hangup, nothing — only you disconnecting manually will end the session.
-**Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. One narrow exception still fires even with this on: a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
+**What it does:** This is a toolbar button, not a checkbox on a settings tab — but it's documented here because that's where you'll actually find it (look for the "no hangup" icon). When on, **no** automatic mechanism can drop your connection — not the emergency low-HP hangup, not a PvP response, not a partymate's `@panic`. What still ends the session is you disconnecting, or someone you trust asking for it.
+**Important notes:** This is a hard override — it wins over the General tab's "Allow hangup in all-off mode" carve-out. Three things still go through with this on: a remote `@hangup` or `@relog` from a player you gave the **Hangup/disconnect** grant (they are requests, not the client's own decision); a log-off command you send yourself (`;o`, `=x`); and a graceful log-off ahead of the BBS's nightly server cleanup, if you've opted into "reconnect after cleanup" on the BBS tab.
 
 ### Sprint Mode (toolbar toggle)
 

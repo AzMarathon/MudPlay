@@ -1,8 +1,11 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.20**
+> **Version 3.159.22**
 > - A `;` that starts a word is sent to the game as typed (`;o`, `/name @do ;o`, a `;)` in chat) instead of splitting the line; `n;s` still sends two commands
+> - Typing `;;` before a word keeps one `;` for the game: `;;time` sends `;time`
+> - Sending `;o` drops the connection and reconnects; sending `=x` drops it and stays off
+> - `@hangup` and `@relog` are obeyed with Disable Hangups on
 > - Events and the pre-/post-rest commands split their commands by the same rule as macros, aliases and triggers
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

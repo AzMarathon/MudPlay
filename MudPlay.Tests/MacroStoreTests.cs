@@ -27,6 +27,7 @@ public sealed class MacroStoreTests
     [InlineData("n ;",                                 new[] { "n" })]                     // nothing behind it: a separator
     [InlineData("n^M ;o",                              new[] { "n", ";o" })]
     [InlineData("pull book;^M",                        new[] { "pull book" })]
+    [InlineData("n;;time",                             new[] { "n", "time" })]             // stored lists: a doubled `;` is an empty step
     [InlineData("",                                    new string[0])]
     [InlineData(null,                                  new string[0])]
     public void SplitCommandSteps_BehavesAsSpecified(string? input, string[] expected)
@@ -54,6 +55,13 @@ public sealed class MacroStoreTests
     [InlineData(";time",           new[] { ";time" })]
     [InlineData("/someone @do ;o", new[] { "/someone @do ;o" })]
     [InlineData("n;s; ;o",         new[] { "n", "s", ";o" })]
+    // Doubled before a character: one `;` is kept for the game.
+    [InlineData(";;time",          new[] { ";time" })]
+    [InlineData("n;;time",         new[] { "n", ";time" })]
+    [InlineData(";;o;;time",       new[] { ";o", ";time" })]
+    [InlineData("n;; s",           new[] { "n", "s" })]          // nothing right behind it: two separators
+    [InlineData("n^M;s",           new[] { "n", "s" })]          // ^M then `;` is not a doubled `;`
+    [InlineData(";;",              new[] { ";;" })]
     public void SplitTypedInput_BehavesAsSpecified(string input, string[] expected)
     {
         IReadOnlyList<string> steps = MacroStore.SplitTypedInput(input);
