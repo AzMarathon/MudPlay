@@ -1,5 +1,10 @@
 # Version history
 
+## 3.155.1
+
+- A party buff whose cast line doesn't name the member (angelic halo) is timed from the cast, so it is no longer recast on the same member every round while the others go without
+- bug reports addressed: paradigm-20261008-222838
+
 ## 3.155.0
 
 - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have

@@ -1,15 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.155.0**
-> - A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
-> - A card whose route uses a teleport (a hole, a hatch, a vortex) takes it and says so on the card; picking it no longer walked a far longer way on foot
-> - The Shortcut card lists everything its route needs, and no longer names the key of a door you can pick or bash
-> - A walk you start keeps its route for the whole trip: through a re-plan, a detour to fetch an item or buy a light, and picking up again after a sell trip, a flee, a party comeback or an event's Resume
-> - Crossing a hazard is agreed for the hazard rooms on the card you picked: a walk picked up from somewhere else never enters a different one
-> - Side trips to fetch an item for such a walk go on foot when they can, and aren't held to the automatic-walk teleport list
-> - Stopping or redirecting a walk while it is opening a door no longer reports the walk as failed
-> - Stop while a walk waits at a giver, shop or item source between two legs ends it; nothing walks on afterwards, and a Stop in a PvP flee room calls off the walk back
+> **Version 3.155.1**
+> - A party buff whose cast line doesn't name the member (angelic halo) is timed from the cast, so it is no longer recast on the same member every round while the others go without
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
