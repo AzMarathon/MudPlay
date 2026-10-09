@@ -1,5 +1,10 @@
 # Version history
 
+## 3.159.28
+
+- A walk or loop held by a fight re-checks its room before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
+- bug reports addressed: paradigm-20261009-082958
+
 ## 3.159.27
 
 - A monster set to **Hangup** (Game Data → the monster's record → Fighting it) now hangs the client up as soon as it is seen in the room

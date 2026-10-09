@@ -1526,6 +1526,78 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Contains("Suspect", h.ResyncReasons[0]);
     }
 
+    // The loop's side of report paradigm-20261009-082958 (seen there on a walk): the
+    // tracker went Suspect during a pause that began between two steps, so no step
+    // was in flight for the guard above to act on, and the resume sent the next
+    // step from a room the loop may not have been standing in. Where the game can
+    // be asked, it is asked first.
+    [Fact]
+    public void SuspectWhilePausedBetweenSteps_AsksTheGameOnResume_InsteadOfSendingTheNextStep()
+    {
+        Harness h = NewHarness(wireRecovery: true);
+        Action heldAtB = PauseBetweenStepsAtB_ThenGoSuspect(h);
+
+        heldAtB();
+
+        Assert.Single(h.Sent);   // the step planned from B was not sent
+        Assert.Contains("on resume before step", Assert.Single(h.ResyncReasons));
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+
+        // The game says we are in B after all. Nothing was in flight, so that is
+        // no landing to count: the loop carries on south from B, with A's step.
+        h.Tracker.SetLocated(new RoomKey(1, 2));
+        h.Gate!.NoteAuthoritativePosition(new RoomKey(1, 2));
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    // On a realm with nothing to ask, the same resume has to keep the loop moving:
+    // the gate starts watching and the step goes out as it always did.
+    [Fact]
+    public void SuspectWhilePausedBetweenSteps_NothingToAsk_StillSendsTheNextStep()
+    {
+        Harness h = NewHarness(wireRecovery: true);
+        h.Gate!.TryResync = _ => false;
+        Action heldAtB = PauseBetweenStepsAtB_ThenGoSuspect(h);
+
+        heldAtB();
+
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(TierLevel.Tier2, h.Gate!.CurrentTier);
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    // Walks the a-b cycle to B, holds the next step there (a monster in the room),
+    // pauses for the fight and shows a room that isn't B. Returns the fight ending.
+    private static Action PauseBetweenStepsAtB_ThenGoSuspect(Harness h)
+    {
+        bool monsterInRoom = false;
+        h.Runner.SetMoveReadyCheck(() => !monsterInRoom);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        Assert.Single(h.Sent);
+
+        monsterInRoom = true;
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(new RoomKey(1, 2), h.Tracker.State.CurrentRoom?.Key);
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        Assert.Single(h.Sent);
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Somewhere Else",
+            new HashSet<Direction> { Direction.N }));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        return () =>
+        {
+            monsterInRoom = false;
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        };
+    }
+
     [Fact]
     public void PassiveSourceRedisplay_WhileMovePending_IsIgnored_NoFalseRecovery()
     {

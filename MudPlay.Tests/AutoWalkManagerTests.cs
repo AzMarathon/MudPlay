@@ -842,6 +842,163 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Walking, h.Walker.State);
     }
 
+    // The stretch of river in report paradigm-20261009-082958, as the Paradigm 1.9.1
+    // data has it. 14/3952 is another "Alba River" showing north and southeast, so
+    // 14/3946's display alone doesn't say which of the two it is.
+    private const string AlbaRiverGraphJson = """
+        [
+          { "Map Number": 14, "Room Number": 3944, "Name": "Alba River, Under a Stone Bridge",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "14/3945", "SE": "14/3805", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3945, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "14/3946", "SE": "14/3944", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3946, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "14/3947", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "14/3945", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3947, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "14/3948", "S": "14/3946", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3952, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "14/3953", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "14/3951", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static readonly HashSet<Direction> AlbaRiver3945Exits = new() { Direction.NW, Direction.SE };
+    private static readonly HashSet<Direction> AlbaRiver3946Exits = new() { Direction.N, Direction.SE };
+
+    // Report paradigm-20261009-082958: the walk was a room further up the river than
+    // the tracker had it. A fight held it in "Alba River" 14/3945; the room shown
+    // during the fight was 14/3946 (north, southeast), which made the tracker Suspect
+    // with the walker paused and deaf to it. When the fight ended the walk sent the
+    // step planned from 14/3945, northwest, into a wall, and a refusal of a move sent
+    // from Suspect wakes nothing: it sat there until the player typed `rm`. The resume
+    // now asks where we are first and plans from the answer.
+    [Fact]
+    public void Resume_TrackerWentSuspectWhilePausedBetweenSteps_AsksRmInsteadOfSendingTheStep()
+    {
+        Harness h = NewHarness(AlbaRiverGraphJson, wireRecovery: true);
+        List<string> rmReasons = new();
+        Action<RoomKey>? rmAnswer = null;
+        h.Gate!.TryResyncOnce = (reason, onResolved, _) =>
+        {
+            rmReasons.Add(reason);
+            rmAnswer = onResolved;
+            return true;
+        };
+        // What holds the step after the landing: a monster in the room.
+        bool monsterInRoom = false;
+        h.Walker.SetMoveReadyCheck(() => !monsterInRoom);
+        h.Tracker.SetLocated(new RoomKey(14, 3944));
+        h.Walker.WalkTo(new RoomKey(14, 3947));      // NW, NW, N
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        monsterInRoom = true;
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3945Exits));
+        Assert.Equal(new RoomKey(14, 3945), h.Tracker.State.CurrentRoom?.Key);
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "daggerfish");
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3946Exits));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        monsterInRoom = false;
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "room cleared");
+
+        Assert.Single(rmReasons);
+        Assert.Equal(new[] { "nw" }, SentText(h));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+
+        // `Location: 14,3946`: the walk goes on north from there.
+        h.Tracker.SetLocated(new RoomKey(14, 3946));
+        rmAnswer!(new RoomKey(14, 3946));
+
+        Assert.Equal(new[] { "nw", "n" }, SentText(h));
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // The same fight, with the pause landing while the step into 14/3945 was still
+    // in flight. The resume used to count that step as arrived from the Suspect
+    // tracker's room and send the next one from it.
+    [Fact]
+    public void Resume_TrackerWentSuspectWhilePausedMidStep_AsksRmInsteadOfSendingTheNextStep()
+    {
+        Harness h = NewHarness(AlbaRiverGraphJson, wireRecovery: true);
+        List<string> rmReasons = new();
+        h.Gate!.TryResyncOnce = (reason, _, _) => { rmReasons.Add(reason); return true; };
+        h.Tracker.SetLocated(new RoomKey(14, 3944));
+        h.Walker.WalkTo(new RoomKey(14, 3947));
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "daggerfish");
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3945Exits));
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3946Exits));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "room cleared");
+
+        Assert.Single(rmReasons);
+        Assert.Equal(new[] { "nw" }, SentText(h));
+    }
+
+    // Where the same report's walk went wrong to begin with, replayed through the
+    // fix that shipped after it was captured (3.153.19). An `rm` was asked from
+    // Ghille Village, Docks 14/3799, and the walk's first `w` went out behind it.
+    // The answer, `Location: 14,3799`, re-located the tracker and dropped that move,
+    // so the walk sent `w` again: one `w` too many, refused four rooms on at
+    // 14/3805 while a `nw` was pending, which was then sent twice in its turn.
+    [Fact]
+    public void RmAnsweredBehindTheWalksFirstMove_DoesNotSendTheMoveAgain()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Info.json"), "[{\"Legit\":2}]");   // a ParaMud set
+        const string docksJson = """
+            [
+              { "Map Number": 14, "Room Number": 3799, "Name": "Ghille Village, Docks",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "14/3800",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "14/3798", "D": "0" },
+              { "Map Number": 14, "Room Number": 3800, "Name": "Ghille Pond, Near Docks",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "14/3802", "E": "14/3799", "W": "14/3803",
+                "NE": "0", "NW": "14/3801", "SE": "0", "SW": "14/3813", "U": "0", "D": "0" },
+              { "Map Number": 14, "Room Number": 3803, "Name": "Ghille Pond",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "14/3801", "S": "14/3813", "E": "14/3800", "W": "14/3804",
+                "NE": "0", "NW": "14/3806", "SE": "14/3802", "SW": "14/3812", "U": "0", "D": "0" }
+            ]
+            """;
+        Harness h = NewHarness(docksJson, wireRecovery: true);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        MessageRouter router = new();
+        MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
+        using ParadigmPositionResolver resolver = new(router, h.Tracker, h.Gate!, cache, log: null, useTimer: false);
+        List<byte[]> rmSent = new();
+        resolver.SetWireSender(rmSent.Add);
+        h.Tracker.SetLocated(new RoomKey(14, 3799));
+
+        Assert.True(resolver.TryRequestResync("step 44 landed at 14/3799 on resume (expected 14/4944)"));
+        h.Walker.WalkTo(new RoomKey(14, 3803));      // W, W
+        Assert.Equal(new[] { "w" }, SentText(h));
+
+        resolver.FeedLocationForTests(14, 3799);
+
+        Assert.Equal(new[] { "w" }, SentText(h));
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Ghille Pond, Near Docks",
+            new HashSet<Direction> { Direction.S, Direction.E, Direction.W, Direction.NW, Direction.SW }));
+        Assert.Equal(new RoomKey(14, 3800), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { "w", "w" }, SentText(h));
+    }
+
     [Fact]
     public void RemainingRoomKeys_TrimsToCurrentRoom_WhilePausedMidStep()
     {

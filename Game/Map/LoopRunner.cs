@@ -3019,6 +3019,28 @@ public sealed class LoopRunner : IRecoverableEngine
                     $"tracker {_tracker.State.Confidence} on resume at step {_index + 1}");
                 return;
             }
+            // The same loss of place with nothing in flight (the pause landed
+            // between steps): the send at the bottom would go out from a room we
+            // may not be standing in, to the same silently dropped refusal (the
+            // walker's side of this is report paradigm-20261009-082958). Tell the
+            // gate here too. Where the game can be asked (rm, sys st) the gate
+            // pauses us for the answer; the last step's target is dropped first,
+            // because an answer naming it would otherwise count as a landing and
+            // skip the step that was never sent. Where it can't, the gate only
+            // starts watching and the send goes ahead as before. Not when recovery
+            // would drop the reroute as an echo of its last attempt: nothing would
+            // be left to wake the loop.
+            if (_tracker.State.Confidence is RoomConfidence.Suspect or RoomConfidence.Lost or RoomConfidence.Unknown
+                && !RecoveryWouldDeclineAsEcho())
+            {
+                _log?.Warn("LoopRunner",
+                    $"resume: tracker confidence={_tracker.State.Confidence} after pause with nothing in flight; forwarding to recovery gate before step {_index + 1}");
+                _expectedMoveTarget = null;
+                _expectedMoveSource = null;
+                _recovery?.NoteSuspectedMismatch(
+                    $"tracker {_tracker.State.Confidence} on resume before step {_index + 1}");
+                if (State != LoopState.Running) return;
+            }
             // A move was already on the wire when the pause hit and its
             // confirmation hasn't landed yet (the overshoot guard above didn't
             // fire, so the tracker is still Pending on it). Re-sending it here

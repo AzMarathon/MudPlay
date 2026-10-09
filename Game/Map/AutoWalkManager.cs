@@ -3760,6 +3760,24 @@ public sealed class AutoWalkManager : IRecoverableEngine
             _stepInFlight = false;
             _awaitingPromptForCommand = false;
 
+            // The tracker lost its place while we were paused: a room display that
+            // wasn't the room it held arrived mid-pause, and OnTrackerStateChanged
+            // (gated on State == Walking) never passed that on. The next step is
+            // planned from a room we may not be standing in, and sending it can't
+            // even fail cleanly: a move sent from Suspect arms no Pending, so the
+            // game's refusal changes nothing the walker or its stall watchdog reads
+            // (report paradigm-20261009-082958: a move into a wall after a fight,
+            // then nothing until the player typed `rm`). Re-check the room first;
+            // the replan asks rm before it trusts the tracker.
+            if (_tracker.State.Confidence == RoomConfidence.Suspect)
+            {
+                _log?.Info("Walker",
+                    $"resume: the tracker went Suspect while paused (holding {_tracker.State.CurrentRoom?.Key.ToString() ?? "(no room)"}); "
+                    + $"re-checking the room before step {_index + 1} instead of sending it");
+                TryReplanOrFail(RoomConfidence.Suspect);
+                return;
+            }
+
             // While paused, OnTrackerStateChanged bailed on every room
             // arrival (it gates on State == Walking), so _index didn't
             // advance even though pipelined server responses may have
