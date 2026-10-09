@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.157.5**
+> **Version 3.157.6**
 > - The golden idol's passage: the room you land in is read from the game's own second display; MudPlay sends an Enter only when that display doesn't come
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
