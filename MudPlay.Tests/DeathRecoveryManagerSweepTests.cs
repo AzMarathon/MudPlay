@@ -203,9 +203,14 @@ public sealed partial class DeathRecoveryManagerTests
                 }
                 else if (cmd == "look")
                 {
+                    // The room again, in wire order: its floor, then the exits line,
+                    // which the room parser hands the tracker (a re-confirm in place)
+                    // before recovery reads the same line.
+                    Room room = H.Graph.GetRoom(Here)!;
                     Survey(Here);
+                    H.Tracker.NoteRoomObserved(new RoomObservation(room.Name, new HashSet<Direction>(room.Exits.Keys)));
                     H.Recovery.FeedTestLine("Obvious exits: " + string.Join(", ",
-                        H.Graph.GetRoom(Here)!.Exits.Keys.Select(d => d.ToLongName())));
+                        room.Exits.Keys.Select(d => d.ToLongName())));
                 }
                 else if (cmd.StartsWith("look ", StringComparison.Ordinal)
                     && DirectionExtensions.TryFromLongName(cmd[5..], out Direction peek))
@@ -1310,6 +1315,103 @@ public sealed partial class DeathRecoveryManagerTests
 
         Assert.Equal(new[] { 1 }, w.Walked.ToArray());   // the looks only
         Assert.Equal(new[] { "rope" }, w.H.Latest.UnrecoveredItems);
+    }
+
+    // ----- third review ------------------------------------------------
+
+    [Fact]
+    public void RecoverNow_WhoseWalkWasStopped_DoesNotSweepOnALaterWalkInByHand()
+    {
+        // Recover Now from two rooms off, then Stop while it walks. Coming into the
+        // death room by hand later is not that Recover Now arriving.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Enter(4);
+        Assert.True(w.Recovery.RecoverNow(w.H.Latest));
+        w.H.Controller!.Stop();
+        w.Settle();                                    // the step already sent lands
+        Assert.Equal(new RoomKey(1, 2), w.Here);
+
+        w.H.Tracker.NoteMoveSentByObserver(Direction.S);
+        w.H.Sent.Add("s");
+        w.Run(40);
+
+        Assert.Equal(new RoomKey(1, 1), w.Here);
+        Assert.DoesNotContain(w.H.Sent, s => s.StartsWith("look ") || s.StartsWith("get "));
+        Assert.DoesNotContain(4, w.Walked.Skip(2));
+    }
+
+    [Fact]
+    public void Sweep_PausedDuringTheLooks_UserWalksOff_EndsOnResume_WithTheGateClear()
+    {
+        using SpillWorld w = SwordHereRopeOut(doorsClosed: false);
+        w.RecoverNow(beats: 0);
+        w.RunUntil("peeking");
+        w.H.Controller!.Pause();
+        w.H.Tracker.NoteMoveSentByObserver(Direction.E);
+        w.H.Sent.Add("e");
+        w.Run(5);
+        Assert.Equal(new RoomKey(1, 3), w.Here);
+        Assert.Contains("peeking", w.State);
+
+        w.H.Controller.Resume();
+        w.Run(5);
+
+        Assert.StartsWith("idle", w.State);
+        Assert.False(w.H.Coordinator.IsGateAsserted(MovementCoordinator.UserGate));
+    }
+
+    [Fact]
+    public void DeferredSweep_ThatCannotStartForTenMinutes_IsDropped()
+    {
+        using SpillWorld w = SwordHereRopeOut();
+        w.H.Hostiles = true;
+        w.RecoverNow(beats: 6);
+        Assert.Contains("waiting to start", w.State);
+
+        w.Run(610);
+        Assert.Equal("idle", w.State);
+
+        w.H.Hostiles = false;
+        int mark = w.H.Sent.Count;
+        w.Run(20);
+        Assert.Empty(w.H.Sent.Skip(mark));
+    }
+
+    [Fact]
+    public void AnEnginesOwnWalkThatJustEndedHere_GetsTheShortSweep_ThoughNothingDrivesAnyMore()
+    {
+        // A PvP flee, or the walk back from one, that happens to end in a death room.
+        // The engine is done by the time anyone asks, but the walk was not the user's.
+        using SpillWorld w = new(CrossJson) { DoorsClosed = true };
+        w.Enter(1);
+        w.Die(Worn("iron sword"), new[] { "rope" });
+        w.Put(1, "iron sword");
+        w.Put(4, "rope");
+        w.H.Recovery.AutoRecover = true;
+        w.Enter(3);
+        w.H.EngineWalkEndedAt.Add(new RoomKey(1, 1));
+
+        Assert.True(w.H.Walker!.WalkTo(new RoomKey(1, 1)));
+        w.Run(60);
+
+        Assert.Equal(new[] { 1 }, w.Walked.ToArray());
+        Assert.Equal(new[] { "rope" }, w.H.Latest.UnrecoveredItems);
+    }
+
+    [Fact]
+    public void Sweep_ItsLeg_IsNotAWalkAnythingCanSaveToResume()
+    {
+        // A PvP fight, a party comeback, a light-shop detour and an event run all save
+        // "the walk under way" from the walker's journey and resume it afterwards. A
+        // sweep's leg ends with the sweep, so the walker reports no journey for it.
+        using SpillWorld w = SweepIn("walking out");
+
+        Assert.NotEqual(WalkState.Idle, w.H.Walker!.State);
+        Assert.Equal(new RoomKey(1, 2), w.H.Walker.Destination);
+        Assert.Null(w.H.Walker.Journey);
     }
 
     [Fact]

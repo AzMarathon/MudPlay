@@ -1615,9 +1615,17 @@ public partial class MainWindowViewModel : ObservableObject
         // the route cards like any other.
         AppServices.Current.DeathRecovery.SetDemandedWalk(room =>
         {
-            _ = MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room);
+            _ = WalkForRecoverNowAsync(room);
             return true;
         });
+
+        // The cards closed without a pick: no walk went out, so the Recover Now that
+        // asked for one isn't left waiting for an arrival.
+        static async Task WalkForRecoverNowAsync(Game.Map.RoomKey room)
+        {
+            if (!await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, room))
+                AppServices.Current.DeathRecovery.ForgetRecoverNowWalk("the route cards were closed");
+        }
         // A party-splitting CMD teleport (chime-style, Darkwood's `go vortex`)
         // dissolves the follow chain even though the `.@party <kw>` relay sent
         // everyone through, so the party must be re-invited on landing. Both

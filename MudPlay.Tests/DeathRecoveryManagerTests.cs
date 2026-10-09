@@ -76,6 +76,8 @@ public sealed partial class DeathRecoveryManagerTests
         public MovementCoordinator Coordinator { get; } = new();
         public AvoidFilter Filter { get; } = new();
         public bool OtherEngine { get; set; }
+        // Rooms an engine's own walk (a PvP flee, its come-back) has just ended in.
+        public HashSet<RoomKey> EngineWalkEndedAt { get; } = new();
         public bool AutoSearches { get; set; }
         public List<RoomKey> Searched { get; } = new();
         public HashSet<string> Stays { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -116,6 +118,7 @@ public sealed partial class DeathRecoveryManagerTests
                 movementHeld: () => Coordinator.IsPaused,
                 isStashRoom: StashRooms.Contains,
                 otherEngineDrives: () => OtherEngine,
+                engineWalkEndedAt: EngineWalkEndedAt.Contains,
                 restHeld: () => Coordinator.IsGateAsserted(MovementCoordinator.HealthRecoveryGate)
                     || Coordinator.IsGateAsserted(MovementCoordinator.ManaRecoveryGate),
                 userPaused: () => Coordinator.IsGateAsserted(MovementCoordinator.UserGate),

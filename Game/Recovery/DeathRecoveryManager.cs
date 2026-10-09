@@ -47,13 +47,21 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // a single "corpse of <given-name>" object recovered by ONE `recover corpse
     // <name>` command (not a per-item get), so there's no per-item remaining set:
     // the corpse either shows in the room's "You notice" survey (recover it) or it
-    // doesn't (mark Missing). _grabOnSurvey arms the recover for the next survey —
-    // the survey line lands AFTER the room-change fires, so we can't read it on
-    // entry. _pendingRecoverNow is a record the user pressed "Recover Now" on while
-    // away — it forces a grab on arrival even when Auto-Recover is off.
+    // doesn't (mark Missing). _grabOnSurvey arms the recover for the next survey to
+    // be read in the room. A room prints its floor BEFORE the exits line that
+    // confirms the move, so on a walk-in the arrival's own survey has gone by when
+    // the room change fires: the Stock path reads it from the floor list there and
+    // then, and otherwise the grab waits for the next display of the room (a look, a
+    // search's reveal, the display after logging back in). _armedAt is when it was
+    // armed: on Stock a survey is this room's only if no move has gone out since.
+    // _pendingRecoverNow is a record the user pressed "Recover Now" on while away —
+    // it forces a grab on arrival even when Auto-Recover is off, until that walk is
+    // stopped, fails or is called off.
     private DeathRecord? _activeRecovery;
     private DeathRecord? _pendingRecoverNow;
+    private bool _recoverNowWalking;
     private bool _grabOnSurvey;
+    private DateTimeOffset _armedAt;
     private GroundItemTracker? _groundItems;
 
     // Combat-aware re-equip interleaving. Recovering the corpse itself
@@ -129,6 +137,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // loop whose approach walk has just ended doesn't yet.
     private bool _engineArrival;
     private bool _classifyOwed;
+    // Heartbeats a deferred sweep has left to become startable; the sweep's own
+    // time budget, counted from when it was put off.
+    private int _deferBudget;
     // Set when a deliberate Stock recovery wanted to sweep but a hostile was still
     // in the death room — the heartbeat starts the sweep once the room clears.
     private bool _stockSweepPending;
@@ -197,6 +208,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private Func<bool>? _movementHeld;
     private Func<RoomKey, bool>? _isStashRoom;
     private Func<bool>? _otherEngineDrives;
+    private Func<RoomKey, bool>? _engineWalkEndedAt;
     private Func<bool>? _restHeld;
     private Func<bool>? _userPaused;
     private Func<bool>? _autoSearchesRooms;
@@ -316,6 +328,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     //   - otherEngineDrives: a loop, Auto-Lair, a solver or an errand has the
     //     character, or it is following a party leader. A sweep the user asked for
     //     doesn't start under one and ends where it stands when one begins;
+    //   - engineWalkEndedAt: an engine's own walk has just ended in this room and the
+    //     engine with it (a PvP flee, the walk back from one), so the arrival was not
+    //     a walk the user made though nothing is driving any more;
     //   - restHeld: a rest is holding helper actions. Like the Auto-All switch, the
     //     sweep sends nothing while one is up;
     //   - userPaused: the user's own pause. Nothing is sent, and its clocks stop too,
@@ -331,6 +346,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         Func<bool> movementHeld,
         Func<RoomKey, bool> isStashRoom,
         Func<bool> otherEngineDrives,
+        Func<RoomKey, bool> engineWalkEndedAt,
         Func<bool> restHeld,
         Func<bool> userPaused,
         Func<bool> autoSearchesRooms,
@@ -340,6 +356,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(movementHeld);
         ArgumentNullException.ThrowIfNull(isStashRoom);
         ArgumentNullException.ThrowIfNull(otherEngineDrives);
+        ArgumentNullException.ThrowIfNull(engineWalkEndedAt);
         ArgumentNullException.ThrowIfNull(restHeld);
         ArgumentNullException.ThrowIfNull(userPaused);
         ArgumentNullException.ThrowIfNull(autoSearchesRooms);
@@ -348,6 +365,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _movementHeld = movementHeld;
         _isStashRoom = isStashRoom;
         _otherEngineDrives = otherEngineDrives;
+        _engineWalkEndedAt = engineWalkEndedAt;
         _restHeld = restHeld;
         _userPaused = userPaused;
         _autoSearchesRooms = autoSearchesRooms;
@@ -386,9 +404,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
     // Bind the room's floor-survey tracker. Auto-recover reads its parsed "You
     // notice" list to confirm the corpse is actually in the room before sending
-    // `recover corpse`, and arms off its SurveyUpdated event (the survey lands
-    // after the room-change fires, so it can't be read on entry). Wired by
-    // AppServices once GroundItems exists (it's built after this manager).
+    // `recover corpse`, and acts off its SurveyUpdated event: an armed grab takes the
+    // next survey read in the room (the arrival's own has printed before the room
+    // change fires; see _grabOnSurvey). Wired by AppServices once GroundItems exists
+    // (it's built after this manager).
     public void AttachGroundItems(GroundItemTracker ground)
     {
         ArgumentNullException.ThrowIfNull(ground);
@@ -680,6 +699,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // Walking back: arm a one-shot force-grab so arrival recovers even
         // when Auto-Recover is off.
         _pendingRecoverNow = record;
+        _recoverNowWalking = false;   // set by the walker's Started for this room
         bool walking = WalkToDeathRoom(record);
         if (walking)
             _log?.Info(LogCategory, $"recover-now: walking to {where} then recovering");
@@ -738,7 +758,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (rec is not null && !ReferenceEquals(_activeRecovery, rec))
         {
             bool force = ReferenceEquals(_pendingRecoverNow, rec);
-            if (force) _pendingRecoverNow = null;
+            if (force)
+            {
+                _pendingRecoverNow = null;
+                _recoverNowWalking = false;
+            }
             // A walk that ended here earns the sweep. One the user asked for (Recover
             // Now's, or their own walk-to with nothing else driving) earns all of it;
             // one another engine made earns the peek and its neighbours only.
@@ -747,23 +771,30 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
                 arrivedByWalk: !force && walkedHere);
             // A room prints its floor before the exits line that confirms the move
             // (GAME_MECHANICS "Hiding coin in a room (stashing)", Client use), so on
-            // a walk-in the survey this grab would wait for has already been read, or
-            // the floor is empty and none was printed. Either way it isn't left armed:
-            // the next survey to come would be the next room's, printed before that
-            // room confirms. A dark room is the exception: it confirms with no
-            // display at all, so nothing has been read, and the grab stays armed for
-            // the look that follows a light.
-            if (IsStock && _grabOnSurvey && ReferenceEquals(_activeRecovery, rec))
+            // a walk-in the arrival's survey has already been read, or the floor is
+            // empty and none was printed. That is only known when the room was
+            // displayed on a real arrival: not in the dark or blind (confirmed with
+            // no display at all), and not when the room merely confirmed in place (a
+            // typed-ahead move that bounced: the floor list was emptied when the step
+            // landed). Then nothing is concluded and the grab stays armed, as it
+            // always did, for the next display of the room.
+            bool arrivedSeeing = (t.PreviousRoom is null || !t.PreviousRoom.Key.Equals(room.Key))
+                && !_roomTracker.IsInDarkRoom && !_roomTracker.EnteredBlind;
+            if (IsStock && _grabOnSurvey && ReferenceEquals(_activeRecovery, rec) && arrivedSeeing)
             {
                 if (FloorWasJustRead()) TryGroundRecover(rec);
-                else if (!_roomTracker.IsInDarkRoom)
-                {
-                    _grabOnSurvey = false;
-                    _settleOwed = true;
-                }
+                // Displayed, with no floor line: empty. What follows is settled at
+                // the next heartbeat, and the grab stays armed all the same: a search
+                // may yet show the room's hidden side.
+                else _settleOwed = true;
             }
             return;
         }
+
+        // Confirmed again in the death room with a grab still armed (a move sent
+        // since it was armed has bounced): whatever went out has been answered, so a
+        // survey from here on is this room's.
+        if (rec is not null && _grabOnSurvey) _armedAt = DateTimeOffset.UtcNow;
 
         // This room holds no deathpile of ours — but if it's adjacent to one, an
         // auto-recover pass-through grabs our overflow here in-stride (Stock only),
@@ -834,9 +865,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     }
 
     // Start (or restart) recovering a deathpile. Mark the record Partial and,
-    // when autoGrab, ARM the corpse grab for the room's next floor survey — the
-    // "You notice" line lands after this room-change fires, so we can't read it
-    // yet (see OnSurveyUpdated / TryCorpseRecover). A known-empty pile (nothing
+    // when autoGrab, ARM the grab for the next floor survey read in the room (see
+    // _grabOnSurvey, OnSurveyUpdated, TryCorpseRecover). A known-empty pile (nothing
     // was lost) jumps straight to Recovered.
     private void BeginRecovery(DeathRecord record, bool autoGrab, bool deliberate, bool arrivedByWalk)
     {
@@ -847,7 +877,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _lookExitsOwed = false;
         _deliberateRecovery = deliberate;
         _engineArrival = false;
-        _classifyOwed = arrivedByWalk;
+        _classifyOwed = false;
 
         List<string> pile = PileNames(record);
         // A Stock pile comes back an item at a time, over more than one visit, so a
@@ -886,9 +916,25 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             SetStatus(record, DeathRecoveryStatus.Partial, "Returned to the death room — recovering.");
 
         _grabOnSurvey = autoGrab;
+        _armedAt = DateTimeOffset.UtcNow;
+        // Whose walk this was only matters where a sweep can follow: on Stock, with
+        // a grab to settle.
+        _classifyOwed = arrivedByWalk && autoGrab && IsStock;
         if (!autoGrab)
             _log?.Info(LogCategory, "recovery: auto-recover off — armed nothing (manual Recover Now only)");
     }
+
+    // A survey read while a Stock grab is armed is the death room's when we are in
+    // it with no move on the wire: the tracker says that room and isn't waiting on a
+    // move, and none has gone out since the grab was armed. The next room's entry
+    // survey prints before that room confirms, with the move still pending. The
+    // tracker need not be Confirmed: Suspect in the room (a display it couldn't
+    // place) is still the room, and a look from there is answered with its floor.
+    private bool ArmedSurveyIsTheDeathRooms(DeathRecord record) =>
+        _roomTracker.State.CurrentRoom?.Key is { } at && record.Room is { } died
+        && at.Map == died.Map && at.Room == died.Room
+        && _roomTracker.State.Confidence != RoomConfidence.Pending
+        && !(_roomTracker.LastMoveSentAt is { } moved && moved > _armedAt);
 
     // The realm probe says Stock. Unbound it says neither, and the Stock-only parts
     // of recovery stay off.
@@ -953,10 +999,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         if (_activeRecovery is not { } record || !_grabOnSurvey) return;
         if (_isParadigm?.Invoke() ?? true) TryCorpseRecover(record);
-        // A Stock grab left armed (a dark room, a look not yet answered) takes only a
-        // survey read while we stand confirmed in the death room: with a move on the
-        // wire it is the next room's, printed before that room confirms.
-        else if (InConfirmedDeathRoom(record)) TryGroundRecover(record);
+        else if (ArmedSurveyIsTheDeathRooms(record)) TryGroundRecover(record);
     }
 
     // Stock deathpile = one "corpse of <given-name>" object. If our corpse is in
@@ -992,6 +1035,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         int sent = GetOurItemsHere(record);
         if (sent > 0)
         {
+            _settleOwed = false;   // an "empty floor" verdict still waiting is overtaken
             _stockRecovering = true;
             _stockSettleTicks = StockSettleTicks;   // heartbeat settles the burst → sweep the leftovers
             _log?.Info(LogCategory, $"stock-recover: get {sent} pile item(s) from the floor");
@@ -1080,6 +1124,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // the hold is off and we stand confirmed in it. A move that lands elsewhere
         // drops it with the rest of this room's recovery.
         _stockSweepPending = sweeps;
+        _deferBudget = SweepBudgetTicks;
         _log?.Info(LogCategory, _stockSweepPending
             ? "stock-recover: sweep deferred (hostile in the death room, a rest, a pause, Auto-All off, or a move under way) — retrying when clear"
             : "stock-recover: no sweep (not a deliberate recovery) — holding Partial");
@@ -1087,13 +1132,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             $"Recovered what was here — {left.Count} item(s) not in this room.");
     }
 
-    // A sweep starts only from a death room we stand confirmed in, lit, with the
-    // walker idle. A move on the wire leaves the tracker unconfirmed: started then,
-    // the looks would go out from a room the character is leaving, the landing would
-    // be ignored for their length, and the tracker anchored back where it isn't.
+    // A sweep starts only from a death room we stand confirmed in, seen (not dark,
+    // not entered blind), with the walker idle. A move on the wire leaves the tracker
+    // unconfirmed: started then, the looks would go out from a room the character is
+    // leaving, the landing would be ignored for their length, and the tracker
+    // anchored back where it isn't.
     private bool SweepCanStartHere(DeathRecord record) =>
         InConfirmedDeathRoom(record)
-        && !_roomTracker.IsInDarkRoom
+        && !_roomTracker.IsInDarkRoom && !_roomTracker.EnteredBlind
         && _walker is not { State: not WalkState.Idle };
 
     private bool InConfirmedDeathRoom(DeathRecord record) =>
@@ -1377,12 +1423,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // One leg through the normal walker, on foot: a spill room is a few steps off, and
     // a teleport's charge or a shopping detour for a gate item isn't worth a floor that
     // may be empty. _issuingLeg marks the events this very call raises (the Stopped of
-    // the leg it replaces, its own Started) as ours.
+    // the leg it replaces, its own Started) as ours. It is an owned leg: whatever
+    // takes the walker ends the sweep, so nothing may save this walk to resume later
+    // (a PvP fight, a party comeback, a light-shop detour, an event run all would).
     private bool WalkLeg(RoomKey room)
     {
         if (_walker is null) return false;
         _issuingLeg = true;
-        try { return _walker.WalkTo(room, armItemAcquisition: false, avoidTeleports: true); }
+        try { return _walker.WalkTo(room, armItemAcquisition: false, avoidTeleports: true, ownedLeg: true); }
         finally { _issuingLeg = false; }
     }
 
@@ -1407,6 +1455,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     //     walk of the client's goes.
     private void OnWalkerEvent(WalkEvent evt)
     {
+        // A Recover Now's walk to the death room: once it has started, its being
+        // stopped or failing means it isn't going to arrive. Only once started: the
+        // walk it replaces is stopped first, and may have been bound for the same room.
+        if (_pendingRecoverNow is { Room: { } bound } && evt.Destination is { } headed
+            && headed.Map == bound.Map && headed.Room == bound.Room)
+        {
+            if (evt.Kind == WalkEventKind.Started) _recoverNowWalking = true;
+            else if (_recoverNowWalking && evt.Kind is WalkEventKind.Stopped or WalkEventKind.Failed)
+                ForgetRecoverNowWalk($"{evt.Kind}: {evt.Detail}");
+        }
+
         // Raised from inside WalkLeg when the room is the very next one, so it is read
         // ahead of the guards below.
         if (evt.Kind == WalkEventKind.Finished && evt.Requested is { } asked)
@@ -1455,10 +1514,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // is one of this stop's tries, and its reveal reaches us as a survey here.
         bool searchedOnEntry = walkedIn && _autoSearchesRooms?.Invoke() == true;
         _searchesLeft = stop.Kind == StopKind.Trail ? TrailSearchTries - (searchedOnEntry ? 1 : 0) : 0;
-        // Walked in, the floor list is this room's, read as it printed. Standing here
-        // already, it is whatever was read last (a neighbour's floor, after the looks),
-        // and this room's floor is only known from the search to come.
-        _arrivalFloor = walkedIn && _groundItems is { } ground ? ground.Items.ToList() : new List<string>();
+        // Walked in, the floor list is this room's if it was read since the step went
+        // out (FloorWasJustRead). Standing here already, it is whatever was read last
+        // (a neighbour's floor, after the looks), and this room's floor is only known
+        // from the search to come.
+        _arrivalFloor = walkedIn && FloorWasJustRead() && _groundItems is { } ground
+            ? ground.Items.ToList() : new List<string>();
         _grabOwed = true;
         SetPhase(CollectPhase.Grabbing);
         if (!SweepOnHold) GrabAtStop();
@@ -1936,12 +1997,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
         // The exits line of the `look` a Recover Now sent from inside a Stock death
         // room: the display is over, and a grab still armed means it printed no floor.
+        // Only if that display was the death room's (the test an armed survey gets):
+        // with a move sent since, it is some other room's, and nothing is concluded.
+        // The grab stays armed either way, for a later display of the room.
         if (_lookExitsOwed && line.Text.StartsWith("Obvious exits:", StringComparison.Ordinal))
         {
             _lookExitsOwed = false;
-            if (_grabOnSurvey && _activeRecovery is not null)
+            if (_grabOnSurvey && _activeRecovery is { } looked && ArmedSurveyIsTheDeathRooms(looked))
             {
-                _grabOnSurvey = false;
                 _log?.Info(LogCategory, "stock-recover: the look showed no floor — nothing is on it");
                 _settleOwed = true;
             }
@@ -2155,7 +2218,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (_classifyOwed)
         {
             _classifyOwed = false;
-            _engineArrival = _otherEngineDrives?.Invoke() == true;
+            // An engine still driving, or one whose own walk it was and which is done
+            // now that it has arrived (a PvP flee, its come-back).
+            _engineArrival = _otherEngineDrives?.Invoke() == true
+                || (ConfirmedRoom() is { } here && _engineWalkEndedAt?.Invoke(here) == true);
             if (_engineArrival)
                 _log?.Info(LogCategory, "stock-recover: another engine's walk brought us here — its sweep is the looks and their neighbours only");
         }
@@ -2171,6 +2237,15 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (_stockRecovering && _stockSettleTicks > 0 && --_stockSettleTicks == 0
             && _activeRecovery is { } settling)
             OnStockDeathRoomSettled(settling);
+
+        // A sweep can't wait for ever on a hostile that never leaves or a hold that
+        // never lifts, to set off long after anyone remembers asking for it.
+        if (_stockSweepPending && --_deferBudget <= 0)
+        {
+            _stockSweepPending = false;
+            _log?.Info(LogCategory,
+                $"stock-recover: the deferred spill sweep waited {SweepBudgetTicks} s without being able to start — dropped; Recover Now runs it");
+        }
 
         // A deferred sweep (hostile cleared, no hold on sends) can run now, unless
         // another engine has taken the character meanwhile.
@@ -2228,8 +2303,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     public void CancelTrip()
     {
         DropSweep("cancelled (Reset States)");
+        ForgetRecoverNowWalk("Reset States");
         _grabOnSurvey = false;
         _settleOwed = false;
+        _classifyOwed = false;
         _lookExitsOwed = false;
         _stockRecovering = false;
         _stockSweepPending = false;
@@ -2248,6 +2325,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     public void StopSpillSweep(string reason)
     {
         _stockSweepPending = false;   // nor does one waiting on a hostile start later
+        ForgetRecoverNowWalkUnderWay(reason);
         if (!SweepRunning) return;
         AbandonLeg();
         EndSweepHere(reason);
@@ -2264,27 +2342,51 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // The connection dropped. A sweep left running would spend its stops timing out
     // against a dead wire and write that up as a result, or set off again on
     // reconnect.
+    //
+    // The pickup itself is left as it stands. A grab armed and waiting for the room's
+    // next display (the usual state after a Paradigm walk-in, whose arrival survey
+    // has gone by, and a Stock one in the dark) must still be armed for the display
+    // that follows logging back in: the room isn't re-entered then, so nothing would
+    // arm it again. What is taken away is the sweep after it: the recovery is no
+    // longer a deliberate one, so whatever settles holds the pile at Partial.
     public void NotifyDisconnected()
     {
         DropSweep("disconnected");
-        // And nothing still settling may start one: the grab's quiet count, a settle
-        // owed, a look waited on.
-        _grabOnSurvey = false;
-        _settleOwed = false;
-        _lookExitsOwed = false;
-        _stockRecovering = false;
-        _stockSettleTicks = 0;
         _stockSweepPending = false;
+        _deliberateRecovery = false;
+        _classifyOwed = false;
     }
 
     // Stop, with no sweep running yet: one waiting on a hostile, a rest or a move
-    // doesn't start afterwards. (A running one is ended through the controller's
+    // doesn't start afterwards, and a Recover Now still walking to the death room is
+    // called off with its walk. (A running sweep is ended through the controller's
     // solver list.)
     public void DropDeferredSweep()
     {
+        ForgetRecoverNowWalkUnderWay("Stop");
         if (!_stockSweepPending) return;
         _stockSweepPending = false;
         _log?.Info(LogCategory, "stock-recover: the deferred spill sweep was called off (Stop)");
+    }
+
+    // The walk a Recover Now started is not going to arrive: stopped, failed, or its
+    // route cards closed without a pick. Left standing, the next time the character
+    // came into that death room by any means would count as the Recover Now's
+    // arrival and set the whole sweep off.
+    public void ForgetRecoverNowWalk(string why)
+    {
+        if (_pendingRecoverNow is null) return;
+        _pendingRecoverNow = null;
+        _recoverNowWalking = false;
+        _log?.Info(LogCategory, $"recover-now: the walk to the death room was called off ({why})");
+    }
+
+    // A Stop only calls off a Recover Now whose walk is under way. Before that (its
+    // route cards still up, or the engines being stopped to make way for it) the Stop
+    // is not about this walk.
+    private void ForgetRecoverNowWalkUnderWay(string why)
+    {
+        if (_recoverNowWalking) ForgetRecoverNowWalk(why);
     }
 
     // Another character was loaded, or this one closed: what is in progress belongs
@@ -2294,6 +2396,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         DropSweep("the character was changed");
         _activeRecovery = null;
         _pendingRecoverNow = null;
+        _recoverNowWalking = false;
         _grabOnSurvey = false;
         _settleOwed = false;
         _lookExitsOwed = false;
@@ -2462,7 +2565,16 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // A sweep that was out walking died with us. Every movement engine is stopped
         // on a death and nothing may walk back toward the room we died in.
         DropSweep("died during the sweep");
+        // And whatever recovery was in hand is over with it. Room changes aren't
+        // followed while a sweep runs, so the one that took us out of the room (the
+        // death) didn't clear this.
+        _activeRecovery = null;
+        _grabOnSurvey = false;
         _stockRecovering = false;
+        _stockSweepPending = false;
+        _settleOwed = false;
+        _classifyOwed = false;
+        _lookExitsOwed = false;
         if (_profile.Current?.DeathHistory is not { Count: > 0 } list)
         {
             _returnedLines.Clear();

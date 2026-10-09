@@ -7237,10 +7237,17 @@ public sealed class AppServices
             // solver that has the walker, and a party leader being followed.
             // A loop being walked to (its handoff pending) is a loop for this purpose:
             // the walker's arrival hands over to it a moment later.
+            // A fight with a player and a flee from one are engines too: neither
+            // stops a sweep's leg when it takes over (the leg isn't a walk it can save
+            // and resume), so the sweep has to see them and stand down.
             otherEngineDrives: () =>
                 ErrandOwnsWalk() || ErrandHasTheWalker
                 || LoopRunner.State != Game.Map.LoopState.Idle || LoopHandoff.Pending is not null
+                || PvpFight.IsActive || PvpFlee.IsActive
                 || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.FollowerGate),
+            // A flee, or the walk back from one, that ended here was an engine's walk
+            // though it is over by the time anyone asks.
+            engineWalkEndedAt: room => PvpFlee.WalkJustEndedAt(room),
             // It sends nothing during a rest (helper actions wait one out) or while
             // the user has paused; Auto-All is its own probe below.
             restHeld: RestHeld,
@@ -7995,8 +8002,7 @@ public sealed class AppServices
         PvpFlee = new Game.Pvp.PvpFleeWalk(
             Walker, LoopRunner, AutoLair, pacedReplyScheduler,
             startSprint: () => ApplyRunStartMode?.Invoke(Game.Map.RunStartMode.Sprint),
-            Log,
-            walkIsNotToResume: () => DeathRecovery.SpillSweepActive);
+            Log);
         PvpFight = new Game.Pvp.PvpFight(
             Router, RoomClassifier,
             pvpEnabled: () => ResolveActiveRealm()?.Realm.PvpEnabled == true,
