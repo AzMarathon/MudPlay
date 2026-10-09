@@ -717,14 +717,10 @@ public sealed class CashManager : IDisposable
             return;
         }
 
-        if (text.StartsWith("You notice ", StringComparison.Ordinal))
+        // A whole single-row list is the pattern subscription's; only a wrapped one
+        // is gathered here.
+        if (FloorListLine.OpensWrappedList(text))
         {
-            if (text.EndsWith(".", StringComparison.Ordinal))
-            {
-                // Single-line case — pattern subscription already
-                // handles it; skip to avoid double-processing.
-                return;
-            }
             _noticeBuffer = text;
             _noticeRawFirst = line.Text;
         }
@@ -732,16 +728,8 @@ public sealed class CashManager : IDisposable
 
     private void ProcessYouNoticeMultiLine(string completeLine)
     {
-        // Strip "You notice " prefix and " here." suffix.
-        const string prefix = "You notice ";
-        if (!completeLine.StartsWith(prefix, StringComparison.Ordinal)) return;
-        string body = completeLine[prefix.Length..].TrimEnd();
-        const string suffix = " here.";
-        if (body.EndsWith(suffix, StringComparison.Ordinal))
-            body = body[..^suffix.Length];
-        else if (body.EndsWith(".", StringComparison.Ordinal))
-            body = body[..^1];
-        DispatchYouNoticeList(body);
+        if (FloorListLine.TryReadList(completeLine, out string body))
+            DispatchYouNoticeList(body);
     }
 
     // Split "X gold sovereigns, Y silver nobles, an item, ..." into entries;
