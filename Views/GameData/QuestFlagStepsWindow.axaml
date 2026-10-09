@@ -80,11 +80,22 @@
                         <TextBlock Classes="Part" Text="Gives"/>
                         <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding Gives}"/>
                     </Grid>
+                    <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasCheckedAfterwards}">
+                        <TextBlock Classes="Part" Text="Checked afterwards"
+                                   ToolTip.Tip="Conditions the line only reaches after it has changed the flag (or, on a line that leaves the flag alone, after it has started giving). They don't hold that back; they decide whether the rest of the line runs."/>
+                        <SelectableTextBlock Grid.Column="1" Classes="Body" Text="{Binding CheckedAfterwards}"/>
+                    </Grid>
                     <Grid ColumnDefinitions="118,*" IsVisible="{Binding HasAlso}">
                         <TextBlock Classes="Part" Text="Also in the script"
                                    ToolTip.Tip="Steps shown exactly as the game data writes them: what they do isn't established, so they aren't put into words."/>
                         <SelectableTextBlock Grid.Column="1" Classes="Raw" Text="{Binding Also}"/>
                     </Grid>
+                    <!-- The rest of a line that checks an ability it has itself just changed. -->
+                    <StackPanel IsVisible="{Binding HasLater}" Spacing="2">
+                        <SelectableTextBlock Classes="Body" Text="{Binding LaterLabel}"
+                                             Foreground="{StaticResource ChromeFgSecBrush}"/>
+                        <SelectableTextBlock Classes="Raw" Text="{Binding Later}" Margin="118,0,0,0"/>
+                    </StackPanel>
                     <Grid ColumnDefinitions="118,*">
                         <TextBlock Classes="Part" Text="Script"/>
                         <SelectableTextBlock Grid.Column="1" Classes="Raw" Text="{Binding Script}"/>
@@ -135,8 +146,9 @@
                                   ItemTemplate="{StaticResource StepTemplate}"
                                   IsVisible="{Binding HasSteps}"/>
 
-                    <!-- Lines that bar a character who has the flag: other quests' steps,
-                         mostly, so they sit apart and closed until asked for. -->
+                    <!-- Lines that only run without the flag and leave it alone sit apart and
+                         closed until asked for, so they don't crowd the steps that move it.
+                         When a flag has no other lines they are the main list instead. -->
                     <Expander IsVisible="{Binding HasWithoutFlagSteps}"
                               Header="{Binding WithoutFlagHeader}"
                               HorizontalAlignment="Stretch"
@@ -146,7 +158,7 @@
                     </Expander>
 
                     <TextBlock Classes="Note"
-                               Text="Steps are ordered by the value the flag must hold going in, then by the value the step leaves. A script line runs left to right and stops at the first condition that fails, so anything written before that condition has already happened; Script shows the order. On Stock, a step that sets a flag keeps the higher value when the character already holds more. “Also in the script” lists the steps exactly as the game data writes them."/>
+                               Text="Steps are ordered by the value the flag must hold going in, then by the value the step leaves; a line that sets the flag without checking it sits just ahead of the steps for that value. A script line runs left to right and stops at the first condition that fails, so anything written before that condition has already happened; Script shows the order. On Stock, a step that sets a flag keeps the higher value when the character already holds more. “Also in the script” lists the steps exactly as the game data writes them."/>
                 </StackPanel>
             </ScrollViewer>
 

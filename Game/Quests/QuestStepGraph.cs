@@ -185,7 +185,7 @@ public static class QuestStepGraph
 
     // Index blocks by textblock number (first row wins — a number is unique in
     // practice) so ResolveAsk can hop a step's Called-From chain by number.
-    internal static Dictionary<int, JsonElement> IndexByNumber(JsonDocument tbinfo)
+    private static Dictionary<int, JsonElement> IndexByNumber(JsonDocument tbinfo)
     {
         var map = new Dictionary<int, JsonElement>();
         foreach (JsonElement block in tbinfo.RootElement.EnumerateArray())
@@ -232,28 +232,6 @@ public static class QuestStepGraph
     private static (int Monster, string Keyword)? ResolveAskSource(
         string? stepCalledFrom, Dictionary<int, JsonElement> byNumber)
     {
-        if (ResolveDispatch(stepCalledFrom, byNumber) is not { } hit) return null;
-        string kw = hit.Keywords[0];
-        return GreetingKeywords.Contains(kw) ? null : (hit.Monster, kw);
-    }
-
-    // The same walk, keeping every keyword the NPC answers with that branch (an NPC
-    // often lists several words for one reply). Auto-shown keywords are left out;
-    // null when none is left.
-    internal static (int Monster, IReadOnlyList<string> Keywords)? ResolveAskKeywords(
-        string? stepCalledFrom, Dictionary<int, JsonElement> byNumber)
-    {
-        if (ResolveDispatch(stepCalledFrom, byNumber) is not { } hit) return null;
-        List<string> askable = hit.Keywords
-            .Where(k => !GreetingKeywords.Contains(k))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        return askable.Count == 0 ? null : (hit.Monster, askable);
-    }
-
-    private static (int Monster, List<string> Keywords)? ResolveDispatch(
-        string? stepCalledFrom, Dictionary<int, JsonElement> byNumber)
-    {
         int? cur = ParseTextblockRef(stepCalledFrom);
         if (cur is null) return null;
 
@@ -269,8 +247,9 @@ public static class QuestStepGraph
             {
                 if (child <= 0) return null;   // NPC root is the step's direct parent —
                                                // no intermediate textblock to key on.
-                List<string> keywords = FindDispatchKeywords(ReadStringProp(block, "Action"), child);
-                return keywords.Count == 0 ? null : (monster, keywords);
+                string? kw = FindDispatchKeywords(ReadStringProp(block, "Action"), child).FirstOrDefault();
+                if (kw is null || IsAutoShownKeyword(kw)) return null;
+                return (monster, kw);
             }
 
             int? parentTb = ParseTextblockRef(parent);
@@ -282,8 +261,9 @@ public static class QuestStepGraph
     }
 
     // In an NPC root block's keyword-dispatch action ("crystal:7018\nreturn:7020"),
-    // the keywords whose branch targets `textblock`, in the block's order.
-    private static List<string> FindDispatchKeywords(string? dispatch, int textblock)
+    // the keywords whose branch targets `textblock`, in the block's order (an NPC often
+    // lists several words for one reply); empty when none maps to it.
+    internal static List<string> FindDispatchKeywords(string? dispatch, int textblock)
     {
         var keywords = new List<string>();
         if (string.IsNullOrEmpty(dispatch)) return keywords;
@@ -338,6 +318,8 @@ public static class QuestStepGraph
     // gated behind one of these has no "ask" command, so it isn't drafted as one.
     private static readonly HashSet<string> GreetingKeywords =
         new(StringComparer.OrdinalIgnoreCase) { "message", "text", "greeting" };
+
+    internal static bool IsAutoShownKeyword(string keyword) => GreetingKeywords.Contains(keyword);
 
     // Stable structural fingerprint so the same step echoed from many rooms folds
     // to one entry (record equality is reference-based for the list fields).

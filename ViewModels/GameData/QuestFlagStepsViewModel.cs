@@ -85,6 +85,9 @@ public sealed partial class QuestFlagStepsViewModel : ObservableObject, IDialogV
 
     public void Dispose() => _cache.ActiveSetChanged -= _activeSetHandler;
 
+    private static string StepCount(int count)
+        => string.Create(CultureInfo.InvariantCulture, $"{count} {(count == 1 ? "step" : "steps")}");
+
     private void Load(int flag)
     {
         Flag = flag;
@@ -114,7 +117,11 @@ public sealed partial class QuestFlagStepsViewModel : ObservableObject, IDialogV
         CountText = number == 0
             ? "No script in this game-data set touches this flag."
             : string.Create(CultureInfo.InvariantCulture,
-                $"{Steps.Count} {(Steps.Count == 1 ? "step" : "steps")} that read or change the flag.");
+                $"{StepCount(Steps.Count)} {(Steps.Count == 1 ? "reads or changes" : "read or change")} the flag")
+              + (WithoutFlagSteps.Count == 0
+                  ? "."
+                  : string.Create(CultureInfo.InvariantCulture,
+                      $"; {WithoutFlagSteps.Count} more only run without it and leave it alone (listed at the bottom)."));
 
         OtherFlags.Clear();
         foreach (int other in walk.OtherFlags)

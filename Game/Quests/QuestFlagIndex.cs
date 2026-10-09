@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Quests;
@@ -16,10 +17,12 @@ public enum QuestFlagSourceKind { Monster, Room, Spell, Textblock }
 // attributed to the NPC / room / spell that reaches it. Value is the directive's second
 // argument (give-step, required value, addability delta); 0 when the verb takes none
 // (removeability), when it was absent, or for failability, whose second number is the message
-// it prints. Line is the script line the directive sits on.
+// it prints. Line is the script line the directive sits on; Command is how that line is set
+// off from this row's own source (empty when the data doesn't establish it).
 public readonly record struct QuestFlagRef(
     int Flag, string FlagName, QuestFlagRelation Relation, QuestFlagSourceKind SourceKind,
-    int SourceNumber, int Map, int Room, string SourceName, int Value, QuestFlagLine Line);
+    int SourceNumber, int Map, int Room, string SourceName, int Value, QuestFlagLine Line,
+    string Command);
 
 // Lazy per-set index of every quest-flag reference in the active set's TBInfo table — the data
 // behind the Game Data Browser's Quest Flags view and its Quest Flag Steps window. Mirrors
@@ -126,23 +129,20 @@ public sealed class QuestFlagIndex
                 tb[num] = new TbRow(ReadString(el, "Action"), ReadString(el, "Called From"));
             }
 
+            LineBuilder builder = new(this, tb, new QuestScriptNames(_cache), QuestDeathSpells.For(_cache));
             List<QuestFlagRef> refs = new();
             Dictionary<int, List<QuestFlagLine>> linesByFlag = new();
             HashSet<int> granted = QuestCrawler.DiscoverGrantedFlags(
                 tb.Values.SelectMany(static row => (row.Action ?? string.Empty).Split('\n')));
-            QuestScriptNames names = new(_cache);
-            Dictionary<int, JsonElement> byNumber = QuestStepGraph.IndexByNumber(doc);
-            IReadOnlyDictionary<int, IReadOnlyList<int>> deaths = QuestDeathSpells.For(_cache);
 
             HashSet<(int, QuestFlagRelation, QuestFlagSourceKind, int, int, int, int, int, int)> seen = new();
-            List<SourceRoot> roots = new();
             foreach ((int number, TbRow row) in tb.OrderBy(static kv => kv.Key))
             {
                 if (string.IsNullOrEmpty(row.Action)
                     || row.Action.IndexOf("ability", StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
 
-                ResolveRoots(number, tb, roots);
+                List<SourceRoot> roots = builder.RootsOf(number);
                 string[] rawLines = row.Action.Split('\n');
                 // A textblock that repeats a line word for word adds nothing: the first
                 // copy that passes ends the scan.
@@ -153,16 +153,7 @@ public sealed class QuestFlagIndex
                     List<(QuestFlagRelation Rel, int Flag, int Value)> abilities = ParseAbilities(text);
                     if (abilities.Count == 0 || !seenText.Add(text)) continue;
 
-                    QuestScriptLine script = QuestScriptLine.Parse(text);
-                    List<QuestTrigger> triggers = ResolveTriggers(script, row.CalledFrom, roots, byNumber, deaths, names);
-                    QuestFlagLine line = new(
-                        number, order, script, CleanText(row.CalledFrom), triggers,
-                        RollChance(script, rawLines), SourcesText(roots, names),
-                        CommandText(triggers), script.LevelText,
-                        string.Join(", ", script.Classes.Select(names.Class)),
-                        string.Join(", ", script.Races.Select(names.Race)),
-                        ItemsText(script, names));
-
+                    QuestFlagLine line = builder.Build(number, order, withCallers: true);
                     foreach ((QuestFlagRelation rel, int flag, int value) in abilities)
                     {
                         if (!linesByFlag.TryGetValue(flag, out List<QuestFlagLine>? flagLines))
@@ -175,7 +166,8 @@ public sealed class QuestFlagIndex
                             if (!seen.Add(key)) continue;
                             refs.Add(new QuestFlagRef(
                                 flag, AbilityNames.FormatId(flag), rel, root.Kind,
-                                root.Number, root.Map, root.Room, ResolveSourceName(root, names), value, line));
+                                root.Number, root.Map, root.Room, ResolveSourceName(root, builder.Names), value, line,
+                                CommandText(line.Triggers, root)));
                         }
                     }
                 }
@@ -201,7 +193,7 @@ public sealed class QuestFlagIndex
                 return c != 0 ? c : a.Value.CompareTo(b.Value);
             });
 
-            snapshot = new Snapshot(refs, linesByFlag, granted, names);
+            snapshot = new Snapshot(refs, linesByFlag, granted, builder.Names);
         }
 
         _snapshot = snapshot;
@@ -233,67 +225,199 @@ public sealed class QuestFlagIndex
         return found;
     }
 
-    // ----- How a line is set off -----
+    // ----- One script line -----
 
-    // A line that opens with a typed command belongs to the room (typed as written) or the NPC
-    // (asked as a keyword) its textblock hangs off. A line that opens with a directive is
-    // reached through an NPC's keyword dispatch, or — when its chain starts at a spell some
-    // monster's death casts — by killing that monster. Anything else is left unresolved.
-    private static List<QuestTrigger> ResolveTriggers(
-        QuestScriptLine script, string? calledFrom, List<SourceRoot> roots,
-        Dictionary<int, JsonElement> byNumber,
-        IReadOnlyDictionary<int, IReadOnlyList<int>> deaths, QuestScriptNames names)
+    // Builds the QuestFlagLine for a textblock line during one Rebuild: its triggers, its roots
+    // and the lines that draw its textblock at random.
+    private sealed class LineBuilder
     {
-        List<QuestTrigger> triggers = new();
-        if (script.Command is { } typed)
+        private readonly QuestFlagIndex _owner;
+        private readonly Dictionary<int, TbRow> _tb;
+        private readonly IReadOnlyDictionary<int, IReadOnlyList<int>> _deaths;
+        private readonly Dictionary<int, List<SourceRoot>> _roots = new();
+        // Textblock → the (textblock, line) pairs that name it in a `random` step.
+        private readonly Dictionary<int, List<(int Block, int Order)>> _drawers = new();
+
+        public QuestScriptNames Names { get; }
+
+        public LineBuilder(
+            QuestFlagIndex owner, Dictionary<int, TbRow> tb, QuestScriptNames names,
+            IReadOnlyDictionary<int, IReadOnlyList<int>> deaths)
         {
-            foreach (CalledFromRef r in ParseCalledFrom(calledFrom))
+            _owner = owner;
+            _tb = tb;
+            _deaths = deaths;
+            Names = names;
+
+            foreach ((int number, TbRow row) in tb.OrderBy(static kv => kv.Key))
             {
-                if (r.Kind == CfKind.Room)
-                    triggers.Add(new QuestTrigger(QuestTriggerKind.RoomCommand, typed, Map: r.Map, Room: r.Room));
-                else if (r.Kind == CfKind.Monster)
-                    triggers.Add(new QuestTrigger(QuestTriggerKind.Ask, AskCommand(names, r.Number, typed), r.Number));
+                if (string.IsNullOrEmpty(row.Action)
+                    || row.Action.IndexOf("random", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                string[] lines = row.Action.Split('\n');
+                for (int order = 0; order < lines.Length; order++)
+                {
+                    foreach (string rawStep in lines[order].Split(':'))
+                    {
+                        QuestScriptStep step = QuestScriptStep.Parse(rawStep);
+                        if (step.Verb != "random" || step.Int(0) is not int table || table <= 0) continue;
+                        if (!_drawers.TryGetValue(table, out List<(int, int)>? list)) _drawers[table] = list = new();
+                        if (!list.Contains((number, order))) list.Add((number, order));
+                    }
+                }
+            }
+        }
+
+        public List<SourceRoot> RootsOf(int number)
+        {
+            if (!_roots.TryGetValue(number, out List<SourceRoot>? roots))
+                _roots[number] = roots = ResolveRoots(number, _tb);
+            return roots;
+        }
+
+        public QuestFlagLine Build(int number, int order, bool withCallers)
+        {
+            TbRow row = _tb[number];
+            string[] rawLines = (row.Action ?? string.Empty).Split('\n');
+            // A leading bare number is a band only in a textblock called as a random table.
+            bool randomTable = (row.CalledFrom ?? string.Empty)
+                .Contains("Textblock(rndm)", StringComparison.OrdinalIgnoreCase);
+            QuestScriptLine script = QuestScriptLine.Parse(rawLines[order], randomTable);
+            List<SourceRoot> roots = RootsOf(number);
+
+            List<QuestFlagLine> callers = new();
+            if (withCallers && _drawers.TryGetValue(number, out List<(int Block, int Order)>? drawers))
+            {
+                HashSet<(int, string)> seenCaller = new();
+                foreach ((int block, int callerOrder) in drawers)
+                {
+                    QuestFlagLine caller = Build(block, callerOrder, withCallers: false);
+                    if (seenCaller.Add((block, caller.Script.Raw))) callers.Add(caller);
+                }
+            }
+
+            return new QuestFlagLine(
+                number, order, script, CleanText(row.CalledFrom),
+                ResolveTriggers(number, script, row.CalledFrom, roots),
+                RollChance(script, rawLines), _owner.SourcesText(roots, Names), script.LevelText,
+                string.Join(", ", script.Classes.Select(Names.Class)),
+                string.Join(", ", script.Races.Select(Names.Race)),
+                ItemsText(script, Names), callers);
+        }
+
+        // A line that opens with a typed command belongs to the room (typed as written) or the
+        // NPC (asked as a keyword) its textblock hangs off. A line that opens with a directive
+        // is reached through an NPC's keyword — askable, or one the NPC shows by itself — or,
+        // when its chain starts at a spell some monster's death casts, by killing that
+        // monster. Anything else is left unresolved.
+        private List<QuestTrigger> ResolveTriggers(
+            int number, QuestScriptLine script, string? calledFrom, List<SourceRoot> roots)
+        {
+            List<QuestTrigger> triggers = new();
+            if (script.Command is { } typed)
+            {
+                foreach (CalledFromRef r in ParseCalledFrom(calledFrom))
+                {
+                    if (r.Kind == CfKind.Room)
+                        triggers.Add(new QuestTrigger(QuestTriggerKind.RoomCommand, typed, Map: r.Map, Room: r.Room));
+                    else if (r.Kind == CfKind.Monster)
+                        triggers.Add(new QuestTrigger(
+                            QuestTriggerKind.Ask, AskCommand(r.Number, typed), r.Number, Textblock: number));
+                }
+                return triggers;
+            }
+
+            foreach ((int monster, int block, List<string> keywords) in NpcKeywords(number))
+            {
+                List<string> askable = keywords
+                    .Where(k => !QuestStepGraph.IsAutoShownKeyword(k))
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (askable.Count > 0)
+                {
+                    if (triggers.Exists(t => t.Kind == QuestTriggerKind.Ask && t.Monster == monster)) continue;
+                    triggers.Add(new QuestTrigger(
+                        QuestTriggerKind.Ask, AskCommand(monster, askable[0]), monster, Textblock: block)
+                    {
+                        OtherKeywords = askable.Skip(1).ToArray(),
+                    });
+                }
+                else if (!triggers.Exists(t => t.Monster == monster))
+                {
+                    triggers.Add(new QuestTrigger(QuestTriggerKind.AutoShown, keywords[0], monster, Textblock: block)
+                    {
+                        OtherKeywords = keywords.Skip(1).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                    });
+                }
+            }
+
+            foreach (SourceRoot root in roots)
+            {
+                if (root.Kind != QuestFlagSourceKind.Spell
+                    || !_deaths.TryGetValue(root.Number, out IReadOnlyList<int>? monsters))
+                    continue;
+                foreach (int monster in monsters)
+                    triggers.Add(new QuestTrigger(
+                        QuestTriggerKind.Kill, "kill " + Names.Monster(monster).ToLowerInvariant(),
+                        monster, Spell: root.Number));
             }
             return triggers;
         }
 
-        foreach (CalledFromRef r in ParseCalledFrom(calledFrom))
+        // Every NPC whose keyword block leads to the textblock, with the keywords that do. An
+        // NPC's keyword block is the one whose Called From names the monster; it lists
+        // `keyword:textblock` lines, so the keyword is looked up for the block walked in from —
+        // the line's own textblock when it hangs straight off the keyword block. Shared
+        // dialogue has several parents, and each is followed.
+        private List<(int Monster, int Block, List<string> Keywords)> NpcKeywords(int start)
         {
-            if (r.Kind != CfKind.Textblock) continue;
-            string parent = string.Create(CultureInfo.InvariantCulture, $"Textblock #{r.Number}");
-            if (QuestStepGraph.ResolveAskKeywords(parent, byNumber) is not { } hit) continue;
-            if (triggers.Exists(t => t.Monster == hit.Monster)) continue;
-            triggers.Add(new QuestTrigger(QuestTriggerKind.Ask, AskCommand(names, hit.Monster, hit.Keywords[0]), hit.Monster)
+            List<(int, int, List<string>)> found = new();
+            HashSet<int> visited = new() { start };
+            Queue<(int Block, int Child)> pending = new();
+            foreach (CalledFromRef r in ParseCalledFrom(_tb[start].CalledFrom))
+                if (r.Kind == CfKind.Textblock && visited.Add(r.Number)) pending.Enqueue((r.Number, start));
+
+            int steps = 0;
+            while (pending.Count > 0 && steps++ < MaxWalkSteps)
             {
-                OtherKeywords = hit.Keywords.Skip(1).ToArray(),
-            });
+                (int block, int child) = pending.Dequeue();
+                if (!_tb.TryGetValue(block, out TbRow row)) continue;
+                List<string>? keywords = null;
+                foreach (CalledFromRef r in ParseCalledFrom(row.CalledFrom))
+                {
+                    if (r.Kind == CfKind.Monster)
+                    {
+                        keywords ??= QuestStepGraph.FindDispatchKeywords(row.Action, child);
+                        if (keywords.Count > 0) found.Add((r.Number, block, keywords));
+                    }
+                    else if (r.Kind == CfKind.Textblock && visited.Add(r.Number))
+                    {
+                        pending.Enqueue((r.Number, block));
+                    }
+                }
+            }
+            return found;
         }
 
-        foreach (SourceRoot root in roots)
-        {
-            if (root.Kind != QuestFlagSourceKind.Spell
-                || !deaths.TryGetValue(root.Number, out IReadOnlyList<int>? monsters))
-                continue;
-            foreach (int monster in monsters)
-            {
-                if (triggers.Exists(t => t.Kind == QuestTriggerKind.Kill && t.Monster == monster)) continue;
-                triggers.Add(new QuestTrigger(
-                    QuestTriggerKind.Kill, "kill " + names.Monster(monster).ToLowerInvariant(), monster));
-            }
-        }
-        return triggers;
+        // The ask target is the NPC's full name with a leading article dropped.
+        private string AskCommand(int monster, string keyword)
+            => $"ask {GuardDoorCommandResolver.AskTarget(Names.Monster(monster)).ToLowerInvariant()} {keyword}";
     }
 
-    // The NPC's full name always works as the ask target.
-    private static string AskCommand(QuestScriptNames names, int monster, string keyword)
-        => $"ask {names.Monster(monster).ToLowerInvariant()} {keyword}";
-
-    // The table's Command cell: each distinct way to set the line off.
-    private static string CommandText(List<QuestTrigger> triggers)
+    // The table's Command cell for one row: the ways to set the line off from that row's own
+    // source. A keyword the NPC shows by itself is not a command, so it leaves the cell empty.
+    private static string CommandText(IReadOnlyList<QuestTrigger> triggers, SourceRoot root)
     {
         List<string> parts = new();
         foreach (QuestTrigger t in triggers)
         {
+            bool own = t.Kind switch
+            {
+                QuestTriggerKind.RoomCommand => root.Kind == QuestFlagSourceKind.Room && t.Map == root.Map && t.Room == root.Room,
+                QuestTriggerKind.Ask         => root.Kind == QuestFlagSourceKind.Monster && t.Monster == root.Number,
+                QuestTriggerKind.Kill        => root.Kind == QuestFlagSourceKind.Spell && t.Spell == root.Number,
+                _                            => false,
+            };
+            if (!own) continue;
             string text = t.OtherKeywords.Count > 0
                 ? $"{t.Command} (or {string.Join(", ", t.OtherKeywords)})"
                 : t.Command;
@@ -379,10 +503,10 @@ public sealed class QuestFlagIndex
     // Walk the block's Called-From graph upward, collecting the distinct monster / room / spell
     // roots. Textblock refs recurse. When nothing roots (an orphan or a textblock-only chain),
     // attribute to the originating block itself so the flag reference still surfaces.
-    private static void ResolveRoots(int startNumber, Dictionary<int, TbRow> tb, List<SourceRoot> roots)
+    private static List<SourceRoot> ResolveRoots(int startNumber, Dictionary<int, TbRow> tb)
     {
-        roots.Clear();
-        if (!tb.TryGetValue(startNumber, out TbRow start)) return;
+        List<SourceRoot> roots = new();
+        if (!tb.TryGetValue(startNumber, out TbRow start)) return roots;
 
         HashSet<int> seenTb = new() { startNumber };
         Queue<TbRow> pending = new();
@@ -415,6 +539,7 @@ public sealed class QuestFlagIndex
 
         if (roots.Count == 0)
             roots.Add(new SourceRoot(QuestFlagSourceKind.Textblock, startNumber, 0, 0));
+        return roots;
     }
 
     private static void AddRoot(List<SourceRoot> roots, SourceRoot root)

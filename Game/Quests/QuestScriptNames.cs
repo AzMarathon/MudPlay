@@ -1,4 +1,5 @@
 using MudPlay.Game.GameData;
+using MudPlay.Game.Map;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Quests;
@@ -17,17 +18,14 @@ public sealed class QuestScriptNames
         _rooms = RoomNameIndex.For(cache);
     }
 
-    public string Item(int number) => Named("Items", number, $"Item #{number}");
-    public string Monster(int number) => Named("Monsters", number, $"Monster #{number}");
-    public string Spell(int number) => Named("Spells", number, $"Spell #{number}");
-    public string Class(int number) => Named("Classes", number, $"Class #{number}");
-    public string Race(int number) => Named("Races", number, $"Race #{number}");
+    public string Item(int number) => TBInfoActionDecoder.Named(_cache, "Items", number, "Item");
+    public string Monster(int number) => TBInfoActionDecoder.Named(_cache, "Monsters", number, "Monster");
+    public string Spell(int number) => TBInfoActionDecoder.Named(_cache, "Spells", number, "Spell");
+    public string Class(int number) => TBInfoActionDecoder.Named(_cache, "Classes", number, "Class");
+    public string Race(int number) => TBInfoActionDecoder.Named(_cache, "Races", number, "Race");
     public static string Ability(int number) => AbilityNames.FormatId(number);
 
     public string Room(int map, int room)
         => _rooms.TryGetValue((map, room), out string? name) && name.Length > 0
             ? name : $"Room {map}/{room}";
-
-    private string Named(string table, int number, string fallback)
-        => _cache.FindNameByNumber(table, number) is { Length: > 0 } n ? n : fallback;
 }

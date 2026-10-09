@@ -36,7 +36,8 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
         [
           { "Number": 10, "Name": "Old Sage", "DeathSpell": 0 },
           { "Number": 11, "Name": "bog troll", "DeathSpell": 40 },
-          { "Number": 12, "Name": "town crier", "DeathSpell": 45 }
+          { "Number": 12, "Name": "town crier", "DeathSpell": 45 },
+          { "Number": 13, "Name": "The Grey Sage", "DeathSpell": 0 }
         ]
         """;
 
@@ -79,7 +80,8 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
         ]
         """;
 
-    // 500 — the Old Sage's keywords: tale / story → 501, reward → 510.
+    // 500 — the Old Sage's keywords: tale / story → 501, reward → 510, and further down
+    //       reconcile → 900 (shared with the Grey Sage's 520), replace → 530, message → 540.
     // 502 — start: without the flag, level 15, sets 1.
     // 511 — turn-in at exactly 2: the Warrior and Mage lines differ only in the class step; the
     //       Thief line has its own level and no reward.
@@ -89,9 +91,27 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
     // 710 — a room command only for a character without the flag.
     // 720 — one band of a random table, with a failability written a way that isn't settled.
     // 730 — a room command that reads and changes other flags.
+    // 4702 — a line that checks the flag right after setting it: one wording sets a value the
+    //       check passes at, one a value it cannot pass at, and one doesn't pin the value.
+    // 800 / 810 — a room command that draws from a random table whose line sets flag 310.
+    // 900 / 901 — dialogue shared by two NPCs. 530 — a line straight under a keyword.
+    // 540 — a line under the NPC's auto-shown `message` keyword.
+    // 750 — the only line of flag 350, and it only runs without it.
+    // 760 — conditions written after a give, and after the flag change.
     private const string TBInfoJson = """
         [
-          { "Number": 500, "Action": "tale:501\nstory:501\nreward:510\n", "Called From": "Monster #10" },
+          { "Number": 500, "Action": "tale:501\nstory:501\nreward:510\nreconcile:900\nreplace:530\nmessage:540\n", "Called From": "Monster #10" },
+          { "Number": 520, "Action": "reconcile:900\n", "Called From": "Monster #13" },
+          { "Number": 530, "Action": "checkability 330 1:giveitem 902\n", "Called From": "Textblock #500" },
+          { "Number": 540, "Action": "checkability 340 1:giveability 340 2\n", "Called From": "Textblock #500" },
+          { "Number": 900, "Action": "\u0000", "Called From": "Textblock #500, Textblock #520" },
+          { "Number": 901, "Action": "checkability 320 1:testability 320 1:giveability 320 2\n", "Called From": "Textblock #900" },
+          { "Number": 4702, "Action": "touch ruby:nomonsters 503:minlevel 35 541:failability 131:giveability 131 3:checkability 131 3:testability 131 3:addexp 15000000:message 541:addability 58 1:addability 70 2\nmove ruby:nomonsters 503:minlevel 35 541:failability 131:giveability 131 1:checkability 131 3:testability 131 3:addexp 15000000:message 541:addability 58 1:addability 70 2\nrub ruby:checkability 131 1:giveability 131 2:checkability 131 3:addexp 5\n", "Called From": "Room 1/100" },
+          { "Number": 800, "Action": "draw lot:class 1:minlevel 50 3020:failability 310 3667:takeitem 900:random 810\ndraw lot:class 2:minlevel 50 3020:failability 310 3667:takeitem 900:random 810\n", "Called From": "Room 1/100" },
+          { "Number": 810, "Action": "75:giveitem 902:message 1\n100:giveitem 901:giveability 310 1:message 2\n", "Called From": "Textblock(rndm) #800" },
+          { "Number": 770, "Action": "nod:giveability 380 1:checkability 380 1:giveability 390 2\n", "Called From": "Room 1/101" },
+          { "Number": 750, "Action": "kneel twice:failability 350:price 5 G:text 1\n", "Called From": "Room 1/100" },
+          { "Number": 760, "Action": "beg:giveitem 901:failability 360:text 9\nbow:failability 370:giveability 370 1:failitem 900:giveitem 900\n", "Called From": "Room 1/101" },
           { "Number": 501, "Action": "\u0000", "Called From": "Textblock #500" },
           { "Number": 502, "Action": "minlevel 10 3000:minlevel 15:failability 300 3001:giveability 300 1:text 503\n", "Called From": "Textblock #501" },
           { "Number": 510, "Action": "\u0000", "Called From": "Textblock #500" },
@@ -129,10 +149,10 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
         return cache;
     }
 
-    private QuestFlagWalkthrough Walk()
+    private QuestFlagWalkthrough Walk(int flag = Flag)
     {
         GameDataCache cache = NewCache();
-        return QuestFlagWalkthroughBuilder.Build(new QuestFlagIndex(cache), cache, Flag, MonsterRooms);
+        return QuestFlagWalkthroughBuilder.Build(new QuestFlagIndex(cache), cache, flag, MonsterRooms);
     }
 
     private static QuestFlagStepEntry Step(QuestFlagWalkthrough walk, string headingStart) =>
@@ -153,11 +173,17 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
     }
 
     [Fact]
-    public void Line_LeadingNumber_IsARandomTableBand()
+    public void Line_LeadingNumber_IsABandOnlyInARandomTable()
     {
-        QuestScriptLine line = QuestScriptLine.Parse("100:giveitem 1449:giveability 205 1");
-        Assert.Equal(100, line.RollBand);
-        Assert.Equal(new[] { "giveitem 1449", "giveability 205 1" }, line.Steps.Select(s => s.Raw));
+        QuestScriptLine band = QuestScriptLine.Parse("100:giveitem 1449:giveability 205 1", randomTable: true);
+        Assert.Equal(100, band.RollBand);
+        Assert.Equal(new[] { "giveitem 1449", "giveability 205 1" }, band.Steps.Select(s => s.Raw));
+
+        // Anywhere else the number is just a step, kept as written.
+        QuestScriptLine plain = QuestScriptLine.Parse("100:giveitem 1449:giveability 205 1");
+        Assert.Null(plain.RollBand);
+        Assert.Null(plain.Command);
+        Assert.Equal("100", plain.Steps[0].Raw);
     }
 
     [Theory]
@@ -175,7 +201,7 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
     // ----- Table columns -----
 
     private static QuestFlagRef Row(QuestFlagIndex index, int textblock, QuestFlagRelation relation, int order = 0) =>
-        index.Entries.Single(e => e.Flag == Flag && e.Relation == relation
+        index.Entries.Single(e => e.Relation == relation
             && e.Line.Textblock == textblock && e.Line.Order == order);
 
     [Fact]
@@ -184,12 +210,12 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
         QuestFlagIndex index = new(NewCache());
 
         QuestFlagRef start = Row(index, 502, QuestFlagRelation.Grants);
-        Assert.Equal("ask old sage tale (or story)", start.Line.Command);
+        Assert.Equal("ask old sage tale (or story)", start.Command);
         Assert.Equal("15+", start.Line.Level);
         Assert.Equal(1, start.Value);
 
         QuestFlagRef turnIn = Row(index, 511, QuestFlagRelation.Grants);
-        Assert.Equal("ask old sage reward", turnIn.Line.Command);
+        Assert.Equal("ask old sage reward", turnIn.Command);
         Assert.Equal("Warrior", turnIn.Line.Classes);
         Assert.Equal("troll tooth (taken)", turnIn.Line.Items);
         Assert.Equal(QuestFlagSourceKind.Monster, turnIn.SourceKind);
@@ -213,8 +239,8 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
     public void Table_RoomCommand_IsTypedAsWritten()
     {
         QuestFlagIndex index = new(NewCache());
-        Assert.Equal("touch altar", Row(index, 700, QuestFlagRelation.Clears, order: 0).Line.Command);
-        Assert.Equal("press altar", Row(index, 700, QuestFlagRelation.Clears, order: 1).Line.Command);
+        Assert.Equal("touch altar", Row(index, 700, QuestFlagRelation.Clears, order: 0).Command);
+        Assert.Equal("press altar", Row(index, 700, QuestFlagRelation.Clears, order: 1).Command);
     }
 
     [Fact]
@@ -223,7 +249,7 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
         QuestFlagIndex index = new(NewCache());
         QuestFlagRef row = Row(index, 600, QuestFlagRelation.Grants);
         // Spell 41 is reached from the bog troll's death spell 40 through its EndCast.
-        Assert.Equal("kill bog troll", row.Line.Command);
+        Assert.Equal("kill bog troll", row.Command);
         Assert.Equal(QuestFlagSourceKind.Spell, row.SourceKind);
     }
 
@@ -231,7 +257,34 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
     public void Table_DeathSpellThatNeverFires_GivesNoCommand()
     {
         QuestFlagIndex index = new(NewCache());
-        Assert.Equal(string.Empty, Row(index, 610, QuestFlagRelation.Advances).Line.Command);
+        Assert.Equal(string.Empty, Row(index, 610, QuestFlagRelation.Advances).Command);
+    }
+
+    [Fact]
+    public void Table_SharedDialogue_GivesEachRowItsOwnNpcsCommand()
+    {
+        QuestFlagIndex index = new(NewCache());
+
+        List<QuestFlagRef> rows = index.Entries
+            .Where(e => e.Line.Textblock == 901 && e.Relation == QuestFlagRelation.Grants).ToList();
+        // The ask target drops a leading article.
+        Assert.Equal(
+            new[] { ("Old Sage", "ask old sage reconcile"), ("The Grey Sage", "ask grey sage reconcile") },
+            rows.Select(r => (r.SourceName, r.Command)));
+    }
+
+    [Fact]
+    public void Table_LineStraightUnderAKeyword_IsAsked()
+    {
+        QuestFlagIndex index = new(NewCache());
+        Assert.Equal("ask old sage replace", Row(index, 530, QuestFlagRelation.Requires).Command);
+    }
+
+    [Fact]
+    public void Table_AutoShownKeyword_IsNotACommand()
+    {
+        QuestFlagIndex index = new(NewCache());
+        Assert.Equal(string.Empty, Row(index, 540, QuestFlagRelation.Grants).Command);
     }
 
     [Fact]
@@ -379,16 +432,200 @@ public sealed class QuestFlagWalkthroughTests : IDisposable
         Assert.Equal(new[]
         {
             "Start — without the flag → sets 1",
-            "No check on the flag → sets 9",
             "At exactly 1 → sets 2",
             "At 1 or more → no change",
             "At 1 or more → adds 1",
             "At exactly 2 → sets 3",
             "At exactly 2 → sets 3",
             "At 3 or more → clears the flag",
+            // A line that sets the flag without checking it sits where its value leads.
+            "No check on the flag → sets 9",
         }, walk.Steps.Select(s => s.Heading));
         // A line that only bars a character who has the flag is kept apart.
         Assert.Equal(new[] { "Without the flag → no change" }, walk.WithoutFlagSteps.Select(s => s.Heading));
+    }
+
+    [Fact]
+    public void OnlyWithoutLines_AreTheStepsWhenThereAreNoOthers()
+    {
+        QuestFlagWalkthrough walk = Walk(350);
+
+        Assert.Equal(new[] { "Without the flag → no change" }, walk.Steps.Select(s => s.Heading));
+        Assert.Empty(walk.WithoutFlagSteps);
+        // A price that names a coin is quoted rather than read as copper.
+        Assert.Equal(new[] { "price 5 G", "text 1" }, walk.Steps[0].Also);
+        Assert.Empty(walk.Steps[0].Needs);
+    }
+
+    // ----- A check on a flag the line has just changed -----
+
+    [Fact]
+    public void CheckAfterOwnChange_ThatCannotPass_StopsTheLineThere()
+    {
+        // Without the flag, then set to 1, then asked to be at least 3: nothing after it runs.
+        QuestFlagStepEntry step = Walk(131).Steps.Single(s => s.Do[0].Contains("move ruby"));
+
+        Assert.Equal("Start — without the flag → sets 1, then stops at `checkability 131 3`", step.Heading);
+        Assert.Empty(step.Gives);
+        Assert.Equal("Not reached — the line stops at `checkability 131 3`, having just left the flag at 1", step.LaterLabel);
+        Assert.Equal(new[]
+        {
+            "testability 131 3", "addexp 15000000", "message 541", "addability 58 1", "addability 70 2",
+        }, step.Later);
+    }
+
+    [Fact]
+    public void CheckAfterOwnChange_ThatPasses_LetsTheLineRunOn()
+    {
+        QuestFlagStepEntry step = Walk(131).Steps.Single(s => s.Do[0].Contains("touch ruby"));
+
+        Assert.Equal("Start — without the flag → sets 3", step.Heading);
+        Assert.Equal(new[] { "15,000,000 experience", "Crits +1", "Spellcasting +2" }, step.Gives);
+        Assert.Equal(new[]
+        {
+            "checkability 131 3  [passes: this line has just left the flag at 3]",
+            "testability 131 3  [passes: this line has just left the flag at 3]",
+            "message 541",
+        }, step.Also);
+        Assert.Empty(step.Later);
+    }
+
+    [Fact]
+    public void CheckAfterOwnChange_WithTheValueNotPinned_IsQuotedWithoutAVerdict()
+    {
+        // "At least 1" doesn't say what the flag was, and Stock keeps the higher value, so
+        // whether "at least 3" then passes is left open.
+        QuestFlagStepEntry step = Walk(131).Steps.Single(s => s.Do[0].Contains("rub ruby"));
+
+        Assert.Equal("At 1 or more → sets 2", step.Heading);
+        Assert.Empty(step.Gives);
+        Assert.StartsWith("After `checkability 131 3` — a check on the flag as this line has just changed it", step.LaterLabel);
+        Assert.Equal(new[] { "addexp 5" }, step.Later);
+    }
+
+    [Fact]
+    public void CheckAfterOwnChange_SeenFromAnotherAbility_IsNotANeed()
+    {
+        // The same lines read for Crits (58): the stat is only added on the wording that
+        // passes the check on 131, and that check is never listed beside "without 131".
+        QuestFlagWalkthrough walk = Walk(58);
+        QuestFlagStepEntry stops = walk.Steps.Single(s => s.Do[0].Contains("move ruby"));
+        QuestFlagStepEntry runs = walk.Steps.Single(s => s.Do[0].Contains("touch ruby"));
+
+        Assert.Equal("No check on the flag → no change, then stops at `checkability 131 3` before its `addability 58 1`", stops.Heading);
+        Assert.Equal(new[]
+        {
+            "Level 35 or higher",
+            "Without SheDragonQuest (131)",
+            "No monster in the room (an NPC counts as one)",
+        }, stops.Needs);
+        Assert.Equal(new[] { "Sets SheDragonQuest (131) to 1" }, stops.Gives);
+        Assert.Equal("No check on the flag → adds 1", runs.Heading);
+    }
+
+    [Fact]
+    public void FlagChangeBehindAnUnsettledCheck_IsNotPromised()
+    {
+        // 380 is set with nothing said about what it was, then checked; the change to 390
+        // comes after that check.
+        QuestFlagStepEntry step = Walk(390).Steps.Single();
+
+        Assert.Equal("No check on the flag → no change, then checks `checkability 380 1` before its `giveability 390 2`", step.Heading);
+        Assert.Equal(new[] { "Sets QuestFlag380 (380) to 1" }, step.Gives);
+        Assert.Equal(new[] { "giveability 390 2" }, step.Later);
+    }
+
+    // ----- Conditions written late -----
+
+    [Fact]
+    public void ConditionAfterTheFlagChange_IsCheckedAfterwards_NotANeed()
+    {
+        QuestFlagStepEntry step = Walk(370).Steps.Single();
+
+        Assert.Equal("Start — without the flag → sets 1", step.Heading);
+        Assert.Empty(step.Needs);
+        Assert.Equal(new[] { "Must not have troll tooth (item 900)" }, step.CheckedAfterwards);
+        Assert.Equal(new[] { "troll tooth (item 900)" }, step.Gives);
+    }
+
+    [Fact]
+    public void FlagCheckAfterAGive_IsMarkedAsLate()
+    {
+        QuestFlagStepEntry step = Walk(360).Steps.Single();
+
+        Assert.Equal("Without the flag, checked after the line's gives → no change", step.Heading);
+        Assert.Equal(new[] { "silver key (item 901)" }, step.Gives);
+        Assert.Equal(new[] { "Without this flag" }, step.CheckedAfterwards);
+    }
+
+    // ----- A line drawn from a random table -----
+
+    [Fact]
+    public void DrawnLine_TakesItsConditionsFromTheLineThatDrawsIt()
+    {
+        QuestFlagWalkthrough walk = Walk(310);
+
+        Assert.Equal(new[]
+        {
+            // The drawing line belongs to the flag's steps although it leaves the flag alone.
+            "Without the flag → no change on this line, which draws from textblock #810",
+            "Start — without the flag → sets 1",
+        }, walk.Steps.Select(s => s.Heading));
+        Assert.Empty(walk.WithoutFlagSteps);
+
+        QuestFlagStepEntry drawn = walk.Steps[1];
+        Assert.Equal(new[]
+        {
+            "Type \"draw lot\" in Mossy Shrine (1/100)",
+            "Then a random draw: textblock #800 draws from textblock #810 with `random 810`, and this outcome is the band up to 100 (25% of draws)",
+        }, drawn.Do);
+        Assert.Equal(new[]
+        {
+            "Level 50 or higher",
+            "Class: Warrior, Mage",
+            "Taken from you: troll tooth (item 900)",
+        }, drawn.Needs);
+        Assert.Equal(new[] { "silver key (item 901)" }, drawn.Gives);
+        Assert.Equal(new[]
+        {
+            "Textblock #800: draw lot:class 1:minlevel 50 3020:failability 310 3667:takeitem 900:random 810",
+            "Textblock #800: draw lot:class 2:minlevel 50 3020:failability 310 3667:takeitem 900:random 810",
+            "Textblock #810: 100:giveitem 901:giveability 310 1:message 2",
+        }, drawn.Script);
+    }
+
+    // ----- NPC keywords -----
+
+    [Fact]
+    public void SharedDialogue_ListsEveryNpc()
+    {
+        QuestFlagStepEntry step = Walk(320).Steps.Single();
+
+        Assert.Equal(new[]
+        {
+            "Type \"ask old sage reconcile\" — Old Sage is in Sage's Hut (1/101)",
+            "Type \"ask grey sage reconcile\" — The Grey Sage",
+        }, step.Do);
+    }
+
+    [Fact]
+    public void AutoShownKeyword_IsNamedAsWhereTheLineComesFrom_NotAsACommandOrAKill()
+    {
+        QuestFlagStepEntry step = Walk(340).Steps.Single();
+
+        Assert.Equal(new[]
+        {
+            "Reached from the \"message\" keyword of Old Sage (monster 10), listed in textblock #500; "
+            + "the NPC is in Sage's Hut (1/101) — a keyword the NPC shows by itself, not one you ask",
+        }, step.Do);
+    }
+
+    // ----- The quest list's findings -----
+
+    [Fact]
+    public void Restriction_IsLeftOutWhenTheCrawlRecordsNone()
+    {
+        Assert.Equal(string.Empty, Walk().RestrictionText);
     }
 
     [Fact]

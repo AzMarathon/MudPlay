@@ -9,4 +9,7 @@ public enum QuestTriggerKind
     Ask,
     // The script hangs off a monster's death spell, so it runs when that monster dies.
     Kill,
+    // A keyword the NPC shows by itself (message / greeting / text): the line is reached from
+    // the NPC, but not by anything a player asks.
+    AutoShown,
 }

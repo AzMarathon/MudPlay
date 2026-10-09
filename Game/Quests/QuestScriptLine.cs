@@ -3,9 +3,10 @@ using System.Globalization;
 namespace MudPlay.Game.Quests;
 
 // One line of a TBInfo Action, split into its ':' steps. A line opens with the command a
-// player types (a room command), with a bare number (one band of a random table, whose lines
-// are `threshold:steps`), or straight with a directive (a line reached by an NPC keyword, a
-// spell, or another textblock). Steps holds the directives only.
+// player types (a room command), with a bare number when its textblock is called as a random
+// table (one band of the table, whose lines are `threshold:steps`), or straight with a
+// directive (a line reached by an NPC keyword, a spell, or another textblock). Steps holds
+// what follows the command or band.
 public sealed class QuestScriptLine
 {
     public string Raw { get; }
@@ -18,7 +19,8 @@ public sealed class QuestScriptLine
 
     public IReadOnlyList<QuestScriptStep> Steps { get; }
 
-    // Every minlevel on a line is enforced, so the line asks for the highest; 0 = none.
+    // Every minlevel on a line is enforced, so the line asks for the highest
+    // (QuestCrawler.HighestGate); 0 = none.
     public int MinLevel { get; }
 
     // maxlevel passes at that level or lower, so the lowest one decides; 0 = none.
@@ -45,7 +47,7 @@ public sealed class QuestScriptLine
             if (step.Int(0) is not int n || n <= 0) continue;
             switch (step.Verb)
             {
-                case "minlevel": minLevel = Math.Max(minLevel, n); break;
+                case "minlevel": minLevel = QuestCrawler.HighestGate(minLevel, n); break;
                 case "maxlevel": maxLevel = maxLevel == 0 ? n : Math.Min(maxLevel, n); break;
                 case "class": AddOnce(classes, n); break;
                 case "race": AddOnce(races, n); break;
@@ -61,7 +63,9 @@ public sealed class QuestScriptLine
         TakenItems = taken;
     }
 
-    public static QuestScriptLine Parse(string raw)
+    // randomTable says the line's textblock is called as a random table; only then is a
+    // leading bare number a band. Elsewhere it is kept as an ordinary step.
+    public static QuestScriptLine Parse(string raw, bool randomTable = false)
     {
         ArgumentNullException.ThrowIfNull(raw);
         string text = raw.Trim();
@@ -73,6 +77,7 @@ public sealed class QuestScriptLine
         string lead = segments[0].Trim();
         if (lead.Length > 0 && IsNumber(lead))
         {
+            if (!randomTable) return new QuestScriptLine(text, null, null, StepsFrom(segments, 0));
             rollBand = int.Parse(lead, NumberStyles.None, CultureInfo.InvariantCulture);
             first = 1;
         }
@@ -87,13 +92,18 @@ public sealed class QuestScriptLine
             first = 1;
         }
 
+        return new QuestScriptLine(text, command, rollBand, StepsFrom(segments, first));
+    }
+
+    private static List<QuestScriptStep> StepsFrom(string[] segments, int first)
+    {
         List<QuestScriptStep> steps = new();
         for (int i = first; i < segments.Length; i++)
         {
             if (string.IsNullOrWhiteSpace(segments[i])) continue;
             steps.Add(QuestScriptStep.Parse(segments[i]));
         }
-        return new QuestScriptLine(text, command, rollBand, steps);
+        return steps;
     }
 
     // "15+", "up to 19", "20 to 29"; empty when the line has no level step.
