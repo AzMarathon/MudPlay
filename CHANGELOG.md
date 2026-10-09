@@ -1,5 +1,9 @@
 # Version history
 
+## 3.158.3
+
+- Players Seen: double-click a row to open the map on the room that player was last seen in, flashed green like an `@where` reply
+
 ## 3.158.2
 
 - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor

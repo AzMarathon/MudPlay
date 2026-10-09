@@ -1,9 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.2**
-> - Looking at a corpse no longer sends a `get` for the coins it holds, and its contents are no longer read as items on the floor
-> - A look at a player's corpse is no longer listed as an unrecognized line
+> **Version 3.158.3**
+> - Players Seen: double-click a row to open the map on the room that player was last seen in, flashed green like an `@where` reply
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
