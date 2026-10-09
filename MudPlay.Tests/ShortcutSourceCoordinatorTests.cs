@@ -175,4 +175,56 @@ public sealed class ShortcutSourceCoordinatorTests
         c.OnCombatStateChanged();   // no effect — abandoned
         Assert.Empty(h.LiveWalkedToDest);
     }
+
+    // The long route is another card's route, so the walk is set up for that card
+    // before it goes out, and only then: with the item in hand the shortcut's own
+    // set-up stands.
+    [Fact]
+    public void TheLongRouteHook_RunsBeforeTheFallbackWalk_AndNotWhenTheItemTurnsUp()
+    {
+        var order = new List<string>();
+
+        var dead = new Harness();
+        ShortcutSourceCoordinator c = dead.Build();
+        c.TryBegin(815, new RoomKey(8, 1699), beforeLongRoute: () => order.Add($"hook after {dead.LiveWalkedToDest.Count} walk(s)"));
+        c.OnWalkEvent(Finished(new RoomKey(2, 50)));   // room clear, nothing to grab
+        dead.FireScheduled();
+        Assert.Equal(new[] { "hook after 0 walk(s)" }, order);
+        Assert.Single(dead.LiveWalkedToDest);
+
+        var unreachable = new Harness();
+        c = unreachable.Build();
+        c.TryBegin(815, new RoomKey(8, 1699), beforeLongRoute: () => order.Add("unreachable"));
+        c.OnWalkEvent(Failed());
+        Assert.Equal("unreachable", order[^1]);
+
+        var found = new Harness();
+        c = found.Build();
+        c.TryBegin(815, new RoomKey(8, 1699), beforeLongRoute: () => order.Add("found"));
+        c.OnWalkEvent(Finished(new RoomKey(2, 50)));
+        found.Carried.Add(815);
+        c.OnInventoryChanged();
+        Assert.DoesNotContain("found", order);
+        Assert.Single(found.LiveWalkedToDest);
+    }
+
+    // A Stop while the coordinator waits at the source stands it down: the walker is
+    // idle there, and what tells it is the Stopped the walker raises for the journey.
+    [Fact]
+    public void AStopWhileWaitingAtTheSource_StandsItDown()
+    {
+        var h = new Harness { Hostiles = true };
+        ShortcutSourceCoordinator c = h.Build();
+        c.TryBegin(815, new RoomKey(8, 1699));
+        c.OnWalkEvent(Finished(new RoomKey(2, 50)));
+        Assert.True(c.Active);
+
+        c.OnWalkEvent(new WalkEvent(WalkEventKind.Stopped, "user stop", new RoomKey(8, 1699)));
+
+        Assert.False(c.Active);
+        h.Hostiles = false;
+        c.OnCombatStateChanged();
+        h.FireScheduled();
+        Assert.Empty(h.LiveWalkedToDest);
+    }
 }

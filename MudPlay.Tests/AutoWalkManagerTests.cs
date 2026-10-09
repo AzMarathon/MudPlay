@@ -2192,7 +2192,8 @@ public sealed class AutoWalkManagerTests : IDisposable
         (AutoWalkManager walker, List<WalkEvent> events, _) = NewHazardLineWalker();
 
         Assert.True(walker.WalkTo(new RoomKey(1, 3),
-            planThroughAcquirableGates: true, armItemAcquisition: false, pickedRoute: true));
+            planThroughAcquirableGates: true, armItemAcquisition: false, pickedRoute: true,
+            agreedHazardRooms: new[] { new RoomKey(1, 2) }));
 
         Assert.DoesNotContain(events, e => e.Kind == WalkEventKind.Failed);
         Assert.Equal(WalkState.Walking, walker.State);

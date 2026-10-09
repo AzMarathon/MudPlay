@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.155.0**
+> **Version 3.156.0**
 > - The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
 > - That passage needs the golden idol: a walk-to through it says so (and offers it on the route card) instead of circling round to it again, and a loop through it won't run without one
 > - Your position follows the passage to the room you really land in, which is then shown with one Enter; nothing is fought, picked up or invited in the room it only passes you through

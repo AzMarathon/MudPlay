@@ -7254,6 +7254,10 @@ public sealed class AppServices
                 RestoreRouteSearchAutoSearchIfDone("walk ended");
             }
         };
+        // A journey can stand with the walker idle (between two of its legs), where
+        // no walk event ends it. Another character's trip is not this one's.
+        Profile.ProfileLoaded += _ => Walker.EndJourney();
+        Profile.ProfileClosed += Walker.EndJourney;
 
         // Search the room a walk / loop / auto-lair STARTS from. Auto-search fires on
         // room entry, but the room the walker steps out of at the start of a run was
@@ -7376,14 +7380,14 @@ public sealed class AppServices
         AutoLightShopRouter = new Game.Light.AutoLightShopRouter(
             shopRoomsSellingItem: ShopRoomsSellingItem,
             currentRoom: () => RoomTracker.State.CurrentRoom?.Key,
-            walkDestination: () => Walker.Destination,
+            walkDestination: LightDetourWalkDestination,
             distanceBetween: (a, b) => Bfs.DistanceBetween(a, b, Movement),
             carriedCount: CountItemCarried,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoLight),
             engineWalkActive: () =>
                 AutoLair.IsActive || LoopRunner.State != Game.Map.LoopState.Idle
                 || AutoDeposit.IsRerouting || SellDetour.IsDetouring,
-            walkTo: key => Walker.WalkTo(key),
+            walkTo: LightDetourWalkTo,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action),
             log: Log);
         AutoLightProvisioner.SetProvisioner(AutoLightShopRouter.OnBuyRequested);
@@ -8817,6 +8821,21 @@ public sealed class AppServices
         // A stash transfer is between walks while it searches, collects or deposits,
         // so the walker's own Stopped wouldn't reach it there.
         MovementControl.Stopping += () => StashTransfer.Cancel("stopped by the user");
+        // So is a walk between two of its legs: standing at a giver, a shop or an
+        // item's source, with the coordinator that brought it there about to issue
+        // the next leg. The walker says Stopped for a journey left standing, which
+        // stands them down; this covers Stop reaching them with no journey to say it
+        // for, so a leg never goes out after the user stopped.
+        MovementControl.Stopping += () =>
+        {
+            PathItemGiveRouter.Cancel();
+            PathItemShopRouter.Cancel();
+            PathItemSummonRouter.Cancel();
+            MonsterDropRouter.Cancel();
+            ShortcutSource.Cancel();
+            AutoLightShopRouter.Cancel();
+            PvpFlee.CancelComeBack();
+        };
         // After the coordinator has seen it: a token the route didn't send (the user
         // used one by hand) ends all movement where we land — nothing walks on from
         // there — and either way the followers it drops aren't left-behind members.
@@ -12627,11 +12646,44 @@ public sealed class AppServices
     // the character walks WITH the sourced item in hand, which crosses that gate.
     // For a gate a free route already bypasses this is a no-op; it only rescues the
     // sole-route case (e.g. buying a rope to reach the hazard-gated FCCO cavern).
+    // The gates the journey's route goes round stay closed, as they do for the
+    // walk the detour will make: a source that can only be reached through one
+    // would be picked and then never arrived at.
     private int? PathItemDetourDistance(Game.Map.RoomKey a, Game.Map.RoomKey b)
     {
-        using (Movement.SuspendAcquirableGates())
+        using (SuspendGatesAsTheJourneyDoes())
             return Bfs.DistanceBetween(a, b, Movement);
     }
+
+    // The walk a light-buying detour interrupts, as the journey it was. The detour's
+    // walk to the shop is a walk of its own and ends that journey, so it is kept
+    // here for the walk back: resumed from the bare room the walker had been heading
+    // for, the walk had lost its route (the gates it went round, how it takes
+    // teleports), and caught on a side trip it went back to the giver's room.
+    private Game.Map.WalkJourney? _lightDetourJourney;
+
+    private Game.Map.RoomKey? LightDetourWalkDestination()
+    {
+        _lightDetourJourney = Walker.State != Game.Map.WalkState.Idle ? Walker.Journey : null;
+        return _lightDetourJourney?.Destination ?? Walker.Destination;
+    }
+
+    private void LightDetourWalkTo(Game.Map.RoomKey key)
+    {
+        if (_lightDetourJourney is { } interrupted && interrupted.Destination.Equals(key)
+            && !ReferenceEquals(Walker.Journey, interrupted))
+        {
+            _lightDetourJourney = null;
+            Walker.ResumeJourney(interrupted);
+            return;
+        }
+        Walker.WalkTo(key);
+    }
+
+    // The acquirable gates stood down the way the walker stands them down for the
+    // journey under way: all of them, but for the gates its picked route goes round.
+    public IDisposable SuspendGatesAsTheJourneyDoes()
+        => Movement.SuspendAcquirableGatesExcept(Walker.Journey?.ClosedGates ?? Array.Empty<int>());
 
     // For a hazard's any-of counter set, pick the counter the run can most cheaply
     // obtain and describe how — preferring one already on the current room's floor

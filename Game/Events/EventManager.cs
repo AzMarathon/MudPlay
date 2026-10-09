@@ -889,9 +889,12 @@ public sealed class EventManager : IDisposable
         {
             return new EventResumePlan.Loop(loop);
         }
-        if (_walker is { State: WalkState.Walking } && _walker.Destination is { } dest)
+        // The journey, not the room the walker is heading for: caught on a side trip
+        // (to a giver, a shop) that room is the side trip's, and a walk resumed from
+        // a bare room has lost the route it was on.
+        if (_walker is { State: WalkState.Walking, Journey: { } journey })
         {
-            return new EventResumePlan.Walker(dest);
+            return new EventResumePlan.Walker(journey);
         }
         return null;
     }
@@ -923,10 +926,10 @@ public sealed class EventManager : IDisposable
                     break;
                 case EventResumePlan.Walker w:
                     if (_walker is null) return;
-                    if (_walker.State == WalkState.Walking && Equals(_walker.Destination, w.Destination)) return;
+                    if (_walker.State == WalkState.Walking && Equals(_walker.Journey?.Destination, w.Destination)) return;
                     _log?.Info("Events", $"Resuming walk to {w.Destination.Map}/{w.Destination.Room}.");
                     EngineSupersede.StopOthers(_walker, _loopRunner, _autoLair, SupersedeKeep.Walker, "event resume");
-                    _walker.WalkTo(w.Destination);
+                    _walker.ResumeJourney(w.Journey);
                     break;
             }
         }
@@ -948,8 +951,9 @@ public sealed class EventManager : IDisposable
         {
             public override string Describe() => $"auto-lair ({Markers.Count} markers)";
         }
-        public sealed record Walker(RoomKey Destination) : EventResumePlan
+        public sealed record Walker(WalkJourney Journey) : EventResumePlan
         {
+            public RoomKey Destination => Journey.Destination;
             public override string Describe() => $"walk to {Destination.Map}/{Destination.Room}";
         }
     }

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.155.0
+## 3.156.0
 
 - The golden idol's passage in the Earthen Catacombs is treated as the party-splitting teleport it is: a leader's walk or loop waits in the landing room and re-invites everyone there, and no longer goes back for the followers it drops
 - That passage needs the golden idol: a walk-to through it says so (and offers it on the route card) instead of circling round to it again, and a loop through it won't run without one
@@ -9,6 +9,18 @@
 - After a reconnect, a loop holds its first step until the party re-invite has seen the room
 - Players seen through a `look <direction>` are no longer invited, and no longer count as arrived for a party re-invite
 - bug reports addressed: paradigm-20260923-092317, paradigm-20260929-221642, paradigm-20261007-134305, paradigm-20261007-134824
+
+## 3.155.0
+
+- A route card's walk now takes the route the card showed: the route that goes round an optional shortcut no longer heads for the shortcut's exit and stops there for an item you don't have
+- A card whose route uses a teleport (a hole, a hatch, a vortex) takes it and says so on the card; picking it no longer walked a far longer way on foot
+- The Shortcut card lists everything its route needs, and no longer names the key of a door you can pick or bash
+- A walk you start keeps its route for the whole trip: through a re-plan, a detour to fetch an item or buy a light, and picking up again after a sell trip, a flee, a party comeback or an event's Resume
+- Crossing a hazard is agreed for the hazard rooms on the card you picked: a walk picked up from somewhere else never enters a different one
+- Side trips to fetch an item for such a walk go on foot when they can, and aren't held to the automatic-walk teleport list
+- Stopping or redirecting a walk while it is opening a door no longer reports the walk as failed
+- Stop while a walk waits at a giver, shop or item source between two legs ends it; nothing walks on afterwards, and a Stop in a PvP flee room calls off the walk back
+- bug reports addressed: paradigm-20261008-173911, paradigm-20261008-174023, paradigm-20261008-174236
 
 ## 3.154.0
 

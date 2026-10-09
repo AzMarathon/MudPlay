@@ -632,8 +632,8 @@ public sealed class PartyComebackManager : IDisposable
             return new ResumeTarget(ResumeKind.Lair, null, null);
         if (_loopRunner.State is not LoopState.Idle && _loopRunner.CurrentLoop is { } loop)
             return new ResumeTarget(ResumeKind.Loop, null, loop);
-        if (_walker.State is not WalkState.Idle && _walker.Destination is { } dest)
-            return new ResumeTarget(ResumeKind.Walker, dest, null);
+        if (_walker.State is not WalkState.Idle && _walker.Journey is { } journey)
+            return new ResumeTarget(ResumeKind.Walker, journey, null);
         return new ResumeTarget(ResumeKind.None, null, null);
     }
 
@@ -663,7 +663,7 @@ public sealed class PartyComebackManager : IDisposable
                 if (r.Loop is { } loop) _loopRunner.ResumeAfterDetour(loop);
                 break;
             case ResumeKind.Walker:
-                if (r.WalkerDest is { } dest) _walker.WalkTo(dest);
+                if (r.Journey is { } journey) _walker.ResumeJourney(journey);
                 break;
         }
     }
@@ -936,5 +936,7 @@ public sealed class PartyComebackManager : IDisposable
         Lair,
     }
 
-    private readonly record struct ResumeTarget(ResumeKind Kind, RoomKey? WalkerDest, Loop? Loop);
+    // A walk is kept as its journey, so the walk picked back up is planned by the
+    // rules the interrupted one had (the route its card showed).
+    private readonly record struct ResumeTarget(ResumeKind Kind, WalkJourney? Journey, Loop? Loop);
 }
