@@ -37,9 +37,25 @@ public enum ItemGiverKind { Monster, Room }
 // RefusalMessages are the message-table numbers the award line prints when one of
 // its conditions fails ("goodaligned -51 3075" → message 3075). A give carrying a
 // condition can be refused; these are how the refusal reads on the wire.
+//
+// TradeItemId is the one item a plain exchange takes: an award line that does
+// nothing but take a single item and hand its award over ("takeitem 811
+// 1368:giveitem 808:text 843", the sleazy shopkeeper's glowing key for an opal
+// brooch). Such a give isn't Deterministic, since it costs the item, but it is as
+// certain as a free one for a character carrying that item. Zero for every other
+// give, a line that takes more than one item or carries any other condition
+// included.
 public readonly record struct ItemGiver(
     ItemGiverKind Kind, int Number, int Map, int Room, string Name, string Requirement,
-    string Keyword, bool Deterministic, IReadOnlyList<int>? RefusalMessages = null);
+    string Keyword, bool Deterministic, IReadOnlyList<int>? RefusalMessages = null,
+    int TradeItemId = 0)
+{
+    // Whether a walk can go to this giver, issue its keyword and count on the item:
+    // a free hand-over always, a plain trade only while what it takes is carried.
+    // Without that item the ask can only be refused.
+    public bool IsReliableFor(Func<int, bool> carries) =>
+        Keyword.Length > 0 && (Deterministic || (TradeItemId > 0 && carries(TradeItemId)));
+}
 
 // One monster a room command summons on demand, which drops an item at a
 // guaranteed rate. This is the deterministic corner of monster drops, and the
@@ -280,8 +296,10 @@ public sealed class ItemSourceIndex
 
                 giveItems.Clear();
                 List<int>? refusals = null;
-                int takeId = 0;
+                List<int>? checkedItems = null;
+                int takeId = 0, takes = 0;
                 bool hasPrice = false, hasAbility = false, hasRandom = false;
+                bool plainExchange = true;
 
                 // A single-block give carries its trigger as the leading token of
                 // the same line ("give blade:takeitem 20:giveitem 22"); a
@@ -293,17 +311,26 @@ public sealed class ItemSourceIndex
                     ? toks[0].Trim()
                     : string.Empty;
 
-                foreach (string rawTok in toks)
+                for (int t = 0; t < toks.Length; t++)
                 {
-                    string tok = rawTok.Trim();
+                    string tok = toks[t].Trim();
                     if (TryArg(tok, "giveitem", out int gi) && gi > 0) giveItems.Add(gi);
-                    else if (takeId == 0 && TryArg(tok, "takeitem", out int ti) && ti > 0) takeId = ti;
+                    else if (TryArg(tok, "takeitem", out int ti) && ti > 0)
+                    {
+                        takes++;
+                        if (takeId == 0) takeId = ti;
+                    }
+                    else if (TryArg(tok, "checkitem", out int ci)) (checkedItems ??= new List<int>()).Add(ci);
                     else if (tok.StartsWith("price", StringComparison.OrdinalIgnoreCase)) hasPrice = true;
                     else if (tok.StartsWith("giveability", StringComparison.OrdinalIgnoreCase)) hasAbility = true;
                     else if (tok.StartsWith("random", StringComparison.OrdinalIgnoreCase)) hasRandom = true;
                     if (RefusalMessageOf(tok) is { } refusal) (refusals ??= new List<int>()).Add(refusal);
+                    bool isLineKeyword = t == 0 && lineKeyword.Length > 0;
+                    if (tok.Length > 0 && !isLineKeyword && !IsExchangeToken(tok)) plainExchange = false;
                 }
                 if (giveItems.Count == 0) continue;
+                // A check for some other item is a condition, not part of the trade.
+                if (checkedItems is not null && checkedItems.Exists(id => id != takeId)) plainExchange = false;
 
                 // Turn-in names the required item (the most useful hint); a bare
                 // price is a purchase; a lone giveability marks a quest reward.
@@ -318,6 +345,11 @@ public sealed class ItemSourceIndex
                 // the award line — so the acquisition router can rely on the
                 // command producing the item every time.
                 bool deterministic = takeId == 0 && !hasPrice && !hasAbility && !hasRandom;
+
+                // One item taken, once, and nothing else asked of the character. A
+                // line that takes several, or the same one more than once, is left
+                // out: how the game counts those isn't something to assume here.
+                int tradeItemId = takes == 1 && plainExchange ? takeId : 0;
 
                 foreach (int itemId in giveItems)
                 {
@@ -334,7 +366,7 @@ public sealed class ItemSourceIndex
                         string keyword = lineKeyword.Length > 0 ? lineKeyword : root.Keyword;
                         AddGiver(giversByItem, itemId,
                             new ItemGiver(root.Kind, root.Number, root.Map, root.Room, name, requirement,
-                                keyword, deterministic, refusals));
+                                keyword, deterministic, refusals, tradeItemId));
                     }
                 }
             }
@@ -597,6 +629,8 @@ public sealed class ItemSourceIndex
                     e = e with { Keyword = giver.Keyword };
                 if (!e.Deterministic && giver.Deterministic)
                     e = e with { Deterministic = true };
+                if (e.TradeItemId == 0 && giver.TradeItemId > 0)
+                    e = e with { TradeItemId = giver.TradeItemId };
                 if (giver.RefusalMessages is { Count: > 0 } more)
                     e = e with { RefusalMessages = (e.RefusalMessages ?? Array.Empty<int>()).Union(more).ToList() };
                 list[i] = e;
@@ -734,6 +768,20 @@ public sealed class ItemSourceIndex
         int space = tok.IndexOf(' ');
         string head = space < 0 ? tok : tok[..space];
         return TBInfoActionResolver.IsDirectiveHead(head);
+    }
+
+    // What an award line may hold and still be a plain exchange: the take, the
+    // give, a check for the item about to be taken, and the lines it prints. Any
+    // other directive is a condition on the character or a side effect.
+    private static readonly HashSet<string> s_exchangeVerbs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "takeitem", "giveitem", "checkitem", "text", "message",
+    };
+
+    private static bool IsExchangeToken(string tok)
+    {
+        int space = tok.IndexOf(' ');
+        return s_exchangeVerbs.Contains(space < 0 ? tok : tok[..space]);
     }
 
     // The conditions whose last argument is the message printed when they fail

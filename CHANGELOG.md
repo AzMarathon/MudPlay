@@ -1,5 +1,12 @@
 # Version history
 
+## 3.153.1
+
+- A door key an NPC trades for an item you carry is fetched on the way: with the opal brooch in hand, a walk into the dark-elf archmage's tower trades it to the sleazy shopkeeper for the glowing key
+- Without that item the route card names the trade and what drops the item, in place of the bare key name
+- A key handed over, bought or picked up for a door is seen to arrive at once; the detour no longer waits out its window
+- bug reports addressed: paradigm-20261008-175938
+
 ## 3.153.0
 
 - New **Log session statistics** box in the Program Log window: writes everything the Session Stats window shows (Player Statistics, Time Analysis, Session Statistics) to its own file in the Logs folder

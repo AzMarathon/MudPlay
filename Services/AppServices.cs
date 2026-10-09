@@ -11709,9 +11709,14 @@ public sealed class AppServices
     // deterministic giver exists. The chosen giver matches the router's
     // fewest-added-steps pick (shared TrySelectGiver), so the picker's "ask X"
     // promise is the giver the run visits — not a plausible guess.
-    public string? PathItemGiveName(int itemId, Game.Map.RoomKey source, Game.Map.RoomKey destination)
+    //
+    // armedByPick: picking the card fetches this item whatever its flag says
+    // (SourceableGateItems), so the card names the giver for it too. A trade
+    // especially has to be named before Go: it costs the item handed in.
+    public string? PathItemGiveName(
+        int itemId, Game.Map.RoomKey source, Game.Map.RoomKey destination, bool armedByPick = false)
     {
-        if (!IsAutoObtainForPath(itemId)) return null;
+        if (!armedByPick && !IsAutoObtainForPath(itemId)) return null;
         System.Collections.Generic.IReadOnlyList<Game.Map.GiveSource> givers = GiveSourcesForItem(itemId);
         if (givers.Count == 0) return null;
         return Game.Map.PathItemGiveRouter.TrySelectGiver(
@@ -12186,8 +12191,9 @@ public sealed class AppServices
 
     // Every concrete place we can be handed itemId on demand, backing
     // PathItemGiveRouter's detour-target search. Filters ItemSourceIndex to the
-    // deterministic, keyword-carrying awards (a gated turn-in / purchase / quest
-    // reward or a `random` roll isn't a reliable one-command hand-over), then
+    // deterministic, keyword-carrying awards (a purchase / quest reward / conditioned
+    // turn-in or a `random` roll isn't a reliable one-command hand-over) plus the
+    // plain trades whose one item is in hand (ItemGiver.IsReliableFor), then
     // resolves each to a room + command: a Monster giver becomes
     // `ask <name> <keyword>` at each of its spawn rooms (Summoned By) — the full
     // name, which the game always accepts (shared GuardDoorCommandResolver.AskTarget)
@@ -12204,7 +12210,13 @@ public sealed class AppServices
         var result = new System.Collections.Generic.List<Game.Map.GiveSource>();
         foreach (ItemGiver g in givers)
         {
-            if (!g.Deterministic || g.Keyword.Length == 0) continue;
+            // A plain trade is as sure as a free give once what it takes is in hand:
+            // the sleazy shopkeeper's glowing key for the opal brooch the captain of
+            // the guard drops (report paradigm-20261008-175938).
+            if (!g.IsReliableFor(IsItemCarried)) continue;
+            string giverName = !g.Deterministic
+                ? $"{g.Name}, in trade for your {ItemNames.GetName(g.TradeItemId) ?? $"item #{g.TradeItemId}"}"
+                : g.Name;
             // A give with a condition on it (alignment, a quest step) is still
             // asked for: whether this character meets it isn't worked out here, and
             // the giver's own refusal ends the wait (user, 2026-10-06).
@@ -12218,15 +12230,35 @@ public sealed class AppServices
                 if (noun.Length == 0) continue;   // no addressable name — can't ask
                 string command = $"ask {noun} {g.Keyword}";
                 foreach (Game.Map.RoomKey room in ItemSources.GiverMonsterRoomsOf(g.Number))
-                    result.Add(new Game.Map.GiveSource(room, command, g.Name, refusals));
+                    result.Add(new Game.Map.GiveSource(room, command, giverName, refusals));
             }
             else // Room giver — the keyword is the verbatim room CMD.
             {
                 result.Add(new Game.Map.GiveSource(
-                    new Game.Map.RoomKey(g.Map, g.Room), g.Keyword, g.Name, refusals));
+                    new Game.Map.RoomKey(g.Map, g.Room), g.Keyword, giverName, refusals));
             }
         }
         return result;
+    }
+
+    // Route-picker helper: a gate item nothing fetches as things stand, but which
+    // an NPC or a room command trades for an item the character isn't carrying.
+    // Names the trade and, where one monster always drops the wanted item, that
+    // monster, so the card says how the key is come by instead of only naming it.
+    // Null once the wanted item is in hand: the give itself then covers the item.
+    public string? PathItemTradeHint(int itemId)
+    {
+        foreach (ItemGiver g in ItemSources.GiversOf(itemId))
+        {
+            if (g.Deterministic || g.TradeItemId <= 0 || g.Keyword.Length == 0) continue;
+            if (IsItemCarried(g.TradeItemId)) return null;
+            string wanted = ItemNames.GetName(g.TradeItemId) ?? $"item #{g.TradeItemId}";
+            string dropper = string.Empty;
+            foreach (MonsterDropIndex.MonsterDrop d in MonsterDrops.DroppersOf(g.TradeItemId))
+                if (d.DropPercent >= 100) { dropper = $", which {d.MonsterName} drops"; break; }
+            return $"{g.Name} trades one for {wanted}{dropper}";
+        }
+        return null;
     }
 
     // True when a free deterministic give can supply itemId at a resolved room —
@@ -12382,8 +12414,11 @@ public sealed class AppServices
     // Copies carried that satisfy a path item on this route: the item itself plus
     // any substitute. The count every path-item fulfiller reads, so none of them
     // chases the picker's chosen item once a different valid one is in hand.
+    // The key ring counts: a key handed over or bought goes straight onto it, and
+    // read from the pack alone it never arrived, so the detour that fetched it
+    // waited out its whole window before going on.
     private int CountPathItemCoverage(int itemId) =>
-        PathItemSubstitutes.Coverage(itemId, CountItemCarried);
+        PathItemSubstitutes.Coverage(itemId, CountItemHeld);
 
     private bool IsPathItemCovered(int itemId) => CountPathItemCoverage(itemId) > 0;
 
@@ -12902,8 +12937,9 @@ public sealed class AppServices
 
     // A door key the walk can reliably go and get: a room command summons a
     // monster that always drops it, an NPC hands it over for the asking (the old
-    // hermit's jagged bone key for the Library), or a shop sells it (the Thieves'
-    // Guild's skeleton key). A shop was left out, so a route through a door the
+    // hermit's jagged bone key for the Library) or in trade for an item already
+    // carried (GiveSourcesForItem), or a shop sells it (the Thieves' Guild's
+    // skeleton key). A shop was left out, so a route through a door the
     // character could neither pick nor bash walked up to it keyless and failed
     // there (report paradigm-20261007-192215).
     private bool DoorKeyIsFetchable(int itemId)

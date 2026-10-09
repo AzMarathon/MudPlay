@@ -3884,7 +3884,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 - **A pick failure is `Your skill fails you this time.`**
 - **A door can lock one way and barely the other, and an open door needs nothing** *([CONFIRMED] 2026-10-06, user; data from Paradigm 1.9.1 Rooms)*. The Library door in Arlysia: from Library Steps `17/1791` north into the Library `17/1792` it needs the jagged bone key (item 1536; the data's alternative is 1000 picklocks / strength, out of reach). From inside, `17/1792` south, a very low strength bash opens it (51 in the data). A door that is already open, as it is behind someone who came out, is walked through with no key.
   - **The jagged bone key is single-use: it crumbles when used** *([CONFIRMED] 2026-10-06, user; item data: `UseCount` 1, destroyed on death)*. See *Items, inventory & equipment → NPC keyword hand-over detection* for where a fresh one comes from.
-  - **Client use:** the walker posts a need for a locked door's key only when the key is reliably fetchable: a room command summons its guaranteed dropper, an NPC hands it over for the asking, or a shop sells it (`AppServices.DoorKeyIsFetchable`, `AutoWalkManager.SetDoorKeySourceProbe`; reports `paradigm-20261006-095806`, `paradigm-20261007-192215`). The shop case: the Rancid Sewer door `9/873` E ↔ `9/909` W is `(Key: 976 [or 201 picklocks/strength])`, and skeleton key #976 (`UseCount` 5, price 100) is sold by Shop #82, Rhudaur Thieve's Guild at `2/2561` *([OBSERVED] 2026-10-07, Paradigm 1.9.1 data)*; a character with Picklocks 107 reached the door keyless and the walk failed there. Picking the gated route card arms the purchase (`RouteChoicePlanner.SourceableGateItems`), and the card names the source. A door found open at the step is walked through by the door handler whatever the plan assumed.
+  - **Client use:** the walker posts a need for a locked door's key only when the key is reliably fetchable: a room command summons its guaranteed dropper, an NPC hands it over for the asking or in trade for an item already carried (see *Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable*), or a shop sells it (`AppServices.DoorKeyIsFetchable`, `AutoWalkManager.SetDoorKeySourceProbe`; reports `paradigm-20261006-095806`, `paradigm-20261007-192215`, `paradigm-20261008-175938`). The shop case: the Rancid Sewer door `9/873` E ↔ `9/909` W is `(Key: 976 [or 201 picklocks/strength])`, and skeleton key #976 (`UseCount` 5, price 100) is sold by Shop #82, Rhudaur Thieve's Guild at `2/2561` *([OBSERVED] 2026-10-07, Paradigm 1.9.1 data)*; a character with Picklocks 107 reached the door keyless and the walk failed there. Picking the gated route card arms the purchase (`RouteChoicePlanner.SourceableGateItems`), and the card names the source. A door found open at the step is walked through by the door handler whatever the plan assumed.
 - **A bash opens the door itself — no `open` afterwards.** *([CONFIRMED] 2026-09-28, user.)* `open <dir>` is only needed after a key (or a pick) has unlocked the door, or for a door that's shut but not locked.
 - **`bash` reads its argument as a direction first, and only then as a monster.** *([OBSERVED] 2026-10-03, Stock 1.11p `wccmmud.dll` `_cmd_bash` / `_cmd_smash`. Paradigm: the door form is in the capture of report `paradigm-20261003-194358` (`bash n` → `You bashed the door open.`); the fall-through to the attack is `[NEEDS CONFIRMATION]` there.)*
   - `bash <dir>` in a room that has an exit that way is the door bash, and never an attack.
@@ -4606,6 +4606,7 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
   - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
   - On failure the engine prints the message's line 1 to you and line 2 to the room (@0x46f360), and the rest of that line doesn't run. With no message number the refusal is silent.
+  - **`takeitem` is written with a second number too in some lines** *([OBSERVED] 2026-10-08, Paradigm 1.9.1 TBInfo)*: `takeitem 811 1368:giveitem 808:text 843` (textblock 842), `takeitem 490 467:message 468:…` (textblock 211), beside the bare `takeitem 1183` of textblock 4041. `[NEEDS CONFIRMATION]`: is that number the message printed when the item isn't carried, as for `checkitem`? The client does not read it.
 - **A refused command never redisplays the room**, the same as a refused move (see *Refused ("bonked") moves*).
 - **Three conditions look at the monsters in the room** *([OBSERVED] 2026-10-07, `_perform_matched_action` in the Stock 1.11p `wccmmud.dll`)*. Each reads the room's 15 monster slots:
   - **`nomonsters [msg]` passes only when every slot is empty.** Any monster record in the room refuses the line: an NPC or a non-hostile monster counts the same as a hostile. Players never count.
@@ -4801,7 +4802,7 @@ Among protectable hazards, a further split governs whether the navigator may off
     they keep the default teleport-allowed shortest route.
 
 ### Route gate items — crossing vs acquiring, required vs optional, reliable vs unreliable
-*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional) · Realm: Paradigm (1.9.1) · per-fact tags inline*
+*Status: CONFIRMED 2026-07-23 (user; dark-elf front door); OBSERVED (Paradigm 1.9.1 game data, cross-referenced; landmark IDs); CONFIRMED 2026-08-18 (user + game-data trace; quest items never auto-obtained); CONFIRMED 2026-09-13 (user + report `paradigm-20260913-100733`; required vs optional); CONFIRMED 2026-10-08 (user + report `paradigm-20261008-175938`; the tower and castle key chain inside the city) · Realm: Paradigm (1.9.1) · per-fact tags inline*
 
 - **[CONFIRMED, user 2026-07-23] A walled city can have a "front door" that is a
   keyword→item→summon→kill→key chain, entirely separate from any teleport "backdoor" the map data also
@@ -4830,6 +4831,48 @@ Among protectable hazards, a further split governs whether the navigator may off
   `Key: 806 or 101 picklocks`. The backdoor is **nightblack-portal item 1419**, whose teleport exit into
   map 8 is gated `minlevel 40` — e.g. the portal in `8/992` (Negative Power Plane, TB 9131) lands in
   `8/558` at level 40+.
+- **Inside the dark-elf city the tower and the castle are a second chain: two bosses, each dropping an
+  item the sleazy shopkeeper trades for keys** *([CONFIRMED] 2026-10-08, user; report
+  `paradigm-20261008-175938`)*. In the user's words: kill the captain of the guard and take the opal
+  brooch he drops to the sleazy shopkeeper, who exchanges it for a key that gets you into the dark-elf
+  archmage's tower; kill the archmage and bring his drop back to the shopkeeper for a key that lets you
+  into the dark-elf castle by the moat, and another that opens the dark-elf queen's door.
+  - **The same chain in the data** *([OBSERVED] 2026-10-08, Paradigm 1.9.1 Rooms / Items / Monsters /
+    TBInfo)*:
+    1. **Captain of the guard** (monster 346, `GameLimit` 1, `RegenTime` 2) is the NPC of Officer's
+       Quarters `8/530`, behind `8/524` E `(Door [51 picklocks/strength])`. He drops the **opal brooch
+       (item 811)** at 100% (`DropItem-2`).
+    2. **Sleazy shopkeeper** (monster 348) is the NPC of Musty Store `8/486`. His `GreetTXT` 838 lists
+       `help:840`, `brooch:841`, `orb:844`. `brooch` → 841 → 842 `takeitem 811 1368:giveitem 808:text 843`:
+       the brooch for the **glowing key (item 808**, a key, `UseCount` 1).
+    3. **Dark Tower, Entrance `8/531` W → `8/532`** is `(Key: 808 [or 1000 picklocks])`, and the only
+       walked way into the tower (`8/532` up to the Ritual Chamber `8/558`). From inside, `8/532` E is
+       `(Door [41 picklocks/strength])`.
+    4. **Dark-elf archmage** (monster 345, `GameLimit` 1, `RegenTime` 2) is the NPC of Ritual Chamber
+       `8/558`, behind Spiral Stairway `8/557` S `(Door [51 picklocks/strength])`. He drops the **dark blue
+       orb (item 810)** at 100%, and the nightblack portal (item 839, a room fixture) at 100%.
+    5. The shopkeeper's `orb` → 844 → 845 `takeitem 810 1369:giveitem 809:giveitem 820:text 846`: the orb
+       for **two keys at once**, the **adamantite key (item 809**, `UseCount` 1) and the **moldy key
+       (item 820**, `UseCount` 3).
+    6. **The castle by the moat:** Moatside `8/559` D `(Text: go moat, dive moat, jump moat)` → Black Moat
+       `8/646`; then Black Moat `8/633` D ↔ Rancid Underwater Passage `8/632` U is
+       `(Key: 820 [or 251 picklocks/strength])`. The gatehouse door `8/559` S ↔ `8/560` N is
+       `(Door [1000 picklocks/strength])` both ways; the wheel in `8/560` (`CMD 4100`, `turn wheel`) works
+       it from inside.
+    7. **The queen's door:** Royal Guardroom `8/702` N → Royal Throne Room `8/705` is
+       `(Key: 809 [or 101 picklocks])`. The dark-elf queen (monster 343) is the NPC of `8/705` and drops
+       the golden key (item 813) at 100%, for Vault Antechamber `8/706` N `(Key: 813 [or 1000 picklocks])`.
+  - **"You can skip the captain of the guard part, if you have lockpicking high enough"** *([CONFIRMED]
+    2026-10-08, user)*. In the data the lock the captain's link opens is the tower door, whose
+    alternative is `1000 picklocks` *([OBSERVED] 2026-10-08)*; the locks with a lower alternative are the
+    queen's door (`101 picklocks`) and the moat (`251 picklocks/strength`), which are the archmage's
+    link. `[NEEDS CONFIRMATION]`: which lock did the user mean, and what Picklocks opens the tower door
+    in play? (By the Stock pick rule in *Locked doors — picking, opening and bashing* a `[1000
+    picklocks]` lock needs Picklocks of 1000 for a 1% chance.)
+  - **Which links a lock skill replaces** *([OBSERVED] 2026-10-08, the same data)*: the adamantite key
+    is not needed by a character who can pick the queen's door, nor the moldy key by one who can pick
+    or bash the moat lock. A character who needs neither key needs no orb, and so neither the archmage
+    nor the brooch that leads to him. A walk to the archmage himself still goes through the tower door.
 - **The map surfaces how to *cross* an item/key gate, but NOT how to *acquire* the gating item (the
   crux of auto-traversal).** The consumption command and required item ride on the exit (`8/398` south
   names `rub orb` + bloodstone orb; `8/461` south names `Key: gate key`). Acquisition provenance lives
@@ -4875,6 +4918,15 @@ Among protectable hazards, a further split governs whether the navigator may off
     optional shortcut (so the walk takes the reliable way and any gate item the crosser already holds
     surfaces as "— you have it"), reports only genuinely-required unheld items, and offers the shortcut
     separately (`RouteChoice.ShortcutItems` / `ShortcutStepCount`) with the rooms it would save.
+  - A trade counts as a reliable source only while the item it takes is carried (`ItemGiver.TradeItemId`,
+    `ItemGiver.IsReliableFor`, `AppServices.GiveSourcesForItem`). With the opal brooch in hand the
+    glowing key is fetchable: the route card reads `glowing key (ask sleazy shopkeeper, in trade for
+    your opal brooch)`, and picking it walks to `8/486` and sends `ask sleazy shopkeeper brooch`. Without
+    the brooch nothing is fetched and the card names the trade instead
+    (`AppServices.PathItemTradeHint`): `glowing key (sleazy shopkeeper trades one for opal brooch, which
+    captain of the guard drops)`. Only an award line that takes one item, once, and asks nothing else
+    of the character counts. Killing a boss for the item a trade takes is left to the player (report
+    `paradigm-20261008-175938`).
 
 ### Random-teleport maze (the Warped Asylum)
 *Status: CONFIRMED 2026-07-17 (user design); solvable-room fast path CONFIRMED 2026-08-16 (user) · Realm: both (Paradigm lever handling differs)*
@@ -5591,7 +5643,7 @@ There is no room to drop amethyst pendant here.
 - The giver's line in that wording, `You give <item> to <player>.`, takes the copies out of the pack under the same record-name check.
 - It reads the Stock coin lines on both sides, `You gave <player> <N> <coin>` and `<Player> gave you <N> <coin>`, into the purse and not the pack (`TryApplyCoinHandOver`). The coin is a bare metal (`give`), a full coin noun (`share`), or any other single word, taken as the fifth coin under a board's own name (`HandOverCoinNoun`).
 - It reads the Paradigm coin lines on both sides, `<Player> gives you <N> <coin noun>` and `You give <N> <coin noun> to <player>`, the same way. Those need the full coin noun and no full stop, which is what keeps a counted item line out of the purse.
-- A key handed over moves on the key ring, in either wording: one received goes onto `InventorySnapshot.Keys` (an item of type 7, or a name already on the ring), and one given away comes off the pack first, then the ring (`AddHeld`, `RemoveHeld`, `PatchKeyRing`). Held keys are counted from the ring (`AppServices.CountItemHeld`), so a key that stayed on it after a give kept its door passable to the route planner. The other lines that move an item do the same for a key: `You took`, `You dropped`, `You hid`, a buy and a sell (user asked for get and drop, 2026-10-07; hide, buy and sell follow the same two helpers).
+- A key handed over moves on the key ring, in either wording: one received goes onto `InventorySnapshot.Keys` (an item of type 7, or a name already on the ring), and one given away comes off the pack first, then the ring (`AddHeld`, `RemoveHeld`, `PatchKeyRing`). Held keys are counted from the ring (`AppServices.CountItemHeld`), so a key that stayed on it after a give kept its door passable to the route planner. The other lines that move an item do the same for a key: `You took`, `You dropped`, `You hid`, a buy and a sell (user asked for get and drop, 2026-10-07; hide, buy and sell follow the same two helpers). The fetchers for a route's gate items count the ring as well (`AppServices.CountPathItemCoverage`); read from the pack alone, a door key that had just been handed over, bought or picked up never arrived, and the detour that fetched it waited out its window.
 - None of the parsing is gated on the realm.
 - The client's own party hand-over of a path item sends the uncounted form, `give <item> to <recipient>` (`PartyPathItemGate`). That form prints `<Player> gives you <item>.` on Paradigm (user's screenshot, 2026-10-07: a relayed `@do give black star key to <recipient>`).
 - `InventoryManager.IsReceivedHandOverLine` tells the unrecognized-line watcher that the receiving lines, item or coins, are read. The giver's Stock coin line is already skipped as an engine reply (`EngineReplyLines`, `You gave %s`).

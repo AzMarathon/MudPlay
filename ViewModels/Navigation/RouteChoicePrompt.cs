@@ -380,8 +380,12 @@ public static class RouteChoicePrompt
                 + $"{RouteChoicePlanner.ListAvoided(alt.AvoidedNames)}, no counter)";
         }
 
+        // A gate item someone trades for another the character lacks carries the
+        // trade, so the log says why a key reads as not obtainable.
         string reqSummary = string.Join(", ", choice.Requirements.Select(r =>
-            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"));
+            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"
+            + (!r.Carried && r.ItemIds.Count == 1 && services.PathItemTradeHint(r.ItemIds[0]) is { } trade
+                ? $" ({trade})" : "")));
         if (choice.GatedWalk is not null)
             avoidAltNote += " (the gates are on a lever detour, not the route itself)";
         string shortcutNote = choice.ShortcutItems is { Count: > 0 } sc
@@ -528,7 +532,14 @@ public static class RouteChoicePrompt
         //   • resolvedCounter: the specific counter the run resolved per hazard
         //     requirement (item + "buy at Pier" / "ask X" / …), so the clause names
         //     that one, not the whole any-of set.
-        Func<int, string?> giveName = itemId => services.PathItemGiveName(itemId, source, destination);
+        //   • trade: an item the run won't fetch, but which someone trades for another
+        //     the character lacks. Names the trade; arranges nothing.
+        // The gate items Go fetches whatever their flag says get their giver named
+        // too, so a trade shows what it costs before it is picked.
+        IReadOnlyList<int> armedByPick = services.SourceableGateItems(choice.Requirements);
+        Func<int, string?> giveName = itemId =>
+            services.PathItemGiveName(itemId, source, destination, armedByPick.Contains(itemId));
+        Func<int, string?> tradeHint = services.PathItemTradeHint;
         Func<int, string?> shopName = itemId => services.PathItemShopName(itemId, source, destination);
         Func<int, string?> dropName = itemId => services.PathItemDropName(itemId, source);
         Func<RouteRequirement, (int ItemId, string Source)?> resolvedCounter =
@@ -571,7 +582,8 @@ public static class RouteChoicePrompt
             dialogTask = calcDialogTask;
             vm.Populate(
                 choice, services.RouteItemLabel, giveName, shopName, dropName,
-                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote);
+                freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter, economyNote,
+                tradeHint);
         }
         else
         {
@@ -580,7 +592,7 @@ public static class RouteChoicePrompt
             vm = new RouteChoiceDialogViewModel(
                 choice, destLabel, services.RouteItemLabel, giveName, shopName, dropName,
                 freeEta, gatedEta, hazardCounterSource, crossesSurvivableHazard, resolvedCounter,
-                economyNote, sourceLabel: DestinationLabel(services, source));
+                economyNote, sourceLabel: DestinationLabel(services, source), tradeHintForItem: tradeHint);
             dialogTask = services.Dialogs
                 .OpenWindowAsync<RouteChoiceDialogViewModel, RouteChoiceResult?>(vm);
         }

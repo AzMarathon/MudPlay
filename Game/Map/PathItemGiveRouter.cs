@@ -32,8 +32,10 @@ public readonly record struct GiveSource(
 // ungated awards reach here: AppServices filters ItemSourceIndex to
 // Deterministic givers with a non-empty keyword and resolves each to a concrete
 // room, so a candidate list is always something we can actually walk to and ask
-// for. A gated give (turn-in / purchase / quest-reward) or a `random` roll is
-// excluded upstream — those aren't a reliable one-command hand-over.
+// for. A gated give (purchase / quest-reward / conditioned turn-in) or a `random`
+// roll is excluded upstream — those aren't a reliable one-command hand-over. The
+// one turn-in let through is a plain trade whose single item is already carried;
+// its GiverName then says what the ask costs.
 //
 // Auto-detour, don't prompt. Like the shop buy and unlike the drop hunt, a
 // deterministic give is cheap, certain, and a single command, so it runs

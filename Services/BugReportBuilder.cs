@@ -1658,6 +1658,24 @@ public static class BugReportBuilder
         Kv(sb, "Physical route (all gates ignored)",
             physical is { Count: > 0 } ? $"{physical.Count} step(s)" : "none — graph-disconnected");
 
+        // The gates the route card named, and what the client makes of each: whether
+        // a door key has a source a walk would use, and any trade that yields the item.
+        if (RouteChoicePlanner.Evaluate(bfs, filter, graph, here, target) is { Requirements: { Count: > 0 } reqs })
+        {
+            IReadOnlyList<int> fetchable = svc.SourceableGateItems(reqs);
+            Kv(sb, "Gate items on the route through gates", string.Join("; ", reqs.Select(r =>
+            {
+                string items = string.Join("/", r.ItemIds.Select(id => $"{id} {svc.ItemNames.GetName(id) ?? "?"}"));
+                if (r.Carried) return $"{r.Kind} {items} (carried)";
+                string source = r.Kind != RouteRequirementKind.DoorKey ? string.Empty
+                    : fetchable.Contains(r.ItemIds[0]) ? " — key has a reliable source"
+                    : " — key has no reliable source";
+                string trade = r.ItemIds.Count == 1 && svc.PathItemTradeHint(r.ItemIds[0]) is { } hint
+                    ? $" — {hint}" : string.Empty;
+                return $"{r.Kind} {items}{source}{trade}";
+            })));
+        }
+
         if (RouteChoicePlanner.PlanBlocked(bfs, filter, graph, here, target) is { } b)
         {
             string reason = Game.Map.BlockedExitDescriber.Describe(

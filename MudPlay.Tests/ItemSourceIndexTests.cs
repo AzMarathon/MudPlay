@@ -51,7 +51,14 @@ public sealed class ItemSourceIndexTests : IDisposable
             "Obtained From": "Textblock #720, Room(get roots|pick roots) 9/500|9/501-503" },
           { "Number": 32, "Name": "Copper Ore", "ItemType": 2,
             "Obtained From": "Room(mine ore) 6/1664(25%)" },
-          { "Number": 30, "Name": "Hermit Gift", "ItemType": 2 }
+          { "Number": 30, "Name": "Hermit Gift", "ItemType": 2 },
+          { "Number": 33, "Name": "opal brooch", "ItemType": 0 },
+          { "Number": 34, "Name": "glowing key", "ItemType": 7 },
+          { "Number": 35, "Name": "dark blue orb", "ItemType": 10 },
+          { "Number": 36, "Name": "adamantite key", "ItemType": 7 },
+          { "Number": 37, "Name": "moldy key", "ItemType": 7 },
+          { "Number": 38, "Name": "dark temple key", "ItemType": 7 },
+          { "Number": 39, "Name": "Signet Copy", "ItemType": 2 }
         ]
         """;
 
@@ -68,6 +75,7 @@ public sealed class ItemSourceIndexTests : IDisposable
           { "Number": 302, "Name": "Dragon Lord" },
           { "Number": 303, "Name": "Gnome Commander", "Summoned By": "Room 5/512, Room 5/513" },
           { "Number": 304, "Name": "old hermit", "Summoned By": "Room 17/1790" },
+          { "Number": 305, "Name": "sleazy shopkeeper", "Summoned By": "Room 8/486" },
           { "Number": 347, "Name": "obsidian statue", "Summoned By": "Textblock #863",
             "DropItem-0": 26, "DropItem%-0": 100 },
           { "Number": 348, "Name": "sandstone sphinx", "Summoned By": "Textblock #864",
@@ -96,8 +104,20 @@ public sealed class ItemSourceIndexTests : IDisposable
     // 700/701 — multi-block menu: Gnome Commander's greeting routes "orb" to a
     //           sub-block that unconditionally gives item 25 (deterministic,
     //           keyword read off the parent menu).
+    // 838–846 — the sleazy shopkeeper's menu as the Paradigm data has it: `brooch`
+    //           trades the opal brooch for the glowing key, `orb` the dark blue orb
+    //           for the adamantite and moldy keys. Each takes one item and no more.
+    // 211 — a device that takes two different keys for one.
+    // 212 — a trade that also checks for an item it doesn't take.
     private const string TBInfoJson = """
         [
+          { "Number": 838, "LinkTo": 839, "Action": "help:840\nbrooch:841\norb:844\n", "Called From": "Monster #305" },
+          { "Number": 841, "LinkTo": 842, "Action": "", "Called From": "Textblock #838" },
+          { "Number": 842, "LinkTo": 0, "Action": "takeitem 33 1368:giveitem 34:text 843\n", "Called From": "Textblock #841" },
+          { "Number": 844, "LinkTo": 845, "Action": "", "Called From": "Textblock #838" },
+          { "Number": 845, "LinkTo": 0, "Action": "takeitem 35 1369:giveitem 36:giveitem 37:text 846\n", "Called From": "Textblock #844" },
+          { "Number": 211, "LinkTo": 0, "Action": "put keys in device:takeitem 26 467:message 468:takeitem 27 469:message 470:giveitem 38\n", "Called From": "Room 7/1281" },
+          { "Number": 212, "LinkTo": 0, "Action": "copy signet:checkitem 10 5:takeitem 28 6:giveitem 39\n", "Called From": "Room 7/1282" },
           { "Number": 500, "LinkTo": 0, "Action": "giveitem 10\n", "Called From": "Spell #200" },
           { "Number": 610, "LinkTo": 0, "Action": "give blade:takeitem 20 999:giveitem 22\n", "Called From": "Monster #300" },
           { "Number": 620, "LinkTo": 0, "Action": "insert fang:checkability 126 4:giveitem 21:giveability 126 5\n", "Called From": "Room 3/606" },
@@ -250,6 +270,54 @@ public sealed class ItemSourceIndexTests : IDisposable
         // The message its conditions print when they fail, once, from both lines.
         Assert.Equal(new[] { 3075 }, remind.RefusalMessages);
         Assert.Equal(new[] { new RoomKey(17, 1790) }, index.GiverMonsterRoomsOf(304));
+    }
+
+    // Report paradigm-20261008-175938: the glowing key for the dark tower was read
+    // as having no source. It has one, for a character carrying the opal brooch:
+    // the shopkeeper's `brooch` keyword takes that and nothing else.
+    [Fact]
+    public void GiversOf_PlainTrade_NamesTheOneItemItTakes()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        ItemGiver key = Assert.Single(index.GiversOf(34));
+        Assert.Equal("sleazy shopkeeper", key.Name);
+        Assert.Equal("brooch", key.Keyword);
+        Assert.False(key.Deterministic);
+        Assert.Equal(33, key.TradeItemId);
+        Assert.Equal("turn in opal brooch", key.Requirement);
+        Assert.Equal(new[] { new RoomKey(8, 486) }, index.GiverMonsterRoomsOf(305));
+
+        // One hand-in, two keys back.
+        Assert.Equal(35, Assert.Single(index.GiversOf(36)).TradeItemId);
+        ItemGiver moldy = Assert.Single(index.GiversOf(37));
+        Assert.Equal("orb", moldy.Keyword);
+        Assert.Equal(35, moldy.TradeItemId);
+
+        // The single-line form carries its own keyword.
+        Assert.Equal(20, Assert.Single(index.GiversOf(22)).TradeItemId);
+
+        // Worth walking to only with the brooch in hand.
+        Assert.True(key.IsReliableFor(id => id == 33));
+        Assert.False(key.IsReliableFor(id => false));
+    }
+
+    // A give that asks anything more of the character than the one item is not a
+    // trade to walk into: a quest step, a second item taken, an item checked for.
+    [Fact]
+    public void GiversOf_TurnInWithOtherConditions_IsNoPlainTrade()
+    {
+        ItemSourceIndex index = NewIndex(NewCache());
+
+        Assert.Equal(0, Assert.Single(index.GiversOf(29), g => g.Keyword == "gift").TradeItemId);
+        Assert.Equal(0, Assert.Single(index.GiversOf(38)).TradeItemId);
+        Assert.Equal(0, Assert.Single(index.GiversOf(39)).TradeItemId);
+        // A free give takes nothing, and is reliable with an empty pack.
+        ItemGiver orb = Assert.Single(index.GiversOf(25));
+        Assert.Equal(0, orb.TradeItemId);
+        Assert.True(orb.IsReliableFor(id => false));
+        // The quest turn-in stays out however full the pack.
+        Assert.False(Assert.Single(index.GiversOf(29), g => g.Keyword == "gift").IsReliableFor(id => true));
     }
 
     // An export that lists "Room(<command>) <rooms>" on the item names every room a
