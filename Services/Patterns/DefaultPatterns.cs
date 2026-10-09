@@ -1090,6 +1090,8 @@ public static class DefaultPatterns
             @"^You have progressed too far to use the training provided here\.");
         yield return new RegexPattern(KnownPatterns.TrainNoMoney,
             @"^You do not have the money required for your training\.");
+        yield return new RegexPattern(KnownPatterns.TrainStatsAltered,
+            @"^Your stats are unnaturally altered!\s+You may not train stats now\.");
     }
 
 }

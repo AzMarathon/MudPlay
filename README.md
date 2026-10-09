@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.153.20**
+> **Version 3.154.1**
 > - A pick the game answers with `Your command had no effect.`, or an open answered `That is not a door or a gate!` (no door that way here), ends the door attempt and re-routes, as a bash already did
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
