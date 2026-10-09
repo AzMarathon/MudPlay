@@ -319,7 +319,7 @@ public static class QuestCrawler
                 switch (p[0].ToLowerInvariant())
                 {
                     case "minlevel" when p.Length >= 2 && int.TryParse(p[1], out int ml):
-                        minLevel = ml; // last wins, matching ParseChain
+                        minLevel = HighestGate(minLevel, ml);
                         break;
                     case "giveability" or "testability" or "checkability"
                         when p.Length >= 3 && int.TryParse(p[1], out int gf) && int.TryParse(p[2], out int gs):
@@ -548,7 +548,7 @@ public static class QuestCrawler
                     raceIds.Add(rid);
                     break;
                 case "minlevel" when p.Length >= 2 && int.TryParse(p[1], out int ml):
-                    minLevel = ml;
+                    minLevel = HighestGate(minLevel, ml);
                     break;
                 case "giveitem" when p.Length >= 2 && int.TryParse(p[1], out int gi):
                     giveItems.Add(gi);
@@ -837,7 +837,7 @@ public static class QuestCrawler
                     raceIds.Add(rid);
                     break;
                 case "minlevel" when p.Length >= 2 && int.TryParse(p[1], out int ml):
-                    minLevel = ml; // last wins: the per-class gate follows any earlier intro gate
+                    minLevel = HighestGate(minLevel, ml);
                     break;
                 case "giveitem" when p.Length >= 2 && int.TryParse(p[1], out int gi):
                     giveItems.Add(gi);
@@ -854,6 +854,15 @@ public static class QuestCrawler
         if (flag is null) return null;
         return new ParsedChain(flag.Value, giveStep, minLevel, classIds, raceIds, bonuses, giveItems, takeItems, exp);
     }
+
+    // The level a chain with more than one `minlevel` asks for: the highest of them.
+    // MajorMUD runs a chain left to right and stops it at the first `minlevel` the
+    // character is below, so every gate has to be met to reach the grant and a later,
+    // lower number never relaxes an earlier one. Paradigm's Mystic Meditate chain reads
+    // `minlevel 27 … minlevel 23` and the game refuses below 27; Stock's Meditate chains
+    // read `minlevel 20 … minlevel 27`, an intro gate under the class's own.
+    // GAME_MECHANICS "Quest level gates".
+    private static int HighestGate(int? soFar, int gate) => soFar is int g && g > gate ? g : gate;
 
     // Scratch record for one parsed chain; never escapes the crawl.
     private sealed record ParsedChain(

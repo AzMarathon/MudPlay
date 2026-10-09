@@ -4601,11 +4601,17 @@ Among protectable hazards, a further split governs whether the navigator may off
     picker's human-readable "(ask …)" promise keeps the full name.
 
 ### Room-command refusals
-*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
+*Status: [OBSERVED] 2026-09-28, monster conditions 2026-10-07, level conditions 2026-10-08 (Stock 1.11p `wccmmud.dll` textblock interpreter, `wccmsg2` message table, imported TBInfo); NPCs counting on Paradigm CONFIRMED 2026-10-07 (user) · Realm: Stock — Paradigm not recorded except where a bullet says so; the client matches these lines on both realms by the user's call 2026-09-28*
 
 - **A condition in a room command or `ask` keyword line names the message it prints when it fails.** In `minlevel 10 3246`, `nomonsters 503` or `checkitem 570 657`, the last number is a **message number**, not a textblock.
   - The directives that take one: `minlevel`, `maxlevel`, `goodaligned`, `evilaligned`, `checkitem`, `failitem`, `roomitem`, `failroomitem`, `needmonster`, `price`, `nomonsters`, `monsters`.
   - On failure the engine prints the message's line 1 to you and line 2 to the room (@0x46f360), and the rest of that line doesn't run. With no message number the refusal is silent.
+- **`minlevel <N> [msg]` passes at level `N` or higher, and every one in a line is enforced** *([OBSERVED] 2026-10-08, `_perform_matched_action` @0x470209 in the Stock 1.11p `wccmmud.dll`, the `minlevel` branch at 0x470df4)*.
+  - The interpreter takes a line one `:` step at a time. At a `minlevel` step it compares the character's level (the word at player+0x94) with `N` and goes on to the next step when the level is `N` or more (`cmp edx,[ebp-0x8]` / `jge 0x471a07`). Below `N` it prints the message if one is named, drops the rest of the line and returns 2.
+  - It keeps nothing from one step to the next, so a line with two `minlevel` steps checks both, and running the whole line takes the **highest** of them. A later, lower number never relaxes an earlier one.
+  - `maxlevel <N> [msg]` is the mirror: it passes at level `N` or lower (0x470e94).
+  - A staged hand-out uses it: textblock `9630` on Paradigm 1.9.1 is `class 5:message 1432:message 1422:random 9645:minlevel 40:message 2622:giveitem 2011:minlevel 41:message 2622:giveitem 1877:minlevel 47:message 2622:giveitem 1878:message 2622`, so each level bracket stops one gift further along (Stock 1.11p has the same block with gates `41` and `47`).
+  - The level a quest chain asks for is in *Quests → Quest level gates*.
 - **A refused command never redisplays the room**, the same as a refused move (see *Refused ("bonked") moves*).
 - **Three conditions look at the monsters in the room** *([OBSERVED] 2026-10-07, `_perform_matched_action` in the Stock 1.11p `wccmmud.dll`)*. Each reads the room's 15 monster slots:
   - **`nomonsters [msg]` passes only when every slot is empty.** Any monster record in the room refuses the line: an NPC or a non-hostile monster counts the same as a hostile. Players never count.
@@ -6320,6 +6326,20 @@ How MajorMUD quests are structured in the game data (kill steps, NPC dialogue st
 
 **Client use:**
 - `QuestCrawler` counts each `addability` to a non-flag code as a stat reward, and `CompletedQuestBonuses` adds them all up — right for both realms. Every `giveability` target is read as a quest flag, never summed as a stat, which matches Stock's keep-the-highest rule.
+
+### Quest level gates
+*Status: Stock [OBSERVED] 2026-10-08 (`_perform_matched_action` in the 1.11p `wccmmud.dll`; TBInfo of `data-Paradigm-1.9.1` and `data-v1.11p`); the same rule on Paradigm per the user 2026-10-08, and report `paradigm-20260925-123004` · Realm: both*
+
+- **A quest chain asks for the highest `minlevel` in it.** The engine checks each `minlevel` when the chain reaches it and stops the chain at the first one the character is below, so every gate ahead of the `giveability` has to be met (the interpreter rule is in *Movement & navigation → Room-command refusals*).
+- **Meditate (flag `187`, textblock `9046`) carries two gates in each class's chain.**
+  - **Paradigm 1.9.1:** the two numbers match for every class (`20` for classes 5 / 12 / 13, `23` for 4 / 6 / 10 / 11, `27` for 3 / 9 / 14) except class 15 (Mystic): `check class:class 15:minlevel 27 2614:takeitem 1351:message 2639:message 2640:addexp 5000:minlevel 23:failability 187:giveability 187 1:failitem 3314:giveitem 3314:text 9026`. A Mystic needs level **27**. Report `paradigm-20260925-123004` (a level-23 Mystic) says the same: it "isn't until 27"; the capture holds no refusal line.
+  - **Stock 1.11p:** every class's chain opens with `minlevel 20 2614` and the second gate is the class's own (`20`, `23` or `27`; there is no class 15), e.g. `check class:class 3:minlevel 20 2614:takeitem 1351:message 2639:message 2640:addexp 5000:minlevel 27:failability 187:giveability 187 1:text 9026`. The class's own number is never the lower one in any of the ten chains.
+  - Message `2614` in the Stock table is `Dhelvanen shakes his head. "This is not what I requested."`. The second gate names no message, so it refuses silently.
+  - `[NEEDS CONFIRMATION]` On Stock the steps between the two gates (`takeitem 1351`, `addexp 5000`) have already run when the second gate refuses, and that branch gives nothing back. Does a class-3 character who hands the item over at level 20–26 really lose it and gain the exp without learning Meditate?
+- **In both imported sets no other chain that touches an ability flag holds two different `minlevel` numbers** *([OBSERVED] 2026-10-08, game data)*. The only other line with differing gates is the staged hand-out in textblock `9630`, which grants no flag.
+
+**Client use:**
+- `QuestCrawler.HighestGate`: `ParseChain`, `ParseValueChain` and `DiscoverTierLadders` read a chain's gate as its highest `minlevel`. Taking the last number announced Meditate to a Paradigm class-15 character at level 23 (report `paradigm-20260925-123004`).
 
 ### Quest kill steps & monster placement
 *Status: CONFIRMED 2026-07-16 (user)*
