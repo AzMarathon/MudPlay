@@ -493,6 +493,87 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(0, r.UnknownDealt);
     }
 
+    // The razor boar's spines (report paradigm-20261009-023430): the party member's
+    // three points of it sat in the round's "unknown" row, and ours had no attacker.
+    [Fact]
+    public void SpinesOnUs_AreTheMonstersWeHit()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("You slash goblin for 11 damage!");
+        h.Feed("You are jabbed by spines for 1 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(1, Row(r, "goblin").Dealt);
+        Assert.Equal(1, Row(r, DamageLineAttributor.Self).Taken);
+        Assert.Equal(0, r.UnknownDealt);
+    }
+
+    [Fact]
+    public void SpinesOnAPartyMember_AreTheMonstersTheyHit()
+    {
+        using Harness h = new();
+        h.State.InCombat = true;
+        h.Feed("Bob jumpkicks goblin for 94 damage!");
+        h.Feed("Bob is jabbed by spines for 1 damage!");
+        h.Feed("Bob jumpkicks goblin for 74 damage!");
+        h.Feed("Bob is jabbed by spines for 2 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(3, Row(r, "goblin").Dealt);
+        Assert.Equal(3, Row(r, "Bob").Taken);
+        Assert.Equal(0, r.UnknownDealt);
+    }
+
+    // A shield whose wording the client has never seen: the game data says the monster
+    // just hit carries one, and the line directly follows that hit.
+    [Theory]
+    [InlineData("You slash goblin for 11 damage!", "You are lashed by thorns for 3 damage!", DamageLineAttributor.Self)]
+    [InlineData("Bob jumpkicks goblin for 94 damage!", "Bob is lashed by thorns for 3 damage!", "Bob")]
+    public void AnUnknownShieldWording_OnAMonsterTheDataGivesAShield_IsThatMonsters(
+        string hit, string struckBack, string victim)
+    {
+        using Harness h = new();
+        h.Tracker.SetDamageShieldCheck(number => number == 2);   // the goblin
+        h.State.InCombat = true;
+        h.Feed(hit);
+        h.Feed(struckBack);
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(3, Row(r, "goblin").Dealt);
+        Assert.Equal(3, Row(r, victim).Taken);
+        Assert.Equal(0, r.UnknownDealt);
+    }
+
+    [Fact]
+    public void AnUnknownWording_OnAMonsterWithNoShield_IsNotItsDoing()
+    {
+        using Harness h = new();
+        h.Tracker.SetDamageShieldCheck(number => number == 2);   // the goblin, not the rat
+        h.State.InCombat = true;
+        h.Feed("You slash large giant rat for 11 damage!");
+        h.Feed("You are poisoned for 5 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(0, Row(r, "large giant rat").Dealt);
+        Assert.Equal(5, Row(r, DamageLineAttributor.Self).Taken);
+    }
+
+    [Fact]
+    public void AnUnknownWording_NotDirectlyAfterTheHit_IsNotTheShields()
+    {
+        using Harness h = new();
+        h.Tracker.SetDamageShieldCheck(number => number == 2);
+        h.State.InCombat = true;
+        h.Feed("You slash goblin for 11 damage!");
+        h.Feed("The goblin lunges at you, but you dodge out of the way!");
+        h.Feed("You are poisoned for 5 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(0, Row(r, "goblin").Dealt);
+        Assert.Equal(5, Row(r, DamageLineAttributor.Self).Taken);
+    }
+
     // Only a shield's own wording counts — someone's unnamed spell right after the
     // monster's hit isn't ours.
     [Fact]

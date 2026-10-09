@@ -1352,6 +1352,11 @@ Sources that feed a character's effective AC beyond the item/race/class/quest `+
   - 2879 `Your blades slash %s for %d damage!` / `The blades slash you for %d damage!` / `The blades slash %s for %d damage!`
   - 2078 `The collar spikes stab %s …`, 3050 `The armour spikes stabs %s …`, 3051 `The shield spike stabs %s …`, 3140 `The shield spikes stab %s …` (each `… for %d damage!`, `you` in the struck attacker's view)
   - 3136 `You counterstrike %s for %d damage!` / `A counterstrike at you does %d damage!` / `A counterstrike at %s does %d damage!`
+  - 1703 (no wearer's line) / `You are burned for %d damage!` / `%s is burned for %s damage!` *([OBSERVED] 2026-10-09, Stock 1.11p message table; it is the shield message of the `vision`, monster #956, in both imported sets)*
+- **Monsters carry it too, and the strike-back is the monster's damage** *([OBSERVED] 2026-10-09, report `paradigm-20261009-023430`, Paradigm; game data of `data-Paradigm-1.9.1` and `data-v1.11p`)*. A player who hits a monster with ability `137` gets the message's struck-attacker line straight after their own hit line, and the rest of the room gets the third line: `You surprise hack fierce razor boar for 202 damage!` then `You are jabbed by spines for 1 damage!`; a party member's `<Name> jumpkicks fierce razor boar for 94 damage!` then `<Name> is jabbed by spines for 1 damage!`.
+  - That is the razor boar's message, `3837` (monster #2312, Paradigm). Its wearer's line has not been seen.
+  - **Paradigm monsters and spells with a shield message whose text is not recorded** (the numbers are not in the Stock message table): `8761` Harbinger of the Void (#1225), `9242` spineshell (#2622), `9855` jagged monstrosity (#2765), and the spells exalted aegis (#5446, `8957`), golden armour (#5653, `9663`) and berserk (#5780, `10135`). On Stock 1.11p the sorcerer (#799) has `8535`, also not in the table.
+  - The other monsters with the ability use the messages listed in this topic: `1446` (sorcerer on Paradigm, blue demonling #952, green sphere #1082), `3136` (Enigma Lord #921 and others), `3050` (the spiked juggernauts and the spiked overlord), `1703` (vision).
 - **The line doesn't say whose shield it was** (the wearer and a bystander see the same `<attacker> is scorched …`), but it follows the hit that set it off.
 
 **Client use:**

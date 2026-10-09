@@ -1,8 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.8**
-> - Players Seen: double-click a row to open the map on the room that player was last seen in, flashed green like an `@where` reply
+> **Version 3.158.9**
+> - Round totals: a monster's damage shield striking back (the razor boar's spines) is credited to that monster, not to "unknown" or to no attacker
+> - A strike-back in wording the client hasn't seen is still credited when the game data gives the monster just hit a damage shield
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
