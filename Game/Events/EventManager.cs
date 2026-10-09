@@ -725,24 +725,11 @@ public sealed class EventManager : IDisposable
         _ticker = null;
     }
 
-    // Split a Command action's text on ^M AND ';' boundaries — both denote a CR
-    // break (matching the existing Macro / Trigger / Alias multi-step splitter).
-    // An empty chunk between two consecutive separators is dropped so "look;;sit"
-    // sends two lines rather than three. Internal so tests can assert the splitter
-    // contract without firing a real event end-to-end.
-    internal static IEnumerable<string> SplitCommand(string text)
-    {
-        if (string.IsNullOrEmpty(text)) yield break;
-        // ^M is the literal two-character sequence ^ + M, not the
-        // control character. Replace first so the subsequent split on
-        // ';' handles both consistently.
-        string normalised = text.Replace("^M", ";", StringComparison.Ordinal);
-        foreach (string part in normalised.Split(';', StringSplitOptions.None))
-        {
-            string trimmed = part.Trim();
-            if (trimmed.Length > 0) yield return trimmed;
-        }
-    }
+    // A Command action's text split into the lines it sends, by the same rule macros,
+    // triggers and aliases use. Internal so tests can assert the contract without
+    // firing a real event end-to-end.
+    internal static IEnumerable<string> SplitCommand(string text) =>
+        MacroStore.SplitCommandSteps(text);
 
     // ----- Reconciliation -------------------------------------------
 

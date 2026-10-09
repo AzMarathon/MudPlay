@@ -106,11 +106,11 @@ public sealed class HangupHandlerTests
     }
 
     // The hang-up penalty line is asked for once per @hangup actually sent, and
-    // not for one the Disable hangups switch dropped.
+    // not for one with no exit command to send.
     [Fact]
     public void Hangup_AsksForThePenaltyLine_OnlyWhenTheExitWentOut()
     {
-        var (engine, handler, players, wire, _, _) = Setup();
+        var (engine, handler, players, wire, commands, _) = Setup();
         SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
         int asked = 0;
         handler.SetHangupPenaltyLog(() => { Assert.Single(wire); asked++; });
@@ -118,7 +118,7 @@ public sealed class HangupHandlerTests
         engine.DispatchForTests(Telepath("Trusted", "@hangup"));
         Assert.Equal(1, asked);
 
-        handler.SetHangupsDisabledCheck(() => true);
+        commands.ExitCommand = "";
         engine.DispatchForTests(Telepath("Trusted", "@hangup"));
         Assert.Equal(1, asked);
         Assert.Single(wire);
@@ -184,38 +184,5 @@ public sealed class HangupHandlerTests
         var (disc, supp) = signal.PeekForTests();
         Assert.True(disc);
         Assert.True(supp);
-    }
-
-    // ===== Master "Disable hangups" kill-switch =========================
-
-    [Fact]
-    public void Hangup_WhenHangupsDisabled_SendsNothingAndRaisesNoSignal()
-    {
-        // Kill-switch on → an authorised @hangup is a silent no-op: no
-        // wire write, and crucially no HangupSignal, so the next
-        // reconnect/login classification stays untouched.
-        var (engine, handler, players, wire, _, signal) = Setup();
-        handler.SetHangupsDisabledCheck(() => true);
-        SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
-
-        engine.DispatchForTests(Telepath("Trusted", "@hangup"));
-
-        Assert.Empty(wire);
-        var (disc, supp) = signal.PeekForTests();
-        Assert.False(disc);
-        Assert.False(supp);
-    }
-
-    [Fact]
-    public void Hangup_WhenCheckReturnsFalse_FiresNormally()
-    {
-        // Kill-switch off → behaves exactly as the unguarded path.
-        var (engine, handler, players, wire, _, _) = Setup();
-        handler.SetHangupsDisabledCheck(() => false);
-        SeedPlayer(players, "Trusted", PlayerRemoteControls.HangupDisconnect);
-
-        engine.DispatchForTests(Telepath("Trusted", "@hangup"));
-
-        Assert.Equal("=x\r", Encoding.Latin1.GetString(Assert.Single(wire)));
     }
 }
