@@ -627,20 +627,7 @@ public sealed class RoomTracker
                 "Entered a dark room — no name/exits shown; position inferred from moves, combat from attack lines.");
         IsInDarkRoom = true;
 
-        // We asked for the room a cast-on-walk teleport put us in, and this is the
-        // answer: it is too dark to show. Not a move arriving. An engine's next
-        // step went out right behind the asking, and read as that step this line
-        // put us a room ahead of the character from here to the next lit room.
-        if (_castLandingUnseen is { } unseen)
-        {
-            _castLandingUnseen = null;
-            if (when - unseen.At <= CastTransitWindow)
-            {
-                _log?.Log(LogSeverity.Info, "RoomTracker",
-                    $"The room asked for after a cast-on-walk teleport ({unseen.Booked}) is too dark to show.");
-                return;
-            }
-        }
+        if (TakeCastLandingLine(when, "is too dark to show")) return;
 
         // Only a pending move can be confirmed by the dark line. A dark display
         // while Confirmed (a passive re-render, standing still) or with nothing
@@ -680,11 +667,9 @@ public sealed class RoomTracker
             bool asked = AskedForCastStep(head);
             if (sentOn) CastCrossingStarted?.Invoke(exit.Landing);
             EndCastCrossing();
-            // The landing isn't asked for off a dark line: the answer would as a
-            // rule be another dark line, which says nothing about the landing and
-            // reads like the next step arriving. If the wait for a room had already
-            // run out, that asking's answer is still to come and is waited for.
-            if (sentOn && asked) BookCastLandingUnseen(expected, in exit, when, alreadyAsked: true);
+            // This line stood for the room passed through; the landing's display
+            // follows, lit or as another dark line.
+            if (sentOn) BookCastLanding(expected, in exit, when, alreadyAsked: asked);
         }
         string moveLabel = DescribeMove(head);
         RoomConfidence target = _pending.IsEmpty
@@ -724,6 +709,8 @@ public sealed class RoomTracker
             }
             // window expired — fall through and treat as our own move
         }
+
+        if (TakeCastLandingLine(when, "is shown to a blind character")) return;
 
         // Only a pending move can be advanced by the blind line. A blind echo
         // while Confirmed (a passive re-render, standing still) or with nothing
@@ -775,8 +762,13 @@ public sealed class RoomTracker
         State.SuspectStrikes = 0;
         if (exit.CastLandings is not null)
         {
-            if (expected.Key != exit.Target) CastCrossingStarted?.Invoke(exit.Landing);
+            bool sentOn = expected.Key != exit.Target;
+            bool asked = AskedForCastStep(head);
+            if (sentOn) CastCrossingStarted?.Invoke(exit.Landing);
             EndCastCrossing();
+            // As in the dark: this line stood for the room passed through, and the
+            // landing's follows.
+            if (sentOn) BookCastLanding(expected, in exit, when, alreadyAsked: asked);
         }
         string moveLabel = DescribeMove(head);
         RoomConfidence target = _pending.IsEmpty
@@ -814,34 +806,37 @@ public sealed class RoomTracker
     }
 
     // ----- Crossing a cast-on-walk teleport ---------------------------
-    // The game shows such a step as one room: the room the exit names. It puts us
-    // there, displays it, and only then casts the exit's spell, whose teleport
-    // prints nothing (GAME_MECHANICS "Jungle to the Lost City: the Vine Bridge trap
-    // and the golden idol"). By the time that display is read we already stand at
-    // the landing, and what it lists belongs to a room we have left. So the landing
-    // is booked off it at once, by what we hold, and the landing's own contents are
-    // read from a display we ask for (a bare Enter), once per crossing. Nothing
-    // waits on that display coming back.
+    // The game shows such a step as two rooms: the room the exit names, which it
+    // puts us in and displays before casting the exit's spell, and then the landing
+    // the spell teleports us to (GAME_MECHANICS "Jungle to the Lost City: the Vine
+    // Bridge trap and the golden idol"). By the time the first display is read we
+    // already stand at the landing, and what it lists belongs to a room we have
+    // left. So the landing is booked off it at once, by what we hold, which lets an
+    // engine step on without waiting; and the display that follows is the
+    // landing's own, held against the booking and read for what is in the room.
+    // Only when that display doesn't come is the room asked for (a bare Enter).
 
     // How long after such a step goes out the next display is believed to be the
-    // room passed through, and how long a landing booked unseen waits to be checked
-    // against a display. A step the game swallowed is never answered, and must not
-    // go on hiding every later display of the room we are still in.
+    // room passed through, and how long the answer to an asking is waited for. A
+    // step the game swallowed is never answered, and must not go on hiding every
+    // later display of the room we are still in.
     private static readonly TimeSpan CastTransitWindow = TimeSpan.FromMilliseconds(LookSuppressWindowMs);
 
-    // How long a step through such an exit may go with no room shown before the
-    // room is asked for. A follower dragged through may be shown none at all.
+    // How long a step through such an exit may go with no room shown, and a
+    // landing booked off the room passed through with no display of its own,
+    // before the room is asked for. A follower dragged through may be shown none.
     private static readonly TimeSpan CastDisplayWait = TimeSpan.FromMilliseconds(1500);
     private IDisposable? _castDisplayTimer;
     private DateTimeOffset? _castDisplayWaitFor;
+    private IDisposable? _castLandingTimer;
 
     // The pending move no room was shown for in time, and when the room was asked
     // for on its account.
     private (DateTimeOffset SentAt, DateTimeOffset At)? _castAsked;
 
-    // A landing booked without having been shown, with the room asked for and the
-    // answer still to come: the next display, or dark line, is that answer
-    // (VerifyCastLanding).
+    // A landing booked off the room passed through, its own display still to come:
+    // the next display, dark line or blind line is the landing's
+    // (VerifyCastLanding, TakeCastLandingLine).
     private (RoomKey Booked, RoomKey Transit, IReadOnlyList<(int ItemId, RoomKey Room)> Landings, DateTimeOffset At)? _castLandingUnseen;
 
     // The display being reconciled was of the room passed through, not of the room
@@ -851,8 +846,8 @@ public sealed class RoomTracker
     private Func<TimeSpan, Action, IDisposable>? _scheduleDelay;
     private Action? _requestRedisplay;
 
-    // One-shot timer for the wait above. Wired by AppServices; unset in tests that
-    // don't exercise the wait, where it then never runs out.
+    // One-shot timer for the waits above. Wired by AppServices; unset in tests that
+    // don't exercise them, where they then never run out.
     public void SetDelayScheduler(Func<TimeSpan, Action, IDisposable> schedule)
     {
         ArgumentNullException.ThrowIfNull(schedule);
@@ -867,8 +862,8 @@ public sealed class RoomTracker
         _requestRedisplay = redisplay;
     }
 
-    // Diagnostics: a cast-on-walk landing is booked, its room was asked for, and
-    // no answer has come yet.
+    // Diagnostics: a cast-on-walk landing is booked and its own display hasn't
+    // come yet.
     public bool CastLandingAwaitsDisplay => _castLandingUnseen is not null;
 
     // A step through an exit whose spell teleports everyone on by themselves is
@@ -947,24 +942,55 @@ public sealed class RoomTracker
     // Test seam — whether the wait for a room is running.
     internal bool CastDisplayWaitArmedForTests => _castDisplayTimer is not null;
 
-    // We stand in a landing nothing has shown us. Ask for it, so its occupants and
-    // items are read, and hold the answer against the booking. Called before the
-    // room change is raised: an engine's next step goes out on that, and the Enter
-    // has to reach the game ahead of it to be answered with this room. Not asked
-    // twice (alreadyAsked: the wait for a room ran out first, and that answer is
-    // still to come), and not at all with another move already queued, which the
-    // answer would come after.
-    private void BookCastLandingUnseen(Room landing, in RoomExit exit, DateTimeOffset when, bool alreadyAsked)
+    // We stand in a landing booked off the room passed through. The game shows the
+    // landing next; until it has, that display is owed, and when it doesn't come in
+    // time the room is asked for instead. Not when the wait for a room had already
+    // run out on this step (alreadyAsked): that asking's answer is still to come.
+    private void BookCastLanding(Room landing, in RoomExit exit, DateTimeOffset when, bool alreadyAsked)
     {
-        bool answerDue = alreadyAsked;
-        if (!alreadyAsked && _pending.IsEmpty && _requestRedisplay is { } ask)
+        _castLandingUnseen = (landing.Key, exit.Target, exit.CastLandings!, when);
+        _castLandingTimer?.Dispose();
+        _castLandingTimer = alreadyAsked ? null : _scheduleDelay?.Invoke(CastDisplayWait, OnCastLandingOverdue);
+    }
+
+    private void EndCastLandingWait()
+    {
+        _castLandingUnseen = null;
+        _castLandingTimer?.Dispose();
+        _castLandingTimer = null;
+    }
+
+    // The landing's own display hasn't come. Standing there still, ask for the room
+    // once, so its occupants and items are read and the booking is checked. Moved
+    // on already (an engine steps as soon as the landing is booked), there is
+    // nothing left to ask about, and the next display is the next step's.
+    private void OnCastLandingOverdue()
+    {
+        _castLandingTimer = null;
+        if (_castLandingUnseen is not { } unseen) return;
+        if (!_pending.IsEmpty || State.CurrentRoom?.Key != unseen.Booked || _requestRedisplay is not { } ask)
         {
-            _log?.Log(LogSeverity.Info, "RoomTracker",
-                $"Sent on to {landing.Key} by the exit's spell without that room being shown — asking for the room.");
-            ask();
-            answerDue = true;
+            _castLandingUnseen = null;
+            return;
         }
-        if (answerDue) _castLandingUnseen = (landing.Key, exit.Target, exit.CastLandings!, when);
+        _castLandingUnseen = unseen with { At = DateTimeOffset.UtcNow };
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"No display of {unseen.Booked} {CastDisplayWait.TotalSeconds:0.#}s after the exit's spell sent us there — asking for the room.");
+        ask();
+    }
+
+    // A dark-room or blind line while a landing's display is owed is that display:
+    // the landing can't be seen. Not a move arriving. An engine's next step went
+    // out as soon as the landing was booked, and read as that step the line put the
+    // tracker a room ahead of the character from there to the next room shown.
+    private bool TakeCastLandingLine(DateTimeOffset when, string what)
+    {
+        if (_castLandingUnseen is not { } unseen) return false;
+        EndCastLandingWait();
+        if (when - unseen.At > CastTransitWindow) return false;
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"The landing of a cast-on-walk teleport ({unseen.Booked}) {what}.");
+        return true;
     }
 
     // A move is announced behind a follower's drag through a cast-on-walk exit that
@@ -991,15 +1017,17 @@ public sealed class RoomTracker
             $"drag {DescribeMove(head)} settled where its spell leaves us ({basis}): dragged on with no room shown for it");
     }
 
-    // The first display after a landing was booked unseen: as a rule the one we
-    // asked for. Fitting the booked room, it bears the booking out. Fitting another
-    // of the exit's landings, or only the room passed through, it says the booking
-    // was wrong (an inventory read gone stale, a spell that sent us nowhere), and
-    // we are where it shows.
+    // The first display after a landing was booked: the landing's own, as the game
+    // shows it or as we asked for it. Fitting the booked room, it bears the booking
+    // out. Fitting another of the exit's landings, or only the room passed through,
+    // it says the booking was wrong (an inventory read gone stale, a spell that
+    // sent us nowhere), and we are where it shows. An engine's next step may be in
+    // flight by now; a display that fits the booked room is then the room that
+    // step is leaving, and is read as that.
     private void VerifyCastLanding(RoomObservation observation, DateTimeOffset when)
     {
         if (_castLandingUnseen is not { } unseen) return;
-        _castLandingUnseen = null;
+        EndCastLandingWait();
         if (when - unseen.At > CastTransitWindow) return;
         if (State.CurrentRoom is not { } booked || booked.Key != unseen.Booked) return;
 
@@ -1628,13 +1656,15 @@ public sealed class RoomTracker
             string confirmed = $"move {moveLabel} confirmed";
             string? castBasis = null;
 
-            // A cast-on-walk teleport is shown as the exit's own target and nothing
-            // more: we are put there, shown it, and sent on in silence. The display
-            // that fits that room is the step's one display, and where it leaves us
-            // is the landing we hold the item for, booked here and now, even though
-            // the display may read exactly like a landing (the golden idol's
-            // passage, where that room and both landings are the same one-exit
-            // room): its occupants aren't the landing's.
+            // A cast-on-walk teleport is shown as the exit's own target and then the
+            // landing: we are put in the first, shown it, sent on, and shown where
+            // we came out. The first display for the step that fits the exit's
+            // target is that room, and where it leaves us is the landing we hold
+            // the item for, booked here and now, even though the display may read
+            // exactly like a landing (the golden idol's passage, where that room
+            // and both landings are the same one-exit room): its occupants aren't
+            // the landing's. The landing's own display then finds the step off the
+            // queue and is read as the room we stand in.
             //
             // When no room was shown and we asked for one, what follows depends on
             // whose step it was. A drag's own display would have come with the line
@@ -1775,7 +1805,7 @@ public sealed class RoomTracker
                     if (bookedUnseen)
                     {
                         _bookedOffAnotherRoomsDisplay = true;
-                        BookCastLandingUnseen(expected, in exit, when, alreadyAsked: castAsked);
+                        BookCastLanding(expected, in exit, when, alreadyAsked: castAsked);
                     }
                 }
                 // Predicted-neighbour is a deduction — only strict (i.e.

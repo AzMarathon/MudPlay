@@ -1627,8 +1627,9 @@ public partial class MainWindowViewModel : ObservableObject
         // Paradigm position resolver — its `rm` re-sync ride the same
         // gate-wrapped pipeline so it can't land mid-password-prompt.
         AppServices.Current.ParadigmResync.SetWireSender(engineSend);
-        // The tracker asks the game to show the room a teleporting exit's spell
-        // put us in, which the game doesn't: a bare Enter, through the same gate.
+        // The tracker asks the game to show the room when a step through a
+        // teleporting exit wasn't followed by the displays the game owes it: a bare
+        // Enter, through the same gate.
         AppServices.Current.RoomTracker.SetRoomRedisplay(
             () => engineSend(System.Text.Encoding.Latin1.GetBytes("\r")));
         // Teleport-maze solver — its look-peeks + reshuffle moves ride the same
