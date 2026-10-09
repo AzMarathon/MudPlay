@@ -167,6 +167,9 @@ public sealed class PathItemGiveSourcesTests
             Assert.Equal("ask sleazy shopkeeper brooch", source.Command);
             Assert.Equal("sleazy shopkeeper, in trade for your opal brooch", source.GiverName);
             Assert.Equal(OpalBrooch, source.TakesItemId);
+            // His refusal (message 1368) ends the wait at once instead of after its window.
+            Assert.Equal(new[] { "When the brooch is not forthcoming, he spits in disgust and turns away!" },
+                source.RefusalLines);
         });
     }
 

@@ -27,6 +27,8 @@ internal static class GiveRefusalLines
         [1094] = "You do not have that.",
         [1114] = "Nothing happens.",
         [1182] = "You do not have that item.",
+        [1368] = "When the brooch is not forthcoming, he spits in disgust and turns away!",
+        [1369] = "The shopkeeper frowns in anger when you say you do not have the orb.",
         [1437] = "A suit of armour!",
         [1608] = "You do not have a pickaxe to mine with.",
         [1684] = "You do not have an obsidian talisman.",
