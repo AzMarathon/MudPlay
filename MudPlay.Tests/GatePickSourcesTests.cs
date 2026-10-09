@@ -150,5 +150,8 @@ public sealed class GatePickSourcesTests
         GatePickSources pick = s.Build(pickFetches: true, hazard, held);
         Assert.Equal("buy at Outfitter", pick.BuyOrTradeNote(Counter));
         Assert.Null(pick.BuyOrTradeNote(Raft));
+
+        // A pick that stops short fetches no counter either.
+        Assert.Null(s.Build(pickFetches: false, hazard).BuyOrTradeNote(Counter));
     }
 }

@@ -68,7 +68,7 @@ public sealed class GatePickSources
 
             bool isKey = req.Kind == RouteRequirementKind.DoorKey;
             bool sourced = req.Kind == RouteRequirementKind.HazardProtection
-                ? flaggedAutoObtain(id)
+                ? pickFetches && flaggedAutoObtain(id)
                 : fetched.Contains(id);
 
             if (sourced)
