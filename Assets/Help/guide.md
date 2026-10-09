@@ -1788,13 +1788,34 @@ The **Players** table also has a **Relationship** column, and a player's edit di
 - **Relationship** — how you stand with that player on this realm: **Neutral** (the default for everyone: left alone until they attack you, which makes them an Enemy), **Friend** (never attacked) or **Enemy** (the PvP response applies on sight). It is saved with the realm's player list, so every character you play on that realm shares it, and a Friend or Enemy is never removed by the stale-player cleanup.
 - **PvP response** — what to do about that player when they are an Enemy. *Use the PvP settings* follows the general response; any other choice (hang up, flee then hang up, flee, attack, chase and attack) replaces it for that one player.
 
-The column is blank for a Neutral player, so the ones you've marked stand out. So far they decide whose presence holds your room attacks on a PvP realm, and a Neutral who attacks you is moved to Enemy for you (see *Room attacks and other players (PvP realms)* under Combat). What happens next is set on Settings → PvP. If you saved a column layout for the Players table before this release, use **Columns ▾ → Reset to defaults** to see the new column.
+The column is blank for a Neutral player, so the ones you've marked stand out. So far they decide whose presence holds your room attacks on a PvP realm, and a Neutral who attacks you is moved to Enemy for you (see *Room attacks and other players (PvP realms)* under Combat). What happens next is set on Settings → PvP.
 
 A player's **class** is filled in from wherever the game states it: the party list, the **top** list (run `top` and every listed player you already have a record for gets their class), and `look`. Failing those it is worked out from their title on `who` when only one class uses that title.
 
 The **Monsters** table lists only the monsters that can actually be met in the game. The ones the game data marks *out of play* — sysop-only NPCs, unused or test monsters (about 70 in the Paradigm set, such as the extra copies of *dark cleric* or *guardsman* that no room ever spawns) — are not here; they are in the **Unobtainable** table instead, so a name that appears twice in Monsters is two real spawns.
 
 The **Unobtainable** table collects everything the game data marks out of play, **Items** and **Monsters** alike, read-only. It also holds any **monster that can never spawn** even though the data marks it in play: one that isn't placed, isn't in a lair, isn't summoned by anything, and is only listed under rooms that have a different NPC. The game data can't show which rooms really skip their listed spawns, so this is a careful guess; in the known data sets it catches only *Cygani*, listed under Aiken's Magic Shoppe, where the Stock game files confirm the shop only ever spawns Aiken. Map room tooltips and room panels leave out anything on this list, so they only show monsters you can actually meet. Its **Kind** column says which table a row came from (the two number ranges overlap, so read the ID together with the Kind), and **Reason** says why it's here; the item columns (type, slot, damage, price…) fill in for items and **HP / Exp / Avg Damage / Alignment** for monsters. The Item Finder skips the same items.
+
+The **Quest Flags** table lists every script line in the game data that touches a quest flag (an ability number the game uses to keep a character's place in a quest), one row per line. **Flag** and **Name** say which flag; **Relationship** says what the line does with it (*Grants*, *Advances*, *Requires*, *Tests*, *Gate (must not have)*, *Clears*) and **Step** the value involved. Then come the columns that say how to get there:
+
+- **Command** — how the line is set off, when the data shows it: the room command to type (`throw egg`), the keyword to ask an NPC (`ask old man phoenix`, with the NPC's other keywords for the same reply in brackets), or `kill <monster>` when the line runs off that monster's death. Blank when the data doesn't show it.
+- **Level** — the level the line asks for: `15+`, `up to 19`, or `20 to 29`.
+- **Class**, **Race** — the classes or races the line is written for.
+- **Items** — the items the line looks for, with *(taken)* after the ones it takes from you.
+- **Kind**, **Source**, **Location** — the NPC, room or spell the line hangs off, as before.
+
+Type a flag's number into **Filter…** and press Enter to see that flag's rows only (`133` shows flag 133, not 1330 or a room numbered 133); any other text matches any column, so a flag's name, an NPC or an item works too.
+
+**Double-click a row** to open **Quest Flag Steps** for that row's flag: everything the game data's scripts do with the flag, in the order you would walk it (by the value the flag has to hold going in, then by the value the step leaves it at). The top shows the flag's name and number, your name for the quest if you have given it one, the value at which the quest reads as complete, and any class or race limit. Each step then has:
+
+- a **heading** — what the line does to the flag: *Start — without the flag → sets 1*, *At exactly 5 → sets 6*, *At 4 or more → no change*, *At 3 or more → clears the flag*;
+- **Do** — the command and where: the room, or the NPC and the room it stands in, or the monster to kill and where it is found. When the data doesn't show how the line is reached, it says which textblock, spell or room it is reached from instead;
+- **Needs** — level, class, race, items you must have, items taken from you, items you must *not* have, other flags and the value they must hold, what it costs, whether monsters may or must be in the room, and any alignment check (quoted as the script writes it);
+- **Gives** — items, experience, stat rewards, spells taught, where it teleports you, and other flags it sets or clears;
+- **Also in the script** — every remaining step, exactly as the game data writes it. These are steps whose meaning isn't established, so the client shows them rather than guess;
+- **Script** — the whole line and its textblock number, which you can select and copy.
+
+Lines that are the same apart from the class they are written for are shown as one step listing the classes, and a room command with several wordings is shown once with all of them. Lines that only run for a character *without* the flag and don't change it (for the alignment flags, the other two paths' whole quests) are kept at the bottom under **Only without this flag**, closed until you open it. **Other flags these steps touch** are links: click one to see that flag's steps in the same window, and **Back** to return. Double-clicking another row of the table swaps the window to that flag rather than opening a second one.
 
 The **Monsters** table carries a full column set for browsing and filtering monster stats:
 

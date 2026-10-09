@@ -167,7 +167,7 @@ public static class QuestStepGraph
 
     // The first segment is a player command only when it doesn't lead with a known
     // guard/effect directive — otherwise the chain is reached by dialogue branch.
-    private static string? ReadCommand(string[] segments)
+    internal static string? ReadCommand(string[] segments)
     {
         string first = segments[0].Trim();
         if (first.Length == 0) return null;
@@ -185,7 +185,7 @@ public static class QuestStepGraph
 
     // Index blocks by textblock number (first row wins — a number is unique in
     // practice) so ResolveAsk can hop a step's Called-From chain by number.
-    private static Dictionary<int, JsonElement> IndexByNumber(JsonDocument tbinfo)
+    internal static Dictionary<int, JsonElement> IndexByNumber(JsonDocument tbinfo)
     {
         var map = new Dictionary<int, JsonElement>();
         foreach (JsonElement block in tbinfo.RootElement.EnumerateArray())
@@ -232,6 +232,28 @@ public static class QuestStepGraph
     private static (int Monster, string Keyword)? ResolveAskSource(
         string? stepCalledFrom, Dictionary<int, JsonElement> byNumber)
     {
+        if (ResolveDispatch(stepCalledFrom, byNumber) is not { } hit) return null;
+        string kw = hit.Keywords[0];
+        return GreetingKeywords.Contains(kw) ? null : (hit.Monster, kw);
+    }
+
+    // The same walk, keeping every keyword the NPC answers with that branch (an NPC
+    // often lists several words for one reply). Auto-shown keywords are left out;
+    // null when none is left.
+    internal static (int Monster, IReadOnlyList<string> Keywords)? ResolveAskKeywords(
+        string? stepCalledFrom, Dictionary<int, JsonElement> byNumber)
+    {
+        if (ResolveDispatch(stepCalledFrom, byNumber) is not { } hit) return null;
+        List<string> askable = hit.Keywords
+            .Where(k => !GreetingKeywords.Contains(k))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return askable.Count == 0 ? null : (hit.Monster, askable);
+    }
+
+    private static (int Monster, List<string> Keywords)? ResolveDispatch(
+        string? stepCalledFrom, Dictionary<int, JsonElement> byNumber)
+    {
         int? cur = ParseTextblockRef(stepCalledFrom);
         if (cur is null) return null;
 
@@ -247,9 +269,8 @@ public static class QuestStepGraph
             {
                 if (child <= 0) return null;   // NPC root is the step's direct parent —
                                                // no intermediate textblock to key on.
-                string? kw = FindDispatchKeyword(ReadStringProp(block, "Action"), child);
-                if (kw is null || GreetingKeywords.Contains(kw)) return null;
-                return (monster, kw);
+                List<string> keywords = FindDispatchKeywords(ReadStringProp(block, "Action"), child);
+                return keywords.Count == 0 ? null : (monster, keywords);
             }
 
             int? parentTb = ParseTextblockRef(parent);
@@ -261,10 +282,11 @@ public static class QuestStepGraph
     }
 
     // In an NPC root block's keyword-dispatch action ("crystal:7018\nreturn:7020"),
-    // the keyword whose branch targets `textblock`; null when none maps to it.
-    private static string? FindDispatchKeyword(string? dispatch, int textblock)
+    // the keywords whose branch targets `textblock`, in the block's order.
+    private static List<string> FindDispatchKeywords(string? dispatch, int textblock)
     {
-        if (string.IsNullOrEmpty(dispatch)) return null;
+        var keywords = new List<string>();
+        if (string.IsNullOrEmpty(dispatch)) return keywords;
         foreach (string line in dispatch.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             string[] parts = line.Split(':');
@@ -276,10 +298,14 @@ public static class QuestStepGraph
                 string tok = parts[i].Trim();
                 int sp = tok.IndexOf(' ');
                 if (sp >= 0) tok = tok[..sp];
-                if (int.TryParse(tok, out int n) && n == textblock) return kw;
+                if (int.TryParse(tok, out int n) && n == textblock)
+                {
+                    keywords.Add(kw);
+                    break;
+                }
             }
         }
-        return null;
+        return keywords;
     }
 
     private static string? ReadStringProp(JsonElement block, string prop)

@@ -12,20 +12,22 @@ public enum QuestFlagRelation { Grants, Advances, Requires, Tests, Gate, Clears 
 // The record kind a flag reference roots at, via the block's Called-From chain.
 public enum QuestFlagSourceKind { Monster, Room, Spell, Textblock }
 
-// One (flag, relationship, source) fact: a TBInfo directive touches a quest flag, attributed
-// to the NPC / room / spell that reaches it. Value is the directive's second argument
-// (give-step, required value, addability delta); 0 when the verb takes none (removeability)
-// or it was absent.
+// One (flag, relationship, source, script line) fact: a TBInfo directive touches a quest flag,
+// attributed to the NPC / room / spell that reaches it. Value is the directive's second
+// argument (give-step, required value, addability delta); 0 when the verb takes none
+// (removeability), when it was absent, or for failability, whose second number is the message
+// it prints. Line is the script line the directive sits on.
 public readonly record struct QuestFlagRef(
     int Flag, string FlagName, QuestFlagRelation Relation, QuestFlagSourceKind SourceKind,
-    int SourceNumber, int Map, int Room, string SourceName, int Value);
+    int SourceNumber, int Map, int Room, string SourceName, int Value, QuestFlagLine Line);
 
 // Lazy per-set index of every quest-flag reference in the active set's TBInfo table — the data
-// behind the Game Data Browser's Quest Flags view. Mirrors ItemSourceIndex in shape: it scans
-// each TBInfo Action for the ability directives (give/add/check/test/fail/removeability),
-// attributes each to its monster / room / spell root by walking the block's Called-From
-// provenance, and resolves ids to names via GameDataCache. Builds on first query and
-// self-invalidates on a set swap by comparing the cache's ActiveSet.
+// behind the Game Data Browser's Quest Flags view and its Quest Flag Steps window. Mirrors
+// ItemSourceIndex in shape: it scans each TBInfo Action line for the ability directives
+// (give/add/check/test/fail/removeability), attributes each to its monster / room / spell root
+// by walking the block's Called-From provenance, works out how the line is set off, and
+// resolves ids to names via GameDataCache. Builds on first query and self-invalidates on a set
+// swap by comparing the cache's ActiveSet.
 public sealed class QuestFlagIndex
 {
     private readonly GameDataCache _cache;
@@ -35,16 +37,20 @@ public sealed class QuestFlagIndex
     // enter Rebuild — one clearing/adding the list while the other is mid-Sort, which
     // trips List.Sort's "IComparer returns inconsistent results" guard and crashes.
     private readonly object _gate = new();
-    // Published atomically at the end of Rebuild under _gate: Entries hands this out as
-    // a live view, so it's built into a fresh local list and swapped in whole — never
+    // Published atomically at the end of Rebuild under _gate: Entries hands its list out as
+    // a live view, so everything is built into fresh collections and swapped in whole — never
     // mutated in place after a reader could be holding it.
-    private List<QuestFlagRef> _refs = new();
+    private Snapshot _snapshot = Snapshot.Empty;
     private string? _loadedSet;
     private bool _built;
 
     // Provenance-walk safety cap — a Called-From chain is a small acyclic tree in practice, but
     // the visited-set plus this bound keeps a malformed cycle from spinning.
     private const int MaxWalkSteps = 512;
+
+    // Roots named in a line's Sources text before it is cut short.
+    private const int MaxSourcesNamed = 4;
+    private const int MaxCastByLength = 90;
 
     private static readonly Dictionary<string, QuestFlagRelation> s_verbs =
         new(StringComparer.OrdinalIgnoreCase)
@@ -57,34 +63,55 @@ public sealed class QuestFlagIndex
             ["removeability"] = QuestFlagRelation.Clears,
         };
 
+    private sealed record Snapshot(
+        List<QuestFlagRef> Refs,
+        Dictionary<int, List<QuestFlagLine>> LinesByFlag,
+        HashSet<int> GrantedFlags,
+        QuestScriptNames? Names)
+    {
+        public static readonly Snapshot Empty = new(new(), new(), new(), null);
+    }
+
     public QuestFlagIndex(GameDataCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
         _cache = cache;
     }
 
-    // Every quest-flag reference in the active set, sorted flag → relationship → source. Live
-    // view — read, don't mutate.
-    public IReadOnlyList<QuestFlagRef> Entries => EnsureBuilt();
+    // Every quest-flag reference in the active set, sorted flag → relationship → source →
+    // script line. Live view — read, don't mutate.
+    public IReadOnlyList<QuestFlagRef> Entries => EnsureBuilt().Refs;
 
-    private List<QuestFlagRef> EnsureBuilt()
+    // The script lines that touch flag, in textblock then line order; empty when none do.
+    public IReadOnlyList<QuestFlagLine> LinesFor(int flag)
+        => EnsureBuilt().LinesByFlag.TryGetValue(flag, out List<QuestFlagLine>? lines)
+            ? lines : Array.Empty<QuestFlagLine>();
+
+    // True when some script in the set grants the ability with giveability — the rule the
+    // quest crawl uses to tell a quest flag from a stat an addability raises.
+    public bool IsQuestFlag(int ability) => EnsureBuilt().GrantedFlags.Contains(ability);
+
+    // Names for the active set's record numbers; null when no set is loaded.
+    public QuestScriptNames? Names => EnsureBuilt().Names;
+
+    private Snapshot EnsureBuilt()
     {
         string? active = _cache.ActiveSet;
         lock (_gate)
         {
-            if (_built && _loadedSet == active) return _refs;
+            if (_built && _loadedSet == active) return _snapshot;
             return Rebuild(active);
         }
     }
 
     private readonly record struct TbRow(string? Action, string? CalledFrom);
 
-    // Caller holds _gate. Builds into a fresh local list, then publishes it whole — so a
-    // concurrent reader (Entries) sees either the previous snapshot or this finished one,
+    // Caller holds _gate. Builds into fresh local collections, then publishes them whole — so
+    // a concurrent reader (Entries) sees either the previous snapshot or this finished one,
     // never a list being cleared/appended/sorted underneath it.
-    private List<QuestFlagRef> Rebuild(string? active)
+    private Snapshot Rebuild(string? active)
     {
-        List<QuestFlagRef> refs = new();
+        Snapshot snapshot = Snapshot.Empty;
         JsonDocument? doc = string.IsNullOrWhiteSpace(active) ? null : _cache.GetRawTable("TBInfo");
         if (doc is not null)
         {
@@ -99,26 +126,57 @@ public sealed class QuestFlagIndex
                 tb[num] = new TbRow(ReadString(el, "Action"), ReadString(el, "Called From"));
             }
 
-            Dictionary<(int, int), string> roomNames = BuildRoomNameMap();
+            List<QuestFlagRef> refs = new();
+            Dictionary<int, List<QuestFlagLine>> linesByFlag = new();
+            HashSet<int> granted = QuestCrawler.DiscoverGrantedFlags(
+                tb.Values.SelectMany(static row => (row.Action ?? string.Empty).Split('\n')));
+            QuestScriptNames names = new(_cache);
+            Dictionary<int, JsonElement> byNumber = QuestStepGraph.IndexByNumber(doc);
+            IReadOnlyDictionary<int, IReadOnlyList<int>> deaths = QuestDeathSpells.For(_cache);
 
-            HashSet<(int, QuestFlagRelation, QuestFlagSourceKind, int, int, int, int)> seen = new();
+            HashSet<(int, QuestFlagRelation, QuestFlagSourceKind, int, int, int, int, int, int)> seen = new();
             List<SourceRoot> roots = new();
-            foreach ((int number, TbRow row) in tb)
+            foreach ((int number, TbRow row) in tb.OrderBy(static kv => kv.Key))
             {
                 if (string.IsNullOrEmpty(row.Action)
                     || row.Action.IndexOf("ability", StringComparison.OrdinalIgnoreCase) < 0)
                     continue;
 
                 ResolveRoots(number, tb, roots);
-                foreach ((QuestFlagRelation rel, int flag, int value) in ParseAbilities(row.Action))
+                string[] rawLines = row.Action.Split('\n');
+                // A textblock that repeats a line word for word adds nothing: the first
+                // copy that passes ends the scan.
+                HashSet<string> seenText = new(StringComparer.Ordinal);
+                for (int order = 0; order < rawLines.Length; order++)
                 {
-                    foreach (SourceRoot root in roots)
+                    string text = rawLines[order].Trim();
+                    List<(QuestFlagRelation Rel, int Flag, int Value)> abilities = ParseAbilities(text);
+                    if (abilities.Count == 0 || !seenText.Add(text)) continue;
+
+                    QuestScriptLine script = QuestScriptLine.Parse(text);
+                    List<QuestTrigger> triggers = ResolveTriggers(script, row.CalledFrom, roots, byNumber, deaths, names);
+                    QuestFlagLine line = new(
+                        number, order, script, CleanText(row.CalledFrom), triggers,
+                        RollChance(script, rawLines), SourcesText(roots, names),
+                        CommandText(triggers), script.LevelText,
+                        string.Join(", ", script.Classes.Select(names.Class)),
+                        string.Join(", ", script.Races.Select(names.Race)),
+                        ItemsText(script, names));
+
+                    foreach ((QuestFlagRelation rel, int flag, int value) in abilities)
                     {
-                        var key = (flag, rel, root.Kind, root.Number, root.Map, root.Room, value);
-                        if (!seen.Add(key)) continue;
-                        refs.Add(new QuestFlagRef(
-                            flag, AbilityNames.FormatId(flag), rel, root.Kind,
-                            root.Number, root.Map, root.Room, ResolveSourceName(root, roomNames), value));
+                        if (!linesByFlag.TryGetValue(flag, out List<QuestFlagLine>? flagLines))
+                            linesByFlag[flag] = flagLines = new List<QuestFlagLine>();
+                        if (flagLines.Count == 0 || !ReferenceEquals(flagLines[^1], line)) flagLines.Add(line);
+
+                        foreach (SourceRoot root in roots)
+                        {
+                            var key = (flag, rel, root.Kind, root.Number, root.Map, root.Room, value, number, order);
+                            if (!seen.Add(key)) continue;
+                            refs.Add(new QuestFlagRef(
+                                flag, AbilityNames.FormatId(flag), rel, root.Kind,
+                                root.Number, root.Map, root.Room, ResolveSourceName(root, names), value, line));
+                        }
                     }
                 }
             }
@@ -134,37 +192,178 @@ public sealed class QuestFlagIndex
                 c = a.SourceNumber.CompareTo(b.SourceNumber);
                 if (c != 0) return c;
                 c = a.Map.CompareTo(b.Map);
-                return c != 0 ? c : a.Room.CompareTo(b.Room);
+                if (c != 0) return c;
+                c = a.Room.CompareTo(b.Room);
+                if (c != 0) return c;
+                c = a.Line.Textblock.CompareTo(b.Line.Textblock);
+                if (c != 0) return c;
+                c = a.Line.Order.CompareTo(b.Line.Order);
+                return c != 0 ? c : a.Value.CompareTo(b.Value);
+            });
+
+            snapshot = new Snapshot(refs, linesByFlag, granted, names);
+        }
+
+        _snapshot = snapshot;
+        _loadedSet = active;
+        _built = true;
+        return snapshot;
+    }
+
+    // Every ability directive on one Action line. A line is a colon-delimited directive chain;
+    // a token whose head verb is one of the ability verbs names a flag (first arg) and an
+    // optional value (second arg).
+    private static List<(QuestFlagRelation Rel, int Flag, int Value)> ParseAbilities(string line)
+    {
+        List<(QuestFlagRelation, int, int)> found = new();
+        foreach (string rawTok in line.Split(':'))
+        {
+            string[] p = rawTok.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (p.Length < 2 || !s_verbs.TryGetValue(p[0], out QuestFlagRelation rel)) continue;
+            if (!int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int flag)
+                || flag <= 0)
+                continue;
+            int value = 0;
+            // failability's second number is the message it prints when the character has
+            // the ability, not a value of the flag.
+            if (p.Length >= 3 && rel != QuestFlagRelation.Gate)
+                int.TryParse(p[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
+            found.Add((rel, flag, value));
+        }
+        return found;
+    }
+
+    // ----- How a line is set off -----
+
+    // A line that opens with a typed command belongs to the room (typed as written) or the NPC
+    // (asked as a keyword) its textblock hangs off. A line that opens with a directive is
+    // reached through an NPC's keyword dispatch, or — when its chain starts at a spell some
+    // monster's death casts — by killing that monster. Anything else is left unresolved.
+    private static List<QuestTrigger> ResolveTriggers(
+        QuestScriptLine script, string? calledFrom, List<SourceRoot> roots,
+        Dictionary<int, JsonElement> byNumber,
+        IReadOnlyDictionary<int, IReadOnlyList<int>> deaths, QuestScriptNames names)
+    {
+        List<QuestTrigger> triggers = new();
+        if (script.Command is { } typed)
+        {
+            foreach (CalledFromRef r in ParseCalledFrom(calledFrom))
+            {
+                if (r.Kind == CfKind.Room)
+                    triggers.Add(new QuestTrigger(QuestTriggerKind.RoomCommand, typed, Map: r.Map, Room: r.Room));
+                else if (r.Kind == CfKind.Monster)
+                    triggers.Add(new QuestTrigger(QuestTriggerKind.Ask, AskCommand(names, r.Number, typed), r.Number));
+            }
+            return triggers;
+        }
+
+        foreach (CalledFromRef r in ParseCalledFrom(calledFrom))
+        {
+            if (r.Kind != CfKind.Textblock) continue;
+            string parent = string.Create(CultureInfo.InvariantCulture, $"Textblock #{r.Number}");
+            if (QuestStepGraph.ResolveAskKeywords(parent, byNumber) is not { } hit) continue;
+            if (triggers.Exists(t => t.Monster == hit.Monster)) continue;
+            triggers.Add(new QuestTrigger(QuestTriggerKind.Ask, AskCommand(names, hit.Monster, hit.Keywords[0]), hit.Monster)
+            {
+                OtherKeywords = hit.Keywords.Skip(1).ToArray(),
             });
         }
 
-        _refs = refs;
-        _loadedSet = active;
-        _built = true;
-        return refs;
-    }
-
-    // Every ability directive in an Action string. Action is newline-separated, each line a
-    // colon-delimited directive chain; a token whose head verb is one of the ability verbs
-    // names a flag (first arg) and optional value (second arg).
-    private static IEnumerable<(QuestFlagRelation Rel, int Flag, int Value)> ParseAbilities(string action)
-    {
-        foreach (string rawLine in action.Split('\n'))
+        foreach (SourceRoot root in roots)
         {
-            foreach (string rawTok in rawLine.Split(':'))
+            if (root.Kind != QuestFlagSourceKind.Spell
+                || !deaths.TryGetValue(root.Number, out IReadOnlyList<int>? monsters))
+                continue;
+            foreach (int monster in monsters)
             {
-                string[] p = rawTok.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (p.Length < 2 || !s_verbs.TryGetValue(p[0], out QuestFlagRelation rel)) continue;
-                if (!int.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int flag)
-                    || flag <= 0)
-                    continue;
-                int value = 0;
-                if (p.Length >= 3)
-                    int.TryParse(p[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out value);
-                yield return (rel, flag, value);
+                if (triggers.Exists(t => t.Kind == QuestTriggerKind.Kill && t.Monster == monster)) continue;
+                triggers.Add(new QuestTrigger(
+                    QuestTriggerKind.Kill, "kill " + names.Monster(monster).ToLowerInvariant(), monster));
             }
         }
+        return triggers;
     }
+
+    // The NPC's full name always works as the ask target.
+    private static string AskCommand(QuestScriptNames names, int monster, string keyword)
+        => $"ask {names.Monster(monster).ToLowerInvariant()} {keyword}";
+
+    // The table's Command cell: each distinct way to set the line off.
+    private static string CommandText(List<QuestTrigger> triggers)
+    {
+        List<string> parts = new();
+        foreach (QuestTrigger t in triggers)
+        {
+            string text = t.OtherKeywords.Count > 0
+                ? $"{t.Command} (or {string.Join(", ", t.OtherKeywords)})"
+                : t.Command;
+            if (!parts.Contains(text)) parts.Add(text);
+        }
+        return string.Join(" / ", parts);
+    }
+
+    private static string ItemsText(QuestScriptLine script, QuestScriptNames names)
+    {
+        List<string> parts = new();
+        foreach (int item in script.HeldItems)
+            if (!script.TakenItems.Contains(item)) parts.Add(names.Item(item));
+        foreach (int item in script.TakenItems)
+            parts.Add($"{names.Item(item)} (taken)");
+        return string.Join(", ", parts);
+    }
+
+    private string SourcesText(List<SourceRoot> roots, QuestScriptNames names)
+    {
+        List<string> parts = new();
+        foreach (SourceRoot root in roots)
+        {
+            if (root.Kind == QuestFlagSourceKind.Textblock) continue;
+            if (parts.Count == MaxSourcesNamed)
+            {
+                parts.Add($"+{roots.Count - MaxSourcesNamed} more");
+                break;
+            }
+            string name = ResolveSourceName(root, names);
+            parts.Add(root.Kind switch
+            {
+                QuestFlagSourceKind.Room    => $"room {name} ({root.Map}/{root.Room})",
+                QuestFlagSourceKind.Monster => $"monster {name} (#{root.Number})",
+                _                           => $"spell {name} (#{root.Number}{CastBy(root.Number)})",
+            });
+        }
+        return string.Join(", ", parts);
+    }
+
+    // What the Spells table lists as casting a spell, word for word, so a script that hangs
+    // off a spell no monster's death casts still says where it comes from.
+    private string CastBy(int spell)
+    {
+        if (_cache.FindRowByNumber("Spells", spell) is not { } row) return string.Empty;
+        string text = CleanText(ReadString(row, "Casted By")).TrimEnd('+', ',', ' ');
+        if (text.Length == 0) return string.Empty;
+        if (text.Length > MaxCastByLength) text = text[..MaxCastByLength].TrimEnd(',', ' ') + " …";
+        return $"; the data lists it as cast by {text}";
+    }
+
+    // A random table's lines are `threshold:steps` with running thresholds, so a line's share
+    // of the draws is its threshold less the one before it, over the table's top threshold.
+    private static double? RollChance(QuestScriptLine script, string[] blockLines)
+    {
+        if (script.RollBand is not int band) return null;
+        int previous = 0, top = 0;
+        foreach (string raw in blockLines)
+        {
+            int colon = raw.IndexOf(':');
+            string lead = (colon < 0 ? raw : raw[..colon]).Trim();
+            if (!int.TryParse(lead, NumberStyles.None, CultureInfo.InvariantCulture, out int threshold)) continue;
+            top = Math.Max(top, threshold);
+            if (threshold < band) previous = Math.Max(previous, threshold);
+        }
+        return top > 0 ? (band - previous) * 100.0 / top : null;
+    }
+
+    // The importer pads some text fields with NULs.
+    private static string CleanText(string? text) => (text ?? string.Empty).Replace("\0", string.Empty).Trim();
 
     // ----- Called-From provenance walk -----
     //
@@ -256,44 +455,18 @@ public sealed class QuestFlagIndex
         }
     }
 
-    private string ResolveSourceName(SourceRoot root, Dictionary<(int, int), string> roomNames) => root.Kind switch
+    private static string ResolveSourceName(SourceRoot root, QuestScriptNames names) => root.Kind switch
     {
-        QuestFlagSourceKind.Monster => Named("Monsters", root.Number, $"Monster #{root.Number}"),
-        QuestFlagSourceKind.Spell   => Named("Spells", root.Number, $"Spell #{root.Number}"),
-        QuestFlagSourceKind.Room    => roomNames.TryGetValue((root.Map, root.Room), out string? rn) && rn.Length > 0
-                                        ? rn : $"Room {root.Map}/{root.Room}",
+        QuestFlagSourceKind.Monster => names.Monster(root.Number),
+        QuestFlagSourceKind.Spell   => names.Spell(root.Number),
+        QuestFlagSourceKind.Room    => names.Room(root.Map, root.Room),
         _                           => $"Textblock #{root.Number}",
     };
-
-    private string Named(string table, int number, string fallback)
-        => _cache.FindNameByNumber(table, number) is { Length: > 0 } n ? n : fallback;
-
-    private Dictionary<(int, int), string> BuildRoomNameMap()
-    {
-        Dictionary<(int, int), string> map = new();
-        JsonDocument? doc = _cache.GetRawTable("Rooms");
-        if (doc is null) return map;
-        foreach (JsonElement row in doc.RootElement.EnumerateArray())
-        {
-            if (row.ValueKind != JsonValueKind.Object) continue;
-            if (!TryInt(row, "Map Number", out int m) || !TryInt(row, "Room Number", out int r)) continue;
-            if (row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String)
-                map[(m, r)] = nm.GetString() ?? string.Empty;
-        }
-        return map;
-    }
 
     private static string? ReadString(JsonElement row, string property)
         => row.TryGetProperty(property, out JsonElement el) && el.ValueKind == JsonValueKind.String
             ? el.GetString()
             : null;
-
-    private static bool TryInt(JsonElement row, string property, out int value)
-    {
-        value = 0;
-        return row.TryGetProperty(property, out JsonElement el)
-            && el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out value);
-    }
 
     private static int IntAfterHash(string s)
     {

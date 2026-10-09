@@ -1,8 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.158.1**
-> - Terminal colours: Custom keeps the same two columns as the other choices (normal left, bright right) instead of one long list
+> **Version 3.159.0**
+> - Game Data Browser → Quest Flags: one row per script line, with **Command**, **Level**, **Class**, **Race** and **Items** columns
+> - Double-click a Quest Flags row for **Quest Flag Steps**: that flag's steps in walking order, with what to type or kill and what each needs and gives
+> - A flag number typed in the Quest Flags filter shows that flag only
+> - A saved column layout no longer hides new columns on a table without a column picker
+>
+> See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
 
 A modern Telnet terminal client for **MajorMUD** and other BBS door games, built in C# / .NET 10 with [Avalonia](https://avaloniaui.net/). It renders a faithful CP437 cell grid with full VT100/ANSI parsing, and layers a MegaMUD-style automation suite (combat, party, navigation, healing, and more) on top — all in modeless, dockable windows so the terminal stays live while you configure anything.

@@ -1,5 +1,12 @@
 # Version history
 
+## 3.159.0
+
+- Game Data Browser → Quest Flags: one row per script line, with **Command**, **Level**, **Class**, **Race** and **Items** columns
+- Double-click a Quest Flags row for **Quest Flag Steps**: that flag's steps in walking order, with what to type or kill and what each needs and gives
+- A flag number typed in the Quest Flags filter shows that flag only
+- A saved column layout no longer hides new columns on a table without a column picker
+
 ## 3.158.1
 
 - Terminal colours: Custom keeps the same two columns as the other choices (normal left, bright right) instead of one long list

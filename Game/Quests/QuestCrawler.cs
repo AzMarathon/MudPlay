@@ -236,7 +236,7 @@ public static class QuestCrawler
 
     // Every distinct giveability target across the data — the discovered quest-flag
     // set, used to tell stat rewards (addability off-set) from progress (on-set).
-    private static HashSet<int> DiscoverGrantedFlags(IEnumerable<string> rawChains)
+    internal static HashSet<int> DiscoverGrantedFlags(IEnumerable<string> rawChains)
     {
         var flags = new HashSet<int>();
         foreach (string raw in rawChains)
