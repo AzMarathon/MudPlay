@@ -13,7 +13,7 @@ namespace MudPlay.Tests;
 
 // Follower-side ComebackRequester: one @comeback to the leader when the party walks
 // off without us, and none for an uninvite, a `leave`, a move of our own, a death or
-// a party teleport (GAME_MECHANICS "@comeback (follower → leader)").
+// a teleport split (GAME_MECHANICS "@comeback (follower → leader)").
 public sealed class ComebackRequesterTests : IDisposable
 {
     private readonly string _root;
@@ -49,6 +49,10 @@ public sealed class ComebackRequesterTests : IDisposable
         """;
 
     private const string ItemRefusal = "You do not have the appropriate item to go that direction!";
+    private const string ParHeader = "The following people are in your travel party:";
+    private const string BossFullRow = "  Boss Hogg                         (Warrior)                 [H:100%]   - Frontrank";
+    private const string BossInvited = "  Boss Hogg                      (Warrior)    [Invited]";
+    private const string OtherInvited = "  Other Guy                      (Mage)       [Invited]";
 
     private sealed class Harness : IDisposable
     {
@@ -60,12 +64,14 @@ public sealed class ComebackRequesterTests : IDisposable
         public bool MasterSwitchOn { get; set; } = true;
         public bool SelfDown { get; set; }
         public string? SendBlocked { get; set; }
+        public bool InTrainTrip { get; set; }
 
         // Everything the requester (and whatever else a test binds) put on the wire.
         public List<string> Wire { get; } = new();
 
         private DateTimeOffset _clock = new(2026, 6, 10, 0, 0, 0, TimeSpan.Zero);
 
+        /// <summary>Advance the deterministic clock the requester reads.</summary>
         public void Advance(TimeSpan by) => _clock += by;
 
         public DateTimeOffset Now => _clock;
@@ -80,17 +86,14 @@ public sealed class ComebackRequesterTests : IDisposable
             Router.Dispatch(new LineExtractor.EmittedLine(
                 text, new CellAttributes[text.Length], _clock, IsPromptLine: false));
 
-        public void FollowBoss()
-        {
-            Party.IsInParty = true;
-            Party.SelfIsLeader = false;
-            Party.LeaderName = "Boss";
-        }
+        public void Type(string line) => Requester.ObserveOutbound(Encoding.Latin1.GetBytes(line + "\r"));
 
         public void Dispose() => Requester.Dispose();
     }
 
-    private Harness NewHarness(Func<bool>? isMovementPrevented = null, bool following = true)
+    // Solo, and not yet located: the state the "no longer following" line alone
+    // speaks for.
+    private Harness NewHarness(Func<bool>? isMovementPrevented = null)
     {
         Directory.CreateDirectory(Path.Combine(_root, "alpha"));
         File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
@@ -111,7 +114,8 @@ public sealed class ComebackRequesterTests : IDisposable
             party: party,
             isAutoEnabled: () => h!.MasterSwitchOn,
             isSelfDown: () => h!.SelfDown,
-            sendBlocked: () => h!.SendBlocked);
+            sendBlocked: () => h!.SendBlocked,
+            inTrainTrip: _ => h!.InTrainTrip);
         h = new Harness
         {
             Router = router,
@@ -121,22 +125,32 @@ public sealed class ComebackRequesterTests : IDisposable
         };
         requester.NowProvider = () => h.Now;
         requester.SetWireSender(b => h.Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
-        if (following) h.FollowBoss();
-        tracker.SetLocated(new RoomKey(1, 1), h.Now);
         return h;
     }
 
-    // ----- "no longer following" behind a failed follow move ---------------
+    // Following Boss, standing in 1/1.
+    private Harness NewFollower(Func<bool>? isMovementPrevented = null)
+    {
+        Harness h = NewHarness(isMovementPrevented);
+        h.Party.IsInParty = true;
+        h.Party.SelfIsLeader = false;
+        h.Party.LeaderName = "Boss";
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
+        return h;
+    }
+
+    // ----- left-behind fires ------------------------------------------
 
     [Fact]
     public void StuckThenNoLongerFollowing_SendsComeback()
     {
         using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
         h.Feed("You can't seem to move anywhere!");
-        h.Feed("You are no longer following Boss.");
+        h.Feed("You are no longer following MudPlay.");
 
-        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
     }
 
     // Stock's line for a stunned follower, printed before the same "no longer
@@ -145,31 +159,58 @@ public sealed class ComebackRequesterTests : IDisposable
     public void StunnedThenNoLongerFollowing_SendsComeback()
     {
         using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
         h.Feed("You are too stunned to move anywhere!");
-        h.Feed("You are no longer following Boss.");
+        h.Feed("You are no longer following MudPlay.");
 
-        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
     }
 
     [Fact]
     public void HeavyThenNoLongerFollowing_SendsComeback()
     {
         using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
-        h.Feed("You are too heavy to move!");
+        h.Feed("Your pack is too heavy to move.");
+        h.Feed("You are no longer following MudPlay.");
+
+        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
+    }
+
+    // The game's own two wordings: a follow move's refusal on Stock, and a typed
+    // move's (GAME_MECHANICS "Too heavy to move (over max encumbrance)").
+    [Theory]
+    [InlineData("You are too heavy to move!")]
+    [InlineData("You are too heavy to move anywhere!")]
+    public void TheGamesTooHeavyLines_ThenNoLongerFollowing_SendComeback(string line)
+    {
+        using Harness h = NewFollower();
+
+        h.Feed(line);
         h.Feed("You are no longer following Boss.");
 
         Assert.Equal("/Boss @comeback 1/1", h.LastWire);
     }
 
     [Fact]
-    public void RoomNotConfirmed_SendsBareComeback()
+    public void Confirmed_NoRoom_SendsBareComeback()
     {
         using Harness h = NewHarness();
-        // A move in flight: the room is a prediction, not a place to send the leader.
-        h.Tracker.NoteMoveSent(Direction.N, h.Now);
-        h.Advance(TimeSpan.FromSeconds(30));
+        // No SetLocated → tracker confidence stays Unknown → bare @comeback.
+        h.Feed("You can't seem to move anywhere!");
+        h.Feed("You are no longer following MudPlay.");
+
+        Assert.Equal("/MudPlay @comeback", h.LastWire);
+    }
+
+    [Fact]
+    public void RoomOnlyPredicted_SendsBareComeback()
+    {
+        using Harness h = NewFollower();
+        // A drag in flight: the room is a prediction, not a place to send the leader.
+        h.Tracker.NoteFollowMove(Direction.N, h.Now);
 
         h.Feed("You can't seem to move anywhere!");
         h.Feed("You are no longer following Boss.");
@@ -177,41 +218,64 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal("/Boss @comeback", h.LastWire);
     }
 
-    // A knockdown answers with "You are flat on your back!", which is none of the
-    // refusal lines, so the hold itself is the tell (report paradigm-20260922-085609).
     [Fact]
     public void KnockedDownThenNoLongerFollowing_SendsComeback()
     {
+        // A knockdown / held affliction produces "You are flat on your back!", NOT one of
+        // the two movement-failure lines — so without the live movement-prevented check the
+        // break reads as deliberate. With it, a break while movement-prevented telepaths
+        // @comeback (report paradigm-20260922-085609).
         using Harness h = NewHarness(isMovementPrevented: () => true);
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
-        h.Feed("You are no longer following Boss.");
+        h.Feed("You are no longer following MudPlay.");
 
-        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
     }
 
     [Fact]
     public void ExitRefusalThenNoLongerFollowing_SendsComeback()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
-        h.Feed("There is a closed door in that direction!");
+        h.Feed(ItemRefusal);
         h.Feed("You are no longer following Boss.");
 
         Assert.Equal("/Boss @comeback 1/1", h.LastWire);
-        Assert.Contains("closed door", h.Requester.LastIncidentSummary);
+        Assert.Contains("appropriate item", h.Requester.LastIncidentSummary);
     }
 
     // The monsters' parting attack held us mid-move: the follow ends with no
-    // refusal line, right behind the leader's own departure.
+    // refusal line, right behind the leader's own departure. The verdict waits for
+    // the prompt, which is what shows a drop.
     [Fact]
-    public void LeaderLeftThenNoLongerFollowing_SendsComeback()
+    public void LeaderLeftThenNoLongerFollowing_SendsOnceThePromptIsIn()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Boss just left to the north.");
         h.Feed("You are no longer following Boss.");
+        Assert.Null(h.LastWire);
+
+        h.Requester.FireSettleForTests();
 
         Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+    }
+
+    // The same two lines when the parting attack dropped us: the HP that says so
+    // comes with the prompt after them.
+    [Fact]
+    public void LeaderLeftThenNoLongerFollowing_ThenWeAreDown_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed("Boss just left to the north.");
+        h.Feed("You are no longer following Boss.");
+        h.SelfDown = true;
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+        Assert.Contains("we died or dropped", h.Requester.LastIncidentSummary);
     }
 
     // ----- a refusal nobody asked for (the follow ends without a line) -----
@@ -219,7 +283,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void UnpromptedExitRefusal_SendsOnceSettled()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed(ItemRefusal);
         Assert.Null(h.LastWire);
@@ -243,7 +307,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [InlineData("You are not permitted in that room!")]
     public void EveryMoveOnlyRefusal_CountsAsARefusedFollowMove(string line)
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed(line);
         h.Requester.FireSettleForTests();
@@ -255,7 +319,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void ClosedDoorLookReply_IsNotARefusedMove()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("The door is closed in that direction!");
 
@@ -264,30 +328,78 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Null(h.LastWire);
     }
 
-    [Fact]
-    public void RefusalAnsweringOurOwnMove_IsNotAFollowMove()
+    // A move of our own still unanswered owns the refusal, however late it comes.
+    [Theory]
+    [InlineData(1)]
+    [InlineData(6)]
+    [InlineData(45)]
+    public void RefusalAnsweringOurOwnTypedMove_IsNotAFollowMove(int secondsLate)
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
-        h.Requester.NoteOwnMoveSent();
-        h.Advance(TimeSpan.FromSeconds(1));
-        h.Feed(ItemRefusal);
+        h.Tracker.NoteMoveSentByObserver(Direction.S, h.Now);
+        h.Advance(TimeSpan.FromSeconds(secondsLate));
+        h.Feed("There is no exit in that direction!");
 
         Assert.Null(h.Requester.PendingCheckFor);
         h.Requester.FireSettleForTests();
         Assert.Null(h.LastWire);
     }
 
+    [Fact]
+    public void RefusalAnsweringAnEnginesMove_IsNotAFollowMove()
+    {
+        using Harness h = NewFollower();
+
+        h.Tracker.NoteMoveSent(Direction.N, h.Now);
+        h.Advance(TimeSpan.FromSeconds(8));
+        h.Feed(ItemRefusal);
+
+        Assert.Null(h.Requester.PendingCheckFor);
+    }
+
+    // A leader's drag still waiting for its room is nobody's command here: the
+    // refusal behind it answers the next follow move.
+    [Fact]
+    public void RefusalWithOnlyADragQueued_IsARefusedFollowMove()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed(" -- Following your Party leader north --");
+        h.Tracker.NoteFollowMove(Direction.N, h.Now);
+        h.Feed(ItemRefusal);
+
+        Assert.Equal("Boss", h.Requester.PendingCheckFor);
+    }
+
     // A typed room command can be refused in an exit's words.
     [Fact]
     public void RefusalRightAfterATypedCommand_IsNotAFollowMove()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
-        h.Requester.ObserveOutbound(Encoding.Latin1.GetBytes("touch altar\r"));
+        h.Type("touch altar");
         h.Feed("A strange power holds you back!");
 
         Assert.Null(h.Requester.PendingCheckFor);
+    }
+
+    // Talk draws no exit refusal, so typing it hides nothing.
+    [Theory]
+    [InlineData("/Boss wait up")]
+    [InlineData(".hello all")]
+    [InlineData(">Boss this way?")]
+    [InlineData("gos anyone selling a ring")]
+    [InlineData("bg on my way")]
+    public void RefusalRightAfterTypedTalk_IsStillARefusedFollowMove(string typed)
+    {
+        using Harness h = NewFollower();
+
+        h.Type(typed);
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
     }
 
     // ----- the leader seen leaving -------------------------------------------
@@ -295,7 +407,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void LeaderLeft_NoFollowMove_SendsOnceSettled()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Boss just left to the north.");
         Assert.Null(h.LastWire);
@@ -309,7 +421,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void LeaderLeft_ThenFollowLine_SendsNothing()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Boss just left to the north.");
         h.Feed(" -- Following your Party leader north --");
@@ -324,7 +436,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void LeaderLeft_AndWeStandElsewhere_SendsNothing()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Boss just left to the north.");
         h.Tracker.SetLocated(new RoomKey(1, 2), h.Now);
@@ -333,10 +445,24 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Null(h.LastWire);
     }
 
+    // The same, with the map no longer sure of the room it had us in: that is not
+    // a follower seen standing where the leader left it.
+    [Fact]
+    public void LeaderLeft_AndTheRoomIsNoLongerSure_SendsNothing()
+    {
+        using Harness h = NewFollower();
+
+        h.Feed("Boss just left to the north.");
+        h.Tracker.NoteFollowMove(Direction.N, h.Now);   // any state that is not Confirmed
+        h.Requester.FireSettleForTests();
+
+        Assert.Null(h.LastWire);
+    }
+
     [Fact]
     public void SomeoneElseLeaving_IsNotTheLeader()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Stranger just left to the north.");
         h.Feed("The orc rogue just left to the north.");
@@ -347,59 +473,165 @@ public sealed class ComebackRequesterTests : IDisposable
     // ----- our own `par` -----------------------------------------------------
 
     // On the list, following nobody: how the game leaves a follower whose follow
-    // move it refused without a word.
+    // move it refused without a word. The request goes out, and this client goes
+    // on believing it follows: the follower hold on its own walks stays up.
     [Fact]
-    public void ParListingTheLeaderAsInvited_SendsComeback()
+    public void ParListingTheLeaderAsInvited_SendsComeback_AndWeStayAFollower()
     {
-        using Harness h = NewHarness(following: false);
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
+        using PartyManager manager = new(h.Router, h.Party);
+        manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
+        MovementCoordinator coordinator = new();
+        using PartyFollowerMovementGate gate = new(h.Party, coordinator);
+        h.Feed("You are now following Boss.");
+
+        h.Feed(ParHeader);
+        manager.FeedTestLines(new[] { BossInvited });
+        manager.FeedTestPromptLine();
+
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+        Assert.Contains("[Invited]", h.Requester.LastIncidentSummary);
+        Assert.False(h.Party.SelfIsLeader);
+        Assert.Equal("Boss", h.Party.LeaderName);
+        Assert.Contains(MovementCoordinator.FollowerGate, coordinator.AssertedGates);
+    }
+
+    // The line and refusal first, then the `par`: one request, and still a follower.
+    [Fact]
+    public void SilentLeftBehind_ThenOwnPar_IsOneRequest_AndTheFollowerHoldStays()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
+        using PartyManager manager = new(h.Router, h.Party);
+        manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
+        MovementCoordinator coordinator = new();
+        using PartyFollowerMovementGate gate = new(h.Party, coordinator);
+        h.Feed("You are now following Boss.");
+
+        h.Feed("Boss just left to the north.");
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        Assert.Equal(1, h.Sent);
+
+        h.Feed(ParHeader);
+        manager.FeedTestLines(new[] { BossInvited });
+        manager.FeedTestPromptLine();
+
+        Assert.Equal(1, h.Sent);
+        Assert.False(h.Party.SelfIsLeader);
+        Assert.Contains(MovementCoordinator.FollowerGate, coordinator.AssertedGates);
+    }
+
+    // Another member's row ahead of the leader's, and the same again on the next
+    // poll: one request.
+    [Fact]
+    public void ParFirst_AnotherMembersRowAheadOfTheLeaders_IsOneRequest()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
         using PartyManager manager = new(h.Router, h.Party);
         manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
         h.Feed("You are now following Boss.");
 
-        h.Feed("The following people are in your travel party:");
-        manager.FeedTestLines(new[] { "  Boss Hogg                      (Warrior)    [Invited]" });
+        h.Feed(ParHeader);
+        manager.FeedTestLines(new[] { OtherInvited, BossInvited });
+        manager.FeedTestPromptLine();
+        Assert.Equal(1, h.Sent);
 
-        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
-        Assert.Contains("[Invited]", h.Requester.LastIncidentSummary);
+        h.Advance(TimeSpan.FromSeconds(5));
+        h.Feed(ParHeader);
+        manager.FeedTestLines(new[] { OtherInvited, BossInvited });
+        manager.FeedTestPromptLine();
+
+        Assert.Equal(1, h.Sent);
+        Assert.False(h.Party.SelfIsLeader);
+    }
+
+    // Three in the party: another member's [Invited] row while we still follow says
+    // nothing about us. We stay a follower, and being left behind later still asks.
+    [Fact]
+    public void AnotherMembersInvitedRow_WhileWeStillFollow_ChangesNothingForUs()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
+        using PartyManager manager = new(h.Router, h.Party);
+        manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
+        MovementCoordinator coordinator = new();
+        using PartyFollowerMovementGate gate = new(h.Party, coordinator);
+        h.Feed("You are now following Boss.");
+
+        h.Feed("You are following Boss.");
+        h.Feed(ParHeader);
+        manager.FeedTestLines(new[] { OtherInvited, BossFullRow });
+        manager.FeedTestPromptLine();
+
+        Assert.False(h.Party.SelfIsLeader);
+        Assert.Equal("Boss", h.Party.LeaderName);
+        Assert.Contains(MovementCoordinator.FollowerGate, coordinator.AssertedGates);
+        Assert.Equal(0, h.Sent);
+
+        h.Advance(TimeSpan.FromSeconds(30));
+        h.Feed("Boss just left to the north.");
+        h.Feed(ItemRefusal);
+        Assert.Equal("Boss", h.Requester.PendingCheckFor);
+        h.Requester.FireSettleForTests();
+        Assert.Equal(1, h.Sent);
+
+        h.Feed(ParHeader);
+        manager.FeedTestLines(new[] { OtherInvited, BossInvited });
+        manager.FeedTestPromptLine();
+        Assert.Equal(1, h.Sent);
+        Assert.Contains(MovementCoordinator.FollowerGate, coordinator.AssertedGates);
     }
 
     [Fact]
     public void ParListingSomeoneElseAsInvited_SendsNothing()
     {
-        using Harness h = NewHarness(following: false);
+        using Harness h = NewHarness();
         using PartyManager manager = new(h.Router, h.Party);
         manager.LeaderListedAsInvited += h.Requester.NoteLeaderListedAsInvited;
         h.Feed("You are now following Boss.");
 
-        h.Feed("The following people are in your travel party:");
-        manager.FeedTestLines(new[] { "  Stranger Danger                (Mage)       [Invited]" });
+        h.Feed(ParHeader);
+        manager.FeedTestLines(new[] { OtherInvited });
 
         Assert.Null(h.LastWire);
     }
 
-    // ----- never a left-behind -------------------------------------------------
+    // ----- deliberate unfollow stays silent ---------------------------
 
-    // An uninvite, a disband, the leader teleported: the same line, with no follow
-    // move of ours refused before it.
     [Fact]
-    public void NoLongerFollowing_WithNothingBeforeIt_StaysSilent()
+    public void NoLongerFollowing_WithoutFailure_StaysSilent()
     {
         using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
+
+        // Deliberate uninvite / our own unfollow — no movement failure first.
+        h.Feed("You are no longer following MudPlay.");
+
+        Assert.Null(h.LastWire);
+    }
+
+    [Fact]
+    public void NoLongerFollowing_WithoutFailure_SaysWhatItCantTell()
+    {
+        using Harness h = NewFollower();
 
         h.Feed("You are no longer following Boss.");
 
-        Assert.Null(h.LastWire);
-        Assert.Contains("uninvited", h.Requester.LastIncidentSummary);
+        Assert.Contains("no sign you were left behind", h.Requester.LastIncidentSummary);
     }
 
     [Fact]
     public void FailureTooLongAgo_StaysSilent()
     {
         using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
         h.Feed("You can't seem to move anywhere!");
-        h.Advance(TimeSpan.FromSeconds(10));     // past the 3 s window
-        h.Feed("You are no longer following Boss.");
+        h.Advance(TimeSpan.FromSeconds(10));     // past the 3s window
+        h.Feed("You are no longer following MudPlay.");
 
         Assert.Null(h.LastWire);
     }
@@ -408,25 +640,29 @@ public sealed class ComebackRequesterTests : IDisposable
     public void QuotedHeavyChatLine_DoesNotArm()
     {
         using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
-        // Player chat is quoted, and the heavy pattern won't read past a quote.
-        h.Feed("Stranger gossips \"my pack is too heavy to move lol\".");
-        h.Feed("You are no longer following Boss.");
+        // A player gossiping the phrase is quoted — the ^[^"]* anchor
+        // means it never matches MovementFailedHeavy, so no arming.
+        h.Feed("Raijin gossips \"my pack is too heavy to move lol\".");
+        h.Feed("You are no longer following MudPlay.");
 
         Assert.Null(h.LastWire);
     }
 
+    // `leave` (alone or with one more word) and a bare `follow` end our own follow.
     [Theory]
     [InlineData("leave")]
     [InlineData("leave party")]
+    [InlineData("lea")]
     [InlineData("follow")]
-    [InlineData("join Stranger")]
-    public void TypedPartyCommand_IsTheUserLeaving(string typed)
+    [InlineData("fol")]
+    public void TypedLeave_IsTheUserLeaving(string typed)
     {
         // Held as well, which without the command would be a left-behind.
-        using Harness h = NewHarness(isMovementPrevented: () => true);
+        using Harness h = NewFollower(isMovementPrevented: () => true);
 
-        h.Requester.ObserveOutbound(Encoding.Latin1.GetBytes(typed + "\r"));
+        h.Type(typed);
         h.Advance(TimeSpan.FromSeconds(1));
         h.Feed("You are no longer following Boss.");
 
@@ -434,10 +670,46 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Contains("left the party by command", h.Requester.LastIncidentSummary);
     }
 
+    // `join <leader>` / `follow <leader>` is how a member rejoins: being left
+    // behind right after it is a left-behind. `leave gang` leaves the gang.
+    [Theory]
+    [InlineData("join Boss")]
+    [InlineData("follow Boss")]
+    [InlineData("leave gang")]
+    public void TypedJoinOrFollowSomeone_IsNotLeaving(string typed)
+    {
+        using Harness h = NewFollower();
+
+        h.Type(typed);
+        h.Feed("You are now following Boss");
+        h.Advance(TimeSpan.FromSeconds(1));
+        h.Feed("Boss just left to the north.");
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+    }
+
+    // A `leave` from before we rejoined says nothing about the next split.
+    [Fact]
+    public void TypedLeave_IsForgottenOnceWeFollowAgain()
+    {
+        using Harness h = NewFollower();
+
+        h.Type("leave");
+        h.Feed("You are no longer following Boss.");
+        h.Feed("You are now following Boss.");
+        h.Advance(TimeSpan.FromSeconds(1));
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+    }
+
     [Fact]
     public void MoveOfOurOwn_IsTheUserLeaving()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Tracker.NoteMoveSentByObserver(Direction.S, h.Now);   // typed, no engine claim
         h.Advance(TimeSpan.FromSeconds(1));
@@ -453,7 +725,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void BonkedMoveOfOurOwn_DoesNotExcuseTheLeader()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Tracker.NoteMoveSentByObserver(Direction.S, h.Now);
         h.Feed("There is no exit in that direction!");
@@ -464,18 +736,24 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.StartsWith("/Boss @comeback", h.LastWire);
     }
 
-    [Fact]
-    public void RelayedPartyTeleport_IsTheLeadersSplit()
+    // A relayed party command that is no teleport (a hand-over before an item
+    // gate, a rest) says nothing about why the follow ends ten seconds later.
+    [Theory]
+    [InlineData("Boss", "rest")]
+    [InlineData("Boss", "give brass key to Boss")]
+    [InlineData("Other", "ring chime")]
+    public void RelayedPartyCommand_DoesNotExcuseBeingLeftAtAnItemExit(string sender, string command)
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
-        h.Requester.NotePartyRelay();
-        h.Advance(TimeSpan.FromSeconds(6));      // a teleport that waits before it moves anyone
-        h.Feed("A strange power holds you back!");
+        h.Requester.NotePartyRelay(sender, command);
+        h.Advance(TimeSpan.FromSeconds(10));
+        h.Feed("Boss just left to the north.");
+        h.Feed(ItemRefusal);
+        h.Advance(TimeSpan.FromSeconds(2));
         h.Requester.FireSettleForTests();
 
-        Assert.Null(h.LastWire);
-        Assert.Contains("party teleport", h.Requester.LastIncidentSummary);
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
     }
 
     // The leader stepped through an exit that casts on the walk and the follow
@@ -483,10 +761,11 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void LeaderLeftThroughACastingExit_IsATeleportSplit()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Boss just left to the east.");
         h.Feed("You are no longer following Boss.");
+        h.Requester.FireSettleForTests();
 
         Assert.Null(h.LastWire);
         Assert.Contains("casts a spell", h.Requester.LastIncidentSummary);
@@ -495,7 +774,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void OurOwnDeath_IsNotALeftBehind()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
         h.SelfDown = true;
 
         h.Feed("You can't seem to move anywhere!");
@@ -510,7 +789,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [InlineData("Boss drops to the ground!")]
     public void LeadersDeath_IsNotALeftBehind(string line)
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed(line);
         h.Feed(ItemRefusal);
@@ -520,52 +799,42 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Contains("Boss died or dropped", h.Requester.LastIncidentSummary);
     }
 
+    // ----- disabled / consume guards ----------------------------------
+
     [Fact]
-    public void SettingOff_DetectsButDoesNotSend()
+    public void Disabled_DetectsButDoesNotSend()
     {
         using Harness h = NewHarness();
         h.Requester.Enabled = false;
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
         h.Feed("You can't seem to move anywhere!");
-        h.Feed("You are no longer following Boss.");
+        h.Feed("You are no longer following MudPlay.");
 
         Assert.Null(h.LastWire);
-        Assert.Contains("is off", h.Requester.LastIncidentSummary);
     }
 
     [Fact]
-    public void MasterSwitchOff_SendsNothing()
+    public void FailureIsConsumed_SecondUnfollowStaysSilent()
     {
         using Harness h = NewHarness();
-        h.MasterSwitchOn = false;
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
         h.Feed("You can't seem to move anywhere!");
-        h.Feed("You are no longer following Boss.");
-        h.Feed("You are now following Boss.");
-        h.Feed(ItemRefusal);
-        h.Requester.FireSettleForTests();
+        h.Feed("You are no longer following MudPlay.");
+        Assert.Equal("/MudPlay @comeback 1/1", h.LastWire);
 
-        Assert.Null(h.LastWire);
-        Assert.Contains("master switch", h.Requester.LastIncidentSummary);
-    }
-
-    [Fact]
-    public void SendGateHeld_SendsNothing()
-    {
-        using Harness h = NewHarness();
-        h.SendBlocked = "we are at the board's menu";
-
-        h.Feed(ItemRefusal);
-        h.Requester.FireSettleForTests();
-
-        Assert.Null(h.LastWire);
-        Assert.Contains("board's menu", h.Requester.LastIncidentSummary);
+        int sentCount = h.Requester.LastSentForTests.Count;
+        // A later, unrelated unfollow must not reuse the consumed failure.
+        h.Feed("You are no longer following Raijin.");
+        Assert.Equal(sentCount, h.Requester.LastSentForTests.Count);
     }
 
     [Fact]
     public void Solo_SendsNothing()
     {
-        using Harness h = NewHarness(following: false);
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
 
         h.Feed(ItemRefusal);
         h.Feed("Boss just left to the north.");
@@ -578,7 +847,8 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void AsLeader_SendsNothing()
     {
-        using Harness h = NewHarness(following: false);
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1), h.Now);
         h.Party.IsInParty = true;
         h.Party.SelfIsLeader = true;
         h.Party.LeaderName = "Self";
@@ -597,7 +867,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void PartyGoneBeforeTheSettle_SendsNothing()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Boss just left to the north.");
         h.Party.IsInParty = false;
@@ -606,12 +876,139 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Null(h.LastWire);
     }
 
+    // ----- a request that can't go out yet ---------------------------------------
+
+    // The master switch off, the send gate held, the board's menu: the request
+    // waits, and goes out when the client can send again.
+    [Fact]
+    public void MasterSwitchOff_HoldsTheRequest_AndSendsItWhenBackOn()
+    {
+        using Harness h = NewFollower();
+        h.MasterSwitchOn = false;
+
+        h.Feed("You can't seem to move anywhere!");
+        h.Feed("You are no longer following Boss.");
+        h.Requester.FireRetryForTests();
+        Assert.Null(h.LastWire);
+        Assert.Contains("master switch", h.Requester.LastIncidentSummary);
+        Assert.NotNull(h.Requester.HeldBack);
+
+        h.MasterSwitchOn = true;
+        h.Advance(TimeSpan.FromSeconds(30));
+        h.Requester.FireRetryForTests();
+
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+        Assert.Null(h.Requester.HeldBack);
+    }
+
+    [Fact]
+    public void SendGateHeld_HoldsTheRequest_AndSendsItOnce()
+    {
+        using Harness h = NewFollower();
+        h.SendBlocked = "the client's sends are held";
+
+        h.Feed("Boss just left to the north.");
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        Assert.Null(h.LastWire);
+
+        h.SendBlocked = null;
+        h.Advance(TimeSpan.FromSeconds(30));
+        h.Feed(ItemRefusal);                 // more of the same evidence adds nothing
+        h.Requester.FireSettleForTests();
+        h.Requester.FireRetryForTests();
+        h.Requester.FireRetryForTests();
+
+        Assert.Equal(1, h.Sent);
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+    }
+
+    // Past the "accept @comeback for" window the leader has moved on.
+    [Fact]
+    public void HeldRequest_IsDroppedOnceItIsNoLongerFresh()
+    {
+        using Harness h = NewFollower();
+        h.Requester.RetryWindow = TimeSpan.FromMinutes(2);
+        h.MasterSwitchOn = false;
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+
+        h.Advance(TimeSpan.FromMinutes(3));
+        h.MasterSwitchOn = true;
+        h.Requester.FireRetryForTests();
+
+        Assert.Null(h.LastWire);
+        Assert.Null(h.Requester.HeldBack);
+    }
+
+    [Fact]
+    public void HeldRequest_IsDroppedWhenWeFollowAgain()
+    {
+        using Harness h = NewFollower();
+        h.MasterSwitchOn = false;
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+
+        h.Feed("You are now following Boss.");
+        h.MasterSwitchOn = true;
+        h.Requester.FireRetryForTests();
+
+        Assert.Null(h.LastWire);
+    }
+
+    // During the leader's party train trip nothing is asked; the request goes out
+    // when the trip is over, however long it ran.
+    [Fact]
+    public void TrainTrip_HoldsTheRequest_UntilTheTripIsOver()
+    {
+        using Harness h = NewFollower();
+        h.Requester.RetryWindow = TimeSpan.FromMinutes(2);
+        h.InTrainTrip = true;
+
+        h.Feed("Boss just left to the north.");
+        h.Feed("You have not progressed far enough to go through this exit!");
+        h.Requester.FireSettleForTests();
+        Assert.Null(h.LastWire);
+        Assert.Contains("party train trip", h.Requester.LastIncidentSummary);
+
+        h.Advance(TimeSpan.FromMinutes(6));
+        h.Requester.FireRetryForTests();
+        Assert.Null(h.LastWire);
+
+        h.InTrainTrip = false;
+        h.Advance(TimeSpan.FromSeconds(5));
+        h.Requester.FireRetryForTests();
+
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+    }
+
+    // A dropped link hands the split to the reconnect's own request: nothing here
+    // adds a second one before we follow again.
+    [Fact]
+    public void AfterADisconnect_TheReconnectsRequestIsTheOnlyOne()
+    {
+        using Harness h = NewFollower();
+
+        h.Requester.NoteDisconnected();
+        h.Advance(TimeSpan.FromSeconds(40));
+        h.Feed("Boss just left to the north.");
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        Assert.Null(h.LastWire);
+
+        h.Feed("You are now following Boss.");
+        h.Advance(TimeSpan.FromSeconds(20));
+        h.Feed(ItemRefusal);
+        h.Requester.FireSettleForTests();
+        Assert.Equal("/Boss @comeback 1/1", h.LastWire);
+    }
+
     // ----- one request per incident --------------------------------------------
 
     [Fact]
     public void OneRequestPerIncident_UntilFollowingAgain()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed(ItemRefusal);
         h.Requester.FireSettleForTests();
@@ -632,11 +1029,33 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Equal(2, h.Sent);
     }
 
+    // The same exit on every lap of the leader's loop: each rejoin and refusal is
+    // a split of its own, so each asks once. Whether a leader goes on coming back
+    // for it is the leader's to decide; nothing here damps it.
+    [Fact]
+    public void TheSameExitEveryLap_AsksOncePerLap()
+    {
+        using Harness h = NewFollower();
+
+        for (int lap = 0; lap < 5; lap++)
+        {
+            h.Feed("Boss just left to the north.");
+            h.Feed(ItemRefusal);
+            h.Advance(TimeSpan.FromSeconds(2));
+            h.Requester.FireSettleForTests();
+            h.Advance(TimeSpan.FromSeconds(20));
+            h.Feed("You are now following Boss");
+            h.Advance(TimeSpan.FromSeconds(5));
+        }
+
+        Assert.Equal(5, h.Sent);
+    }
+
     // The refusal and the leader's departure are one split, however they arrive.
     [Fact]
     public void RefusalAndDepartureTogether_AreOneRequest()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
 
         h.Feed("Boss just left to the north.");
         h.Feed(ItemRefusal);
@@ -648,25 +1067,11 @@ public sealed class ComebackRequesterTests : IDisposable
         Assert.Contains("appropriate item", h.Requester.LastIncidentSummary);
     }
 
-    [Fact]
-    public void FailureIsConsumed_SecondUnfollowStaysSilent()
-    {
-        using Harness h = NewHarness();
-
-        h.Feed("You can't seem to move anywhere!");
-        h.Feed("You are no longer following Boss.");
-        Assert.Equal(1, h.Sent);
-
-        // A later, unrelated unfollow must not reuse the consumed failure.
-        h.Feed("You are no longer following Stranger.");
-        Assert.Equal(1, h.Sent);
-    }
-
     // An idle leader says so; the follower logs it and asks no second time.
     [Fact]
     public void LeadersDecline_IsKept_AndNotAnswered()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
         h.Feed(ItemRefusal);
         h.Requester.FireSettleForTests();
 
@@ -686,7 +1091,7 @@ public sealed class ComebackRequesterTests : IDisposable
     [Fact]
     public void TooHeavyAndLeftBehind_SendsWaitThenOneComeback()
     {
-        using Harness h = NewHarness();
+        using Harness h = NewFollower();
         using InventoryManager inventory = new(log: null);
         PartyRestSync rest = new(h.Party);
         rest.SetWireSender(b => h.Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));

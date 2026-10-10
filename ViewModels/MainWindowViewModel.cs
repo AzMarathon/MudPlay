@@ -3406,6 +3406,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (wasConnected) AppServices.Current.PartyReform.NoteDisconnected();
                 // The follower's reconnect @comeback is skipped after too long a drop.
                 if (wasConnected) AppServices.Current.PartyRejoin.NoteDisconnected();
+                // That reconnect request is the only one for this split: the
+                // left-behind watch stands down until we follow again.
+                if (wasConnected) AppServices.Current.ComebackRequest.NoteDisconnected();
                 // Cancel any pending stable-window reset — this drop
                 // happened before the 30s threshold, so the connect
                 // didn't earn a counter reset.

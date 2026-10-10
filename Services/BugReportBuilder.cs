@@ -413,6 +413,11 @@ public static class BugReportBuilder
         Kv(sb, "Last left-behind incident", svc.ComebackRequest.LastIncidentSummary);
         if (svc.ComebackRequest.PendingCheckFor is { } pendingLeader)
             Kv(sb, "Left-behind check pending", $"judging whether {pendingLeader} left without us");
+        if (svc.ComebackRequest.HeldBack is { } heldBack)
+            Kv(sb, "Left-behind @comeback held back", heldBack);
+        if (svc.PartyComeback.QueuedRecoveries is { Count: > 0 } queued)
+            Kv(sb, "Recoveries waiting their turn", string.Join(", ", queued));
+        Kv(sb, "Party train trip we set out on", svc.PartyTrain.TripWeSetOutOn ?? "(none)");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't
         // wait after a nightly-cleanup reconnect" report hinges on whether they

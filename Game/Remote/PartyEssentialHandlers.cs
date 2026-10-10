@@ -574,14 +574,13 @@ public sealed class PartyEssentialHandlers : IDisposable
         };
         byte[] bytes = Encoding.Latin1.GetBytes(local + "\r");
         _wireSender(bytes);
-        PartyDirectiveRelayed?.Invoke();
+        PartyDirectiveRelayed?.Invoke(GivenName(ctx.Sender), local);
     }
 
-    // A leader's `@party <command>` was just put on our wire. A leader takes the
-    // party across a party-splitting teleport this way, so a follow that ends
-    // right after one is that split and the leader regroups on landing
-    // (ComebackRequester reads it).
-    public event Action? PartyDirectiveRelayed;
+    // A member's `@party <command>` was just put on our wire: who sent it and the
+    // command as sent. Most are no concern of the follow (a hand-over before an
+    // item gate, a rest); ComebackRequester picks out a leader's teleport keyword.
+    public event Action<string, string>? PartyDirectiveRelayed;
 
     // ----- Lives / invite / join -----------------------------------------
 

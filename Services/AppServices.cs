@@ -8283,7 +8283,8 @@ public sealed class AppServices
             sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
             roomName: () => RoomTracker.State.CurrentRoom?.Name,
             schedule: pacedReplyScheduler,
-            log: Log);
+            log: Log,
+            isPartyFollower: () => PartyState.IsInParty && !PartyState.SelfIsLeader);
         PvpResponse.Responded += what => WriteTerminalNotice($"[PvP: {what}]");
 
         // Always-alive control surface over the three movement engines.
@@ -8803,7 +8804,10 @@ public sealed class AppServices
             recordedLevel: name => Players.Find(name)?.Level,
             selfTimeToLevel: () => SelfTimeToLevel().Remaining,
             telepathsPending: () => Telepaths.Queued + Telepaths.InFlight > 0,
-            log: Log);
+            log: Log,
+            // A member a finished trip came back without asks to be fetched now;
+            // that request is honoured as a party member's.
+            expectComeback: given => Party.ExpectComebackFrom(given));
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
@@ -9300,11 +9304,15 @@ public sealed class AppServices
             isSelfDown: () => PlayerState.IsMortallyWounded,
             sendBlocked: () => InGameCapture.AtBoardMenu ? "we are at the board's menu"
                 : EngineGate.IsLocked ? "the client's sends are held (a trainer screen or a password prompt)"
-                : null);
-        // A refusal right after a move of our own answers that move, not a follow move.
-        OutboundMovement.MoveSent += () => ComebackRequest.NoteOwnMoveSent();
-        // A follow that ends behind a relayed party command is the leader's teleport split.
-        PartyEssentials.PartyDirectiveRelayed += () => ComebackRequest.NotePartyRelay();
+                : null,
+            // During the leader's party train trip the request waits for the trip to
+            // end (PartyTrain is built before this).
+            inTrainTrip: leader => PartyTrain.InTripOf(leader));
+        // The trip's leader may tell us it is over after an exit has turned us out
+        // of the party on our own side.
+        RemoteCommands.PartyTrainEligibility = sender => PartyTrain.InTripOf(sender);
+        // The leader's relay of a teleport keyword is the leader's own split.
+        PartyEssentials.PartyDirectiveRelayed += (sender, command) => ComebackRequest.NotePartyRelay(sender, command);
         Party.LeaderListedAsInvited += leader => ComebackRequest.NoteLeaderListedAsInvited(leader);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
@@ -13927,6 +13935,7 @@ public sealed class AppServices
         Party.ComebackWindow = window;
         PartyComeback.ComebackWindow = window;
         PartyRejoin.ComebackWindow = window;
+        ComebackRequest.RetryWindow = window;
     }
 
     public void ApplyPartyFromActiveProfile()

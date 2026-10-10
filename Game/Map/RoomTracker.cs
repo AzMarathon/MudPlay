@@ -135,6 +135,19 @@ public sealed class RoomTracker
     // happen to be under at the time.
     public bool LastMoveWasManual { get; private set; }
 
+    // A move this client sent, typed or an engine's, has had no answer yet. A
+    // party leader's drag waits in the same queue but nobody here asked for it, so
+    // a refusal that arrives with only drags queued answers none of ours.
+    public bool OwnMoveInFlight
+    {
+        get
+        {
+            foreach (PendingMove move in _pending)
+                if (!move.IsFollowDrag) return true;
+            return false;
+        }
+    }
+
     // Diagnostics: the most recent server move-echo the tracker recorded (the
     // command + when), or null if none this session. The echo gate confirms a
     // move's landing only once its command has been echoed, so a bug report of a
