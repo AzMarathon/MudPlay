@@ -15,8 +15,12 @@ public abstract record DoorOpenResult
 
     // Door couldn't be opened — bash exhausted, pick exhausted, key
     // required but unavailable, or an unknown server reply broke the FSM.
-    // Reason is a short user-facing failure detail.
-    public sealed record Failed(string Reason) : DoorOpenResult;
+    // Reason is a short user-facing failure detail. Unopenable says the door itself
+    // beat this character (no verb it has can open it, or the ones it has ran out),
+    // as opposed to the request breaking (stopped, a reply lost, a key missing): the
+    // caller goes round such a door when it can, and trying it again would end the
+    // same way.
+    public sealed record Failed(string Reason, bool Unopenable = false) : DoorOpenResult;
 
     // The door isn't in the room the character is standing in: the game answered
     // the verb with "Your command had no effect." (the exit that way is no door

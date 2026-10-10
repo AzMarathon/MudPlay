@@ -4013,6 +4013,9 @@ public sealed class AppServices
         // Same bash ceiling the door FSM uses, so the filter and DoorOpenManager
         // never disagree on whether a strength-gated door is bashable.
         Movement.MaxBashableStrengthProvider = () => MaxStrength.MaxAchievableStrength;
+        // The pick roll is recorded for the Stock engine only, so on Paradigm no
+        // lock is weighed by its odds.
+        Movement.PickChanceKnownProbe = () => GameData.ActiveRealm != Game.RealmType.ParaMud;
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
         Favorites = new FavoritesStore(Profile, GameData, ProfileGameDataSet, Log);

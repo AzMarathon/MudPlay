@@ -307,7 +307,8 @@ public sealed class DoorOpenManager : IDisposable
                 StartUseKey();
                 return;
             }
-            FailCurrent($"no viable open verb (req {cur.StatRequirement}, str {_stats.Strength}, picks {_stats.Picklocks}, canBash {cur.CanBash})");
+            FailCurrent($"no viable open verb (req {cur.StatRequirement}, str {_stats.Strength}, picks {_stats.Picklocks}, canBash {cur.CanBash})",
+                unopenable: true);
             return;
         }
         StartVerb(verb);
@@ -683,7 +684,7 @@ public sealed class DoorOpenManager : IDisposable
                 StartUseKey();
                 return;
             }
-            FailCurrent($"{reason}; fallback verb also exhausted");
+            FailCurrent($"{reason}; fallback verb also exhausted", unopenable: true);
             return;
         }
         _triedFallbackVerb = true;
@@ -704,7 +705,7 @@ public sealed class DoorOpenManager : IDisposable
                 StartUseKey();
                 return;
             }
-            FailCurrent($"{reason}; no viable fallback verb");
+            FailCurrent($"{reason}; no viable fallback verb", unopenable: true);
             return;
         }
         _log?.Info("Door", $"falling back from {_verb} to {other}.");
@@ -719,13 +720,18 @@ public sealed class DoorOpenManager : IDisposable
         Reset();
     }
 
-    private void FailCurrent(string reason)
+    // unopenable: bash and pick are both out for this character (DoorOpenResult.Failed).
+    // The request is cleared before the caller hears of it for the reason
+    // AbandonCurrent gives: the caller may re-plan from inside the reply and ask for
+    // another door at once.
+    private void FailCurrent(string reason, bool unopenable = false)
     {
         if (_current is not { } cur) return;
         if (AbandonIfLeftRoom()) return;
         _log?.Warn("Door", $"door {cur.DirectionShort} failed: {reason}.");
-        cur.Reply(new DoorOpenResult.Failed(reason));
-        Reset();
+        ClearCurrent();
+        cur.Reply(new DoorOpenResult.Failed(reason, unopenable));
+        TryStartNext();
     }
 
     // The tracker has confirmed another room than the one this door is in: a move

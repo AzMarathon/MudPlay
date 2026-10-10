@@ -32,8 +32,15 @@ public sealed class LoopRunner : IRecoverableEngine
     private readonly AutoWalkManager? _walker;
     // Path filter used by the runner's BFS calls (rotation + closest-waypoint
     // pick). When set this is typically AppServices.Movement; changes to its
-    // avoided-rooms list arrive via NotifyAvoidedChanged.
-    private readonly IRoomFilter? _filter;
+    // avoided-rooms list arrive via NotifyAvoidedChanged. Once the run has given up
+    // on a door it is that filter with the door refused on top
+    // (AbandonedDoorsFilter), and the bare one again from the next run.
+    private IRoomFilter? _filter;
+    private readonly IRoomFilter? _runFilter;
+    // Doors this run tried and couldn't open, by the room each leaves and the room
+    // it leads to: the walker's rule (AutoWalkManager.TryGoRoundDoor) for a circuit.
+    private readonly HashSet<(RoomKey From, RoomKey To)> _abandonedDoors = new();
+    public IReadOnlyCollection<(RoomKey From, RoomKey To)> AbandonedDoors => _abandonedDoors;
     private Action<byte[]>? _wireSender;
     private Action? _preMoveHook;
     // StealthManager.ReadyToMoveSneaking — false = hold the step (a sneak is settling).
@@ -597,6 +604,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachTarget = target;
         State = LoopState.Approaching;
         Raise(new LoopEvent(LoopEventKind.Resumed, $"walking back to {target} after a flee"));
+        CarryAbandonedDoorsToWalker();
         if (_walker.WalkTo(target, preferTeleportFree: ApproachTeleportPreference)) return true;
         _fleeReturnTarget = null;
         _approachTarget = null;
@@ -690,6 +698,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _recovery = recovery;
         _bfs = bfs;
         _walker = walker;
+        _runFilter = filter;
         _filter = filter;
         _postToUi = postToUi ?? (a => Dispatcher.UIThread.Post(a));
 
@@ -942,6 +951,7 @@ public sealed class LoopRunner : IRecoverableEngine
             _recoverAttempts = 0;
             _revealRetries = 0;
             _lastRecoveryAttemptAt = DateTimeOffset.MinValue;
+            ForgetAbandonedDoors();
             if (State is LoopState.Running or LoopState.Paused
                        or LoopState.Approaching or LoopState.Recovering)
             {
@@ -1084,6 +1094,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner",
             $"approach: walking from {currentKey} → {closest} (closest of {loop.Waypoints.Count} waypoints)");
         JourneyFetch? fetch = throughGates ? _gatedApproachFetch?.Invoke(currentKey.Value, closest.Value) : null;
+        CarryAbandonedDoorsToWalker();
         _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference,
             fetch: fetch);
         return true;
@@ -1143,6 +1154,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner",
             $"approach: walking from {from} → {entry} (nearest loop room, {steps[entry]} step(s); joins at step {_index + 1} of {_expandedSteps.Count})");
         JourneyFetch? fetch = throughGates ? _gatedApproachFetch?.Invoke(from, entry) : null;
+        CarryAbandonedDoorsToWalker();
         _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference,
             fetch: fetch);
         return true;
@@ -1850,6 +1862,7 @@ public sealed class LoopRunner : IRecoverableEngine
                 return;
 
             case DoorOpenResult.Failed failed:
+                if (failed.Unopenable && TryGoRoundDoor(failed.Reason)) return;
                 FailStep($"door open failed: {failed.Reason}");
                 return;
 
@@ -1869,6 +1882,55 @@ public sealed class LoopRunner : IRecoverableEngine
                 EnterRecovery($"step {_index + 1} door isn't here ({notHere.Reason})");
                 return;
         }
+    }
+
+    // The walker's rule for a door that beat the character
+    // (AutoWalkManager.TryGoRoundDoor), for a circuit: the door is given up on for
+    // the rest of the run and the loop re-planned from here with it refused, so the
+    // legs it was on go round. Failing the lap there, as before, ended the run on a
+    // door a few steps would have gone round. False when the step has to fail as
+    // before; true when the loop went round, or failed here because a leg has no
+    // other way.
+    private bool TryGoRoundDoor(string reason)
+    {
+        if (_loop is null || _bfs is null || _index >= _expandedSteps.Count
+            || _expandedSteps[_index] is not MoveLoopStep step
+            || _tracker.State.CurrentRoom is not { } here
+            || !here.Exits.TryGetValue(step.Direction, out RoomExit exit))
+            return false;
+        // Recovery would take an entry this soon after the last for its echo and
+        // drop it, leaving the step with nothing on the wire: the OnDoorReply
+        // NotHere case has the same guard.
+        if (RecoveryWouldDeclineAsEcho()) return false;
+
+        IReadOnlyList<LoopWaypoint> waypoints = RuntimeWaypointOrder();
+        int unreachableBefore = LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count;
+        _abandonedDoors.Add((here.Key, exit.Target));
+        _filter = new AbandonedDoorsFilter(_runFilter, _abandonedDoors);
+        string door = $"the door {step.Direction} from {here.Key} ({here.Name})";
+        if (LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count > unreachableBefore)
+        {
+            FailStep($"couldn't open {door} ({reason}), and the loop has no way round it");
+            return true;
+        }
+
+        _log?.Info("LoopRunner",
+            $"gave up on {door} ({reason}); routing the loop round it, and not planning through it again this run");
+        EnterRecovery($"step {_index + 1} couldn't open {door}");
+        return true;
+    }
+
+    private void ForgetAbandonedDoors()
+    {
+        _abandonedDoors.Clear();
+        _filter = _runFilter;
+    }
+
+    // An approach walk is the walker's own trip, with its own list of doors given
+    // up on: without the run's, it would try a door this run already gave up on.
+    private void CarryAbandonedDoorsToWalker()
+    {
+        if (_abandonedDoors.Count > 0) _walker?.RefuseDoorsOnNextWalk(_abandonedDoors);
     }
 
     // The way was cleared (trap down, door open, winch turned, hidden exit found)
@@ -3124,6 +3186,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachFinishedWhilePaused = false;
         _recoverAttempts = 0;
         _lastRecoveryAttemptAt = DateTimeOffset.MinValue;   // reset the spacing clock with the budget
+        ForgetAbandonedDoors();
         _lapDurations.Clear();
         _completedLaps = 0;
         _lapStartedAt = default;

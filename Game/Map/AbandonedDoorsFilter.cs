@@ -1,26 +1,31 @@
 namespace MudPlay.Game.Map;
 
-// The route filter of a walk the user sent around some rooms for this one trip (the
-// route card's "walk around the boss"): everything the wrapped filter says, with
-// those rooms avoided on top.
+// The route filter of a walk or loop run that has given up on a door: everything
+// the wrapped filter says, with that door refused on top. A door the character
+// tried and couldn't open is not one to plan through again on the same trip, and
+// without this the re-plan from the door's own room is the same one step through it.
 //
-// Wrapping the filter, not passing a flag to one search, is what makes the choice
-// hold for every plan the walk makes, each re-plan on the way included.
-public sealed class WalkAroundRoomsFilter : IRoomFilter
+// The set is the caller's and is read live, so a door given up on later is refused
+// by the filter already in use. A door is named by the room it leaves and the room
+// it leads to, since an exit alone doesn't say where it leaves from.
+public sealed class AbandonedDoorsFilter : IRoomFilter
 {
     private readonly IRoomFilter? _inner;
-    private readonly IReadOnlySet<RoomKey> _around;
+    private readonly IReadOnlySet<(RoomKey From, RoomKey To)> _abandoned;
 
-    public WalkAroundRoomsFilter(IRoomFilter? inner, IReadOnlySet<RoomKey> around)
+    public AbandonedDoorsFilter(IRoomFilter? inner, IReadOnlySet<(RoomKey From, RoomKey To)> abandoned)
     {
-        ArgumentNullException.ThrowIfNull(around);
+        ArgumentNullException.ThrowIfNull(abandoned);
         _inner = inner;
-        _around = around;
+        _abandoned = abandoned;
     }
 
-    public bool IsAvoided(RoomKey key) => _around.Contains(key) || (_inner?.IsAvoided(key) ?? false);
+    public bool IsExitRefused(RoomKey from, in RoomExit exit) =>
+        (exit.Hint is RoomExitHint.Door or RoomExitHint.KeyLocked && _abandoned.Contains((from, exit.Target)))
+        || (_inner?.IsExitRefused(from, in exit) ?? false);
+
+    public bool IsAvoided(RoomKey key) => _inner?.IsAvoided(key) ?? false;
     public bool IsExitBlocked(in RoomExit exit) => _inner?.IsExitBlocked(in exit) ?? false;
-    public bool IsExitRefused(RoomKey from, in RoomExit exit) => _inner?.IsExitRefused(from, in exit) ?? false;
     public bool IsPoorOddsDoor(in RoomExit exit) => _inner?.IsPoorOddsDoor(in exit) ?? false;
     public string? DescribeDoorRefusal(in RoomExit exit) => _inner?.DescribeDoorRefusal(in exit);
     public ExitBlockReason DescribeExitBlock(in RoomExit exit) => _inner?.DescribeExitBlock(in exit) ?? ExitBlockReason.None;
