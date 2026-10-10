@@ -86,9 +86,9 @@ public sealed partial class OutboundMovementObserver
             return;
         }
 
-        // "leave party" isn't a valid game command — the game ignores it — but
-        // it's a natural phrase to type when trying to leave a party. "leave" is a
-        // legitimate text-exit verb, so without this guard TextMovementPattern
+        // "leave party" leaves the party (GAME_MECHANICS "Party commands") and
+        // moves nobody. "leave" is also a text-exit verb, so without this guard
+        // TextMovementPattern
         // reads "leave party" as a text-exit move and enqueues a phantom,
         // cardinal-less pending move. In a dark room that phantom has no mapped
         // exit, so NoteDarkRoomEntered holds it at the head of the pending queue
@@ -155,8 +155,7 @@ public sealed partial class OutboundMovementObserver
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TextMovementPattern();
 
-    // A "leave party" phrase — a natural thing to type to leave a party, but not
-    // a valid game command (the game ignores it) and never movement. It starts
+    // A "leave party" phrase — the party command, never movement. It starts
     // with "leave", which TextMovementPattern would otherwise treat as a text-exit
     // move, so it must be dropped before that check.
     [GeneratedRegex(

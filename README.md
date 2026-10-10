@@ -1,11 +1,16 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.165.2**
-> - A follower left behind at an exit (door, item, toll, level or class gate) now sends `@comeback`
+> **Version 3.165.7**
+> - A follower left behind at an exit the leader got through (item, toll, level or class gate) sends `@comeback`
 > - Also when the leader is seen leaving without it, or its own `par` shows the leader `[Invited]`
-> - No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a party teleport
-> - One request per split; the leader's answer is logged; nothing is sent with Auto-All off
+> - No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a teleport split
+> - One request per split; it waits out Auto-All off or a party train trip, then goes out
+> - A party follower never flees: low HP or mana, Hit and Run, a failed backstab, PvP, a Flee monster
+> - `[Invited]` rows in `par` no longer make a follower's client think it leads
+> - Leader: followers left behind together are fetched one after the other
+> - Leader: a re-invited follower who never answers is waited on 90 s when the wait is set to 0
+> - Party train: members are told when a trip sets out and ends
 > - The bug report shows the last left-behind incident
 >
 > See the [version history](CHANGELOG.md) for the full changelog.

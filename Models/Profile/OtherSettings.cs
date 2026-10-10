@@ -94,9 +94,10 @@ public sealed class OtherSettings
     // we telepath @comeback <room> to the leader once so their party-recovery
     // walk picks us up; ComebackRequester has the triggers and the splits it
     // never asks for. When false, the left-behind is still detected but no request
-    // is sent — the player handles it manually. Defaults on: the request is a single telepath that
-    // moves nothing on our side, so being stranded silently is strictly the
-    // worse outcome. Char-tier setting; surfaced in Settings → Other.
+    // is sent — the player handles it manually. Defaults on: the request is a
+    // single telepath that moves nothing on our side, so being stranded silently
+    // is strictly the worse outcome. Char-tier setting; surfaced in Settings →
+    // Other.
     public bool AutoRequestComebackWhenLeftBehind { get; set; } = true;
 
     // When true, a player flagged "invite to party if seen" is auto-invited only while
