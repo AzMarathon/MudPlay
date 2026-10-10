@@ -41,10 +41,10 @@ public sealed class GroundItemTracker : IDisposable
     private string? _noticeBuffer;            // multi-line continuation
     private bool _disposed;
 
-    // Whether any line this session followed a command echo, which only a statline
-    // the client can split ever shows. Until one has, a list that doesn't follow a
-    // search's echo proves nothing about where it came from.
-    private bool _echoesRead;
+    private readonly Func<string, bool>? _isRoomName;
+    // Whether a room's name has gone by since the last prompt or exits line: the
+    // head of a room display, whose floor list comes after it and before its exits.
+    private bool _roomNameSeen;
     // What printed the list now being read, settled on the row that opens it: later
     // rows of a wrapped list follow that row, not an echo.
     private FloorSurveySource _openListSource;
@@ -53,13 +53,16 @@ public sealed class GroundItemTracker : IDisposable
     // when it names a real Items.json record). Injected so the cash filter can
     // settle the "2 gold key" ambiguity below; null when no game data is wired
     // (tests), where the count+denomination heuristic stands alone.
+    // isRoomName says whether a line is the name of a room in the active set; null
+    // when no map is wired, where no list can be shown to be a room display's.
     public GroundItemTracker(MessageRouter router, CurrencyNaming naming,
-        Func<string, bool>? isKnownItem = null)
+        Func<string, bool>? isKnownItem = null, Func<string, bool>? isRoomName = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(naming);
         _naming = naming;
         _isKnownItem = isKnownItem;
+        _isRoomName = isRoomName;
         _router = router;
         // Ahead of the pattern handlers, and inside the dispatch that knows which
         // command the line answers.
@@ -96,8 +99,6 @@ public sealed class GroundItemTracker : IDisposable
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = lines;
         _lines.LineEmitted += OnLine;
-        // A new session may run on another statline.
-        _echoesRead = false;
     }
 
     // Discard the snapshot on an actual room change — the floor loot belonged to
@@ -110,15 +111,30 @@ public sealed class GroundItemTracker : IDisposable
 
     // ----- notice parsing ----------------------------------------------
 
+    // Each source is taken only on proof. The echo of a bare search directly ahead
+    // of the list proves a reply; a room's name ahead of it, with no prompt between,
+    // proves a display. A list with neither is left unknown: a line that lands
+    // between a search's echo and its reply, or a statline that puts text of its own
+    // after the prompt, takes the echo away without making the list a room display.
     private void NoteWhatTheLineFollows(Terminal.LineExtractor.EmittedLine line)
     {
-        string? echo = _router.CommandEchoedBeforeLine;
-        if (echo is not null) _echoesRead = true;
-        if (line.IsPromptLine || !FloorListLine.Opens(line.Text)) return;
+        if (line.IsPromptLine)
+        {
+            _roomNameSeen = false;
+            return;
+        }
 
-        _openListSource = echo is not null && FloorListLine.IsRoomSearch(echo)
-            ? FloorSurveySource.SearchReply
-            : _echoesRead ? FloorSurveySource.RoomDisplay : FloorSurveySource.Unknown;
+        string text = line.Text.Trim();
+        if (FloorListLine.Opens(text))
+        {
+            _openListSource = _router.CommandEchoedBeforeLine is { } echo && FloorListLine.IsRoomSearch(echo)
+                ? FloorSurveySource.SearchReply
+                : _roomNameSeen ? FloorSurveySource.RoomDisplay : FloorSurveySource.Unknown;
+            return;
+        }
+
+        if (text.StartsWith("Obvious exits:", StringComparison.Ordinal)) _roomNameSeen = false;
+        else if (_isRoomName?.Invoke(text) == true) _roomNameSeen = true;
     }
 
     // Single-line "You notice <list> here." — the pattern subscription path.

@@ -77,7 +77,8 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         GroundItemTracker ground = new(router, new CurrencyNaming(),
-            entry => names.FindByName(entry) is not null);
+            entry => names.FindByName(entry) is not null,
+            isRoomName: line => line == "Bronze House Vault");
 
         // The condition tracker reads every line against the realm's message
         // catalogue; its cast-line templates are where the seconds went.
@@ -222,7 +223,8 @@ public sealed class GhSweepHugeRoomTests : IDisposable
         int hidden = Enumerable.Range(visible, all - visible).Sum(HugeFloor.CountOf);
         Assert.StartsWith(
             $"recon at 1/3: {shown + hidden} item(s) of {all} kind(s) in the room; "
-            + $"on display {shown} in {visible} stack(s); hidden {hidden} in {all - visible} stack(s): ", vaultLines[0]);
+            + $"on display {shown} in {visible} stack(s); searched 2 time(s); "
+            + $"hidden {hidden} in {all - visible} stack(s): ", vaultLines[0]);
         Assert.Contains($"(+{all - visible - 20} more)", vaultLines[0]);
         Assert.Contains("; 3 floor read(s), slowest: read ", vaultLines[0]);
         Assert.All(vaultLines, line => Assert.True(line.Length < 800, $"summary line ran to {line.Length} characters"));

@@ -88,7 +88,8 @@ public sealed class GhSweepSearchCountsTests : IDisposable
         MessageRouter router = new();
         DefaultPatterns.Seed(router);
         GroundItemTracker ground = new(router, new CurrencyNaming(),
-            entry => names.FindByName(entry) is not null);
+            entry => names.FindByName(entry) is not null,
+            isRoomName: line => line == "Bronze House Room");
         LineExtractor lines = new(_emulator);
         lines.LineEmitted += router.Dispatch;
         ground.AttachLineExtractor(lines);
@@ -220,6 +221,7 @@ public sealed class GhSweepSearchCountsTests : IDisposable
             .Select(e => e.Message));
         Assert.StartsWith(
             "recon at 1/3: 61 item(s) of 5 kind(s) in the room; on display 45 in 3 stack(s); "
+            + "searched 3 time(s); "
             + "hidden 16 in 5 stack(s): 2 wooden skiff, 2 rope and grapple, scorpion tail, pulsating heart, "
             + "10 black diamond; 5 floor read(s), slowest: read ", line);
         Assert.Contains("; item log written in ", line);
@@ -277,8 +279,10 @@ public sealed class GhSweepSearchCountsTests : IDisposable
     }
 
     // Sorting searches the room, then asks for the visible copies before the hidden
-    // ones. Here the sort's own searches miss the two hidden ropes: that pickup fails
-    // by itself and the 34 in plain sight are already in the pack.
+    // ones. Here the two hidden ropes can't be had: that pickup is refused by itself
+    // (`You don't see 2 rope and grapple here.`, the count echoed back) with the 34
+    // in plain sight already in the pack. The room is searched once more for them,
+    // and when that finds nothing they are left as not found.
     [Fact]
     public void Sorting_TakesTheVisibleCopies_WhateverBecomesOfTheHiddenOnes()
     {
@@ -297,7 +301,7 @@ public sealed class GhSweepSearchCountsTests : IDisposable
             ("get 10 pulsating heart", "You took 10 pulsating heart."),
             ("get scorpion tail", "You took scorpion tail."),
             ("get 2 wooden skiff", "You took 2 wooden skiff."),
-            ("get 2 rope and grapple", "You don't see rope and grapple here."),
+            ("get 2 rope and grapple", "You don't see 2 rope and grapple here."),
             ("get scorpion tail", "You took scorpion tail."),
             ("get pulsating heart", "You took pulsating heart."),
             ("get 10 black diamond", "You took 10 black diamond."),
@@ -309,8 +313,17 @@ public sealed class GhSweepSearchCountsTests : IDisposable
             _sweep.FirePromptWaitTimeoutForTests();
         }
 
+        // The second search for the refused two, once the rest of the room is done.
+        Assert.Equal("sea", _sent[^1]);
+        Wire(Prompt + "sea", "Your search revealed nothing.");
+        typeof(GhSweepManager).GetMethod("OnDispatchSettleElapsed",
+            BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_sweep, null);
+
         Assert.Equal(7, _sweep.CarriedPendingCount);
         Assert.Equal(7, _sweep.PendingMoveCount);
+        GhSweepItemFound left = Assert.Single(_sweep.LeftInPlace);
+        Assert.Equal((Store, "rope and grapple", GhLeftReason.NotFoundBySearch),
+            (left.Room, left.ItemName, left.Reason));
     }
 
     [Fact]

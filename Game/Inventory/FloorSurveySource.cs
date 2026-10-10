@@ -4,15 +4,18 @@ namespace MudPlay.Game.Inventory;
 // a room display lists the visible floor, and the reply to a room search lists only
 // the hidden stacks that search found, each under the hidden stack's own count
 // (GAME_MECHANICS "Hiding items in a room (stashing)"). The same item can be in both.
+// Each is named only on proof; a list with neither proof is Unknown, and a caller
+// that cares has to decide from what it was doing at the time.
 public enum FloorSurveySource
 {
-    // No command echo has been read this session (a statline the client can't
-    // split), so the line can't be told apart. Callers keep their older reading.
+    // Neither proof: no search echo directly ahead of the list, and no room name
+    // ahead of it either.
     Unknown,
 
-    // The line did not follow the echo of a room search: a walk-in, a look.
+    // A room's name went by ahead of the list with no prompt between: a walk-in, a
+    // look, a redisplay.
     RoomDisplay,
 
-    // The line directly followed the echo of a bare `search`.
+    // The list directly followed the echo of a bare `search`.
     SearchReply,
 }

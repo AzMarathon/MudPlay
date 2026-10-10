@@ -67,10 +67,11 @@ public sealed class GhItemLocationStore
     // hold but that isn't in this fresh list anymore has its sighting for THIS
     // room dropped — a room's entry always reflects the last survey actually
     // taken of it, not everything ever seen there. Other rooms' sightings of
-    // the same item name are untouched either way. Called by GhSweepManager
-    // right after it merges a fresh survey into its own _observedByRoom ledger
-    // for `room` — `items` is that room's full accumulated floor list
-    // (count-prefixed entries allowed; the count becomes Quantity).
+    // the same item name are untouched either way. Called by GhSweepManager once
+    // its reads of `room` on a visit are done (after the last search, or at once
+    // where it isn't searching) — `items` is what the room holds, its visible
+    // stacks and its hidden ones added (count-prefixed entries allowed; the
+    // count becomes Quantity).
     public void RecordRoom(RoomKey room, IReadOnlyList<string> items)
     {
         if (_realmFolder is null) return;
