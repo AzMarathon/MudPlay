@@ -158,8 +158,8 @@ public sealed class EventScheduler : IDisposable
     }
 
     // Called by MainWindowVM when its TelnetClient.Disconnected handler runs.
-    // Latches the Re-log flag (so the next reconnect's Logon also fires Re-log)
-    // and stops all timers.
+    // Latches the Re-log flag (so the next reconnect's Logon also fires Re-log),
+    // stops all timers and drops the events waiting on the one running.
     public void NotifyDisconnected()
     {
         // Only set the Re-log latch when we actually made it in-game
@@ -169,6 +169,7 @@ public sealed class EventScheduler : IDisposable
         _isInGame = false;
         _atTimeTicker.Stop();
         StopAllEveryTimers();
+        _events.NoteDisconnected();
     }
 
     // BBS announced upcoming shutdown — fire user-configured Logoff events ONCE

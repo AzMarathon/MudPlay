@@ -4378,7 +4378,7 @@ The walks it covers are the ones nobody is there to approve: bank and sell trips
 
 The **filter** box narrows the list to lines holding what you type: a room name, a map/room number, or a command such as `go hatch`. **Allow all** and **Allow none** tick or clear the lines the filter is showing.
 
-**Important notes:** Walks **you** start aren't affected: they ask you on the route cards (**Walk it** or **Teleport**) whenever the shortest way there teleports and it could also be walked, and any other card whose route teleports names the teleport. That holds for the whole walk: a side trip it makes to fetch an item its route needs (to an NPC who hands it over, or a shop) isn't held to this list either. It goes on foot when it can and takes a teleport only when it can't, and the leg from there on to where you were going is the route you picked again. The same goes for the walk picking up after a sell trip or a flee, and for a Shortcut card's trip to the shortcut item's source. That covers a walk-to, a **loop you start** from off the loop (getting to it is a walk-to like any other, with every route card a walk-to shows; the loop begins when you arrive), and **Recover Now** on a death. Only that first walk to the loop is yours: once the loop is reached, a walk back to it after a bank or sell trip or a flee is automatic and uses this list. So is a loop started by an event or by another player's remote command. A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
+**Important notes:** Walks **you** start aren't affected: they ask you on the route cards (**Walk it** or **Teleport**) whenever the shortest way there teleports and it could also be walked, and any other card whose route teleports names the teleport. That holds for the whole walk: a side trip it makes to fetch an item its route needs (to an NPC who hands it over, or a shop) isn't held to this list either. It goes on foot when it can and takes a teleport only when it can't, and the leg from there on to where you were going is the route you picked again. The same goes for the walk picking up after a sell trip or a flee, and for a Shortcut card's trip to the shortcut item's source. That covers a walk-to, a **loop you start** from off the loop (getting to it is a walk-to like any other, with every route card a walk-to shows; the loop begins when you arrive), and **Recover Now** on a death. Only that first walk to the loop is yours: once the loop is reached, a walk back to it after a bank or sell trip or a flee is automatic and uses this list. So is a loop started by an event or by another player's remote command, and the walk back to your loop after an event (when that walk is refused, the terminal names the teleport). A sailing isn't a teleport and is always allowed. Saved for this character; a change applies from the next automatic walk on, never to one already under way.
 
 ## Other
 
@@ -4578,7 +4578,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 - **Bank trip** — walk to your Settings → Cash bank or stash room and deposit / stash there, then stop (the Then step decides where to go next).
 - **Stash transfer** — carry one of your stash rooms' coin to a bank you pick, trip by trip, until the stash is empty: the same run as the map's **Transfer Stash to Bank** (see [Banking](#banking)). Pick the stash room and the bank from the two dropdowns. Done when the transfer ends, in the bank; if it gives up (no route, nothing could be picked up) the Then step still runs, and if you stop it yourself the Then step is dropped.
 
-Every action except a plain command stops whatever walk, loop or Auto-Lair was running first.
+Every action except a plain command stops whatever walk, loop or Auto-Lair was running first. If another event is still running, the new one waits for it: see [When events overlap](#when-events-overlap).
 
 ### Event editor — Stop after (loop / Auto-Lair)
 
@@ -4600,7 +4600,25 @@ What happens once the action is done:
 - **Fire event** — run another event by name; its own Then carries on from there, and its **Go back** still returns to what the first event interrupted. A chain of more than 10 events in a row is stopped as a loop.
 - **Nothing** — stop there.
 
-A walk or trip that can't be finished (no path, a leg fails) still runs its Then, so you aren't left standing. If **you** take over — stop the event's walk / loop / Auto-Lair, or start one of your own while it waits or rests — the event ends without its Then. A second event firing while one runs takes over (the first one's Then is dropped), but its **Go back** still means what the first event interrupted. Events you made before Then existed are converted the first time the character loads: a walk-to gets **Go back**, anything else **Nothing** — what they did before — so edit them to choose something else.
+A walk or trip that can't be finished (no path, a leg fails) still runs its Then, so you aren't left standing. If **you** take over — stop the event's walk / loop / Auto-Lair, or start one of your own while it waits or rests — the event ends without its Then. Events you made before Then existed are converted the first time the character loads: a walk-to gets **Go back**, anything else **Nothing** — what they did before — so edit them to choose something else.
+
+**Going back is an automatic walk.** The walk back to a loop or Auto-Lair (**Go back**, or a **Start loop** / **Auto-lair** Then) is one the client starts by itself, so it uses only the teleports ticked on **Settings → Teleports**. An event can walk you out of a place whose only way back in is a teleport: a room you enter by a command, say. If that teleport isn't ticked, the loop can't walk back and ends where the event did. The terminal then says so, and names the teleport to tick: `[Event 'Boss walk' finished, but loop 'Farm' didn't get going: … no route without the teleport from … to …, which automatic walks aren't allowed to use (Settings → Teleports)]`. The same line is written for any Then that can't start (a loop that no longer exists, a walk with no route).
+
+### When events overlap
+
+Events run one at a time, each from start to finish. An event that fires while another is still walking, waiting, resting, sweeping or on a bank trip or stash transfer **waits its turn** and starts when that one is done, its Then walk-to included. Several waiting events run in the order they fired.
+
+- **Go back happens once.** When the event that just finished would only go back or start a loop or Auto-Lair, and another event is waiting, the waiting event starts straight away and takes that loop as what **it** goes back to. Two boss events that both end in the same loop walk to the first boss, then the second, then start the loop.
+- **A loop or Auto-Lair action doesn't make others wait.** It has no end in sight, so an event that fires during one takes over at once (the loop event's Then is dropped), and its **Go back** means what the loop event interrupted.
+- **A plain command** (Nothing after it) is sent the moment it fires and waits for nothing.
+- **Logoff events don't wait.** They run just before a disconnect or a cleanup, so one takes over from whatever event is running and the waiting ones are dropped.
+- **The same event isn't queued twice.** An **Every 5 minutes** event whose run takes seven fires again while it is still going: that firing is skipped. One that fires again while it waits stays queued once.
+- **Limits.** At most 10 events wait at a time, and one that has waited 30 minutes is dropped, so a walk you left paused for an hour doesn't set off an hour's worth of events when you resume it. An event you remove, edit or disable while it waits doesn't run.
+- **Stopping the running event empties the queue.** Stop its walk (or take over, as above) and the waiting events are dropped with it. So does dying and **Reset States**. A lost connection drops the waiting events too; Logon and Re-log events fire afresh when you are back in.
+- **Your own walk or loop** is not an event: an event that fires over it takes over at once, as always, and goes back to it if its Then says so.
+- **Pause** holds an event's walk like any other, and the loop it goes back to stays paused until you resume.
+
+The Program Log names each event as it is queued, started, finished, skipped, dropped or abandoned, and a bug report lists the running event, the ones waiting and what the last Then came to.
 
 ---
 

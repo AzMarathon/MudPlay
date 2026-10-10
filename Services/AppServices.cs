@@ -8196,6 +8196,9 @@ public sealed class AppServices
             Walker.Stop("player died — halting in graveyard");
             AutoLair.Stop("player died — halting in graveyard");
             MovementControl.DropQueuedRun();
+            // After the engines: a run their stop didn't end (a wait, a rest) and
+            // the events queued behind it end here.
+            Events.NoteDeath();
         });
         // Wipe the classifier's room view so a hostile from the room we died in
         // doesn't linger as a stale target the combat engine re-attacks when a
@@ -9136,6 +9139,9 @@ public sealed class AppServices
         Events.SetStashTransferHooks(StartStashTransfer, () => StashTransfer.Cancel("another event took over"));
         StashTransfer.Ended += Events.NoteStashTransferEnded;
         Events.SetRestHooks(() => Health.IsRecoveringRest || Health.RestInFlight, () => Health.Evaluate());
+        // Posted: the engine event that reports a refused walk back can arrive from
+        // inside the message pump, where a terminal write re-feeds the emulator.
+        Events.SetNotice(msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);

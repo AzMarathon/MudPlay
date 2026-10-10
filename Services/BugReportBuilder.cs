@@ -588,6 +588,8 @@ public static class BugReportBuilder
           .Append(", level=").Append(now.Level?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown")
           .Append("\n\n");
         sb.Append("- **Running:** ").Append(svc.Events.RunSummary).Append('\n');
+        sb.Append("- **Waiting behind it:** ").Append(svc.Events.QueueSummary).Append('\n');
+        sb.Append("- **Last Then:** ").Append(svc.Events.LastThenSummary).Append('\n');
         if (events.Count == 0) sb.Append("- _(no events)_\n");
         else foreach (Models.GameData.ScheduledEvent e in events)
         {

@@ -166,6 +166,7 @@ public sealed class EventStateTriggerTests
         mgr.SetRoombaStarter(mode => { started.Add(mode); return null; });
 
         mgr.Fire(new ScheduledEvent { ActionType = EventActionType.Roomba, RoombaMode = EventRoombaMode.InventoryOnly });
+        mgr.NoteRoombaFinished();
         mgr.Fire(new ScheduledEvent { ActionType = EventActionType.Roomba });
 
         Assert.Equal(new[] { EventRoombaMode.InventoryOnly, EventRoombaMode.Sort }, started);
