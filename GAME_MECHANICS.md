@@ -128,7 +128,29 @@ how many swings or spell fires a player or monster gets inside one round.
     - **Not recognised:** four Paradigm room spells that do damage have no damage text in the
       message seed (freezing cold #5242, ocean drowning #5256, bog poison #5682, murky drown
       #5687), so step 1 can't match them; if their lines name no dealer, step 2 still leaves
-      them out. `[NEEDS CONFIRMATION]` What do those four print?
+      them out.
+      - **Where Stock has the same spell record, Paradigm's text is the same** *([CONFIRMED]
+        2026-10-09, user, asked what the four print: "check stock to see if they have the same
+        spell records. they will be the same if they do")*.
+      - **Stock has none of the four** *([OBSERVED] 2026-10-10, imported game data, Stock 1.11p
+        and Paradigm 1.9.1)*: Stock's spell table has no #5242, #5256, #5682 or #5687, and no
+        spell of those names. Nothing in the Paradigm records points at a message either
+        (each carries abilities 1, 144 and `115` = 66, as every damaging room spell does).
+      - **Each has a look-alike that both realms carry and the seeds have text for**
+        *([OBSERVED], the same data)*, alike in cast code (`Short`), damage type and abilities,
+        not in number:
+        - bog poison #5682 (`swamp`, 3 to 30, poison) and **swamp poison #485** (`swamp`, 2 to
+          20, poison; negated by the same boots): `You take %d damage from the poisonous
+          swamp!`, witness `<name> takes %d damage from the poisonous swamp!`;
+        - freezing cold #5242 (`free`, 1 to 4) and **freezing water #511** (`free`, 1 to 4, with
+          an EndCast to holding breath): `You are freezing cold!`;
+        - ocean drowning #5256 and murky drown #5687 (`drown`, 5 to 15 over 5 rounds, negated by
+          the fish-helm and coral fetish) and **drowning #513** (`drown`, 5 to 20 over 5 rounds,
+          negated by the fish-helm): `You are drowning!`, witness `<name> is drowning!`.
+      - None of the look-alikes' lines has the `… for N damage!` shape, so if the four print
+        the same they never reach the hit pattern, the round clock or the combat engine at
+        all. `[NEEDS CONFIRMATION]` A look-alike is not the same record: do the four print
+        their look-alike's lines?
     - (The first version of this rule was step 2 without its exception; superseded 2026-10-09.
       An earlier line here also listed `You take …` among the wordings: those never matched
       the hit pattern and never reached the round clock.)
