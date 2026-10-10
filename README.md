@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.8**
+> **Version 3.161.9**
 > - Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
 > - One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
 > - A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
