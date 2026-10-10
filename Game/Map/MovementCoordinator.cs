@@ -226,12 +226,14 @@ public sealed class MovementCoordinator
     // its first step went out before the reform's own holds were up.
     public const string ReconnectReformGate = "ReconnectReform";
 
-    // Asserted by HangupItemRecheck from a connect until the items a penalised
-    // hang-up dropped have been looked for, on a realm whose settings say items are
-    // dropped. A loop restarts on the first prompt after a reconnect, before the
-    // login's inventory read can say what is missing, and would walk out of the
-    // room the items lie in. Engine-wait tier. Ends with the check or with the link,
-    // and is given up when the game isn't entered, or no inventory read, in time.
+    // Asserted by HangupItemRecheck from a connect until what a penalised hang-up
+    // cost has been looked into: the items it dropped, on a realm whose settings
+    // say items are dropped, and whether it killed the character, on any realm
+    // whose settings penalise that hang-up. A loop restarts on the first prompt
+    // after a reconnect, before the login's `stat` and inventory read can say
+    // either, and would walk out of the room the items lie in, or out of the
+    // temple stripped. Engine-wait tier. Ends with the check or with the link, and
+    // is given up when the game isn't entered, or no inventory read, in time.
     public const string HangupItemCheckGate = "HangupItemCheck";
 
     // Asserted by ConfusionMovementGate while the local character is confused. A

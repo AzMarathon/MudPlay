@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.162.0**
+> **Version 3.163.0**
 > - Auto-open opens a flagged container on arrival; it did nothing before
 > - Its contents go on the Chest Offload list
 > - It waits out a fight, a rest and a kept sneak, one container at a time

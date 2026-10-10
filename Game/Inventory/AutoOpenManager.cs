@@ -91,6 +91,8 @@ public sealed class AutoOpenManager
     // The game was entered and the pack not read since: what that read shows gone
     // went while the character was out of the game.
     private bool _awaitingEntryRead;
+    // item Number → copies that read found gone.
+    private readonly Dictionary<int, int> _goneWhileOut = new();
     // The hold last logged, so one hold is one log line.
     private string? _heldFor;
 
@@ -234,7 +236,27 @@ public sealed class AutoOpenManager
 
     // InGameCapture.InGameChanged(true): the next full read is the first of this
     // stay in the game.
-    public void OnEnteredGame() => _awaitingEntryRead = true;
+    public void OnEnteredGame()
+    {
+        _awaitingEntryRead = true;
+        _goneWhileOut.Clear();
+    }
+
+    // RoomTracker.UnwitnessedDeathRecorded: a death the client did not see (a
+    // hang-up on a board that kills for it) was worked out on the way back in.
+    // What the entry read found gone went into that death's pile, and coming
+    // back from it is no more an arrival than after a death that was seen.
+    public void OnUnwitnessedDeath(DateTimeOffset diedAt)
+    {
+        if (_goneWhileOut.Count == 0) return;
+        if (_lostAtDeath.Count == 0 || diedAt < _diedAt) _diedAt = diedAt;
+        foreach ((int number, int count) in _goneWhileOut)
+            _lostAtDeath[number] = _lostAtDeath.GetValueOrDefault(number) + count;
+        _goneWhileOut.Clear();
+        _log?.Info(LogCategory,
+            $"{AwaitedFromDeath} container(s) went with a death while out of the game: a copy that comes back "
+            + "while that pile is being recovered is not a new one");
+    }
 
     // Something that kept an owed open back may have cleared, or the engine may
     // have been switched off: send the next one if nothing holds it now.
@@ -336,6 +358,7 @@ public sealed class AutoOpenManager
         _lostAtDeath.Clear();
         _owedOut.Clear();
         _awaitingEntryRead = false;
+        _goneWhileOut.Clear();
         _heldFor = null;
         LastOpen = null;
     }
@@ -404,6 +427,8 @@ public sealed class AutoOpenManager
 
     private void Left(int number, int copies)
     {
+        if (_awaitingEntryRead) _goneWhileOut[number] = _goneWhileOut.GetValueOrDefault(number) + copies;
+
         // The first copy to go after our own open is the one it opened.
         if (_opening is { } opening && opening.Number == number && !_openingSeenGone)
         {

@@ -108,6 +108,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved += ClearNavIntentOnDeath;
+        // A death found out on re-entry: the skull lands through the Records change.
+        _services.RoomTracker.PlayerDeathInferred += ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged += OnConditionsChanged;
         _services.RoomGraph.GraphReloaded += OnGraphReloaded;
         _services.TBInfo.StoreReloaded    += RefreshTeleportRooms;
@@ -291,6 +293,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved -= ClearNavIntentOnDeath;
+        _services.RoomTracker.PlayerDeathInferred -= ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged -= OnConditionsChanged;
         _services.RoomGraph.GraphReloaded -= OnGraphReloaded;
         _services.TBInfo.StoreReloaded    -= RefreshTeleportRooms;

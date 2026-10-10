@@ -292,6 +292,31 @@ public sealed class AutoOpenManagerTests
         Assert.Equal(new[] { "small sack" }, h.Opened);
     }
 
+    // A hang-up on a board that kills for it: the death is worked out on the way
+    // back in, after the pack has been read. What that read found gone is that
+    // death's pile, and a sack kept shut before it stays shut when recovered.
+    [Fact]
+    public void AContainerLostToADeathTheClientDidNotSee_IsNotAnArrivalWhenRecovered()
+    {
+        Harness h = new();
+        h.Items["small sack"] = (100, true);
+        h.Carried.Add("small sack");
+        h.Seed();                                        // carried at connect: kept shut
+
+        h.Open.OnEnteredGame();
+        h.Carried.Clear();                               // the entry read: it is gone
+        h.Open.OnInventoryChanged();
+        h.Open.OnFullInventoryRead();
+        h.Open.OnUnwitnessedDeath(DateTimeOffset.UtcNow.AddMinutes(-5));
+        Assert.Equal(1, h.Open.AwaitedFromDeath);
+
+        h.PickUp("small sack");                          // recovered from the pile
+        Assert.Empty(h.Opened);
+
+        h.PickUp("small sack");                          // a new one
+        Assert.Equal(new[] { "small sack" }, h.Opened);
+    }
+
     [Fact]
     public void AnotherCharacter_StartsFromItsOwnPack()
     {
