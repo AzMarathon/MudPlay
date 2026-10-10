@@ -6106,7 +6106,8 @@ public sealed class AppServices
         // tiebreaker so a stacked denomination-named item ("2 gold key") isn't
         // mistaken for coin (see IsCashEntry).
         GroundItems = new Game.Inventory.GroundItemTracker(Router, Currency,
-            isKnownItem: IsKnownGroundItem);
+            isKnownItem: IsKnownGroundItem,
+            isRoomName: text => RoomGraph.FindByName(text).Count > 0);
         // Auto-recover reads the floor survey to confirm our corpse is in the room
         // before sending `recover corpse` (and arms off its SurveyUpdated event).
         DeathRecovery.AttachGroundItems(GroundItems);

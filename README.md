@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.10**
+> **Version 3.167.15**
 > - A new attack's `*Combat Off*` is no longer read as a kill (an attack sent at the survivor of a room spell)
 > - The survivor stays the target, the room isn't taken for cleared and the loop doesn't walk on
 > - A buff cast right after that attack is followed by the attack again at once
