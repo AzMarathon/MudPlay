@@ -1,18 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.165.0**
-> - Auto-open opens a flagged container on arrival; it did nothing before
-> - Its contents go on the Chest Offload list
-> - It waits out a fight, a rest and a kept sneak, one container at a time
-> - Off with Auto Get Items or Auto-All; never during a Roomba sweep
-> - Chest Offload: pickups during an open aren't listed as the chest's
-> - Chest Offload: an item given away leaves the list
-> - Chest Offload: the coin tally clears with the last listed item
-> - Chest Offload: `op <chest>` is tracked, `open <direction>` is not
-> - Chest Offload: one inventory read the game never answers no longer leaves every later open unread
-> - Auto-open: a copy opened by hand clears the open owed if it returns, and a hang-up's ends with its item check
-> - Bug report shows auto-open's state
+> **Version 3.165.1**
+> - Conversation window: a picture emote no longer draws over the lines above and below it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

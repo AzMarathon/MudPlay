@@ -66,6 +66,18 @@ public static class ConversationMessageInlines
     {
         MessageProperty.Changed.AddClassHandler<TextBlock>((t, _) => Rebuild(t));
         EmotesEnabledProperty.Changed.AddClassHandler<TextBlock>((t, _) => Rebuild(t));
+        // A picture emote is sized from the row's font and line height, and both are
+        // bound after the message is (and change with the font-size setting), so a
+        // row that carries a message is laid out again when either arrives.
+        TextBlock.LineHeightProperty.Changed.AddClassHandler<TextBlock>((t, _) => RebuildIfHosted(t));
+        TextBlock.FontSizeProperty.Changed.AddClassHandler<TextBlock>((t, _) => RebuildIfHosted(t));
+    }
+
+    // Only a TextBlock this behaviour was given a message for; the class handlers
+    // above see every TextBlock in the app.
+    private static void RebuildIfHosted(TextBlock target)
+    {
+        if (target.IsSet(MessageProperty)) Rebuild(target);
     }
 
     // Rebuild the inline runs: URLs become clickable links; the remaining text is
@@ -95,10 +107,7 @@ public static class ConversationMessageInlines
         if (seg.Kind == EmoteSegmentKind.Image && seg.Payload is { } uri
             && EmoteImages.Get(uri) is { } bmp)
         {
-            // Sized a bit past the text line box (~font * 1.45) so a picture emote reads
-            // clearly instead of squashed to letter height — a row carrying one grows a
-            // little. Square box → uniform footprint for all emotes.
-            double h = host.FontSize > 0 ? host.FontSize * 1.75 : 22;
+            double h = EmoteImageSize(host.FontSize, host.LineHeight);
             var img = new Image
             {
                 Source = bmp,
@@ -112,6 +121,19 @@ public static class ConversationMessageInlines
         }
         // Emoji run, or an image emote whose asset was missing → its literal text.
         return new Run(seg.Text);
+    }
+
+    // The side of a picture emote's square box. It reads best a little taller than
+    // the text, but a TextBlock with a set LineHeight gives every line exactly that
+    // height and does not grow one for an inline picture: a taller picture is drawn
+    // over the lines and rows above and below it. So the line height, when set, is
+    // the most a picture may take; with none set the line grows to fit it.
+    internal static double EmoteImageSize(double fontSize, double lineHeight)
+    {
+        double wanted = fontSize > 0 ? fontSize * 1.75 : 22;
+        return lineHeight > 0 && !double.IsNaN(lineHeight) && !double.IsInfinity(lineHeight)
+            ? Math.Min(wanted, lineHeight)
+            : wanted;
     }
 
     // Loads + caches emote bitmaps by avares:// URI so a repeated emote reuses one
