@@ -1,6 +1,6 @@
 # Version history
 
-## 3.165.8
+## 3.165.9
 
 - Paradigm: a pile is marked Missing only off a confirmed death-room display
 - Paradigm: Recover Now marks Missing when the look shows no corpse
@@ -11,6 +11,10 @@
 - A light that burns out comes off what you hold at once
 - Stock: being placed in a death room is not an empty floor
 - Bug report shows where the death-room pickup stands
+
+## 3.165.1
+
+- Conversation window: a picture emote no longer draws over the lines above and below it
 
 ## 3.165.0
 

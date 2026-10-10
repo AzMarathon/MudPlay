@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.165.8**
+> **Version 3.165.9**
 > - Paradigm: a pile is marked Missing only off a confirmed death-room display
 > - Paradigm: Recover Now marks Missing when the look shows no corpse
 > - Recover Now on a Missing pile walks there and looks again
