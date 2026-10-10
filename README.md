@@ -1,9 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.2**
-> - A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
-> - A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
+> **Version 3.161.5**
+> - A room's heat (*You are seared by the flames*) no longer counts as a combat round
+> - No more heals or buffs sent mid-round into `You have already cast a spell this round!`
+> - A fight stopped just after an attack is re-attacked on the next round line
+> - A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+> - A refused cast no longer leaves a re-attack armed
+> - Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+> - The giant hellhound's death line is recognised
+> - Program log and bug report show re-attack decisions
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
