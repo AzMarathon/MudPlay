@@ -859,4 +859,32 @@ public sealed class AutoLairManagerTests : IDisposable
             Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
         }
     }
+
+    // The entry came due while frozen, and the user then walked into the lair by
+    // hand and a fight began. The gate change that lifts the freeze settles the
+    // owed entry (nothing to do: no longer waiting) and must still be read for
+    // the fight, or the fight's end is never seen as one.
+    [Fact]
+    public void Waiting_EntryOwed_ThenWalkedInByHandWhileFrozen_TheFreezeLiftingIsStillReadForTheFight()
+    {
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+            doors.Calls[0].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
+            h.Roam.FireRetryForTests();
+            h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
+            h.Roam.FireEntryTimerForTests();
+
+            h.Roam.StartEngagementForTests();           // in the lair, by the user's own steps
+            h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
+            h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
+            Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "killed");
+            Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
+        }
+    }
 }

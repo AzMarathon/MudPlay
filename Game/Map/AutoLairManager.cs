@@ -892,7 +892,8 @@ public sealed class AutoLairManager : IDisposable
         {
             _entryOwedAfterFreeze = false;
             if (Phase == AutoLairPhase.Waiting && IsActive && !IsPaused) EnterLairNow();
-            return;
+            // No return: the user may have walked into the lair by hand while
+            // frozen, and then this change is also the fight's to read.
         }
         if (Phase != AutoLairPhase.Engaging) return;
         if (!IsActive || IsPaused) return;
