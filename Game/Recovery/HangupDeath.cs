@@ -28,9 +28,9 @@ namespace MudPlay.Game.Recovery;
 //     Stock, into a corpse on Paradigm). A character that still holds even one
 //     such item died somewhere else and got its pile back. One consumable used
 //     since must not hide that, so it is "any still held", not "all still held".
-//   - nothing is worn: a death takes every piece off the body on Stock; on
-//     Paradigm that is known for a loyal piece only, so there a worn piece that
-//     stays with the character says nothing either way.
+//   - nothing is worn: a death takes every piece off the body on Stock. On
+//     Paradigm a cursed piece that stays with the character isn't known to come
+//     off, and is treated as Stock's does (the user's ruling).
 //   - the board's two login lines were printed (Stock): they follow the first
 //     entry after a hang-up it didn't let go free, and no other.
 // A life lost with one of those missing is not recorded, and is told.
@@ -80,8 +80,8 @@ public static class HangupDeath
     //   livesBefore    — the count the character left the game with, read on that
     //                    connection; null when it wasn't.
     //   livesNow       — from a `stat` read on this connection; null until one is.
-    //   worn           — a piece a death is known to take off was worn at the first
-    //                    inventory read; null when no inventory has been read.
+    //   worn           — a piece was worn at the first inventory read; null when no
+    //                    inventory has been read.
     //   loginLines     — the board's hang-up lines were printed on this connection;
     //                    null where it isn't known to print them (not Stock).
     //   takenStillHeld — an item of the list that a death takes, or coins, was still
