@@ -1487,6 +1487,76 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));   // out of C the way the lap goes
     }
 
+    // A real HealthManager over a real loop, the loop in C with a Flee monster seen:
+    // a forward run of two rooms, the first of them already sent.
+    private static MudPlay.Game.Health.HealthManager StartForwardFleeFromC(Harness h, out MudPlay.Game.Health.FleeOutcome outcome)
+    {
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 2, BreakBeforeFleeing = false,
+        };
+        MudPlay.Game.Health.HealthManager health = new(
+            new MudPlay.Game.PlayerState(), h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Runner.State != LoopState.Idle ? h.Runner : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 3));
+        outcome = health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true);
+        return health;
+    }
+
+    // The toolbar Stop ends the loop without telling HealthManager. The first flee
+    // move lands with a room still queued: nothing goes out through the stopped
+    // loop, and the flee is over instead of staying in flight with the loop idle.
+    [Fact]
+    public void AFlee_WhoseLoopWasStopped_EndsWhenItsFirstMoveLands_AndSendsNothing()
+    {
+        Harness h = NewHarness(withWalker: true);
+        using MudPlay.Game.Health.HealthManager health = StartForwardFleeFromC(h, out MudPlay.Game.Health.FleeOutcome outcome);
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started, outcome);
+        Assert.True(health.IsFleeInFlight);
+        h.Runner.Stop("user stop from toolbar");
+        int sentBefore = h.Sent.Count;
+
+        health.NoteRoomChanged(new RoomKey(1, 2));                   // the first move lands
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.False(health.IsFleeInFlight);
+        Assert.False(health.IsFleeing);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
+    // A profile load mid-run: the loop the flee had paused belongs to the character
+    // going away, so it is stopped and a later prompt resumes nothing.
+    [Fact]
+    public void AFleeCutByAProfileLoad_StopsTheLoopItHadPaused()
+    {
+        Harness h = NewHarness(withWalker: true);
+        using MudPlay.Game.Health.HealthManager health = StartForwardFleeFromC(h, out _);
+        health.StopMovementEngine = (engine, why) => ((LoopRunner)engine).Stop(why);
+        Assert.Equal(LoopState.Paused, h.Runner.State);
+        int sentBefore = h.Sent.Count;
+
+        Assert.True(health.EndFlee("another profile was loaded", stopItsEngine: true));
+        health.NoteInGamePrompt();
+        health.Evaluate();
+        h.Drain();
+
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.False(health.IsFleeing);
+        Assert.Equal(sentBefore, h.Sent.Count);
+    }
+
     // A flee or recovery that outlived the loop (a death, a drop of the line) must
     // not walk the character on through it.
     [Fact]

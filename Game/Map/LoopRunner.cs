@@ -479,6 +479,8 @@ public sealed class LoopRunner : IRecoverableEngine
         // Direction.Teleport out rather than have this swallow it.
         // A stopped loop moves nobody: a flee or recovery that outlived it (a death,
         // a drop of the line) must not walk the character on through it.
+        // HealthManager ends a flee whose engine was stopped at the next room change,
+        // so for a flee this is a backstop.
         if (State == LoopState.Idle)
         {
             _log?.Info("LoopRunner", $"backtrack move {direction} not sent: the loop is stopped");

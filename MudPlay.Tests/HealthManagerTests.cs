@@ -2972,6 +2972,66 @@ public sealed class HealthManagerTests
         Assert.Null(h.Engine!.ResumedAtRoom);
     }
 
+    // The toolbar Stop ends the walk or loop without telling this class. The first
+    // move of the retreat then lands with a step still queued: it is not sent
+    // through a stopped engine, and the flee is over rather than left in flight (and
+    // combat declining every engage) until enough rooms are crossed to drain it.
+    [Theory]
+    [InlineData(false)]   // nothing is running
+    [InlineData(true)]    // another engine is
+    public void AFlee_WhoseEngineWasStopped_EndsAtTheNextRoomChange_AndSendsNothing(bool anotherEngineRuns)
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        FakeFleeEngine stopped = h.Engine!;
+        h.Engine = anotherEngineRuns ? new FakeFleeEngine() : null;
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));       // the first move landed
+
+        Assert.Single(stopped.SentBacktrackMoves);                   // the queued step stays unsent
+        Assert.False(h.Health.IsFleeInFlight);
+        Assert.False(h.Health.IsFleeing);
+        Assert.Null(stopped.ResumedAtRoom);
+        if (anotherEngineRuns) Assert.Empty(h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void AFlee_WhoseEngineIsStillRunning_SendsItsNextQueuedStep()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));
+
+        Assert.Equal(2, h.Engine!.SentBacktrackMoves.Count);
+        Assert.True(h.Health.IsFleeInFlight);
+    }
+
+    // A profile load or close takes the character's walk or loop with it: the engine
+    // the flee had paused is stopped, not left paused for good.
+    [Fact]
+    public void AFleeCutByAProfileChange_StopsTheEngineItHadPaused()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        List<(Game.Map.IRecoverableEngine Engine, string Why)> stopped = new();
+        h.Health.StopMovementEngine = (engine, why) => stopped.Add((engine, why));
+
+        Assert.True(h.Health.EndFlee("another profile was loaded", stopItsEngine: true));
+
+        Assert.Equal((h.Engine!, "another profile was loaded"), Assert.Single(stopped));
+        Assert.False(h.Health.IsFleeing);
+    }
+
+    [Fact]
+    public void AFleeCutByADeath_LeavesStoppingTheEngineToTheDeathHalt()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        int stopped = 0;
+        h.Health.StopMovementEngine = (_, _) => stopped++;
+
+        Assert.True(h.Health.EndFlee("died"));
+
+        Assert.Equal(0, stopped);
+    }
+
     // Which runs tell the engine to carry on from where they landed (user,
     // 2026-10-10): the ones that ran forward to get away from something. A
     // hit-and-run or a failed backstab's run comes back for the monster, a player's

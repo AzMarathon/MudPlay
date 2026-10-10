@@ -2615,7 +2615,13 @@ public sealed class HealthManager : IDisposable
     // first game prompt of the next stay (NoteInGamePrompt). Not before: the prompt
     // data is as it was when the line dropped, so a resume left to Evaluate would
     // run offline.
-    public bool EndFlee(string why, bool handBackLiveEngine = false)
+    //
+    // stopItsEngine is for a flee cut off by the character going away (a profile
+    // loaded or closed): the walk or loop this flee had paused belongs to that
+    // character, and dropping the reference alone left it paused with nobody to
+    // resume it. It is stopped through StopMovementEngine, after the flee's state
+    // is cleared so the engine's stop events find no flee standing.
+    public bool EndFlee(string why, bool handBackLiveEngine = false, bool stopItsEngine = false)
     {
         // Kept past a run for the room they were refused in (NoteMoveBlocked), so
         // they go here whether or not a run is on.
@@ -2623,9 +2629,12 @@ public sealed class HealthManager : IDisposable
         if (_fleeEngine is null && _deferredFleeReason is null && _fleeQueue.Count == 0) return false;
         Map.IRecoverableEngine? live = handBackLiveEngine && _fleeEngine is { } paused
             && ReferenceEquals(_getActiveMovementEngine?.Invoke(), paused) ? paused : null;
+        Map.IRecoverableEngine? toStop = stopItsEngine ? _fleeEngine : null;
         _log?.Info(LogCategory, live is not null
             ? $"flee ended — {why}; {live.Name} is handed back at the next game prompt"
-            : $"flee ended — {why}; nothing will be resumed");
+            : toStop is not null
+                ? $"flee ended — {why}; {toStop.Name} is stopped"
+                : $"flee ended — {why}; nothing will be resumed");
         _fleeEngine = live;
         _fleeLanded = live is not null;
         _fleeResumeAwaitsPrompt = live is not null;
@@ -2639,8 +2648,13 @@ public sealed class HealthManager : IDisposable
         _deferredFleeFromGates = false;
         _deferredFleeStillWanted = null;
         ClearPlayerFlee();
+        if (toStop is not null) StopMovementEngine?.Invoke(toStop, why);
         return true;
     }
+
+    // Stops the walk or loop (the engine's own Stop). Set by AppServices, which owns
+    // the engines; HealthManager only knows them through IRecoverableEngine.
+    public Action<Map.IRecoverableEngine, string>? StopMovementEngine { get; set; }
 
     // Set by EndFlee when an engine is to be handed back after a reconnect.
     private bool _fleeResumeAwaitsPrompt;
@@ -2702,6 +2716,18 @@ public sealed class HealthManager : IDisposable
             // Outside a run, the refused ways out belong to the room just left.
             if (_fleeEngine is null && !r.Equals(_lastKnownRoom)) _refusedFleeMoves.Clear();
             _lastKnownRoom = r;
+        }
+
+        // The user's Stop (or any end of the walk or loop) does not tell this class.
+        // A retreat whose engine is no longer the running one has nobody to send its
+        // steps through: a stopped loop swallows them, and a stopped walker sends them
+        // anyway. A paused engine still counts as running, so the engine this flee
+        // itself holds is not caught by this.
+        if (_fleeEngine is { } fleeing && !_fleeLanded
+            && !ReferenceEquals(_getActiveMovementEngine?.Invoke(), fleeing))
+        {
+            EndFlee("the walk or loop was stopped");
+            return;
         }
 
         // A flee step only lands on a confirmed arrival somewhere new. While its move

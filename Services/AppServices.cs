@@ -4690,8 +4690,15 @@ public sealed class AppServices
         // those; the disconnect is MainWindowViewModel's to tell it. The death
         // halt's own subscription, made earlier, has stopped the engines by now.
         RoomTracker.PlayerDeathObserved += () => Health.EndFlee("died");
-        Profile.ProfileLoaded += _ => Health.EndFlee("another profile was loaded");
-        Profile.ProfileClosed += () => Health.EndFlee("the profile was closed");
+        // The walk or loop a cut-off flee had paused goes with the character: left
+        // paused it would wait for a resume nobody will give.
+        Health.StopMovementEngine = (engine, reason) =>
+        {
+            if (engine is Game.Map.LoopRunner loop) loop.Stop(reason);
+            else if (engine is Game.Map.AutoWalkManager walk) walk.Stop(reason);
+        };
+        Profile.ProfileLoaded += _ => Health.EndFlee("another profile was loaded", stopItsEngine: true);
+        Profile.ProfileClosed += () => Health.EndFlee("the profile was closed", stopItsEngine: true);
         // The first game prompt after a reconnect hands back a walk that a flee cut
         // off by the disconnect had paused.
         PromptScanner.PromptObserved += _ => Health.NoteInGamePrompt();
