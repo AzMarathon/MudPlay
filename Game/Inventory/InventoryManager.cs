@@ -189,6 +189,11 @@ public sealed partial class InventoryManager : IDisposable
     // for us and gave back as our deathpile coming home.
     public event Action<string, string>? ItemReceived;
 
+    // The game confirmed an item hand-over of ours: (item name, copies, recipient
+    // as the line names them). Items only. It is the one proof a `give` landed, so
+    // what a party member was handed is remembered from it and not from the send.
+    public event Action<string, int, string>? ItemGivenAway;
+
     // True for another character's hand-over line this parser reads, item or
     // coins. It reads the wire directly and registers no router pattern, so the
     // unrecognized-line watcher asks here rather than restate the shapes.
@@ -680,7 +685,10 @@ public sealed partial class InventoryManager : IDisposable
         Match gaveAway = GaveItemAwayRegex().Match(line);
         if (gaveAway.Success)
         {
-            ApplyGiveTransfer(gaveAway.Groups[1].Value.TrimEnd(), -1);
+            string gaveItem = gaveAway.Groups[1].Value.TrimEnd();
+            ApplyGiveTransfer(gaveItem, -1);
+            if (!CurrencyTokenRegex().IsMatch(gaveItem))
+                ItemGivenAway?.Invoke(gaveItem, 1, gaveAway.Groups[2].Value.Trim());
             return;
         }
 
@@ -717,6 +725,7 @@ public sealed partial class InventoryManager : IDisposable
         {
             RemoveHeld(awayItem, awayCount);
             AdjustItemWeight(awayItem, -awayCount);
+            ItemGivenAway?.Invoke(awayItem, awayCount, handedAway.Groups[2].Value);
             return;
         }
 
@@ -1561,7 +1570,8 @@ public sealed partial class InventoryManager : IDisposable
     // ("... to Bob."); receive names the giver ("Bob just gave you ..."). The
     // captured name (item or a currency token) is routed through the currency
     // guard in ApplyGiveTransfer. The greedy item groups let a multi-word name
-    // ("a rusty dagger") round-trip; the recipient / giver token isn't used.
+    // ("a rusty dagger") round-trip. The recipient and the giver are passed on
+    // with the item (ItemGivenAway, ItemReceived) and change nothing in the pack.
     [GeneratedRegex(@"^You just gave (.+) to (.+)\.$")]
     private static partial Regex GaveItemAwayRegex();
 
@@ -1573,7 +1583,7 @@ public sealed partial class InventoryManager : IDisposable
     [GeneratedRegex(@"^(\S+) gives you (.+)\.$")]
     private static partial Regex HandedItemRegex();
 
-    [GeneratedRegex(@"^You give (.+) to \S+\.$")]
+    [GeneratedRegex(@"^You give (.+) to (\S+)\.$")]
     private static partial Regex HandedAwayRegex();
 
     // Coins in that wording carry no full stop, which keeps them apart from items.

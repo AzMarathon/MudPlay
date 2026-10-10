@@ -89,6 +89,12 @@ namespace MudPlay.Game.Map;
 // such a member a copy itself, or tells a member who did answer to; nothing can
 // be asked of the silent one. A member invited and not yet joined is not asked
 // and not in the pool.
+//
+// Unless the leader handed them one. A silent member stays silent, so the next
+// trip through the same gate fetched them another copy, though they held the one
+// from the trip before. A hand-over of the leader's own that the game confirmed is
+// remembered (PartyHandOverMemory), and each count is read against it: a silent
+// member is credited with what they were handed.
 public sealed class PartyPathItemGate
 {
     private const string LogCategory = "AutoSearch";
@@ -126,6 +132,7 @@ public sealed class PartyPathItemGate
     private readonly Func<Action, IDisposable>? _armHoldCap;
     private readonly Func<object?> _journey;
     private readonly Func<DateTimeOffset> _now;
+    private readonly PartyHandOverMemory? _handOvers;
     private readonly LogService? _log;
     private readonly object _gate = new();
     private readonly Dictionary<int, Pending> _pending = new();
@@ -188,7 +195,9 @@ public sealed class PartyPathItemGate
         Func<Action, IDisposable>? armHoldCap = null,
         // The trip the walk being announced belongs to, by reference.
         Func<object?>? journey = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        // What the leader has handed to members, which a silent member is credited with.
+        PartyHandOverMemory? handOvers = null)
     {
         ArgumentNullException.ThrowIfNull(isCarried);
         ArgumentNullException.ThrowIfNull(selfCount);
@@ -222,6 +231,7 @@ public sealed class PartyPathItemGate
         _armHoldCap = armHoldCap;
         _journey = journey ?? (static () => null);
         _now = now ?? (static () => DateTimeOffset.UtcNow);
+        _handOvers = handOvers;
         _log = log;
     }
 
@@ -679,6 +689,13 @@ public sealed class PartyPathItemGate
             _log?.Info(LogCategory, $"party probe for path item {id}: asking about any of {string.Join(", ", askedNames)}");
 
         PartyInventoryProbe.PartyItemResult[] results = await Task.WhenAll(asks).ConfigureAwait(true);
+        // Before anyone is taken to hold none: a silent member the leader handed
+        // a copy to is credited with it here, and so is in the pool as a holder.
+        if (_handOvers is not null)
+        {
+            int q = PerPersonFor(id);
+            for (int i = 0; i < results.Length; i++) results[i] = _handOvers.Reconcile(results[i], q);
+        }
         var byMember = new Dictionary<string, Dictionary<int, int>>(StringComparer.OrdinalIgnoreCase);
         foreach (PartyInventoryProbe.PartyItemResult r in results)
             foreach (KeyValuePair<string, int> kv in r.CountsByMember)
@@ -835,7 +852,11 @@ public sealed class PartyPathItemGate
             string recipient = sink ?? selfName!;
             string item = NameOf(copy.ItemId, name);
             if (copy.Giver is null)
+            {
                 SendRaw($"give {item} to {recipient}");                        // hand over our own
+                // Ours is the only give whose line comes back to this client.
+                _handOvers?.NoteGiveSent(copy.ItemId, item, recipient);
+            }
             else
                 SendRaw($"/{copy.Giver} @do give {item} to {recipient}");     // direct the holder
             sent++;

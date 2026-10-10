@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.1**
-> - Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
-> - In that mode the room tooltip and the Legend name the colours
+> **Version 3.160.2**
+> - Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+> - A copy you handed them and the game confirmed is remembered until the party changes
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
