@@ -1,25 +1,46 @@
 # Version history
 
-## 3.163.4
-
-- Roomba's final lap records what it sees: each room's entry in the item-location log is rewritten as the room is after the sort
-- A room someone changed between the sort and that lap is named once in the program log, with what is extra and what is missing; nothing is re-sorted
-- Hidden items the scan found and the sort didn't take stay on the room's record (the final lap doesn't search)
-- The final lap no longer sets off with a doubled first step
-- Bug report: the rooms the final lap found changed
-
-## 3.163.3
-
-- Roomba's program log: the sort queue is one line per room (stacks, items, where they are bound), not one per stack
-- Stacks split for carry weight, too heavy to carry, or turned away by a full room are one line each as well; the per-stack lines are at Debug
-
-## 3.163.2
+## 3.165.5
 
 - Roomba counts a room's hidden copies of an item on top of the ones in plain sight (34 on the floor and 2 from a search is 36), not the larger of the two
-- A hidden item is recorded at the highest count any one search showed, and the item-location log is written once per room, after its last search
-- A redisplay of the room between searches is no longer read as a search's reply
-- Sorting picks up the copies in plain sight and the hidden ones as two pickups, the hidden ones after the search
-- Bug report: where the last floor list came from, and Roomba's on-display and hidden counts for the room
+- A hidden item is recorded at the highest count any one search showed; what is in plain sight is the latest room display
+- The item-location log is written once per room, after its last search
+- Sorting picks up the copies in plain sight first, then searches for the hidden ones as a pickup of their own
+- A pickup that comes up short keeps the copies it took: they are delivered and reported, and only the rest is left
+- A hidden stack the sort's search missed is reported as not found, not as gone
+- Roomba's final lap records what it sees: each room's item-location entry is rewritten as the room is after the sort
+- A room someone changed between the sort and that lap is named once in the program log; nothing is re-sorted
+- Roomba's program log is written a room at a time (queue, pickups, deliveries, searches), with the per-stack lines at Debug
+- Bug report: where the last floor list came from, Roomba's on-display and hidden counts for the room, the rooms the final lap found changed
+
+## 3.165.0
+
+- Auto-open opens a flagged container on arrival; it did nothing before
+- Its contents go on the Chest Offload list
+- It waits out a fight, a rest and a kept sneak, one container at a time
+- Off with Auto Get Items or Auto-All; never during a Roomba sweep
+- Chest Offload: pickups during an open aren't listed as the chest's
+- Chest Offload: an item given away leaves the list
+- Chest Offload: the coin tally clears with the last listed item
+- Chest Offload: `op <chest>` is tracked, `open <direction>` is not
+- Chest Offload: one inventory read the game never answers no longer leaves every later open unread
+- Auto-open: a copy opened by hand clears the open owed if it returns, and a hang-up's ends with its item check
+- Bug report shows auto-open's state
+
+## 3.164.0
+
+- Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
+- A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
+- With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
+- Logoff events start at once; every other event waits its turn
+- An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes), and one dropped at either says so in the terminal
+- Stop, dying or Reset States ends the running event and drops the waiting ones; Stop now ends an event that is waiting or resting too
+- A lost connection keeps the waiting events: they run, in order, once back in the game
+- A bank or sell trip, a flee or a reconnect no longer ends an event's loop or walk: it goes on afterwards, laps and Stop after rule intact
+- A walk refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
+- Bug report: the events waiting, the queue limits and what the last Then came to
+- Settings → Events: how long a paused event may stand still before it is given up (5 minutes)
+- bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
 
 ## 3.163.0
 

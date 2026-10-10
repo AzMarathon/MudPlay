@@ -1,12 +1,17 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.163.4**
-> - Roomba's final lap records what it sees: each room's entry in the item-location log is rewritten as the room is after the sort
-> - A room someone changed between the sort and that lap is named once in the program log, with what is extra and what is missing; nothing is re-sorted
-> - Hidden items the scan found and the sort didn't take stay on the room's record (the final lap doesn't search)
-> - The final lap no longer sets off with a doubled first step
-> - Bug report: the rooms the final lap found changed
+> **Version 3.165.5**
+> - Roomba counts a room's hidden copies of an item on top of the ones in plain sight (34 on the floor and 2 from a search is 36), not the larger of the two
+> - A hidden item is recorded at the highest count any one search showed; what is in plain sight is the latest room display
+> - The item-location log is written once per room, after its last search
+> - Sorting picks up the copies in plain sight first, then searches for the hidden ones as a pickup of their own
+> - A pickup that comes up short keeps the copies it took: they are delivered and reported, and only the rest is left
+> - A hidden stack the sort's search missed is reported as not found, not as gone
+> - Roomba's final lap records what it sees: each room's item-location entry is rewritten as the room is after the sort
+> - A room someone changed between the sort and that lap is named once in the program log; nothing is re-sorted
+> - Roomba's program log is written a room at a time (queue, pickups, deliveries, searches), with the per-stack lines at Debug
+> - Bug report: where the last floor list came from, Roomba's on-display and hidden counts for the room, the rooms the final lap found changed
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
