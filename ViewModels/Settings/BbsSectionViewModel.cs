@@ -244,6 +244,10 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     [ObservableProperty] private int _hangupPveHpFromPercent = 25;
     [ObservableProperty] private int _hangupPveHpToPercent = 50;
     [ObservableProperty] private int _hangupPveItemsDropped;
+    // The board penalises every hang-up, in a fight or not
+    // (RealmProfile.HangupOutsideFightPenaltyEnabled). It only decides whether a
+    // death by the penalty is looked for after a hang-up outside a fight.
+    [ObservableProperty] private bool _hangupOutsideFightPenaltyEnabled;
 
     // Nightly boss-cleanup wall-clock time ("HH:mm" in CleanupTimeZone) + its zone.
     // Drives the DEAD/ALIVE state of "Respawns @ Cleanup" bosses on the Bosses tab.
@@ -842,6 +846,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         (HangupPveHpFromPercent, HangupPveHpToPercent) = Game.Health.HangupPenaltyNotice.HpRange(
             realm.HangupPveHpFromPercent, realm.HangupPveHpToPercent);
         HangupPveItemsDropped = Game.Health.HangupPenaltyNotice.Items(realm.HangupPveItemsDropped);
+        HangupOutsideFightPenaltyEnabled = realm.HangupOutsideFightPenaltyEnabled;
         CleanupTimeOfDay = realm.CleanupTimeOfDay;
         CleanupTimeZoneId = realm.CleanupTimeZoneId;
         RunicCurrencyName = realm.RunicCurrencyName;
@@ -1244,6 +1249,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
         (realm.HangupPveHpFromPercent, realm.HangupPveHpToPercent) =
             Game.Health.HangupPenaltyNotice.HpRange(HangupPveHpFromPercent, HangupPveHpToPercent);
         realm.HangupPveItemsDropped = Game.Health.HangupPenaltyNotice.Items(HangupPveItemsDropped);
+        realm.HangupOutsideFightPenaltyEnabled = HangupOutsideFightPenaltyEnabled;
         realm.CleanupTimeOfDay = CleanupTimeOfDay?.Trim() ?? string.Empty;
         realm.CleanupTimeZoneId = string.IsNullOrWhiteSpace(CleanupTimeZoneId)
             ? defaults.CleanupTimeZoneId : CleanupTimeZoneId.Trim();
@@ -1344,6 +1350,7 @@ public sealed partial class BbsSectionViewModel : SettingsSectionViewModel
     partial void OnHangupPvpItemsDroppedChanged(int value)      { PushToCache(); Dirty(); }
     partial void OnHangupPvePenaltyEnabledChanged(bool value)   { PushToCache(); Dirty(); }
     partial void OnHangupPveItemsDroppedChanged(int value)      { PushToCache(); Dirty(); }
+    partial void OnHangupOutsideFightPenaltyEnabledChanged(bool value) { PushToCache(); Dirty(); }
 
     // The board takes a share between the lower figure and the upper, so moving
     // one past the other carries the other along and the pair on screen is always

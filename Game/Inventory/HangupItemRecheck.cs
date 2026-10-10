@@ -112,7 +112,7 @@ public sealed class HangupItemRecheck
     private readonly Func<int?>? _lives;
     private readonly Func<bool>? _pvpFight;
     private readonly Func<bool>? _monsterFight;
-    private readonly Func<bool, int?>? _hpShareTop;
+    private readonly Func<bool, bool, int?>? _hpShareTop;
     private readonly Func<bool>? _stockRealm;
     private readonly Func<Recovery.UnwitnessedDeath, DeathRecord?>? _recordDeath;
 
@@ -195,7 +195,7 @@ public sealed class HangupItemRecheck
     //   pvpFight         — a fight with a player is on, or one has just attacked.
     //   monsterFight     — in combat with a monster, or a hostile one in the room.
     //   hpShareTop       — HangupPenaltyNotice.HpShareTop for the realm, given whether
-    //                      the fight was with a player.
+    //                      the character was in a fight with a player, and with a monster.
     //   stockRealm       — the realm runs the Stock engine, where a death is known to
     //                      unequip everything and the board prints its hang-up lines.
     //   recordDeath      — RoomTracker.NoteUnwitnessedDeath: the record it made.
@@ -223,7 +223,7 @@ public sealed class HangupItemRecheck
         Func<int?>? lives = null,
         Func<bool>? pvpFight = null,
         Func<bool>? monsterFight = null,
-        Func<bool, int?>? hpShareTop = null,
+        Func<bool, bool, int?>? hpShareTop = null,
         Func<bool>? stockRealm = null,
         Func<Recovery.UnwitnessedDeath, DeathRecord?>? recordDeath = null)
     {
@@ -679,7 +679,9 @@ public sealed class HangupItemRecheck
     // drop it, and the realm's settings penalise a hang-up in the fight it was in.
     // Only then is a death looked for.
     private bool DeathSuspected(HeldAtDisconnect before) =>
-        Recovery.HangupDeath.Suspected(before.Hp, before.MaxHp, _hpShareTop?.Invoke(before.PvpFight));
+        Recovery.HangupDeath.Suspected(before.Hp, before.MaxHp, ShareTop(before));
+
+    private int? ShareTop(HeldAtDisconnect before) => _hpShareTop?.Invoke(before.PvpFight, before.InCombat);
 
     private (int Hp, int? MaxHp)? VitalsNow() => _promptThisLink ? _vitals?.Invoke() : null;
 
@@ -703,7 +705,7 @@ public sealed class HangupItemRecheck
     {
         bool stock = _stockRealm?.Invoke() ?? false;
         InventorySnapshot held = _firstInventory ?? _inventory();
-        int? share = _hpShareTop?.Invoke(before.PvpFight);
+        int? share = ShareTop(before);
         // Stock only: where else a death unequips, or a board prints these lines,
         // isn't recorded.
         bool? worn = stock && _firstInventory is not null ? held.EquippedItems.Count > 0 : null;

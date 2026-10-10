@@ -42,18 +42,21 @@ public static class HangupPenaltyNotice
 
     // The largest share of max HP (percent) the realm's settings say that hang-up
     // costs, or null when they don't penalise it: in a fight with a player the PvP
-    // side's, by the master switch; otherwise the monster side's, and only with
-    // that side ticked. The settings have no way to say what the board's own
-    // levels do (every hang-up, or only one while being attacked), so outside PvP
-    // the monster side stands for both and what is found on the way back in
-    // decides. Read by Game.Inventory.HangupItemRecheck to tell whether a hang-up
-    // can have been a death: a penalised one kills a dropped character whatever the
-    // share (0 included), and a standing one when the share takes its HP that low.
-    public static int? HpShareTop(RealmProfile? realm, bool pvp)
+    // side's, by the master switch; otherwise the monster side's, with that side
+    // ticked, when the character was in a fight with a monster, or in none and the
+    // realm is set as penalising every hang-up (the board's three levels: only
+    // PvP, only while attacked, every hang-up). Read by
+    // Game.Inventory.HangupItemRecheck to tell whether a hang-up can have been a
+    // death: a penalised one kills a dropped character whatever the share (0
+    // included), and a standing one when the share takes its HP that low.
+    //   pvp     — a fight with a player was on, or one had just attacked.
+    //   inFight — in combat with a monster, or a hostile one in the room.
+    public static int? HpShareTop(RealmProfile? realm, bool pvp, bool inFight)
     {
         if (realm is not { HangupPenaltyEnabled: true }) return null;
         if (pvp) return HpRange(realm.HangupPvpHpFromPercent, realm.HangupPvpHpToPercent).To;
-        return realm.HangupPvePenaltyEnabled
+        if (!realm.HangupPvePenaltyEnabled) return null;
+        return inFight || realm.HangupOutsideFightPenaltyEnabled
             ? HpRange(realm.HangupPveHpFromPercent, realm.HangupPveHpToPercent).To
             : null;
     }
@@ -62,7 +65,10 @@ public static class HangupPenaltyNotice
     public static string Describe(RealmProfile? realm)
     {
         if (realm is not { HangupPenaltyEnabled: true }) return "none";
-        return $"PvP: {Pvp(realm)}; PvE: {(realm.HangupPvePenaltyEnabled ? Pve(realm) : "not penalised")}";
+        return $"PvP: {Pvp(realm)}; PvE: {(realm.HangupPvePenaltyEnabled ? Pve(realm) : "not penalised")}"
+               + (realm is { HangupPvePenaltyEnabled: true, HangupOutsideFightPenaltyEnabled: true }
+                   ? "; outside a fight too, as PvE"
+                   : "");
     }
 
     // The log line for a hang-up going out now, or null when the realm's settings
@@ -81,9 +87,10 @@ public static class HangupPenaltyNotice
             return realm.HangupPvePenaltyEnabled
                 ? $"This realm penalises a hang-up in combat with monsters: {Pve(realm)}."
                 : null;
-        return realm.HangupPvePenaltyEnabled
-            ? $"This realm penalises a hang-up in PvP ({Pvp(realm)}) and in combat with monsters ({Pve(realm)})."
-            : $"This realm penalises a hang-up in PvP only: {Pvp(realm)}.";
+        if (!realm.HangupPvePenaltyEnabled) return $"This realm penalises a hang-up in PvP only: {Pvp(realm)}.";
+        return realm.HangupOutsideFightPenaltyEnabled
+            ? $"This realm penalises every hang-up: in PvP {Pvp(realm)}, otherwise {Pve(realm)}."
+            : $"This realm penalises a hang-up in PvP ({Pvp(realm)}) and in combat with monsters ({Pve(realm)}).";
     }
 
     private static string Pvp(RealmProfile realm) =>

@@ -225,6 +225,7 @@ public sealed class HangupItemRecheckTests
         public bool MonsterFight { get; set; }
         public int? PvpShare { get; set; }
         public int? PveShare { get; set; }
+        public int? OutsideFightShare { get; set; }
         // The Stock engine: a death unequips everything and the board prints its
         // hang-up lines, which the death question then asks for.
         public bool Stock { get; set; } = true;
@@ -257,7 +258,7 @@ public sealed class HangupItemRecheckTests
                 lives: () => Lives,
                 pvpFight: () => PvpFight,
                 monsterFight: () => MonsterFight,
-                hpShareTop: pvp => pvp ? PvpShare : PveShare,
+                hpShareTop: (pvp, inFight) => pvp ? PvpShare : inFight ? PveShare : OutsideFightShare,
                 stockRealm: () => Stock,
                 recordDeath: death =>
                 {
@@ -275,7 +276,8 @@ public sealed class HangupItemRecheckTests
 
         // The list a save left when the link dropped with the character at this HP
         // of 200, with 7 lives, in room 1/3.
-        public void StoredAt(int hp, InventorySnapshot before, int? lives = 7, bool pvp = false, RoomRef? room = null)
+        public void StoredAt(int hp, InventorySnapshot before, int? lives = 7, bool pvp = false, RoomRef? room = null,
+            bool inFight = true)
         {
             Stored(before, room);
             HeldAtDisconnect list = Profile.HeldAtDisconnect!;
@@ -283,6 +285,7 @@ public sealed class HangupItemRecheckTests
             list.MaxHp = 200;
             list.Lives = lives;
             list.PvpFight = pvp;
+            list.InCombat = inFight;
             (list.Worn, list.Carried) = DeathLootCapture.FromSnapshot(before);
             list.Coins = before.Currency;
         }
@@ -1368,6 +1371,26 @@ public sealed class HangupItemRecheckTests
         if (!looked) Assert.Empty(h.Coordinator.History);
     }
 
+    // A hang-up with no fight on is free on a board that penalises only while
+    // attacked: nothing is held and no `stat` is sent for it. On a realm set as
+    // penalising every hang-up it is looked at like any other.
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(50, true)]
+    public void AHangUpOutsideAFight_IsLookedAtOnlyWhereEveryHangUpIsPenalised(int? outsideShare, bool looked)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, OutsideFightShare = outsideShare };
+        h.StoredAt(-5, Geared, inFight: false);
+
+        ComeBackDead(h, lives: null);
+        Assert.Equal(looked, h.Held);
+        h.ReadInventory(Snap());
+
+        Assert.Equal(looked ? 1 : 0, h.Sent.Count(s => s == "stat\r"));
+        Assert.Empty(h.Deaths);
+        if (!looked) Assert.Empty(h.Coordinator.History);
+    }
+
     // A free room, or a level that didn't apply: the character comes back as it
     // left. After a restart of the client no maximum has been seen yet (a dropped
     // character's statline never shows one), and HP alone still says so.
@@ -1577,6 +1600,7 @@ public sealed class HangupItemRecheckTests
         ComeBackDead(h, lives: null);
         h.ReadInventory(Snap());
         h.Vitals = (-8, 200);
+        h.MonsterFight = true;
         h.Check.NoteLinkDropping();
         h.Check.OnInGameChanged(false);
         h.Check.NoteDisconnected();

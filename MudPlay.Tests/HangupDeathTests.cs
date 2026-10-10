@@ -45,8 +45,37 @@ public sealed class HangupDeathTests
             HangupPveHpToPercent = pveTo,
         };
 
-        Assert.Equal(expected, HangupPenaltyNotice.HpShareTop(realm, pvpFight));
-        Assert.Null(HangupPenaltyNotice.HpShareTop(null, pvpFight));
+        Assert.Equal(expected, HangupPenaltyNotice.HpShareTop(realm, pvpFight, inFight: true));
+        Assert.Null(HangupPenaltyNotice.HpShareTop(null, pvpFight, inFight: true));
+    }
+
+    // The board's three levels: only PvP, only while attacked, every hang-up. A
+    // hang-up outside any fight is penalised only on a realm set as the last.
+    [Theory]
+    // PvE ticked, every hang-up ticked, in a PvP fight, in a fight with a monster → the top share
+    [InlineData(true, false, false, false, null)]   // attacked-only board, and nothing was attacking
+    [InlineData(true, false, false, true, 20)]
+    [InlineData(true, true, false, false, 20)]      // every hang-up: at the PvE figures
+    [InlineData(true, true, false, true, 20)]
+    [InlineData(false, true, false, false, null)]   // the box means nothing without the PvE side
+    [InlineData(false, true, false, true, null)]
+    [InlineData(true, false, true, false, 50)]      // a PvP fight is penalised on every level
+    [InlineData(false, false, true, false, 50)]
+    public void HpShareTop_OutsideAFight_OnlyOnARealmThatPenalisesEveryHangUp(
+        bool pve, bool everyHangUp, bool pvpFight, bool inFight, int? expected)
+    {
+        RealmProfile realm = new()
+        {
+            HangupPenaltyEnabled = true,
+            HangupPvpHpFromPercent = 25,
+            HangupPvpHpToPercent = 50,
+            HangupPvePenaltyEnabled = pve,
+            HangupPveHpFromPercent = 10,
+            HangupPveHpToPercent = 20,
+            HangupOutsideFightPenaltyEnabled = everyHangUp,
+        };
+
+        Assert.Equal(expected, HangupPenaltyNotice.HpShareTop(realm, pvpFight, inFight));
     }
 
     // ----- Whether to look ----------------------------------------------

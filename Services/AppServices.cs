@@ -9358,7 +9358,8 @@ public sealed class AppServices
             pvpFight: () => PvpFight.IsActive
                 || PvpAttacks.Recent.Any(a => DateTimeOffset.Now - a.At < HangupPvpAttackWindow),
             monsterFight: () => PlayerState.InCombat || CombatTracker.HasHostileMonster,
-            hpShareTop: pvp => Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp),
+            hpShareTop: (pvp, inFight) =>
+                Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
             stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
             recordDeath: RoomTracker.NoteUnwitnessedDeath);
         Profile.ProfileSaving += HangupItems.StampForSave;

@@ -82,6 +82,13 @@ public sealed class RealmProfile
     public int HangupPveHpToPercent { get; set; } = 50;
     public int HangupPveItemsDropped { get; set; }
 
+    // The board penalises every hang-up made in the game, in a fight or not, at the
+    // monster side's figures. Off, a hang-up outside a fight is taken as free. Only
+    // Game.Inventory.HangupItemRecheck reads it, to decide whether a death by the
+    // penalty is worth looking for after such a hang-up (a hold on movement, and a
+    // `stat` if none was read).
+    public bool HangupOutsideFightPenaltyEnabled { get; set; }
+
     // The realm's nightly cleanup wall-clock time. Some bosses ("Respawns @
     // Cleanup" in the boss table) reset only at this daily cleanup — a marked one
     // reads DEAD until the next cleanup, then ALIVE. Format "HH:mm" in

@@ -5,6 +5,7 @@
 > - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
 > - Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
 > - The item pickup stands down for it, and nothing is recorded when it can't be told
+> - Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
