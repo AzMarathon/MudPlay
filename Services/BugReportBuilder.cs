@@ -1416,6 +1416,18 @@ public static class BugReportBuilder
             foreach ((string name, int count) in chestLoot)
                 sb.Append("- ").Append(count).Append(' ').Append(name).Append('\n');
 
+        // Auto-open engine (AutoOpenManager): whether its opens can reach the wire,
+        // what it still owes an open, what holds that back, and the last one it made.
+        var owedOpens = svc.AutoOpen.Owed;
+        sb.Append("\n**Auto-open** (")
+          .Append(svc.EngineWireBound ? "wire bound" : "wire NOT bound (never connected)")
+          .Append("; owed ").Append(owedOpens.Count)
+          .Append(owedOpens.Count > 0 ? $": {string.Join(", ", owedOpens)}" : "")
+          .Append(svc.AutoOpen.Opening is { } opening ? $"; opening {opening}" : "")
+          .Append(svc.AutoOpen.HeldFor is { } heldFor ? $"; waiting — {heldFor}" : "")
+          .Append("; last open: ").Append(svc.AutoOpen.LastOpen ?? "none this session")
+          .Append(")\n");
+
         // Discard hides a full room refused (AutoDiscardManager), each sent again in
         // the next room entered: who sent each, the room that last had it and what
         // it is waiting on, and how many hides are out with no answer yet.

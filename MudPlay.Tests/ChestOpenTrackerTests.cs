@@ -31,7 +31,7 @@ public sealed class ChestOpenTrackerTests : IDisposable
     private ChestOpenTracker NewTracker() => new(
         _inv, _profile, _typed,
         isContainer: name => name.EndsWith("chest", StringComparison.OrdinalIgnoreCase),
-        send: _sent.Add,
+        send: Send,
         schedule: (_, a) => _scheduled.Add(a),
         post: a => a(),
         runicName: () => "runic");
@@ -40,6 +40,14 @@ public sealed class ChestOpenTrackerTests : IDisposable
     {
         _tracker.Dispose();
         _inv.Dispose();
+    }
+
+    // As in the client: whatever the tracker sends passes the outbound observers,
+    // its own `open` included.
+    private void Send(string command)
+    {
+        _sent.Add(command);
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes(command + "\r"));
     }
 
     private void Feed(string text)
@@ -148,7 +156,8 @@ public sealed class ChestOpenTrackerTests : IDisposable
 
         Feed("You hid ruby.");
         Assert.Empty(_tracker.Loot(new[] { "ruby" }));
-        Assert.Empty(_profile.Current!.ChestLoot!.Items);   // saved, the coin tally stays
+        Assert.Null(_profile.Current!.ChestLoot);   // the last item gone, nothing stays saved
+        Assert.Equal(0, _tracker.Coin.TotalCopperValue);
     }
 
     private void OpenOakChestAgain()
@@ -254,6 +263,35 @@ public sealed class ChestOpenTrackerTests : IDisposable
         _typed.ObserveOutbound(Encoding.Latin1.GetBytes("open door\r\n"));
 
         Assert.Empty(_scheduled);
+    }
+
+    // `open s` is the south door, to the game and so to the list, whatever in the
+    // pack has a word starting with s.
+    [Fact]
+    public void TypedOpen_OfADirection_IsADoor_NotAContainer()
+    {
+        Inventory("small chest", gold: 10);
+
+        _typed.ObserveOutbound(Encoding.Latin1.GetBytes("open s\r\n"));
+
+        Assert.Empty(_scheduled);
+    }
+
+    // A chest that gave only coin has no item to leave the list, so its tally stays
+    // until the list is cleared by hand.
+    [Fact]
+    public void ChestThatGaveOnlyCoin_KeepsItsTally()
+    {
+        Inventory("oak chest, torch", gold: 10);
+        _tracker.Open("oak chest");
+        Inventory("oak chest, torch", gold: 10);
+        RunScheduled();
+        Inventory("torch", gold: 25);
+
+        Inventory("torch", gold: 25);   // a later read with nothing listed to prune
+
+        Assert.Equal(15, _tracker.Coin.Gold);
+        Assert.NotNull(_profile.Current!.ChestLoot);
     }
 
     [Fact]

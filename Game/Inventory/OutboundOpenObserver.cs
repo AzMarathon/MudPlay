@@ -3,10 +3,13 @@ using System.Text;
 
 namespace MudPlay.Game.Inventory;
 
-// Watches what the user types for `open <target>` and announces the target, so the
-// Chest Offload tab can track a chest opened from the terminal the same as one
-// opened from its own button. Only typed input reaches it (engine sends skip the
-// outbound observers); the window decides whether the target is a carried container.
+// Watches the outbound line stream for `open <target>` and announces the target, so
+// the Chest Offload list can track a chest opened from the terminal the same as one
+// opened from its own button. It sees every send, not only typed ones: the engines'
+// wire senders run through the same MainWindowViewModel.SendUserInput. So the
+// listener has to tell its own opens apart (ChestOpenTracker does, while it sends
+// one) and decide whether the target is a carried container at all (a door
+// engine's `open n` is not).
 public sealed class OutboundOpenObserver
 {
     public event Action<string>? OpenSent;

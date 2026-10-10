@@ -1979,10 +1979,11 @@ public sealed class AppServices
     // items are never sold.
     public Game.Inventory.AutoSellManager AutoSell { get; private set; } = null!;
 
-    // Auto-open engine. On every inventory change, sends open <name> once for
-    // each container item (ItemType == Container) flagged
-    // Models.GameData.ItemOverlay.AutoOpen that newly entered the pack. Shares
-    // the AutoGetItems master toggle; the per-item AutoOpen flag is the real gate.
+    // Auto-open engine. On every inventory change, each container item
+    // (ItemType == Container) flagged Models.GameData.ItemOverlay.AutoOpen that
+    // newly entered the pack is opened through ChestOpens, so what it gave joins
+    // the Chest Offload list. Shares the AutoGetItems master toggle; the per-item
+    // AutoOpen flag is the real gate.
     public Game.Inventory.AutoOpenManager AutoOpen { get; private set; } = null!;
 
     // Base auto-search engine — sends a bare sea on each room
@@ -6838,15 +6839,39 @@ public sealed class AppServices
             log: Log,
             isParadigm: onParadigm);
 
+        // The engine holds no wire sender of its own: each open goes to the Chest
+        // Offload tracker, which sends it and reads what it gave. Nothing is left
+        // for the main window to bind, and so nothing to leave unbound.
         AutoOpen = new Game.Inventory.AutoOpenManager(
             carriedItems: () => Inventory.Snapshot.CarriedItems,
             resolve: ResolveAutoOpenItem,
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
+            // With the Auto-All switch off nothing automatic is sent.
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems) && !AutoModeController.KillSwitchEngaged,
             isLoaded: () => Inventory.IsLoaded,
-            log: Log);
+            open: name => ChestOpens.TryOpenNow(name),
+            log: Log)
+        {
+            // An `open` typed at the board's menus would be a menu choice.
+            SendGateOpen = () => !EngineGate.IsLocked && InGameCapture.InGame,
+            InCombat = () => PlayerState.InCombat,
+            SneakKept = () => SneakGuard.Holds,
+            ComingBack = name => HangupItems.LastStillMissing
+                .Where(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase)).Sum(m => m.Count),
+        };
         // Auto-open re-evaluates the pack on every inventory change — the seam
         // that surfaces a container the moment it enters inventory.
         Inventory.Changed += AutoOpen.OnInventoryChanged;
+        ChestOpens.OpenSettled += AutoOpen.OnOpenSettled;
+        // Each of these may be what an owed open was waiting on.
+        EngineGate.Released += AutoOpen.Recheck;
+        SneakGuard.Released += AutoOpen.Recheck;
+        InGameCapture.InGameChanged += _ => AutoOpen.Recheck();
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerState.InCombat) && !PlayerState.InCombat) AutoOpen.Recheck();
+        };
+        Profile.ProfileLoaded += _ => AutoOpen.Reset();
+        RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
         // Settings → Talk auto-greet. Self name resolves through the
         // PartyManager's LocalCharacterName first (set on connect), then
         // the loaded profile name as a fallback. Wire-sender bound by
@@ -8922,6 +8947,8 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
+        // A container the sweep carries is being moved, not looted.
+        AutoOpen.SuppressDuringSweep = () => GhSweep.IsActive;
         // Hides a full room refused were kept back for the sweep; it may have left
         // the character somewhere with room.
         GhSweep.PhaseChanged += () => { if (!GhSweep.IsActive) AutoDiscard.RecheckHeldHides(); };
@@ -11009,6 +11036,9 @@ public sealed class AppServices
         ArgumentNullException.ThrowIfNull(send);
         _engineWireSend = send;
     }
+
+    // Whether SendGameCommand has a wire to send on, for the bug report.
+    public bool EngineWireBound => _engineWireSend is not null;
 
     // Un-wrapped wire sender that pierces the EngineSendGate — bound to the same raw
     // SendUserInput the emergency hangup uses (NOT the gate-wrapped engine sender).

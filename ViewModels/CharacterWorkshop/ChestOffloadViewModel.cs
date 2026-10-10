@@ -143,11 +143,10 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         _sellStatus = _tour.Status;
         _isTourRunning = _tour.IsRunning;
         _sayLootToRoom = _chests.SayLootToRoom;
-        // Reconcile the list against the game's OWN confirmed sell/drop/hide lines, so
-        // a refused sale changes nothing and a partial one reduces only that item.
-        _inventory.ItemSold += OnItemSold;
-        _inventory.ItemDropped += OnItemDropped;
-        _inventory.ItemHidden += OnItemHidden;
+        // The tracker lowers the list on the game's OWN confirmed sell / drop / hide /
+        // give lines, window open or not; the rows here follow it, so a refused sale
+        // changes nothing and a partial one reduces only that item.
+        _chests.ItemLeft += OnItemLeft;
         _discard.HideRefused += OnHideRefused;
         _discard.HeldHideEnded += OnHeldHideEnded;
 
@@ -189,9 +188,10 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     }
 
     // The tracker's list changed as a whole (an open settled, a row was taken off, the
-    // list was cleared). Sells, drops and hides don't come through here — they
-    // reconcile row by row (OnItemSold / OnItemDropped / OnItemHidden) so the user's
-    // sell quantities and ⇄ shop moves survive. Simulated chests keep their own view.
+    // list was cleared or its last item left). A sale, drop, hide or give that leaves
+    // items listed doesn't come through here — it moves its one row (OnItemLeft) so
+    // the user's sell quantities and ⇄ shop moves survive. Simulated chests keep
+    // their own view.
     private void OnChestsChanged()
     {
         SayLootToRoom = _chests.SayLootToRoom;   // a profile swap brings its own setting
@@ -203,22 +203,11 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
     // The containers held can change any time (a chest picked up or opened).
     private void OnInventoryChanged() => Dispatcher.UIThread.Post(() => RebuildContainers(_inventory.Snapshot));
 
-    // The game confirmed a sale of `count` of `name` (the player's own "You sold …").
+    // The game confirmed `count` of a listed item gone (the player's own "You sold …",
+    // "You dropped …", "You hid …" or a give) and the tracker has lowered its list.
     // Reduce that row and drop it at zero, leaving every other row's edits intact.
-    private void OnItemSold(string name, int count, long _)
-        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, Departure.Sold));
-
-    // The game confirmed a drop of `count` of `name` (the player's own "You dropped …").
-    private void OnItemDropped(string name, int count)
-        => Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, Departure.Dropped));
-
-    // The game confirmed a hide (the player's own "You hid …"). Unlike the sale and
-    // drop events this one carries the echo whole, so Paradigm's count is split off.
-    private void OnItemHidden(string item)
-    {
-        (int count, string name) = CountedCommand.SplitLeadingCount(item);
-        Dispatcher.UIThread.Post(() => ReconcileConfirmed(name, count, Departure.Hidden));
-    }
+    private void OnItemLeft(string name, int count, ChestOpenTracker.Departure how)
+        => ReconcileConfirmed(name, count, how);
 
     // A full room refused a discard's hide. The row is left as it is (nothing
     // confirmed, so the item is still carried); AutoDiscardManager holds the copy
@@ -268,24 +257,25 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         foreach (string name in names) _discard.ReleaseHeld(name, int.MaxValue, byHandOnly: true);
     }
 
-    // How a listed item left the pack, by the game's own confirmation.
-    private enum Departure { Sold, Dropped, Hidden }
-
-    private void ReconcileConfirmed(string name, int count, Departure how)
+    private void ReconcileConfirmed(string name, int count, ChestOpenTracker.Departure how)
     {
         if (_simulating || count <= 0) return;
         string did = how.ToString().ToLowerInvariant();
         if (FindRow(name) is not (ChestOffloadShopGroup group, ChestOffloadItemRow row))
         {
-            _log?.Debug(LogCategory,
-                $"{did} {count} {name} — no matching offload row (already reconciled or not from a chest)");
+            // No shop buys it, so it sits in the list below the shops.
+            ChestOffloadItemRow? unsold = Unsellable.FirstOrDefault(
+                r => string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (unsold is null) _log?.Debug(LogCategory, $"{did} {count} {name} — no row to move");
+            else if (unsold.ApplyDiscarded(count)) RemoveRow(unsold);
             return;
         }
 
         int before = row.Gained;
-        bool empty = how == Departure.Sold ? row.ApplySold(count) : row.ApplyDiscarded(count);
-        _log?.Info(LogCategory,
-            $"{did} {count} {name} confirmed — held {before}→{row.Gained}" +
+        bool empty = how == ChestOpenTracker.Departure.Sold ? row.ApplySold(count) : row.ApplyDiscarded(count);
+        // The tracker has logged the confirmation; this is the row's side of it.
+        _log?.Debug(LogCategory,
+            $"{did} {count} {name} — row held {before}→{row.Gained}" +
             (empty ? " (row cleared)" : $", sell qty now {row.SellQty}"));
 
         if (empty)
@@ -843,9 +833,7 @@ public sealed partial class ChestOffloadViewModel : WorkshopSectionViewModel
         _chests.Changed -= OnChestsChanged;
         _inventory.Changed -= OnInventoryChanged;
         _tour.Changed -= OnTourChanged;
-        _inventory.ItemSold -= OnItemSold;
-        _inventory.ItemDropped -= OnItemDropped;
-        _inventory.ItemHidden -= OnItemHidden;
+        _chests.ItemLeft -= OnItemLeft;
         _discard.HideRefused -= OnHideRefused;
         _discard.HeldHideEnded -= OnHeldHideEnded;
         if (_diagnostics is not null) _diagnostics.Changed -= OnDiagnosticsChanged;
