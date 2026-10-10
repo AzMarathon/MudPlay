@@ -153,6 +153,14 @@ public sealed class RoomTracker
     // engaged.
     public bool IsInDarkRoom { get; private set; }
 
+    // True while we stand in a room entered blind: the move went through and the
+    // game printed only "You are blind.", so nothing of the room was displayed. Set
+    // by NoteBlindMove's advance and cleared with IsInDarkRoom (a normal display, a
+    // graph reload, a death). With IsInDarkRoom it lets a consumer that reads the
+    // room's display on arrival (death recovery's floor read) tell "nothing was
+    // shown" from "shown, and empty".
+    public bool EnteredBlind { get; private set; }
+
     // The last observation we fully processed (name + exit set) and when. Used
     // to tell a passive redisplay of the same room — an Enter, a cash-on-ground
     // notice, a party arrival echo — apart from a genuine failed-move mismatch,
@@ -785,6 +793,7 @@ public sealed class RoomTracker
         RoomConfidence target = _pending.IsEmpty
             ? RoomConfidence.Confirmed
             : RoomConfidence.Pending;
+        EnteredBlind = true;
         SetRoom(expected, target, when, $"blind-move advance via {moveLabel}", isStrictAnchor: false);
         ArmCastDisplayWait();
     }
@@ -1170,6 +1179,7 @@ public sealed class RoomTracker
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 "Room display visible again — no longer in the dark.");
         IsInDarkRoom = false;
+        EnteredBlind = false;
 
         // Mirror open-door modifiers from the latest observation into
         // state so the walker can pre-check before kicking off the
@@ -1313,6 +1323,7 @@ public sealed class RoomTracker
         ClearPassiveGrid();
         PersistSteps();
         IsInDarkRoom = false;
+        EnteredBlind = false;
         SetRoom(room: null, RoomConfidence.PendingRespawn, when, "death recorded");
 
         // Broadcast the death AFTER the PendingRespawn transition but BEFORE the
@@ -1609,6 +1620,7 @@ public sealed class RoomTracker
         ClearPendingAndSteps();
         _history.Clear();
         IsInDarkRoom = false;
+        EnteredBlind = false;
         SetRoom(room: null, RoomConfidence.Unknown, when, "graph reloaded");
     }
 

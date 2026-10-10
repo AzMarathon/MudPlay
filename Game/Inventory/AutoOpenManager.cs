@@ -10,9 +10,9 @@ namespace MudPlay.Game.Inventory;
 // once so its contents spill without the player opening it by hand, then a
 // single 'i' so the client re-parses the post-open pack.
 //
-// Trigger: InventoryManager.Changed. Each change groups the current carried
-// list by resolved item Number and diffs the flagged-container counts against
-// the previous snapshot; a count increase fires one open per new copy. The
+// Trigger: InventoryManager.Changed. Each change counts the carried copies of
+// each flagged container by resolved item Number and diffs them against the
+// previous snapshot; a count increase fires one open per new copy. The
 // baseline is seeded silently on the first change seen once inventory is loaded
 // (a full 'i'), so containers already carried at connect aren't re-opened —
 // only genuine new acquisitions trigger an open. Rebasing the baseline right
@@ -121,15 +121,16 @@ public sealed class AutoOpenManager : IDisposable
         if (!_isLoaded()) return;
 
         // Group current carried copies by resolved item Number, keeping only
-        // flagged containers.
+        // flagged containers. A pile is one entry standing for all its copies, so
+        // a container that joins one already carried still reads as an arrival.
         Dictionary<int, (ResolvedOpen Item, int Count)> current = new();
-        foreach (string entry in _carried())
+        foreach ((string name, int copies) in InventorySnapshot.Stacks(_carried()))
         {
-            if (_resolve(entry) is not { AutoOpen: true } item) continue;
+            if (_resolve(name) is not { AutoOpen: true } item) continue;
             if (current.TryGetValue(item.Number, out (ResolvedOpen Item, int Count) g))
-                current[item.Number] = (g.Item, g.Count + 1);
+                current[item.Number] = (g.Item, g.Count + copies);
             else
-                current[item.Number] = (item, 1);
+                current[item.Number] = (item, copies);
         }
 
         // Seed the baseline silently the first time (once loaded) so containers

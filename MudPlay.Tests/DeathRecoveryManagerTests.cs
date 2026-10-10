@@ -23,7 +23,7 @@ namespace MudPlay.Tests;
 /// party-pickup flow is a separate concern owned by
 /// <see cref="MudPlay.Game.Remote.PartyComebackManager"/>.)
 /// </summary>
-public sealed class DeathRecoveryManagerTests
+public sealed partial class DeathRecoveryManagerTests
 {
     private sealed class GraphHarness : IDisposable
     {
@@ -63,15 +63,37 @@ public sealed class DeathRecoveryManagerTests
             ]
             """;
 
-        public GraphHarness(string characterName = "Ermias")
+        // Stock spill-sweep wiring, as the app does it. Graph is the room graph the
+        // sweep plans from. Walker (when asked for) is the real walker, its moves
+        // landing in Sent beside recovery's own commands, and Controller the real
+        // movement controller with the sweep listed as a solver. Movement holds and
+        // the hold on sends are read off the real Coordinator's gates. OtherEngine
+        // stands in for a loop / Auto-Lair / errand / following; AutoSearches and
+        // Searched for auto-search; Stays and StashRooms back the last two probes.
+        public RoomGraphManager Graph { get; }
+        public AutoWalkManager? Walker { get; }
+        public MovementController? Controller { get; }
+        public MovementCoordinator Coordinator { get; } = new();
+        public AvoidFilter Filter { get; } = new();
+        public bool OtherEngine { get; set; }
+        // Rooms an engine's own walk (a PvP flee, its come-back) has just ended in.
+        public HashSet<RoomKey> EngineWalkEndedAt { get; } = new();
+        public bool AutoSearches { get; set; }
+        public List<RoomKey> Searched { get; } = new();
+        public HashSet<string> Stays { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<RoomKey> StashRooms { get; } = new();
+        private readonly List<IDisposable> _engines = new();
+
+        public GraphHarness(string characterName = "Ermias", string graphJson = GraphJson, bool withWalker = false)
         {
             _root = Path.Combine(Path.GetTempPath(), "mudplay-deathrec-" + Path.GetRandomFileName());
             Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-            File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
+            File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), graphJson);
             GameDataCache cache = new(_root);
             cache.SwitchSet("alpha");
             RoomGraphManager graph = new(cache);
             graph.OnActiveSetChanged("alpha");
+            Graph = graph;
 
             _router = new MessageRouter();
             DefaultPatterns.Seed(_router);
@@ -91,6 +113,46 @@ public sealed class DeathRecoveryManagerTests
                 () => GateHeld = false,
                 name => Ac.TryGetValue(name, out int v) ? v : 0);
             Recovery.SetRealmProbe(() => Paradigm);
+            Recovery.AttachSpillSweep(
+                roomLookup: graph.GetRoom,
+                movementHeld: () => Coordinator.IsPaused,
+                isStashRoom: StashRooms.Contains,
+                otherEngineDrives: () => OtherEngine,
+                engineWalkEndedAt: EngineWalkEndedAt.Contains,
+                restHeld: () => Coordinator.IsGateAsserted(MovementCoordinator.HealthRecoveryGate)
+                    || Coordinator.IsGateAsserted(MovementCoordinator.ManaRecoveryGate),
+                userPaused: () => Coordinator.IsGateAsserted(MovementCoordinator.UserGate),
+                autoSearchesRooms: () => AutoSearches,
+                noteRoomSearched: Searched.Add);
+            Recovery.SetStaysOnDeathProbe(Stays.Contains);
+            // As the app wires it, after recovery's own subscription: the floor list
+            // belongs to the room just left, so a genuine room change empties it.
+            Tracker.StateChanged += t =>
+            {
+                if (t.NewRoom is null || (t.PreviousRoom is not null && t.PreviousRoom.Key.Equals(t.NewRoom.Key))) return;
+                Ground.OnRoomChanged();
+            };
+            if (withWalker)
+            {
+                BfsMapper bfs = new(graph);
+                Walker = new AutoWalkManager(graph, bfs, Tracker, Coordinator, Filter);
+                Walker.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
+                Recovery.AttachWalker(Walker);
+                LoopRunner loops = new(Tracker, Coordinator, graph: graph, bfs: bfs);
+                loops.SetWireSender(_ => { });
+                LairTimerStore timers = new(cache, graph, Tracker);
+                AutoLairManager autoLair = new(Walker, Tracker, graph, bfs, timers, log: null, coordinator: Coordinator);
+                Controller = new MovementController(Walker, loops, autoLair, Coordinator);
+                Controller.AddSolver(
+                    active: () => Recovery.SpillSweepActive,
+                    held: () => Recovery.SpillSweepHeld,
+                    stop: Recovery.StopSpillSweep);
+                Recovery.SpillSweepStateChanged += Controller.NoteSolverStateChanged;
+                Controller.Stopping += Recovery.DropDeferredSweep;
+                _engines.Add(Controller);
+                _engines.Add(autoLair);
+                _engines.Add(timers);
+            }
 
             Profile.LoadBlank();
             Profile.Current!.Name = characterName;
@@ -114,6 +176,7 @@ public sealed class DeathRecoveryManagerTests
 
         public void Dispose()
         {
+            foreach (IDisposable engine in _engines) engine.Dispose();
             Recovery.Dispose();
             Ground.Dispose();
             Watcher.Dispose();
@@ -614,8 +677,8 @@ public sealed class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
 
-        h.EnterGates();
-        h.FeedSurvey("a platinum mace, a plate mail, and a torch");   // our pile on the floor
+        h.FeedSurvey("a platinum mace, a plate mail, and a torch");   // our pile on the floor,
+        h.EnterGates();                                                // read before the room confirms
 
         // `get` each present pile item (article-insensitive) — NOT `recover corpse`.
         Assert.Contains("get platinum mace", h.Sent);
@@ -648,8 +711,8 @@ public sealed class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
 
-        h.EnterGates();
         h.FeedSurvey("an iron sword");       // only the sword is here; the helm spilled
+        h.EnterGates();
 
         Assert.Contains("get iron sword", h.Sent);
         Assert.DoesNotContain("get steel helm", h.Sent);   // absent → never `get`-spammed
@@ -665,8 +728,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("3 torch");
+        h.EnterGates();
 
         // Stock has no batched `get N item` — send bare `get torch`, once per unit.
         Assert.Equal(3, h.Sent.Count(s => s == "get torch"));
@@ -687,8 +750,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("a torch");
+        h.EnterGates();
         Assert.Contains("get torch", h.Sent);
 
         // The get confirmation is redrawn onto the prompt row (IsPromptLine=true) —
@@ -710,8 +773,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("an iron sword and 1500 gold");   // sword + coins on the floor
+        h.EnterGates();
 
         Assert.Contains("get iron sword", h.Sent);
         Assert.DoesNotContain(h.Sent, s => s.Contains("gold"));   // coins never `get`-ed
@@ -733,8 +796,8 @@ public sealed class DeathRecoveryManagerTests
         h.Paradigm = false;
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("an iron sword");         // helm spilled to a neighbour, sword is here
+        h.EnterGates();
         h.Recovery.FeedTestLine("You took an iron sword.");
         h.Sent.Clear();
         h.Heartbeat();                         // settle the grab (StockSettleTicks = 2)
@@ -791,4 +854,143 @@ public sealed class DeathRecoveryManagerTests
     // North Square (1/3) — the adjacent room, used to leave and re-enter the death room.
     private static RoomObservation Obs3()
         => new("North Square", new HashSet<Direction>(new[] { Direction.S }));
+
+    // ----- Stock: what is never on a floor ----------------------------
+
+    [Fact]
+    public void Stock_ItemReturnedToItsRightfulPlace_IsNotWaitedFor()
+    {
+        // The line prints as the death happens, before the lives readout that makes
+        // the record, and names an item that is gone for good.
+        using GraphHarness h = new() { Paradigm = false };
+        h.EnterGates();
+        h.Snapshot = SnapWith(
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Recovery.FeedTestLine("You have been killed!");
+        h.Recovery.FeedTestLine("Your steel helm has returned to its rightful place.");
+        h.Tracker.NoteDeath(2, "You have 2 lives left.");
+        h.Recovery.AutoRecover = true;
+
+        Assert.Equal(new[] { "steel helm" }, h.Latest.ReturnedItems);
+
+        h.FeedSurvey("an iron sword");
+        h.EnterGates();
+        Assert.DoesNotContain("get steel helm", h.Sent);
+        h.Recovery.FeedTestLine("You took an iron sword.");
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);   // the helm isn't waited for
+    }
+
+    [Fact]
+    public void Paradigm_ReturnedLine_ChangesNothing()
+    {
+        using GraphHarness h = new();   // Paradigm
+        h.EnterGates();
+        h.Snapshot = SnapWith(new[] { new EquippedItem("steel helm", "Head") }, Array.Empty<string>());
+        h.Recovery.FeedTestLine("Your steel helm has returned to its rightful place.");
+        h.Tracker.NoteDeath(2, "You have 2 lives left.");
+
+        Assert.Null(h.Latest.ReturnedItems);
+        Assert.Null(h.Latest.Trail);
+        h.EnterGates();
+        Assert.Equal(new[] { "steel helm" }, h.Latest.UnrecoveredItems);
+    }
+
+    [Fact]
+    public void Stock_ItemThatStaysOnTheCharacter_IsNeverMissing_AndIsWornAgain()
+    {
+        // A Loyal or CursedMajor item isn't dropped (the probe reads its abilities),
+        // but a death takes everything off, so it goes back on with the rest.
+        using GraphHarness h = new() { Paradigm = false };
+        h.Stays.Add("signet ring");
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("signet ring", "Finger") },
+            Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+
+        h.FeedSurvey("an iron sword and a signet ring");   // someone else's ring on the floor
+        h.EnterGates();
+        Assert.Equal(new[] { "iron sword" }, h.Latest.UnrecoveredItems);
+        Assert.DoesNotContain("get signet ring", h.Sent);
+        h.Recovery.FeedTestLine("You took an iron sword.");
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Contains("wear signet ring", h.Sent);
+    }
+
+    [Fact]
+    public void Stock_ReturnedUnit_IsStruckOnce_NotAgainOnEveryReEntry()
+    {
+        // Three torches, one of them gone for good. Two are out; get one and one is.
+        // Coming back must not strike the returned torch a second time and close the
+        // pile with a torch still on a floor somewhere.
+        using GraphHarness h = new() { Paradigm = false };
+        h.EnterGates();
+        h.Snapshot = SnapWith(Array.Empty<EquippedItem>(), new[] { "3 torch" });
+        h.Recovery.FeedTestLine("Your torch has returned to its rightful place.");
+        h.Tracker.NoteDeath(2, "You have 2 lives left.");
+        h.Recovery.AutoRecover = true;
+
+        h.FeedSurvey("a torch");
+        h.EnterGates();
+        Assert.Equal(new[] { "torch", "torch" }, h.Latest.UnrecoveredItems);
+        h.Recovery.FeedTestLine("You took torch.");
+        Assert.Equal(new[] { "torch" }, h.Latest.UnrecoveredItems);
+
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.EnterGates();
+
+        Assert.Equal(new[] { "torch" }, h.Latest.UnrecoveredItems);
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+    }
+
+    [Fact]
+    public void Stock_PileOfNothingButWhatStays_IsDone_AndTheGearGoesBackOn()
+    {
+        using GraphHarness h = new() { Paradigm = false };
+        h.Stays.Add("signet ring");
+        Die(h, new[] { new EquippedItem("signet ring", "Finger") }, Array.Empty<string>());
+        h.Recovery.AutoEquip = true;
+
+        h.EnterGates();
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Contains("wear signet ring", h.Sent);
+    }
+
+    [Fact]
+    public void Stock_ReEnteringAPartlyRecoveredPile_KeepsWhatWasCountedDown()
+    {
+        using GraphHarness h = new() { Paradigm = false };
+        Die(h,
+            new[] { new EquippedItem("iron sword", "Weapon Hand"), new EquippedItem("steel helm", "Head") },
+            Array.Empty<string>());
+        h.Recovery.AutoRecover = true;
+        h.FeedSurvey("an iron sword");
+        h.EnterGates();
+        h.Recovery.FeedTestLine("You took an iron sword.");
+        Assert.Equal(new[] { "steel helm" }, h.Latest.UnrecoveredItems);
+
+        h.Tracker.NoteRoomObserved(Obs3());   // leave
+        h.EnterGates();                       // and come back: the sword is in the pack, not missing
+
+        Assert.Equal(new[] { "steel helm" }, h.Latest.UnrecoveredItems);
+    }
+
+    [Fact]
+    public void Stock_WalkIn_ReadsTheSurveyThatPrintedBeforeTheRoomConfirmed()
+    {
+        // A room prints its floor before the exits line that confirms the move, so on
+        // a walk-in the survey is already read when the grab is armed.
+        using GraphHarness h = new() { Paradigm = false };
+        Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
+        h.Recovery.AutoRecover = true;
+
+        h.FeedSurvey("a torch");
+        h.EnterGates();
+
+        Assert.Contains("get torch", h.Sent);
+    }
 }

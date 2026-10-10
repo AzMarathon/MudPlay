@@ -3663,6 +3663,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // The first Stop holds a money or training errand; a second ends it.
         if (_services.MovementControl.HoldErrandOnStop()) return;
         _services.TokenRoute.Cancel();
+        // Between two of its legs the walker has nothing to stop and says nothing.
+        _services.DeathRecovery.StopSpillSweep("user stop from Navigation");
         _services.Walker.Stop("user stop from Navigation");
     }
 
@@ -5160,6 +5162,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     {
         if (_services.MovementControl.HoldErrandOnStop()) return;
         _services.TokenRoute.Cancel();
+        _services.DeathRecovery.StopSpillSweep("user stop from Navigation");
         if (_services.AutoLair.IsActive) _services.AutoLair.Stop();
         if (_services.LoopRunner.State != Game.Map.LoopState.Idle)
             _services.LoopRunner.Stop();
