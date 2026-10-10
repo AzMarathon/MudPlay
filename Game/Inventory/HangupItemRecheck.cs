@@ -123,6 +123,7 @@ public sealed class HangupItemRecheck
     private readonly Func<bool>? _monsterFight;
     private readonly Func<bool, bool, int?>? _hpShareTop;
     private readonly Func<bool>? _stockRealm;
+    private readonly Func<string, bool>? _staysOnDeath;
     private readonly Func<Recovery.UnwitnessedDeath, DeathRecord?>? _recordDeath;
 
     private Phase _phase;
@@ -163,6 +164,13 @@ public sealed class HangupItemRecheck
     // Heartbeats until a `stat` is sent to read the lives again, after something
     // changed them with no screen saying so. 0: none owed.
     private int _livesRereadTicks;
+    // They changed that way on this connection and no `stat` has given them since.
+    private bool _livesChangedUnread;
+    // A room display was read on this connection: the client knows what is in the
+    // room, and so whether a fight is on.
+    private bool _roomReadThisLink;
+    // The list on file was marked as left by the game's own exit on this connection.
+    private bool _cleanExitMarked;
     // The character's name off a `stat` read on this connection.
     private string? _nameReadThisLink;
     // A game prompt was read on this connection, so the HP the client holds is
@@ -213,6 +221,9 @@ public sealed class HangupItemRecheck
     //   stockRealm       — the realm runs the Stock engine, where a death is known to
     //                      unequip everything and the board prints its hang-up lines.
     //   recordDeath      — RoomTracker.NoteUnwitnessedDeath: the record it made.
+    //   staysOnDeath     — an item of this name stays with the character through a
+    //                      death (loyal, or cursed so); false for a name the game
+    //                      data doesn't know, which is then taken for one a death takes.
     public HangupItemRecheck(
         MovementCoordinator coordinator,
         Func<CharacterProfile?> profile,
@@ -239,7 +250,8 @@ public sealed class HangupItemRecheck
         Func<bool>? monsterFight = null,
         Func<bool, bool, int?>? hpShareTop = null,
         Func<bool>? stockRealm = null,
-        Func<Recovery.UnwitnessedDeath, DeathRecord?>? recordDeath = null)
+        Func<Recovery.UnwitnessedDeath, DeathRecord?>? recordDeath = null,
+        Func<string, bool>? staysOnDeath = null)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
         ArgumentNullException.ThrowIfNull(profile);
@@ -281,6 +293,7 @@ public sealed class HangupItemRecheck
         _hpShareTop = hpShareTop;
         _stockRealm = stockRealm;
         _recordDeath = recordDeath;
+        _staysOnDeath = staysOnDeath;
     }
 
     // ----- for the bug report -------------------------------------------
@@ -341,30 +354,44 @@ public sealed class HangupItemRecheck
 
         List<(string Name, int Count)> outstanding = itemsKnown ? Outstanding() : new List<(string Name, int Count)>();
         InventorySnapshot? held = itemsKnown ? _inventory() : null;
+        bool couldKill = _leaving == Leaving.DropThatCouldKill;
+        HeldAtDisconnect? carry = couldKill ? _carryFrom : null;
+        HeldAtDisconnect? carriedItems = _carryItems ? carry : null;
         profile.HeldAtDisconnect = new HeldAtDisconnect
         {
             At = _now(),
             Realm = _realmKey(),
-            Character = _nameReadThisLink,
+            Character = _nameReadThisLink ?? carry?.Character,
             Room = _confirmedRoom() is { } room ? new RoomRef(room.Map, room.Room) : null,
             // What an unfinished check hasn't found was dropped before this
             // connection; a drop of this one comes on top of it.
             PenaltiesSpanned = outstanding.Count > 0 ? Spanned(_before) + 1 : 1,
-            Items = held is { } pack
-                ? HangupItemPlan.WithOutstanding(HangupItemPlan.Held(pack), outstanding)
+            Items = held is { } pack ? HangupItemPlan.WithOutstanding(HangupItemPlan.Held(pack), outstanding)
+                : carriedItems is not null ? carriedItems.Items.Select(i => new HeldItem(i.Name, i.Count)).ToList()
                 : new List<HeldItem>(),
-            ItemsUnknown = held is null,
-            CleanExit = _leaving == Leaving.CleanExit,
+            ItemsUnknown = held is null && carriedItems is null,
+            // A dropped character can't leave by the exit command: the game refuses it.
+            CleanExit = _leaving == Leaving.CleanExit && VitalsNow() is not { Hp: <= 0 },
             Hp = VitalsNow()?.Hp,
             MaxHp = VitalsNow()?.MaxHp,
-            Lives = _livesKnownThisLink ? _lives?.Invoke() : null,
-            PvpFight = _pvpFight?.Invoke() ?? false,
-            InCombat = _monsterFight?.Invoke() ?? false,
-            Worn = held is { } worn ? DeathLootCapture.FromSnapshot(worn).Equipped : null,
-            Carried = held is { } carried ? Recovery.HangupDeath.CarriedOf(carried) : null,
-            Coins = held?.Currency,
+            Lives = _livesKnownThisLink ? _lives?.Invoke() : _livesChangedUnread ? null : carry?.Lives,
+            PvpFight = couldKill ? _dropPvp : _pvpFight?.Invoke() ?? false,
+            InCombat = couldKill ? _dropFight : _monsterFight?.Invoke() ?? false,
+            Worn = held is { } worn ? DeathLootCapture.FromSnapshot(worn).Equipped : carriedItems?.Worn,
+            Carried = held is { } carried ? Recovery.HangupDeath.CarriedOf(carried) : carriedItems?.Carried,
+            Coins = held?.Currency ?? carriedItems?.Coins,
         };
+        if (profile.HeldAtDisconnect.CleanExit) _cleanExitMarked = true;
     }
+
+    // Set by LeaveGame for the list a drop that could kill writes with no inventory
+    // read: the fight it is judged by, and the older list when that one's hang-up
+    // is known not to have killed, whose lives and name then still hold (and its
+    // items, when nothing can have changed them).
+    private bool _dropPvp;
+    private bool _dropFight;
+    private HeldAtDisconnect? _carryFrom;
+    private bool _carryItems;
 
     // How the game is being left, for the list written as it is.
     private enum Leaving
@@ -409,6 +436,9 @@ public sealed class HangupItemRecheck
         _livesReadThisLink = null;
         _livesKnownThisLink = false;
         _livesRereadTicks = 0;
+        _livesChangedUnread = false;
+        _roomReadThisLink = false;
+        _cleanExitMarked = false;
         _nameReadThisLink = null;
         _promptThisLink = false;
         _askedLives = false;
@@ -486,6 +516,15 @@ public sealed class HangupItemRecheck
             return;
         }
         _promptThisLink = true;
+        // A game prompt after "the game was left": it wasn't. A line that only
+        // looked like the exit's (chat can) had the list marked as a clean exit,
+        // and a hang-up after it must not go unlooked at.
+        if (_cleanExitMarked && _profile()?.HeldAtDisconnect is { CleanExit: true } stillIn)
+        {
+            stillIn.CleanExit = false;
+            _saveProfile();
+        }
+        _cleanExitMarked = false;
         // The statline's own handler runs ahead of this one (PromptParser is built
         // first), so the HP read here is that first prompt's.
         if (!_hpAtEntryTaken)
@@ -506,6 +545,7 @@ public sealed class HangupItemRecheck
     {
         if (!_linkUp) return;
         _livesKnownThisLink = false;
+        _livesChangedUnread = true;
         _livesRereadTicks = LivesRereadTicks;
         _log?.Info(LogCategory, $"The lives count is no longer known ({why}): a `stat` will read it again.");
     }
@@ -539,6 +579,7 @@ public sealed class HangupItemRecheck
         _livesReadThisLink = lives;
         _livesKnownThisLink = true;
         _livesRereadTicks = 0;
+        _livesChangedUnread = false;
         if (!string.IsNullOrWhiteSpace(name)) _nameReadThisLink = name.Trim();
         if (_before is { } before && _phase == Phase.AwaitingLives)
             CompareAndSave(before);
@@ -577,22 +618,31 @@ public sealed class HangupItemRecheck
     private void LeaveGame(bool linkDropped)
     {
         if (!_inGame) return;
+        HeldAtDisconnect? older = OlderList();
+        bool pvp = _pvpFight?.Invoke() ?? false;
+        bool fight = _monsterFight?.Invoke() ?? false;
+        // With no room display read on this connection the client can't say what
+        // is in the room: a character that comes back dropped where it left, and
+        // is hung up again at the first prompt, is in the fight it left.
+        if (!_roomReadThisLink && older is not null)
+        {
+            pvp |= older.PvpFight;
+            fight |= older.InCombat;
+        }
         bool couldKill = linkDropped && !_inventoryReadThisLink && !_heldUnknown && _phase != Phase.AwaitingLives
             && VitalsNow() is { } vitals
-            && Recovery.HangupDeath.Suspected(vitals.Hp, vitals.MaxHp,
-                _hpShareTop?.Invoke(_pvpFight?.Invoke() ?? false, _monsterFight?.Invoke() ?? false));
+            && Recovery.HangupDeath.Suspected(vitals.Hp, vitals.MaxHp, _hpShareTop?.Invoke(pvp, fight));
+        if (couldKill)
+        {
+            _dropPvp = pvp;
+            _dropFight = fight;
+            SettleOlderList(older);
+        }
         _leaving = !linkDropped ? Leaving.CleanExit : couldKill ? Leaving.DropThatCouldKill : Leaving.Drop;
         // Nothing is written over the list while it is still to be compared.
         bool listStands = !_inventoryReadThisLink || _phase == Phase.AwaitingLives;
         if (!listStands || couldKill)
-        {
-            if (couldKill && (_before is not null || _deathBefore is not null))
-                _log?.Info(LogCategory,
-                    "The link dropped with the character low enough for the penalty to kill and no inventory read on this "
-                    + "connection: the list is written for this hang-up, without what was held, and the older one is "
-                    + "let go uncompared.");
             _saveProfile();
-        }
         else if (_deathBefore is { } open && ReferenceEquals(_profile()?.HeldAtDisconnect, open))
         {
             open.LoginLinesSeenSince |= _loginLines;
@@ -600,6 +650,8 @@ public sealed class HangupItemRecheck
             _saveProfile();
         }
         _leaving = Leaving.No;
+        _carryFrom = null;
+        _carryItems = false;
         _inGame = false;
         switch (_phase)
         {
@@ -614,6 +666,79 @@ public sealed class HangupItemRecheck
                 break;
             case Phase.AwaitingRoom or Phase.AwaitingFightEnd or Phase.PickingUp:
                 Abandon("the game was left before the check ended; what it hadn't found is kept on the list");
+                break;
+        }
+    }
+
+    // The list on file, when it is this realm's and this character's.
+    private HeldAtDisconnect? OlderList()
+    {
+        if (_profile()?.HeldAtDisconnect is not { } list) return null;
+        string? realm = _realmKey();
+        if (realm is null || !string.Equals(list.Realm, realm, StringComparison.OrdinalIgnoreCase)) return null;
+        return OtherCharacter(list) is null ? list : null;
+    }
+
+    // The link is dropping with the character low enough to be killed and no
+    // inventory read on this connection, so a list is about to be written for this
+    // hang-up over the older one. The older one is settled first, with what this
+    // connection knows:
+    //   - its hang-up is known not to have killed (it couldn't, or HP at the first
+    //     prompt after it says so: the character came back alive, if down). Then
+    //     the lives and the name it carries are still current and go onto the new
+    //     list, which a connection too short for a `stat` could not give. This is
+    //     the commonest way the penalty kills: a hang-up that leaves the character
+    //     dropped, a re-entry with the monster still there, and a second hang-up at
+    //     the first prompt. What it held goes on too when nothing can have changed
+    //     it: no move was sent, and the realm's penalty takes no items.
+    //   - its hang-up could have killed and was never judged. It is judged now
+    //     rather than dropped: a `stat` on this connection showing one life fewer
+    //     is a death by it, recorded here from the older list. When it can't be
+    //     told, that is said, since nothing will ask again.
+    private void SettleOlderList(HeldAtDisconnect? older)
+    {
+        _carryFrom = null;
+        _carryItems = false;
+        if (older is null) return;
+        int? hpAtEntry = older.HpAtFirstEntrySince ?? _hpAtEntry;
+        int? share = ShareTop(older);
+        if (older.CleanExit || Recovery.HangupDeath.RuledOut(older.Hp, older.MaxHp, share, hpAtEntry))
+        {
+            _carryFrom = older;
+            _carryItems = !older.ItemsUnknown && !_moveSentSinceEntry && _maxItemsDropped() <= 0;
+            _log?.Info(LogCategory,
+                "The link dropped with the character low enough for the penalty to kill and no inventory read on this "
+                + "connection. The hang-up before it didn't kill (the character came back "
+                + $"{(hpAtEntry is { } hp ? $"at {hp} HP" : "as it left")}), so the lives and name of the older list still hold "
+                + $"and go onto the list written for this hang-up{(_carryItems ? ", with what was held" : "; what is held isn't known")}.");
+            return;
+        }
+        if (older.Hp is null) return;
+
+        bool stock = _stockRealm?.Invoke() ?? false;
+        bool? loginLines = stock ? _loginLines || older.LoginLinesSeenSince : null;
+        (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
+            older.Hp, older.MaxHp, share, hpAtEntry, older.Lives, _livesReadThisLink,
+            worn: null, loginLines, takenStillHeld: null);
+        string seen = $"judged as the link dropped again with no inventory read: left the game {older.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
+            + $"at {RoomText(older.Room)} with HP {Shown(older.Hp)}, lives {Shown(older.Lives)}; since then HP {Shown(hpAtEntry)} at "
+            + $"the first prompt, lives {Shown(_livesReadThisLink)} from a `stat`";
+        switch (verdict)
+        {
+            case Recovery.HangupDeathVerdict.Died when _livesReadThisLink is { } livesNow:
+                RecordDeath(older, held: null, livesNow, why, seen);
+                break;
+            case Recovery.HangupDeathVerdict.NeedsLives or Recovery.HangupDeathVerdict.Unsure:
+                _deathBefore = null;
+                LastDeathCheck = $"{_now():HH:mm:ss} can't tell, nothing recorded: {why}. Seen: {seen}";
+                _log?.Info(LogCategory, $"The hang-up before this connection is let go unjudged: {why}.");
+                _notice?.Invoke($"[Hang-up check: you were {HpText(older)} when you left the game before this connection, and "
+                                + $"whether that hang-up killed can no longer be told: {why}, and the link has dropped again "
+                                + "with the character low enough to be killed. No death was recorded for it]");
+                break;
+            default:
+                _deathBefore = null;
+                _log?.Info(LogCategory, $"The hang-up before this connection didn't kill the character: {why}.");
                 break;
         }
     }
@@ -851,20 +976,18 @@ public sealed class HangupItemRecheck
         // is this connection, unless an earlier one came and went without judging
         // the list and left what it saw on it.
         int? hpAtEntry = before.HpAtFirstEntrySince ?? _hpAtEntry;
-        // Both realms: a death leaves nothing worn. What stays with the character
-        // (a loyal item) is back in the pack.
-        bool? worn = _firstInventory is not null ? held.EquippedItems.Count > 0 : null;
+        // Stock unequips everything at a death. On Paradigm that is known of a
+        // loyal piece only (it is back in the pack), so there a worn piece that
+        // stays with the character says nothing, and any other worn piece does.
+        bool? worn = _firstInventory is null ? null
+            : stock ? held.EquippedItems.Count > 0
+            : held.EquippedItems.Any(e => !StaysOnDeath(e.Name));
         // Stock only: no other board is known to print these lines.
         bool? loginLines = stock ? _loginLines || before.LoginLinesSeenSince : null;
-        // Both realms: a death takes all but what stays with the character, so a
-        // list that held something, all of it still held, was not ended by one.
         List<(string Name, int Count)> gone = HangupItemPlan.Missing(before.Items, held);
-        long coinsThen = before.Coins?.TotalCoinCount ?? 0;
-        bool? heldGone = _firstInventory is null || before.ItemsUnknown || (before.Items.Count == 0 && coinsThen == 0)
-            ? null
-            : gone.Count > 0 || held.Currency.TotalCoinCount < coinsThen;
+        bool? takenStillHeld = _firstInventory is null ? null : TakenStillHeld(before, held);
         (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
-            before.Hp, before.MaxHp, share, hpAtEntry, before.Lives, _livesReadThisLink, worn, loginLines, heldGone);
+            before.Hp, before.MaxHp, share, hpAtEntry, before.Lives, _livesReadThisLink, worn, loginLines, takenStillHeld);
 
         RoomKey? here = _confirmedRoom();
         string evidence =
@@ -923,6 +1046,24 @@ public sealed class HangupItemRecheck
         }
     }
 
+    private bool StaysOnDeath(string name) => _staysOnDeath?.Invoke(name) ?? false;
+
+    // Both realms: a death takes every item but those that stay with the character,
+    // and every coin. So one such item of the list, or any of its coins, still
+    // held at the first inventory read says the character didn't die since the
+    // list was written, or died and got its pile back where this client didn't
+    // see. "Any", not "all": one torch burnt elsewhere must not hide it. Null when
+    // the list has nothing a death takes, or doesn't know what was held.
+    private bool? TakenStillHeld(HeldAtDisconnect before, InventorySnapshot held)
+    {
+        if (before.ItemsUnknown) return null;
+        List<HeldItem> taken = before.Items.Where(i => !StaysOnDeath(i.Name)).ToList();
+        long coinsThen = before.Coins?.TotalCoinCount ?? 0;
+        if (taken.Count == 0 && coinsThen == 0) return null;
+        HashSet<string> heldNow = new(HangupItemPlan.Held(held).Select(h => h.Name), StringComparer.OrdinalIgnoreCase);
+        return taken.Exists(i => heldNow.Contains(i.Name)) || (coinsThen > 0 && held.Currency.TotalCoinCount > 0);
+    }
+
     // A `stat` was read while the question stood open after its pass.
     private void AnswerOpenQuestion(HeldAtDisconnect before)
     {
@@ -948,11 +1089,13 @@ public sealed class HangupItemRecheck
     private void SayWaiting(HeldAtDisconnect before, string why)
     {
         if (_saidWaiting) return;
-        // Only when a `stat` is what is missing: not when HP at the first prompt
-        // already answers, and not when no count was kept to compare one with.
+        // Only when a read is what is missing (a `stat`, or the inventory a life
+        // already seen lost is waiting on): not when HP at the first prompt already
+        // answers, and not when no count was kept to compare one with.
         if (Recovery.HangupDeath.Judge(before.Hp, before.MaxHp, ShareTop(before),
-                before.HpAtFirstEntrySince ?? _hpAtEntry, before.Lives, livesNow: null,
-                worn: null, loginLines: null, heldGone: null).Verdict != Recovery.HangupDeathVerdict.NeedsLives)
+                before.HpAtFirstEntrySince ?? _hpAtEntry, before.Lives, _livesReadThisLink,
+                worn: null, loginLines: null, takenStillHeld: null).Verdict
+            is not (Recovery.HangupDeathVerdict.NeedsLives or Recovery.HangupDeathVerdict.Died))
             return;
         _saidWaiting = true;
         _log?.Info(LogCategory,
@@ -966,15 +1109,24 @@ public sealed class HangupItemRecheck
     // character was last in the game, and as its pile what it held then and
     // didn't at the first inventory read. Nothing is picked up here and nothing
     // reported as dropped; Death Recovery has the record from here on.
-    private void RecordDeath(HeldAtDisconnect before, InventorySnapshot held, int lives, string why, string evidence)
+    //   held — the first inventory read since the hang-up; null when none was read
+    //          (the list is being let go as the link drops again): the pile is
+    //          then everything on the list that a death takes.
+    private void RecordDeath(HeldAtDisconnect before, InventorySnapshot? held, int lives, string why, string evidence)
     {
         _deathBefore = null;
         // Still holding movement: nothing has run since the connect, and the death
-        // gets all a death is owed. Found later (the hold given up, or a `stat`
-        // read long after the pass), the character has played on since: the
-        // record is made, and the engines and buff timers are left as they are.
-        bool atEntry = _holding;
-        (List<DeathItem>? equipped, List<DeathItem>? lost) = Recovery.HangupDeath.Pile(before, held);
+        // gets all a death is owed. Found later (the hold given up, a `stat` read
+        // long after the pass, or the link dropping again), the character has
+        // played on since: the record is made, and the engines and buff timers
+        // are left as they are.
+        bool atEntry = _holding && held is not null;
+        (List<DeathItem>? equipped, List<DeathItem>? lost) = Recovery.HangupDeath.Pile(before, held ?? InventorySnapshot.Empty);
+        if (held is null)
+        {
+            equipped?.RemoveAll(i => StaysOnDeath(i.Name));
+            lost?.RemoveAll(i => StaysOnDeath(CountedCommand.SplitLeadingCount(i.Name.Trim()).Name));
+        }
         string message = before.ItemsUnknown ? DeathMessage + " What it held then isn't known." : DeathMessage;
         DeathRecord? record = _recordDeath?.Invoke(new Recovery.UnwitnessedDeath(
             before.Room, before.At, lives, message, equipped, lost, before.ItemsUnknown ? null : before.Coins, atEntry));
@@ -1196,6 +1348,7 @@ public sealed class HangupItemRecheck
             EnterGame();
         }
         _roomShownHere = true;
+        if (_linkUp) _roomReadThisLink = true;
         if (_phase != Phase.AwaitingRoom) return;
         _post(() =>
         {

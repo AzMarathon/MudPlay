@@ -9387,7 +9387,8 @@ public sealed class AppServices
             hpShareTop: (pvp, inFight) =>
                 Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
             stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
-            recordDeath: RoomTracker.NoteUnwitnessedDeath);
+            recordDeath: RoomTracker.NoteUnwitnessedDeath,
+            staysOnDeath: EveryItemOfThisNameStaysOnDeath);
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
         // The lives a `stat` on this connection gave: the count carried over a

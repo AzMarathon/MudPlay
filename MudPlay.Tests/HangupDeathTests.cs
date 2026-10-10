@@ -99,8 +99,8 @@ public sealed class HangupDeathTests
     // full HP with 6, nothing worn, the board's hang-up lines printed.
     private static HangupDeathVerdict Verdict(
         int? hpAtDrop = -5, int? share = 50, int? hpAtEntry = 200, int? livesBefore = 7, int? livesNow = 6,
-        bool? worn = false, bool? loginLines = true, bool? heldGone = true) =>
-        HangupDeath.Judge(hpAtDrop, 200, share, hpAtEntry, livesBefore, livesNow, worn, loginLines, heldGone).Verdict;
+        bool? worn = false, bool? loginLines = true, bool? takenStillHeld = false) =>
+        HangupDeath.Judge(hpAtDrop, 200, share, hpAtEntry, livesBefore, livesNow, worn, loginLines, takenStillHeld).Verdict;
 
     // Only a life lost says "died": exactly one, both counts read from the game.
     [Fact]
@@ -114,8 +114,9 @@ public sealed class HangupDeathTests
         // Where a death isn't known to unequip, or the board to print its lines
         // (not Stock), neither is asked for.
         Assert.Equal(HangupDeathVerdict.Died, Verdict(worn: null, loginLines: null));
-        // The list held nothing, or what it held isn't known: nothing to go by there.
-        Assert.Equal(HangupDeathVerdict.Died, Verdict(heldGone: null));
+        // The list held nothing a death takes, or what it held isn't known: nothing
+        // to go by there.
+        Assert.Equal(HangupDeathVerdict.Died, Verdict(takenStillHeld: null));
     }
 
     // Left at the top of its HP on a realm whose share goes to 100%: a death sets
@@ -123,7 +124,7 @@ public sealed class HangupDeathTests
     [Fact]
     public void ADeathFromFullHp_ShowsNoRiseInHp_AndIsStillADeath() =>
         Assert.Equal(HangupDeathVerdict.Died,
-            HangupDeath.Judge(200, 200, 100, 200, 7, 6, worn: false, loginLines: true, heldGone: true).Verdict);
+            HangupDeath.Judge(200, 200, 100, 200, 7, 6, worn: false, loginLines: true, takenStillHeld: false).Verdict);
 
     [Fact]
     public void NotLookedAt_WhenNotPenalised_NotLowEnough_OrHpWasNotKnown()
@@ -180,11 +181,27 @@ public sealed class HangupDeathTests
         // It came back dropped, or under the HP it left with.
         Assert.Equal(HangupDeathVerdict.Unsure, Verdict(hpAtEntry: -3));
         Assert.Equal(HangupDeathVerdict.Unsure, Verdict(hpAtDrop: 40, hpAtEntry: 12));
-        // Everything it held is still held: a death takes all but what stays with
+        // Something a death takes is still held: it takes all but what stays with
         // the character. This one holds on both realms, with nothing else to go by.
-        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(heldGone: false));
-        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(worn: null, loginLines: null, heldGone: false));
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(takenStillHeld: true));
+        Assert.Equal(HangupDeathVerdict.Unsure, Verdict(worn: null, loginLines: null, takenStillHeld: true));
     }
+
+    // A hang-up known not to have killed, lives aside: the lives the character
+    // left with are then still its lives, and a later list may carry them.
+    [Theory]
+    [InlineData(20, 50, -10, true)]     // came back dropped
+    [InlineData(60, 50, 20, true)]      // came back under what it left with
+    [InlineData(60, 50, 60, true)]      // came back as it left, short of full
+    [InlineData(150, 50, 200, true)]    // too much HP for the share to drop
+    [InlineData(60, null, 200, true)]   // not penalised
+    [InlineData(-5, 50, 200, false)]    // dropped, and back at full HP: it may have died
+    [InlineData(60, 50, 200, false)]
+    [InlineData(60, 50, null, false)]   // HP at the first prompt not read
+    [InlineData(null, 50, 20, false)]   // HP at the drop not known
+    public void RuledOut_WhenTheHangUpCouldNotKill_OrHpAtTheNextPromptSaysItDidNot(
+        int? hpAtDrop, int? share, int? hpAtEntry, bool expected) =>
+        Assert.Equal(expected, HangupDeath.RuledOut(hpAtDrop, 200, share, hpAtEntry));
 
     // Stock's word on the way in that the last exit was a hang-up it didn't let go
     // free, as the engine prints it.

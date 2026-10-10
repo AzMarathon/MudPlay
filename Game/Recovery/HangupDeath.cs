@@ -23,11 +23,14 @@ namespace MudPlay.Game.Recovery;
 // hang-up's. A death by this hang-up leaves marks the entry shows:
 //   - HP at the first prompt is above 0 and not under what the character left
 //     with: a death sets it to the maximum.
-//   - something it held is gone: a death takes everything but what stays with
-//     the character, on both realms (to the floor on Stock, into a corpse on
-//     Paradigm). A character that still holds all of it died somewhere else and
-//     got it back.
-//   - nothing is worn (Stock): a death takes every piece off the body.
+//   - nothing a death takes is still held: it takes every item but those that
+//     stay with the character, and every coin, on both realms (to the floor on
+//     Stock, into a corpse on Paradigm). A character that still holds even one
+//     such item died somewhere else and got its pile back. One consumable used
+//     since must not hide that, so it is "any still held", not "all still held".
+//   - nothing is worn: a death takes every piece off the body on Stock; on
+//     Paradigm that is known for a loyal piece only, so there a worn piece that
+//     stays with the character says nothing either way.
 //   - the board's two login lines were printed (Stock): they follow the first
 //     entry after a hang-up it didn't let go free, and no other.
 // A life lost with one of those missing is not recorded, and is told.
@@ -51,22 +54,43 @@ public static class HangupDeath
         return maxHpAtDrop is { } max && (long)max * share / 100 >= hp;
     }
 
+    // A death sets HP to its maximum, so a character that came back dropped, under
+    // what it left with, or at exactly what it left with short of the maximum (the
+    // penalty took nothing) wasn't killed by that hang-up. The reason, or null
+    // when HP at the first prompt doesn't say.
+    private static string? EntryHpSaysNo(int dropHp, int? maxHpAtDrop, int? hpAtEntry) => hpAtEntry switch
+    {
+        { } hp when hp <= 0 => $"it came back dropped (HP {hp}), where a death sets HP to its maximum",
+        { } hp when hp < dropHp => $"it came back at {hp} HP, under the {dropHp} it left with, where a death sets HP to its maximum",
+        { } hp when hp == dropHp && maxHpAtDrop is { } max && dropHp < max =>
+            $"it came back at the {hp} HP it left with, where a death sets HP to its maximum ({max})",
+        _ => null,
+    };
+
+    // Whether a hang-up is known not to have killed, lives aside: it couldn't (it
+    // wasn't penalised, or HP was too high for the share), or HP at the first
+    // prompt after it says so. Then the lives the character left with are still
+    // its lives.
+    public static bool RuledOut(int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpAtEntry) =>
+        hpAtDrop is { } dropHp
+        && (!Suspected(hpAtDrop, maxHpAtDrop, hpShareTop) || EntryHpSaysNo(dropHp, maxHpAtDrop, hpAtEntry) is not null);
+
     //   hpAtDrop / maxHpAtDrop — as the statline last gave them in the game; null if not known.
     //   hpAtEntry      — HP at the first prompt of this connection; null if none was read.
     //   livesBefore    — the count the character left the game with, read on that
     //                    connection; null when it wasn't.
     //   livesNow       — from a `stat` read on this connection; null until one is.
-    //   worn           — something was worn at the first inventory read of this
-    //                    connection; null where a death isn't known to unequip
-    //                    (not Stock) or no inventory has been read.
+    //   worn           — a piece a death is known to take off was worn at the first
+    //                    inventory read; null when no inventory has been read.
     //   loginLines     — the board's hang-up lines were printed on this connection;
     //                    null where it isn't known to print them (not Stock).
-    //   heldGone       — an item or coins the list has were not held at the first
-    //                    inventory read; null when the list held nothing, what it
-    //                    held isn't known, or no inventory has been read.
+    //   takenStillHeld — an item of the list that a death takes, or coins, was still
+    //                    held at the first inventory read; null when the list has
+    //                    nothing a death takes, what it held isn't known, or no
+    //                    inventory has been read.
     public static (HangupDeathVerdict Verdict, string Why) Judge(
         int? hpAtDrop, int? maxHpAtDrop, int? hpShareTop, int? hpAtEntry,
-        int? livesBefore, int? livesNow, bool? worn, bool? loginLines, bool? heldGone)
+        int? livesBefore, int? livesNow, bool? worn, bool? loginLines, bool? takenStillHeld)
     {
         if (hpAtDrop is not { } dropHp)
             return (HangupDeathVerdict.NotSuspected, "HP wasn't known when the character left the game");
@@ -76,17 +100,7 @@ public static class HangupDeath
             return (HangupDeathVerdict.NotSuspected,
                 $"HP was {dropHp}, more than the {hpShareTop}% of max HP the realm's settings say the penalty takes at most");
 
-        // A death sets HP to its maximum, so one that came back dropped, under what
-        // it left with, or at exactly what it left with short of the maximum (the
-        // penalty took nothing) wasn't killed by this hang-up.
-        string? hpSaysNo = hpAtEntry switch
-        {
-            { } hp when hp <= 0 => $"it came back dropped (HP {hp}), where a death sets HP to its maximum",
-            { } hp when hp < dropHp => $"it came back at {hp} HP, under the {dropHp} it left with, where a death sets HP to its maximum",
-            { } hp when hp == dropHp && maxHpAtDrop is { } max && dropHp < max =>
-                $"it came back at the {hp} HP it left with, where a death sets HP to its maximum ({max})",
-            _ => null,
-        };
+        string? hpSaysNo = EntryHpSaysNo(dropHp, maxHpAtDrop, hpAtEntry);
 
         if (livesBefore is not { } before)
             return hpSaysNo is not null
@@ -108,10 +122,10 @@ public static class HangupDeath
         string lost = $"a life was lost (lives {before} to {now})";
         if (hpSaysNo is not null)
             return (HangupDeathVerdict.Unsure, $"{lost}, but {hpSaysNo}");
-        if (heldGone == false)
+        if (takenStillHeld == true)
             return (HangupDeathVerdict.Unsure,
-                $"{lost}, but everything the character held when it left the game is still held, where a death takes "
-                + "all but what stays with it: the life was lost somewhere else (on another client?)");
+                $"{lost}, but something the character held when it left the game is still held, where a death takes "
+                + "all but what stays with it: the life was lost somewhere else, and the pile got back (on another client?)");
         if (worn == true)
             return (HangupDeathVerdict.Unsure,
                 $"{lost}, but something was still worn on entering the game, where a death takes everything off");

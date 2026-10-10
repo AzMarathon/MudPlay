@@ -232,6 +232,8 @@ public sealed class HangupItemRecheckTests
         // The Stock engine: a death unequips everything and the board prints its
         // hang-up lines, which the death question then asks for.
         public bool Stock { get; set; } = true;
+        // Item names that stay with the character through a death (loyal, cursed).
+        public HashSet<string> Stays { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<MudPlay.Game.Recovery.UnwitnessedDeath> Deaths { get; } = new();
         public HangupItemRecheck Check { get; }
 
@@ -274,7 +276,8 @@ public sealed class HangupItemRecheckTests
                     };
                     Profile.DeathHistory.Add(record);
                     return record;
-                });
+                },
+                staysOnDeath: Stays.Contains);
             Check.SetWireSender(_ => { });
         }
 
@@ -1560,6 +1563,8 @@ public sealed class HangupItemRecheckTests
     public void ALateAnswer_IsJudgedOnWhatTheEntryShowed()
     {
         Harness h = new() { MaxItems = 0, PveShare = 50, AutoAll = false };
+        // The rope stays with the character through a death, so it is still held.
+        h.Stays.Add("rope");
         h.StoredAt(90, Geared);
 
         ComeBackDead(h, lives: null);
@@ -2234,19 +2239,25 @@ public sealed class HangupItemRecheckTests
         Assert.Equal(h.Now, list.At);
         Assert.Equal(50, list.Room!.Room);
         Assert.Equal(-9, list.Hp);
+        // It walked on for two hours with no inventory read: what it holds now
+        // isn't known.
         Assert.True(list.ItemsUnknown);
         Assert.Empty(list.Items);
         Assert.Null(list.Worn);
-        // No `stat` was read on that connection, so no count either.
-        Assert.Null(list.Lives);
+        // No `stat` was read on that connection either, but the first hang-up is
+        // known not to have killed (it came in at 20 HP where it had left at 60),
+        // so the lives and name of the older list still hold.
+        Assert.Equal(7, list.Lives);
+        Assert.Equal("Ermias Asghedom", list.Character);
 
-        // It died in 1/50. With no count to compare, that is told and not recorded:
-        // never recorded at 1/3, two hours early.
+        // It died in 1/50: recorded there, at that time, never at 1/3 two hours early.
         h.AutoAll = true;
         h.ComeBack(hp: 200, lives: 6, Snap());
 
-        Assert.Empty(h.Deaths);
-        Assert.Contains("No death was recorded: its lives weren't read", h.Notices[^1]);
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(50, death.Room!.Room);
+        Assert.Equal(list.At, death.At);
+        Assert.Null(death.Lost);
     }
 
     // The same, with a `stat` read on that connection: the death is recorded where
@@ -2265,6 +2276,7 @@ public sealed class HangupItemRecheckTests
         h.Vitals = (20, 200);
         h.Check.OnInGameChanged(true);
         h.ReadLives(7);
+        h.Check.NoteMoveSent();
         h.Room = new RoomKey(1, 50);
         h.Check.OnRoomChanged();
         h.Vitals = (-9, 200);
@@ -2286,6 +2298,320 @@ public sealed class HangupItemRecheckTests
         Assert.Null(death.Coins);
         Assert.Contains("What it held then isn't known", death.Message);
         Assert.Contains("lists no pile", h.Notices[^1]);
+    }
+
+    // The commonest way the penalty kills. A penalised hang-up at 20 HP costs HP
+    // only and leaves the character dropped at -10. It comes back dropped with the
+    // monster still there, and the health settings hang up again at the first
+    // prompt, before any `stat` or `i`: a dropped, penalised hang-up is a certain
+    // death. On the third connection it stands in the temple with 6 lives where it
+    // had 7. The death is the SECOND hang-up's: the first is known not to have
+    // killed (it came back dropped), so the lives, the name and what was held are
+    // still those of the older list, and go onto the list written for the second.
+    [Theory]
+    [InlineData(true)]    // every hang-up penalised: the client needs no fight for it
+    [InlineData(false)]   // only in a fight, and the client had read no room yet
+    public void ADroppedReentry_HungUpAgainAtTheFirstPrompt_IsRecordedAtTheSecondHangUp(bool everyHangUpPenalised)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, OutsideFightShare = everyHangUpPenalised ? 50 : null };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 20, new RoomKey(1, 3));
+        DateTimeOffset firstDrop = h.Profile.HeldAtDisconnect!.At;
+
+        h.Room = new RoomKey(1, 3);
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Vitals = (-10, 200);
+        h.Check.OnInGameChanged(true);   // the first prompt: no room display, no occupants yet
+        h.MonsterFight = false;
+        DateTimeOffset secondDrop = h.Now;
+        h.Check.NoteLinkDropping();
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+
+        HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
+        Assert.Equal(secondDrop, list.At);
+        Assert.NotEqual(firstDrop, list.At);
+        Assert.Equal(-10, list.Hp);
+        Assert.Equal(7, list.Lives);
+        Assert.Equal("Ermias Asghedom", list.Character);
+        Assert.False(list.ItemsUnknown);
+        Assert.Equal(3, list.Items.Single(i => i.Name == "torch").Count);
+        // The fight it left is the fight it came back to.
+        Assert.True(list.InCombat);
+
+        h.ComeBack(hp: 200, lives: 6, Snap());
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(3, death.Room!.Room);
+        Assert.Equal(secondDrop, death.At);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Equal(HangupItemRecheck.DeathMessage, death.Message);
+        Assert.Equal(("chainmail hauberk", "Torso"), (Assert.Single(death.Equipped!).Name, death.Equipped![0].Slot));
+        Assert.Equal(new[] { "3 torch", "rope" }, death.Lost!.Select(i => i.Name).ToArray());
+        Assert.Equal(25, death.Coins!.Value.Gold);
+        Assert.True(death.AtEntry);
+    }
+
+    // On a realm whose penalty drops items the first hang-up may have taken some,
+    // so what was held isn't carried: the record has no pile.
+    [Fact]
+    public void ADroppedReentry_OnARealmThatDropsItems_CarriesTheLivesButNotTheItems()
+    {
+        Harness h = new() { MaxItems = 3, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 20, new RoomKey(1, 3));
+
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.Vitals = (-10, 200);
+        h.Check.OnInGameChanged(true);
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+
+        HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
+        Assert.Equal(7, list.Lives);
+        Assert.True(list.ItemsUnknown);
+    }
+
+    // A level trained on the short connection changes the lives unread: the count
+    // of the older list is then not carried.
+    [Fact]
+    public void ADroppedReentry_AfterTheLivesChangedUnread_CarriesNoCount()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 20, new RoomKey(1, 3));
+
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.Vitals = (-10, 200);
+        h.Check.OnInGameChanged(true);
+        h.Check.NoteLivesChangedUnread("a level was trained");
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+
+        Assert.Null(h.Profile.HeldAtDisconnect!.Lives);
+    }
+
+    // The first hang-up killed (7 to 6) and was never judged: connection 2 was
+    // played by hand with a `stat` (6) and no `i`, and ended low in a fight, so
+    // its own list replaces the older one. The older death used to be let go with
+    // a log line. It is judged with what connection 2 knows before it goes: one
+    // life fewer on that `stat` is a death by the first hang-up, recorded then,
+    // from the older list.
+    [Fact]
+    public void AnOlderDeathNeverJudged_IsRecordedBeforeItsListIsLetGo()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, AutoAll = false };
+        h.Stays.Add("rope");
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+        DateTimeOffset firstDrop = h.Profile.HeldAtDisconnect!.At;
+
+        h.Room = new RoomKey(1, 1);
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.Lives = 6;
+        h.ReadLives(6);
+        h.Heartbeats(10);
+        h.Room = new RoomKey(1, 9);
+        h.Vitals = (30, 200);
+        h.MonsterFight = true;
+        h.Now = h.Now.AddMinutes(20);
+        h.Check.NoteLinkDropping();
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(3, death.Room!.Room);
+        Assert.Equal(firstDrop, death.At);
+        Assert.Equal(6, death.LivesRemaining);
+        // No inventory was read since, so the pile is everything on the older list
+        // that a death takes: not the rope, which stays with the character.
+        Assert.Equal("chainmail hauberk", Assert.Single(death.Equipped!).Name);
+        Assert.Equal("3 torch", Assert.Single(death.Lost!).Name);
+        // Found as the link dropped again: the record, and nothing stopped.
+        Assert.False(death.AtEntry);
+        Assert.Contains("died to the hang-up penalty", h.Notices[^1]);
+        // The list on file is now the second hang-up's.
+        HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
+        Assert.Equal(9, list.Room!.Room);
+        Assert.Equal(30, list.Hp);
+        Assert.Equal(6, list.Lives);
+
+        // The second hang-up cost HP only: no second record.
+        h.AutoAll = true;
+        h.ComeBack(hp: 5, lives: 6, Snap(), room: new RoomKey(1, 9));
+        Assert.Single(h.Deaths);
+    }
+
+    // Where the older hang-up can't be judged as its list is let go, that is said
+    // then: nothing will ask again.
+    [Fact]
+    public void AnOlderQuestionThatCantBeJudged_IsSaidAsItsListIsLetGo()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, AutoAll = false };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+
+        h.Room = new RoomKey(1, 1);
+        h.Now = h.Now.AddMinutes(1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.Heartbeats(10);
+        int said = h.Notices.Count;
+        h.Vitals = (30, 200);
+        h.MonsterFight = true;
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+
+        Assert.Empty(h.Deaths);
+        Assert.Contains("can no longer be told", Assert.Single(h.Notices.Skip(said)));
+        Assert.Null(h.Profile.HeldAtDisconnect!.Lives);
+    }
+
+    // Paradigm: died on another client, the corpse recovered into the pack, nothing
+    // put back on, and one torch burnt since. "Everything still held" missed it for
+    // the one torch, and a death was recorded at the stale room with a pile of one
+    // torch. A death takes every item that doesn't stay with the character, so
+    // holding even one of them says the life wasn't lost to this hang-up.
+    [Fact]
+    public void ALifeLostElsewhere_WithThePileBackButOneTorchBurnt_IsNotRecorded()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 80, new RoomKey(1, 3));
+
+        h.Now = h.Now.AddDays(4);
+        h.ComeBack(hp: 200, lives: 6,
+            Geared with { EquippedItems = [], CarriedItems = ["chainmail hauberk", "2 torch", "rope"] },
+            boardLine: false, room: new RoomKey(1, 700));
+
+        Assert.Empty(h.Deaths);
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("a life was lost", notice);
+        Assert.Contains("is still held", notice);
+    }
+
+    // A piece that stays with the character through a death is no such sign: a
+    // real death leaves it held. With nothing else of the list held, it is a death.
+    [Fact]
+    public void HoldingOnlyWhatStaysThroughADeath_DoesNotHideADeath()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        h.Stays.Add("loyal blade");
+        h.PlayAndDrop(lives: 7, Snap(worn: [("loyal blade", "Weapon Hand")], carried: ["3 torch"]), hpAtDrop: -5, new RoomKey(1, 3));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(carried: ["loyal blade"]));
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal("3 torch", Assert.Single(death.Lost!).Name);
+        Assert.Empty(death.Equipped!);
+
+        // A list of nothing but pieces that stay can't be read that way at all.
+        Harness loyal = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        loyal.Stays.Add("loyal blade");
+        loyal.PlayAndDrop(lives: 7, Snap(worn: [("loyal blade", "Weapon Hand")]), hpAtDrop: -5, new RoomKey(1, 3));
+        loyal.ComeBack(hp: 200, lives: 6, Snap(carried: ["loyal blade"]));
+        Assert.Single(loyal.Deaths);
+    }
+
+    // What can't be separated: died elsewhere by an ordinary death and logged off
+    // stripped. The record is made, and says only where this client had the character.
+    [Fact]
+    public void ADeathElsewhereLeftUnrecovered_IsRecordedWithTheHedgedWording()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = false };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 80, new RoomKey(1, 3));
+
+        h.Now = h.Now.AddDays(4);
+        h.ComeBack(hp: 200, lives: 6, Snap(), boardLine: false);
+
+        Assert.Contains("where this client last had the character", Assert.Single(h.Deaths).Message);
+        Assert.Contains("If it was played from another client since", Assert.Single(h.Notices));
+    }
+
+    // A list of coins only, and a real death: the coins are gone, so it is one.
+    [Fact]
+    public void AListOfCoinsOnly_GoneAtTheEntry_IsADeath()
+    {
+        InventorySnapshot purse = Snap() with { Currency = new CurrencyHoldings(0, 0, 25, 0, 0, 2500) };
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, purse, hpAtDrop: -5, new RoomKey(1, 3));
+        h.ComeBack(hp: 200, lives: 6, Snap());
+        Assert.Single(h.Deaths);
+
+        // Still holding coins: a death takes every one.
+        Harness kept = new() { MaxItems = 0, PveShare = 50 };
+        kept.PlayAndDrop(lives: 7, purse, hpAtDrop: -5, new RoomKey(1, 3));
+        kept.ComeBack(hp: 200, lives: 6, Snap() with { Currency = new CurrencyHoldings(0, 0, 3, 0, 0, 300) });
+        Assert.Empty(kept.Deaths);
+    }
+
+    // On Stock a death takes every piece off the body. On Paradigm that is known
+    // of a loyal piece only (it is back in the pack); whether a cursed piece that
+    // stays with the character comes off there is not, so worn it says nothing
+    // either way, while any other worn piece still says "no death".
+    [Theory]
+    [InlineData(true, "cursed collar", false)]    // Stock: anything worn is no death
+    [InlineData(false, "cursed collar", true)]    // Paradigm: a piece that stays, worn, proves nothing
+    [InlineData(false, "plain helm", false)]      // Paradigm: a piece a death takes, worn, is no death
+    public void AWornPieceThatStaysThroughADeath_SaysNothingOnParadigm(bool stock, string wornNow, bool died)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = stock };
+        h.Stays.Add("cursed collar");
+        h.PlayAndDrop(lives: 7, Snap(worn: [("cursed collar", "Neck")], carried: ["3 torch"]), hpAtDrop: -5, new RoomKey(1, 3));
+
+        h.ComeBack(hp: 200, lives: 6, Snap(worn: [(wornNow, "Neck")]));
+
+        Assert.Equal(died ? 1 : 0, h.Deaths.Count);
+        if (!died) Assert.Contains("still worn", h.Notices[^1]);
+    }
+
+    // A chat line shaped like the exit's takes the client "out of the game" until
+    // the next prompt. A dropped character can't leave by the exit command at all,
+    // so such a mark is not believed; and a prompt after it takes the mark off
+    // again.
+    [Fact]
+    public void AnExitShapedLine_DoesNotMarkAHangUpAsACleanExit()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.Check.NoteConnected();
+        h.Vitals = (200, 200);
+        h.Check.NoteRoomDisplayed();
+        h.Check.OnInGameChanged(true);
+        h.Lives = 7;
+        h.ReadLives(7);
+        h.ReadInventory(Geared);
+        h.Vitals = (-5, 200);
+        h.MonsterFight = true;
+        h.Check.OnInGameChanged(false);   // the exit-shaped line
+        h.Now = h.Now.AddSeconds(1);
+        h.Check.NoteLinkDropping();       // the hang-up, before another prompt
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+        Assert.False(h.Profile.HeldAtDisconnect!.CleanExit);
+
+        h.ComeBack(hp: 200, lives: 6, Snap());
+        Assert.Single(h.Deaths);
+
+        // Standing, so the mark is believed until a prompt shows the game wasn't left.
+        Harness s = new() { MaxItems = 0, PveShare = 50 };
+        s.Check.NoteConnected();
+        s.Vitals = (200, 200);
+        s.Check.NoteRoomDisplayed();
+        s.Check.OnInGameChanged(true);
+        s.ReadInventory(Geared);
+        s.Vitals = (30, 200);
+        s.Check.OnInGameChanged(false);
+        Assert.True(s.Profile.HeldAtDisconnect!.CleanExit);
+        s.Check.OnInGameChanged(true);
+        Assert.False(s.Profile.HeldAtDisconnect!.CleanExit);
     }
 
     // A connection that came and went with no inventory read, and nothing that
