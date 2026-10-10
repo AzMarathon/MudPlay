@@ -5055,6 +5055,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             if (_services.MovementControl.HoldErrandOnStop()) return;
             _services.Walker.Stop("user stop from Navigation");
             _services.NoteUserStoppedRun?.Invoke();
+            _services.Events.NoteUserStop();
             return;
         }
 
@@ -5196,6 +5197,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (_services.Walker.State is WalkState.Walking or WalkState.Paused)
             _services.Walker.Stop("user stop from Navigation");
         _services.NoteUserStoppedRun?.Invoke();
+        // An event with no engine running to report the stop (waiting, resting, or
+        // suspended behind a detour) ends here, with the events behind it.
+        _services.Events.NoteUserStop();
 
         _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
 

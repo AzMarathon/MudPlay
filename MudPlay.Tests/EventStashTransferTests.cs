@@ -101,14 +101,38 @@ public sealed class EventStashTransferTests
         Assert.Empty(r.Sent);
     }
 
+    // An event that fires mid-transfer waits for it: the transfer isn't stopped.
     [Fact]
-    public void AnotherEventTakingOver_StopsTheTransfer()
+    public void AnotherEventFiring_WaitsForTheTransfer()
+    {
+        Rig r = new();
+        ScheduledEvent wait = new() { Name = "wait", ActionType = EventActionType.Wait, WaitSeconds = 5 };
+        r.Manager.Events.Add(wait);
+        r.Manager.Fire(r.Transfer);
+        r.Manager.Fire(wait);
+
+        Assert.Equal(0, r.Stops);
+        Assert.Contains("'bank the stash' StashTransfer", r.Manager.RunSummary);
+
+        r.Manager.NoteStashTransferEnded(StashTransferOutcome.Done);
+        Assert.Equal("stat", Assert.Single(r.Sent));       // the transfer's Then ran first
+        Assert.Contains("'wait' Wait", r.Manager.RunSummary);
+    }
+
+    // A Logoff event doesn't wait, and a transfer is between walks while it searches
+    // or deposits, so it is told to stop.
+    [Fact]
+    public void ALogoffEventTakingOver_StopsTheTransfer()
     {
         Rig r = new();
         r.Manager.Fire(r.Transfer);
-        r.Manager.Fire(new ScheduledEvent { Name = "wait", ActionType = EventActionType.Wait, WaitSeconds = 5 });
+        r.Manager.Fire(new ScheduledEvent
+        {
+            Name = "wait", TriggerType = EventTriggerType.Logoff, ActionType = EventActionType.Wait, WaitSeconds = 5,
+        });
 
         Assert.Equal(1, r.Stops);
+        Assert.Contains("'wait' Wait", r.Manager.RunSummary);
     }
 
     [Fact]

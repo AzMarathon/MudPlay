@@ -67,6 +67,19 @@ public static class RouteChoicePrompt
             return true;
         }
 
+        bool went = await PlanAndWalkAsync(services, destination, previewSink, startMode, askOnlyOverAvoids, remember);
+        // A walk the user starts takes over from an event paused behind a detour: the
+        // detour is ended for good by it, and nothing of that event, or of the ones
+        // waiting behind it, may set off by itself once this walk is done. A walk the
+        // client starts for them (askOnlyOverAvoids) is no takeover.
+        if (went && !askOnlyOverAvoids) services.Events.NoteUserStop();
+        return went;
+    }
+
+    private static async Task<bool> PlanAndWalkAsync(
+        AppServices services, RoomKey destination, Action<IReadOnlyList<RoomKey>?>? previewSink,
+        RunStartMode startMode, bool askOnlyOverAvoids, bool remember)
+    {
         // Remember it for the bug report even if the walk is declined at the picker
         // or fails — so a capture can re-plan and explain what the picker decided.
         services.LastRequestedWalkTo = destination;
@@ -975,7 +988,9 @@ public static class RouteChoicePrompt
         if (entry is not { } loopRoom)
         {
             ApplyStartMode(services, startMode);
-            services.LoopRunner.Start(loop, userStarted: true);
+            // The user's loop takes over from an event paused behind a detour, as a
+            // user's walk does (WalkAsync).
+            if (services.LoopRunner.Start(loop, userStarted: true)) services.Events.NoteUserStop();
             return;
         }
 

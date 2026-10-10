@@ -654,9 +654,9 @@ public sealed class PartyComebackManager : IDisposable
         // AutoLair.Stop() is gate-clean (clears its UserGate when paused
         // and stops the walker); LoopRunner / Walker Stop() return them
         // to Idle. Stop all three so the recovery walk owns the wire.
-        if (_autoLair.IsActive) _autoLair.Stop(reason);
-        if (_loopRunner.State is not LoopState.Idle) _loopRunner.Stop(reason);
-        if (_walker.State is not WalkState.Idle) _walker.Stop(reason);
+        if (_autoLair.IsActive) _autoLair.Stop(reason, willResume: true);
+        if (_loopRunner.State is not LoopState.Idle) _loopRunner.Stop(reason, willResume: true);
+        if (_walker.State is not WalkState.Idle) _walker.Stop(reason, willResume: true);
     }
 
     private void Resume()

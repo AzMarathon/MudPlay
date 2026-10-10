@@ -200,6 +200,9 @@ public sealed class AutoLairManager : IDisposable
     // Fires when IsActive flips. Carries the new value.
     public event Action<bool>? ActiveChanged;
 
+    // The last Stop was by a caller that restarts the run itself (see Stop).
+    public bool StoppedForResume { get; private set; }
+
     // Fires when Phase changes; carries the new phase.
     public event Action<AutoLairPhase>? PhaseChanged;
 
@@ -320,6 +323,7 @@ public sealed class AutoLairManager : IDisposable
     public bool Start(string? label = null)
     {
         if (IsActive) return true;
+        StoppedForResume = false;
         if (_markers.Count < 2)
         {
             _log?.Warn("AutoLair", $"need at least 2 markers; have {_markers.Count}.");
@@ -357,9 +361,13 @@ public sealed class AutoLairManager : IDisposable
         return true;
     }
 
-    public void Stop(string reason = "user stop")
+    // willResume: the caller stops the run only to start it again itself (a bank or
+    // sell trip, a flee). ActiveChanged carries no detail, so a listener reads
+    // StoppedForResume while it handles the change.
+    public void Stop(string reason = "user stop", bool willResume = false)
     {
         if (!IsActive) return;
+        StoppedForResume = willResume;
         _schedulerTick.Stop();
         _entryTimer.Stop();
         _engageTimer.Stop();

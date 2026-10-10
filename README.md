@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.164.0**
+> **Version 3.166.0**
 > - Auto-All is a true master switch: off, nothing automatic acts (engines, remote commands, triggers, events, polls, position fixes, holds, party signals, trips)
 > - Only the Auto-All switch counts as "all autos off"; unticking the toggles one by one does not
 > - `@auto-all` is the one remote command followed while it is off, by chat or the local API; the others are ignored with no reply
@@ -14,6 +14,8 @@
 > - Nightly-cleanup log-off does not start while the switch is off
 > - Re-enable on reconnect no longer turns autos back on over a switch that is off
 > - Main-menu auto-entry works with the switch off, like the rest of login
+> - Events: one that fires while the switch is off is skipped; one already waiting or running is held, clocks stopped
+> - A chest opened by hand while the switch is off draws no inventory read and no loot line
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

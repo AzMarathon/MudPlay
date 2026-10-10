@@ -119,6 +119,15 @@ public sealed class ScheduledEvent
     // Stop once all of these hold.
     public List<EventCondition>? StopConditions { get; set; }
 
+    // Whether anything ends this event's loop or auto-lair. With a rule the event
+    // is a run that finishes; without one it is done the moment the loop starts.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasStopRule =>
+        (ActionType == EventActionType.Loop && StopAfterLaps is > 0)
+        || StopAfterMinutes is > 0
+        || StopConditions is { Count: > 0 }
+        || (StopBossMoment is not null && !string.IsNullOrWhiteSpace(StopBossName));
+
     // ----- Then (after the action is done) ---------------------------
 
     // Null on events saved before Then existed: a walk-to resumes what it
