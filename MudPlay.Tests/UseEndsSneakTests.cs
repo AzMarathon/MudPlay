@@ -82,17 +82,17 @@ public sealed class UseEndsSneakTests : IDisposable
 
     private static ItemUseStealthRule Rule(params string[] held) => Rule(null, held);
 
-    private static ItemUseStealthRule Rule(List<string>? debug, params string[] held) => new(
-        () => held,
-        name =>
-        {
-            List<ItemUseStealthRule.Facts> records = new();
-            foreach (Dictionary<string, string> table in new[] { Items, Namesakes })
-                if (table.TryGetValue(name, out string? json))
-                    records.Add(ItemUseStealthRule.Facts.Read(JsonDocument.Parse(json).RootElement, TargetsOf));
-            return records;
-        },
-        debug is null ? null : debug.Add);
+    private static ItemUseStealthRule Rule(List<string>? debug, params string[] held) =>
+        new(() => held, FactsOf, debug is null ? null : debug.Add);
+
+    private static IReadOnlyList<ItemUseStealthRule.Facts> FactsOf(string name)
+    {
+        List<ItemUseStealthRule.Facts> records = new();
+        foreach (Dictionary<string, string> table in new[] { Items, Namesakes })
+            if (table.TryGetValue(name, out string? json))
+                records.Add(ItemUseStealthRule.Facts.Read(JsonDocument.Parse(json).RootElement, TargetsOf));
+        return records;
+    }
 
     private static readonly string[] Pack =
     {
@@ -241,24 +241,27 @@ public sealed class UseEndsSneakTests : IDisposable
         public bool EngineDriving;
         public bool AutoSneak = true;
         public bool AutoHide;
-        private readonly ItemUseStealthRule _items = Rule(Pack);
+        private readonly ItemUseStealthRule _items;
 
         public World()
         {
             DefaultPatterns.Seed(Router);
+            _items = new ItemUseStealthRule(() => { RuleConsulted++; return Pack; }, FactsOf);
             Stealth = new StealthManager(Router, State, new LogService());
             Stealth.SetAutoToggles(() => AutoSneak, () => AutoHide);
             Stealth.SetEngineDrivingCheck(() => EngineDriving);
             Stealth.SetWireSender(SendBytes);
         }
 
-        // Every command goes out through here, as it does through SendUserInput, and
-        // is judged the way AppServices.NoteSentForSneak judges it.
+        // How many times the item rule was asked what the pack holds.
+        public int RuleConsulted;
+
+        // Every command goes out through here and is reported once, as
+        // AppServices.NoteSentForSneak reports it.
         public void Send(string command)
         {
             Wire.Add(command);
-            if (SneakBreakingCommands.EndsSneak(command, items: _items))
-                Stealth.NoteSneakBroken($"'{command}'", endsHide: SneakBreakingCommands.AlsoEndsHide(command));
+            Stealth.NoteCommandSent(command, () => false, _items);
         }
 
         public void SendBytes(byte[] bytes) => Send(Encoding.Latin1.GetString(bytes).TrimEnd('\r'));
@@ -429,6 +432,243 @@ public sealed class UseEndsSneakTests : IDisposable
 
         Assert.Empty(w.Wire);
         Assert.True(w.State.IsHidden);
+    }
+
+    // ----- the sneak under a hide ----------------------------------------
+    // `hid` never touches the game's sneak flag, so a character that sneaked in and
+    // then hid is still sneaking. Its step out is a sneaked one as it stands, and an
+    // `sn` for it would throw that sneak away and roll again.
+
+    [Fact]
+    public void SneakedInThenHid_EngineStep_SendsNoSn_IsNotHeld_AndIsSneakingAgain()
+    {
+        using World w = new() { EngineDriving = true };
+        w.Stealth.SetMovementCoordinator(new MovementCoordinator());
+        w.Feed("Sneaking...");
+        w.Feed("Attempting to hide...");
+        Assert.Equal(StealthState.Hidden, w.Stealth.State);
+
+        Assert.True(w.Stealth.ReadyToMoveSneaking());
+        Assert.False(w.Stealth.IsHoldingForSneakAnswer);
+        w.Stealth.RequestPreMoveStealth();
+        w.Stealth.NoteDirectionalMoveSent();        // the step's direction goes out
+        w.Stealth.NoteTypedMove();
+
+        Assert.Empty(w.Wire);
+        Assert.Equal(StealthState.Sneaking, w.Stealth.State);
+        Assert.True(w.State.IsSneaking);
+        Assert.False(w.State.IsHidden);
+
+        // The room stepped into still has to confirm it.
+        Assert.False(w.Stealth.IsStealthedHere);
+        w.Feed("Sneaking...");
+        w.Stealth.NoteRoomChanged();
+        Assert.True(w.Stealth.IsStealthedHere);
+        Assert.Empty(w.Wire);
+    }
+
+    [Fact]
+    public void SneakedInThenHid_TypedStep_SendsNoSn_AndIsSneakingAgain()
+    {
+        using World w = new();
+        w.Feed("Sneaking...");
+        w.Feed("Attempting to hide...");
+
+        w.Stealth.NoteDirectionalMoveSent();
+        w.Stealth.NoteTypedMove();
+
+        Assert.Empty(w.Wire);
+        Assert.Equal(StealthState.Sneaking, w.Stealth.State);
+        Assert.True(w.State.IsSneaking);
+    }
+
+    // Both toggles on, an engine walking: arrive sneaking, Auto-Hide hides, the step
+    // goes on from there.
+    [Fact]
+    public void BothTogglesOn_ArriveSneaking_AutoHide_ThenStep_SendsNoSn()
+    {
+        using World w = new() { EngineDriving = true, AutoHide = true };
+        w.Stealth.SetMovementCoordinator(new MovementCoordinator());
+        w.Feed("Sneaking...");
+        w.Stealth.NoteRoomChanged();
+        w.Stealth.NoteIdleOpportunity();
+        w.Feed("Attempting to hide...");
+        Assert.Equal(new[] { "hid" }, w.Wire);
+
+        Assert.True(w.Stealth.ReadyToMoveSneaking());
+        w.Stealth.NoteDirectionalMoveSent();
+
+        Assert.Equal(new[] { "hid" }, w.Wire);
+        Assert.Equal(StealthState.Sneaking, w.Stealth.State);
+    }
+
+    // The sneak under the hide is ended by anything that ends a sneak. A cast item
+    // ends the hide with it; `disarm` ends the sneak and leaves the hide. Either way
+    // the step out has no sneak to ride on and sends `sn` first.
+    [Theory]
+    [InlineData("use waterskin", false)]
+    [InlineData("disarm trap n", true)]
+    public void SneakUnderTheHide_EndedByACommandMeanwhile_TheStepSneaksFirst(string command, bool stillHidden)
+    {
+        using World w = new() { EngineDriving = true };
+        w.Stealth.SetMovementCoordinator(new MovementCoordinator());
+        w.Feed("Sneaking...");
+        w.Feed("Attempting to hide...");
+
+        w.Send(command);
+        Assert.Equal(stillHidden, w.State.IsHidden);
+
+        Assert.False(w.Stealth.ReadyToMoveSneaking());   // held for the `sn` answer
+        Assert.Equal(new[] { command, "sn" }, w.Wire);
+        Assert.False(w.State.IsHidden);
+    }
+
+    // A hide that fails over a sneak leaves the sneak where it was.
+    [Fact]
+    public void AutoHideOverASneak_ThatFails_IsStillSneaking()
+    {
+        using World w = new() { AutoHide = true };
+        w.Feed("Sneaking...");
+        w.Stealth.NoteIdleOpportunity();
+
+        w.Feed("Attempting to hide... You don't think you are hidden.");
+
+        Assert.Equal(StealthState.Sneaking, w.Stealth.State);
+        Assert.True(w.State.IsSneaking);
+        Assert.False(w.State.IsHidden);
+    }
+
+    // ----- a hide the game turns away, and one typed by hand ----------------
+
+    // An `hid` refused with no "Attempting to hide..." used to stay open: the next
+    // hide-ending command counted an answer as owed, and the next real hide in the
+    // room was thrown away as that answer.
+    [Theory]
+    [InlineData("You must wait before you may do that!")]
+    [InlineData("You can't seem to move anywhere to hide!")]
+    [InlineData("You are too stunned to move anywhere to hide!")]
+    public void AutoHideRefused_SettlesTheAttempt_AndALaterHideIsRead(string refusal)
+    {
+        using World w = new() { AutoSneak = false, AutoHide = true };
+        w.Stealth.NoteIdleOpportunity();
+        w.Feed(refusal);
+        Assert.Equal(StealthState.Idle, w.Stealth.State);
+
+        w.Send("sea");
+        w.Send("hid");
+        w.Feed("Attempting to hide...");
+
+        Assert.True(w.State.IsHidden);
+    }
+
+    // The wait line answers many commands; with no hide unanswered it settles nothing.
+    [Fact]
+    public void MustWaitLine_WithNoHideUnanswered_LeavesAHideAlone()
+    {
+        using World w = new();
+        w.Feed("Attempting to hide...");
+        w.Feed("You must wait before you may do that!");
+        Assert.True(w.State.IsHidden);
+    }
+
+    // An attempt the game answers with a line the client doesn't read at all: a fresh
+    // `hid` starts the count of owed answers again.
+    [Fact]
+    public void AFreshHid_ClearsAnswersOwedToOlderOnes()
+    {
+        using World w = new() { AutoSneak = false, AutoHide = true };
+        w.Stealth.NoteIdleOpportunity();            // answered by nothing we read
+        w.Send("sea");                              // counts its answer as owed
+
+        w.Send("hid");
+        w.Feed("Attempting to hide...");
+
+        Assert.True(w.State.IsHidden);
+    }
+
+    // An `hid` typed by hand (or sent by a macro) and still unanswered when a
+    // hide-ending command goes out: its answer isn't read as hidden either.
+    [Fact]
+    public void TypedHideStillUnanswered_ThenAHideEndingCommand_ItsAnswerIsNotReadAsHidden()
+    {
+        using World w = new() { AutoSneak = false };
+        w.Send("hid");
+        Assert.Equal(StealthState.Idle, w.Stealth.State);   // a typed one changes no state
+
+        w.Send("sea");
+        w.Feed("Attempting to hide...");
+        Assert.False(w.State.IsHidden);
+
+        w.Send("hid");                              // and the next one counts
+        w.Feed("Attempting to hide...");
+        Assert.True(w.State.IsHidden);
+    }
+
+    [Fact]
+    public void HideWithAnObject_IsAStash_NotAHideAttempt()
+    {
+        Assert.True(SneakBreakingCommands.IsHideAttempt("hid"));
+        Assert.True(SneakBreakingCommands.IsHideAttempt("HIDE"));
+        Assert.False(SneakBreakingCommands.IsHideAttempt("hide 50 gold"));
+        Assert.False(SneakBreakingCommands.IsHideAttempt("hi"));
+    }
+
+    // ----- what a verdict costs ------------------------------------------
+
+    // With no sneak or hide to end, what a command would do isn't worked out at all.
+    [Fact]
+    public void NothingToEnd_TheItemRuleIsNotConsulted()
+    {
+        using World w = new() { AutoSneak = false };
+        w.Send("use waterskin");
+        w.Send("eat iron ration");
+        Assert.Equal(0, w.RuleConsulted);
+
+        w.Feed("Sneaking...");
+        w.Send("use torch");
+        Assert.Equal(1, w.RuleConsulted);
+    }
+
+    // The name → facts map is built once per game-data set and keeps every record of
+    // a name, so two items sharing one are both weighed.
+    [Fact]
+    public void FactsIndex_BuiltOncePerSet_KeepsEveryRecordOfAName()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Items.json"), """
+            [
+              { "Number": 559,  "Name": "poisoned shuriken", "ItemType": 1, "Abil-0": 114, "AbilVal-0": 10, "Abil-1": 43, "AbilVal-1": 304 },
+              { "Number": 1825, "Name": "poisoned shuriken", "ItemType": 1, "Abil-0": 43, "AbilVal-0": 304 },
+              { "Number": 283,  "Name": "waterskin", "ItemType": 5, "Abil-0": 43, "AbilVal-0": 711 },
+              { "Number": 175,  "Name": "torch", "ItemType": 6, "Abil-0": 54, "AbilVal-0": 100 }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(_root, "alpha", "Spells.json"), """
+            [
+              { "Number": 304, "Name": "poison", "Targets": 1 },
+              { "Number": 711, "Name": "waterskin", "Targets": 1 }
+            ]
+            """);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+
+        IReadOnlyList<ItemUseStealthRule.Facts> shurikens = ItemUseFactsIndex.Lookup(cache, "Poisoned  Shuriken ");
+        Assert.Equal(2, shurikens.Count);
+        Assert.False(shurikens[0].Casts);
+        Assert.True(shurikens[1].Casts);
+        Assert.Equal(new ItemUseStealthRule.Facts(5, true, 1), Assert.Single(ItemUseFactsIndex.Lookup(cache, "waterskin")));
+        Assert.Equal(new ItemUseStealthRule.Facts(6, false, null), Assert.Single(ItemUseFactsIndex.Lookup(cache, "torch")));
+        Assert.Empty(ItemUseFactsIndex.Lookup(cache, "lever"));
+
+        // Answered from the map, not from the table: the same list comes back, and it
+        // still does once the Items file is gone.
+        Assert.Same(shurikens, ItemUseFactsIndex.Lookup(cache, "poisoned shuriken"));
+        File.Delete(Path.Combine(_root, "alpha", "Items.json"));
+        Assert.Same(shurikens, ItemUseFactsIndex.Lookup(cache, "poisoned shuriken"));
+
+        ItemUseStealthRule rule = new(() => new[] { "poisoned shuriken", "torch" }, name => ItemUseFactsIndex.Lookup(cache, name));
+        Assert.True(SneakBreakingCommands.EndsSneak("use poisoned shuriken", items: rule));
+        Assert.False(SneakBreakingCommands.EndsSneak("use torch", items: rule));
     }
 
     // ----- sneak ---------------------------------------------------------

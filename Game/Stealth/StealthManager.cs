@@ -40,6 +40,8 @@ namespace MudPlay.Game.Stealth;
 //   * UserHideFailed ("...You don't think you are hidden.") is the one ground-truth
 //     failure line → drop the optimistic hidden state.
 //   * A move (NoteRoomChanged) breaks hide — you can't move while hidden.
+//   * A hide never ends a sneak. One taken while Sneaking has the sneak still up
+//     under it (_sneakUnderHide), and the step out rides on that sneak with no `sn`.
 // Auto-hide (NoteIdleOpportunity) is suppressed while in a party: a hidden member
 // falls off the room's Also-here line and can't be targeted by party heals/buffs.
 //
@@ -70,6 +72,8 @@ public sealed class StealthManager : IDisposable
     private readonly IDisposable _cantSneakSub;
     private readonly IDisposable _hideInitiateSub;
     private readonly IDisposable _hideFailedSub;
+    private readonly IDisposable _hideRefusedSub;
+    private readonly IDisposable _mustWaitSub;
 
     private Action<byte[]>? _wireSender;
     private Func<bool>? _isAutoSneakEnabled;
@@ -207,12 +211,14 @@ public sealed class StealthManager : IDisposable
             return false;
         }
         // Hidden with a step planned: the move ends the hide, and sneaking is a flag of
-        // its own that a hide doesn't set, so the step goes out sneaked only if an `sn`
-        // takes first (GAME_MECHANICS "What ends a hide on Stock"). Where one can't
-        // take, the step goes as it stands.
-        if (_stateValue == StealthState.Hidden && !_state.InCombat && !SneakBlockedHere())
+        // its own that a hide neither sets nor clears (GAME_MECHANICS "What ends a
+        // hide on Stock"). With the sneak still up under the hide the step is a
+        // sneaked one as it stands, and an `sn` would only throw that sneak away and
+        // roll again. With none under it, the step goes out sneaked only if an `sn`
+        // takes first; where one can't take, the step goes as it stands.
+        if (_stateValue == StealthState.Hidden && !_sneakUnderHide && !_state.InCombat && !SneakBlockedHere())
         {
-            _log?.Info(LogCategory, "stepping out of a hide — the move ends it, so sneaking first");
+            _log?.Info(LogCategory, "stepping out of a hide with no sneak under it — the move ends it, so sneaking first");
             NoteHideBroken();
         }
         if (IsStealthed || _stateValue == StealthState.AttemptingSneak) return true;
@@ -351,6 +357,8 @@ public sealed class StealthManager : IDisposable
         _cantSneakSub     = router.Subscribe(KnownPatterns.UserCantSneak,     OnCantSneak);
         _hideInitiateSub  = router.Subscribe(KnownPatterns.UserHideInitiate,  OnHideInitiate);
         _hideFailedSub    = router.Subscribe(KnownPatterns.UserHideFailed,    OnHideFailed);
+        _hideRefusedSub   = router.Subscribe(KnownPatterns.UserHideRefused,   OnHideRefused);
+        _mustWaitSub      = router.Subscribe(KnownPatterns.UserMustWait,      OnMustWait);
     }
 
     // Bind the wire sender for the auto-sneak / auto-hide engines. Until set, the
@@ -480,6 +488,7 @@ public sealed class StealthManager : IDisposable
         _awaitingArrivalConfirm = false;
         _staleSneakAcks = 0;
         _staleHideAcks = 0;
+        _hideSentByHand = false;
 
         // Auto-sneak: fires after the silent-loss check so a just-lost
         // sneak immediately re-attempts. This is the reactive path —
@@ -586,33 +595,108 @@ public sealed class StealthManager : IDisposable
     // read from Stock and is applied on both realms, as the sneak list is.
 
     // Answers still owed to an `hid` that a later hide-ending command has undone, the
-    // counterpart of _staleSneakAcks. A room change clears it.
+    // counterpart of _staleSneakAcks. A room change clears it, and so does a fresh
+    // `hid`: an answer still owed to an older one can only arrive ahead of its own.
     private int _staleHideAcks;
 
-    // Drop a hide that something just sent has ended. True when there was one to drop.
-    private bool DropHide(string what)
+    // An `hid` typed by hand (or sent by a macro) has gone out and isn't answered yet.
+    // Auto-Hide's own is the AttemptingHide state; a typed one changes no state, so
+    // one the game answers with a line we don't read can't strand the machine.
+    private bool _hideSentByHand;
+
+    // The game's sneak flag is up under the hide. `hid` never touches that flag, so a
+    // character that sneaked in and then hid is still sneaking, and its step out is a
+    // sneaked one as it stands: an `sn` sent for it would throw that sneak away and
+    // roll again (GAME_MECHANICS "What ends a sneak", the `sn` bullet). Set when a
+    // hide is taken from Sneaking, cleared by anything that ends a sneak.
+    private bool _sneakUnderHide;
+
+    // True while there is a sneak or a hide, held or being attempted, for a sent
+    // command to end. With none, what the command would do isn't worth working out.
+    private bool HasStealthToEnd =>
+        _hideSentByHand
+        || _stateValue is StealthState.Sneaking or StealthState.AttemptingSneak
+            or StealthState.Hidden or StealthState.AttemptingHide;
+
+    // A command went out, typed or the client's own. One that ends a sneak marks it
+    // broken, and the hide with it where it ends that too. A bare `hid` is noted as a
+    // hide being attempted.
+    public void NoteCommandSent(string command, Func<bool> shadowRest, ItemUseStealthRule? items)
     {
-        if (_stateValue == StealthState.Hidden)
+        ArgumentNullException.ThrowIfNull(shadowRest);
+        if (SneakBreakingCommands.IsHideAttempt(command))
         {
-            _log?.Info(LogCategory, $"{what} ended the hide");
-            NoteHideBroken();
-            return true;
+            _staleHideAcks = 0;
+            if (_stateValue != StealthState.AttemptingHide) _hideSentByHand = true;
+            return;
         }
-        if (_stateValue != StealthState.AttemptingHide) return false;
-        // The `hid` went out BEFORE this, so the game runs the hide and then ends it.
-        // Its "Attempting to hide..." is still on its way and must not read as hidden.
-        _log?.Info(LogCategory, $"{what} ended the hide still being attempted");
-        _staleHideAcks++;
-        Transition(StealthState.Idle);
+        if (!HasStealthToEnd) return;
+        if (!SneakBreakingCommands.EndsSneak(command, shadowRest(), items)) return;
+        NoteSneakBroken($"'{command.Trim()}'", endsHide: SneakBreakingCommands.AlsoEndsHide(command));
+    }
+
+    // Drop a hide that something just sent has ended, held or still being attempted.
+    // sneakSurvives: what was sent ends a hide and leaves a sneak (a move), so a
+    // sneak under the hide is what remains. True when there was a hide to drop.
+    private bool DropHide(string what, bool sneakSurvives = false)
+    {
+        bool attempted = _hideSentByHand || _stateValue == StealthState.AttemptingHide;
+        if (attempted)
+        {
+            // The `hid` went out BEFORE this, so the game runs the hide and then ends
+            // it. Its "Attempting to hide..." is on its way and must not read as hidden.
+            _staleHideAcks++;
+            _hideSentByHand = false;
+        }
+        if (_stateValue is not (StealthState.Hidden or StealthState.AttemptingHide))
+        {
+            if (attempted) _log?.Info(LogCategory, $"{what} ended the hide still being attempted");
+            return attempted;
+        }
+        bool stillSneaking = sneakSurvives && _sneakUnderHide;
+        _log?.Info(LogCategory, $"{what} ended the hide{(attempted ? " still being attempted" : "")}"
+            + (stillSneaking ? "; still sneaking under it" : ""));
+        _sneakUnderHide = false;
         _state.IsHidden = false;
+        if (stillSneaking)
+        {
+            Transition(StealthState.Sneaking);
+            _state.IsSneaking = true;
+            // The room being stepped into has to confirm it, like any sneaked step.
+            _awaitingArrivalConfirm = true;
+        }
+        else
+        {
+            Transition(StealthState.Idle);
+            _state.IsSneaking = false;
+        }
         return true;
+    }
+
+    // A hide that didn't take, by the failed-hide line or a refusal. The sneak it
+    // was tried over, if any, is still there.
+    private void SettleHideThatDidNotTake()
+    {
+        _hideSentByHand = false;
+        if (_stateValue is StealthState.Hidden or StealthState.AttemptingHide)
+        {
+            if (_sneakUnderHide)
+            {
+                Transition(StealthState.Sneaking);
+                _state.IsSneaking = true;
+            }
+            else Transition(StealthState.Idle);
+        }
+        _sneakUnderHide = false;
+        _state.IsHidden = false;
     }
 
     // A direction went out. The game's move command zeroes the hidden state as it is
     // taken, before it knows whether the move goes anywhere, so a move refused at a
-    // wall ends a hide too and no room change would say so. Runs ahead of
-    // NoteTypedMove, so a step typed out of a hide is sneaked like any other.
-    public void NoteDirectionalMoveSent() => DropHide("a move");
+    // wall ends a hide too and no room change would say so. It leaves the sneak flag
+    // alone, so a sneak under the hide carries the step. Runs ahead of NoteTypedMove,
+    // which sends the `sn` for a step typed out of a hide with no sneak under it.
+    public void NoteDirectionalMoveSent() => DropHide("a move", sneakSurvives: true);
 
     private void ScheduleInPlaceReSneak()
     {
@@ -673,12 +757,14 @@ public sealed class StealthManager : IDisposable
     // Auto-Sneak takes over as it does after a cast.
     public void NoteSneakBroken(string what, bool endsHide = false)
     {
-        if (endsHide && DropHide(what))
+        // Whatever it does to the hide, it ends the sneak the hide was taken over.
+        _sneakUnderHide = false;
+        bool hideEnded = endsHide && DropHide(what);
+        if (_stateValue is not (StealthState.Sneaking or StealthState.AttemptingSneak))
         {
-            ScheduleInPlaceReSneak();
+            if (hideEnded) ScheduleInPlaceReSneak();
             return;
         }
-        if (_stateValue is not (StealthState.Sneaking or StealthState.AttemptingSneak)) return;
         _log?.Info(LogCategory, $"{what} ended the sneak — re-sneaking before the next move");
         // An `sn` still unanswered was sent BEFORE this command, so the game takes the
         // sneak and then ends it. Its "Attempting to sneak..." is on its way and must
@@ -728,11 +814,6 @@ public sealed class StealthManager : IDisposable
                 Transition(StealthState.Idle);
                 _state.IsSneaking = false;
                 _sneakConfirmedThisRoom = false;
-            }
-            else if (_stateValue == StealthState.Hidden)
-            {
-                _log?.Info(LogCategory, "cast spent hide — resetting stealth");
-                NoteHideBroken();
             }
             if (_skipReSneakForRest?.Invoke() == true)
             {
@@ -884,6 +965,8 @@ public sealed class StealthManager : IDisposable
             return;
         }
         _log?.Info(LogCategory, "auto-hide triggered");
+        _sneakUnderHide = _stateValue == StealthState.Sneaking;
+        _staleHideAcks = 0;
         Transition(StealthState.AttemptingHide);
         Send("hid");
     }
@@ -903,6 +986,11 @@ public sealed class StealthManager : IDisposable
     // walks into the room.
     public void NoteHideConfirmed()
     {
+        // Taken while sneaking, the sneak is still up under it (_sneakUnderHide). From
+        // an attempt, or a hide re-taken, what was noted when it began stands.
+        if (_stateValue == StealthState.Sneaking) _sneakUnderHide = true;
+        else if (_stateValue is not (StealthState.AttemptingHide or StealthState.Hidden)) _sneakUnderHide = false;
+        _hideSentByHand = false;
         Transition(StealthState.Hidden);
         _state.IsHidden = true;
         // Mutually exclusive with sneaking — clear the sneak flag so both
@@ -917,6 +1005,7 @@ public sealed class StealthManager : IDisposable
         if (_stateValue == StealthState.Hidden)
             Transition(StealthState.Idle);
         _state.IsHidden = false;
+        _sneakUnderHide = false;
     }
 
     // ----- handlers ----------------------------------------------------
@@ -964,6 +1053,7 @@ public sealed class StealthManager : IDisposable
         _sneakConfirmedThisRoom = true;
         _sneakRetries = 0;
         if (_stateValue == StealthState.Sneaking) return;
+        _sneakUnderHide = false;
         Transition(StealthState.Sneaking);
         _state.IsSneaking = true;
         // Sneaking and hidden are mutually exclusive — establishing one clears the
@@ -1130,12 +1220,34 @@ public sealed class StealthManager : IDisposable
 
     private void OnHideFailed(MatchResult _)
     {
-        if (_staleHideAcks > 0) _staleHideAcks--;
+        if (_staleHideAcks > 0)
+        {
+            // The answer to an `hid` a later command already undid.
+            _staleHideAcks--;
+            return;
+        }
         // "Attempting to hide...You don't think you are hidden." — the one
         // ground-truth failure signal. Drop the optimistic hidden state.
-        if (_stateValue == StealthState.Hidden || _stateValue == StealthState.AttemptingHide)
-            Transition(StealthState.Idle);
-        _state.IsHidden = false;
+        SettleHideThatDidNotTake();
+    }
+
+    // "You can't seem to move anywhere to hide!" / "You are too stunned to move
+    // anywhere to hide!": the game turned the `hid` away with no "Attempting to
+    // hide...", after resetting the hidden state. Without this the attempt stayed
+    // open, and the next hide-ending command counted an answer as still owed.
+    private void OnHideRefused(MatchResult _)
+    {
+        _log?.Info(LogCategory, "hide refused");
+        SettleHideThatDidNotTake();
+    }
+
+    // "You must wait before you may do that!" answers many commands. It settles a
+    // hide only while one is unanswered.
+    private void OnMustWait(MatchResult _)
+    {
+        if (!_hideSentByHand && _stateValue != StealthState.AttemptingHide) return;
+        _log?.Info(LogCategory, "hide refused (too soon)");
+        SettleHideThatDidNotTake();
     }
 
     private void Transition(StealthState next)
@@ -1158,6 +1270,8 @@ public sealed class StealthManager : IDisposable
         _cantSneakSub.Dispose();
         _hideInitiateSub.Dispose();
         _hideFailedSub.Dispose();
+        _hideRefusedSub.Dispose();
+        _mustWaitSub.Dispose();
         ReleaseCooldownHold("disposed");
         ReleaseSettleHold("disposed");
         _inPlaceTimer?.Stop();

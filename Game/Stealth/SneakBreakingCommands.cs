@@ -55,6 +55,15 @@ public static class SneakBreakingCommands
         return BreakingVerbs.Contains(verb);
     }
 
+    // True for the bare word that hides the character (`hid`, `hide`). With an object
+    // after it the command stashes that object instead.
+    public static bool IsHideAttempt(string command)
+    {
+        string c = command.Trim();
+        return c.Equals("hid", StringComparison.OrdinalIgnoreCase)
+            || c.Equals("hide", StringComparison.OrdinalIgnoreCase);
+    }
+
     // For a command that ends a sneak: whether it ends a hide as well.
     public static bool AlsoEndsHide(string command)
     {

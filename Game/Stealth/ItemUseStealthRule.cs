@@ -19,6 +19,11 @@ namespace MudPlay.Game.Stealth;
 // the sneak the character still had and rolls again, and can be refused. Believed in
 // after it has gone, the next move goes out with no `sn` at all and a backstab is
 // planned from nothing, which is the worse of the two.
+//
+// Two misreadings are left in: an item not yet in the pack list (picked up as the
+// command goes out) is read as a held namesake that shares its first word, and a
+// longer run of words that fits inside another held name ("net r" in "signet ring")
+// is read as that item, since the match is a substring and not the start of a word.
 public sealed class ItemUseStealthRule
 {
     public enum Verb { Use, Read, Eat, Drink, Light }
