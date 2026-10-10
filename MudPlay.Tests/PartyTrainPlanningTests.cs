@@ -106,6 +106,18 @@ public sealed class PartyTrainPlanningTests
         if (ok) Assert.Equal(expected, level);
     }
 
+    // A reading with no stated level (an @exp reply) keeps the level already held;
+    // its (L<n>) hint — the level the exp counts toward, 59 for a 58 with exp banked —
+    // is used only when nothing else is known.
+    [Theory]
+    [InlineData(58, 0, 0, 59, 58)]    // earlier @level reply wins
+    [InlineData(0, 58, 0, 59, 58)]    // else the member's @ptrain report
+    [InlineData(0, 0, 58, 59, 58)]    // else the recorded level
+    [InlineData(0, 0, 0, 59, 59)]     // nothing known: the hint
+    [InlineData(0, 0, 0, 0, 0)]
+    public void ResolveLevel_HintNeverOutranksAKnownLevel(int prior, int report, int recorded, int hint, int expected) =>
+        Assert.Equal(expected, PartyTrainCoordinator.ResolveLevel(prior, report, recorded, hint));
+
     // ----- who can be asked -------------------------------------------------
 
     [Theory]

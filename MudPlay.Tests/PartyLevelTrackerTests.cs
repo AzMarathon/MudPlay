@@ -252,6 +252,41 @@ public sealed class PartyLevelTrackerTests
         Assert.Equal(22, h.Players.Find("Bob")!.Level);
     }
 
+    // A level-58 member with exp banked for 59 is asked @level: MegaMUD counts the
+    // Needed figure to L60 and still says Level: 58. That is their level, recorded
+    // and handed to the Party window as stated, with no tag-derived hint.
+    [Fact]
+    public void LevelReply_MegaMudBankedShape_RecordsTheStatedLevel()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");
+        h.Lead();
+        var seen = new List<(int Level, int Hint)>();
+        h.Probe.ProgressObserved += (_, level, _, _, _, hint) => seen.Add((level, hint));
+
+        h.Reply("Bob", "{Level: 58  Needed: 216,526,237 (L60)  Will level in: +2 in 2-3 days}");
+
+        Assert.Equal(58, h.Players.Find("Bob")!.Level);
+        Assert.Equal([(58, 0)], seen);
+    }
+
+    // An @exp reply states no level: its (L<n>) tag rides along as a hint only, and
+    // is never recorded as the member's level.
+    [Fact]
+    public void ExpReply_CarriesTheTagAsAHint_NotALevel()
+    {
+        var h = new Harness { SelfLevel = 40 };
+        h.AddMember("Bob");
+        h.Lead();
+        var seen = new List<(int Level, int Hint)>();
+        h.Probe.ProgressObserved += (_, level, _, _, _, hint) => seen.Add((level, hint));
+
+        h.Reply("Bob", "{Made: 0  Needed: 216,526,237 (L60)  Rate: unknown}");
+
+        Assert.Equal([(0, 59)], seen);
+        Assert.Null(h.Players.Find("Bob"));
+    }
+
     [Theory]
     [InlineData("{Made: 359  Needed: 1,077 (L2, +0.38 lvls)  Rate: 1,816/hr  Will level in: 35m}", 1, 1077L, "35m")]
     [InlineData("{Made: 0  Needed: 1,750 (L2, +0.18 lvls)  Rate: unknown}", 1, 1750L, null)]
@@ -282,6 +317,9 @@ public sealed class PartyLevelTrackerTests
     [InlineData("Level 12, 1,234 exp, exp-to-next unknown (type exp)", 12, null, null)]
     [InlineData("{Level: 1  Needed: 1,000  Will level in: ?}", 1, 1000L, null)]
     [InlineData("{Level: 30  Needed: 2,345,678  Will level in: 1 hour}", 30, 2345678L, "1 hour")]
+    [InlineData("{Level: 58  Needed: 216,526,237 (L60)  Will level in: +2 in 2-3 days}", 58, 216526237L, "+2 in 2-3 days")]
+    [InlineData("{Level: 58  Needed: 208,954,024 (L60)  Will level in: ?}", 58, 208954024L, null)]
+    [InlineData("{Level: 58  Needed: 208,954,024 (L60)}", 58, 208954024L, null)]
     public void TryParseLevelReply_ReadsBothShapes(string reply, int level, long? needed, string? eta)
     {
         Assert.True(Game.Remote.PartyLevelProbe.TryParseLevelReply(reply, out int l, out long? n, out string? e, out _));

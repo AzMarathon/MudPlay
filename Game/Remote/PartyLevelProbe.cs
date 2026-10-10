@@ -92,9 +92,10 @@ public sealed partial class PartyLevelProbe : IDisposable
 
     // MegaMUD's @level reply: "{Level: 1  Needed: 1,000  Will level in: ?}" — Needed
     // is the exp still to go, "Will level in" its own time estimate at its own rate
-    // ("?" until it has one). Anchored on "Level: N  Needed: N" for the same chatter
-    // guard as the MudPlay shape.
-    [GeneratedRegex(@"^\{?Level:\s*(\d+)\s+Needed:\s*([\d,]+)(?:\s+Will level in:\s*([^}]*?))?\s*\}?\s*$",
+    // ("?" until it has one). Once it counts past the next level the figure carries a
+    // "(L60)" tag and the estimate reads "+2 in 2-3 days". Anchored on "Level: N
+    // Needed: N" for the same chatter guard as the MudPlay shape.
+    [GeneratedRegex(@"^\{?Level:\s*(\d+)\s+Needed:\s*([\d,]+)(?:\s*\(L\d+[^)]*\))?(?:\s+Will level in:\s*([^}]*?))?\s*\}?\s*$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     private static partial Regex MegaMudLevelReply();
 
@@ -108,9 +109,11 @@ public sealed partial class PartyLevelProbe : IDisposable
     // Raised for every parsed level reply (probe in flight or not): the member's
     // given name, level, exp still needed for the next level (null when the reply
     // didn't carry it), the sender's own "will level in" text (MegaMUD only; null
-    // otherwise or when it's "?") and its total exp (MudPlay's reply only). Feeds the
-    // Party window's leveling line.
-    public event Action<string, int, long?, string?, long?>? ProgressObserved;
+    // otherwise or when it's "?"), its total exp (MudPlay's reply only) and, for an
+    // @exp reply that doesn't state a level, the level its "(L<n>)" tag implies (0
+    // when there is none) — a guess for the listener to use only when it knows nothing
+    // better. Feeds the Party window's leveling line.
+    public event Action<string, int, long?, string?, long?, int>? ProgressObserved;
 
     [GeneratedRegex(@"^\{?level unknown\b",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
@@ -190,10 +193,12 @@ public sealed partial class PartyLevelProbe : IDisposable
         if (string.IsNullOrEmpty(entry.Message)) return;
 
         // An @exp reply isn't a level reading for the probe, but its exp-to-next still
-        // feeds the Party window (level 0 = not stated).
+        // feeds the Party window. It never states a level: its tag names the level the
+        // exp figure counts toward, which is past the member's own once they have exp
+        // banked to train, so the tag only goes along as a hint.
         if (TryParseExpReply(entry.Message, out int expLevel, out long expNeeded, out string? expEta))
         {
-            ProgressObserved?.Invoke(GivenName(entry.Speaker), expLevel, expNeeded, expEta, null);
+            ProgressObserved?.Invoke(GivenName(entry.Speaker), 0, expNeeded, expEta, null, expLevel);
             return;
         }
 
@@ -213,7 +218,7 @@ public sealed partial class PartyLevelProbe : IDisposable
         {
             _recordLevel?.Invoke(given, level);
             _log?.Info("PartyLevel", $"recorded {given} = level {level}");
-            ProgressObserved?.Invoke(given, level, needed, willLevelIn, totalExp);
+            ProgressObserved?.Invoke(given, level, needed, willLevelIn, totalExp, 0);
         }
 
         // Pending-query bookkeeping only applies while a probe is awaiting
@@ -291,7 +296,8 @@ public sealed partial class PartyLevelProbe : IDisposable
         Match m = ExpReply().Match(message.Trim());
         if (!m.Success || ParseCount(m.Groups[1].Value) is not { } n) return false;
         needed = n;
-        // "(L2, …)" is the level being worked toward, so the member is one below it.
+        // "(L2, …)" is the level being worked toward — one past the member's own only
+        // while they have no exp banked, so this is a lower-confidence guess.
         if (m.Groups[2].Success && int.TryParse(m.Groups[2].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int next))
             level = Math.Max(0, next - 1);
         string eta = m.Groups[3].Success ? m.Groups[3].Value.Trim() : "";

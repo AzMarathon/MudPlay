@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.7**
-> - Party item gates: after crossing, one `par` checks a member credited with a copy from memory
-> - A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+> **Version 3.161.8**
+> - Party window: a member's level is the one they state, no longer the level their exp could train to
+> - MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

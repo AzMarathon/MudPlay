@@ -606,14 +606,16 @@ public sealed class PartyTrainCoordinator : IDisposable
     // the report the row is estimating from, so it re-anchors that estimate: the
     // report's exp becomes the reply's total (MudPlay's reply carries it; a reply with
     // only "needed" is read against the report's next-level mark), counted from now.
-    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta, long? totalExp)
+    public void NoteLevelProgress(string given, int level, long? needed, string? theirEta, long? totalExp, int levelHint)
     {
         string name = GivenName(given);
-        // An @exp reply doesn't always state the level — keep the one we know.
+        // An @exp reply doesn't state the level — keep the one we know.
         if (level <= 0)
-            level = _levelReplies.TryGetValue(name, out var prior) ? prior.Level
-                : _reports.TryGetValue(name, out var rep) ? rep.Status.Level
-                : _recordedLevel(name) ?? 0;
+            level = ResolveLevel(
+                _levelReplies.TryGetValue(name, out var prior) ? prior.Level : 0,
+                _reports.TryGetValue(name, out var rep) ? rep.Status.Level : 0,
+                _recordedLevel(name) ?? 0,
+                levelHint);
         _levelReplies[name] = (level, needed, theirEta, _now(), _selfExp());
 
         if (_reports.TryGetValue(name, out var report))
@@ -634,6 +636,13 @@ public sealed class PartyTrainCoordinator : IDisposable
         }
         RefreshTrainInfo();
     }
+
+    // The level for a reading that doesn't state one: the first known, else the
+    // reply's "(L<n>)" hint. The hint names the level the exp figure counts toward,
+    // which is past the member's own when they have exp banked to train, so it can
+    // never outrank a level we already hold.
+    internal static int ResolveLevel(int priorReply, int report, int recorded, int hint) =>
+        priorReply > 0 ? priorReply : report > 0 ? report : recorded > 0 ? recorded : hint;
 
     // A member's "I can now train to level: N" (LevelUpAnnouncer, on whatever channel
     // they picked) — shown on its Party-window line as "can train LN" until its level
