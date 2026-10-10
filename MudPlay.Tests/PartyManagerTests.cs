@@ -1061,6 +1061,60 @@ public sealed class PartyManagerTests
         Assert.Equal(2, p.State.Members.Count);
     }
 
+    // A consumer that asked `par` a question acts on ParReplyRead, so it is raised
+    // once the roster agrees with the reply: after a block with rows, after the
+    // game's "no party" line, and not for a block that was cut short.
+    [Fact]
+    public void ParReplyRead_IsRaisedOnceTheRosterAgreesWithTheReply()
+    {
+        var (router, p) = Setup(localCharacterName: "MudPlay");
+        router.Dispatch(Line("Member started to follow you."));
+        router.Dispatch(Line("Helper started to follow you."));
+        List<int> rosterAtRead = new();
+        p.ParReplyRead += () => rosterAtRead.Add(p.State.Members.Count);
+
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestPromptLine();                           // cut short: answers nothing
+        Assert.Empty(rosterAtRead);
+
+        // The first reply that leaves a member out takes them off the roster.
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Frontrank",
+            "  Helper                         (Mage)       [M:100%] [H:100%]   - Midrank",
+        });
+        p.FeedTestPromptLine();
+        Assert.Equal(new[] { 2 }, rosterAtRead);
+        Assert.DoesNotContain(p.State.Members, m => m.Name == "Member");
+
+        router.Dispatch(Line("You are not in a party at the present time."));
+        Assert.Equal(new[] { 2, 1 }, rosterAtRead);        // the lone self row
+    }
+
+    // A member the reply lists as `[Invited]` is on the list and not following.
+    // The row stays, marked invited, which is how a reader tells them from one
+    // who came along.
+    [Fact]
+    public void ParReply_ListingAFollowerAsInvited_KeepsTheRowMarkedInvited()
+    {
+        var (router, p) = Setup(localCharacterName: "MudPlay");
+        router.Dispatch(Line("Member started to follow you."));
+        router.Dispatch(Line("Helper started to follow you."));
+
+        router.Dispatch(Line("The following people are in your travel party:"));
+        p.FeedTestLines(new[]
+        {
+            "  Member                          (Priest)        [Invited]",
+            "  Helper                         (Mage)       [M:100%] [H:100%]   - Midrank",
+            "  MudPlay                          (Missionary) [M:100%] [H:100%]   - Frontrank",
+        });
+        p.FeedTestPromptLine();
+
+        Assert.True(p.State.Members.Single(m => m.Name == "Member").IsInvited);
+        Assert.False(p.State.Members.Single(m => m.Name == "Helper").IsInvited);
+    }
+
     [Fact]
     public void ParPoll_SelfNeverReconciledAway_WhenAbsentFromOwnPar()
     {

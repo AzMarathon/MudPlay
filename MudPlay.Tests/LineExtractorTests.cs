@@ -165,6 +165,85 @@ public sealed class LineExtractorTests
         Assert.Equal(body, emitted[0]);
     }
 
+    // A search of a room with no item cap is one line over a thousand rows. The
+    // text and the colour of every cell must come through the stitch whole.
+    [Fact]
+    public void ThousandRowWrap_JoinsTextAndAttributesWhole()
+    {
+        string floor = HugeFloor.Line(4000);
+        Assert.True(floor.Length > 80 * 800);
+
+        TerminalEmulator emulator = new(80, 25);
+        LineExtractor extractor = new(emulator);
+        List<LineExtractor.EmittedLine> emitted = new();
+        extractor.LineEmitted += emitted.Add;
+        // Cyan from the first character, as the game colours a floor list.
+        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("\u001b[0;36m" + floor + "\r\n"));
+
+        LineExtractor.EmittedLine line = Assert.Single(emitted);
+        Assert.Equal(floor, line.Text);
+        Assert.Equal(floor.Length, line.Attributes.Length);
+        Assert.All(line.Attributes, a => Assert.Equal(line.Attributes[0], a));
+        Assert.NotEqual(CellAttributes.Default, line.Attributes[0]);
+    }
+
+    [Fact]
+    public void ALineItsSubscribersDwellOn_IsReportedAsSlow()
+    {
+        TerminalEmulator emulator = new(80, 25);
+        LineExtractor extractor = new(emulator);
+        extractor.LineEmitted += l =>
+        {
+            if (l.Text == "slow") Thread.Sleep(LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50));
+        };
+        List<(string Text, TimeSpan Took)> slow = new();
+        extractor.SlowLine += (l, took) => slow.Add((l.Text, took));
+
+        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("slow\r\n"));
+
+        (string text, TimeSpan took) = Assert.Single(slow);
+        Assert.Equal("slow", text);
+        Assert.True(took >= LineExtractor.SlowLineThreshold);
+    }
+
+    // The slow line is reported as the chat subscriber saw it, so the log can say a
+    // player's words were what it was reading without holding any of them.
+    [Fact]
+    public void ASlowChatLine_IsReportedAsChat()
+    {
+        TerminalEmulator emulator = new(80, 25);
+        LineExtractor extractor = new(emulator);
+        extractor.ChatLineEmitted += _ =>
+            Thread.Sleep(LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50));
+        List<(LineExtractor.EmittedLine Line, TimeSpan Took)> slow = new();
+        extractor.SlowLine += (l, took) => slow.Add((l, took));
+
+        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("Phrixas telepaths: QZXJ\r\n"));
+
+        (LineExtractor.EmittedLine line, TimeSpan took) = Assert.Single(slow);
+        Assert.True(line.IsChat);
+        Assert.Contains("chat line", LineExtractor.SlowLineNotice(line, took));
+    }
+
+    // A slow line may be a telepath or a row of the board's login. The notice gives
+    // its length, its kind and the time it took, and not one character of it.
+    [Theory]
+    [InlineData(false, false, "-character line")]
+    [InlineData(true, false, "-character chat line")]
+    [InlineData(false, true, "-character prompt line")]
+    public void TheSlowLineNotice_CarriesNoneOfTheLinesText(bool chat, bool prompt, string kind)
+    {
+        // Characters the notice's own wording never uses.
+        const string text = "QZXJ#@~QZXJ_^|WVUK";
+        LineExtractor.EmittedLine line = new(
+            text, new CellAttributes[text.Length], FixedNow, IsPromptLine: prompt, IsChat: chat);
+
+        string notice = LineExtractor.SlowLineNotice(line, TimeSpan.FromMilliseconds(2913));
+
+        Assert.Equal($"the client stood still for 2913 ms reading a {text.Length}{kind}", notice);
+        Assert.DoesNotContain(notice, c => text.Contains(c));
+    }
+
     [Fact]
     public void HardLineBreaks_AreNotJoined()
     {

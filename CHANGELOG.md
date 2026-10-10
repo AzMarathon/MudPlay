@@ -1,11 +1,25 @@
 # Version history
 
-## 3.161.6
+## 3.162.0
 
 - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
 - Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
 - The item pickup stands down for it, and nothing is recorded when it can't be told
 - Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
+
+## 3.161.7
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+
+## 3.161.6
+
+- The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+- Every line from the game is read faster (a slowdown that came in with 3.157.8)
+- Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+- Bug report: how much is on the floor here and Roomba's slowest floor read
+- bug reports addressed: paradigm-20261009-164508
 
 ## 3.161.5
 

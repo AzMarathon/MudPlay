@@ -1079,6 +1079,7 @@ public partial class MainWindowViewModel : ObservableObject
         // lanes, and itself confines chat lines to the conversation.* patterns.
         Lines.LineEmitted     += line => AppServices.Current.Router.Dispatch(line);
         Lines.ChatLineEmitted += line => AppServices.Current.Router.Dispatch(line);
+        Lines.SlowLine        += LogSlowLine;
 
         // Reactive hazard-buff re-raise: a lapse-damage prompt (the desert's
         // "you need water, soon!") mid-walk fires one `use` to re-raise, and a
@@ -2172,6 +2173,9 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus("[Ganghouse roomba complete]", TerminalStatusKind.Notice));
+
+    private static void LogSlowLine(LineExtractor.EmittedLine line, TimeSpan took)
+        => AppServices.Current.Log.Warn("Lines", LineExtractor.SlowLineNotice(line, took));
 
     // The login sequence sends stat / exp / inventory (and the user's who, etc.) right
     // after entering the realm. Wait for that to finish rendering, then dump the quests
