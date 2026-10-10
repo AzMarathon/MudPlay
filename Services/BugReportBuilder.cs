@@ -2000,6 +2000,7 @@ public static class BugReportBuilder
         Kv(sb, "Route card counts not yet taken by a walk", svc.CardCountSummary);
         // Why a member who never answers a count was or wasn't fetched a copy.
         Kv(sb, "Gate items handed to party members (remembered)", svc.PartyHandOvers.Summary);
+        Kv(sb, "Members par was asked about after a gate, reply not read yet", svc.PartyPathItemGate.PartyListCheckSummary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
