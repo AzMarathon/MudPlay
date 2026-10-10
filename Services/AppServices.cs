@@ -9862,6 +9862,8 @@ public sealed class AppServices
         ManaRegen.MasterSwitchOff = MasterSwitchOff("Mana-regen reroll");
         PvpFight.MasterSwitchOff = MasterSwitchOff("PvP response");
 
+        MovementControl.RefuseResume = () => RefuseStartForMasterSwitch("Run", "resume");
+
         AutoModeController.DescribeInFlight = DescribeInFlightForMasterSwitch;
         AutoModeController.KillSwitchToggled += OnMasterSwitchChanged;
     }

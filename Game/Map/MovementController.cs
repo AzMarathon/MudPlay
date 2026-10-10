@@ -350,8 +350,14 @@ public sealed class MovementController : IDisposable
     // Inverse of Pause — lifts the user override only. Any engine wait still
     // asserted (an active fight, a rest) keeps the engine paused on its own
     // gate; we just clear the user's hold. No-op when not user-paused.
+    // Asked as the user resumes a paused run: true means it was refused (the
+    // master switch is off) and the pause stays. Lifting it would only leave the
+    // run frozen on the switch with nothing said.
+    public Func<bool>? RefuseResume { get; set; }
+
     public void Resume()
     {
+        if (IsUserPaused && RefuseResume?.Invoke() == true) return;
         LetErrandGo();
         if (!IsUserPaused) return;
         if (_autoLair.IsActive)

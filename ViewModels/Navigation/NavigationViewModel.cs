@@ -2945,6 +2945,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     // out of loop-build, record the destination, then hand to the route picker.
     private async Task WalkToRoom(Game.Map.RoomKey k, bool askOnlyOverAvoids = false)
     {
+        // Before the stops below: a run frozen by the master switch is not given
+        // up for a walk that won't start.
+        if (_services.RefuseStartForMasterSwitch("Walk")) return;
         // If a loop or Auto-Lair is currently driving movement, stop
         // it before handing control to the walker — the user's explicit
         // walk-to takes precedence over the automation in the
@@ -4935,6 +4938,10 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // preempt — so the check has to come first. Mirrors GoToFavorite.
         if (QueuedDestination is { } queued)
         {
+            // Before the stops below, and with the destination left queued: a run
+            // frozen by the master switch is not given up for a walk that won't
+            // start.
+            if (_services.RefuseStartForMasterSwitch("Walk")) return;
             // Only pre-clear the user-pause gate when a loop/lair was actually
             // stopped here: leaving that engine idle behind a stale UserGate would
             // re-pause the next loop start, so we lift it up front. A bare paused
@@ -5001,6 +5008,9 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 }
             }
 
+            // The pause stays: lifting it would only leave the loop frozen on the
+            // master switch with nothing said.
+            if (_services.RefuseStartForMasterSwitch("Loop", "resume")) return;
             _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
             if (_loopBuilderOpenedByPause)
             {
@@ -5028,8 +5038,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         // in flight.
         if (_services.AutoLair.IsActive)
         {
-            if (_services.AutoLair.IsPaused) _services.AutoLair.Resume();
-            else _services.AutoLair.Pause();
+            if (!_services.AutoLair.IsPaused) _services.AutoLair.Pause();
+            else if (!_services.RefuseStartForMasterSwitch("Auto-Lair", "resume")) _services.AutoLair.Resume();
             return;
         }
         // In Loop build with a runnable loop, Run means "run the loop" (which takes
