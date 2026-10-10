@@ -1065,6 +1065,38 @@ public sealed class CastingDirector : IDisposable
         return doomed.Count;
     }
 
+    // Drop the run-out timers of anyone who is no longer in the party. A member's
+    // timer outlives its expiry on purpose: the entry is what a negative recast
+    // margin counts from, and the next cast overwrites it. Once they have left,
+    // nothing casts on them again, so theirs sat in the store, and in every bug
+    // report as "expired, not yet cleared", until the profile was reloaded (report
+    // paradigm-20261010-145330). A timer still running is kept: whoever comes back
+    // inside it is still buffed.
+    private void DropExpiredTimersOfDeparted()
+    {
+        if (_activeUntil.Count == 0) return;
+        DateTime now = _now();
+        List<(string Target, string Short)>? doomed = null;
+        foreach (KeyValuePair<(string Target, string Short), (DateTime Until, int MarginSec, int TotalSec)> kv in _activeUntil)
+            if (kv.Key.Target.Length > 0 && kv.Value.Until <= now && !IsInPartyGiven(kv.Key.Target))
+                (doomed ??= new()).Add(kv.Key);
+        if (doomed is null) return;
+        foreach ((string, string) key in doomed) _activeUntil.Remove(key);
+        _log?.Info(LogCategory,
+            $"dropped {doomed.Count} expired buff timer(s) on target(s) no longer in the party.");
+    }
+
+    // Anyone on the roster, ourselves included: a slot aimed at our own name keys its
+    // timer by that name.
+    private bool IsInPartyGiven(string given)
+    {
+        if (_party is null) return false;
+        foreach (PartyMember m in _party.Members)
+            if (string.Equals(GivenName(m.Name), given, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
     // The instant the timers were frozen on a disconnect, or null while running. The
     // Buff Watchdog reads this so its display freezes at the drop (the heartbeat is a
     // wall clock that keeps ticking while disconnected). On resume the display catches
@@ -1770,6 +1802,9 @@ public sealed class CastingDirector : IDisposable
         // first in-game prompt clears the latch. Without this, buffs drain onto the
         // login prompts during re-entry (report paradigm-20260908-053448).
         if (_suspended) return null;
+        // Ahead of the master switches: the timers are shown and reported whether or
+        // not anything is being cast.
+        DropExpiredTimersOfDeparted();
         // Two independent masters share this loop: the heal / cure / debuff
         // categories run under AutoHeal (_isEnabled), buffing runs under
         // AutoBless (_autoBlessEnabled), and each is gated separately in the

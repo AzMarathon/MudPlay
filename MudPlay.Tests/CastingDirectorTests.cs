@@ -4422,6 +4422,57 @@ public sealed class CastingDirectorTests
         Assert.Equal("raijin", kept.Target);
     }
 
+    // Nothing casts on someone who has left the party, so nothing ever overwrote or
+    // cleared their timer: it stayed in the store, expired, for the rest of the
+    // session (report paradigm-20261010-145330).
+    [Fact]
+    public void PartyBless_MemberLeft_TheirTimerIsDroppedOnceItRunsOut()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.BuffInfo["mysh"] = (string.Empty, 200);
+        PartyMember raijin = h.AddMember("Raijin");
+
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        h.Director.NoteManualBuffCast("mysh");
+        Assert.Equal(2, h.Director.SnapshotActiveBuffs().Count);
+
+        h.Party.Members.Remove(raijin);
+        h.Party.IsInParty = false;
+        h.Now = h.Now.AddSeconds(120);
+        h.Director.Evaluate();
+        // Still running: whoever rejoins inside it is still buffed.
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), t => t.Target == "raijin");
+
+        h.Now = h.Now.AddSeconds(400);
+        h.Director.Evaluate();
+        // Theirs is gone; our own run-out timer stays for the recast to count from.
+        Game.Spells.ActiveBuffTimer own = Assert.Single(h.Director.SnapshotActiveBuffs());
+        Assert.Equal(string.Empty, own.Target);
+    }
+
+    [Fact]
+    public void PartyBless_MemberStillInParty_TheirRunOutTimerIsKept()
+    {
+        using PartyBlessHarness h = new();
+        h.Health.BlessIfAboveMa = 0;
+        h.AddTargetSlot("bles", "Raijin");
+        h.BuffInfo["bles"] = ("You cast {s} on {s}!", 300);
+        h.AddMember("Raijin");
+        h.Director.Evaluate();
+        h.Confirm("You cast bless on Raijin!");
+        Assert.Single(h.Director.SnapshotActiveBuffs());
+
+        h.InRoom.Remove("Raijin");                      // out of reach: nothing recasts it
+        h.Now = h.Now.AddSeconds(400);
+        h.Director.Evaluate();
+
+        Assert.Contains(h.Director.SnapshotActiveBuffs(), t => t.Target == "raijin");
+    }
+
     // A spell strips what it removes off its own target only. Smite on one member and
     // greater smite on another (each removes the other) cleared each other's timers
     // and were recast every few seconds (report paradigm-20261002-012234).
