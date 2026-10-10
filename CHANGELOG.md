@@ -8,6 +8,7 @@
 - Off with Auto Get Items or Auto-All; never during a Roomba sweep
 - Chest Offload: pickups during an open aren't listed as the chest's
 - Chest Offload: an item given away leaves the list
+- Chest Offload: the coin tally clears with the last listed item
 - Chest Offload: `op <chest>` is tracked, `open <direction>` is not
 - Bug report shows auto-open's state
 
