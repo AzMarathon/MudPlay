@@ -579,10 +579,14 @@ public sealed class AppServices
     // engage even with master auto-attack off) and stays silent on success.
     public Game.Remote.KillHandler Kill { get; }
 
-    // Master "Auto-All" kill-switch shared by the toolbar / Action-menu
-    // button and the @auto-all remote command. One press snapshots
-    // + clears every wired auto-engine; the next restores the snapshot.
+    // The master switch, shared by the toolbar / Action-menu "Auto-All" button
+    // and the @auto-all remote command. Off silences every automatic system.
     public Game.AutoModeController AutoModeController { get; }
+
+    // An enable probe for an automatic system that has no toggle of its own:
+    // true while the master switch is off, counting the skip under the system's
+    // name (AutoModeController.Blocks).
+    private Func<bool> MasterSwitchOff(string system) => () => AutoModeController.Blocks(system);
 
     // Leader-side @comeback party-pickup flow — pauses the
     // running movement engine, walks to recover a stranded follower
@@ -2720,6 +2724,9 @@ public sealed class AppServices
         // audit (load / swap / close / re-home) rides the always-on Info stream.
         Profile.Log = bootstrapLog;
         Profile.Performance = Performance;
+        // Built ahead of every engine: each one's enable probe reads the master
+        // switch, and a probe must never run before its target exists.
+        AutoModeController = new Game.AutoModeController(Profile, Log);
         Bbs = new BbsProfileStore(() => Settings.Current.DefaultGameDataSet, bootstrapLog);
         Realms = new RealmCatalog(Bbs, Profile, bootstrapLog);
 
@@ -3302,11 +3309,9 @@ public sealed class AppServices
         // loaded profile's General section + persists. (@comeback is
         // wired in the Navigation block below as PartyComebackManager,
         // which needs the movement engines.)
-        // AutoModeController owns the master "Auto-All" snapshot; the
-        // remote handler reuses it for @auto-all so button + telepath
-        // share one session snapshot. ResetSnapshot on load so a freshly
-        // loaded character doesn't restore the previous one's state.
-        AutoModeController = new Game.AutoModeController(Profile, Log);
+        // The remote handler shares AutoModeController with the Auto-All button,
+        // so button + telepath drive one master switch. ResetSnapshot on load so
+        // a freshly loaded character doesn't inherit the previous one's switch.
         Profile.ProfileLoaded += _ => AutoModeController.ResetSnapshot();
         AutoMode = new Game.Remote.AutoModeRemoteHandler(
             RemoteCommands, Profile, AutoModeController, Log);
@@ -9854,6 +9859,9 @@ public sealed class AppServices
 
     private bool ReadAutoModeFlag(Func<Models.Profile.AutoActionDefaults, bool> selector)
     {
+        // The master switch outranks the toggles: one ticked by hand while it is
+        // off stays ticked for when it comes back on, but runs nothing meanwhile.
+        if (AutoModeController.KillSwitchEngaged) return false;
         Models.Profile.CharacterProfile? profile = Profile.Current;
         System.Text.Json.JsonElement entry = default;
         bool present = profile?.Settings?.TryGetValue("General", out entry) == true;

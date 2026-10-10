@@ -337,25 +337,24 @@ public partial class MainWindowViewModel : ObservableObject
     // buttons, the Action-menu check items, and the Settings → General
     // checkboxes all write here. The partial OnXxxChanged handlers persist to
     // the profile and refresh the toolbar IsActive badge.
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoCombatActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoNukeActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff), nameof(IsAutoHealRestActive))] private bool _isAutoHealActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff), nameof(IsAutoHealRestActive))] private bool _isAutoRestActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoBlessActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoLightActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoGetItemsActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoGetCashActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoSneakActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoHideActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoSearchActive;
+    [ObservableProperty] private bool _isAutoCombatActive;
+    [ObservableProperty] private bool _isAutoNukeActive;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAutoHealRestActive))] private bool _isAutoHealActive;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAutoHealRestActive))] private bool _isAutoRestActive;
+    [ObservableProperty] private bool _isAutoBlessActive;
+    [ObservableProperty] private bool _isAutoLightActive;
+    [ObservableProperty] private bool _isAutoGetItemsActive;
+    [ObservableProperty] private bool _isAutoGetCashActive;
+    [ObservableProperty] private bool _isAutoSneakActive;
+    [ObservableProperty] private bool _isAutoHideActive;
+    [ObservableProperty] private bool _isAutoSearchActive;
 
     // Master "Disable hangups" toggle. When on, every automatic disconnect
     // path (@hangup / @relog remote commands, low-HP emergency hangup,
     // nightly-cleanup log-off) is suppressed — the client drops the carrier
     // only on an explicit user action. Persisted in
     // Models.Profile.GeneralSettings.DisableHangups and reseeded on profile
-    // load like the auto-mode toggles. Not part of IsAllAutoOff — it gates
-    // disconnects, not auto-engines.
+    // load like the auto-mode toggles. It gates disconnects, not auto-engines.
     [ObservableProperty] private bool _isDisableHangupsActive;
 
     // Sprint Mode. A transient "just get me there" movement mode. While on:
@@ -367,7 +366,7 @@ public partial class MainWindowViewModel : ObservableObject
     // next lair; and manually turning any of those four engines back on ends it
     // too. See OnIsSprintModeActiveChanged + the nav-event handlers. Persisted
     // in Models.Profile.GeneralSettings.SprintMode, reseeded on profile load.
-    // Not part of IsAllAutoOff — it's a movement mode, not an auto-engine.
+    // It's a movement mode, not an auto-engine.
     [ObservableProperty] private bool _isSprintModeActive;
 
     // The auto-engines Sprint Mode forced off when it turned on — remembered so
@@ -471,15 +470,10 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Log.Info("AutoMode", "Run + Combat off: the run has begun — Auto-Combat back on.");
     }
 
-    // True when every wired auto-engine is off — drives the "Auto-All" master
-    // toggle's depressed/checked state. Mirrors
-    // Game.AutoModeController.AllWiredOff but computed from the live
-    // observables so the badge updates instantly.
-    public bool IsAllAutoOff =>
-        !IsAutoCombatActive && !IsAutoNukeActive && !IsAutoHealActive && !IsAutoRestActive
-        && !IsAutoBlessActive && !IsAutoLightActive && !IsAutoGetItemsActive
-        && !IsAutoGetCashActive && !IsAutoSneakActive && !IsAutoHideActive
-        && !IsAutoSearchActive;
+    // The master switch (Game.AutoModeController): drives the "Auto-All" button's
+    // depressed state and the menu item's tick. It follows the switch itself, not
+    // the eleven toggles: with every toggle unticked by hand the switch is still on.
+    [ObservableProperty] private bool _isMasterSwitchOn = true;
 
     public bool IsDisconnected => !IsConnected;
 
@@ -934,6 +928,19 @@ public partial class MainWindowViewModel : ObservableObject
         // (no-op for a character that predates the base/live split). Runs before
         // the badge reseed below; the reconcile also reseeds when it changes state.
         AppServices.Current.Profile.ProfileLoaded += _ => ReconcileAutoModeToBase("profile load");
+        AppServices.Current.AutoModeController.KillSwitchToggled += off =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsMasterSwitchOn = !off;
+                // The switch moves the toggles through a profile reseed, which is
+                // not a genuine flip, so nothing re-decides on its own: the engines
+                // that only decide on an event are told here, as a hand flip tells
+                // them, or a monster already in the room goes unfought and a rest
+                // that is due waits for the next prompt.
+                ReevaluateCombatForCurrentRoom();
+                AppServices.Current.Health?.Evaluate();
+                AppServices.Current.CastDirector?.Evaluate();
+            });
         AppServices.Current.Profile.ProfileLoaded += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileMutated += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileSaving  += _ => SyncAutoEngineTogglesFromProfile();
@@ -1941,7 +1948,7 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsDisableHangupsActive)
          && e.PropertyName != nameof(IsSprintModeActive)
          && e.PropertyName != nameof(CombatProfileCycleLabel)
-         && e.PropertyName != nameof(IsAllAutoOff)) return;
+         && e.PropertyName != nameof(IsMasterSwitchOn)) return;
 
         foreach (ToolbarButtonItem row in ToolbarItems)
         {
@@ -2009,8 +2016,8 @@ public partial class MainWindowViewModel : ObservableObject
                 row.IsActive = IsAutoSearchActive;
                 break;
             case "ToggleAllAutoOff":
-                // Depressed = auto-responses running; inverse of "all off".
-                row.IsActive = !IsAllAutoOff;
+                // Depressed = the master switch is on.
+                row.IsActive = IsMasterSwitchOn;
                 break;
             case "MovementStart":
             {
@@ -6026,13 +6033,12 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Master "Auto-All" kill-switch. Delegates to the shared
-    // Game.AutoModeController so the toolbar button, the Action-menu item,
-    // and the @auto-all remote command all drive one session snapshot. The
-    // controller's profile write fires ProfileSaving, which reseeds the
-    // nine toggle observables (and thereby IsAllAutoOff).
+    // The master switch. Delegates to the shared Game.AutoModeController so the
+    // toolbar button, the Action-menu item and the @auto-all remote command all
+    // drive one switch. The controller's profile write fires ProfileSaving, which
+    // reseeds the toggle observables; IsMasterSwitchOn follows KillSwitchToggled.
     [RelayCommand]
-    private void AllAutoOff() => AppServices.Current.AutoModeController.ToggleAll();
+    private void AllAutoOff() => AppServices.Current.AutoModeController.ToggleAll("Auto-All button");
 
     // "Reset States" — the manual recovery escape hatch. First every engine goes
     // back to idle (AppServices.ResetEngineStates: walks, loops, lair, detours,

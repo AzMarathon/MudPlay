@@ -6,16 +6,10 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-/// <summary>
-/// <see cref="AutoModeController"/> — the Auto-All master kill switch.
-/// Pins <see cref="AutoModeController.KillSwitchEngaged"/> as the "user
-/// actively silenced automation" signal, deliberately distinct from
-/// <see cref="AutoModeController.AllWiredOff"/> (which is ALSO true for a
-/// manual-play character that simply never enabled an engine). The
-/// main-menu auto-entry gate reads KillSwitchEngaged, so this distinction
-/// is exactly what lets a manual-play character still auto-enter the realm
-/// on the first connect instead of being stranded at the game menu.
-/// </summary>
+// AutoModeController — the master switch. Pins KillSwitchEngaged as the one
+// "all autos off" signal, distinct from AllWiredOff (also true for a character
+// played by hand who never ticked a toggle): unticking the toggles one by one is
+// not the switch, and the switch engages with every toggle already off.
 public sealed class AutoModeControllerTests
 {
     private static ProfileService BlankProfile()
@@ -25,113 +19,226 @@ public sealed class AutoModeControllerTests
         return profile;
     }
 
-    private static void WriteAutoMode(ProfileService profile, AutoActionDefaults mode)
+    private static void WriteAutoMode(ProfileService profile, AutoActionDefaults mode,
+                                      AutoActionDefaults? baseModes = null)
     {
         CharacterProfile current = profile.Current!;
         current.Settings ??= new();
         current.Settings["General"] =
-            JsonSerializer.SerializeToElement(new GeneralSettings { AutoMode = mode });
+            JsonSerializer.SerializeToElement(new GeneralSettings { AutoMode = mode, AutoModeBase = baseModes });
     }
+
+    private static AutoActionDefaults ReadAutoMode(ProfileService profile) =>
+        JsonSerializer.Deserialize<GeneralSettings>(profile.Current!.Settings!["General"].GetRawText())!.AutoMode;
 
     private static AutoActionDefaults AllOff() => new()
     {
         AutoCombat = false, AutoNuke = false, AutoHeal = false, AutoRest = false,
         AutoBless = false, AutoLight = false, AutoGetItems = false,
-        AutoGetCash = false, AutoSneak = false, AutoHide = false,
+        AutoGetCash = false, AutoSneak = false, AutoHide = false, AutoSearch = false,
     };
 
-    private static AutoActionDefaults CombatOn() => new() { AutoCombat = true };
+    private static AutoActionDefaults Only(Action<AutoActionDefaults> set)
+    {
+        AutoActionDefaults mode = AllOff();
+        set(mode);
+        return mode;
+    }
 
     [Fact]
-    public void ManualPlay_AllEnginesOff_ButNeverKilled_KillSwitchNotEngaged()
+    public void ManualPlay_AllTogglesOff_SwitchStillOn()
     {
-        // The regression guard: a character running every auto-engine off
-        // (manual play) reports AllWiredOff but NOT KillSwitchEngaged, so
-        // the auto-entry gate (!KillSwitchEngaged) still fires.
         ProfileService profile = BlankProfile();
         WriteAutoMode(profile, AllOff());
         AutoModeController controller = new(profile);
 
         Assert.True(controller.AllWiredOff);
         Assert.False(controller.KillSwitchEngaged);
+        Assert.False(controller.Blocks("Test"));
     }
 
     [Fact]
-    public void KillPress_EngagesKillSwitch()
+    public void Press_WithTogglesOn_SwitchesOffAndClearsThem()
     {
         ProfileService profile = BlankProfile();
-        WriteAutoMode(profile, CombatOn());
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
         AutoModeController controller = new(profile);
-        Assert.False(controller.KillSwitchEngaged);
 
-        controller.ToggleAll();   // engines were on → kill
+        controller.ToggleAll();
 
         Assert.True(controller.AllWiredOff);
         Assert.True(controller.KillSwitchEngaged);
     }
 
     [Fact]
-    public void RestorePress_ClearsKillSwitch()
+    public void SecondPress_SwitchesOnAndRestoresTheToggles()
     {
         ProfileService profile = BlankProfile();
-        WriteAutoMode(profile, CombatOn());
+        WriteAutoMode(profile, Only(m => { m.AutoCombat = true; m.AutoSneak = true; }));
         AutoModeController controller = new(profile);
-        controller.ToggleAll();   // kill
-        Assert.True(controller.KillSwitchEngaged);
+        controller.ToggleAll();
 
-        controller.ToggleAll();   // restore
+        controller.ToggleAll();
 
         Assert.False(controller.KillSwitchEngaged);
-        Assert.False(controller.AllWiredOff);
+        AutoActionDefaults mode = ReadAutoMode(profile);
+        Assert.True(mode.AutoCombat);
+        Assert.True(mode.AutoSneak);
+        Assert.False(mode.AutoHeal);
+    }
+
+    // The ruling's second half: toggles unticked by hand are not the switch, so
+    // an off must still engage it.
+    [Fact]
+    public void TurnOff_WithEveryToggleAlreadyOff_StillEngages()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, AllOff());
+        AutoModeController controller = new(profile);
+        List<bool> events = new();
+        controller.KillSwitchToggled += events.Add;
+
+        controller.TurnOff("test");
+
+        Assert.True(controller.KillSwitchEngaged);
+        Assert.Equal(new[] { true }, events);
     }
 
     [Fact]
-    public void KillSwitchToggled_FiresTrueOnKill_FalseOnRestore()
+    public void TurnOff_Twice_IsOneSwitch()
     {
-        // The event AppServices bridges to MovementController so navigation
-        // suspends on engage and resumes on restore.
         ProfileService profile = BlankProfile();
-        WriteAutoMode(profile, CombatOn());
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
         AutoModeController controller = new(profile);
         List<bool> events = new();
-        controller.KillSwitchToggled += engaged => events.Add(engaged);
+        controller.KillSwitchToggled += events.Add;
 
-        controller.ToggleAll();   // kill
-        controller.ToggleAll();   // restore
+        controller.TurnOff("test");
+        controller.TurnOff("test");
+        controller.TurnOn("test");
 
+        // The second off must not overwrite what the first remembered.
+        Assert.True(ReadAutoMode(profile).AutoCombat);
         Assert.Equal(new[] { true, false }, events);
     }
 
     [Fact]
-    public void KillSwitchToggled_DoesNotFire_WhenRestoreHasNoSnapshot()
+    public void TurnOn_NothingRemembered_SwitchesOnTheBaseModes()
     {
-        // A restore press with nothing snapshotted (everything already off, no
-        // prior kill this session) is a no-op — it must not emit a spurious
-        // resume, which would fight a nav the user is intentionally running.
         ProfileService profile = BlankProfile();
-        WriteAutoMode(profile, AllOff());
+        WriteAutoMode(profile, AllOff(), baseModes: Only(m => { m.AutoCombat = true; m.AutoRest = true; }));
         AutoModeController controller = new(profile);
         List<bool> events = new();
-        controller.KillSwitchToggled += engaged => events.Add(engaged);
+        controller.KillSwitchToggled += events.Add;
 
-        controller.ToggleAll();   // all already off, no snapshot → no-op
+        controller.TurnOn("test");
 
+        AutoActionDefaults mode = ReadAutoMode(profile);
+        Assert.True(mode.AutoCombat);
+        Assert.True(mode.AutoRest);
+        Assert.False(mode.AutoNuke);
+        Assert.False(controller.KillSwitchEngaged);
+        // The switch never went off, so nothing is told it came back on.
         Assert.Empty(events);
     }
 
     [Fact]
-    public void ResetSnapshot_ClearsKillSwitch()
+    public void TurnOn_AfterAnOffWithEveryToggleOff_SwitchesOnTheBaseModes()
     {
-        // Profile-load boundary: a freshly loaded character must not
-        // inherit the previous one's silenced-automation flag.
         ProfileService profile = BlankProfile();
-        WriteAutoMode(profile, CombatOn());
+        WriteAutoMode(profile, AllOff(), baseModes: Only(m => m.AutoHeal = true));
         AutoModeController controller = new(profile);
-        controller.ToggleAll();   // kill
-        Assert.True(controller.KillSwitchEngaged);
+        controller.TurnOff("test");
+
+        controller.TurnOn("test");
+
+        Assert.False(controller.KillSwitchEngaged);
+        Assert.True(ReadAutoMode(profile).AutoHeal);
+    }
+
+    [Fact]
+    public void TurnOn_SwitchAlreadyOnWithAToggleOn_ChangesNothing()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoLight = true), baseModes: Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+
+        controller.TurnOn("test");
+
+        AutoActionDefaults mode = ReadAutoMode(profile);
+        Assert.True(mode.AutoLight);
+        Assert.False(mode.AutoCombat);
+    }
+
+    [Fact]
+    public void TurnOn_KeepsAToggleTickedByHandWhileOff()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+        controller.TurnOff("test");
+        WriteAutoMode(profile, Only(m => m.AutoSearch = true));
+
+        controller.TurnOn("test");
+
+        AutoActionDefaults mode = ReadAutoMode(profile);
+        Assert.True(mode.AutoCombat);
+        Assert.True(mode.AutoSearch);
+    }
+
+    [Fact]
+    public void Blocks_OnlyWhileOff_AndCountsPerSystem()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+        Assert.False(controller.Blocks("Triggers"));
+        Assert.Empty(controller.SkippedSinceOff);
+
+        controller.TurnOff("test");
+        Assert.True(controller.Blocks("Triggers", "one"));
+        Assert.True(controller.Blocks("Triggers", "two"));
+        Assert.True(controller.Blocks("Polls"));
+
+        Assert.Equal(2, controller.SkippedSinceOff["Triggers"]);
+        Assert.Equal(1, controller.SkippedSinceOff["Polls"]);
+        Assert.Equal("Polls 1, Triggers 2", controller.DescribeSkipped());
+
+        // A new off starts a new count.
+        controller.TurnOn("test");
+        controller.TurnOff("test");
+        Assert.Empty(controller.SkippedSinceOff);
+    }
+
+    [Fact]
+    public void TurnOff_AsksWhatWasInFlightBeforeItChangesAnything()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+        bool? engagedWhenAsked = null;
+        controller.DescribeInFlight = () => { engagedWhenAsked = controller.KillSwitchEngaged; return "a loop"; };
+
+        controller.TurnOff("test");
+
+        Assert.False(engagedWhenAsked);
+    }
+
+    [Fact]
+    public void ResetSnapshot_ClearsTheSwitch_AndSaysSo()
+    {
+        // Profile-load boundary: a freshly loaded character starts with the
+        // switch on, and whatever it held is released.
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+        controller.ToggleAll();
+        List<bool> events = new();
+        controller.KillSwitchToggled += events.Add;
 
         controller.ResetSnapshot();
 
         Assert.False(controller.KillSwitchEngaged);
+        Assert.Equal(new[] { false }, events);
     }
 }
