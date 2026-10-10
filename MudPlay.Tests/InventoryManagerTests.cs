@@ -27,11 +27,12 @@ public sealed class InventoryManagerTests
             Func<string, int?>? itemWeight = null,
             Func<string, string?>? slotResolver = null,
             Func<string, bool>? isItemRecordName = null,
-            Func<string, bool>? isKey = null)
+            Func<string, bool>? isKey = null,
+            Func<string, bool>? staysWhenSpent = null)
         {
             Inv = new InventoryManager(
                 log: null, itemWeightResolver: itemWeight, slotResolver: slotResolver,
-                isItemRecordName: isItemRecordName, isKey: isKey);
+                isItemRecordName: isItemRecordName, isKey: isKey, staysWhenSpent: staysWhenSpent);
             Lines = new LineExtractor(new TerminalEmulator(80, 24));
             Inv.AttachLineExtractor(Lines);
             Inv.Changed += () => ChangedCount++;
@@ -1168,6 +1169,81 @@ public sealed class InventoryManagerTests
 
         Assert.Null(h.Inv.Snapshot.ReadiedLight);
         Assert.Equal(new[] { "torch" }, Carried(h));
+    }
+
+    // ----- a light that burns out ---------------------------------------
+
+    // The burn-out line reaches the manager through the router's subscription
+    // (KnownPatterns.LightBurnedOut), not its own line reader.
+
+    [Fact]
+    public void TheLitLightBurningOut_IsNoLongerHeld_InOneNotice()
+    {
+        // Left listed as lit until the next full read, a light that had burned out
+        // went onto a death record as lost, and a Stock pile waited for it for good.
+        using Harness h = new();
+        h.Feed("You are carrying torch (Readied/1), torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        int before = h.ChangedCount;
+
+        h.Inv.NoteLitLightBurnedOut();
+
+        Assert.Null(h.Inv.Snapshot.ReadiedLight);
+        Assert.Equal(new[] { "torch" }, Carried(h));            // the spare only
+        Assert.Equal(1, h.ChangedCount - before);
+        Assert.Equal(new[] { "torch" },
+            DeathLootCapture.LostOf(h.Inv.Snapshot).Select(i => i.Name).ToArray());
+    }
+
+    [Fact]
+    public void ALightKeptWhenSpent_BurningOut_GoesBackIntoThePack()
+    {
+        // No light in the imported data is one; the engine's rule allows for it.
+        using Harness h = new(staysWhenSpent: name => name == "glow stone");
+        h.Feed("You are carrying glow stone (Readied/1), 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Inv.NoteLitLightBurnedOut();
+
+        Assert.Null(h.Inv.Snapshot.ReadiedLight);
+        Assert.Equal(new[] { "glow stone" }, Carried(h));
+    }
+
+    [Fact]
+    public void ASpareLitAfterTheFirstBurnedOut_IsCountedOnce_AndLeavesWhenItBurnsOutToo()
+    {
+        // The whole of the case: read with a torch lit and one spare; the lit one
+        // burns out; the spare is lit (Stock's line; it stays in the pack list);
+        // then that one burns out as well.
+        using Harness h = new();
+        h.Feed("You are carrying torch (Readied/1), torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+
+        h.Inv.NoteLitLightBurnedOut();
+        h.Feed("You lit the torch.");
+        Assert.Equal(new[] { "torch" },
+            DeathLootCapture.LostOf(h.Inv.Snapshot).Select(i => i.Name).ToArray());
+
+        h.Inv.NoteLitLightBurnedOut();
+        Assert.Empty(DeathLootCapture.LostOf(h.Inv.Snapshot));
+    }
+
+    [Fact]
+    public void ABurnOut_WithNoLightKnownToBeLit_LeavesThePackAlone()
+    {
+        using Harness h = new();
+        h.Feed("You are carrying torch, 5 copper farthings.");
+        h.Feed("Wealth:    5 copper farthings");
+        h.Feed("Encumbrance:    50/2880  -  Light  [2%]");
+        int before = h.ChangedCount;
+
+        h.Inv.NoteLitLightBurnedOut();
+
+        Assert.Equal(new[] { "torch" }, Carried(h));
+        Assert.Equal(0, h.ChangedCount - before);
     }
 
     [Fact]
