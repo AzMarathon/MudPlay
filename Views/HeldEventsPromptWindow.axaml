@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MudPlay.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="320"
+        x:Class="MudPlay.Views.HeldEventsPromptWindow"
+        x:DataType="vm:HeldEventsPromptViewModel"
+        Title="Waiting Events"
+        Width="560" MinWidth="460" SizeToContent="Height"
+        ShowActivated="False"
+        WindowStartupLocation="CenterOwner">
+
+    <!-- ShowActivated off: the window opens by itself, not on a press, and keys
+         being typed at the terminal must not land on it (Space would untick the
+         first row). -->
+
+
+    <Border Padding="18" Background="{StaticResource ChromeBgBrush}">
+        <!-- Auto rows throughout: with SizeToContent="Height" a star row is pinned to
+             the window's first measured height and the list would overflow onto the
+             buttons. The list scrolls past its MaxHeight instead. -->
+        <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="14">
+            <TextBlock Grid.Row="0"
+                       Text="{Binding Intro}"
+                       Foreground="{StaticResource ChromeFgBrush}"
+                       FontSize="12"
+                       TextWrapping="Wrap"/>
+
+            <ScrollViewer Grid.Row="1" MaxHeight="360"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Rows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HeldEventRowViewModel">
+                            <CheckBox IsChecked="{Binding Run}" Margin="0,0,0,8">
+                                <StackPanel Spacing="1">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
+                                    <TextBlock Text="{Binding What}"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{StaticResource ChromeFgBrush}"/>
+                                    <TextBlock Text="{Binding WaitedText}"
+                                               FontSize="11"
+                                               Foreground="{StaticResource ChromeFgMutedBrush}"/>
+                                </StackPanel>
+                            </CheckBox>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <DockPanel Grid.Row="2" LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Select all"  Command="{Binding SelectAllCommand}"  MinWidth="80"/>
+                    <Button Content="Select none" Command="{Binding SelectNoneCommand}" MinWidth="80"/>
+                </StackPanel>
+                <!-- Not the default button: the prompt opens by itself, and an Enter
+                     meant for the terminal must not answer it. -->
+                <Button DockPanel.Dock="Right"
+                        Content="{Binding ConfirmLabel}" Command="{Binding ConfirmCommand}"
+                        MinWidth="120"/>
+            </DockPanel>
+        </Grid>
+    </Border>
+</Window>

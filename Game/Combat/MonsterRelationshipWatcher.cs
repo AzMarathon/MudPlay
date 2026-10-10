@@ -395,7 +395,7 @@ public sealed class MonsterRelationshipWatcher : IDisposable
                 return false;
             case EscapeOutcome.AllOff:
                 Hold("all-off", what,
-                    "Auto-Heal and Auto-Rest are off and Allow hangup in all-off mode is not ticked, so no hang-up");
+                    "the master switch is off and Allow hangup in all-off mode is not ticked, so no hang-up");
                 return false;
         }
 

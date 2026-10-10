@@ -2779,9 +2779,48 @@ public sealed class LoopRunner : IRecoverableEngine
     // genuine Start() call — see NotifyDisconnected's rationale.
     private Loop? _pendingReconnectResume;
 
+    // True while the master switch (Auto-All) is off. The restart after a
+    // reconnect is an engine starting by itself, so it waits for the switch:
+    // restarted then, the loop would raise its start events (the session reset,
+    // the party's @reset, the base-modes settle) with the user's autos off.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    // The first game prompt came with the switch off: the restart is owed, and
+    // ResumeAfterMasterSwitch runs it.
+    private bool _reconnectResumeHeldBySwitch;
+    public bool ReconnectResumeHeldForMasterSwitch => _reconnectResumeHeldBySwitch;
+
     // Reset States, and a death found out at the login: don't restart the loop on
     // the next prompt after a reconnect.
-    public void ClearPendingReconnectResume() => _pendingReconnectResume = null;
+    public void ClearPendingReconnectResume()
+    {
+        _pendingReconnectResume = null;
+        _reconnectResumeHeldBySwitch = false;
+    }
+
+    // A restart kept waiting on the master switch is the user's to call off: a
+    // Stop, or another character loaded. One still waiting for the reconnect's
+    // first prompt is left as it always was.
+    public void DropResumeHeldForMasterSwitch(string why)
+    {
+        if (!_reconnectResumeHeldBySwitch) return;
+        _log?.Info("LoopRunner",
+            $"reconnect: loop '{_pendingReconnectResume?.Name}' will not be restarted when the master switch is back on ({why})");
+        ClearPendingReconnectResume();
+    }
+
+    // The master switch is back on, in the game: restart the loop the reconnect
+    // set aside.
+    public void ResumeAfterMasterSwitch()
+    {
+        if (!_reconnectResumeHeldBySwitch) return;
+        _reconnectResumeHeldBySwitch = false;
+        if (_pendingReconnectResume is not { } loop) return;
+        _pendingReconnectResume = null;
+        _log?.Info("LoopRunner",
+            $"reconnect: resuming loop '{loop.Name}' now the master switch is back on");
+        RestartAfterReconnect(loop);
+    }
 
     // Torn down by a connection drop (wired from MainWindowViewModel's
     // client.Disconnected, mirroring every other subsystem's NotifyDisconnected).
@@ -2797,6 +2836,9 @@ public sealed class LoopRunner : IRecoverableEngine
     // no stale recovery state left to misread.
     public void NotifyDisconnected()
     {
+        // A restart held for the master switch goes back to waiting for the next
+        // stay's first prompt, which asks the switch again.
+        _reconnectResumeHeldBySwitch = false;
         if (State != LoopState.Idle)
         {
             _pendingReconnectResume = _loop;
@@ -2846,12 +2888,19 @@ public sealed class LoopRunner : IRecoverableEngine
         // resume.
         if (_pendingReconnectResume is { } loop)
         {
+            if (MasterSwitchOff?.Invoke() == true)
+            {
+                if (!_reconnectResumeHeldBySwitch)
+                    _log?.Info("LoopRunner",
+                        $"reconnect: loop '{loop.Name}' is not restarted with the master switch off; it restarts when the switch is back on");
+                _reconnectResumeHeldBySwitch = true;
+                return;
+            }
             _pendingReconnectResume = null;
-            if (_reformAwaitsRoom?.Invoke() == true) BeginReconnectReformHold();
+            _reconnectResumeHeldBySwitch = false;
             _log?.Info("LoopRunner",
                 $"reconnect: resuming loop '{loop.Name}' on first in-game prompt");
-            Start(loop);
-            ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
+            RestartAfterReconnect(loop);
             return;
         }
         ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
@@ -2862,6 +2911,13 @@ public sealed class LoopRunner : IRecoverableEngine
         // Decide once they have.
         int step = _index;
         _postToUi(() => { if (_index == step) FinishCommandWaitIfAnswered(); });
+    }
+
+    private void RestartAfterReconnect(Loop loop)
+    {
+        if (_reformAwaitsRoom?.Invoke() == true) BeginReconnectReformHold();
+        Start(loop);
+        ReleaseReconnectHoldOnceReformSawRoom(linesStillToCome: true);
     }
 
     private void BeginReconnectReformHold()

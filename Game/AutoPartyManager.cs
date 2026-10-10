@@ -630,8 +630,17 @@ public sealed class AutoPartyManager : IDisposable
 
     // ----- Behaviour ----------------------------------------------------
 
+    // The master switch (true = off): off, nobody is invited, joined, nagged or
+    // uninvited by us. The nags and invite waits already running keep their
+    // state and are settled on the first timer tick after it is back on; their
+    // movement hold is parked meanwhile by MovementCoordinator.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    private bool MasterOff => MasterSwitchOff?.Invoke() == true;
+
     private void TryAutoInvite(string given)
     {
+        if (MasterOff) return;
         // Already in our party? Nothing to do — except a pending [Invited] row with no
         // nag running: that invite has gone quiet (a follow that broke into an
         // [Invited] slot, a nag already cut off), and they're standing right here, so
@@ -711,6 +720,7 @@ public sealed class AutoPartyManager : IDisposable
     {
         if (_trainerMenu is null) return;
         if (!_wire.IsBound) return;
+        if (MasterOff) return;
         // Only a leader reforms its group after a trainer trip. A follower's
         // roster snapshot includes its LEADER, and re-inviting the leader is always
         // wrong — the leader re-invites the follower, who auto-joins via
@@ -773,6 +783,7 @@ public sealed class AutoPartyManager : IDisposable
 
     private void TryAutoAccept(string sender)
     {
+        if (MasterOff) return;
         // Reconnect-rejoin override runs first: if the inviter is the leader we
         // remember following before a reconnect, join regardless of whether a
         // per-player customization exists or has JoinPartyIfInvited set. The
@@ -892,6 +903,7 @@ public sealed class AutoPartyManager : IDisposable
     private void TickNags()
     {
         if (_activeNags.Count == 0 && _inviteWaits.Count == 0) { StopNagTimer(); return; }
+        if (MasterOff) return;
         DateTime now = NowProvider();
 
         ExpireInviteWaits(now);
@@ -1014,6 +1026,7 @@ public sealed class AutoPartyManager : IDisposable
         // teleport has nobody to re-invite. SelfIsLeader implies a live party.
         if (!_party.SelfIsLeader) return;
         if (!_wire.IsBound) return;
+        if (MasterOff) return;
 
         DateTime now = NowProvider();
         bool anyDeferred = false;
@@ -1109,6 +1122,7 @@ public sealed class AutoPartyManager : IDisposable
     private void FireReformRedisplay()
     {
         StopReformRedisplay();
+        if (MasterOff) return;
         // Every member's arrival was already witnessed → the reform resolved via
         // the event path and the walker may have resumed; a redisplay now is a
         // no-op nudge at best and risks landing on the resumed walk's next-step
@@ -1138,6 +1152,7 @@ public sealed class AutoPartyManager : IDisposable
     // strangers recalling in, or a member already invited.
     private void TrySendDeferredReformInvite(string given)
     {
+        if (MasterOff) return;
         // Still in the room we teleported from: a member listed or seen here hasn't
         // crossed yet (a delayed teleport), and an invite now would only re-invite
         // someone about to be split off.

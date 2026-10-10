@@ -132,7 +132,16 @@ public sealed class TooHeavyWaitSignal : IDisposable
         _restSync.RequestOk(WaitReason.TooHeavy);
     }
 
-    private void Recheck() => _wire.Send("i");
+    // The master switch (true = off): off, the `i` reads are not sent. The state
+    // stays as it is and the timed read picks it up once the switch is back on,
+    // or the user's own `i` settles it sooner.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    private void Recheck()
+    {
+        if (MasterSwitchOff?.Invoke() == true) return;
+        _wire.Send("i");
+    }
 
     internal void RecheckForTests() => Recheck();
 

@@ -21,7 +21,6 @@ public enum EscapeOutcome
     // Disable Hangups is on.
     HangupsDisabled,
 
-    // Auto-Heal and Auto-Rest are both off and Allow hangup in all-off mode is not
-    // ticked: the all-off rule the low-HP hang-up follows.
+    // The master switch is off and Allow hangup in all-off mode is not ticked.
     AllOff,
 }

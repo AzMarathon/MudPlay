@@ -484,6 +484,9 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private async Task WalkToFavorite(FavoriteRowViewModel? row, RunStartMode mode)
     {
         if (row is null || _walker is null) return;
+        // Before the Stop: a run frozen by the master switch is not given up for
+        // a walk that won't start.
+        if (AppServices.Current.RefuseStartForMasterSwitch("Walk")) return;
         _movement?.Stop();
         Close();
         await RouteChoicePrompt.WalkAsync(AppServices.Current, row.Key, startMode: mode);
@@ -534,6 +537,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private void StartLoop(ManagerLoopRow? row, RunStartMode mode)
     {
         if (row is null || _runner is null) return;
+        if (AppServices.Current.RefuseStartForMasterSwitch("Loop")) return;
         ApplyStartMode(mode);
         _runner.Start(row.Source);
     }
@@ -750,6 +754,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
     private void StartLairSetup(ManagerLairSetupRow? row, RunStartMode mode)
     {
         if (row is null || _autoLair is null) return;
+        if (AppServices.Current.RefuseStartForMasterSwitch("Auto-Lair")) return;
         LoadLairMarkers(row.Source);
         ApplyStartMode(mode);
         _autoLair.Start();
@@ -981,6 +986,7 @@ public sealed partial class NavigationManagerDialogViewModel : ObservableObject,
         }
         if (dest is not { } target) return;
 
+        if (AppServices.Current.RefuseStartForMasterSwitch("Walk")) return;
         _movement?.Stop();
         // Close this manager first, then hand off — the route picker (when a
         // shorter gated shortcut exists) opens as its own modeless window rather

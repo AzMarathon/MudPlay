@@ -173,12 +173,12 @@ public static class ToolbarItemCatalogue
             "ResetStatesCommand",
             Tooltip: "Reset States — stop every engine and clear stuck ailments, waits, holds and pending walks (return to idle; auto toggles untouched)"),
 
-        // Master auto-responses switch. Active = auto-engines run; clicking
-        // off kills every Auto-* (remembering which were on) and also gates
-        // the game-entry command. Clicking back on restores the prior set.
+        // The master switch. Active = on; clicking it off stops everything
+        // automatic (remembering which toggles were on), clicking it back on
+        // gives them back.
         new("ToggleAllAutoOff",   "All auto-responses",   "IconKillSwitch",
             "AllAutoOffCommand",
-            Tooltip: "Master switch — off kills every auto-engine and auto-entry; on restores them"),
+            Tooltip: "Master switch — off stops everything automatic (autos, remote commands, triggers, events, polls, walks); on gives it back"),
 
         // Auto-engine toggles. Button is depressed (IsActive) while its
         // matching GeneralSettings.AutoMode flag is on; clicking flips it.

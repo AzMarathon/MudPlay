@@ -349,13 +349,37 @@ public sealed class CombatProfileManager
         return CombatSpellProfileReport.DescribeRoster(s.Profiles, ActiveIndex);
     }
 
-    // The active profile's full-config line (slots + gates + knobs) — for the
-    // combat-engage log anchor. Null when none is loaded.
-    public string? CurrentConfigLine()
+    // The configuration the last full "engaged" line carried.
+    private string? _engagedConfigLogged;
+
+    // A profile was loaded. Whatever was last logged was another character's, so
+    // this one's first fight is logged in full even when its profile reads the same.
+    public void OnProfileLoaded()
+    {
+        _engagedConfigLogged = null;
+        EnsureSeeded();
+    }
+
+    // Combat was engaged: anchor the fight to the profile driving it. The full
+    // configuration (slots + gates + knobs) goes to the log at Info only when it
+    // differs from the last one logged, a character's first fight included. A
+    // caster's combat drops and re-engages on every cast, so the same 400-character
+    // line was written a dozen times a minute and pushed the fight itself out of a
+    // bug report's log window (report paradigm-20261010-145330); a repeat now names
+    // the profile only, on the Combat channel. The bug report's Combat profiles
+    // section carries every profile's configuration whatever the log holds.
+    public void NoteCombatEngaged()
     {
         int i = ActiveIndex;
-        CombatSpellProfile? a = Active;
-        return a is not null && i >= 0 ? CombatSpellProfileReport.DescribeConfig(a, i + 1) : null;
+        if (Active is not { } active || i < 0) return;
+        string config = CombatSpellProfileReport.DescribeConfig(active, i + 1);
+        if (config == _engagedConfigLogged)
+        {
+            _log?.Combat("CombatProfiles", $"engaged — {CombatSpellProfileReport.Label(active, i + 1)}, configured as last logged");
+            return;
+        }
+        _engagedConfigLogged = config;
+        _log?.Log(LogSeverity.Info, "CombatProfiles", "engaged — " + config);
     }
 
     private CombatProfileSettings? Store() => _profile()?.CombatProfiles;

@@ -28,6 +28,11 @@ public sealed class HealthManagerTests
         // The Auto-Rest switch on its own; the engine switch above stays on.
         public bool RestEnabled { get; set; } = true;
 
+        // The master switch. Off, both probes above read false, as the app's do,
+        // and each hang-up it holds back is noted here.
+        public bool MasterSwitchOff { get; set; }
+        public List<string?> HeldByMasterSwitch { get; } = new();
+
         /// <summary>Char-tier General settings. Default instance has
         /// AllowHangupInAllOffMode=false, so the all-off carve-out stays
         /// dormant unless a test opts in.</summary>
@@ -155,7 +160,7 @@ public sealed class HealthManagerTests
             Coordinator = new MovementCoordinator(Log);
             Health = new HealthManager(State, Coordinator,
                 readSettings: () => Settings,
-                isEnabled: () => AutoHealRestEnabled,
+                isEnabled: () => AutoHealRestEnabled && !MasterSwitchOff,
                 readHangupCommand: () => HangupCommand ?? string.Empty,
                 getActiveMovementEngine: null,
                 getLastSentDirection: null,
@@ -178,7 +183,8 @@ public sealed class HealthManagerTests
                 isStealthed: () => Stealthed,
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
-            Health.SetRestEnabledGate(() => RestEnabled);
+            Health.SetRestEnabledGate(() => RestEnabled && !MasterSwitchOff);
+            Health.SetMasterSwitch(() => MasterSwitchOff, what => HeldByMasterSwitch.Add(what));
             Health.SetDoNotRestSelector(() => SkipRestHere);
             Health.SetRestHereSelector(() => RestHere);
             Health.SetEquipmentApplyingProbe(() => EquipmentApplying);
@@ -342,12 +348,16 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
-    public void RestOff_EmergencyHangupStillFires()
+    public void RestOff_NoLowHpHangup_UntilAutoRestIsBackOn()
     {
-        // Healing by spell alone still hangs up at the hang threshold: only the
-        // resting is switched off, not the engine.
+        // The low-HP hang-up sits behind Auto-Rest (user, 2026-10-09): healing by
+        // spell alone no longer carries it.
         using Harness h = new() { RestEnabled = false };
         h.SetPrompt(hp: 5, maxHp: 200);
+        Assert.DoesNotContain("=x", h.SentLines);
+
+        h.RestEnabled = true;
+        h.Health.Evaluate();
         Assert.Equal(1, h.SentLines.Count(l => l == "=x"));
     }
 
@@ -4183,8 +4193,8 @@ public sealed class HealthManagerTests
         Assert.Equal(0, asked);
     }
 
-    // The all-off rule the low-HP hang-up follows (user, 2026-10-09): with the
-    // autos off nothing responds unless Allow hangup in all-off mode is ticked.
+    // The master-switch rule (user, 2026-10-09): with the switch off nothing
+    // responds unless Allow hangup in all-off mode is ticked.
     [Theory]
     [InlineData(false, EscapeOutcome.AllOff)]
     [InlineData(true, EscapeOutcome.HungUp)]
@@ -4195,7 +4205,7 @@ public sealed class HealthManagerTests
             SysGotoWimpyInsteadOfHanging = true,
             SysGotoWimpyLocation = "wimpy-room",
         };
-        using Harness h = new(s) { AutoHealRestEnabled = false };
+        using Harness h = new(s) { MasterSwitchOff = true };
         h.General.AllowHangupInAllOffMode = allowed;
         h.SetPrompt(hp: 200, maxHp: 200);
 
@@ -4211,7 +4221,7 @@ public sealed class HealthManagerTests
     [Fact]
     public void HangUpForMonster_DisableHangups_OutranksAllowHangupInAllOffMode()
     {
-        using Harness h = new() { AutoHealRestEnabled = false };
+        using Harness h = new() { MasterSwitchOff = true };
         h.General.AllowHangupInAllOffMode = true;
         h.General.DisableHangups = true;
         h.SetPrompt(hp: 200, maxHp: 200);
@@ -4804,9 +4814,9 @@ public sealed class HealthManagerTests
     public void Hangup_DroppedInAllOffMode_StillHangs()
     {
         // The all-off carve-out honours the bleeding-out window too, so an AFK
-        // character that dropped with every engine off still gets its escape.
+        // character that dropped with the master switch off still gets its escape.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings { AllowHangupInAllOffMode = true };
         h.SetPrompt(hp: -10, maxHp: 200);
 
@@ -4818,9 +4828,9 @@ public sealed class HealthManagerTests
     [Fact]
     public void AllOff_HangupAllowed_HpBelowTrigger_StillHangs()
     {
-        // Engine disabled but the opt-in keeps the emergency hangup live.
+        // Master switch off but the opt-in keeps the emergency hangup live.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings { AllowHangupInAllOffMode = true };
         h.SetPrompt(hp: 5, maxHp: 200);   // 2.5% — below default 5% hang threshold
 
@@ -4830,15 +4840,130 @@ public sealed class HealthManagerTests
     [Fact]
     public void AllOff_HangupNotAllowed_HpBelowTrigger_NoHang()
     {
-        // Engine disabled and carve-out off (default) — fully dormant.
+        // Master switch off and carve-out off (default) — fully dormant.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         // h.General left at default (AllowHangupInAllOffMode = false)
         h.State.MaxHp = 200;
         h.State.HasPromptData = true;
         h.State.Hp = 5;
 
         Assert.DoesNotContain("=x", h.SentLines);
+        Assert.NotEmpty(h.HeldByMasterSwitch);
+    }
+
+    // The hang-up matrix (user, 2026-10-09). Master switch off: every automatic
+    // hang-up fires only with Allow hangup in all-off mode. Master switch on: the
+    // low-HP hang-up sits behind Auto-Rest (Auto-Heal alone no longer carries it)
+    // and the others need no toggle. Disable Hangups stops them all.
+    public static IEnumerable<object[]> HangupMatrix()
+    {
+        foreach (bool masterOff in new[] { false, true })
+        foreach (bool allow in new[] { false, true })
+        foreach (bool disabled in new[] { false, true })
+        foreach (bool rest in new[] { false, true })
+            yield return new object[] { masterOff, allow, disabled, rest };
+    }
+
+    private static Harness MatrixHarness(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        Harness h = new() { MasterSwitchOff = masterOff, RestEnabled = rest };
+        h.General = new Models.Profile.GeneralSettings
+        {
+            AllowHangupInAllOffMode = allow,
+            DisableHangups = disabled,
+        };
+        return h;
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_LowHp(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        bool expected = !disabled && (masterOff ? allow : rest);
+        Assert.Equal(expected, h.SentLines.Contains("=x"));
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_ReceivedPanic(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.RespondToReceivedPanic("Tank");
+
+        bool expected = !disabled && (!masterOff || allow);
+        Assert.Equal(expected, acted);
+        Assert.Equal(expected, h.SentLines.Contains("=x"));
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_Pvp(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.HangUpForPvp("Raider is here");
+
+        bool expected = !disabled && (!masterOff || allow);
+        Assert.Equal(expected, acted);
+        Assert.Equal(expected, h.SentLines.Contains("=x"));
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_HangupMonster(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        EscapeOutcome outcome = h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup");
+
+        EscapeOutcome expected = disabled ? EscapeOutcome.HangupsDisabled
+            : masterOff && !allow ? EscapeOutcome.AllOff
+            : EscapeOutcome.HungUp;
+        Assert.Equal(expected, outcome);
+        Assert.Equal(expected == EscapeOutcome.HungUp, h.SentLines.Contains("=x"));
+    }
+
+    // With the master switch off and no opt-in, a received @panic or a PvP
+    // hang-up takes no wimpy jump either: nothing of ours responds.
+    [Fact]
+    public void MasterSwitchOff_NoOptIn_NoWimpyJumpForPanicOrPvp()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true, MasterSwitchOff = true };
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.False(h.Health.RespondToReceivedPanic("Tank"));
+        Assert.False(h.Health.HangUpForPvp("Raider is here"));
+
+        Assert.Null(h.WimpyFiredWith);
+        Assert.Equal(2, h.HeldByMasterSwitch.Count);
+    }
+
+    // A held low-HP hang-up is not latched: it goes out as soon as the switch
+    // that held it allows.
+    [Fact]
+    public void LowHpHangup_HeldByMasterSwitch_FiresWhenSwitchedBackOn()
+    {
+        using Harness h = new() { MasterSwitchOff = true };
+        h.SetPrompt(hp: 5, maxHp: 200);
+        Assert.DoesNotContain("=x", h.SentLines);
+
+        h.MasterSwitchOff = false;
+        h.Health.Evaluate();
+
+        Assert.Contains("=x", h.SentLines);
     }
 
     [Fact]
@@ -4846,7 +4971,7 @@ public sealed class HealthManagerTests
     {
         // Carve-out on but HP healthy — no spurious hangup.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings { AllowHangupInAllOffMode = true };
         h.SetPrompt(hp: 50, maxHp: 200);   // 25% — above 5% hang threshold
 
@@ -4873,10 +4998,10 @@ public sealed class HealthManagerTests
     public void DisableHangups_OverridesAllowHangupInAllOffMode()
     {
         // Both the all-off carve-out AND the master kill-switch are set —
-        // DisableHangups wins, so an all-engines-off character at lethal
-        // HP still won't auto-disconnect.
+        // DisableHangups wins, so a character with the master switch off at
+        // lethal HP still won't auto-disconnect.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings
         {
             AllowHangupInAllOffMode = true,
@@ -5661,6 +5786,387 @@ public sealed class HealthManagerTests
         Assert.NotNull(hpAssert);
         Assert.Equal(HealthManager.AsserterName, hpAssert!.Value.Asserter);
         Assert.Contains("HP", hpAssert.Value.Reason);
+    }
+
+    // ----- a room whose own spell does damage (user, 2026-10-09) -----
+    // "we should heal but not actively try to rest in a room like this": the game
+    // re-casts the room's spell every six seconds and each hit breaks the rest.
+
+    private const string MagmaHeat = "magma heat (#526)";
+
+    private static List<string> InfoLines(Harness h)
+    {
+        List<string> lines = new();
+        h.Log.EntryAdded += e => { if (e.Severity == LogSeverity.Info) lines.Add(e.Message); };
+        return lines;
+    }
+
+    [Fact]
+    public void DamagingRoom_RestDue_NoHoldNoRest_AndSaidOncePerRoom()
+    {
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+
+        h.SetPrompt(hp: 30, maxHp: 100, ma: 10, maxMa: 100);   // both under their rest triggers
+        h.Health.Evaluate();
+
+        Assert.False(h.HealthGateHeld);                         // movement isn't held: the walk carries on out
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);                              // no rest, no meditate
+        Assert.Equal(MagmaHeat, h.Health.RestDeferredByRoomSpell);
+        Assert.True(h.Health.HpRestDeferredByRoomSpell);
+
+        // Standing idle while the room keeps hitting: every prompt asks again, and
+        // nothing is tried, broken and tried again.
+        for (int hp = 29; hp > 20; hp--)
+        {
+            h.State.Hp = hp;
+            h.Health.Evaluate();
+        }
+        Assert.Empty(h.SentLines);
+        Assert.Single(info, l => l.Contains("does damage — not resting here"));
+    }
+
+    [Fact]
+    public void DamagingRoom_TheRestStartsInTheNextRoomThatDoesNotHurt()
+    {
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.False(h.HealthGateHeld);
+
+        // Another damaging room: still nothing, and it says so for this room too.
+        h.Health.NoteRoomChanged();
+        Assert.False(h.HealthGateHeld);
+        Assert.Equal(2, info.Count(l => l.Contains("does damage — not resting here")));
+
+        // Out of the heat. Only the room changed; no prompt did.
+        hurting = null;
+        h.Health.NoteRoomChanged();
+
+        Assert.True(h.HealthGateHeld);
+        Assert.Contains("rest", h.SentLines);
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.Single(info, l => l.Contains("the rest put off in a damaging room starts here"));
+    }
+
+    [Fact]
+    public void DamagingRoom_HealedBackAboveTheTrigger_NothingIsOwed()
+    {
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+
+        h.State.Hp = 90;                                        // the heals kept up
+        h.Health.Evaluate();
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);
+
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        Assert.False(h.HealthGateHeld);
+        Assert.DoesNotContain(info, l => l.Contains("starts here"));
+    }
+
+    [Fact]
+    public void DamagingRoom_ReleasesARestAlreadyHeld()
+    {
+        // Resting in the volcano with the feather on; the feather comes off.
+        using Harness h = new();
+        string? hurting = null;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.True(h.HealthGateHeld);
+
+        hurting = MagmaHeat;
+        h.Health.Evaluate();
+        Assert.False(h.HealthGateHeld);
+    }
+
+    [Fact]
+    public void DamagingRoom_NoDowntimeRestEither()
+    {
+        // The leader lies down in the volcano: a follower above its own floor would
+        // top off beside it anywhere else.
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { },
+            isLeaderResting: () => true);
+        List<string> info = InfoLines(h);
+
+        h.SetPrompt(hp: 150, maxHp: 200);
+
+        Assert.Empty(h.SentLines);
+        Assert.Single(info, l => l.Contains("the leader is resting, but this room's magma heat (#526) does damage"));
+    }
+
+    [Fact]
+    public void DamagingRoom_WinsOverRestUpHere()
+    {
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.RestHere = (true, true);
+        h.SetPrompt(hp: 80, maxHp: 100, ma: 80, maxMa: 100);
+
+        Assert.False(h.Health.HoldForRestHere());
+    }
+
+    [Fact]
+    public void DamagingRoom_FollowerSendsNoWait()
+    {
+        // No hold means no @wait: the follower goes on with the leader and asks in
+        // the next room that doesn't hurt.
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        int waits = 0;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { },
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Equal(0, waits);
+
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        Assert.Equal(1, waits);
+    }
+
+    [Theory]
+    [InlineData(false, false)]   // Auto-Rest off
+    [InlineData(true, true)]     // Sprint mode / a loop's do-not-rest room
+    public void DamagingRoom_NoRestWasComingAnyway_NothingIsDeferred(bool restEnabled, bool skipRestHere)
+    {
+        // "Deferred for the room" turns the rest-time heal on while standing. With
+        // resting ruled out by the user's own settings there is no rest to stand in for.
+        using Harness h = new();
+        h.RestEnabled = restEnabled;
+        h.SkipRestHere = skipRestHere;
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);
+    }
+
+    [Fact]
+    public void DamagingRoom_ManaOnly_NoMeditateEither()
+    {
+        // Room damage breaks a meditation as it does a rest (user, 2026-10-10).
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.SetPrompt(hp: 100, maxHp: 100, ma: 10, maxMa: 100);
+        h.Health.Evaluate();
+
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);
+        Assert.Equal(MagmaHeat, h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);   // no HP rest is owed, so no standing rest-time heal
+    }
+
+    [Fact]
+    public void DamagingRoom_SpellUntickedWhileStandingThere_RestsAtTheNextCheck()
+    {
+        // Settings → Periodic Damage Room Spells: the probe answers from the saved
+        // choice each time, so unticking the spell needs no room change.
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Empty(h.SentLines);
+
+        hurting = null;
+        h.Health.Evaluate();
+
+        Assert.True(h.HealthGateHeld);
+        Assert.Contains("rest", h.SentLines);
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+    }
+
+    [Fact]
+    public void DamagingRoom_FollowerDraggedInWithAWaitOut_ReleasesIt_AndAsksAgainInTheNextRoom()
+    {
+        // The deficit starts in an ordinary room: gate up, @wait out, resting. The
+        // leader's wait window runs out and it walks on into the volcano with the
+        // follower in tow. "A follower keeps following" (user, 2026-10-10): no second
+        // @wait from inside the heat, and the one that is out is released.
+        using Harness h = new();
+        string? hurting = null;
+        int waits = 0, oks = 0;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => oks++,
+            isSelfPoisoned: () => false);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal((1, 0), (waits, oks));
+        int rests = h.SentLines.Count(l => l == "rest");
+        Assert.Equal(1, rests);
+
+        h.Clock += TimeSpan.FromMinutes(1);   // long past the re-ask interval
+        hurting = MagmaHeat;
+        h.Health.NoteRoomChanged();
+
+        Assert.Equal((1, 1), (waits, oks));
+        Assert.False(h.HealthGateHeld);
+        Assert.Equal(MagmaHeat, h.Health.RestDeferredByRoomSpell);
+        Assert.Single(info, l => l.Contains("releasing the leader with @ok"));
+
+        // Every prompt in the heat, and the next burning room, ask nothing more.
+        h.State.Hp = 28;
+        h.Health.Evaluate();
+        h.Clock += TimeSpan.FromMinutes(1);
+        h.Health.NoteRoomChanged();
+        Assert.Equal((1, 1), (waits, oks));
+        Assert.Equal(rests, h.SentLines.Count(l => l == "rest"));
+
+        // Out of it: the rest that was owed, and the @wait that goes with it.
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal((2, 1), (waits, oks));
+        Assert.Equal(rests + 1, h.SentLines.Count(l => l == "rest"));
+    }
+
+    [Fact]
+    public void DamagingRoom_BeginsToBarWhileAWaitIsOut_ReleasesTheLeader()
+    {
+        // No move at all: the feather comes off under a resting follower.
+        using Harness h = new();
+        string? hurting = null;
+        int waits = 0, oks = 0;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => oks++,
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Equal((1, 0), (waits, oks));
+
+        hurting = MagmaHeat;
+        h.Health.Evaluate();
+        h.Health.Evaluate();
+
+        Assert.Equal((1, 1), (waits, oks));   // released once, not on every prompt
+    }
+
+    [Fact]
+    public void DamagingRoom_LeftForARoomTheMapDoesNotHold_NothingStaysOwedHere()
+    {
+        // A move out of a placed room into an unplaced one is no NoteRoomChanged. The
+        // deferral has to end all the same, or the rest-time heal goes on being cast
+        // standing in an ordinary room.
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.True(h.Health.HpRestDeferredByRoomSpell);
+
+        hurting = null;   // an unplaced room bars nothing
+        h.Health.NoteRoomPlacementChanged();
+
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);
+        Assert.True(h.HealthGateHeld);
+        Assert.Contains("rest", h.SentLines);
+
+        // Placed again, in another burning room: the rest under way is given up, and
+        // it is said for this room as for any new one.
+        hurting = MagmaHeat;
+        h.Health.NoteRoomPlacementChanged(new MudPlay.Game.Map.RoomKey(16, 2));
+        Assert.False(h.HealthGateHeld);
+        Assert.Equal(2, info.Count(l => l.Contains("not resting here; healing as set")));
+    }
+
+    [Fact]
+    public void DamagingRoom_TrackerFlappingInOneRoom_SaysItOnce()
+    {
+        // Lost and found again in the same barred room, over and over (a grid of
+        // look-alike rooms): one line for the room, not one per flap.
+        using Harness h = new();
+        var room = new MudPlay.Game.Map.RoomKey(16, 10109);
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.Health.NoteRoomPlacementChanged(room);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+
+        for (int flap = 0; flap < 3; flap++)
+        {
+            hurting = null;
+            h.Health.NoteRoomPlacementChanged();       // lost
+            hurting = MagmaHeat;
+            h.Health.NoteRoomPlacementChanged(room);   // found, where we were
+        }
+
+        Assert.Single(info, l => l.Contains("not resting here; healing as set"));
+    }
+
+    [Fact]
+    public void DamagingRoom_PlacementChangeWithNothingOwed_DoesNothing()
+    {
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => null);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        int sent = h.SentLines.Count;
+
+        h.Health.NoteRoomPlacementChanged();   // the tracker lost its place mid-rest
+
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(sent, h.SentLines.Count);   // the rest under way isn't sent again
+    }
+
+    [Fact]
+    public void DamagingRoom_RestGivenUpWhenTheRoomStartsToBar_RunsNoPostRestCommands()
+    {
+        // Resting with the feather on; it comes off. Nothing was recovered, so the
+        // commands that follow a finished rest don't go out.
+        using Harness h = new(new HealthSettings { PostRestCommand = "look;exits" });
+        string? hurting = null;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Contains("rest", h.SentLines);
+
+        hurting = MagmaHeat;
+        h.Health.Evaluate();
+
+        Assert.False(h.HealthGateHeld);
+        Assert.DoesNotContain("look", h.SentLines);
+        Assert.DoesNotContain("exits", h.SentLines);
+
+        // The rest that does finish, in the next room, still runs them.
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        h.State.Hp = 96;
+        Assert.Contains("look", h.SentLines);
+        Assert.Contains("exits", h.SentLines);
     }
 
     // ----- "do not rest in this room" (per-waypoint) -----------------

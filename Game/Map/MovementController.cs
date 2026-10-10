@@ -347,11 +347,17 @@ public sealed class MovementController : IDisposable
         _coordinator.AssertGate(MovementCoordinator.UserGate, nameof(MovementController));
     }
 
+    // Asked as the user resumes a paused run: true means it was refused (the
+    // master switch is off) and the pause stays. Lifting it would only leave the
+    // run frozen on the switch with nothing said.
+    public Func<bool>? RefuseResume { get; set; }
+
     // Inverse of Pause — lifts the user override only. Any engine wait still
     // asserted (an active fight, a rest) keeps the engine paused on its own
     // gate; we just clear the user's hold. No-op when not user-paused.
     public void Resume()
     {
+        if (IsUserPaused && RefuseResume?.Invoke() == true) return;
         LetErrandGo();
         if (!IsUserPaused) return;
         if (_autoLair.IsActive)
@@ -383,6 +389,7 @@ public sealed class MovementController : IDisposable
         Stopping?.Invoke();
         if (_autoLair.IsActive) _autoLair.Stop("user stop from toolbar");
         if (_loops.State != LoopState.Idle) _loops.Stop("user stop from toolbar");
+        _loops.DropResumeHeldForMasterSwitch("user stop from toolbar");
         // Idle too: a journey can stand between two of its legs with no walk running
         // (waiting at a giver for the hand-over), and Stop is the end of it.
         _walker.Stop("user stop from toolbar");
@@ -408,9 +415,17 @@ public sealed class MovementController : IDisposable
         // untouched; ReleaseFromAutoAll clears it and the engines auto-resume.
         _coordinator.AssertGate(MovementCoordinator.AutoAllGate, nameof(MovementController),
             "Auto-All engaged — movement frozen");
+        // After the freeze is up, so releasing the holds moves nothing.
+        IReadOnlyList<string> released = _coordinator.ParkHoldsForMasterSwitch();
         _log?.Info(nameof(MovementController),
-            "Auto-All engaged — navigation frozen (resumes when Auto-All is restored).");
+            "Auto-All engaged — navigation frozen (resumes when Auto-All is restored)."
+            + (released.Count > 0 ? $" Holds released: {string.Join(", ", released)}." : string.Empty));
     }
+
+    // Re-assert the holds still owed, ahead of ReleaseFromAutoAll. Separate from
+    // it so the engines that derive a hold from current state can be re-run in
+    // between, with every hold up before the freeze lifts.
+    public void RestoreHoldsBeforeAutoAllRelease() => _coordinator.RestoreHoldsAfterMasterSwitch();
 
     // Auto-All kill switch restored: resume the navigation we suspended, unless the
     // user has since taken it over (manually resumed, stopped, or started a new one)
@@ -420,6 +435,9 @@ public sealed class MovementController : IDisposable
     {
         if (!_autoAllSuspended) return;
         _autoAllSuspended = false;
+        // A no-op when the caller already restored them; never lift the freeze
+        // with a hold still parked.
+        _coordinator.RestoreHoldsAfterMasterSwitch();
         // Drop the gate — the coordinator fires PauseStateChanged(false) when no other
         // gate remains, and the walker / loop resume from where they held. A gate the
         // user asserted themselves (UserGate) survives, so their own pause persists.

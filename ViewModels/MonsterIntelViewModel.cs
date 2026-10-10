@@ -1280,7 +1280,7 @@ public sealed partial class MonsterIntelViewModel : ObservableObject, IDisposabl
             ObservationLines.Add(
                 $"Landed hits: {o.HitCount}, {o.HitDamageMin}-{o.HitDamageMax} dmg (avg {o.AvgHitDamage:0.#})");
         if (o.SwingCount > 0)
-            ObservationLines.Add($"Hit rate: {o.HitRatePercent:0.#}% ({o.HitCount}/{o.SwingCount} swings)");
+            ObservationLines.Add($"Weapon hit rate: {o.HitRatePercent:0.#}% ({o.HitCount}/{o.SwingCount} swings)");
         if (o.PhysicalNoEffectCount > 0)
             ObservationLines.Add(
                 $"Physical attacks had no effect {o.PhysicalNoEffectCount}x — your weapon/fists aren't magical enough for this monster");

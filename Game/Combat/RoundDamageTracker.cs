@@ -106,6 +106,7 @@ public sealed class RoundDamageTracker : IDisposable
     private Func<string, bool>? _isOwnRoomSpellLine;
     private Func<bool>? _ownSpellRepeating;
     private DateTimeOffset _lastOwnCastAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastOwnAttackCastAt = DateTimeOffset.MinValue;
     // The last hit that named both sides — a proc right after it is the hitter's.
     private (string Source, string Target, DateTimeOffset At, string Line)? _lastHit;
     // The room's monsters by the name on their lines → game-data number.
@@ -191,6 +192,14 @@ public sealed class RoundDamageTracker : IDisposable
     // OwnCastWindow and read as nobody's.
     public void SetOwnSpellRepeating(Func<bool> repeating) => _ownSpellRepeating = repeating;
 
+    // Whether a damage line is a room's own damage, which falls anywhere in the
+    // round (the round clock's test, wired by AppServices). Such a line is damage
+    // taken in a round already open and never opens one or keeps one open: read as
+    // a fight's it showed up as a round of its own two seconds after the real one.
+    public void SetOffRoundDamageCheck(Func<string, bool> isOffRoundDamage) => _isOffRoundDamage = isOffRoundDamage;
+
+    private Func<string, bool>? _isOffRoundDamage;
+
     // The room's monsters as MonsterHpTracker has them: the one a hit on a name lands on
     // (the first of that name) and every one of them, each with a stable id and its HP
     // estimate before the hit. Unbound, or a monster with no HP data, and damage counts
@@ -243,11 +252,18 @@ public sealed class RoundDamageTracker : IDisposable
     }
 
     // We sent a cast (engine or typed), so a caster's-eye spell line in the next few
-    // seconds may be ours.
-    public void NoteOwnCast() => _lastOwnCastAt = _now();
+    // seconds may be ours. attack is false for a cast that costs no round energy (a
+    // heal, a buff, a cure): it can't be what a missed swing really was.
+    public void NoteOwnCast(bool attack = true)
+    {
+        _lastOwnCastAt = _now();
+        if (attack) _lastOwnAttackCastAt = _lastOwnCastAt;
+    }
 
-    // We sent a cast recently enough that it may still be landing.
-    public bool CastLately => _now() - _lastOwnCastAt <= OwnCastWindow;
+    // We sent an attack spell recently enough that it may still be landing. A heal
+    // going out between rounds doesn't count: it made a weapon user's only swing of
+    // the round, a whiff, read as a resisted cast.
+    public bool AttackCastLately => _now() - _lastOwnAttackCastAt <= OwnCastWindow;
 
     private void OnLine(LineExtractor.EmittedLine line)
     {
@@ -330,9 +346,11 @@ public sealed class RoundDamageTracker : IDisposable
         int? dealerId = !a.NoDealer && source is not null && IsFoe(source)
             ? _monsterTarget?.Invoke(source)?.Id : null;
 
-        bool opens = _state.InCombat
-            || source == DamageLineAttributor.Self
-            || (source is not null && target is not null);
+        bool offRound = _isOffRoundDamage?.Invoke(text) == true;
+        bool opens = !offRound
+            && (_state.InCombat
+                || source == DamageLineAttributor.Self
+                || (source is not null && target is not null));
         Attributed?.Invoke(new AttributedLine(text,
             new DamageAttribution(a.NoDealer ? null : source, target, a.Amount, a.NoDealer), ownSpell, proc, foesHit.Count));
         bool counted = _current is not null || opens;
@@ -341,7 +359,7 @@ public sealed class RoundDamageTracker : IDisposable
         if (!counted) return;
 
         RoundAccumulator round = Current(now);
-        NoteActivity();
+        if (!offRound) NoteActivity();
         // Damage nobody dealt (a poison tick) is only damage taken. The dealer dealt what
         // the victims could take.
         // Each number is kept twice: as the cap setting counts it, and the other way

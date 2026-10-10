@@ -124,6 +124,9 @@ public sealed class PlayerDeathMovementHalt : IDisposable
             "Movement stopped after death — engines and destinations cleared.");
     }
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // ResyncDelay after death: if the tracker still hasn't anchored the graveyard
     // (a slow / missed respawn display), send a bare CR to re-display it now so the
     // PendingRespawn candidate search lands the room. A tick where we've already
@@ -134,6 +137,9 @@ public sealed class PlayerDeathMovementHalt : IDisposable
         if (_tracker.State.Confidence is not (RoomConfidence.PendingRespawn or RoomConfidence.Lost))
             return;
         if (_wireResync is null) return;
+        // The stop on death is a safety act and always runs; the redisplay it
+        // would send is a position fix, which the master switch holds back.
+        if (MasterSwitchOff?.Invoke() == true) return;
         _wireResync(System.Text.Encoding.Latin1.GetBytes("\r"));
         _log?.Info(DeathLineWatcher.LogCategory,
             "Post-death graveyard resync — sent CR to re-observe the respawn room.");

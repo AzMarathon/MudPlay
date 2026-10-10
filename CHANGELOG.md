@@ -1,9 +1,50 @@
 # Version history
 
-## 3.165.10
+## 3.167.8
 
 - Using, eating or drinking an item that casts a spell now counts as ending your sneak, so the next move re-sneaks
 - Commands that end a sneak, and a direction you send, now drop a hide too
+
+## 3.167.7
+
+- A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
+- A prompt that just matched is no longer reported as one the statline can't read
+- Run-out buff timers of members who left the party are dropped
+- Engaged combat profile logged in full when it changes, always at Info; a short line on repeats
+- A spell that lands no longer counts as a missed weapon swing in Monster Intel's observations
+- Monster Intel's saved weapon swing counts are cleared once per character: older versions counted spell casts as misses
+- Lair timer log lines print local time
+- Paradigm: the farm fields' haze line is no longer logged as unrecognized
+- bug reports addressed: paradigm-20261010-145330
+
+## 3.167.0
+
+- Auto-All is a true master switch: off, nothing automatic acts
+- `@auto-all` is the only remote command followed while it is off
+- Switching it on gives back what was ticked when it went off
+- A walk, loop or Auto-Lair started with it off is refused, with a notice
+- Low-HP hang-up now needs Auto-Rest on
+- "Allow hangup in all-off mode" follows the master switch
+- Events held more than 5 minutes by it: you pick which still run
+
+## 3.166.0
+
+- New Settings tab **Periodic Damage Room Spells**: per room spell, whether it bars resting
+- Each spell's record, damage, how it comes, what counters it, and its rooms as map links
+- No rest or meditate in a barred room (by default: volcano heat, swamp poison, a river with no raft)
+- The walk carries on and the rest starts in the next room that isn't barred
+- *Heal (rest)* is cast standing while that rest is owed
+- A follower dragged into a barred room releases its `@wait` and asks again outside it
+- With the room's counter in effect, resting is as normal: a negating item worn, a raft or the sunstone wristband just held
+- A room's own damage no longer puts you in combat, swaps gear, sends an Enter or counts in Round Totals
+- A gear command from a macro, alias, trigger or event mid-fight re-attacks at once
+- A stopped spell fight is picked up on the next round tick, not only on a combat line
+- Paradigm: freezing cold, ocean drowning, bog poison and murky drown lines recognised
+- Bug report: the room's spell and whether it bars resting, and the spells changed from the default
+
+## 3.165.10
+
+- A handed-back item counts toward a Missing deathpile from anyone, at any time
 
 ## 3.165.9
 

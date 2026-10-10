@@ -396,6 +396,32 @@ public sealed class LairTimerStoreTests : IDisposable
         Assert.Null(store.NextReadyAt(lair));
     }
 
+    // An entry is stamped in UTC and a kill in local time. Both are instants, so the
+    // timer is the same whichever offset the kill arrives with, and the log prints
+    // both on the one clock (report paradigm-20261010-145330: the entry read four
+    // hours from the kill beside it).
+    [Fact]
+    public void KillStampedWithALocalOffset_TimesAndPrintsAsTheSameInstant()
+    {
+        var (cache, graph, tracker) = BuildFixture();
+        using LairTimerStore store = new(cache, graph, tracker);
+        RoomKey lair = new(5, 100);
+        tracker.SetLocated(lair);
+        DateTimeOffset entered = store.LastEntered(lair)!.Value;
+        Assert.Equal(TimeSpan.Zero, entered.Offset);
+
+        DateTimeOffset killUtc = entered.AddSeconds(25);
+        DateTimeOffset killLocal = killUtc.ToOffset(TimeSpan.FromHours(-4));
+        store.NoteKill(killLocal);
+
+        Assert.Equal(killUtc.AddSeconds(1800), store.NextReadyAt(lair));
+        Assert.Equal(TimeSpan.FromSeconds(25), store.LastKilled(lair)!.Value - entered);
+        Assert.Equal(LairTimerStore.LogTime(killUtc), LairTimerStore.LogTime(killLocal));
+        Assert.Equal(
+            killUtc.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture),
+            LairTimerStore.LogTime(killUtc));
+    }
+
     [Fact]
     public void ResetArrivals_NoCrash_OnEmptyStore()
     {

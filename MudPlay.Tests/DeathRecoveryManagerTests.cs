@@ -81,9 +81,8 @@ public sealed partial class DeathRecoveryManagerTests
         public bool AutoSearches { get; set; }
         public List<RoomKey> Searched { get; } = new();
         public HashSet<string> Stays { get; } = new(StringComparer.OrdinalIgnoreCase);
-        // Items that are keys by their game data, and who is in our party now.
+        // Items that are keys by their game data.
         public HashSet<string> KeyItems { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public HashSet<string> Party { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<RoomKey> StashRooms { get; } = new();
         private readonly List<IDisposable> _engines = new();
 
@@ -128,7 +127,6 @@ public sealed partial class DeathRecoveryManagerTests
                 autoSearchesRooms: () => AutoSearches,
                 noteRoomSearched: Searched.Add);
             Recovery.SetStaysOnDeathProbe(Stays.Contains, isKeyItem: KeyItems.Contains);
-            Recovery.SetPartyMemberProbe(Party.Contains);
             // As the app wires it, after recovery's own subscription: the floor list
             // belongs to the room just left, so a genuine room change empties it.
             Tracker.StateChanged += t =>

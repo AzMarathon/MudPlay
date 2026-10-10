@@ -53,6 +53,32 @@ public sealed class SneakGuardTests
         Assert.Equal(SneakHold.None, w.Guard.Current);
     }
 
+    // With the master switch off Auto Sneak reads off, which would lift the hold
+    // and send everything held. The queue is kept instead and goes out, as it
+    // would have, once the switch is back on and the hold really lifts.
+    [Fact]
+    public void MasterSwitchOff_HeldCommandsAreKept_NotFlushed()
+    {
+        World w = new() { Npc = true };
+        bool off = false;
+        w.Guard.MasterSwitchOff = () => off;
+        w.Guard.Poll();
+        Assert.True(w.Guard.TakeIfHeld("invite Raijin"));
+
+        off = true;
+        w.AutoSneak = false;
+        w.Guard.Poll();
+        Assert.Empty(w.Sent);
+
+        off = false;
+        w.AutoSneak = true;
+        w.Guard.Poll();
+        Assert.Empty(w.Sent);          // still sneaking past the NPC: still held
+        w.Npc = false;
+        w.Guard.Poll();
+        Assert.Equal(new[] { "invite Raijin" }, w.Sent);
+    }
+
     [Fact]
     public void ShadowRestInAnEmptyRoom_HoldsNothing()
     {
