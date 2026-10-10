@@ -1,9 +1,15 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.1**
-> - Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
-> - In that mode the room tooltip and the Legend name the colours
+> **Version 3.160.2**
+> - Chest Offload Drop / Drop All hide when Hide items when discarding is on
+> - Hidden items leave the Chest Offload list
+> - A hide a full room refuses is retried in each new room
+> - A sale, drop, ✕ or Clear list calls a waiting hide off
+> - No hide sent for a copy not in the pack
+> - Refused or unanswered auto-discard drops no longer stay counted all session
+> - No discard after a death or reconnect until the inventory is read
+> - Items named after a coin (iron crown) no longer read as coin
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
