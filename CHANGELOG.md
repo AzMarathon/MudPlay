@@ -1,5 +1,10 @@
 # Version history
 
+## 3.161.6
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+
 ## 3.161.5
 
 - A room's heat (*You are seared by the flames*) no longer counts as a combat round
