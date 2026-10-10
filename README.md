@@ -1,13 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.6**
-> - Crystal Lake's teleport rooms are never on a route or a loop, for any character, with or without a boat: walks, loops, Auto-Lair travel and automatic trips go round them, and no raft or skiff is offered, fetched or bought for the lake
-> - The lake's rooms without the teleport are ordinary ground and need no raft
-> - When the teleport rooms are the only way, a walk you start shows one card to cross them on your pick (nothing fetched); a trip the client starts stops and logs why
-> - A loop with a waypoint in a teleport room is refused at start, with the reason
-> - Standing in one of those rooms, you are always planned out by the nearest way that leads on to where you are going
-> - A route whose only way there needs a key or other item goes round hazard rooms you hold no counter for when it can, and asks for the key alone (the walk to the Hidden Study no longer crossed the lake or sent for a log raft)
+> **Version 3.161.10**
+> - Crystal Lake's teleport rooms are never on an automatic route or loop; no raft or skiff is offered for them
+> - The lake's other rooms are ordinary ground, no raft needed
+> - A walk you start by hand may cross the teleport rooms on one card; automatic trips stop and log why
+> - A loop waypoint in a teleport room is refused at start
+> - Standing in a teleport room, you are planned out by the nearest way on
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

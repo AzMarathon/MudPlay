@@ -38,12 +38,15 @@ internal static class GhSurveyMerger
         }
     }
 
-    // Merge only the items in `incoming` that AREN'T already on the room's
-    // pre-search visible floor — the true hidden delta a `sea` revealed. A `sea`
-    // re-lists the whole floor (visible + hidden), so merging the raw post-search
-    // snapshot would tag plainly-visible items as hidden and make Sorting waste a
-    // needless search before grabbing them. `visibleByRoom` holds what was on the
-    // floor before any search; anything on it is excluded here.
+    // Merge only the items in `incoming` whose names AREN'T already on the room's
+    // pre-search visible floor. A `sea` reply lists what the search found, not the
+    // whole floor, but it can name a stack the room display already showed: one
+    // Paradigm room displayed `34 rope and grapple` and answered `2 rope and
+    // grapple` (report paradigm-20261009-164508). Tagging such a name hidden would
+    // make Sorting spend a search before grabbing an item it can see, so anything
+    // on `visibleByRoom` (the floor before any search) is excluded here by name.
+    // Whether the reply's copies are in addition to the visible ones is unsettled:
+    // GAME_MECHANICS "Room-wide search during and after combat".
     public static void MergeHiddenDelta(
         Dictionary<RoomKey, List<string>> hiddenByRoom,
         RoomKey room,

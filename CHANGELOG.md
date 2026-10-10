@@ -1,14 +1,27 @@
 # Version history
 
+## 3.161.10
+
+- Crystal Lake's teleport rooms are never on an automatic route or loop; no raft or skiff is offered for them
+- The lake's other rooms are ordinary ground, no raft needed
+- A walk you start by hand may cross the teleport rooms on one card; automatic trips stop and log why
+- A loop waypoint in a teleport room is refused at start
+- Standing in a teleport room, you are planned out by the nearest way on
+- bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.161.7
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+
 ## 3.161.6
 
-- Crystal Lake's teleport rooms are never on a route or a loop, for any character, with or without a boat: walks, loops, Auto-Lair travel and automatic trips go round them, and no raft or skiff is offered, fetched or bought for the lake
-- The lake's rooms without the teleport are ordinary ground and need no raft
-- When the teleport rooms are the only way, a walk you start shows one card to cross them on your pick (nothing fetched); a trip the client starts stops and logs why
-- A loop with a waypoint in a teleport room is refused at start, with the reason
-- Standing in one of those rooms, you are always planned out by the nearest way that leads on to where you are going
-- A route whose only way there needs a key or other item goes round hazard rooms you hold no counter for when it can, and asks for the key alone (the walk to the Hidden Study no longer crossed the lake or sent for a log raft)
-- bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+- The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+- Every line from the game is read faster (a slowdown that came in with 3.157.8)
+- Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+- Bug report: how much is on the floor here and Roomba's slowest floor read
+- bug reports addressed: paradigm-20261009-164508
 
 ## 3.161.5
 
