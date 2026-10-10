@@ -1,12 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.10**
-> - Crystal Lake's teleport rooms are never on an automatic route or loop; no raft or skiff is offered for them
-> - The lake's other rooms are ordinary ground, no raft needed
-> - A walk you start by hand may cross the teleport rooms on one card; automatic trips stop and log why
-> - A loop waypoint in a teleport room is refused at start
-> - Standing in a teleport room, you are planned out by the nearest way on
+> **Version 3.161.9**
+> - Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+> - One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
+> - A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+> - Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+> - Program log lists the summoning room spells and each summon left out
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
