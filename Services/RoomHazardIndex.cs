@@ -289,9 +289,10 @@ public sealed class RoomHazardIndex
     // the items, and a line that passes on `checkitem <one of them>` is what happens
     // to a holder. The sea spells have such lines for each boat, split by level
     // (`maxlevel 49:checkitem 690:random 9445`, `minlevel 50:checkitem 690:random
-    // 9361`), and both lead on to a teleport. No other hazard in either realm's data
-    // has a holder line at all: the river, the ice cavern and the desert stop at
-    // their `failitem`.
+    // 9361`), and both lead on to a teleport. The river, the ice cavern and the
+    // desert's root blocks stop at their `failitem`. Stock's nested desert blocks
+    // (2654, 2659) do have holder lines, but they are not roots and relocate nobody,
+    // so they come out false here as well.
     private bool TeleportsHolders(int tb, Dictionary<int, string> tbActions)
     {
         if (!tbActions.TryGetValue(tb, out string? action) || string.IsNullOrWhiteSpace(action))

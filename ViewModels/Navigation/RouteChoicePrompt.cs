@@ -402,12 +402,9 @@ public static class RouteChoicePrompt
         // cards offered rather than one route and a saving.
         if (!choice.HasFreeRoute)
             reqSummary += $" over {choice.GatedStepCount} step(s)";
-        // Whether the route offered keeps out of hazard rooms or walks into them,
-        // and how many: the first thing asked of a route that goes near a lake.
-        if (choice.RoundedHazardRooms > 0)
-            reqSummary += $", going round {choice.RoundedHazardRooms} hazard room(s) the shortest way through "
-                + $"every gate ({choice.ThroughHazardsStepCount} step(s)) crosses";
-        else if (RouteChoicePlanner.UncounteredHazardRooms(services.Movement, choice.GatedPath) is { Count: > 0 } crossed)
+        // How many hazard rooms the route walks into: the first thing asked of a
+        // route that goes near a lake.
+        if (RouteChoicePlanner.UncounteredHazardRooms(services.Movement, choice.GatedPath) is { Count: > 0 } crossed)
             reqSummary += $", crossing {crossed.Count} hazard room(s)"
                 + (choice.UnprotectedRoomNames is { Count: > 0 } unprotected
                     ? $", {unprotected.Count} of them teleport room(s) nothing protects from "

@@ -417,7 +417,7 @@ public sealed partial class RouteChoiceDialogViewModel
             && choice.Requirements.All(r => r.Kind == RouteRequirementKind.HazardProtection);
         _crossesSurvivableHazard = hazardSurvivable;
         _mixedHazard = hazardSurvivable && !soleHazardOnly;
-        // A counter that does nothing at the crosser's level isn't one to go looking for.
+        // A counter that protects from nothing here (the lake's sea rooms) isn't one to go looking for.
         _hazardCounterNeeded = choice.Requirements.Any(
             r => r.Kind == RouteRequirementKind.HazardProtection && !r.NoProtection);
         SearchSummary = _hazardCounterNeeded
@@ -598,6 +598,11 @@ public sealed partial class RouteChoiceDialogViewModel
                 FreeSummary = "No open detour — the only way there crosses a gate you must clear yourself";
                 GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
             }
+
+            // Whatever else the route asks for, one that crosses rooms nothing protects
+            // from is headed as that crossing. (The hazard-only card says it above.)
+            if (!HasFreeRoute && !soleHazardOnly && choice.Requirements.Any(r => r.NoProtection))
+                GatedSummary = $"Cross the teleport rooms — {StepsEta(choice.GatedStepCount, gatedEta)}";
 
             // A hazard no item makes safe is not something to bring: it is said apart,
             // as what the route does, with the items that don't help named so nobody

@@ -2365,27 +2365,36 @@ public sealed class RouteChoicePlannerTests
         filter.ItemCarriedProbe = _ => false;
     }
 
+    // An ordinary hazard room (a counter can be had for it) is not gone round, however
+    // far: the sole route takes the shorter way through it and asks for the counter
+    // beside the key, as the all-open plan does. Going round it wherever a way
+    // existed sent real walks 100+ steps out of their way.
     [Fact]
-    public void SoleKeyRoute_GoesRoundAHazardRoom_ItHasNoCounterFor()
+    public void SoleKeyRoute_TakesTheShorterWayThroughAnOrdinaryHazardRoom_AndAsksForItsCounter()
     {
         WithGraph(KeyedDoorPastAHazardJson, (bfs, graph, filter) =>
         {
-            RouteChoice? choice = RouteChoicePlanner.Evaluate(
-                bfs, filter, graph, new RoomKey(1, 1), new RoomKey(1, 9));
+            RoomKey from = new(1, 1), to = new(1, 9);
+            IReadOnlyList<Direction>? allOpen;
+            using (filter.SuspendAcquirableGates())
+                allOpen = bfs.FindPath(from, to, filter);
+            Assert.NotNull(allOpen);
+
+            RouteChoice? choice = RouteChoicePlanner.Evaluate(bfs, filter, graph, from, to);
 
             Assert.NotNull(choice);
             Assert.False(choice!.HasFreeRoute);
+            Assert.Equal(allOpen!.Count, choice.GatedStepCount);
             Assert.Equal(
-                new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3), new RoomKey(1, 8), new RoomKey(1, 9) },
+                new[] { new RoomKey(1, 1), new RoomKey(1, 5), new RoomKey(1, 8), new RoomKey(1, 9) },
                 choice.GatedPath);
-            // The key is all the route needs: no counter is asked for, or fetched.
-            RouteRequirement req = Assert.Single(choice.Requirements);
-            Assert.Equal(RouteRequirementKind.DoorKey, req.Kind);
-            Assert.Equal(new[] { 7 }, req.ItemIds);
-            Assert.Empty(RouteChoicePlanner.UncounteredHazardRooms(filter, choice.GatedPath));
-            // What it went round, for the log and the bug report.
-            Assert.Equal(1, choice.RoundedHazardRooms);
-            Assert.Equal(3, choice.ThroughHazardsStepCount);
+            Assert.Equal(
+                new[] { RouteRequirementKind.HazardProtection, RouteRequirementKind.DoorKey },
+                choice.Requirements.Select(r => r.Kind));
+            Assert.Equal(new[] { 42 }, choice.Requirements[0].ItemIds);
+            Assert.False(choice.Requirements[0].NoProtection);
+            Assert.Equal(new[] { 7 }, choice.Requirements[1].ItemIds);
+            Assert.Null(choice.UnprotectedRoomNames);
         },
         spellsJson: HazardSpellsJson,
         itemsJson: HazardItemsJson,
@@ -2407,7 +2416,6 @@ public sealed class RouteChoicePlannerTests
             Assert.Equal(3, choice!.GatedStepCount);
             Assert.Contains(new RoomKey(1, 5), choice.GatedPath);
             Assert.Equal(RouteRequirementKind.DoorKey, Assert.Single(choice.Requirements).Kind);
-            Assert.Equal(0, choice.RoundedHazardRooms);
         },
         spellsJson: HazardSpellsJson,
         itemsJson: HazardItemsJson,
@@ -2433,7 +2441,6 @@ public sealed class RouteChoicePlannerTests
                 new[] { RouteRequirementKind.HazardProtection, RouteRequirementKind.DoorKey },
                 choice.Requirements.Select(r => r.Kind));
             Assert.Equal(new[] { new RoomKey(1, 5) }, RouteChoicePlanner.UncounteredHazardRooms(filter, choice.GatedPath));
-            Assert.Equal(0, choice.RoundedHazardRooms);
         },
         spellsJson: HazardSpellsJson,
         itemsJson: HazardItemsJson,

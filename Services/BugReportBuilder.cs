@@ -1858,11 +1858,7 @@ public static class BugReportBuilder
             IReadOnlyList<Game.Map.RoomKey> entered = RouteChoicePlanner.UncounteredHazardRooms(filter, gatedChoice.GatedPath);
             Kv(sb, "Hazard rooms on the route through gates",
                 $"{entered.Count} walked into with no working counter held"
-                + (entered.Count > 0 ? $" ({string.Join(", ", entered.Take(20).Select(k => $"{k.Map}/{k.Room}"))})" : string.Empty)
-                + (gatedChoice.RoundedHazardRooms > 0
-                    ? $"; goes round {gatedChoice.RoundedHazardRooms} the shortest way through every gate "
-                      + $"({gatedChoice.ThroughHazardsStepCount} step(s)) crosses"
-                    : string.Empty));
+                + (entered.Count > 0 ? $" ({string.Join(", ", entered.Take(20).Select(k => $"{k.Map}/{k.Room}"))})" : string.Empty));
             IReadOnlyList<int> fetchable = svc.SourceableGateItems(reqs);
             Kv(sb, "Gate items on the route through gates", string.Join("; ", reqs.Select(r =>
             {

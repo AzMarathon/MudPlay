@@ -167,11 +167,6 @@ public sealed record RouteChoice(
     IReadOnlyList<RoomKey>? BossWaitPath = null,
     // "pharaoh rastep's room (12/2250)", filled in by the caller for the cards.
     string? BossRoomLabel = null,
-    // For a sole route that goes round hazard rooms: how many the shortest way
-    // through every gate would have walked into, and that way's length. Zero when
-    // the route crosses its hazards (there is no way round) or meets none.
-    int RoundedHazardRooms = 0,
-    int ThroughHazardsStepCount = 0,
     // For a sole route across rooms no item makes safe (a NoProtection requirement):
     // those rooms, named in the order the route meets them ("Crystal Lake
     // (17/1201)"), for the one card that offers the crossing.
@@ -238,21 +233,21 @@ public static class RouteChoicePlanner
 
         // Direct route: acquirable gates suspended so BFS crosses them. Beside a free
         // route it is the route obtaining something would open, so a hazard room no
-        // item protects this crosser from stays closed: a boat is not offered for a
-        // lake it does nothing on (report paradigm-20261009-123349). With no free
-        // route the hazards are dealt with below.
+        // item protects from stays closed: a boat is not offered for a lake it does
+        // nothing on (report paradigm-20261009-123349). With no free route the
+        // hazards are dealt with below.
         IReadOnlyList<Direction>? gated = null;
         if (hasFree)
             using (filter.SuspendAcquirableGatesButUnprotectableHazards())
                 gated = bfs.FindPath(source, destination, filter);
 
-        // A SOLE route (no gate-free way there) goes round every hazard room the
-        // crosser has no counter for when a way round exists. Standing every gate
+        // A SOLE route (no gate-free way there) goes round the rooms nothing protects
+        // from (the lake's sea rooms) when a way round exists. Standing every gate
         // down at once made a route that needed only a door key walk the lake's
-        // teleport rooms as open ground, for a way no shorter than the one beside
-        // them, and ask for a boat to do it (reports paradigm-20261009-135049,
-        // paradigm-20261009-135314). Only when there is no way round does the route
-        // cross them, as it always has.
+        // teleport rooms as open ground, and ask for a boat to do it (reports
+        // paradigm-20261009-135049, paradigm-20261009-135314). Other hazard rooms are
+        // not gone round: a detour of any length to avoid a counter that can be had
+        // was worse than asking for it.
         //
         // Either way a trap on one approach may be dodgeable by taking another (e.g.
         // a hazard room reachable from several sides, only one of which is trapped).
@@ -272,10 +267,9 @@ public static class RouteChoicePlanner
                 through = bfs.FindPath(source, destination, filter);
             if (through is not { Count: > 0 }) return null;
 
-            // Round every hazard room with no counter held; failing that, across the
-            // ones a counter can be had for and round those nothing makes safe (the
-            // lake's sea rooms); and across those only when nothing else gets there.
-            foreach (HazardsKept attempt in new[] { HazardsKept.Uncountered, HazardsKept.Unprotectable, HazardsKept.None })
+            // Round the rooms nothing makes safe; across them only when nothing else
+            // gets there.
+            foreach (HazardsKept attempt in new[] { HazardsKept.Unprotectable, HazardsKept.None })
             {
                 using (Suspend(filter, attempt, Array.Empty<int>()))
                     gated = PlanAsTheWalkWill(bfs, graph, filter, source, destination, avoidTraps: true);
@@ -284,7 +278,6 @@ public static class RouteChoicePlanner
             }
             gated ??= through;
         }
-        bool roundsHazards = kept == HazardsKept.Uncountered;
         if (gated is null || gated.Count == 0) return null;
 
         List<RouteRequirement> reqs = CollectRequirements(graph, filter, source, gated);
@@ -308,17 +301,12 @@ public static class RouteChoicePlanner
             // required (report paradigm-20260913-100733).
             GateClassification gc = ClassifyGates(bfs, filter, graph, source, destination, gated, kept);
             IReadOnlyList<RoomKey> committedKeys = BuildKeyPath(graph, source, gc.CommittedPath);
-            int rounded = roundsHazards
-                ? UncounteredHazardRooms(filter, BuildKeyPath(graph, source, through!)).Except(committedKeys).Count()
-                : 0;
             RouteChoice sole = new(
                 0, gc.CommittedPath.Count, gc.Requirements,
                 Array.Empty<RoomKey>(),
                 committedKeys)
             {
                 ClosedGateItems = gc.ClosedGateItems.Count > 0 ? gc.ClosedGateItems : null,
-                RoundedHazardRooms = rounded,
-                ThroughHazardsStepCount = rounded > 0 ? through!.Count : 0,
                 UnprotectedRoomNames = gc.Requirements.Any(r => r.NoProtection)
                     ? UnprotectedOnPath(filter, graph, committedKeys) : null,
             };
@@ -1036,14 +1024,14 @@ public static class RouteChoicePlanner
     // items it needs. Optionality is a topology fact (does a route avoiding the gate
     // exist?), independent of what the crosser currently carries.
     // Which hazard rooms a sole route's plan keeps closed while the item gates stand
-    // down: the ones the crosser holds no counter for, only the ones no item makes
-    // safe, or none (the route has to cross even those).
-    private enum HazardsKept { None, Unprotectable, Uncountered }
+    // down: only the ones no item makes safe, or none (the route has to cross even
+    // those).
+    private enum HazardsKept { None, Unprotectable }
 
     private static IDisposable Suspend(MovementFilter filter, HazardsKept kept, IReadOnlyCollection<int> keepClosed) =>
-        filter.SuspendAcquirableGatesExcept(keepClosed,
-            keepUncounteredHazards: kept == HazardsKept.Uncountered,
-            keepUnprotectableHazards: kept == HazardsKept.Unprotectable);
+        kept == HazardsKept.Unprotectable
+            ? filter.SuspendAcquirableGatesExceptUnprotectable(keepClosed)
+            : filter.SuspendAcquirableGatesExcept(keepClosed);
 
     // kept: the hazard rooms the route was planned round, so every probe here keeps
     // them closed too. A gate is then optional only when the way round it also stays

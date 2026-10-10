@@ -1366,7 +1366,7 @@ public sealed class AppServices
     public IReadOnlyList<(Game.GameData.BankShop Bank, int? Steps)> BanksNearestFirst(Game.Map.RoomKey from)
     {
         IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
             distances = Bfs.ComputeDistancesFrom(from, Movement, viaBoats: true);
         return Game.GameData.BankCatalog.ByDistance(Game.GameData.BankCatalog.Enumerate(GameData), distances);
     }
@@ -1377,7 +1377,7 @@ public sealed class AppServices
     public IReadOnlyList<(Game.Map.RoomKey Stash, int? Steps, long Copper)> StashesNearestFirst(Game.Map.RoomKey bank)
     {
         IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
             distances = Bfs.ComputeDistancesFrom(bank, Movement, viaBoats: true);
         var rows = new List<(Game.Map.RoomKey Stash, int? Steps, long Copper)>();
         foreach (Game.Map.RoomKey stash in Movement.Stash)
@@ -12414,7 +12414,7 @@ public sealed class AppServices
         // already make (report paradigm-20260917-233549). Null when nothing acquirable is on
         // the way (suspending changes nothing), leaving the plain comparison unchanged.
         int? obtainableSteps;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
         {
             int? obt = Bfs.FindPath(src, destination, Movement)?.Count;
             obtainableSteps = obt is { } o && o < overland.Count ? o : null;

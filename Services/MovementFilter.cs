@@ -459,12 +459,10 @@ public sealed class MovementFilter : IRoomFilter
         IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
         new GateSuspensionScope(this, keepClosed, keepUncounteredHazards, openHazardRooms);
 
-    // The same with the two hazard rules named apart, for the route picker's sole
-    // route: uncountered hazards kept closed, or only those no item makes safe.
-    public IDisposable SuspendAcquirableGatesExcept(
-        IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards, bool keepUnprotectableHazards) =>
-        new GateSuspensionScope(this, keepClosed, keepUncounteredHazards,
-            keepUnprotectableHazards: keepUnprotectableHazards);
+    // The same keeping closed the hazard rooms no item makes safe, for the route
+    // picker's sole route.
+    public IDisposable SuspendAcquirableGatesExceptUnprotectable(IReadOnlyCollection<int> keepClosed) =>
+        new GateSuspensionScope(this, keepClosed, keepUnprotectableHazards: true);
 
     // Whether stepping into this room is refused, as things stand, for want of a
     // counter to its cast-on-enter hazard. What a route card's "cross it" asks the

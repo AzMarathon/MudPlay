@@ -778,6 +778,7 @@ public sealed class RouteChoiceDialogViewModelTests
             hazardCounterSource: null, hazardSurvivable: false);
 
         Assert.False(vm.ShowSearchCard);
+        Assert.StartsWith("Cross the teleport rooms — ", vm.GatedSummary);
         Assert.StartsWith("Requires the dragon key. Crosses 1 room that can teleport you away", vm.RequirementSummary);
     }
 
