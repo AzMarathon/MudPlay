@@ -4454,9 +4454,14 @@ public sealed class AppServices
         {
             if (t.NewRoom?.Key != t.PreviousRoom?.Key) RecentFoes.Clear();
         };
+        // A room spell's kill names nobody: the engaged target is only the monster the
+        // round was anchored to, which may be the boss while an add is the one that
+        // died. It goes in unnamed, and is the boss's only on the exp it paid or the
+        // roster re-read finding the boss gone.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
-                Combat.DeathAttributionTarget, RecentFoes.Within(TimeSpan.FromSeconds(12)));
+                evt.RoomSpellRoster is null ? Combat.DeathAttributionTarget : null,
+                RecentFoes.Within(TimeSpan.FromSeconds(12)));
         // What the boss is worth, and what everything else in its room is: an unnamed
         // death there is told apart by the exp it paid.
         BossTimers.SetRoomExpResolver((def, room) =>
@@ -4542,6 +4547,11 @@ public sealed class AppServices
             // is re-picked a beat later, instead of sitting through the ~5s idle-stall
             // tick that would otherwise re-pick the corpse, no-op it, and only then
             // force the re-display.
+            //
+            // Not for a room spell's kill: the combat manager raised that one itself,
+            // from the exp line it is still handling, and asks for the re-display
+            // there. What it was fighting is no guide to which monster died.
+            if (evt.RoomSpellRoster is not null) return;
             Log.Info(Game.Combat.MonsterDeathWatcher.LogCategory,
                 "death — forcing roster resync");
             Combat.NoteUnattributedDeath();
@@ -4576,6 +4586,10 @@ public sealed class AppServices
             // Resolve a debuff slot's cast-code to its catalog row (energy cost +
             // targeting scope) so a mis-slotted spell is rejected before it casts.
             resolveSpellByCode: code => Spellbook.FindByCastCode(code));
+        // A kill of our own room spell is a death like any other, raised on its exp
+        // line: the watcher's exp + *Combat Off* pairing can't see one that leaves a
+        // survivor, since the game prints no *Combat Off* for it (Paradigm).
+        Combat.RoomSpellKill += (experience, roster) => MonsterDeath.NoteRoomSpellKill(experience, roster);
 
         // Dark-room combat. A room too dark to show "Also here:" hides any
         // hostile sharing it — the only evidence is the mob's dark-cyan attack
@@ -4638,6 +4652,8 @@ public sealed class AppServices
         // suppressed while blind.
         Combat.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
         CombatTracker.SetDarkRoomProbe(() => RoomTracker.IsInDarkRoom);
+        // Tells a roster emptied where we stand from a move out of a fight.
+        CombatTracker.SetCurrentRoomProbe(() => RoomTracker.State.CurrentRoom?.Key);
 
         // The Combat → Min/Max Monsters window only makes sense while a
         // walker / loop / auto-lair is actively trying to move us past a
@@ -4938,7 +4954,13 @@ public sealed class AppServices
         // TickEngine.CombatTickElapsed so the next round can cast.
         Cast = new Game.Spells.CastCoordinator(Router, Log);
         Tick.CombatTickElapsed += () => Cast.OnCombatTick(Tick.LastCombatTickWasPlaced);
-        Cast.CastSent += _ => RoundDamage.NoteOwnCast();
+        // The line is "<cast code>[ <target>]"; only a spell that costs round energy
+        // is an attack cast.
+        Cast.CastSent += line =>
+        {
+            int space = line.IndexOf(' ');
+            RoundDamage.NoteOwnCast(attack: CombatSpells.IsCombatSpell(space < 0 ? line : line[..space]));
+        };
 
         // ConditionTracker reads MessageStore +
         // line-side patterns to surface ActiveFlags. CastingDirector
@@ -5407,7 +5429,7 @@ public sealed class AppServices
             // A hand cast ends a sneak like an engine one, so it re-sneaks the same way.
             onManualCast: (c, target) =>
             {
-                RoundDamage.NoteOwnCast();
+                RoundDamage.NoteOwnCast(attack: CombatSpells.IsCombatSpell(c));
                 Combat.OnManualCastObserved(c, target);
                 CastDirector.NoteManualBuffCast(c, target);
                 Stealth.ReSneakAfterCast();
@@ -6087,7 +6109,8 @@ public sealed class AppServices
         // tiebreaker so a stacked denomination-named item ("2 gold key") isn't
         // mistaken for coin (see IsCashEntry).
         GroundItems = new Game.Inventory.GroundItemTracker(Router, Currency,
-            isKnownItem: IsKnownGroundItem);
+            isKnownItem: IsKnownGroundItem,
+            isRoomName: text => RoomGraph.FindByName(text).Count > 0);
         // Auto-recover reads the floor survey to confirm our corpse is in the room
         // before sending `recover corpse` (and arms off its SurveyUpdated event).
         DeathRecovery.AttachGroundItems(GroundItems);
@@ -6438,20 +6461,16 @@ public sealed class AppServices
                 Profile.Save();
             });
         CombatProfiles.EnsureSeeded();
-        Profile.ProfileLoaded += _ => CombatProfiles.EnsureSeeded();
+        Profile.ProfileLoaded += _ => CombatProfiles.OnProfileLoaded();
         ProfileSwap = new Game.Remote.ProfileSwapHandler(RemoteCommands, CombatProfiles);
 
-        // Anchor each fight to the combat profile driving it: on the InCombat
-        // false→true edge, drop a Combat-channel line naming the active profile and
-        // its full config, so a combat-diagnostics log read pins which profile — and
-        // how it was configured — fought, without waiting for a swap. Gated on the
-        // Combat toggle (off in a normal session), so no per-engage noise; switches
-        // themselves already log at Info.
+        // Anchor each fight to the combat profile driving it, on the InCombat
+        // false→true edge, so a log read pins which profile fought and how it was
+        // configured without waiting for a swap.
         PlayerState.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName != nameof(Game.PlayerState.InCombat) || !PlayerState.InCombat) return;
-            if (Log.IsCombatEnabled && CombatProfiles.CurrentConfigLine() is { } cfg)
-                Log.Combat("CombatProfiles", "engaged — " + cfg);
+            if (e.PropertyName == nameof(Game.PlayerState.InCombat) && PlayerState.InCombat)
+                CombatProfiles.NoteCombatEngaged();
         };
 
         // Unwearable-slot blocks: keep the Equipment tab's block set in sync with
@@ -7082,6 +7101,9 @@ public sealed class AppServices
         // monster instead of session-wide; persists on the loaded profile.
         MonsterObservations = new Game.Combat.MonsterObservationTracker(
             Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
+        // One judge of what was a swing: a miss the session figures take back as a
+        // spell's cast line comes off the monster's record too.
+        CombatSession.CastLineMissRetracted += () => MonsterObservations.RetractLastMiss();
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The
@@ -11833,6 +11855,14 @@ public sealed class AppServices
         HashSet<int> numbers = new();
         foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
             if (id.Number is { } n) numbers.Add(n);
+        // A room spell's kill is one of the kinds the room listed, and the monster we
+        // were fighting is only the one the round was anchored to.
+        if (evt.RoomSpellRoster is { } listed)
+        {
+            foreach (Game.Combat.MonsterDeathIdentity id in listed)
+                if (id.Number is { } n) numbers.Add(n);
+            return numbers;
+        }
         if (Combat.DeathAttributionTarget is not { Length: > 0 } dying) return numbers;
 
         if (RoomClassifier.Current is { } roster)
@@ -11873,6 +11903,10 @@ public sealed class AppServices
         // The nudge is ours to send, not the game's to need: with the master
         // switch off the stall runs its length, or the user's own Enter ends it.
         if (AutoModeController.KillSwitchEngaged) return;
+        // The response and the coin hold are for a death that did stall the room. A
+        // room spell's kill among several kinds may not be the one with the death
+        // spell, so it is answered only when the room listed a single kind.
+        if (evt.RoomSpellRoster is { Count: > 1 }) return;
         foreach (int num in DyingMonsterNumbers(evt))
         {
             int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;

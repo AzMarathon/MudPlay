@@ -1,6 +1,6 @@
 # Version history
 
-## 3.167.1
+## 3.167.16
 
 - After a death no walk or loop takes a toll, fare or sailing until the inventory is read again (your coin went with the pile); a death in an arena room takes nothing
 - A toll or fare the game refuses is never sent twice, and stays closed until an inventory read shows its price
@@ -10,6 +10,46 @@
 - The re-read a refusal asks for waits for Auto-All to come back on; the one after a death is no longer lost to a held send
 - Program log and bug report show the purse a toll was judged on
 - bug reports addressed: paradigm-20261010-145529
+
+## 3.167.15
+
+- A new attack's `*Combat Off*` is no longer read as a kill (an attack sent at the survivor of a room spell)
+- The survivor stays the target, the room isn't taken for cleared and the loop doesn't walk on
+- A buff cast right after that attack is followed by the attack again at once
+- A typed `break` just after a kill isn't counted as another
+- No lair-timer kill, kill count or kill sound for a kill that didn't happen
+- A room read again after a room spell's kills is never emptied by them
+- A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
+- A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
+- Program log notes a `*Combat Off*` that answers a command
+- bug reports addressed: paradigm-20261010-145330
+
+## 3.167.12
+
+- Roomba adds a room's hidden copies to its visible ones
+- A hidden count is the highest any one search showed
+- Item-location log written once per room
+- Sort takes visible copies first, hidden ones after a search
+- A stack smaller than recorded is re-read and what's there picked up
+- Copies taken from a stack that ran out are still delivered
+- A hidden stack the search missed is reported as not found
+- Final lap rewrites each room's item-location entry
+- A room changed after the sort is logged once
+- After "You cannot carry that much!" the room's other pickups wait for the pack read
+- Roomba's program log is one line per room
+- Bug report shows Roomba's floor counts
+
+## 3.167.7
+
+- A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
+- A prompt that just matched is no longer reported as one the statline can't read
+- Run-out buff timers of members who left the party are dropped
+- Engaged combat profile logged in full when it changes, always at Info; a short line on repeats
+- A spell that lands no longer counts as a missed weapon swing in Monster Intel's observations
+- Monster Intel's saved weapon swing counts are cleared once per character: older versions counted spell casts as misses
+- Lair timer log lines print local time
+- Paradigm: the farm fields' haze line is no longer logged as unrecognized
+- bug reports addressed: paradigm-20261010-145330
 
 ## 3.167.0
 

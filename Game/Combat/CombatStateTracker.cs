@@ -425,6 +425,33 @@ public sealed class CombatStateTracker : IDisposable
         _isInDarkRoom = isInDarkRoom;
     }
 
+    // The room the character stands in (RoomTracker's confirmed room), and the one
+    // it stood in when a hostile last held the gate or a combat line last arrived
+    // with the gate held. A RoomChange wipe is not always a move: CombatManager
+    // empties the roster in place when a room spell's kills cover every hostile
+    // listed, and that reached the walker as a fight walked out on, a 1 to 2 s hold
+    // after every room wiped clean (report paradigm-20261010-145330). Only a wipe
+    // that finds us in another room is one. Unwired, or either room unknown, a wipe
+    // reads as a move, as it always did.
+    private Func<RoomKey?>? _currentRoom;
+    private RoomKey? _gateRoom;
+
+    // For the bug report: where the gate was last held.
+    public RoomKey? GateRoom => _gateRoom;
+
+    public void SetCurrentRoomProbe(Func<RoomKey?> currentRoom)
+    {
+        ArgumentNullException.ThrowIfNull(currentRoom);
+        _currentRoom = currentRoom;
+    }
+
+    private bool LeftTheGateRoom()
+    {
+        if (_currentRoom is null) return true;
+        if (_gateRoom is not { } held || _currentRoom() is not { } here) return true;
+        return held != here;
+    }
+
     // True while combat is held on purpose (a ShadowRest resting stealthed beside a
     // monster). The silence is the point then, not a stall: the watchdog leaves the
     // gate up instead of re-displaying the room every 6 s (report
@@ -744,8 +771,16 @@ public sealed class CombatStateTracker : IDisposable
             // empty room emits no further observation to release it); if the
             // monster followed, its arrival observation re-asserts within
             // milliseconds.
+            //
+            // A wipe that leaves us standing where the gate was last held is the
+            // roster dropped in place, a room cleared by kills (see _gateRoom).
             if (obs.Source == RoomObservationSource.RoomChange && _gateAsserted)
-                EngagedTargetAbandoned?.Invoke("left a room with an engaged target still alive");
+            {
+                if (LeftTheGateRoom())
+                    EngagedTargetAbandoned?.Invoke("left a room with an engaged target still alive");
+                else
+                    _log?.Combat(LogCategory, "roster emptied in the room we fought in — a cleared room, not a fight walked out on");
+            }
 
             // Room is now clear of engageable monsters → combat truly ended. This
             // is the authoritative "we're out of combat" signal; CombatStatus=Off
@@ -917,6 +952,10 @@ public sealed class CombatStateTracker : IDisposable
 
     private void AssertGate(string reason)
     {
+        // Re-read on every hold, not only the first: a new room's "Also here:" holds
+        // the gate before the move is confirmed, while the tracker still names the
+        // room we left; the roster re-emitted on the confirm corrects it.
+        _gateRoom = _currentRoom?.Invoke();
         if (_gateAsserted) return;
         _gateAsserted = true;
         _gateAssertedAt = _now();
@@ -976,6 +1015,9 @@ public sealed class CombatStateTracker : IDisposable
         _lastCombatActivityAt = _now();
         _lastCombatActivityDesc = "combat line";
         if (!_state.InCombat) _state.InCombat = true;
+        // The fight is where we stand. A pursuer kept across our move raises no
+        // observation in the new room, so this is what moves the gate's room with it.
+        if (_gateAsserted) _gateRoom = _currentRoom?.Invoke();
     }
 
     // The combat manager is holding engagement of a passive KillOnSight neutral so

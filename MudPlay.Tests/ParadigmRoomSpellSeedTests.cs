@@ -52,6 +52,7 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
     [InlineData(915, "A dry twig snaps loudly behind you.")]
     [InlineData(915, "The forest becomes strangely silent.")]
     [InlineData(915, "The leaves begin to rustle, as if some beast were about to spring forth!")]
+    [InlineData(5665, "You can barely make out a figure lurching in the haze.")]
     public void RoomSpellRecord_CarriesEachFlavorWording(int spell, string wording)
         => Assert.Contains(wording, Find(spell).WitnessMessage.Split('\n'));
 
@@ -63,6 +64,61 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
             MessageRecord.ComputeId(r.Name, r.CasterMessage, r.TargetMessage,
                 r.WitnessMessage, r.AppliedMessage, r.AppliedEndsWith),
             r.Id);
+    }
+
+    // Paradigm's Smoldering Fields rooms carry room spell #5665 (farm 8), whose table
+    // prints a line three casts in a hundred. One of its wordings has been captured
+    // (report paradigm-20261010-145330); the record holds that one and no guess at
+    // the rest.
+    [Fact]
+    public void FarmFieldRoomSpellRecord_HoldsTheOneCapturedWording_UnderItsOwnId()
+    {
+        MessageRecord r = Find(5665);
+
+        Assert.Equal("farm 8", r.Name);
+        Assert.Equal("You can barely make out a figure lurching in the haze.", r.WitnessMessage);
+        Assert.Equal("63acecdce9a4fa4d", r.Id);
+        Assert.Equal(
+            MessageRecord.ComputeId(r.Name, r.CasterMessage, r.TargetMessage,
+                r.WitnessMessage, r.AppliedMessage, r.AppliedEndsWith),
+            r.Id);
+        Assert.Single(_records, x => x.Id == r.Id);
+        GameDataLink link = Assert.Single(r.Links!);
+        Assert.Equal(new GameDataLink("Spells", 5665), link);
+    }
+
+    // The record is what recognises the line: with it the watcher stages nothing,
+    // and without it the same line is staged as unrecognized, as the report shows.
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    public void FarmFieldHazeLine_IsStagedOnlyWithoutItsRecord(bool withRecord, int staged)
+    {
+        MessageStore messages = new();
+        messages.Messages.ReplaceAll(withRecord ? _records : _records.Where(r => r.Id != "63acecdce9a4fa4d"));
+        MessageRouter router = new();
+        DefaultPatterns.Seed(router);
+        MessageCandidateStore candidates = new();
+        using MessageCandidateWatcher watcher = new(router, messages, candidates);
+        watcher.NotifyInGame();
+
+        // The room display the line follows in the report, then the line itself.
+        foreach (string line in new[]
+        {
+            "Smoldering Fields",
+            "Also here: brute zombie, brute zombie, brute zombie, brute zombie.",
+            "Obvious exits: north, south, east, west",
+            "You can barely make out a figure lurching in the haze.",
+        })
+        {
+            var emitted = new LineExtractor.EmittedLine(
+                line, Array.Empty<CellAttributes>(), DateTimeOffset.UtcNow, IsPromptLine: false);
+            Invoke(watcher, "OnLine", emitted);
+            Invoke(watcher, "CommitPending");
+        }
+
+        Assert.Equal(staged, candidates.Candidates.Count(c =>
+            c.RawText == "You can barely make out a figure lurching in the haze."));
     }
 
     // A seed record whose text is fixed in place keeps the Id it shipped with: a
@@ -138,6 +194,8 @@ public sealed class ParadigmRoomSpellSeedTests : IDisposable
     [InlineData("The clicking sound of scrabbling claws can be heard from down the passage.")]
     [InlineData("Eerie lights dance about further down the passageway.")]
     [InlineData("Doors on this level creak and thump!")]
+    // The farm fields' room spell (5665), report paradigm-20261010-145330.
+    [InlineData("You can barely make out a figure lurching in the haze.")]
     public void AttributedLine_IsRecognized_NotStaged(string line)
     {
         MessageStore messages = new();
