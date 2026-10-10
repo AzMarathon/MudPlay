@@ -253,6 +253,51 @@ public sealed class WirePromptScannerTests
         Assert.Empty(unmatched);
     }
 
+    // The guard covers the burst only: a prompt the statline truly can't read is
+    // still reported at the commands that follow.
+    [Fact]
+    public void GenuineUnreadPromptAfterAHandlerBurst_IsStillReported()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+        bool burst = true;
+        s.PromptObserved += _ =>
+        {
+            if (!burst) return;
+            for (int i = 0; i < 5; i++) s.NoteCommandSent();
+        };
+
+        s.Append(B("\u001b[79D\u001b[K[HP=749/MA=608]: (Meditating) "));
+        Assert.Empty(unmatched);
+        burst = false;
+
+        s.NoteCommandSent();
+        s.Append(B("\r\nwear fiery crown\r\nHits 749 Mana 608 > "));   // a prompt with no brackets
+        s.NoteCommandSent();
+
+        Assert.Equal(new[] { "Hits 749 Mana 608 >" }, unmatched);
+    }
+
+    // A handler that throws must not leave the scanner deaf to the cursor's row.
+    [Fact]
+    public void PromptHandlerThrows_TheGuardIsReleased()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+        bool boom = true;
+        s.PromptObserved += _ => { if (boom) throw new InvalidOperationException("x"); };
+
+        Assert.Throws<InvalidOperationException>(() => s.Append(B("\u001b[79D\u001b[K[HP=749/MA=608]:")));
+        boom = false;
+        s.Reset();
+        s.Append(B("\r\nHits 749 Mana 608 > "));
+        s.NoteCommandSent();
+
+        Assert.Single(unmatched);
+    }
+
     [Fact]
     public void HpOnlyPrompt_HasNoManaType()
     {
