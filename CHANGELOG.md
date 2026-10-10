@@ -1,5 +1,9 @@
 # Version history
 
+## 3.165.1
+
+- Conversation window: a picture emote no longer draws over the lines above and below it
+
 ## 3.165.0
 
 - Auto-open opens a flagged container on arrival; it did nothing before
