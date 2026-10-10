@@ -54,6 +54,10 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // Ahead of the cards and the errand question: nothing is asked about a
+        // walk that isn't going to start.
+        if (services.RefuseStartForMasterSwitch("Walk")) return false;
+
         // Stop is holding an errand: ask whether it goes first. The walk comes back
         // through here once that is settled — after the errand, or straight away.
         if (services.MovementControl.SuspendedErrand is not null)
@@ -929,6 +933,9 @@ public static class RouteChoicePrompt
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(loop);
+        // Here, not left to the approach walk's own check, so the notice names
+        // the loop the user asked for.
+        if (services.RefuseStartForMasterSwitch("Loop")) return;
         RoomKey? entry = services.RoomTracker.State.CurrentRoom is { } here
             ? services.LoopRunner.NearestRoomOf(loop, here.Key)
             : null;

@@ -134,6 +134,20 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
     }
 
+    // A walk, loop or Auto-Lair started by hand with the master switch off is
+    // refused up front, with a notice naming what could not start (user,
+    // 2026-10-09), where it used to plan and then sit frozen with nothing said.
+    // True when refused: the caller starts nothing. what is "Walk", "Loop" or
+    // "Auto-Lair". One already running when the switch goes off is not stopped
+    // here: it freezes on MovementCoordinator.AutoAllGate and resumes.
+    public bool RefuseStartForMasterSwitch(string what)
+    {
+        if (!AutoModeController.Blocks("Hand-started navigation", what)) return false;
+        Log.Info("Navigation", $"{what} not started: the master switch is off.");
+        WriteTerminalNotice($"[{what} cannot start: the master switch (Auto-All) is off]");
+        return true;
+    }
+
     // Toggle the Profile Management window. The window is owned by the main VM
     // (it borrows that VM's connection gate + profile-swap path), so non-main
     // surfaces — the Settings → BBS tab's "Open Profile Management" button —
@@ -1312,6 +1326,10 @@ public sealed class AppServices
     public string? StartStashTransfer(Game.Map.RoomKey stash, Game.GameData.BankShop bank)
     {
         if (StashTransfer.IsBusy) return "a stash transfer is already running";
+        // A trip started by hand is a walk started by hand; the caller prints the
+        // refusal. An Event's transfer never gets here with the switch off.
+        if (AutoModeController.Blocks("Hand-started navigation", "Stash transfer"))
+            return "the master switch (Auto-All) is off";
         if (ErrandHasTheWalker) return "another trip is using the walker — stop it first";
         if (AutoLair.IsActive) AutoLair.Stop("stash transfer started");
         if (LoopRunner.State != Game.Map.LoopState.Idle) LoopRunner.Stop("stash transfer started");
@@ -9306,7 +9324,10 @@ public sealed class AppServices
         // holding for the party-reform window on a party-session reconnect.
         DefaultTaskRunner = new Game.DefaultTaskRunner(
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
-            LoopRunner, AutoLair, PartyState, Party, Log);
+            LoopRunner, AutoLair, PartyState, Party, Log)
+        {
+            BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
+        };
 
         // What a penalised hang-up dropped, looked for on the way back in. Gated on
         // the realm's own settings, and on Auto-All for anything it sends. Its gets

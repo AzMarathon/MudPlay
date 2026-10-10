@@ -5144,6 +5144,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void StartLoopFavorite(Game.Map.Loop loop)
     {
         var s = AppServices.Current;
+        if (s.RefuseStartForMasterSwitch("Loop")) return;
         s.MovementControl.StartUserRun(() =>
         {
             if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
@@ -5157,6 +5158,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void StartLairFavorite(Models.Profile.LairSetup setup)
     {
         var s = AppServices.Current;
+        if (s.RefuseStartForMasterSwitch("Auto-Lair")) return;
         s.MovementControl.StartUserRun(() =>
         {
             if (s.LoopRunner.State != Game.Map.LoopState.Idle) s.LoopRunner.Stop("auto-lair favorite started");
@@ -5173,6 +5175,9 @@ public partial class MainWindowViewModel : ObservableObject
     // entry point the Navigation manager's Walk buttons use).
     private async Task WalkToFavoriteRoomAsync(Game.Map.RoomKey key)
     {
+        // Before the Stop: a run frozen by the master switch is not given up for
+        // a walk that won't start.
+        if (AppServices.Current.RefuseStartForMasterSwitch("Walk")) return;
         MovementStop();
         await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, key);
     }

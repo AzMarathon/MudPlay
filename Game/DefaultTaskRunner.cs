@@ -274,9 +274,24 @@ public sealed class DefaultTaskRunner : IDisposable
         start();
     }
 
+    // The master switch, asked with what is about to start (true = off;
+    // AutoModeController.Blocks counts it). The default task is automatic, so with
+    // the switch off it is skipped, not kept for when the switch comes back on:
+    // by then the user is at the keys and starts what they want. Checked at the
+    // start itself so a start waiting out the party-rebuild hold is covered too.
+    public Func<string, bool>? BlockedByMasterSwitch { get; set; }
+
+    private bool SkippedForMasterSwitch(string what)
+    {
+        if (BlockedByMasterSwitch?.Invoke($"default task {what}") != true) return false;
+        _log?.Info("DefaultTask", $"{what} not started: the master switch is off.");
+        return true;
+    }
+
     private void StartLoop(Loop loop)
     {
         if (!_isConnected) return;
+        if (SkippedForMasterSwitch($"loop '{loop.Name}'")) return;
         if (_loopRunner.Start(loop))
             _log?.Info("DefaultTask", $"started loop '{loop.Name}'.");
         else
@@ -290,6 +305,7 @@ public sealed class DefaultTaskRunner : IDisposable
     private void StartLair(LairSetup setup)
     {
         if (!_isConnected) return;
+        if (SkippedForMasterSwitch($"Auto-Lair '{setup.Name}'")) return;
 
         if (_loopRunner.State != LoopState.Idle)
             _loopRunner.Stop("default task: auto-lair");

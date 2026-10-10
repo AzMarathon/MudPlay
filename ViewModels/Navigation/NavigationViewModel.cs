@@ -573,6 +573,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void ToggleAutoLair()
     {
         if (_services.AutoLair.IsActive) _services.AutoLair.Stop();
+        else if (_services.RefuseStartForMasterSwitch("Auto-Lair")) return;
         else _services.MovementControl.StartUserRun(() => _services.AutoLair.Start());
     }
 
@@ -1531,11 +1532,16 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             Game.Map.Loop target = loop;
             ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
                 $"{++number})", loop.Name, LoopFavBrush,
-                new RelayCommand(() => _services.MovementControl.StartUserRun(() =>
+                new RelayCommand(() =>
                 {
-                    if (_services.AutoLair.IsActive) _services.AutoLair.Stop("loop favorite started");
-                    _ = RouteChoicePrompt.StartLoopAsync(_services, target, path => PreviewPath = path);
-                }))));
+                    // Before the running Auto-Lair is stopped for it.
+                    if (_services.RefuseStartForMasterSwitch("Loop")) return;
+                    _services.MovementControl.StartUserRun(() =>
+                    {
+                        if (_services.AutoLair.IsActive) _services.AutoLair.Stop("loop favorite started");
+                        _ = RouteChoicePrompt.StartLoopAsync(_services, target, path => PreviewPath = path);
+                    });
+                })));
         }
 
         foreach (Models.Profile.LairSetup setup in _services.Lairs.Setups
@@ -1545,8 +1551,13 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             Models.Profile.LairSetup target = setup;
             ContextFavorites.Add(new MudPlay.ViewModels.FavoriteMenuItem(
                 $"{++number})", setup.Name, LairFavBrush,
-                new RelayCommand(() => _services.MovementControl.StartUserRun(
-                    () => { LoadSetupInternal(target); _services.AutoLair.Start(); }))));
+                new RelayCommand(() =>
+                {
+                    // Before the setup replaces the live markers.
+                    if (_services.RefuseStartForMasterSwitch("Auto-Lair")) return;
+                    _services.MovementControl.StartUserRun(
+                        () => { LoadSetupInternal(target); _services.AutoLair.Start(); });
+                })));
         }
 
         OnPropertyChanged(nameof(HasContextFavorites));
@@ -1892,6 +1903,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void StartSetup(LairSetupRowViewModel? row, Game.Map.RunStartMode mode)
     {
         if (row is null) return;
+        if (_services.RefuseStartForMasterSwitch("Auto-Lair")) return;
         _services.MovementControl.StartUserRun(() =>
         {
             LoadSetupInternal(row.Source);
@@ -2319,6 +2331,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
     private void StartLoop(LoopRowViewModel? row, Game.Map.RunStartMode mode)
     {
         if (row is null) return;
+        if (_services.RefuseStartForMasterSwitch("Loop")) return;
         _services.MovementControl.StartUserRun(() =>
         {
             _ = RouteChoicePrompt.StartLoopAsync(_services, row.Source, path => PreviewPath = path, mode);
@@ -4977,6 +4990,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
                 Game.Map.Loop? rebuilt = edBuilder.BuildTransient();
                 if (rebuilt is not null)
                 {
+                    // A restart is a start: refused before the paused loop is stopped.
+                    if (_services.RefuseStartForMasterSwitch("Loop")) return;
                     runner.Stop("edits applied during pause; restarting");
                     _services.MovementCoordinator.ClearGate(Game.Map.MovementCoordinator.UserGate);
                     runner.Start(rebuilt);
@@ -5040,7 +5055,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
             // mode so the bottom builder strip collapses and the
             // running loop's CURRENT NAV pane takes over.
             Game.Map.Loop? transient = LoopBuilder.BuildTransient();
-            if (transient is not null)
+            if (transient is not null && !_services.RefuseStartForMasterSwitch("Loop"))
                 _services.MovementControl.StartUserRun(() =>
                 {
                     // Building a loop no longer stops an in-flight walk-to (only Run
@@ -5057,6 +5072,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         if (CurrentMode == NavigationMode.AutoLair
             && _services.AutoLair.Marked.Count > 0)
         {
+            if (_services.RefuseStartForMasterSwitch("Auto-Lair")) return;
             _services.MovementControl.StartUserRun(() =>
             {
                 ApplyStartMode(mode);
