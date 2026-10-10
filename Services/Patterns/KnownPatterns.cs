@@ -21,6 +21,10 @@ public static class KnownPatterns
     // the suffixed "...You don't think you are hidden." line.
     public const string UserHideInitiate  = "stealth.user-hide-initiate";
     public const string UserHideFailed    = "stealth.user-hide-failed";
+    // The game turned an `hid` away with no "Attempting to hide..." at all.
+    public const string UserHideRefused   = "stealth.user-hide-refused";
+    // The wait refusal many commands share, `hid` among them.
+    public const string UserMustWait      = "stealth.user-must-wait";
 
     // ----- Movement ------------------------------------------------------
     public const string DirectionFailed   = "movement.direction-failed";

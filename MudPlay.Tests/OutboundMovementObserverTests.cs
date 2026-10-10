@@ -411,4 +411,23 @@ public sealed class OutboundMovementObserverTests : IDisposable
         Assert.Equal(1, manualCount);
     }
 
+    // A direction raises DirectionalMoveSent ahead of MoveSent; a text exit raises
+    // MoveSent alone, since it isn't the game's move command.
+    [Fact]
+    public void DirectionalMoveSent_IsRaisedForADirectionOnly_AheadOfMoveSent()
+    {
+        (RoomTracker tracker, OutboundMovementObserver observer) = NewObserver();
+        tracker.SetLocated(new RoomKey(1, 1));
+        List<string> raised = new();
+        observer.DirectionalMoveSent += () => raised.Add("direction");
+        observer.MoveSent += () => raised.Add("move");
+
+        observer.ObserveOutbound(Cmd("n"));
+        Assert.Equal(new[] { "direction", "move" }, raised);
+
+        raised.Clear();
+        observer.ObserveOutbound(Cmd("go path"));
+        Assert.Equal(new[] { "move" }, raised);
+    }
+
 }

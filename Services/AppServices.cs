@@ -2391,11 +2391,17 @@ public sealed class AppServices
     // gate, and hand-typed lines through SendUserInput (report
     // paradigm-20260928-163051: a typed `sea` left the client believing it still
     // sneaked, so sneak keeping held every buff for a quarter of an hour).
-    public void NoteSentForSneak(string command)
-    {
-        if (Game.Stealth.SneakBreakingCommands.EndsSneak(command, shadowRest: CharacterHasShadowRest()))
-            Stealth.NoteSneakBroken($"'{command.Trim()}'");
-    }
+    //
+    // The same commands end a hide, a few excepted. An item command (`use`, `read`,
+    // `eat`, `drink`, `light`) ends either only when the item's spell is cast, which
+    // _itemUseStealth reads off the pack and the game data.
+    //
+    // Each command is reported here once: a typed line by SendUserInput, the client's
+    // own by the send gate.
+    public void NoteSentForSneak(string command) =>
+        Stealth.NoteCommandSent(command, CharacterHasShadowRest, _itemUseStealth);
+
+    private Game.Stealth.ItemUseStealthRule? _itemUseStealth;
 
     // Sniffs a hand-typed PHYSICAL attack verb so Combat treats it as a user override
     // (holds the auto attack until next round). Hooked from SendUserInput.
@@ -4450,9 +4456,14 @@ public sealed class AppServices
         {
             if (t.NewRoom?.Key != t.PreviousRoom?.Key) RecentFoes.Clear();
         };
+        // A room spell's kill names nobody: the engaged target is only the monster the
+        // round was anchored to, which may be the boss while an add is the one that
+        // died. It goes in unnamed, and is the boss's only on the exp it paid or the
+        // roster re-read finding the boss gone.
         MonsterDeath.MonsterDied += evt =>
             BossTimers.OnMonsterDied(evt, RoomTracker.State.CurrentRoom?.Key,
-                Combat.DeathAttributionTarget, RecentFoes.Within(TimeSpan.FromSeconds(12)));
+                evt.RoomSpellRoster is null ? Combat.DeathAttributionTarget : null,
+                RecentFoes.Within(TimeSpan.FromSeconds(12)));
         // What the boss is worth, and what everything else in its room is: an unnamed
         // death there is told apart by the exp it paid.
         BossTimers.SetRoomExpResolver((def, room) =>
@@ -4538,6 +4549,11 @@ public sealed class AppServices
             // is re-picked a beat later, instead of sitting through the ~5s idle-stall
             // tick that would otherwise re-pick the corpse, no-op it, and only then
             // force the re-display.
+            //
+            // Not for a room spell's kill: the combat manager raised that one itself,
+            // from the exp line it is still handling, and asks for the re-display
+            // there. What it was fighting is no guide to which monster died.
+            if (evt.RoomSpellRoster is not null) return;
             Log.Info(Game.Combat.MonsterDeathWatcher.LogCategory,
                 "death — forcing roster resync");
             Combat.NoteUnattributedDeath();
@@ -4572,6 +4588,10 @@ public sealed class AppServices
             // Resolve a debuff slot's cast-code to its catalog row (energy cost +
             // targeting scope) so a mis-slotted spell is rejected before it casts.
             resolveSpellByCode: code => Spellbook.FindByCastCode(code));
+        // A kill of our own room spell is a death like any other, raised on its exp
+        // line: the watcher's exp + *Combat Off* pairing can't see one that leaves a
+        // survivor, since the game prints no *Combat Off* for it (Paradigm).
+        Combat.RoomSpellKill += (experience, roster) => MonsterDeath.NoteRoomSpellKill(experience, roster);
 
         // Dark-room combat. A room too dark to show "Also here:" hides any
         // hostile sharing it — the only evidence is the mob's dark-cyan attack
@@ -5453,6 +5473,10 @@ public sealed class AppServices
         // detects silent loss on room change, and sends `sneak` /
         // `hide` per AutoMode toggles.
         Stealth = new Game.Stealth.StealthManager(Router, PlayerState, Log);
+        _itemUseStealth = new Game.Stealth.ItemUseStealthRule(
+            HeldItemNames,
+            name => Game.Stealth.ItemUseFactsIndex.Lookup(GameData, name),
+            debug: line => Log.Debug(Game.Stealth.StealthManager.LogCategory, line));
         Stealth.SetSneakHoldForHeal(() => Health.IsGateFleeing && CastDirector.IsEmergencyHealDue);
         // A buff cast mid-rest doesn't re-sneak unless ShadowRest keeps it through the rest.
         Stealth.SetReSneakSkipForRest(() => (Health.IsRecoveringRest || Health.RestInFlight) && !Health.UsesShadowRest);
@@ -8015,6 +8039,7 @@ public sealed class AppServices
         // runs before the typed bytes go out, so the `sn` leaves ahead of them). After
         // the gear hook above: equipping ends a sneak, so any swap goes out first.
         OutboundMovement.MoveSent += Stealth.NoteTypedMove;
+        OutboundMovement.DirectionalMoveSent += Stealth.NoteDirectionalMoveSent;
         // Every move re-opens the backstab surprise round, typed moves included.
         OutboundMovement.MoveSent += Combat.NoteMoveSent;
         OutboundMovement.MoveSent += CombatTracker.NoteMoveSent;
@@ -11802,6 +11827,14 @@ public sealed class AppServices
         HashSet<int> numbers = new();
         foreach (Game.Combat.MonsterDeathIdentity id in evt.Candidates)
             if (id.Number is { } n) numbers.Add(n);
+        // A room spell's kill is one of the kinds the room listed, and the monster we
+        // were fighting is only the one the round was anchored to.
+        if (evt.RoomSpellRoster is { } listed)
+        {
+            foreach (Game.Combat.MonsterDeathIdentity id in listed)
+                if (id.Number is { } n) numbers.Add(n);
+            return numbers;
+        }
         if (Combat.DeathAttributionTarget is not { Length: > 0 } dying) return numbers;
 
         if (RoomClassifier.Current is { } roster)
@@ -11842,6 +11875,10 @@ public sealed class AppServices
         // The nudge is ours to send, not the game's to need: with the master
         // switch off the stall runs its length, or the user's own Enter ends it.
         if (AutoModeController.KillSwitchEngaged) return;
+        // The response and the coin hold are for a death that did stall the room. A
+        // room spell's kill among several kinds may not be the one with the death
+        // spell, so it is answered only when the room listed a single kind.
+        if (evt.RoomSpellRoster is { Count: > 1 }) return;
         foreach (int num in DyingMonsterNumbers(evt))
         {
             int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;

@@ -10,10 +10,31 @@
 - A party follower never flees: low HP or mana, Hit and Run, a failed backstab, PvP, a Flee monster
 - `[Invited]` rows in `par` no longer make a follower's client think it leads
 - Leader: followers left behind together are fetched one after the other
-- Leader on a loop refuses `@comeback` from a member an exit on the loop turns away; a walk-to goes back
+- Leader on a loop refuses `@comeback` only for an exit of its own circuit that turned that member away; a walk-to goes back
 - Leader: a re-invited follower who never answers is waited on 90 s when the wait is set to 0
-- Party train: members are told when a trip sets out and ends
-- The bug report shows the last left-behind incident
+- Party train: nothing stops the trip; the leader fetches everyone it left once the training is done
+- Party train: members are told when a trip sets out and ends, and hold their request until then
+- A dark or blind arrival counts as following; `le` is read as `leave`
+- `@forget` takes a queued member off the leader's pickup list
+- The bug report shows the last left-behind incident and who a train trip left
+
+## 3.167.17
+
+- An item whose use, eat or drink casts a spell ends the sneak; the next move re-sneaks
+- Sneak-ending commands and a sent direction drop a hide too
+
+## 3.167.15
+
+- A new attack's `*Combat Off*` is no longer read as a kill (an attack sent at the survivor of a room spell)
+- The survivor stays the target, the room isn't taken for cleared and the loop doesn't walk on
+- A buff cast right after that attack is followed by the attack again at once
+- A typed `break` just after a kill isn't counted as another
+- No lair-timer kill, kill count or kill sound for a kill that didn't happen
+- A room read again after a room spell's kills is never emptied by them
+- A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
+- A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
+- Program log notes a `*Combat Off*` that answers a command
+- bug reports addressed: paradigm-20261010-145330
 
 ## 3.167.12
 

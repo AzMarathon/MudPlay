@@ -147,6 +147,39 @@ public sealed class SummonOnDeathSettleTests
         Assert.Equal(0, h.Releases);
     }
 
+    // A room spell's kill names nobody, and the engaged target is only the monster
+    // the round was anchored to. With a summoner among the kinds the room listed, the
+    // re-scan and its hold are worth having whichever of them died.
+    [Fact]
+    public void RoomSpellKill_WithASummonerAmongTheListedKinds_Holds()
+    {
+        using Harness h = new();
+        h.Feed($"Also here: {Plain}, {Summoner}.");
+        h.Target = Plain;
+
+        h.Watcher.NoteRoomSpellKill(9, new[]
+        {
+            new MonsterDeathIdentity(PlainNumber, Plain),
+            new MonsterDeathIdentity(SummonerNumber, Summoner),
+        });
+
+        Assert.Equal(new[] { "\r" }, h.SentRaw);
+        Assert.True(h.SettleHeld);
+    }
+
+    [Fact]
+    public void RoomSpellKill_WithNoSummonerListed_DoesNotHold()
+    {
+        using Harness h = new();
+        h.Feed($"Also here: {Plain}, {Plain}.");
+        h.Target = Summoner;   // a stale anchor must not be read for this death
+
+        h.Watcher.NoteRoomSpellKill(9, new[] { new MonsterDeathIdentity(PlainNumber, Plain) });
+
+        Assert.Empty(h.SentRaw);
+        Assert.False(h.SettleHeld);
+    }
+
     [Fact]
     public void SyntheticRosterRefires_DoNotRelease()
     {

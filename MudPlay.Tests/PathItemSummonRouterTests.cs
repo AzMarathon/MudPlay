@@ -35,6 +35,12 @@ public sealed class PathItemSummonRouterTests
     private static MonsterDeathEvent Died()
         => new(Array.Empty<MonsterDeathIdentity>(), 1000, DateTimeOffset.Now, true);
 
+    // The other shape: a kill of our own room spell, raised on its exp line. It names
+    // nobody either, only the kinds of monster the room listed.
+    private static MonsterDeathEvent DiedUnderRoomSpell(DateTimeOffset at)
+        => new(Array.Empty<MonsterDeathIdentity>(), 1000, at, true,
+            RoomSpellRoster: new[] { new MonsterDeathIdentity(7, "obsidian statue") });
+
     private sealed class Harness
     {
         public readonly Dictionary<int, List<SummonSource>> Sources = new();
@@ -162,6 +168,26 @@ public sealed class PathItemSummonRouterTests
 
         Assert.False(r.DetourActive);
         Assert.Equal(Dest, h.Walks[^1]);
+    }
+
+    // A room spell's kills are a death each, all in one burst. One look at the floor
+    // covers the burst; a look per kill would spend the allowance in two rounds.
+    [Fact]
+    public void RoomSpellKillsOfOneBurst_ReSurveyOnce()
+    {
+        var h = new Harness().WithGateStatue();
+        PathItemSummonRouter r = h.Build();
+        r.OnNeedPosted(PathNeed(GateKey));
+        r.OnWalkEvent(Finished(GateRoom));
+        int before = h.Sent.Count;
+        DateTimeOffset round = DateTimeOffset.Now;
+
+        for (int i = 0; i < 4; i++) r.OnMonsterDied(DiedUnderRoomSpell(round));
+        Assert.Equal(before + 1, h.Sent.Count);
+
+        // The next round's kills are another burst, and another look.
+        for (int i = 0; i < 3; i++) r.OnMonsterDied(DiedUnderRoomSpell(round.AddSeconds(5)));
+        Assert.Equal(before + 2, h.Sent.Count);
     }
 
     // A room being ground by a party would otherwise turn every kill into a `look`.

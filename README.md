@@ -10,10 +10,13 @@
 > - A party follower never flees: low HP or mana, Hit and Run, a failed backstab, PvP, a Flee monster
 > - `[Invited]` rows in `par` no longer make a follower's client think it leads
 > - Leader: followers left behind together are fetched one after the other
-> - Leader on a loop refuses `@comeback` from a member an exit on the loop turns away; a walk-to goes back
+> - Leader on a loop refuses `@comeback` only for an exit of its own circuit that turned that member away; a walk-to goes back
 > - Leader: a re-invited follower who never answers is waited on 90 s when the wait is set to 0
-> - Party train: members are told when a trip sets out and ends
-> - The bug report shows the last left-behind incident
+> - Party train: nothing stops the trip; the leader fetches everyone it left once the training is done
+> - Party train: members are told when a trip sets out and ends, and hold their request until then
+> - A dark or blind arrival counts as following; `le` is read as `leave`
+> - `@forget` takes a queued member off the leader's pickup list
+> - The bug report shows the last left-behind incident and who a train trip left
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

@@ -3826,8 +3826,10 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.ComebackRequest.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
-        // command, not a paste.
-        if (data.Length is > 0 and <= 128)
+        // command, not a paste. A line a wrapped sender is putting out is the gate's
+        // to report, once it has gone; reporting it here as well judged every client
+        // command twice.
+        if (data.Length is > 0 and <= 128 && !AppServices.Current.EngineGate.SendingClientCommand)
             AppServices.Current.NoteSentForSneak(System.Text.Encoding.Latin1.GetString(data).TrimEnd('\r', '\n', '\0'));
         // Chat router — capture engine-sent telepath "/<recipient> <message>"
         // bursts (party @-command broadcasts / nags) so the outgoing
