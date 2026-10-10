@@ -1,6 +1,6 @@
 # Version history
 
-## 3.161.9
+## 3.161.10
 
 - Locks under 25% a pick are gone round when the way round is short
 - A door the picks run out on is gone round, not stood at
@@ -8,6 +8,14 @@
 - Auto-Lair leaves out a lair it can't reach, and retries a failed entry slower each time
 - Auto-Lair keeps a door only if you can't open it; a fair-odds door is retried next visit
 - Log and bug report name the doors gone round and the lairs left out
+
+## 3.161.9
+
+- Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+- One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
+- A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+- Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+- Program log lists the summoning room spells and each summon left out
 
 ## 3.161.8
 

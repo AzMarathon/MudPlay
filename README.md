@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.9**
+> **Version 3.161.10**
 > - Locks under 25% a pick are gone round when the way round is short
 > - A door the picks run out on is gone round, not stood at
 > - Auto-Lair waits one step short of the lair, on its own route
