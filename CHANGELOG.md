@@ -1,6 +1,6 @@
 # Version history
 
-## 3.167.16
+## 3.167.18
 
 - After a death no walk or loop takes a toll, fare or sailing until the inventory is read again (your coin went with the pile); a death in an arena room takes nothing
 - A toll or fare the game refuses is never sent twice, and stays closed until an inventory read shows its price
@@ -10,6 +10,11 @@
 - The re-read a refusal asks for waits for Auto-All to come back on; the one after a death is no longer lost to a held send
 - Program log and bug report show the purse a toll was judged on
 - bug reports addressed: paradigm-20261010-145529
+
+## 3.167.17
+
+- An item whose use, eat or drink casts a spell ends the sneak; the next move re-sneaks
+- Sneak-ending commands and a sent direction drop a hide too
 
 ## 3.167.15
 

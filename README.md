@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.16**
+> **Version 3.167.18**
 > - After a death no walk or loop takes a toll, fare or sailing until the inventory is read again (your coin went with the pile); a death in an arena room takes nothing
 > - A toll or fare the game refuses is never sent twice, and stays closed until an inventory read shows its price
 > - A walk with no way round one you can't pay says so on the terminal, naming it and how short you are
