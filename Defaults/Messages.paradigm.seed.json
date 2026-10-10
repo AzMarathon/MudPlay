@@ -13676,6 +13676,10 @@
       {
         "Table": "Spells",
         "Number": 485
+      },
+      {
+        "Table": "Spells",
+        "Number": 5682
       }
     ]
   },
@@ -13744,6 +13748,10 @@
       {
         "Table": "Spells",
         "Number": 511
+      },
+      {
+        "Table": "Spells",
+        "Number": 5242
       }
     ]
   },
@@ -13761,6 +13769,14 @@
       {
         "Table": "Spells",
         "Number": 513
+      },
+      {
+        "Table": "Spells",
+        "Number": 5256
+      },
+      {
+        "Table": "Spells",
+        "Number": 5687
       }
     ]
   },

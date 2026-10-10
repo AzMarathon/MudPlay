@@ -954,8 +954,23 @@ public sealed class CombatStateTracker : IDisposable
 
     // ----- InCombat plumbing ----------------------------------------
 
-    private void OnAnyCombatLine(MatchResult _)
+    // A room's own damage reads like a hit ("You are seared by the flames for 46
+    // damage!") and is no fight: nothing is there to fight. Taken for one it put the
+    // client in combat in an empty room, which broke off a rest in the bookkeeping,
+    // swapped gear to the fighting set and back, and kept the idle watchdog fed. The
+    // probe is the round clock's own test (OffRoundDamageLines, wired by
+    // AppServices); unset, every line is a combat line as before.
+    private Func<string, bool>? _isNotCombatLine;
+
+    public void SetNotCombatLineProbe(Func<string, bool> isNotCombatLine)
     {
+        ArgumentNullException.ThrowIfNull(isNotCombatLine);
+        _isNotCombatLine = isNotCombatLine;
+    }
+
+    private void OnAnyCombatLine(MatchResult match)
+    {
+        if (_isNotCombatLine?.Invoke(match.Text) == true) return;
         // A damage/miss line is proof the fight is live — refresh the
         // watchdog's activity stamp so it never fires mid-fight.
         _lastCombatActivityAt = _now();

@@ -239,13 +239,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // The pile marked Missing on this visit to its room: a floor that shows the
     // corpse after all, before we leave, takes the verdict back.
     private DeathRecord? _missingThisVisit;
-    // When each pile was marked Missing, this session. A hand-back can reopen one
-    // only for a while after (MissingHandBackWindow). Not saved: after a restart a
-    // Missing pile is past reopening by a gift.
-    private readonly Dictionary<DeathRecord, DateTimeOffset> _markedMissingAt = new();
-    private Func<string, bool>? _isPartyMember;
     private Func<string, bool>? _isKeyItem;
-    internal Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
 
     // Heartbeats (1 s) of quiet after the death-room `get` burst before it counts
     // as settled and the sweep can start on the leftovers.
@@ -280,13 +274,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // The lines of one death arrive together; the window only keeps a line from
     // some other moment off this death's record.
     private static readonly TimeSpan ReturnedLineWindow = TimeSpan.FromSeconds(30);
-    // How long after a pile was marked Missing a party member's gift of one of its
-    // items still counts as the pile being handed back. The case is a corpse a
-    // party member picked up before we reached the room: they hand the gear over
-    // when the party is back together, minutes later. Half an hour covers a slow
-    // regroup; past it a like-named gift is just a gift, and must not reopen a pile
-    // looted long ago and put its "worn" piece on.
-    internal static readonly TimeSpan MissingHandBackWindow = TimeSpan.FromMinutes(30);
 
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
@@ -421,14 +408,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(staysOnDeath);
         _staysOnDeath = staysOnDeath;
         _isKeyItem = isKeyItem;
-    }
-
-    // Whether the named player is in our party right now (given name). A gift from
-    // anyone else never reopens a pile marked Missing.
-    public void SetPartyMemberProbe(Func<string, bool> isPartyMember)
-    {
-        ArgumentNullException.ThrowIfNull(isPartyMember);
-        _isPartyMember = isPartyMember;
     }
 
     // Bind the gate-wrapped wire sender so auto-recover can send get / wear /
@@ -623,10 +602,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
                 parts.Add($"Recover Now pending for {asked.RoomKeyText}{(_recoverNowWalking ? " (walking)" : "")}");
             if (_missingThisVisit is { } written)
                 parts.Add($"marked {written.RoomKeyText} Missing on this visit (a corpse shown here takes it back)");
-            foreach ((DeathRecord pile, DateTimeOffset at) in _markedMissingAt)
-                if (pile.Status == DeathRecoveryStatus.Missing)
-                    parts.Add($"{pile.RoomKeyText} marked Missing {(NowProvider() - at).TotalMinutes:0} min ago "
-                        + $"(a party member's hand-back reopens it for {MissingHandBackWindow.TotalMinutes:0} min)");
             return string.Join("; ", parts);
         }
     }
@@ -1263,7 +1238,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // The note says which display the verdict came off: a report of a pile
         // wrongly written off turns on that.
         SetStatus(record, DeathRecoveryStatus.Missing, $"Corpse was not in the room ({why}) — pile appears lost.");
-        _markedMissingAt[record] = NowProvider();
         _missingThisVisit = record;
         _activeRecovery = null;
     }
@@ -2813,7 +2787,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _stockSweepPending = false;
         _returnedLines.Clear();
         _missingThisVisit = null;
-        _markedMissingAt.Clear();
     }
 
     // Abandon a running spill sweep where it stands: no walk is started, nothing more
@@ -2850,12 +2823,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // that dropped nothing lists nothing, so it doesn't stand between a hand-back
     // and the pile it belongs to.
     //
-    // An Active or Partial pile takes the item from anyone. A pile marked Missing
-    // is closed, with one exception: a corpse gone from the death room is just what
-    // it looks like when a party member has picked it up to hand the gear back. So
-    // a Missing pile takes it only from someone in our party now, and only for
-    // MissingHandBackWindow after it was marked. Any other gift of a like-named
-    // item is a gift.
+    // Any pile takes the item from anyone, party or not, at any time: an Active,
+    // Partial or Missing one alike (user, 2026-10-10). A corpse gone from
+    // the death room is what it looks like when someone has picked it up to hand the
+    // gear back, and a pile marked Missing is not closed to that.
     public void OnItemReceived(string itemName, string giver)
     {
         if (string.IsNullOrWhiteSpace(itemName)) return;
@@ -2867,14 +2838,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             int idx = listed.FindIndex(n =>
                 string.Equals(ItemNameStore.Normalize(n), got, StringComparison.OrdinalIgnoreCase));
             if (idx < 0) continue;
-            if (rec.Status is DeathRecoveryStatus.Missing && MissingPileStaysClosedTo(rec, giver) is { } why)
-            {
-                _log?.Info(LogCategory,
-                    $"hand-back: '{itemName}' from {giver} is on the {rec.RoomKeyText} deathpile, which is marked Missing — "
-                    + $"not reopened ({why})");
-                continue;
-            }
-
             rec.UnrecoveredItems = listed;
             rec.UnrecoveredItems.RemoveAt(idx);
             rec.HandedBack = true;
@@ -2886,19 +2849,6 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
                 + $"({rec.UnrecoveredItems.Count} item(s) still out)");
             return;
         }
-    }
-
-    // Why a gift doesn't reopen this Missing pile, or null when it does.
-    private string? MissingPileStaysClosedTo(DeathRecord pile, string giver)
-    {
-        if (!_markedMissingAt.TryGetValue(pile, out DateTimeOffset markedAt))
-            return "it was marked Missing before this session";
-        TimeSpan ago = NowProvider() - markedAt;
-        if (ago > MissingHandBackWindow)
-            return $"it was marked Missing {ago.TotalMinutes:0} min ago, past the {MissingHandBackWindow.TotalMinutes:0} min a hand-back is expected in";
-        if (_isPartyMember?.Invoke(giver) != true)
-            return $"{giver} is not in our party";
-        return null;
     }
 
     // The hand-back burst went quiet: finalise the pile (all back, or only coins left)

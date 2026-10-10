@@ -1487,6 +1487,34 @@ public sealed class CombatStateTrackerTests
         Assert.True(h.State.InCombat);
     }
 
+    // A room's own damage reads like a hit and is no fight (user, 2026-10-09). The
+    // probe is the round clock's test, the one AppServices hands every consumer.
+    [Theory]
+    [InlineData("You are seared by the flames for 46 damage!", OffRoundDamageLinesTests.MagmaHeat)]
+    [InlineData("You are seared by the flames for 46 damage!", 0)]             // room not placed: the wording gives it away
+    [InlineData("A chaotic storm assaults you for 30 damage!", OffRoundDamageLinesTests.ChaosStorm)]
+    public void RoomSpellDamage_DoesNotPutUsInCombat(string line, int roomSpell)
+    {
+        using Harness h = new();
+        h.Tracker.SetNotCombatLineProbe(OffRoundDamageLinesTests.ProbeIn(roomSpell));
+        h.Feed(line);
+        Assert.False(h.State.InCombat);
+    }
+
+    [Theory]
+    [InlineData("A chaotic storm assaults you for 30 damage!", 0)]             // the same text, cast by a monster elsewhere
+    [InlineData("A chaotic storm assaults you for 30 damage!", OffRoundDamageLinesTests.MagmaHeat)]
+    [InlineData("You are struck by a dark force for 80 damage!", OffRoundDamageLinesTests.MagmaHeat)]
+    [InlineData("The giant rat bites you for 3 damage!", OffRoundDamageLinesTests.MagmaHeat)]
+    [InlineData("The giant rat lunges at you, but misses!", OffRoundDamageLinesTests.MagmaHeat)]
+    public void AMonstersAttack_StillPutsUsInCombat(string line, int roomSpell)
+    {
+        using Harness h = new();
+        h.Tracker.SetNotCombatLineProbe(OffRoundDamageLinesTests.ProbeIn(roomSpell));
+        h.Feed(line);
+        Assert.True(h.State.InCombat);
+    }
+
     [Fact]
     public void MobHitsLine_FlipsInCombatTrue()
     {

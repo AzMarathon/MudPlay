@@ -291,7 +291,6 @@ public sealed partial class DeathRecoveryManagerTests
         // The leader picked the corpse up; the follower walks into the death room,
         // finds no corpse (Missing), and is then handed the gear.
         using GraphHarness h = CorpseGoneOnArrival();
-        h.Party.Add("Nineteen");
 
         h.Recovery.OnItemReceived("rusty dagger", "Nineteen");
         h.Recovery.OnItemReceived("torch", "Nineteen");
@@ -309,7 +308,6 @@ public sealed partial class DeathRecoveryManagerTests
         // pile's gear is handed over. The later death lists nothing, so it doesn't
         // stand in the way.
         using GraphHarness h = CorpseGoneOnArrival();
-        h.Party.Add("Leader");
         DeathRecord first = h.Latest;
 
         Die(h, Array.Empty<EquippedItem>(), Array.Empty<string>());
@@ -323,32 +321,63 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Null(h.Latest.UnrecoveredItems);            // the later death's record is untouched
     }
 
+    // Owner's ruling, 2026-10-10: a hand-back counts from anyone, party or not, at
+    // any time. These two once pinned the opposite (a stranger's gift, and a gift
+    // after the 30-minute window, left a Missing pile untouched).
     [Fact]
-    public void AGift_FromSomeoneNotInTheParty_DoesNotReopenAMissingPile()
+    public void AGift_FromSomeoneNotInTheParty_CountsTowardAMissingPile()
     {
         using GraphHarness h = CorpseGoneOnArrival();
 
         h.Recovery.OnItemReceived("rusty dagger", "Somebody");
         h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
 
-        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
-        Assert.Equal(new[] { "rusty dagger", "torch" }, h.Latest.UnrecoveredItems);
-        Assert.Empty(h.Sent);
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.Equal(new[] { "torch" }, h.Latest.UnrecoveredItems);
+        Assert.Contains("eq rusty dagger", h.Sent);
     }
 
     [Fact]
-    public void AGift_LongAfterThePileWasMarkedMissing_DoesNotReopenIt_EvenFromTheParty()
+    public void AGift_LongAfterThePileWasMarkedMissing_StillCountsTowardIt()
     {
         using GraphHarness h = CorpseGoneOnArrival();
-        h.Party.Add("Nineteen");
-        DateTimeOffset marked = DateTimeOffset.UtcNow;
-        h.Recovery.NowProvider = () => marked + DeathRecoveryManager.MissingHandBackWindow + TimeSpan.FromMinutes(1);
+        for (int i = 0; i < 1900; i++) h.Heartbeat();   // over half an hour of quiet
 
-        h.Recovery.OnItemReceived("rusty dagger", "Nineteen");
+        h.Recovery.OnItemReceived("rusty dagger", "Somebody");
         h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
 
-        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
-        Assert.Empty(h.Sent);
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.Equal(new[] { "torch" }, h.Latest.UnrecoveredItems);
+        Assert.Contains("eq rusty dagger", h.Sent);
+    }
+
+    [Fact]
+    public void AMissingPile_HandedFullyBackByAStranger_EndsRecovered()
+    {
+        using GraphHarness h = CorpseGoneOnArrival();
+
+        h.Recovery.OnItemReceived("rusty dagger", "Somebody");
+        h.Recovery.OnItemReceived("torch", "Somebody");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Equal("Handed back by Somebody.", h.Latest.RecoveryMessage);
+        Assert.Null(h.Latest.UnrecoveredItems);
+        Assert.False(h.Latest.HandedBack);
+    }
+
+    [Fact]
+    public void AMissingPile_HandedPartlyBackByAStranger_IsPartialWithTheCountStillOut()
+    {
+        using GraphHarness h = CorpseGoneOnArrival();
+
+        h.Recovery.OnItemReceived("torch", "Somebody");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.Equal("Handed back by Somebody — 1 item(s) still out.", h.Latest.RecoveryMessage);
+        Assert.Equal(new[] { "rusty dagger" }, h.Latest.UnrecoveredItems);
+        Assert.True(h.Latest.HandedBack);
     }
 
     [Fact]
@@ -375,7 +404,6 @@ public sealed partial class DeathRecoveryManagerTests
     {
         GraphHarness h = DiedAtTheGates();
         h.Recovery.AutoEquip = true;
-        h.Party.Add("Leader");
         h.Tracker.NoteMoveSentByObserver(Direction.S);
         ShowDeathRoomAgain(h);
         Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);

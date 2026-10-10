@@ -608,6 +608,21 @@ public sealed class CastingDirector : IDisposable
         _isTriggeredRest = isTriggeredRest;
     }
 
+    // Wire HealthManager.HpRestDeferredByRoomSpell. True while an HP rest is due and
+    // isn't being taken because the room's own spell does damage (the rest would be
+    // broken every few seconds). The rest-time heal is cast only while resting, so
+    // without this it would never fire there and the room would wear the character
+    // down unanswered: the heal goes out standing instead (user, 2026-10-09: "we
+    // should heal but not actively try to rest in a room like this, because it'll
+    // kill us if we dont have heals").
+    public void SetRestDeferredGate(Func<bool> hpRestDeferredHere)
+    {
+        ArgumentNullException.ThrowIfNull(hpRestDeferredHere);
+        _hpRestDeferredHere = hpRestDeferredHere;
+    }
+
+    private Func<bool>? _hpRestDeferredHere;
+
     // Wire the mana-rest-lock gate for "cast before resting for mana" slots (see
     // _isManaRestActive). True while a mana-recovery rest is active — held through a
     // combat interruption until mana reaches its rest-max target.
@@ -2260,7 +2275,7 @@ public sealed class CastingDirector : IDisposable
 
     private SelfHealInputs SelfHealState() => new(
         _state.Hp, _state.MaxHp, _state.Ma, _state.MaxMa, _state.InCombat,
-        Resting: _state.Position == PlayerPosition.Resting,
+        Resting: _state.Position == PlayerPosition.Resting || _hpRestDeferredHere?.Invoke() == true,
         HealHpTrigger: ResolveHealHpTrigger,
         Affordable: SpellAffordable,
         HpRegenRecastDue: spell => IsRecastDue("", spell));

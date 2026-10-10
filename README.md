@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.166.0**
+> **Version 3.167.0**
 > - Auto-All is a true master switch: off, nothing automatic acts
 > - `@auto-all` is the only remote command followed while it is off
 > - Switching it on gives back what was ticked when it went off

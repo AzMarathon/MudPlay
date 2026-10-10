@@ -110,13 +110,79 @@ public sealed class RoomHazardIndex
             IReadOnlyList<BuffCounter>? buffCounters = null,
             bool isSurvivableDamage = false,
             bool teleportsCounterHolders = false,
-            int counterHolderMinLevel = 0)
+            int counterHolderMinLevel = 0,
+            int negateGroup = -1)
         {
             RequirementGroups = groups;
             BuffCounters = buffCounters ?? Array.Empty<BuffCounter>();
             IsSurvivableDamage = isSurvivableDamage;
             TeleportsCounterHolders = teleportsCounterHolders;
             CounterHolderMinLevel = counterHolderMinLevel;
+            _negateGroup = negateGroup;
+        }
+
+        // Which of RequirementGroups holds the items that work by negating the spell
+        // (an item's NegateSpell list: the phoenix feather, the fish-helm, the swamp
+        // boots), -1 when none does. The game asks that list of what is worn and of
+        // nothing else, so one of these protects on the body and not from the pack.
+        // Every other group is an item the room's textblock looks for among
+        // everything held (`failitem`: a raft, the sunstone wristband, worn or not)
+        // or a buff's source. GAME_MECHANICS "Room-spell hazard shape 1 — direct
+        // damage, negated by an item's `NegateSpell-N`".
+        private readonly int _negateGroup;
+
+        // True when the hazard does nothing to this character as things stand: the
+        // negate group has an item on the body, and every other group one that is
+        // held, worn or not. Asked group by group, since the two are different checks
+        // in the game: an item that is in both has to be worn for the one and only
+        // held for the other. Stricter than IsSatisfiedBy, which asks only whether a
+        // counter is carried. Route planning goes by that looser test today and no
+        // engine puts a carried counter on, so a route can cross a room this says
+        // still hurts. A buff's source item counts while carried: the hazard
+        // provisioner keeps that buff raised in these rooms, and a lapse is not read
+        // here.
+        public bool IsCounteredNow(Func<int, bool> worn, Func<int, bool> carried)
+        {
+            ArgumentNullException.ThrowIfNull(worn);
+            ArgumentNullException.ThrowIfNull(carried);
+            for (int i = 0; i < RequirementGroups.Count; i++)
+                if (!RequirementGroups[i].Any(i == _negateGroup ? worn : carried)) return false;
+            return true;
+        }
+
+        // The counters in a line for the user, each group saying how it has to be
+        // had: worn, held, or as a buff raised by using its source. itemName
+        // resolves an item number; null leaves the number.
+        public string DescribeCounters(Func<int, string?> itemName)
+        {
+            ArgumentNullException.ThrowIfNull(itemName);
+            string Names(IEnumerable<int> ids) =>
+                string.Join(" or ", ids.Select(id => itemName(id) ?? $"item {id}"));
+
+            var parts = new List<string>();
+            for (int i = 0; i < RequirementGroups.Count; i++)
+            {
+                IReadOnlyList<int> group = RequirementGroups[i];
+                if (i == _negateGroup)
+                {
+                    parts.Add($"{Names(group)} (worn)");
+                    continue;
+                }
+                // A buff gate's group is the buff's sources plus the items whose
+                // holder the gate skips altogether.
+                BuffCounter buff = BuffCounters.FirstOrDefault(
+                    b => b.SourceItems is { Count: > 0 } sources && sources.All(group.Contains));
+                if (buff.SourceItems is not { Count: > 0 } used)
+                {
+                    parts.Add($"{Names(group)} (held)");
+                    continue;
+                }
+                List<int> held = group.Where(id => !used.Contains(id)).ToList();
+                parts.Add(held.Count > 0
+                    ? $"the buff from {Names(used)} (used), or {Names(held)} (held)"
+                    : $"the buff from {Names(used)} (used)");
+            }
+            return string.Join("; and ", parts);
         }
 
         // Every distinct protecting item across all groups — the set the route
@@ -263,6 +329,7 @@ public sealed class RoomHazardIndex
         List<BuffCounter> buffCounters = new();
 
         // Damage / death-timer path: any item negating any chain member protects.
+        int negateGroup = -1;
         if (damaging)
         {
             List<int> negators = new();
@@ -272,7 +339,11 @@ public sealed class RoomHazardIndex
                 foreach (int itemId in items)
                     if (!negators.Contains(itemId)) negators.Add(itemId);
             }
-            if (negators.Count > 0) groups.Add(negators);
+            if (negators.Count > 0)
+            {
+                negateGroup = groups.Count;
+                groups.Add(negators);
+            }
         }
 
         // TextBlock paths: failitem (hold to abort) and checkspell (carry+use the
@@ -291,7 +362,7 @@ public sealed class RoomHazardIndex
         int holderMinLevel = 0;
         foreach (int tb in textBlocks)
             holdersTeleported |= TeleportsHolders(tb, tbActions, ref holderMinLevel);
-        return new RoomHazard(groups, buffCounters, survivable, holdersTeleported, holderMinLevel);
+        return new RoomHazard(groups, buffCounters, survivable, holdersTeleported, holderMinLevel, negateGroup);
     }
 
     // Steps that relocate whoever the textblock runs on.

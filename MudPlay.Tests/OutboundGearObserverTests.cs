@@ -1,5 +1,6 @@
 using System.Text;
 using MudPlay.Game.Combat;
+using MudPlay.Models.GameData;
 using MudPlay.Services;
 using Xunit;
 
@@ -65,5 +66,95 @@ public sealed class OutboundGearObserverTests
 
         Assert.Equal(new[] { false, true, true, false }, duringSend);
         Assert.False(gate.SendingClientCommand);
+    }
+
+    // ----- the user's own commands, relayed by the client (user, 2026-10-09:
+    // "re-attack immediately if auto-combat is on") -------------------------
+
+    // The wire as MainWindowViewModel.SendUserInput runs it for the gear observer.
+    private sealed class Wire
+    {
+        public EngineSendGate Gate { get; } = new();
+        public List<string> GearSeen { get; } = new();
+        public Action<byte[]> Engine { get; }
+        public Action<byte[]> UserCommands { get; }
+        private readonly OutboundGearObserver _observer;
+
+        public Wire()
+        {
+            _observer = new OutboundGearObserver(GearSeen.Add);
+            Engine = Gate.WrapEngineSender(Send);
+            UserCommands = Gate.MarkUserCommands(Engine);
+        }
+
+        public void Send(byte[] data)
+        {
+            if (Gate.SendingUsersOwnCommand) _observer.ObserveOutbound(data);
+        }
+
+        public void Typed(string line) => Send(Encoding.Latin1.GetBytes(line + "\r\n"));
+    }
+
+    [Fact]
+    public void Macro_GearStep_IsTheUsersOwn_TheOtherStepsAreNot()
+    {
+        // A macro bound to a key: "rem ring;eq ring of power;a rat".
+        Wire wire = new();
+        MacroDispatcher macros = new(new MacroStore());
+        macros.SetSender(wire.UserCommands);
+
+        macros.FireMacro(new Macro("F5", Ctrl: false, Shift: false, Alt: false,
+            Command: "rem ring;eq ring of power;a rat", Enabled: true));
+
+        Assert.Equal(new[] { "rem ring", "eq ring of power" }, wire.GearSeen);
+    }
+
+    [Theory]
+    [InlineData("wear phoenix feather")]   // a trigger's response
+    [InlineData("eq amber sceptre")]       // an event's Command action
+    public void TriggerResponseOrEventCommand_ThroughTheMarkedSender_IsTheUsersOwn(string command)
+    {
+        // TriggerEngine.SendResponse and EventManager.ExecuteCommand each send
+        // through the one sender they are bound to, which MainWindowViewModel marks.
+        Wire wire = new();
+        wire.UserCommands(Encoding.Latin1.GetBytes(command + "\r"));
+
+        Assert.Equal(new[] { command }, wire.GearSeen);
+        Assert.True(wire.Gate.SendingUsersOwnCommand);    // nothing in flight afterwards: back to typed
+    }
+
+    [Fact]
+    public void AliasExpansion_GoesOutAsTyped()
+    {
+        // An alias turns the typed line into its steps and sends each as typed.
+        Wire wire = new();
+        wire.Typed("eq phoenix feather");
+
+        Assert.Equal(new[] { "eq phoenix feather" }, wire.GearSeen);
+    }
+
+    [Fact]
+    public void EngineGearCommands_AreNotTheUsersOwn_EvenBesideAMarkedSend()
+    {
+        // The Equipment Manager's swap, an item cast's eq / use / eq, a fumble's
+        // re-send: each has its own re-attack and must not arm a second one.
+        Wire wire = new();
+        wire.Engine(Encoding.Latin1.GetBytes("eq platinum sceptre\r"));
+        wire.UserCommands(Encoding.Latin1.GetBytes("say hello\r"));
+        wire.Engine(Encoding.Latin1.GetBytes("eq amber sceptre\r"));
+        wire.Gate.ReplayLastClientCommand();
+
+        Assert.Empty(wire.GearSeen);
+    }
+
+    [Fact]
+    public void MarkedSender_HeldByTheGate_SendsNothing()
+    {
+        // Marking a command the user's doesn't get it past a hold (the trainer form).
+        Wire wire = new();
+        wire.Gate.Hold("test");
+        wire.UserCommands(Encoding.Latin1.GetBytes("eq sword\r"));
+
+        Assert.Empty(wire.GearSeen);
     }
 }
