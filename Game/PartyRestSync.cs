@@ -105,7 +105,39 @@ public sealed class PartyRestSync : IDisposable
         if (!CanSignal()) return;
         string? why = note ?? DefaultNote(reason);
         Telepath(_party.LeaderName!, why is null ? "@wait" : $"@wait {why}");
+        _leaderHolds = true;
         _log?.Info(LogCategory, $"sent @wait for {reason}" + (why is null ? "" : $" {why}"));
+    }
+
+    // The master switch (true = off). Off, nothing is telepathed: no @wait, no @ok,
+    // no @heal (user, 2026-10-09: "no holds should be sent"). The reasons are still
+    // tracked, so ResyncAfterMasterSwitch can settle with the leader afterwards.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    // The leader was last told @wait and has not been told @ok since.
+    private bool _leaderHolds;
+
+    // The master switch came back on. What the leader was last told may no longer
+    // be true: a reason that arose meanwhile was never sent, and one that cleared
+    // left its @ok unsent. Tell the leader how things stand now. A repeated @wait is
+    // harmless (the leader dedupes waiting members).
+    public void ResyncAfterMasterSwitch()
+    {
+        if (!CanSignal()) return;
+        if (_waitReasons.Count > 0)
+        {
+            WaitReason reason = _waitReasons.First();
+            string? why = DefaultNote(reason);
+            Telepath(_party.LeaderName!, why is null ? "@wait" : $"@wait {why}");
+            _leaderHolds = true;
+            _log?.Info(LogCategory, $"master switch back on — sent @wait, still held by {string.Join(", ", _waitReasons)}");
+        }
+        else if (_leaderHolds)
+        {
+            Telepath(_party.LeaderName!, "@ok");
+            _leaderHolds = false;
+            _log?.Info(LogCategory, "master switch back on — sent the @ok owed for a wait that cleared while it was off");
+        }
     }
 
     // Engine-callable entry point — clear a wait reason and telepath @ok to the
@@ -130,6 +162,7 @@ public sealed class PartyRestSync : IDisposable
         }
         if (!CanSignal()) return;
         Telepath(_party.LeaderName!, "@ok");
+        _leaderHolds = false;
         _log?.Info(LogCategory, $"last wait reason ({reason}) cleared — sent @ok");
     }
 
@@ -148,6 +181,7 @@ public sealed class PartyRestSync : IDisposable
         if (!_party.IsInParty) return;
         if (_party.SelfIsLeader) return;
         if (_wireSender is null) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         _wireSender(Encoding.Latin1.GetBytes("bg @heal\r"));   // gang speak verb is `bg`
     }
 
@@ -159,6 +193,7 @@ public sealed class PartyRestSync : IDisposable
 
     private bool CanSignal()
     {
+        if (MasterSwitchOff?.Invoke() == true) return false;
         if (!_party.IsInParty) return false;
         if (_party.SelfIsLeader) return false;
         if (string.IsNullOrEmpty(_party.LeaderName)) return false;

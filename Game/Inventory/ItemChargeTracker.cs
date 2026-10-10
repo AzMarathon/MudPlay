@@ -146,9 +146,15 @@ public sealed class ItemChargeTracker : IDisposable
     // `look`; a persisted count (or a rechargeable that cleanup-resolves to max) needs
     // no look, so this stays quiet after the first encounter with each item. A one-use
     // consumable (a learn-spell scroll) is never looked: held, it has its one charge.
+    // The master switch (true = off): off, no item is looked at to read its
+    // charges. An unknown count stays unknown until the next inventory change
+    // after the switch is back on.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public void EnsureChargesKnown()
     {
         if (_disposed || !_onParadigm()) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         foreach (string entry in _held())
         {
             if (string.IsNullOrWhiteSpace(entry)) continue;
@@ -296,6 +302,7 @@ public sealed class ItemChargeTracker : IDisposable
         {
             if (_disposed || !_onParadigm()) return;
             if (!_relookGen.TryGetValue(number, out int cur) || cur != gen) return;
+            if (MasterSwitchOff?.Invoke() == true) return;
             if (IsHeld(number)) _sendLook($"look {name}");
             else Forget(number, name);
         });

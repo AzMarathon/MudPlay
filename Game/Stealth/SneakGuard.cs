@@ -131,7 +131,9 @@ public sealed class SneakGuard
         Released?.Invoke();
     }
 
-    // Drop anything queued — a new profile or a disconnect makes it stale.
+    // Drop anything queued — a new profile or a disconnect makes it stale, and so
+    // does the master switch going off: Auto Sneak then reads off, the hold would
+    // lift, and without this the lift would send everything held.
     public void Reset()
     {
         _queued.Clear();

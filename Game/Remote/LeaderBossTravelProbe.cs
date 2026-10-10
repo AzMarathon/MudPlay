@@ -89,9 +89,13 @@ public sealed class LeaderBossTravelProbe : IDisposable
 
     // Ask the leader where it's going. False when there's nobody to ask. A question
     // already out is left to run.
+    // The master switch (true = off): off, the leader is not asked.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public bool Ask()
     {
         if (_disposed || _leaderGivenName() is not { Length: > 0 } leader) return false;
+        if (MasterSwitchOff?.Invoke() == true) return false;
         if (_awaiting) return true;
         _awaiting = true;
         byte[] bytes = Encoding.Latin1.GetBytes($"/{leader} @path\r");
@@ -142,6 +146,9 @@ public sealed class LeaderBossTravelProbe : IDisposable
     public void NoteMoved()
     {
         if (!_waitingForLeaderToMove) return;
+        // Left waiting, so the question is asked at the first move after the
+        // switch is back on, and whoever is waiting on the answer still gets one.
+        if (MasterSwitchOff?.Invoke() == true) return;
         _waitingForLeaderToMove = false;
         if (!_stillNeeded()) return;
         _confirming = true;

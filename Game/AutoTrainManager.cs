@@ -346,10 +346,15 @@ public sealed class AutoTrainManager : IDisposable
     //
     // A Stock hold is not consulted: it rests on the last `stat`, and a form that
     // opens is the game's own word that no stat is altered now.
+    // The master switch (true = off): off, a stat form the user opens by hand is
+    // theirs to fill in.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnManualTrainStatsEntered()
     {
         if (IsBusy) return;                                      // our own flow already drives it
         if (!ReadAutoTrainerSettings().AutoTrainStats) return;   // checkbox off → hand-allocate
+        if (MasterSwitchOff?.Invoke() == true) return;
         if (CurrentRow(out CharacterPlanContext ctx) is not { } row || !HasWork(ctx, row))
         {
             // Say why, or a report of "the plan didn't fire" reads as a bug — usually it's

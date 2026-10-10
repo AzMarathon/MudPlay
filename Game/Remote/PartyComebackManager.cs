@@ -308,9 +308,18 @@ public sealed class PartyComebackManager : IDisposable
 
     // ----- @where probe (path B) -------------------------------------
 
+    // The master switch (true = off): off, nobody is probed for or gone back to
+    // on our own. The @comeback and @forget a member sends are remote commands
+    // and are stopped at the dispatcher; a recovery under way when the switch
+    // goes off is dropped by it (AppServices calls Cancel).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    private bool MasterOff => MasterSwitchOff?.Invoke() == true;
+
     private void OnMemberReturned(string given)
     {
         if (string.IsNullOrEmpty(given)) return;
+        if (MasterOff) return;
         if (_busy) return;                 // a recovery is already running
         if (MemberInParty(given)) return;  // already back with us
         if (!_wire.IsBound) return;        // can't probe without a wire
@@ -350,7 +359,7 @@ public sealed class PartyComebackManager : IDisposable
             _log?.Info(LogCategory, $"{given} rejoined after the CR — no @where needed.");
             return;
         }
-        if (_busy || !_wire.IsBound) return;
+        if (_busy || !_wire.IsBound || MasterOff) return;
         ProbeWhere(given);
     }
 
@@ -369,6 +378,7 @@ public sealed class PartyComebackManager : IDisposable
     private void OnTelepathIn(MatchResult result)
     {
         if (_pendingProbes.Count == 0) return;
+        if (MasterOff) return;
         if (result.Groups.Count < 2) return;
         PruneProbes();
         string sender = GivenName(result.Groups[0]);
@@ -416,6 +426,7 @@ public sealed class PartyComebackManager : IDisposable
     private void OnMemberLeftBehind(string given)
     {
         if (string.IsNullOrEmpty(given) || _busy) return;
+        if (MasterOff) return;
         if (_ownTeleportAt is { } at && NowProvider() - at <= OwnTeleportWindow)
         {
             _log?.Info(LogCategory, $"{given} was dropped by our own teleport — not going back for them.");

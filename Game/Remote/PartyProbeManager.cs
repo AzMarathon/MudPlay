@@ -160,9 +160,14 @@ public sealed class PartyProbeManager : IDisposable
         if (!m.IsInvited) TryProbeOnJoin(m);
     }
 
+    // The master switch (true = off): off, a joining member is not probed. Checked
+    // before the once-a-day stamp, so the probe is still owed at the next join.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void TryProbeOnJoin(PartyMember m)
     {
         if (!Enabled || _suspended || InTrainerMenu || _wireSender is null) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         if (m.IsSelf || m.IsInvited || string.IsNullOrEmpty(m.Name)) return;
 
         string given = GivenName(m.Name);

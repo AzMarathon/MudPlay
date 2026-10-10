@@ -520,6 +520,9 @@ public sealed class CombatStateTracker : IDisposable
     // — a laggy >6s round — the CR's re-displayed "Also here:" re-observes a beat
     // later, so the optimistic clear self-heals. Running on the 1s heartbeat
     // lands this in ~6s total.
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public void OnCombatTick()
     {
         if (_disposed) return;
@@ -560,7 +563,9 @@ public sealed class CombatStateTracker : IDisposable
             + (dark
                 ? "room empty; dark room, skipping resync CR and clearing stuck combat state"
                 : "room empty; resyncing and clearing stuck combat state"));
-        if (!dark)
+        // With the master switch off the stuck state is still cleared, but the
+        // redisplay is not sent: nothing automatic goes on the wire.
+        if (!dark && MasterSwitchOff?.Invoke() != true)
             _wireSender(Encoding.Latin1.GetBytes("\r"));
         ResetCombatState("idle-stall watchdog: no combat activity — room empty");
     }

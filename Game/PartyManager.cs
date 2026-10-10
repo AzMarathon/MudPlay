@@ -604,9 +604,15 @@ public sealed partial class PartyManager : IDisposable
     // Send the rerank command (`frontrank` / `backrank`) to the server iff
     // LocalRankPreference is non-Mid and a wire-sender is bound. Mid is the
     // server-side default rank — no command needed when that's the preference.
+    // The master switch (true = off): off, no rank command and no re-invite of a
+    // returning member goes out. Invite and Uninvite themselves are not gated
+    // here: their callers are.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void SendRankPreferenceCommand()
     {
         if (_wireSender is null) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         string? cmd = LocalRankPreference switch
         {
             Models.Profile.PartyRank.Front => "frontrank\r",
@@ -939,6 +945,7 @@ public sealed partial class PartyManager : IDisposable
         _recentlyDisconnected.Remove(name);
         if (State.IsInParty && !State.SelfIsLeader) return;
         if (!AutoInviteEnabled) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         // Signal the recovery manager before the bare invite: if they came back
         // far away, it probes @where and walks to collect them; a co-located
         // return is handled by the invite below and the probe short-circuits.

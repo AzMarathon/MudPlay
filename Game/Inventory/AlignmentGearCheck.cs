@@ -56,9 +56,14 @@ public sealed class AlignmentGearCheck
     public void RequestVerify() => _verifyPending = true;
 
     // Every prompt: send what's pending once the gap has passed.
+    // The master switch (true = off): off, the check stays pending and goes out
+    // at the first prompt after the switch is back on.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public void OnPrompt()
     {
         if (!_checkPending && !_verifyPending) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         DateTimeOffset now = _now();
         if (now - _lastSent < Gap) return;
         bool verify = _verifyPending;

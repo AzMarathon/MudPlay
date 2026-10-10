@@ -33,9 +33,14 @@ public sealed class PostDeathInventoryRefresh
     }
 
     // The character's room is known again (the graveyard, on the way back in).
+    // The master switch (true = off): off, the read stays owed and goes out at
+    // the first known room after the switch is back on.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public void OnRoomKnown()
     {
         if (!_due) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         _due = false;
         _requestInventory();
     }

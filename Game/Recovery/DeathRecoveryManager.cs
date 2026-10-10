@@ -593,6 +593,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // re-entering the death room. Persisted per-character. The grab itself is
     // inert until inventory tracking records lost items; the preference is stored
     // now.
+    // The automatic grab on walking into the death room, or past a pile: the
+    // setting, and the master switch being on. Recover Now forces it and is not
+    // read through here.
+    private bool AutoGrabAllowed => AutoRecover && _isAutoEnabled?.Invoke() != false;
+
     public bool AutoRecover
     {
         get => _profile.Current?.DeathAutoRecover ?? false;
@@ -805,7 +810,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             // Now's, or their own walk-to with nothing else driving) earns all of it;
             // one another engine made earns the peek and its neighbours only.
             bool walkedHere = WalkedToDeathRoom(rec);
-            BeginRecovery(rec, autoGrab: AutoRecover || force, deliberate: force || walkedHere,
+            BeginRecovery(rec, autoGrab: AutoGrabAllowed || force, deliberate: force || walkedHere,
                 arrivedByWalk: !force && walkedHere);
             // A room prints its floor before the exits line that confirms the move
             // (GAME_MECHANICS "Hiding coin in a room (stashing)", Client use), so on
@@ -866,7 +871,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // confirmed) is not asked for a second time, only counted.
     private void TryArmSpillover(Room room, bool arrived, DeathRecord? floorAlreadyAskedFor)
     {
-        if (!AutoRecover || _isParadigm?.Invoke() == true) return;
+        if (!AutoGrabAllowed || _isParadigm?.Invoke() == true) return;
         if (!arrived && _spilloverRecovering) return;
         if (FindPileAdjacentTo(room) is not { } dp) return;
         _spilloverPile = dp;

@@ -165,15 +165,20 @@ public sealed class ManaRegenReroller : IDisposable
     // mid-cycle is the recast we triggered and keeps the counter. Either way, fire an
     // abil 145 query to read what it rolled. No-op (and abandons any cycle) when
     // rerolling is disabled.
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public void OnRollSpellLanded(string spellShort)
     {
         if (string.IsNullOrWhiteSpace(spellShort)) return;
 
         ManaRegenRerollConfig cfg = _readConfig();
-        if (cfg.Threshold is null)
+        if (cfg.Threshold is null || MasterSwitchOff?.Invoke() == true)
         {
-            // Rerolling disabled — nothing to verify; the spell just rides the
-            // normal recast-on-expiry buff path. Ensure we hold no stale cycle.
+            // Rerolling disabled (or the master switch is off, and a roll spell
+            // the user cast by hand is theirs) — nothing to verify; the spell just
+            // rides the normal recast-on-expiry buff path. Ensure we hold no stale
+            // cycle.
             Reset();
             return;
         }

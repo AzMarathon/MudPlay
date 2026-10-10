@@ -310,6 +310,66 @@ public sealed class MovementCoordinator
         _log = log;
     }
 
+    // ----- Master switch ---------------------------------------------------
+    // With the master switch off no hold is asserted (user, 2026-10-09: "no holds
+    // should be sent"): every gate but the switch's own and the user's is parked.
+    // A parked gate is not asserted, so nothing reads it as a hold, but its owner
+    // goes on calling AssertGate / ClearGate as its own state changes and the
+    // parked set follows. When the switch comes back on, whatever is still parked
+    // is asserted before the Auto-All gate is lifted, so a hold that came due
+    // meanwhile (held, afraid, a member down) is up before anything moves.
+    private readonly HashSet<string> _parkedGates = new(StringComparer.OrdinalIgnoreCase);
+    private bool _masterSwitchOff;
+    private const string MasterSwitchAsserter = "MasterSwitch";
+
+    // The gates the master switch leaves alone: its own freeze, and the user's
+    // pause, which is not an automatic hold.
+    private static bool StandsWhileMasterSwitchOff(string gate) =>
+        gate.Equals(AutoAllGate, StringComparison.OrdinalIgnoreCase)
+        || gate.Equals(UserGate, StringComparison.OrdinalIgnoreCase);
+
+    // Gates owed but not asserted because the master switch is off, for the bug
+    // report.
+    public IReadOnlyCollection<string> ParkedGates => _parkedGates.ToArray();
+
+    // The master switch went off: release every automatic hold into the parked
+    // set. Called with the Auto-All gate already up, so nothing moves on the
+    // release. Returns the gates released, for the switch's log line.
+    public IReadOnlyList<string> ParkHoldsForMasterSwitch()
+    {
+        _masterSwitchOff = true;
+        List<string> released = _assertedGates.Where(g => !StandsWhileMasterSwitchOff(g)).ToList();
+        foreach (string gate in released)
+        {
+            _assertedGates.Remove(gate);
+            _parkedGates.Add(gate);
+            RecordTransition(gate, asserted: false, MasterSwitchAsserter, "master switch off — hold not asserted");
+        }
+        if (released.Count > 0)
+        {
+            if (!IsPaused) PauseStateChanged?.Invoke(false);
+            GatesChanged?.Invoke();
+        }
+        return released;
+    }
+
+    // The master switch came back on: assert what is still owed. Called before
+    // the Auto-All gate is lifted.
+    public void RestoreHoldsAfterMasterSwitch()
+    {
+        _masterSwitchOff = false;
+        if (_parkedGates.Count == 0) return;
+        bool wasPaused = IsPaused;
+        foreach (string gate in _parkedGates.ToList())
+        {
+            _parkedGates.Remove(gate);
+            if (!_assertedGates.Add(gate)) continue;
+            RecordTransition(gate, asserted: true, MasterSwitchAsserter, "still owed as the master switch came back on");
+        }
+        if (!wasPaused && IsPaused) PauseStateChanged?.Invoke(true);
+        GatesChanged?.Invoke();
+    }
+
     // Assert gate. Idempotent — re-asserting an already-asserted gate doesn't
     // refire the event or duplicate a history entry. gate uses one of the
     // constants (UserGate, CombatGate, etc.). asserter names the subsystem
@@ -318,6 +378,12 @@ public sealed class MovementCoordinator
     public void AssertGate(string gate, string? asserter = null, string? reason = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+        if (_masterSwitchOff && !StandsWhileMasterSwitchOff(gate))
+        {
+            if (_parkedGates.Add(gate))
+                _log?.Debug("Gate", $"parked   — gate={gate} asserter={asserter} reason={reason} (master switch off: not asserted)");
+            return;
+        }
         bool wasPaused = IsPaused;
         if (!_assertedGates.Add(gate)) return;
         RecordTransition(gate, asserted: true, asserter, reason);
@@ -331,6 +397,7 @@ public sealed class MovementCoordinator
     public void ClearGate(string gate, string? asserter = null, string? reason = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gate);
+        _parkedGates.Remove(gate);
         if (!_assertedGates.Remove(gate)) return;
         RecordTransition(gate, asserted: false, asserter, reason);
         if (!IsPaused) PauseStateChanged?.Invoke(false);

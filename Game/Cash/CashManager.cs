@@ -1384,6 +1384,10 @@ public sealed class CashManager : IDisposable
         _autoDepositRetryNotBefore = default;
     }
 
+    // The master switch (true = off): off, no bank / stash trip is asked for.
+    // Coin collection itself rides the Auto Get Cash probe, which reads it too.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void CheckAutoDeposit()
     {
         CashSettings settings = _readSettings();
@@ -1435,6 +1439,10 @@ public sealed class CashManager : IDisposable
                     + $"(wealth={wealthValue} gate={wealthThreshold})");
                 return;
             }
+
+            // Before the latch, so the trip is still owed: the first inventory
+            // change after the master switch is back on fires it.
+            if (MasterSwitchOff?.Invoke() == true) return;
 
             _autoDepositFiredThisCrossing = true;
             _log?.Info(LogCategory,

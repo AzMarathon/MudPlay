@@ -47,9 +47,15 @@ public sealed class LocationEquipManager
     // newly-matched items (when carried) and reverts items whose area we've left.
     // A null (unknown / Lost) room holds the current state rather than stripping
     // gear on a transient localization loss.
+    // The master switch (true = off): off, a room change wears and reverts
+    // nothing. What is worn stays as it is until the first room change after the
+    // switch is back on.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public void OnRoomChanged(Room? newRoom)
     {
         if (newRoom is not { } room) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
 
         var desired = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (LocationEquipRule rule in _readOther().LocationEquipRules)

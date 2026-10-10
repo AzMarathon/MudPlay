@@ -173,9 +173,14 @@ public sealed class AilmentSyncEngine : IDisposable
     // gate must be off. Ignore<X> is the single "I don't care about this ailment"
     // toggle — it suppresses BOTH the say announce and the @wait telepath. Held has
     // no Ignore gate, so it always announces (in-party / no-cure permitting).
+    // The master switch (true = off): off, no ailment is announced on say. The
+    // announce is apply-only, so one skipped is not said later.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private bool ShouldAnnounce(MessageFlags flag, SpellsSettings s, bool inParty)
     {
         if (!inParty) return false;
+        if (MasterSwitchOff?.Invoke() == true) return false;
         if (_hasCureConfigured(flag)) return false;
         return !IsWaitSuppressed(flag, s);
     }

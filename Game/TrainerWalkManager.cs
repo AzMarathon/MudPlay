@@ -1291,12 +1291,19 @@ public sealed class TrainerWalkManager : IDisposable
     // every stat/exp poll and accrues each "You gain N experience." line. We react
     // to its change so the armed run fires the instant a kill crosses the next-level
     // threshold (no exp poll), and so CanTrainNow refreshes for the UI.
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnStatsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(PlayerStats.Exp)) return;
         AutoTrainerSettings s = ReadSettings();
         int keep = Math.Max(0, s.LevelsToKeep);
+        // Auto-train does not fire with the master switch off, "because no other
+        // engines will fire" (user, 2026-10-09). This handler runs on every exp
+        // change, so an armed run fires at the first gain after it is back on.
         if (!IsBusy && EngineActive && s.AutoTrain
+            && MasterSwitchOff?.Invoke() != true
             && DateTimeOffset.Now >= _fundingRetryAt
             && TrainBudgetCalculator.ShouldFire(CountBankableAbove(_stats.Level), keep, s.FireAtBankedLevels)
             && TrainBudgetCalculator.WithinCeiling(_stats.Level, Math.Max(0, s.DoNotTrainAbove))

@@ -929,18 +929,7 @@ public partial class MainWindowViewModel : ObservableObject
         // the badge reseed below; the reconcile also reseeds when it changes state.
         AppServices.Current.Profile.ProfileLoaded += _ => ReconcileAutoModeToBase("profile load");
         AppServices.Current.AutoModeController.KillSwitchToggled += off =>
-            Dispatcher.UIThread.Post(() =>
-            {
-                IsMasterSwitchOn = !off;
-                // The switch moves the toggles through a profile reseed, which is
-                // not a genuine flip, so nothing re-decides on its own: the engines
-                // that only decide on an event are told here, as a hand flip tells
-                // them, or a monster already in the room goes unfought and a rest
-                // that is due waits for the next prompt.
-                ReevaluateCombatForCurrentRoom();
-                AppServices.Current.Health?.Evaluate();
-                AppServices.Current.CastDirector?.Evaluate();
-            });
+            Dispatcher.UIThread.Post(() => IsMasterSwitchOn = !off);
         AppServices.Current.Profile.ProfileLoaded += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileMutated += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileSaving  += _ => SyncAutoEngineTogglesFromProfile();
@@ -1686,8 +1675,13 @@ public partial class MainWindowViewModel : ObservableObject
         // The tracker asks the game to show the room when a step through a
         // teleporting exit wasn't followed by the displays the game owes it: a bare
         // Enter, through the same gate.
-        AppServices.Current.RoomTracker.SetRoomRedisplay(
-            () => engineSend(System.Text.Encoding.Latin1.GetBytes("\r")));
+        // Not with the master switch off: the tracker goes on reading the rooms it
+        // is shown, but asks for none.
+        AppServices.Current.RoomTracker.SetRoomRedisplay(() =>
+        {
+            if (AppServices.Current.AutoModeController.Blocks("Position fixes")) return;
+            engineSend(System.Text.Encoding.Latin1.GetBytes("\r"));
+        });
         // Teleport-maze solver — its look-peeks + reshuffle moves ride the same
         // gate-wrapped pipeline. The RoomParsed feed that drives its relocalize
         // is subscribed below beside the RoomDisplayParser.

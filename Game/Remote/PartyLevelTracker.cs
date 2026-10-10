@@ -108,9 +108,13 @@ public sealed class PartyLevelTracker
     // re-probe is demand-driven rather than firing on every hop. Debounced so one
     // plan fires at most one round-trip. Fire-and-forget: the reply refreshes the
     // cache for the next evaluation; the synchronous Bounds never blocks on it.
+    // The master switch (true = off): off, no @level round-trip is started.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     public void WarmStaleLevels()
     {
         if (!_party.IsInParty || !_party.SelfIsLeader) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
 
         DateTime now = _clock();
         if (now - _lastStaleProbeAt < WarmDebounce) return;
