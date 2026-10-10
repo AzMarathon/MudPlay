@@ -1,5 +1,18 @@
 # Version history
 
+## 3.162.0
+
+- Auto-All is a true master switch: off, nothing automatic acts (engines, remote commands, triggers, events, polls, position fixes, holds, party signals, trips)
+- Only the Auto-All switch counts as "all autos off"; unticking the toggles one by one does not
+- `@auto-all` is the one remote command followed while it is off; the others are ignored with no reply
+- `@auto-all off` engages the switch even with every toggle already off; `@auto-all on` with nothing remembered turns on the base modes
+- A walk, loop or Auto-Lair started by hand with the switch off is refused with a terminal notice
+- Low-HP hang-up now needs Auto-Rest on (it used to run under Auto-Heal alone too)
+- "Allow hangup in all-off mode" now means the master switch: off, it lets every automatic hang-up through (low HP, `@panic`, PvP, Hangup monster)
+- Nightly-cleanup log-off does not start while the switch is off
+- Re-enable on reconnect no longer turns autos back on over a switch that is off
+- Main-menu auto-entry works with the switch off, like the rest of login
+
 ## 3.161.7
 
 - Party item gates: after crossing, one `par` checks a member credited with a copy from memory

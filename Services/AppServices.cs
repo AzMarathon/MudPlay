@@ -140,6 +140,11 @@ public sealed class AppServices
     // True when refused: the caller starts nothing. what is "Walk", "Loop" or
     // "Auto-Lair". One already running when the switch goes off is not stopped
     // here: it freezes on MovementCoordinator.AutoAllGate and resumes.
+    // The hang-up carve-out as the engines read it (the character's own tier),
+    // for the bug report.
+    public bool AllowHangupInAllOffMode =>
+        ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").AllowHangupInAllOffMode;
+
     public bool RefuseStartForMasterSwitch(string what)
     {
         if (!AutoModeController.Blocks("Hand-started navigation", what)) return false;

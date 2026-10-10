@@ -255,7 +255,7 @@ The status line spells out **what the engine is doing** — e.g. *"Looping Ring 
 
 **Why it's held** shows as amber chips after the line, one per hold in force: *Mortally Wounded*, *Confused*, *Held*, *Feared*, *Low HP*, *Low MANA*, *Corpse Recovery*, *@Wait <name>* (a party member asked you to wait), *Downed Ally <name>*, *<name> disconnected*, *Waiting on <name> to join*, *Asking who holds <item>* (a walk in a party waiting at its start to hear who has an item it is to fetch; it shows for a moment even when a route card's count is reused), *Auto-all is off*, *Searching Room*, *Roomba*, *Waiting to Sneak*, *Waiting to Debuff*, and *Buffing* / *Curing* / *Healing* when a sneaked walk stops in a clear room to cast. Brief everyday holds (looting, sneaking, gear swaps, the quick room checks) don't get a chip. A *Held* hold normally ends on the game's own "you can move again" line; if that line is missed, it ends the next time a move of yours goes through (typed, or dragged by your party leader), since a held character can't move. An **errand trip** that pauses the run and walks somewhere else gets a cyan chip for as long as it lasts — *Bank Trip* (auto-deposit), *Auto-Selling*, *Auto-Training*, *@Comeback* (going back for a party member, until they're picked up or given up on) — since the line itself only names where the walk is headed. Once the errand is done, the walk back reads *Back to Loop* (*Back to Lairs* for Auto-Lair). Many holds last a split second, so when one ends its chip fades out over three seconds instead of vanishing — long enough to read. The engine doesn't wait for the fade; only the display lingers.
 
-A route that's **queued but not moving** says so and names the hold (a common one is **auto-engines off (Auto-All)** — the kill switch is off, so nothing walks until you turn it back on).
+A route that's **queued but not moving** says so and names the hold (a common one is **auto-engines off (Auto-All)** — the master switch went off while it was running, so it stands until you turn it back on; a run you try to *start* with the switch off is refused with a terminal notice instead).
 
 When a walk / loop / Auto-Lair **can't continue**, the reason is named rather than a bare "lost": a blocked loop shows the offending door / winch / hidden exit and room, an Auto-Lair whose approach keeps failing shows *"retrying: …"*, and the **Lost — couldn't recover** dialog names the last room the engine was sure of so you have a concrete place to right-click **"I am here"**.
 
@@ -952,7 +952,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 ### Change my settings
 
 - The auto-engine toggles — `@auto-combat`, `@auto-nuke`, `@auto-heal`, `@auto-rest`, `@auto-bless`, `@auto-light`, `@auto-cash`, `@auto-get`, `@auto-sneak`, `@auto-hide`, `@auto-search` — each flips that engine (bare toggles it; add `on` or `off` to force it).
-- `@auto-all` — the kill switch: `off` stops every engine, `on` restores what was running. `@settings` — reports every engine's on/off state.
+- `@auto-all` — the master switch: `off` switches it off (even when every toggle was already unticked), `on` switches it on and gives back what was running, or your base modes when nothing was. **While it is off, `@auto-all` is the only remote command that is followed**; every other one is ignored without a reply. See **Automation → The master switch (Auto-All)**. `@settings` — reports every engine's on/off state.
 - `@atkprio` — Target Priority: bare reports it; `1` Default, `2` follow-leader, `3 <name>` attack-what-player.
 - `@atkorder` — Attack Order: bare reports it; `1` Default, `2` last-party, `3` last-room, `4 <name>` attack-after, `5` not-last.
 - `@divert <player>` — forwards your incoming telepaths to another player; bare `@divert` stops.
@@ -992,7 +992,7 @@ Your client only accepts loop lines within two minutes of your own `@loop send y
 - `@share` — splits your held coin evenly across the party.
 - `@ptrain` — the **Auto-train party** handshake between MudPlay clients (readiness reports, and the leader's give / withdraw / train orders during a party training trip). You never type it; a client only acts on it while its own *Auto-train party* box is on, and only on orders from its current leader. See **Auto-train party** under Settings → Auto-Trainer.
 - `@party` — bare, it reports whether you're solo / following / leading. Sent on **say** *with* arguments, it relays whatever follows verbatim to your character as if you typed it (the party version of `@do`) — `@party rest`, `@party use chime`, and so on. The directive form only works on the say channel, and Settings → Talk can disallow it.
-- `@panic` — the party-wide bail-out (MegaMUD parity). A **leader** whose HP crosses its **"hang if below"** floor says a bare `@panic` on say and then escapes (hangs up, or breaks + `sys goto <wimpy>` per the Health tab) — warning the whole party to get out. It's opt-in on both sides via two **Settings → Party** checkboxes: **Use @panic while leading** (whether you send it) and **Ignore @panics** (whether a received one makes *you* bail). Both default off. A received `@panic` makes you escape exactly as your own low-HP emergency would; it still respects the *Disable hangups* master switch for the carrier-drop (you'll `sys goto` wimpy if configured, but never be force-disconnected by someone else's panic).
+- `@panic` — the party-wide bail-out (MegaMUD parity). A **leader** whose HP crosses its **"hang if below"** floor says a bare `@panic` on say and then escapes (hangs up, or breaks + `sys goto <wimpy>` per the Health tab) — warning the whole party to get out. It's opt-in on both sides via two **Settings → Party** checkboxes: **Use @panic while leading** (whether you send it) and **Ignore @panics** (whether a received one makes *you* bail). Both default off. A received `@panic` makes you escape exactly as your own low-HP emergency would; it still respects the *Disable hangups* master switch for the carrier-drop (you'll `sys goto` wimpy if configured, but never be force-disconnected by someone else's panic). With the **master switch (Auto-All) off** a received `@panic` does nothing at all unless General → **Allow hangup in all-off mode** is ticked.
 
 **Telepath pacing.** The server throttles telepaths — fire several at once and the later ones come back `--- Telepath Not Sent ---`. MudPlay sends every telepath (its own @-command traffic and replies, and the ones you type) at least 100 ms apart, and resends any the server refuses, up to three tries. Other commands — movement, attacks, casts — are never held behind a telepath.
 
@@ -1707,9 +1707,33 @@ What doesn't reset them:
 
 (A character created before these checkboxes existed adopts its current live modes as its base the first time it loads, so nothing changes until you edit the boxes.)
 
-## The kill switch
+## The master switch (Auto-All)
 
-The **All auto-responses** toggle at the top of the Action menu (and the `@auto-all` remote command) flips every engine off in one press, remembering what was on so a second press restores it — a fast "stop everything" that doesn't lose your setup. While it's off, auto-entry to the game is gated too, and **all movement is frozen** — a walk, loop, auto-lair, or a right-click Queue-walk-to will plan but hold until you turn Auto-All back on (then it resumes where it left off). Your own manual Pause/Resume is untouched by this.
+The **All auto-responses** toggle at the top of the Action menu, its toolbar button, and the `@auto-all` remote command are one switch: the **master switch**. Off, **nothing automatic acts**. On, everything is as you set it.
+
+**It is the only "all autos off".** Unticking the eleven auto toggles one by one is *not* the same thing: many automatic systems have no toggle of their own (remote commands, triggers, events, the polls, the party signals), so only the master switch silences all of them. The button shows the switch, not the toggles: with every toggle unticked by hand it still reads on.
+
+**Switching it off** remembers which toggles were on, unticks them, and from then on:
+
+- **No engine runs**: combat, nuke, heal, rest, bless, light, get items, get cash, sneak, hide, search. A toggle you tick by hand while the switch is off stays ticked for later but runs nothing.
+- **No remote command is followed** except `@auto-all` itself. That includes the party signals (`@wait`, `@ok`, `@waiting`, `@comeback`), the single `@auto-…` toggles, `@settings`, `@hangup` and `@relog`. A command that is ignored for this reason gets **no reply at all**, whatever *Warn on invalid remote command* says, so nobody can probe whether you are at the keys.
+- **Triggers and events are skipped**, not put off: a trigger that matches fires nothing, and an event whose time comes does not run later. An event already running is held with its walk and carries on when the switch is back on.
+- **A walk, loop or Auto-Lair you start by hand is refused**, with a notice in the terminal naming what could not start, for example `[Loop cannot start: the master switch (Auto-All) is off]`. The same goes for the other trips you start by hand: Train Now, a stash transfer, a Sell Tour, a Roomba sweep. One **already running** when the switch goes off is frozen where it is and resumes when the switch comes back on. Your own Pause / Resume is untouched.
+- **Nothing is polled or fixed up**: no party health or level asks, no token or item-charge looks, no quest sync, no automatic `stat` / inventory re-read, no "where am I" fix (`rm`, `sys st`) and no room redisplay. The map goes on reading the rooms the game shows you; it just asks for nothing.
+- **No hold is raised and no hold is signalled**: held, confused, afraid, a hurt party member, a party wait, too heavy. No `@wait` or `@ok` goes out and no ailment is announced. A `@wait` you had already sent is left as it is; when the switch comes back on the leader is told how things stand then (the `@wait` now owed, or the `@ok` for a wait that ended meanwhile).
+- **Nothing else answers for you**: no auto-invite or auto-join, no greeting or look-back, no level-up announce, no telepath divert, no auto-train, no bank or stash trip, no gear swap for a room, no PvP response, no boss Grab All.
+- **Hang-ups** follow **Allow hangup in all-off mode** (Settings → General): unticked, nothing hangs up on its own; ticked, every automatic hang-up still works. See that setting.
+- **The nightly-cleanup log-off does not start.** It is not a hang-up, but it is automatic. If the board drops you anyway, reconnecting follows your BBS reconnect settings as usual.
+
+**What always works**, switch on or off: everything you type, your macros and aliases, logging in (the whole login automation, through entering the realm), setting up and repairing the statline, reconnecting as your BBS settings say, and `@auto-all`.
+
+**Switching it back on** gives back the toggles that were on, plus any you ticked meanwhile. If that would leave nothing on (you switched it off with every toggle already unticked), your **base modes** are switched on instead. Holds that came due while it was off are raised before anything moves, a frozen walk or loop carries on, a monster already in the room is fought and a rest that is due starts.
+
+**A reconnect respects it.** If you switch the autos off and then reconnect, **Re-enable on reconnect** ticks nothing back on and the switch stays off.
+
+`@auto-all off` switches it off even when every toggle was already unticked by hand; `@auto-all on` switches it on (falling back to your base modes as above); a bare `@auto-all` flips it. The reply names the switch: `@auto-all: on` or `@auto-all: off`.
+
+The program log has one line each time the switch changes, listing what it stopped or held and, as it comes back on, how often each kind of thing was skipped while it was off. A bug report carries the same counts.
 
 ## Macros, aliases, and triggers
 
@@ -1730,6 +1754,8 @@ Each shows the same surface: a **Filter…** box, an **Add** button, a **Remove*
 
     Leave the box blank to send a bare Enter.
   - **Sound** (optional) — a sound file to play when the trigger matches. WAV plays on every system; MP3, OGG and FLAC depend on your system's player. **Settings → Sounds → Trigger sounds** turns trigger sounds on (it starts off) and sets how loud they play.
+
+**Triggers follow the master switch (Auto-All).** While it is off a trigger that matches is skipped whole: nothing is captured, nothing is sent and no sound plays. Macros and aliases are things you fire by hand, so they always work.
 
 ### Writing an alias
 
@@ -1986,7 +2012,7 @@ Even *without* Kill on sight, if you hand-attack a passive neutral yourself (a m
 - **The wimpy jump takes its place.** With **Sys goto wimpy instead of hanging** set up, MudPlay jumps there instead of hanging up, and you stay connected. As after a low-HP jump, a running loop or walk is not stopped: if it brings you back to the monster, MudPlay jumps again.
 - **Disable hangups stops it.** With the toolbar's **Disable hangups** on, nothing is sent (no hang-up and no wimpy jump), and the program log says once that the monster was seen. The monster is still not attacked on sight, but if it attacks you it is fought back (with Auto-Combat on), the way a Neutral monster is. Turn Disable hangups off while the monster is still there and the next change in the room's list hangs up.
 - **A fight with a player comes first.** While MudPlay is fighting another player, the PvP actions win: no hang-up goes out for a Hangup monster. The same holds while a player you marked **Enemy** is in the room on a PvP realm, whichever PvP action is set: the PvP response answers that room. The program log says once why, and when the fight ends or the player has left, with the monster still in the room, it is hung up on then. The Health tab's own hang-up works in PvP as it always has.
-- **All-off mode stops it.** It follows General → **Allow hangup in all-off mode** exactly as the low-HP hang-up does. With Auto-Heal and Auto-Rest both off and that option not ticked, a Hangup monster is not hung up on, and the program log says once why. Tick the option and it is.
+- **All-off mode stops it.** It follows General → **Allow hangup in all-off mode** exactly as the low-HP hang-up does. With the master switch (Auto-All) off and that option not ticked, a Hangup monster is not hung up on, and the program log says once why. Tick the option and it is. With the master switch on it needs no toggle: Auto-Rest gates the low-HP hang-up only.
 - **Once per sighting.** One room display is one sighting: there is one hang-up for it, however many other monsters come and go. A new **Also here:** line (the next room, or the same room displayed again) is a new sighting, and so is a Hangup monster that walks in after the first was answered. This only matters when the first answer did not end the session: a wimpy jump, a missing exit command, Disable hangups or all-off mode.
 - **After you reconnect: one minute off.** After the connection has dropped with a Hangup monster in sight (MudPlay hung up for it, or a low-HP or PvP hang-up went out as it was seen), the watch is off for your first minute back in the game, so the monster still standing there does not hang you up at once. This is for a reconnect you make yourself: when the PvP response dials back in on its own, there is no minute off. The minute starts at your first game prompt after reconnecting, not while you log in. While it runs, the status bar shows **Hangup watch off 0:59** in amber beside the connection light, counting down each second, and the terminal has one notice when it starts and one when it ends. (A status bar layout with no connection item shows only the terminal notices.) During the minute, as with **Disable hangups** on, the Hangup monster is not attacked on sight, but if it attacks you it is fought back. When the minute ends, a Hangup monster still in the room is hung up on then. To stay longer, turn **Disable hangups** on or change the monster's relationship. Loading another character clears it.
 - **At the board's menu.** If you have left the game for the board's menu, nothing is sent: the exit command would be a menu choice there. A Hangup monster in the room when you come back in is hung up on at your first game prompt.
@@ -2688,14 +2714,15 @@ Each of the three made choices keeps every colour near its usual hue, so red is 
 ### Allow hangup in all-off mode
 
 **Default:** Off
-**What it does:** Normally, if every Auto-* engine above is off, MudPlay does nothing at all — including the emergency low-HP hangup and the hang-up for a monster whose relationship is **Hangup**. Turning this on carves out the exception: even with everything off, MudPlay still disconnects you if your HP drops below the Health tab's "Hang up if below" threshold, and still hangs up when a Hangup monster is seen.
-**Important notes:** The low-HP hang-up depends on the Health tab's threshold to know when to fire. Both hang-ups go by **Auto-Heal** and **Auto-Rest**: with both of those off they count as off and need this option, whatever else is on. It's silenced entirely if the toolbar's "Disable hangups" toggle is on — that flag always wins.
+**What it does:** "All-off mode" is the **master switch (Auto-All) being off**. Unticking the auto toggles one by one is not it. With the master switch off MudPlay does nothing on its own, hang-ups included. Turning this on carves out the exception: with the master switch off, **every automatic hang-up still works** — the low-HP hang-up (Health tab's "Hang up if below"), a received `@panic`, the PvP hang-up actions, and the hang-up for a monster whose relationship is **Hangup**. With it off (the default) and the master switch off, none of them fires, and the wimpy jump that can stand in for a hang-up is not made either.
+**Important notes:** This setting does nothing while the master switch is **on**. Then the low-HP hang-up goes by **Auto-Rest** (see *Hang up if below*) and the others need no toggle. The toolbar's **Disable hangups** always wins: with it on, nothing hangs up automatically whatever this is set to. The remote `@hangup` and `@relog` are remote commands, so with the master switch off they are not followed at all, this option or not.
 
 ### Re-enable on reconnect (11 checkboxes)
 
 **Default:** Off (all)
 **What it does:** One checkbox per automation engine (the same 11 engines as above). When you reconnect after having been disconnected mid-session (not the very first connect of an app session), each checked engine gets automatically turned back on — useful if you manually paused something, got dropped, and want your automation state to reset to "on" on redial rather than staying off.
 **When you might change it:** Check the engines you always want running even through a flaky connection (e.g. Auto-Heal and Auto-Rest, which share one re-enable box); leave off the ones you deliberately paused for a reason (e.g. Auto-Nuke while grinding a safe area).
+**Important notes:** It never overrides the **master switch (Auto-All)**. If you switched the autos off with it and then reconnect, nothing is turned back on (Auto-Train included) and the switch stays off: the reconnect respects what you set.
 
 ---
 
@@ -3623,7 +3650,7 @@ Only Default-set items you actually **have** (worn or carried) count — an item
 
 **Default:** 5%
 **What it does:** The absolute last resort: disconnects the game outright once HP falls to or below this value. Since 0 HP only "drops" you in MajorMUD rather than killing you outright, this threshold can go negative, all the way down to (but never past) the point your BBS's realm actually treats as death.
-**Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use the toolbar's "Disable hangups" toggle instead.
+**Important notes:** There's no "0 disables it" here — to fully disable the emergency hangup, use the toolbar's "Disable hangups" toggle instead. **It sits behind Auto-Rest**: with Auto-Rest off it does not fire, even with Auto-Heal on (it used to run under either). With the **master switch (Auto-All) off** it fires only if General → **Allow hangup in all-off mode** is ticked, and then whatever the Auto-Rest toggle reads.
 
 ### Sys goto wimpy instead of hanging
 
@@ -4545,7 +4572,7 @@ Settings → Events. Lets you define per-character events. Each has three parts,
 
 **Default:** Off
 **What it does:** A single master pause switch for every scheduled event on this character, without deleting or individually disabling each one.
-**Important notes:** Saves immediately on toggle — no separate Apply step.
+**Important notes:** Saves immediately on toggle — no separate Apply step. The **master switch (Auto-All)** being off stops events too, whatever this reads: an event whose time comes while it is off is skipped, not run later, and one already running is held until the switch is back on. An event that walks somewhere plans its route like any walk the client starts by itself: by the **Settings → Teleports** list for automatic walks, with no route cards.
 
 ### Event list (New… / Modify… / Remove)
 

@@ -2289,8 +2289,22 @@ public static class BugReportBuilder
     private static string BuildAutoMode(AppServices svc)
     {
         StringBuilder sb = new();
-        Kv(sb, "Kill-switch engaged", svc.AutoModeController.KillSwitchEngaged.ToString());
-        Kv(sb, "All wired engines off", svc.AutoModeController.AllWiredOff.ToString());
+        // First, because with it off nothing automatic acts and most "it didn't do
+        // X" reports end here.
+        bool off = svc.AutoModeController.KillSwitchEngaged;
+        Kv(sb, "Master switch (Auto-All)", off
+            ? "OFF — nothing automatic acts: no engines, remote commands (but @auto-all), triggers, events, polls, holds or hand-started runs"
+            : "on");
+        if (off)
+        {
+            Kv(sb, "Skipped because the master switch is off", svc.AutoModeController.DescribeSkipped());
+            IReadOnlyCollection<string> parked = svc.MovementCoordinator.ParkedGates;
+            Kv(sb, "Holds owed but not asserted", parked.Count == 0 ? "(none)" : string.Join(", ", parked.OrderBy(g => g)));
+            Kv(sb, "Allow hangup in all-off mode",
+                svc.AllowHangupInAllOffMode ? "ticked — automatic hang-ups still fire" : "not ticked — nothing hangs up on its own");
+        }
+        Kv(sb, "All eleven toggles off", svc.AutoModeController.AllWiredOff.ToString()
+            + " (not the master switch: toggles unticked by hand leave it on)");
         sb.Append("\nPer-engine toggles live in the `General` settings block below: `AutoMode` is the live toolbar state, `AutoModeBase` the base defaults reconciled onto it at profile load / loop / auto-lair start (null = pre-split character, treated as equal to `AutoMode`).\n");
         return sb.ToString();
     }
