@@ -1893,11 +1893,13 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
-    public void Follower_WithoutHealCallbackWired_FallsBackToFlee()
+    public void Follower_WithoutHealCallbackWired_LatchesTheDecisionAndSendsNothing()
     {
-        // isPartyFollower true but no requestPartyHeal callback wired: the
-        // null-guard falls through to the flee path rather than silently doing
-        // nothing at the run trigger.
+        // isPartyFollower true but no requestPartyHeal callback wired: there is no
+        // heal to ask for, and a follower never flees, so the run trigger is held
+        // with nothing sent. This harness has no walk or loop, so it shows only
+        // the decision latch and the empty wire; the follower tests further down,
+        // which have one, show that no run starts.
         using Harness h = new();
         h.Health.SetPartyRoleSync(
             isPartyFollower: () => true,
