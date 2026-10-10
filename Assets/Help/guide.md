@@ -1550,6 +1550,14 @@ Your death history. **How did I Die?** replays the backscroll from the moment of
 
 Recovery matches your realm: on **Paradigm** it recovers your `corpse` in one command; on **Stock**, where death scatters your items loose on the floor (and overflows into other rooms when that floor is full), it `get`s each item back.
 
+On **Paradigm** the corpse is recovered the moment you arrive in the death room, whether the walk ends there or only passes through: the room's own display is read as it prints. If the room is shown without your corpse, the pile is marked **Missing** (looted or decayed), with a note saying which display that came from, and nothing is sent. Only the death room's own display decides that: the floor of the next room you walk into, or of a room you `look` into, never does.
+
+- In a **dark** death room, one you walked into **blind**, or one MudPlay placed you in without the game showing it (a manual locate, the room you were in when you last logged off), nothing has been read, so nothing is concluded. The recovery waits for the room's next display (a light or your sight back, then a look).
+- **Recover Now** from inside the room looks again: it recovers the corpse if the look shows it, and marks the pile Missing if the look shows a floor without it. That is also how to retry a pile already marked Missing.
+- Gear a party member hands back still counts for your latest death when its pile was marked Missing: a corpse gone from the room is what it looks like when someone has picked it up for you.
+
+**A spare of something you were wearing is part of the pile.** Wearing a longsword with another in your pack, you lost two: both are listed and waited for, one goes back on when it is recovered and the other stays in your pack. On Stock, the first copy to come back is the one that goes on.
+
 With **Auto-Equip on recovery** on, MudPlay re-wears everything you had on when you died — and if a hostile is in the room when the pile comes back, it does this **combat-aware**: grabbing the pile doesn't interrupt the fight, but wearing gear does, so it puts a few pieces on between combat rounds (weapon first, then armour heaviest-first) and keeps swinging in between, then equips whatever's left the moment the room clears.
 
 **It follows the Auto-All master switch.** If you recover the corpse yourself while Auto-All is off, nothing is worn for you — the gear stays in your pack so a burst of wear commands can't pin you in a room you're trying to leave. Switch Auto-All back on and the held pieces go on then (paced the same way if something hostile is there), leaving out anything you've already put on by hand.

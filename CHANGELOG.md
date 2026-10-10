@@ -1,5 +1,13 @@
 # Version history
 
+## 3.161.7
+
+- Paradigm: the corpse is recovered on arriving in the death room, off that room's own display
+- Paradigm: the next room's floor no longer marks a deathpile Missing; only the death room's display does
+- Paradigm: Recover Now inside the room marks the pile Missing when its look shows no corpse
+- Gear handed back still counts for the latest death when its pile was marked Missing
+- A single spare of a worn item is recorded in the deathpile and recovered with it
+
 ## 3.161.5
 
 - A room's heat (*You are seared by the flames*) no longer counts as a combat round

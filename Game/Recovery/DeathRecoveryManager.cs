@@ -43,17 +43,18 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private bool _disposed;
 
     // In-progress recovery context — one deathpile at a time (you stand in one
-    // room). _activeRecovery is the record we're recovering. Stock's deathpile is
-    // a single "corpse of <given-name>" object recovered by ONE `recover corpse
+    // room). _activeRecovery is the record we're recovering. Paradigm's deathpile
+    // is a single "corpse of <given-name>" object recovered by ONE `recover corpse
     // <name>` command (not a per-item get), so there's no per-item remaining set:
     // the corpse either shows in the room's "You notice" survey (recover it) or it
-    // doesn't (mark Missing). _grabOnSurvey arms the recover for the next survey to
-    // be read in the room. A room prints its floor BEFORE the exits line that
-    // confirms the move, so on a walk-in the arrival's own survey has gone by when
-    // the room change fires: the Stock path reads it from the floor list there and
-    // then, and otherwise the grab waits for the next display of the room (a look, a
-    // search's reveal, the display after logging back in). _armedAt is when it was
-    // armed: on Stock a survey is this room's only if no move has gone out since.
+    // doesn't (mark Missing). Stock's is loose items, got one at a time.
+    // _grabOnSurvey arms the grab for the next survey to be read in the room. A
+    // room prints its floor BEFORE the exits line that confirms the move, so on a
+    // walk-in the arrival's own survey has gone by when the room change fires: it
+    // is read from the floor list there and then, and otherwise the grab waits for
+    // the next display of the room (a look, a search's reveal, the display after
+    // logging back in). _armedAt is when it was armed: a survey is this room's only
+    // if no move has gone out since.
     // _pendingRecoverNow is a record the user pressed "Recover Now" on while away —
     // it forces a grab on arrival even when Auto-Recover is off, until that walk is
     // stopped, fails or is called off.
@@ -229,6 +230,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // neighbour's.
     private bool _settleOwed;
     private bool _lookExitsOwed;
+    private DateTimeOffset _lookSentAt;
     private DateTimeOffset _lastSurveyAt;
 
     // Heartbeats (1 s) of quiet after the death-room `get` burst before it counts
@@ -264,6 +266,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // The lines of one death arrive together; the window only keeps a line from
     // some other moment off this death's record.
     private static readonly TimeSpan ReturnedLineWindow = TimeSpan.FromSeconds(30);
+    // How long an exits line can be the answer to the `look` Recover Now sent from
+    // inside the death room. Not a stand-in for a reply (a slower one concludes
+    // nothing and the grab stays armed): it keeps a look that got no exits line, in
+    // the dark, from being answered by some much later display.
+    private static readonly TimeSpan LookAnswerWindow = TimeSpan.FromSeconds(10);
 
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
@@ -705,9 +712,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             BeginRecovery(record, autoGrab: true, deliberate: true, arrivedByWalk: false);
             // Already standing here, so no room-change survey is coming — re-look
             // to re-render the "You notice" list, which fires SurveyUpdated and
-            // drives the corpse grab. On Stock the look's exits line settles an
-            // empty floor, which prints no survey at all.
-            _lookExitsOwed = IsStock;
+            // drives the grab. The look's exits line settles an empty floor, which
+            // prints no survey at all.
+            _lookExitsOwed = true;
+            _lookSentAt = DateTimeOffset.UtcNow;
             Send("look");
             return true;
         }
@@ -834,6 +842,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
                 // may yet show the room's hidden side.
                 else _settleOwed = true;
             }
+            else if (!IsStock && _grabOnSurvey && ReferenceEquals(_activeRecovery, rec) && arrivedSeeing)
+                CorpseOnArrival(rec, t.Displayed);
             return;
         }
 
@@ -996,17 +1006,19 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             _log?.Info(LogCategory, "recovery: auto-recover off — armed nothing (manual Recover Now only)");
     }
 
-    // A survey read while a Stock grab is armed is the death room's when we are in
-    // it with no move on the wire: the tracker says that room and isn't waiting on a
+    // A survey read while a grab is armed is the death room's when we are in it
+    // with no move on the wire: the tracker says that room and isn't waiting on a
     // move, and none has gone out since the grab was armed. The next room's entry
     // survey prints before that room confirms, with the move still pending. The
     // tracker need not be Confirmed: Suspect in the room (a display it couldn't
     // place) is still the room, and a look from there is answered with its floor.
+    // A `look <dir>` still to be answered shows the room next door, floor and all.
     private bool ArmedSurveyIsTheDeathRooms(DeathRecord record) =>
         _roomTracker.State.CurrentRoom?.Key is { } at && record.Room is { } died
         && at.Map == died.Map && at.Room == died.Room
         && _roomTracker.State.Confidence != RoomConfidence.Pending
-        && !(_roomTracker.LastMoveSentAt is { } moved && moved > _armedAt);
+        && !(_roomTracker.LastMoveSentAt is { } moved && moved > _armedAt)
+        && !_roomTracker.IsPeekSuppressed();
 
     // The realm probe says Stock. Unbound it says neither, and the Stock-only parts
     // of recovery stay off.
@@ -1071,27 +1083,71 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
 
         if (_activeRecovery is not { } record || !_grabOnSurvey) return;
-        if (_isParadigm?.Invoke() ?? true) TryCorpseRecover(record);
-        else if (ArmedSurveyIsTheDeathRooms(record)) TryGroundRecover(record);
+        // Only the death room's own floor. Some other room's, taken for it, sent
+        // Stock gets for items that weren't there and, on Paradigm, wrote the pile
+        // off as Missing because the next room along showed no corpse.
+        if (!ArmedSurveyIsTheDeathRooms(record))
+        {
+            _log?.Debug(LogCategory, "armed grab: a floor was read that isn't provably the death room's — left armed");
+            return;
+        }
+        if (IsStock) TryGroundRecover(record);
+        else TryCorpseRecover(record);
     }
 
-    // Stock deathpile = one "corpse of <given-name>" object. If our corpse is in
+    // Paradigm deathpile = one "corpse of <given-name>" object. If our corpse is in
     // the survey, send ONE `recover corpse <name>` (own corpse needs no password,
     // and naming it disambiguates when several corpses share the room). If it
     // isn't there, the pile is gone — mark Missing so we neither retry nor spam.
+    // The caller has made sure the floor list is the death room's.
     private void TryCorpseRecover(DeathRecord record)
     {
-        _grabOnSurvey = false;   // one shot per arming — never loop
         string? corpse = FindOurCorpse();
-        if (corpse is null)
-        {
-            _log?.Info(LogCategory, "auto-recover: corpse not in the room survey — marking Missing.");
-            SetStatus(record, DeathRecoveryStatus.Missing, "Corpse was not in the room — pile appears lost.");
-            _activeRecovery = null;
-            return;
-        }
+        if (corpse is null) MarkCorpseMissing(record, "it is not on the floor the room showed");
+        else RecoverCorpse(corpse);
+    }
+
+    private void RecoverCorpse(string corpse)
+    {
+        _grabOnSurvey = false;   // one shot per arming — never loop
+        _lookExitsOwed = false;
         _log?.Info(LogCategory, $"auto-recover: recover corpse {corpse}");
         Send($"recover corpse {corpse}");
+    }
+
+    private void MarkCorpseMissing(DeathRecord record, string why)
+    {
+        _grabOnSurvey = false;
+        _lookExitsOwed = false;
+        _log?.Info(LogCategory, $"auto-recover: no corpse in the death room ({why}) — marking Missing.");
+        // The note says which display the verdict came off: a report of a pile
+        // wrongly written off turns on that.
+        SetStatus(record, DeathRecoveryStatus.Missing, $"Corpse was not in the room ({why}) — pile appears lost.");
+        _activeRecovery = null;
+    }
+
+    // A Paradigm walk-in. The arrival's own display has just been read: the floor
+    // line prints before the exits line that confirms the room (GAME_MECHANICS "Room
+    // display parsing — the room title is positional, not just bright cyan"), and an
+    // empty floor prints none. So the corpse is recovered, or found gone, off this
+    // display, with no later one to wait for. Arming for "the next survey" instead
+    // took the floor of whatever room was walked into next for this one.
+    //
+    // Missing is only said of a room that was shown (displayed). Settled on some
+    // other way (a saved room at load, a manual locate, a reconnect), nothing was
+    // read here and the grab stays armed for the room's next display.
+    private void CorpseOnArrival(DeathRecord record, bool displayed)
+    {
+        if (FloorWasJustRead() && FindOurCorpse() is { } corpse)
+        {
+            RecoverCorpse(corpse);
+            return;
+        }
+        if (displayed)
+            MarkCorpseMissing(record, FloorWasJustRead()
+                ? "it is not on the floor shown on arriving" : "the room was shown on arriving with nothing on its floor");
+        else
+            _log?.Info(LogCategory, "auto-recover: in the death room without a display of it to read — armed for the next one");
     }
 
     // Stock deathpile = loose items on the floor. `get <name>` each pile item
@@ -2100,18 +2156,30 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             return;
         }
 
-        // The exits line of the `look` a Recover Now sent from inside a Stock death
-        // room: the display is over, and a grab still armed means it printed no floor.
+        // The exits line of the `look` a Recover Now sent from inside the death room:
+        // the display is over, and a grab still armed means it printed no floor.
         // Only if that display was the death room's (the test an armed survey gets):
         // with a move sent since, it is some other room's, and nothing is concluded.
-        // The grab stays armed either way, for a later display of the room.
+        // Nor when the look went unanswered (a dark room prints no exits line) and
+        // this is some later display's line, or the room is still dark; nor when a
+        // floor was read since the look and passed over (it wasn't provably this
+        // room's then, and "no floor" can't be said of a display that had one).
+        // On Stock the grab stays armed either way, for a later display of the room;
+        // on Paradigm a floor with nothing on it has no corpse, and the pile is gone.
         if (_lookExitsOwed && line.Text.StartsWith("Obvious exits:", StringComparison.Ordinal))
         {
             _lookExitsOwed = false;
-            if (_grabOnSurvey && _activeRecovery is { } looked && ArmedSurveyIsTheDeathRooms(looked))
+            bool ours = DateTimeOffset.UtcNow - _lookSentAt <= LookAnswerWindow
+                && _lastSurveyAt < _lookSentAt
+                && !_roomTracker.IsInDarkRoom && !_roomTracker.EnteredBlind;
+            if (ours && _grabOnSurvey && _activeRecovery is { } looked && ArmedSurveyIsTheDeathRooms(looked))
             {
-                _log?.Info(LogCategory, "stock-recover: the look showed no floor — nothing is on it");
-                _settleOwed = true;
+                if (IsStock)
+                {
+                    _log?.Info(LogCategory, "stock-recover: the look showed no floor — nothing is on it");
+                    _settleOwed = true;
+                }
+                else MarkCorpseMissing(looked, "the look showed nothing on the floor");
             }
             return;
         }
@@ -2167,10 +2235,47 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         SetStatus(pile, DeathRecoveryStatus.Recovered, "Recovered — overflow grabbed in passing.");
     }
 
+    // The worn pieces that have a copy back to put on, counted by name. The pile can
+    // hold more copies of a name than were worn (a worn longsword and a spare in the
+    // pack): the copies back are the pile's copies less those still out and those
+    // gone for good, and a worn piece goes back on as soon as one of them is. With
+    // the worn longsword and its spare both lost and one got back, that one is worn;
+    // with both back, one is worn and the other stays in the pack.
+    private List<DeathItem> WornPiecesBack(DeathRecord record, List<DeathItem> worn)
+    {
+        var back = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        void Tally(IEnumerable<string>? names, int each)
+        {
+            if (names is null) return;
+            foreach (string name in names)
+            {
+                string norm = ItemNameStore.Normalize(name);
+                back[norm] = back.GetValueOrDefault(norm) + each;
+            }
+        }
+        var held = new List<string>();
+        AddPileNames(held, record.EquippedAtDeath);
+        AddPileNames(held, record.LostItems);
+        Tally(held, +1);
+        Tally(record.UnrecoveredItems, -1);
+        Tally(record.ReturnedItems, -1);
+
+        var pieces = new List<DeathItem>();
+        foreach (DeathItem piece in worn)
+        {
+            string norm = ItemNameStore.Normalize(piece.Name);
+            if (back.GetValueOrDefault(norm) <= 0) continue;
+            back[norm]--;
+            pieces.Add(piece);
+        }
+        return pieces;
+    }
+
     // Re-equip the worn half we've RECOVERED (Auto-Equip). Paradigm gets the whole
     // pile back at once; a Stock recovery may leave some pieces on a neighbour's
-    // floor, so we only re-wear worn items no longer in UnrecoveredItems (a caller
-    // nulls that list when the whole pile is confirmed back — see the corpse path).
+    // floor, so we only re-wear worn items with a copy back (WornPiecesBack; a caller
+    // nulls UnrecoveredItems when the whole pile is confirmed back — see the corpse
+    // path).
     // Ordering is weapon(s) first then armour highest-AC-first (see OrderForReequip).
     // When a hostile is in the room the wear/eq burst would repeatedly break the
     // combat round, so we don't fire it all at once — enqueue it and pace it across
@@ -2183,12 +2288,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         if (!AutoEquip || record.EquippedAtDeath is not { } worn || worn.Count == 0) return;
 
-        HashSet<string> missing = record.UnrecoveredItems is { Count: > 0 } rem
-            ? rem.Select(ItemNameStore.Normalize).ToHashSet(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        List<DeathItem> recovered = worn
-            .Where(i => !missing.Contains(ItemNameStore.Normalize(i.Name)))
-            .ToList();
+        List<DeathItem> recovered = WornPiecesBack(record, worn);
         if (recovered.Count == 0) return;
 
         List<DeathItem> ordered = OrderForReequip(recovered, _armourClass);
@@ -2566,9 +2666,15 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(itemName)) return;
         string got = ItemNameStore.Normalize(itemName);
-        foreach (DeathRecord rec in Records.Reverse())   // newest pile first
+        IReadOnlyList<DeathRecord> records = Records;
+        DeathRecord? latest = records.Count > 0 ? records[^1] : null;
+        foreach (DeathRecord rec in records.Reverse())   // newest pile first
         {
-            if (rec.Status is DeathRecoveryStatus.Recovered or DeathRecoveryStatus.Missing) continue;
+            if (rec.Status is DeathRecoveryStatus.Recovered) continue;
+            // A pile written off as Missing is closed, except the latest death's:
+            // a corpse gone from the death room is just what it looks like when a
+            // party member has picked it up to hand the gear back.
+            if (rec.Status is DeathRecoveryStatus.Missing && !ReferenceEquals(rec, latest)) continue;
             rec.UnrecoveredItems ??= PileNames(rec);
             int idx = rec.UnrecoveredItems.FindIndex(n =>
                 string.Equals(ItemNameStore.Normalize(n), got, StringComparison.OrdinalIgnoreCase));

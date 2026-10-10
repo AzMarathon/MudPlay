@@ -1,15 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.5**
-> - A room's heat (*You are seared by the flames*) no longer counts as a combat round
-> - No more heals or buffs sent mid-round into `You have already cast a spell this round!`
-> - A fight stopped just after an attack is re-attacked on the next round line
-> - A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
-> - A refused cast no longer leaves a re-attack armed
-> - Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
-> - The giant hellhound's death line is recognised
-> - Program log and bug report show re-attack decisions
+> **Version 3.161.7**
+> - Paradigm: the corpse is recovered on arriving in the death room, off that room's own display
+> - Paradigm: the next room's floor no longer marks a deathpile Missing; only the death room's display does
+> - Paradigm: Recover Now inside the room marks the pile Missing when its look shows no corpse
+> - Gear handed back still counts for the latest death when its pile was marked Missing
+> - A single spare of a worn item is recorded in the deathpile and recovered with it
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
