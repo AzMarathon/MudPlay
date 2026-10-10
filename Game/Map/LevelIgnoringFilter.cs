@@ -21,6 +21,11 @@ public sealed class LevelIgnoringFilter(IRoomFilter inner, int? atLevel = null) 
 
     public bool IsExitBlocked(in RoomExit exit) => DescribeExitBlock(in exit) != ExitBlockReason.None;
 
+    public bool IsPoorOddsDoor(in RoomExit exit) => inner.IsPoorOddsDoor(in exit);
+
+    public string? DescribeDoorRefusal(in RoomExit exit) => inner.DescribeDoorRefusal(in exit);
+    public int DoorRuleStamp => inner.DoorRuleStamp;
+
     public ExitBlockReason DescribeExitBlock(in RoomExit exit)
     {
         ExitBlockReason reasons = inner.DescribeExitBlock(in exit) & ~ExitBlockReason.Level;
@@ -49,6 +54,17 @@ public sealed class LevelIgnoringFilter(IRoomFilter inner, int? atLevel = null) 
         IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false,
         IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
         inner.SuspendAcquirableGatesExcept(keepClosed, keepUncounteredHazards, openHazardRooms);
+
+    public bool IsClosedToRoutes(RoomKey room) => inner.IsClosedToRoutes(room);
+
+    public ClosedRoomTerms? CrossingTerms(RoomKey room) => inner.CrossingTerms(room);
+
+    public bool MayCrossClosedRooms() => inner.MayCrossClosedRooms();
+
+    public bool TeleportsOnArrival(RoomKey room) => inner.TeleportsOnArrival(room);
+
+    public IDisposable SuspendAcquirableGatesButUnprotectableHazards() =>
+        inner.SuspendAcquirableGatesButUnprotectableHazards();
 
     private bool Excluded(int minLevel, int maxLevel) =>
         atLevel is int level && OutsideLevelWindow(level, minLevel, maxLevel);

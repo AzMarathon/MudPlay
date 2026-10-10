@@ -16,4 +16,13 @@ public sealed record TeleportChoice(
     string Commands,
     string Area,
     int RoomsBeyond,
-    IReadOnlyList<(RoomKey From, RoomKey To)> Exits);
+    IReadOnlyList<(RoomKey From, RoomKey To)> Exits)
+{
+    // The line as Settings → Teleports shows it, and as a refused automatic walk
+    // names it so the user can find the box to tick. Map/room numbers beside both
+    // names: a spot the user doesn't know by name can be looked up on the map.
+    public string Title => TitleOf(From, FromName, To, ToName, TwoWay);
+
+    public static string TitleOf(RoomKey from, string fromName, RoomKey to, string toName, bool twoWay) =>
+        $"{fromName} ({from.Map}/{from.Room}) {(twoWay ? "⇄" : "→")} {toName} ({to.Map}/{to.Room})";
+}

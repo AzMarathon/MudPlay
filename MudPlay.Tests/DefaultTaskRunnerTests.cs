@@ -24,6 +24,7 @@ public sealed class DefaultTaskRunnerTests
         public required PartyState PartyState { get; init; }
         public required ProfileService Profile { get; init; }
         public required DefaultTaskRunner Runner { get; init; }
+        public required RoomTracker Tracker { get; init; }
         public required IDisposable[] Owned { get; init; }
 
         // First in-game prompt of the connection — the "we're in MajorMUD" signal.
@@ -75,6 +76,7 @@ public sealed class DefaultTaskRunnerTests
             PartyState = partyState,
             Profile = profile,
             Runner = runner,
+            Tracker = tracker,
             Owned = new IDisposable[] { autoLair, timers },
         };
     }
@@ -125,6 +127,46 @@ public sealed class DefaultTaskRunnerTests
 
         h.Runner.NotifyConnected();
         Assert.False(h.Runner.PendingPartyRebuildHold);
+    }
+
+    // A death worked out on the way back in (a hang-up penalty that killed) stops
+    // the engines that are running; a task still waiting for the room to be known,
+    // or out the party-rebuild window, would start after that stop and walk a
+    // stripped character out of the temple. It is called off for the connection.
+    [Fact]
+    public void ADeathWorkedOutOnEntry_CallsTheTaskOffForThisConnection()
+    {
+        using Harness h = Build();
+        h.Profile.LoadBlank();
+        h.Tracker.Hydrate(h.Profile.Current!);
+        h.Runner.NotifyConnected();
+        h.EnterGame();   // the room isn't known yet: the task is still to start
+        Assert.False(h.Runner.StoodDownForDeath);
+
+        h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
+            null, DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", [], [], null));
+
+        Assert.True(h.Runner.StoodDownForDeath);
+        Assert.False(h.Runner.IsHoldingForParty);
+
+        // The next connection starts clean.
+        h.Runner.NotifyDisconnected();
+        h.Runner.NotifyConnected();
+        Assert.False(h.Runner.StoodDownForDeath);
+    }
+
+    // Off the link there is no task to call off.
+    [Fact]
+    public void ADeathWorkedOutWhileNotConnected_ChangesNothing()
+    {
+        using Harness h = Build();
+        h.Profile.LoadBlank();
+        h.Tracker.Hydrate(h.Profile.Current!);
+
+        h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
+            null, DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", [], [], null));
+
+        Assert.False(h.Runner.StoodDownForDeath);
     }
 
     [Fact]

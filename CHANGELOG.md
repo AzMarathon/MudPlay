@@ -1,13 +1,108 @@
 # Version history
 
-## 3.161.13
+## 3.165.5
 
-- Paradigm: the corpse is recovered on arriving in the death room, off that room's own display
-- Paradigm: the next room's floor no longer marks a deathpile Missing; only the death room's display does
+- Paradigm: the corpse is recovered, or found gone, off the death room's own display; the next room's floor no longer marks the pile Missing
 - Paradigm: Recover Now inside the room marks the pile Missing when its look shows no corpse
-- Gear handed back still counts for the latest death when its pile was marked Missing
+- Gear handed back still counts for a pile marked Missing
 - A single spare of a worn item is recorded in the deathpile and recovered with it
 - The lit light and the keys are recorded in the deathpile and recovered with it; the light is not lit again
+
+## 3.165.0
+
+- Auto-open opens a flagged container on arrival; it did nothing before
+- Its contents go on the Chest Offload list
+- It waits out a fight, a rest and a kept sneak, one container at a time
+- Off with Auto Get Items or Auto-All; never during a Roomba sweep
+- Chest Offload: pickups during an open aren't listed as the chest's
+- Chest Offload: an item given away leaves the list
+- Chest Offload: the coin tally clears with the last listed item
+- Chest Offload: `op <chest>` is tracked, `open <direction>` is not
+- Chest Offload: one inventory read the game never answers no longer leaves every later open unread
+- Auto-open: a copy opened by hand clears the open owed if it returns, and a hang-up's ends with its item check
+- Bug report shows auto-open's state
+
+## 3.164.0
+
+- Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
+- A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
+- With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
+- Logoff events start at once; every other event waits its turn
+- An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes), and one dropped at either says so in the terminal
+- Stop, dying or Reset States ends the running event and drops the waiting ones; Stop now ends an event that is waiting or resting too
+- A lost connection keeps the waiting events: they run, in order, once back in the game
+- A bank or sell trip, a flee or a reconnect no longer ends an event's loop or walk: it goes on afterwards, laps and Stop after rule intact
+- A walk refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
+- Bug report: the events waiting, the queue limits and what the last Then came to
+- Settings → Events: how long a paused event may stand still before it is given up (5 minutes)
+- bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
+
+## 3.163.0
+
+- A monster set to **Flee** is run from on sight, while a walk or loop is running
+- It is the Health tab's flee: the Combat tab's run distance and direction
+- With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
+- Go backwards if running unticked: the run goes on past it, and a loop carries on from there
+- Ticked: a monster on your route is run from on every return
+- A low-HP or low-mana flee set to run forwards now carries a loop on too, instead of returning to the fight room
+- A forward flee no longer starts with the step just walked
+- A flee ends when you die, disconnect or load another character
+- Two monsters ship set to Flee; set Neutral or Enemy to turn it off
+- A flee stops short of Crystal Lake's teleporting rooms
+
+## 3.162.4
+
+- Hang-up death check: on Paradigm anything still worn rules a death out, as on Stock
+
+## 3.162.3
+
+- Routes never enter Crystal Lake's teleport rooms, boat or not
+- No raft or skiff offered, fetched or bought for the lake
+- A walk the lake blocks says why in one line
+- Stock: White Forest reached along the coast at level 50+ with a boat
+- Paradigm: one card to cross to the Bloodwood Weald room
+- Lake crossings are named on the card and logged once
+- Isle of Bones never reached across the lake
+- The lake's spell-free rooms stay ordinary ground
+- Standing in a teleport room, you are planned out
+- A loop waypoint in a teleport room is refused at start
+- A key-only route goes round the lake and asks for the key alone
+- bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.162.0
+
+- A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
+- Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
+- A life lost on another client, or after a clean exit, is not recorded here
+- The item pickup stands down for it, and nothing is recorded when it can't be told
+- Lives are read again after a life is given back or a level trained
+- Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
+
+## 3.161.16
+
+- Auto-discard counts copies, not pack entries: an item with Min. to keep of 1 or more is now discarded down to that amount (it never was before)
+- Worn copies count toward Min. to keep and are never the copy discarded
+- A flagged light is discarded lit or not; the lit one counts as a pack copy
+- A discard waiting to be sent is checked again before it goes, and taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+- An inventory read landing before a pile's answers no longer has the pile sent twice
+- Taking off a lit light on Stock no longer adds a pack item named `<light> and extinguished it` or leaves the light listed as lit
+
+## 3.161.10
+
+- Locks under 25% a pick are gone round when the way round is short
+- A door the picks run out on is gone round, not stood at
+- Auto-Lair waits one step short of the lair, on its own route
+- Auto-Lair leaves out a lair it can't reach, and retries a failed entry slower each time
+- Auto-Lair keeps a door only if you can't open it; a fair-odds door is retried next visit
+- Log and bug report name the doors gone round and the lairs left out
+
+## 3.161.9
+
+- Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+- One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
+- A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+- Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+- Program log lists the summoning room spells and each summon left out
 
 ## 3.161.8
 

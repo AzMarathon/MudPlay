@@ -898,6 +898,10 @@ public static class DefaultPatterns
         // during the wait the line can arrive on the end of their row.
         yield return new RegexPattern(KnownPatterns.RealmExitInterrupted,
             @"^\.*Your meditation has been interrupted - you may not exit now!");
+        // The first of the two lines a Stock board prints on the entry after a
+        // hang-up it didn't let go free.
+        yield return new RegexPattern(KnownPatterns.HangupLoginNotice,
+            @"^Last time you were on, you disconnected while playing\.");
         // The wait is counted out as a row of dots, built up one at a time, on both
         // realms.
         yield return new RegexPattern(KnownPatterns.RealmExitDots, @"^\.{2,}$");

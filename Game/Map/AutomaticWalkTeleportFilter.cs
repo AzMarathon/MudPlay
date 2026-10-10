@@ -23,14 +23,27 @@ public sealed class AutomaticWalkTeleportFilter : IRoomFilter
         _allowed = allowed;
     }
 
+    // The same rules with more teleports allowed: what a refused walk asks to find
+    // out which box on Settings → Teleports would open its route.
+    public AutomaticWalkTeleportFilter AlsoAllowing(IEnumerable<(RoomKey From, RoomKey To)> more)
+    {
+        HashSet<(RoomKey From, RoomKey To)> allowed = new(_allowed);
+        allowed.UnionWith(more);
+        return new AutomaticWalkTeleportFilter(_inner, allowed);
+    }
+
     public static bool IsTeleport(in RoomExit exit) =>
         exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport;
 
-    public bool IsTeleportRefused(RoomKey from, in RoomExit exit) =>
-        IsTeleport(in exit) && !_allowed.Contains((from, exit.Target));
+    public bool IsExitRefused(RoomKey from, in RoomExit exit) =>
+        (IsTeleport(in exit) && !_allowed.Contains((from, exit.Target)))
+        || (_inner?.IsExitRefused(from, in exit) ?? false);
 
     public bool IsAvoided(RoomKey key) => _inner?.IsAvoided(key) ?? false;
     public bool IsExitBlocked(in RoomExit exit) => _inner?.IsExitBlocked(in exit) ?? false;
+    public bool IsPoorOddsDoor(in RoomExit exit) => _inner?.IsPoorOddsDoor(in exit) ?? false;
+    public string? DescribeDoorRefusal(in RoomExit exit) => _inner?.DescribeDoorRefusal(in exit);
+    public int DoorRuleStamp => _inner?.DoorRuleStamp ?? 0;
     public ExitBlockReason DescribeExitBlock(in RoomExit exit) => _inner?.DescribeExitBlock(in exit) ?? ExitBlockReason.None;
     public bool IsBoatPassable(in BoatPassage passage) => _inner?.IsBoatPassable(in passage) ?? true;
     public ExitBlockReason DescribeBoatBlock(in BoatPassage passage) => _inner?.DescribeBoatBlock(in passage) ?? ExitBlockReason.None;
@@ -43,7 +56,12 @@ public sealed class AutomaticWalkTeleportFilter : IRoomFilter
         IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false,
         IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
         _inner?.SuspendAcquirableGatesExcept(keepClosed, keepUncounteredHazards, openHazardRooms) ?? NoSuspension.Instance;
-
+    public bool IsClosedToRoutes(RoomKey room) => _inner?.IsClosedToRoutes(room) ?? false;
+    public ClosedRoomTerms? CrossingTerms(RoomKey room) => _inner?.CrossingTerms(room);
+    public bool MayCrossClosedRooms() => _inner?.MayCrossClosedRooms() ?? false;
+    public bool TeleportsOnArrival(RoomKey room) => _inner?.TeleportsOnArrival(room) ?? false;
+    public IDisposable SuspendAcquirableGatesButUnprotectableHazards() =>
+        _inner?.SuspendAcquirableGatesButUnprotectableHazards() ?? NoSuspension.Instance;
     private sealed class NoSuspension : IDisposable
     {
         public static readonly NoSuspension Instance = new();

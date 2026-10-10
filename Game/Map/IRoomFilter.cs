@@ -21,6 +21,13 @@ public enum ExitBlockReason
     Alignment  = 1 << 8,   // an (Alignment: X to Y) exit a party member's alignment is outside
 }
 
+// What a crosser needs for a room closed to routes on a walk that may cross it: a
+// level, and any one of some items in hand; and whether this crosser has each.
+public readonly record struct ClosedRoomTerms(int MinLevel, IReadOnlyList<int> Items, bool LevelMet, bool ItemHeld)
+{
+    public bool Met => LevelMet && ItemHeld;
+}
+
 // Pathing-time room filter — when supplied to BfsMapper.FindPath, any
 // room with IsAvoided=true is treated as a non-traversable node (cannot be
 // on a path; cannot be a path's intermediate hop). The source and
@@ -44,12 +51,27 @@ public interface IRoomFilter
     // "graph-disconnected".
     bool IsExitBlocked(in RoomExit exit) => false;
 
-    // A teleport out of `from` this route may not use. Unlike an exit gate it isn't
+    // An exit out of `from` this route may not use. Unlike an exit gate it isn't
     // something the crosser could satisfy, so the search skips it even when exit
-    // gates are being ignored. Only the filter of an automatic walk refuses any
-    // (AutomaticWalkTeleportFilter); the exit alone doesn't say where it leaves from,
-    // which is why this takes the room.
-    bool IsTeleportRefused(RoomKey from, in RoomExit exit) => false;
+    // gates are being ignored. The filter of an automatic walk refuses the teleports
+    // it wasn't allowed (AutomaticWalkTeleportFilter), and a walk refuses a door it
+    // already gave up on (AbandonedDoorsFilter); the exit alone doesn't say where it
+    // leaves from, which is why this takes the room.
+    bool IsExitRefused(RoomKey from, in RoomExit exit) => false;
+
+    // A door the crosser can open only by picking it, at a poor chance per try
+    // (DoorPolicy.IsPoorOddsPick). Not a gate: the search goes round it when a short
+    // way round exists and through it otherwise. Default never; only the stat-aware
+    // Services.MovementFilter says so.
+    bool IsPoorOddsDoor(in RoomExit exit) => false;
+
+    // Why the crosser's routes keep off this door, in words for the log: it can't be
+    // opened at all, or only at poor odds. Null for any exit routes use freely.
+    string? DescribeDoorRefusal(in RoomExit exit) => null;
+
+    // Changes whenever the stats the door rule reads change, so a caller that
+    // remembers "no route from here" can tell when the answer may have changed.
+    int DoorRuleStamp => 0;
 
     // Classifies WHY an exit is non-traversable — the union of gate kinds
     // blocking it — so a failed walk can name the real obstacle instead of a
@@ -119,6 +141,33 @@ public interface IRoomFilter
         IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false,
         IReadOnlyCollection<RoomKey>? openHazardRooms = null)
         => keepUncounteredHazards ? SuspendAcquirableGatesButUncounteredHazards() : SuspendAcquirableGates();
+
+    // A room no route is planned into as things stand, whatever is carried, though a
+    // character standing in one is always planned out of it (BfsMapper.FindPath
+    // takes the shortest way out first). Crystal Lake's teleporting sea rooms are
+    // the case. Default: none; only Services.MovementFilter knows of any.
+    bool IsClosedToRoutes(RoomKey room) => false;
+
+    // What this crosser needs to be taken across a room closed to routes, on the
+    // few walks that are (BfsMapper.FindCrossing), and whether they have it. Null
+    // for a room that isn't one. Default: none.
+    ClosedRoomTerms? CrossingTerms(RoomKey room) => null;
+
+    // Whether this crosser meets the terms of any closed room there is. A cheap
+    // gate on the crossing search: false for nearly every character, so a failed
+    // plan costs them nothing more. Default: no.
+    bool MayCrossClosedRooms() => false;
+
+    // A room whose own spell teleports whoever arrives, on a roll or outright. A
+    // walk is never taken across closed rooms to one on its own account: that is
+    // the one crossing a route card offers (the room on Paradigm's Crystal Lake that
+    // sends you to the Bloodwood Weald). Default: none.
+    bool TeleportsOnArrival(RoomKey room) => false;
+
+    // SuspendAcquirableGates, but for the rooms closed to routes, which stay closed:
+    // what could be walked by obtaining something. Default: the plain suspension,
+    // for filters that know no such room.
+    IDisposable SuspendAcquirableGatesButUnprotectableHazards() => SuspendAcquirableGates();
 
     // The default-implementation's inert scope — disposing it does nothing.
     private sealed class NoGateSuspension : IDisposable

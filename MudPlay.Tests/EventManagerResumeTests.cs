@@ -7,6 +7,7 @@ using MudPlay.Models.GameData;
 using MudPlay.Models.Profile;
 using MudPlay.Services;
 using Xunit;
+using Harness = MudPlay.Tests.EventEngineHarness;
 
 namespace MudPlay.Tests;
 
@@ -43,80 +44,7 @@ public sealed class EventManagerResumeTests : IDisposable
         catch { /* best-effort */ }
     }
 
-    // 1/1 ↔ 1/2 ↔ 1/3 linear strip.
-    private const string GraphJson = """
-        [
-          { "Map Number": 1, "Room Number": 1, "Name": "A",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/2", "S": "0", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 2, "Name": "B",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
-          { "Map Number": 1, "Room Number": 3, "Name": "C",
-            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
-            "N": "0", "S": "1/2", "E": "0", "W": "0",
-            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
-        ]
-        """;
-
-    private sealed class Harness : IDisposable
-    {
-        public required RoomTracker Tracker { get; init; }
-        public required AutoWalkManager Walker { get; init; }
-        public required LoopRunner Runner { get; init; }
-        public required AutoLairManager AutoLair { get; init; }
-        public required LoopManager Loops { get; init; }
-        public required LairManager Lairs { get; init; }
-        public required EventManager Events { get; init; }
-        public required LairTimerStore Timers { get; init; }
-
-        public void Dispose()
-        {
-            AutoLair.Dispose();
-            Timers.Dispose();
-        }
-    }
-
-    private Harness NewHarness()
-    {
-        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
-        File.WriteAllText(Path.Combine(_root, "alpha", "Rooms.json"), GraphJson);
-        GameDataCache cache = new(_root);
-        cache.SwitchSet("alpha");
-        RoomGraphManager graph = new(cache);
-        graph.OnActiveSetChanged("alpha");
-        BfsMapper bfs = new(graph);
-        RoomTracker tracker = new(graph);
-        MovementCoordinator coord = new();
-        AutoWalkManager walker = new(graph, bfs, tracker, coord);
-        walker.SetWireSender(_ => { });
-        LoopRunner runner = new(tracker, coord, graph: graph, bfs: bfs);
-        runner.SetWireSender(_ => { });
-        LairTimerStore timers = new(cache, graph, tracker);
-        AutoLairManager autoLair = new(walker, tracker, graph, bfs, timers);
-        LoopManager loops = new(bfs, graph);
-        // LoopManager.Save no-ops unless a BBS context is set. LoadAll
-        // binds the catalogue to TestBbs (no folder yet, so it seeds an
-        // empty collection); the cascade tests that call Save then write
-        // a .loop file under AppPaths.BbsFolder(TestBbs), which Dispose
-        // reclaims.
-        loops.LoadAll(TestBbs);
-        LairManager lairs = new();
-
-        // EventManager via its full-engine ctor — parameterless ctor
-        // leaves the engines null and the resume code can't exercise.
-        ProfileService profile = new();
-        profile.LoadBlank();
-        EventManager events = new(profile, loops, lairs, runner, autoLair, walker);
-
-        return new Harness
-        {
-            Tracker = tracker, Walker = walker, Runner = runner, AutoLair = autoLair,
-            Loops = loops, Lairs = lairs, Events = events, Timers = timers,
-        };
-    }
+    private Harness NewHarness() => Harness.Create(_root, TestBbs);
 
     private static ScheduledEvent WalkToEvent(int map, int room) => new()
     {
@@ -331,7 +259,8 @@ public sealed class EventManagerResumeTests : IDisposable
         Assert.Equal("(none)", h.Events.RunSummary);
     }
 
-    // Standing in the room already: the walk is done at once and Then runs.
+    // Standing in the room already: the walk is done at once and Then runs. A Then
+    // walk-to is the event's last leg, so the run stays up until it arrives.
     [Fact]
     public void WalkTo_AlreadyThere_IsDoneAtOnce()
     {
@@ -344,6 +273,9 @@ public sealed class EventManagerResumeTests : IDisposable
         h.Events.Fire(e);
 
         Assert.Equal(new RoomKey(1, 3), h.Walker.Destination);
+        Assert.Contains("Then walk-to", h.Events.RunSummary);
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "arrived", new RoomKey(1, 3)));
         Assert.Equal("(none)", h.Events.RunSummary);
     }
 
@@ -374,19 +306,29 @@ public sealed class EventManagerResumeTests : IDisposable
         Assert.Equal("(none)", h.Events.RunSummary);
     }
 
-    // A second event mid-run takes over but keeps the first one's resume target.
+    // A second event mid-walk waits for the first, then goes back to what the first
+    // one interrupted: the loop is restarted once, after the second (EventQueueTests
+    // has the queue's own rules).
     [Fact]
     public void SecondEvent_KeepsWhatTheFirstInterrupted()
     {
         using Harness h = NewHarness();
         Loop loop = RunLoop(h);
+        ScheduledEvent second = WalkToEvent(1, 2);
+        h.Events.Events.Add(second);
 
         h.Events.Fire(WalkToEvent(1, 3));
-        h.Events.Fire(WalkToEvent(1, 2));
+        h.Events.Fire(second);
+        Assert.Contains("'walk-1-3' WalkTo", h.Events.RunSummary);
+
+        h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "arrived", new RoomKey(1, 3)));
+        Assert.Contains("'walk-1-2' WalkTo", h.Events.RunSummary);
         Assert.Contains("resume target loop 'ab'", h.Events.RunSummary);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
 
         h.Events.OnWalkEvent(new WalkEvent(WalkEventKind.Finished, "arrived", new RoomKey(1, 2)));
         Assert.Same(loop, h.Runner.CurrentLoop);
+        Assert.NotEqual(LoopState.Idle, h.Runner.State);
     }
 
     // ----- Other actions ---------------------------------------------------

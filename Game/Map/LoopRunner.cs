@@ -32,8 +32,15 @@ public sealed class LoopRunner : IRecoverableEngine
     private readonly AutoWalkManager? _walker;
     // Path filter used by the runner's BFS calls (rotation + closest-waypoint
     // pick). When set this is typically AppServices.Movement; changes to its
-    // avoided-rooms list arrive via NotifyAvoidedChanged.
-    private readonly IRoomFilter? _filter;
+    // avoided-rooms list arrive via NotifyAvoidedChanged. Once the run has given up
+    // on a door it is that filter with the door refused on top
+    // (AbandonedDoorsFilter), and the bare one again from the next run.
+    private IRoomFilter? _filter;
+    private readonly IRoomFilter? _runFilter;
+    // Doors this run tried and couldn't open, by the room each leaves and the room
+    // it leads to: the walker's rule (AutoWalkManager.TryGoRoundDoor) for a circuit.
+    private readonly HashSet<(RoomKey From, RoomKey To)> _abandonedDoors = new();
+    public IReadOnlyCollection<(RoomKey From, RoomKey To)> AbandonedDoors => _abandonedDoors;
     private Action<byte[]>? _wireSender;
     private Action? _preMoveHook;
     // StealthManager.ReadyToMoveSneaking — false = hold the step (a sneak is settling).
@@ -428,6 +435,17 @@ public sealed class LoopRunner : IRecoverableEngine
         int n = _expandedSteps.Count;
         if (count < 1 || _loop is null || n == 0) return Array.Empty<Direction>();
         var dirs = new List<Direction>(count);
+        // The step at _index has already been walked when its move landed while we
+        // were paused: the pause (a fight, or the flee asking this) keeps the arrival
+        // from advancing the index. Counting it sent a forward flee off with the
+        // direction it had just come in by.
+        int from = _index + (InFlightStepHasLanded() ? 1 : 0);
+        // A flee already holds the loop: this is a later leg of its run, and its
+        // earlier legs have walked steps of the lap the index knows nothing of. The
+        // lap goes on from the step that leads into the room we stand in.
+        if (_fleeHolding && _tracker.State.CurrentRoom?.Key is { } here
+            && FirstStepLeadingTo(here, _index, n, out _) is >= 0 and int walked)
+            from = walked + 1;
         // Loops are circular — wrap around the circuit to fill the count. Stop at
         // the first command / delay step: a forward flee sends plain cardinals
         // only and can't run a custom-command step mid-escape.
@@ -436,12 +454,21 @@ public sealed class LoopRunner : IRecoverableEngine
             // A teleport step counts as a custom command too — LoopExpander turns a
             // BFS path straight into MoveLoopSteps, so a circuit that crosses a CMD
             // teleport carries one, and it can't go out as a bare direction.
-            if (_expandedSteps[(_index + k) % n] is not MoveLoopStep move
+            if (_expandedSteps[(from + k) % n] is not MoveLoopStep move
                 || !move.Direction.IsCardinal()) break;
             dirs.Add(move.Direction);
         }
         return dirs;
     }
+
+    // The move of the step at _index has been sent and the tracker stands in the
+    // room it was headed for, though the index has not been advanced yet.
+    private bool InFlightStepHasLanded() =>
+        _stepInFlight
+        && _index < _expandedSteps.Count
+        && _expandedSteps[_index] is MoveLoopStep
+        && _expectedMoveTarget is { } target
+        && _tracker.State.CurrentRoom?.Key.Equals(target) == true;
 
     public void SendBacktrackMove(Direction direction)
     {
@@ -450,6 +477,15 @@ public sealed class LoopRunner : IRecoverableEngine
         // FSM stays in sync with the observation it'll receive.
         // Cardinals only, same as the walker's — callers must keep
         // Direction.Teleport out rather than have this swallow it.
+        // A stopped loop moves nobody: a flee or recovery that outlived it (a death,
+        // a drop of the line) must not walk the character on through it.
+        // HealthManager ends a flee whose engine was stopped at the next room change,
+        // so for a flee this is a backstop.
+        if (State == LoopState.Idle)
+        {
+            _log?.Info("LoopRunner", $"backtrack move {direction} not sent: the loop is stopped");
+            return;
+        }
         (byte[] bytes, string what) = SpecialExitDispatch.EncodeBacktrack(_tracker, direction);
         _preMoveHook?.Invoke();
         Write(bytes, what);
@@ -483,15 +519,86 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private bool _fleeHolding;
 
-    public void ResumeAfterFlee(RoomKey landedAt)
+    public void ResumeAfterFlee(RoomKey landedAt, bool carryOnFromHere = false)
     {
         _fleeHolding = false;
         _resumingAfterFlee = true;
+        // Set before the adoption: a run that did not stop ahead on the lap is
+        // still not walked back, it is re-planned from where it stopped.
+        _carryOnAfterFlee = carryOnFromHere;
+        if (carryOnFromHere) TakeStepsRunForwardAsWalked(landedAt);
         try { ResumeAfterRecovery(landedAt); }
-        finally { _resumingAfterFlee = false; }
+        finally
+        {
+            _resumingAfterFlee = false;
+            _carryOnAfterFlee = false;
+        }
     }
 
     private bool _resumingAfterFlee;
+    private bool _carryOnAfterFlee;
+
+    // A forward flee walked the lap's own next steps (PeekPlannedDirections). Take
+    // them as walked: the last becomes the step in flight with its move landed, so
+    // the resume advances past it and the lap goes on from the room the run stopped
+    // in (user, 2026-10-10), where walking back would only meet again what was run
+    // from. Nothing is adopted when that room is not ahead on the lap, this one or
+    // the start of the next: the run was turned onto another exit.
+    private void TakeStepsRunForwardAsWalked(RoomKey landedAt)
+    {
+        if (State != LoopState.Paused) return;
+        int was = _index;
+        int k = FirstStepLeadingTo(landedAt, _index, _expandedSteps.Count, out RoomKey from);
+        // Not ahead on this lap, with nothing but moves left in it: the run may have
+        // walked over the lap's end. Then the lap is done, and is counted and
+        // announced as any other, before the steps of the next one are taken.
+        if (k < 0 && RestOfLapIsMoves()
+            && FirstStepLeadingTo(landedAt, 0, _index, out _) >= 0)
+        {
+            RollLapOver();
+            // A wrap's listener may stop the loop.
+            if (_loop is null || State != LoopState.Paused) return;
+            k = FirstStepLeadingTo(landedAt, 0, _expandedSteps.Count, out from);
+        }
+        if (k < 0) return;
+
+        _log?.Info("LoopRunner",
+            $"ResumeAfterFlee: the run went forward to {landedAt}, the room step {k + 1} leads to; carrying on from step {k + 2} (was at step {was + 1})");
+        _index = k;
+        _stepInFlight = true;
+        _expectedMoveSource = from;
+        _expectedMoveTarget = landedAt;
+    }
+
+    private bool RestOfLapIsMoves()
+    {
+        for (int k = _index; k < _expandedSteps.Count; k++)
+            if (_expandedSteps[k] is not MoveLoopStep) return false;
+        return true;
+    }
+
+    // The first step in [first, end) whose move leads into this room, found by
+    // walking the lap from its start, and the room that step leaves from; -1 when
+    // there is none. It stops at the first step in that range that is not a move: a
+    // flee sends moves only, so it cannot have crossed one.
+    private int FirstStepLeadingTo(RoomKey room, int first, int end, out RoomKey from)
+    {
+        from = default;
+        if (_graph is null || _circleStartRoom is not { } here) return -1;
+        for (int k = 0; k < end && k < _expandedSteps.Count; k++)
+        {
+            if (_expandedSteps[k] is not MoveLoopStep move)
+            {
+                if (k >= first) return -1;
+                continue;
+            }
+            if (_graph.GetRoom(here) is not { } at || !at.Exits.TryGetValue(move.Direction, out RoomExit exit)) return -1;
+            from = here;
+            here = exit.Target;
+            if (k >= first && here.Equals(room)) return k;
+        }
+        return -1;
+    }
 
     // The room the loop stood in, with nothing in flight, when the recovery gate
     // took it to find out where we are (a resume with the tracker unsure). Null
@@ -590,7 +697,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // stopped. Re-planning restarted the loop at the nearest waypoint — for a
         // hit-and-run that walked away from the monster it had just backstabbed
         // instead of re-sneaking back in (report paradigm-20260929-221352).
-        if (_resumingAfterFlee && _expectedMoveTarget is { } fledFrom && StartFleeReturn(fledFrom, recoveredAnchor))
+        // Not after a forward run that is to carry on: it is re-planned from here.
+        if (_resumingAfterFlee && !_carryOnAfterFlee
+            && _expectedMoveTarget is { } fledFrom && StartFleeReturn(fledFrom, recoveredAnchor))
             return;
 
         // Desync: the gate recovered us to a real room that isn't the step's
@@ -628,6 +737,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachTarget = target;
         State = LoopState.Approaching;
         Raise(new LoopEvent(LoopEventKind.Resumed, $"walking back to {target} after a flee"));
+        CarryAbandonedDoorsToWalker();
         if (_walker.WalkTo(target, preferTeleportFree: ApproachTeleportPreference)) return true;
         _fleeReturnTarget = null;
         _approachTarget = null;
@@ -721,10 +831,16 @@ public sealed class LoopRunner : IRecoverableEngine
         _recovery = recovery;
         _bfs = bfs;
         _walker = walker;
+        _runFilter = filter;
         _filter = filter;
         _postToUi = postToUi ?? (a => Dispatcher.UIThread.Post(a));
 
         _tracker.StateChanged += OnTrackerStateChanged;
+        // A death found out at the login (the hang-up penalty killed the character
+        // after the link was gone) stops the engines, but the loop set aside when
+        // the link dropped is not running yet: the first prompt would start it and
+        // walk a stripped character out of the temple.
+        _tracker.PlayerDeathInferred += ClearPendingReconnectResume;
         _tracker.CastCrossingStarted += OnCastCrossingStarted;
         _coordinator.PauseStateChanged += OnPauseChanged;
         if (_promptScanner is not null)
@@ -889,6 +1005,20 @@ public sealed class LoopRunner : IRecoverableEngine
         return StartInternal(loop, isRecovery: false, gateFallback: true);
     }
 
+    // Why this loop can't be run at all, or null when it can: it has a waypoint in a
+    // room no route enters. Asked before the walk to the loop too, so nobody is
+    // walked to the lake to be told there.
+    public string? RefusalFor(Loop loop)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        if (_filter is null) return null;
+        List<RoomKey> closed = loop.Waypoints.Select(w => w.Key).Where(_filter.IsClosedToRoutes).Distinct().ToList();
+        if (closed.Count == 0) return null;
+        string first = _graph?.GetRoom(closed[0])?.Name is { Length: > 0 } name ? $"{closed[0]} ({name})" : closed[0].ToString();
+        return $"loop '{loop.Name}' has {closed.Count} waypoint(s) in rooms that teleport at random and that nothing "
+            + $"protects from, {first} the first: no loop or automatic walk enters them";
+    }
+
     // The walk to the loop is the user's: set by a user Start and dropped the moment
     // the loop is reached (BeginCircle). The user asked to go to the loop, not for
     // what the run does afterwards, so a walk back to it after a detour or a flee is
@@ -922,8 +1052,9 @@ public sealed class LoopRunner : IRecoverableEngine
 
         // The free way in first; failing that, through a gate the walk can open on
         // the way, as the runner's own start falls back.
+        // Never across a room closed to routes: the walk there wouldn't cross either.
         if (Nearest() is { } free) return free;
-        using (_filter?.SuspendAcquirableGates())
+        using (_filter?.SuspendAcquirableGatesButUnprotectableHazards())
             return Nearest();
     }
 
@@ -973,6 +1104,7 @@ public sealed class LoopRunner : IRecoverableEngine
             _recoverAttempts = 0;
             _revealRetries = 0;
             _lastRecoveryAttemptAt = DateTimeOffset.MinValue;
+            ForgetAbandonedDoors();
             if (State is LoopState.Running or LoopState.Paused
                        or LoopState.Approaching or LoopState.Recovering)
             {
@@ -1025,6 +1157,17 @@ public sealed class LoopRunner : IRecoverableEngine
         // otherwise clear it) so the one-shot survives to BeginCircle.
         _suppressFirstWaypointEvent = suppressFirstWaypointEvent;
         _returningFromDetour = suppressFirstWaypointEvent;
+
+        // A waypoint in a room no route enters (Crystal Lake's teleporting sea
+        // rooms) can't be walked to, and a loop that stood in one would be thrown
+        // off it on most entries. Refused here, by name, rather than started with
+        // a leg missing.
+        if (RefusalFor(loop) is { } refusal)
+        {
+            _log?.Warn("LoopRunner", $"Start refused: {refusal}");
+            RaiseAfterReset(new LoopEvent(LoopEventKind.Failed, refusal));
+            return false;
+        }
 
         RoomKey? currentKey = _tracker.State.CurrentRoom?.Key;
 
@@ -1116,6 +1259,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner",
             $"approach: walking from {currentKey} → {closest} (closest of {loop.Waypoints.Count} waypoints)");
         JourneyFetch? fetch = throughGates ? _gatedApproachFetch?.Invoke(currentKey.Value, closest.Value) : null;
+        CarryAbandonedDoorsToWalker();
         _walker.WalkTo(closest.Value, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference,
             fetch: fetch);
         return true;
@@ -1135,7 +1279,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (entryIndex.Count == 0) return false;
 
         IReadOnlyDictionary<RoomKey, int> steps;
-        using (IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null)
+        using (IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGatesButUnprotectableHazards() : null)
             steps = _bfs!.ComputeDistancesTo(from, entryIndex.Keys, _filter);
         RoomKey? best = null;
         foreach ((RoomKey room, int index) in entryIndex)
@@ -1175,6 +1319,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _log?.Info("LoopRunner",
             $"approach: walking from {from} → {entry} (nearest loop room, {steps[entry]} step(s); joins at step {_index + 1} of {_expandedSteps.Count})");
         JourneyFetch? fetch = throughGates ? _gatedApproachFetch?.Invoke(from, entry) : null;
+        CarryAbandonedDoorsToWalker();
         _walker!.WalkTo(entry, planThroughAcquirableGates: throughGates, preferTeleportFree: ApproachTeleportPreference,
             fetch: fetch);
         return true;
@@ -1212,8 +1357,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // hazard) for the reachability probe so a waypoint reachable only by acquiring
         // something en route (e.g. the key to re-enter a walled city after a detour)
         // still counts as reachable; the approach walk then plans + acquires through
-        // them. Level / toll / class gates stay active regardless.
-        using IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null;
+        // them. Level / toll / class gates stay active regardless, and so do the
+        // rooms closed to routes, which that walk would not cross.
+        using IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGatesButUnprotectableHazards() : null;
         RoomKey? best = null;
         int bestLen = int.MaxValue;
         foreach (LoopWaypoint w in waypoints)
@@ -1465,7 +1611,11 @@ public sealed class LoopRunner : IRecoverableEngine
         }
     }
 
-    public void Stop(string reason = "user stop")
+    // willResume: the caller stops the loop only to start it again itself (a bank or
+    // sell trip, a flee, a reconnect), which the Stopped event says so a listener
+    // can tell that from the loop being called off (an event run counting this
+    // loop's laps must outlast the one and end on the other).
+    public void Stop(string reason = "user stop", bool willResume = false)
     {
         if (State == LoopState.Idle) return;
         string? name = _loop?.Name;
@@ -1477,7 +1627,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (State == LoopState.Approaching) _walker?.Stop("loop stopped");
         Reset();
         EndReconnectReformHold("the loop was stopped");
-        Raise(new LoopEvent(LoopEventKind.Stopped, $"{name}: {reason}"));
+        Raise(new LoopEvent(LoopEventKind.Stopped, $"{name}: {reason}", willResume));
     }
 
     // Avoided-rooms list mutated mid-loop. Re-plan with the new filter so it
@@ -1533,6 +1683,40 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // ----- internals -------------------------------------------------
 
+    // The lap's last step is behind us: count and time the lap, go back to step 0
+    // and announce the wrap. Called where the steps run out, and by a forward flee's
+    // resume when the run itself walked over the lap's end.
+    private void RollLapOver()
+    {
+        if (_loop is null) return;
+        // Record the just-completed lap's duration into the rolling
+        // history (capped at MaxLapHistory) so AverageLapTime stays
+        // bounded in memory across long-running sessions.
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        bool partLap = _partialLap;
+        _partialLap = false;
+        if (!partLap)
+        {
+            TimeSpan lapTime = now - _lapStartedAt;
+            _lapDurations.Add(lapTime);
+            if (_lapDurations.Count > MaxLapHistory) _lapDurations.RemoveAt(0);
+            _completedLaps++;
+        }
+        _lapStartedAt = now;
+        _index = 0;
+
+        // A live per-room edit that added or removed a command deferred its
+        // re-expansion to here — the one safe point to swap the step list, with
+        // _index at 0 and the player back at the entry room after the closing leg.
+        if (_reExpandAtLapEnd)
+        {
+            _reExpandAtLapEnd = false;
+            ExpandSteps();
+        }
+
+        if (!partLap) Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
+    }
+
     private void SendNextStep()
     {
         if (_loop is null || State != LoopState.Running) return;
@@ -1546,32 +1730,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // runs until the user Stops or the recovery gate aborts it.
         if (_index >= _expandedSteps.Count)
         {
-            // Record the just-completed lap's duration into the rolling
-            // history (capped at MaxLapHistory) so AverageLapTime stays
-            // bounded in memory across long-running sessions.
-            DateTimeOffset now = DateTimeOffset.UtcNow;
-            bool partLap = _partialLap;
-            _partialLap = false;
-            if (!partLap)
-            {
-                TimeSpan lapTime = now - _lapStartedAt;
-                _lapDurations.Add(lapTime);
-                if (_lapDurations.Count > MaxLapHistory) _lapDurations.RemoveAt(0);
-                _completedLaps++;
-            }
-            _lapStartedAt = now;
-            _index = 0;
-
-            // A live per-room edit that added or removed a command deferred its
-            // re-expansion to here — the one safe point to swap the step list, with
-            // _index at 0 and the player back at the entry room after the closing leg.
-            if (_reExpandAtLapEnd)
-            {
-                _reExpandAtLapEnd = false;
-                ExpandSteps();
-            }
-
-            if (!partLap) Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
+            RollLapOver();
 
             // A RepeatStarted subscriber can react synchronously — e.g. a
             // room-arrival dispatcher asserting a MovementCoordinator gate to
@@ -1892,6 +2051,7 @@ public sealed class LoopRunner : IRecoverableEngine
                 return;
 
             case DoorOpenResult.Failed failed:
+                if (failed.Unopenable && TryGoRoundDoor(failed.Reason)) return;
                 FailStep($"door open failed: {failed.Reason}");
                 return;
 
@@ -1911,6 +2071,55 @@ public sealed class LoopRunner : IRecoverableEngine
                 EnterRecovery($"step {_index + 1} door isn't here ({notHere.Reason})");
                 return;
         }
+    }
+
+    // The walker's rule for a door that beat the character
+    // (AutoWalkManager.TryGoRoundDoor), for a circuit: the door is given up on for
+    // the rest of the run and the loop re-planned from here with it refused, so the
+    // legs it was on go round. Failing the lap there, as before, ended the run on a
+    // door a few steps would have gone round. False when the step has to fail as
+    // before; true when the loop went round, or failed here because a leg has no
+    // other way.
+    private bool TryGoRoundDoor(string reason)
+    {
+        if (_loop is null || _bfs is null || _index >= _expandedSteps.Count
+            || _expandedSteps[_index] is not MoveLoopStep step
+            || _tracker.State.CurrentRoom is not { } here
+            || !here.Exits.TryGetValue(step.Direction, out RoomExit exit))
+            return false;
+        // Recovery would take an entry this soon after the last for its echo and
+        // drop it, leaving the step with nothing on the wire: the OnDoorReply
+        // NotHere case has the same guard.
+        if (RecoveryWouldDeclineAsEcho()) return false;
+
+        IReadOnlyList<LoopWaypoint> waypoints = RuntimeWaypointOrder();
+        int unreachableBefore = LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count;
+        _abandonedDoors.Add((here.Key, exit.Target));
+        _filter = new AbandonedDoorsFilter(_runFilter, _abandonedDoors);
+        string door = $"the door {step.Direction.ToLongName()} from {here.Key} ({here.Name})";
+        if (LoopExpander.Expand(waypoints, _bfs, _filter).UnreachableSegments.Count > unreachableBefore)
+        {
+            FailStep($"couldn't open {door} ({reason}), and the loop has no way round it");
+            return true;
+        }
+
+        _log?.Info("LoopRunner",
+            $"gave up on {door} ({reason}); routing the loop round it, and not planning through it again this run");
+        EnterRecovery($"step {_index + 1} couldn't open {door}");
+        return true;
+    }
+
+    private void ForgetAbandonedDoors()
+    {
+        _abandonedDoors.Clear();
+        _filter = _runFilter;
+    }
+
+    // An approach walk is the walker's own trip, with its own list of doors given
+    // up on: without the run's, it would try a door this run already gave up on.
+    private void CarryAbandonedDoorsToWalker()
+    {
+        if (_abandonedDoors.Count > 0) _walker?.RefuseDoorsOnNextWalk(_abandonedDoors);
     }
 
     // The way was cleared (trap down, door open, winch turned, hidden exit found)
@@ -2570,7 +2779,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // genuine Start() call — see NotifyDisconnected's rationale.
     private Loop? _pendingReconnectResume;
 
-    // Reset States: don't restart the loop on the next prompt after a reconnect.
+    // Reset States, and a death found out at the login: don't restart the loop on
+    // the next prompt after a reconnect.
     public void ClearPendingReconnectResume() => _pendingReconnectResume = null;
 
     // Torn down by a connection drop (wired from MainWindowViewModel's
@@ -2590,7 +2800,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (State != LoopState.Idle)
         {
             _pendingReconnectResume = _loop;
-            Stop("disconnected — will resume on reconnect");
+            Stop("disconnected — will resume on reconnect", willResume: true);
         }
         // A reform hold belongs to the connection that just ended. Dropped after the
         // stop, which drops it too: lifting it first would let the held loop step.
@@ -3279,6 +3489,7 @@ public sealed class LoopRunner : IRecoverableEngine
         _approachFinishedWhilePaused = false;
         _recoverAttempts = 0;
         _lastRecoveryAttemptAt = DateTimeOffset.MinValue;   // reset the spacing clock with the budget
+        ForgetAbandonedDoors();
         _lapDurations.Clear();
         _completedLaps = 0;
         _lapStartedAt = default;
@@ -3347,4 +3558,5 @@ public enum LoopEventKind
     Renamed = 9,
 }
 
-public readonly record struct LoopEvent(LoopEventKind Kind, string Detail);
+// WillResume is set on a Stopped whose caller restarts the loop itself afterwards.
+public readonly record struct LoopEvent(LoopEventKind Kind, string Detail, bool WillResume = false);

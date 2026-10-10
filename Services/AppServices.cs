@@ -1188,8 +1188,9 @@ public sealed class AppServices
     // unknown-entity click-to-fix dialog.
     public Game.Combat.RoomEntityClassifier RoomClassifier { get; private set; } = null!;
 
-    // Hangs up when a monster whose relationship is Hangup is on the room roster.
-    public Game.Combat.MonsterHangupWatcher MonsterHangup { get; private set; } = null!;
+    // Answers a monster on the room roster whose relationship is Hangup (a hang-up)
+    // or Flee (a run).
+    public Game.Combat.MonsterRelationshipWatcher MonsterWatch { get; private set; } = null!;
 
     // Auto-greets newly-seen non-party players (Settings → Talk
     // "Greet players when first met"). Subscribes to
@@ -1366,7 +1367,7 @@ public sealed class AppServices
     public IReadOnlyList<(Game.GameData.BankShop Bank, int? Steps)> BanksNearestFirst(Game.Map.RoomKey from)
     {
         IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
             distances = Bfs.ComputeDistancesFrom(from, Movement, viaBoats: true);
         return Game.GameData.BankCatalog.ByDistance(Game.GameData.BankCatalog.Enumerate(GameData), distances);
     }
@@ -1377,7 +1378,7 @@ public sealed class AppServices
     public IReadOnlyList<(Game.Map.RoomKey Stash, int? Steps, long Copper)> StashesNearestFirst(Game.Map.RoomKey bank)
     {
         IReadOnlyDictionary<Game.Map.RoomKey, int> distances;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
             distances = Bfs.ComputeDistancesFrom(bank, Movement, viaBoats: true);
         var rows = new List<(Game.Map.RoomKey Stash, int? Steps, long Copper)>();
         foreach (Game.Map.RoomKey stash in Movement.Stash)
@@ -1979,10 +1980,11 @@ public sealed class AppServices
     // items are never sold.
     public Game.Inventory.AutoSellManager AutoSell { get; private set; } = null!;
 
-    // Auto-open engine. On every inventory change, sends open <name> once for
-    // each container item (ItemType == Container) flagged
-    // Models.GameData.ItemOverlay.AutoOpen that newly entered the pack. Shares
-    // the AutoGetItems master toggle; the per-item AutoOpen flag is the real gate.
+    // Auto-open engine. On every inventory change, each container item
+    // (ItemType == Container) flagged Models.GameData.ItemOverlay.AutoOpen that
+    // newly entered the pack is opened through ChestOpens, so what it gave joins
+    // the Chest Offload list. Shares the AutoGetItems master toggle; the per-item
+    // AutoOpen flag is the real gate.
     public Game.Inventory.AutoOpenManager AutoOpen { get; private set; } = null!;
 
     // Base auto-search engine — sends a bare sea on each room
@@ -3365,6 +3367,7 @@ public sealed class AppServices
             picklocksOverBashProvider:     () => Resolver.Resolve<Models.Profile.OtherSettings>("Other").PicklocksOverBash,
             itemNameLookup:                id => ItemNames.GetName(id),
             maxBashableStrengthProvider:   () => MaxStrength.MaxAchievableStrength,
+            statsRead:                     () => Stats.HasParsed,
             // Read lazily at door-open time — Inventory is constructed after Door.
             holdsKeyItem:                  HoldsKeyItem,
             // Rest-interleave for bashing (bashing drains HP): pause a bash once HP
@@ -4028,6 +4031,8 @@ public sealed class AppServices
         Movement.MaxBashableStrengthProvider = () => MaxStrength.MaxAchievableStrength;
         Movement.RoomEntrySpellProbe = key => RoomGraph.GetRoom(key)?.Spell ?? 0;
         Movement.Hazards = RoomHazards;
+        Movement.SpellTeleportsAtRandomProbe =
+            spell => RoomSpellTeleports.ClassOf(spell) == Game.Map.RoomSpellTeleport.Sudden;
         Favorites = new FavoritesStore(Profile, GameData, ProfileGameDataSet, Log);
         GotoHistory = new GotoHistoryStore(Profile);
 
@@ -4134,14 +4139,17 @@ public sealed class AppServices
             log: Log);
         GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
         // Built ahead of the combat tracker and engine, like PvpRoom: a monster whose
-        // relationship is Hangup is answered before their handlers can start a fight
-        // in the room. Health, the PvP services and InGameCapture are built further
-        // down, so they are reached through lambdas; a method group would be read
-        // here, while they are still null.
-        MonsterHangup = new Game.Combat.MonsterHangupWatcher(
+        // relationship is Hangup or Flee is answered before their handlers can start
+        // a fight in the room. Health, the PvP services and InGameCapture are built
+        // further down, so they are reached through lambdas; a method group would be
+        // read here, while they are still null.
+        MonsterWatch = new Game.Combat.MonsterRelationshipWatcher(
             RoomClassifier,
             resolveOverlay: ResolveMonsterOverlay,
             hangUp: reason => Health.HangUpForMonster(reason),
+            flee: (reason, stillHere) => Health.FleeFromMonster(reason, stillHere),
+            fleeInFlight: () => Health.IsFleeInFlight,
+            masterSwitchOff: () => AutoModeController.KillSwitchEngaged,
             hangupsDisabled: () =>
                 ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups,
             // The fight's end re-issues the roster (PvpFight.ActiveChanged, below),
@@ -4161,10 +4169,10 @@ public sealed class AppServices
         // The minute's hold after a hang-up from here starts at the first game
         // prompt once the character is back, and belongs to the character that
         // hung up.
-        PromptScanner.PromptObserved += _ => MonsterHangup.NoteInGamePrompt();
-        Profile.ProfileLoaded += _ => MonsterHangup.Reset();
-        Profile.ProfileClosed += () => MonsterHangup.Reset();
-        MonsterHangup.HoldNotice += text => WriteTerminalNotice($"[{text}]");
+        PromptScanner.PromptObserved += _ => MonsterWatch.NoteInGamePrompt();
+        Profile.ProfileLoaded += _ => MonsterWatch.Reset();
+        Profile.ProfileClosed += () => MonsterWatch.Reset();
+        MonsterWatch.HoldNotice += text => WriteTerminalNotice($"[{text}]");
         // Another player's room attack shows as a line, not a room observation, so
         // nothing re-asks the combat gate on its own. Posted: the line is still being
         // dispatched, and the re-check can send a break.
@@ -4677,6 +4685,26 @@ public sealed class AppServices
         // The room we came from — the Backward flee's retreat when there's no trail
         // to the loop's origin (we're standing on it).
         Health.IsMovePending = () => RoomTracker.State.Confidence == Game.Map.RoomConfidence.Pending;
+        // MovementControl is built further down; the lambda reads it when a Flee
+        // monster is seen.
+        Health.IsNavigationPausedByUser = () => MovementControl.IsUserPaused;
+        // A flee does not outlive what cuts it off (user, 2026-10-10: "if we died,
+        // the flee needs to end"). Health is built once, so a profile swap is one of
+        // those; the disconnect is MainWindowViewModel's to tell it. The death
+        // halt's own subscription, made earlier, has stopped the engines by now.
+        RoomTracker.PlayerDeathObserved += () => Health.EndFlee("died");
+        // The walk or loop a cut-off flee had paused goes with the character: left
+        // paused it would wait for a resume nobody will give.
+        Health.StopMovementEngine = (engine, reason) =>
+        {
+            if (engine is Game.Map.LoopRunner loop) loop.Stop(reason);
+            else if (engine is Game.Map.AutoWalkManager walk) walk.Stop(reason);
+        };
+        Profile.ProfileLoaded += _ => Health.EndFlee("another profile was loaded", stopItsEngine: true);
+        Profile.ProfileClosed += () => Health.EndFlee("the profile was closed", stopItsEngine: true);
+        // The first game prompt after a reconnect hands back a walk that a flee cut
+        // off by the disconnect had paused.
+        PromptScanner.PromptObserved += _ => Health.NoteInGamePrompt();
         Health.IsServerEngaged = () => CombatTracker.IsServerEngaged;
         RoomTracker.MoveBlocked += Health.NoteMoveBlocked;
         Health.PreviousRoom = () =>
@@ -4689,6 +4717,7 @@ public sealed class AppServices
         Health.RoomExits = key => RoomGraph.GetRoom(key)?.Exits.ToDictionary(e => e.Key, e => e.Value.Target);
         Health.RoomRisk = key => (IsBossRoomLive(key),
             Game.Map.RoomTooltipBuilder.TryParseLairMax(RoomGraph.GetRoom(key)?.RawLairTag, out int lairMax) ? lairMax : 0);
+        Health.IsClosedToRoutes = Movement.IsClosedToRoutes;
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us
@@ -5403,8 +5432,8 @@ public sealed class AppServices
             && LoopRunner.State == Game.Map.LoopState.Idle
             && !AutoLair.IsActive);
         // A Hangup-relationship monster is fought back only while no hang-up will
-        // come for it.
-        Combat.SetHangupWatchOffProbe(() => MonsterHangup.WatchIsOff);
+        // come for it, and a Flee one only while no run will.
+        Combat.SetNoAnswerComingProbe(relationship => MonsterWatch.NoAnswerComing(relationship));
         // A fresh hide re-arms the surprise round for the stationary hidden opener:
         // when the FSM latches Hidden, re-open so a monster that wanders in is a
         // genuine backstab target again (no gear swap — equipping would break hide).
@@ -5854,9 +5883,9 @@ public sealed class AppServices
             {
                 EngineGate.Release(BoardMenuHold);
                 // The room is displayed ahead of the first prompt on the way back
-                // in: a Hangup monster read off it while still "at the menu" is
-                // answered now.
-                MonsterHangup.NoteBackInGame();
+                // in: a Hangup or Flee monster read off it while still "at the
+                // menu" is answered now.
+                MonsterWatch.NoteBackInGame();
                 return;
             }
             EngineGate.Hold(BoardMenuHold);
@@ -6802,7 +6831,12 @@ public sealed class AppServices
             resolve: ResolveAutoDiscardItem,
             isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
             log: Log,
-            isParadigm: onParadigm);
+            isParadigm: onParadigm,
+            // Worn gear counts toward an item's keep amount. The lit light is a pack
+            // copy to the game, though the listing sets it apart; it is known from
+            // the last full read only.
+            wornItems: () => Inventory.Snapshot.EquippedItems.Select(e => e.Name),
+            litLight: () => Inventory.Snapshot.ReadiedLight?.Name);
         // Auto-discard re-evaluates the pack on every inventory change — the
         // seam that surfaces chest dumps and freshly collected loot.
         Inventory.Changed += AutoDiscard.OnInventoryChanged;
@@ -6815,7 +6849,13 @@ public sealed class AppServices
             if (t.NewConfidence == Game.Map.RoomConfidence.Confirmed && t.NewRoom is { } arrived)
                 AutoDiscard.OnRoomEntered(arrived.Key);
         };
-        AutoDiscard.PacedSender = cmds => InventoryAction.SendPaced(cmds);
+        // The engine's commands go into the pacer under its own tags and with its
+        // own last-moment check, so it can take back what is still waiting when
+        // the rules change under them; nothing else in the queue is its to take.
+        AutoDiscard.PacedSender = (cmds, owner, mayGo) => InventoryAction.SendPaced(cmds, owner, mayGo);
+        AutoDiscard.RecallQueued = (owner, take) => InventoryAction.RecallPaced(owner, take);
+        // An item's flag unticked or its keep amount raised while a pile waits.
+        Resolver.GameDataChanged += _ => AutoDiscard.OnRulesChanged();
         AutoDiscard.SendsQueued = () => InventoryAction.HasPacedCommandsQueued;
         AutoDiscard.CancelQueuedSends = () => InventoryAction.CancelPaced();
         // A discard sent while the send gate is up is dropped unsent. And on Stock
@@ -6856,15 +6896,62 @@ public sealed class AppServices
             log: Log,
             isParadigm: onParadigm);
 
+        // The engine holds no wire sender of its own: each open goes to the Chest
+        // Offload tracker, which sends it and reads what it gave. Nothing is left
+        // for the main window to bind, and so nothing to leave unbound.
         AutoOpen = new Game.Inventory.AutoOpenManager(
             carriedItems: () => Inventory.Snapshot.CarriedItems,
             resolve: ResolveAutoOpenItem,
-            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems),
+            // With the Auto-All switch off nothing automatic is sent.
+            isEnabled: () => ReadAutoModeFlag(d => d.AutoGetItems) && !AutoModeController.KillSwitchEngaged,
             isLoaded: () => Inventory.IsLoaded,
-            log: Log);
+            open: name => ChestOpens.TryOpenNow(name),
+            log: Log)
+        {
+            // An `open` typed at the board's menus would be a menu choice.
+            SendGateOpen = () => !EngineGate.IsLocked && InGameCapture.InGame,
+            InCombat = () => PlayerState.InCombat,
+            // `open` stands a resting character up, as the door and trap tries do.
+            Resting = RestHeld,
+            SneakKept = () => SneakGuard.Holds,
+            ComingBack = name => HangupItems.BeingPickedUp(name),
+            // The pile of a death is open until its record is recovered, found
+            // missing or cleared. A minute's slack: the record and the engine each
+            // stamp the death themselves.
+            DeathpileOpenSince = since => Profile.Current?.DeathHistory?.Any(r =>
+                r.At >= since.AddMinutes(-1)
+                && r.Status is Models.Profile.DeathRecoveryStatus.Active
+                    or Models.Profile.DeathRecoveryStatus.Partial) == true,
+        };
         // Auto-open re-evaluates the pack on every inventory change — the seam
         // that surfaces a container the moment it enters inventory.
         Inventory.Changed += AutoOpen.OnInventoryChanged;
+        Inventory.FullInventoryParsed += AutoOpen.OnFullInventoryRead;
+        ChestOpens.OpenSettled += AutoOpen.OnOpenSettled;
+        ChestOpens.PlayerOpened += AutoOpen.OnPlayerOpened;
+        // Each of these may be what an owed open was waiting on.
+        EngineGate.Released += AutoOpen.Recheck;
+        SneakGuard.Released += AutoOpen.Recheck;
+        MovementCoordinator.GatesChanged += AutoOpen.Recheck;
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame) AutoOpen.OnEnteredGame();
+            AutoOpen.Recheck();
+        };
+        PlayerState.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(Game.PlayerState.InCombat) && !PlayerState.InCombat) AutoOpen.Recheck();
+        };
+        // Switched off, an owed open is forgotten then and there: back on a moment
+        // later, with nothing having moved in the pack, it must not go out. The
+        // Auto Get Items toggle does the same from the main window.
+        AutoModeController.KillSwitchToggled += _ => AutoOpen.Recheck();
+        Profile.ProfileLoaded += _ => AutoOpen.Reset();
+        RoomTracker.PlayerDeathObserved += AutoOpen.OnPlayerDied;
+        RoomTracker.UnwitnessedDeathRecorded += () =>
+        {
+            if (Profile.Current?.DeathHistory?.LastOrDefault() is { } record) AutoOpen.OnUnwitnessedDeath(record.At);
+        };
         // Settings → Talk auto-greet. Self name resolves through the
         // PartyManager's LocalCharacterName first (set on connect), then
         // the loaded profile name as a fallback. Wire-sender bound by
@@ -7230,6 +7317,8 @@ public sealed class AppServices
         // change reaches the next walk and a profile swap brings its own list.
         Walker.SetAutomaticWalkTeleports(() => Game.Map.TeleportCatalog.ParseKeys(
             ReadSection<Models.Profile.TeleportSettings>(Profile.Current, "Teleports").AutomaticWalkTeleports));
+        // A refused automatic walk names the line to tick by its title on that tab.
+        Walker.SetTeleportChoices(() => TeleportChoices);
         RoomGraph.GraphReloaded += () => _teleportChoices = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
@@ -7826,7 +7915,7 @@ public sealed class AppServices
         Lairs = new Game.Map.LairManager(Log);
         LairTimers = new Game.Map.LairTimerStore(GameData, RoomGraph, RoomTracker, Log);
         MonsterDeath.MonsterDied += evt => LairTimers.NoteKill(evt.At);
-        ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData);
+        ExpResolver = new Game.Map.RouteExpResolver(RoomGraph, Bfs, LairTimers, GameData, Log);
 
         // Loops + lairs are per-game-data-set and share one on-disk tree,
         // so they reload together on every active-set change. Mirrors the
@@ -8348,6 +8437,9 @@ public sealed class AppServices
             Walker.Stop("player died — halting in graveyard");
             AutoLair.Stop("player died — halting in graveyard");
             MovementControl.DropQueuedRun();
+            // After the engines: a run their stop didn't end (a wait, a rest) and
+            // the events queued behind it end here.
+            Events.NoteDeath();
         });
         // Wipe the classifier's room view so a hostile from the room we died in
         // doesn't linger as a stale target the combat engine re-attacks when a
@@ -8950,9 +9042,12 @@ public sealed class AppServices
         // moment the sweep ends.
         AutoGetItems.SuppressDuringSweep = () => GhSweep.IsActive;
         AutoDiscard.SuppressDuringSweep = () => GhSweep.IsActive;
-        // Hides a full room refused were kept back for the sweep; it may have left
-        // the character somewhere with room.
-        GhSweep.PhaseChanged += () => { if (!GhSweep.IsActive) AutoDiscard.RecheckHeldHides(); };
+        // A container the sweep carries is being moved, not looted.
+        AutoOpen.SuppressDuringSweep = () => GhSweep.IsActive;
+        // A sweep starting takes back the engine's piles still waiting to be sent.
+        // One ending may have left the character somewhere with room for the hides
+        // a full room refused, and lets the engine's own discards go again.
+        GhSweep.PhaseChanged += AutoDiscard.OnInventoryChanged;
 
         // Shop-source routing (PR C). On a one-shot walk-to that needs an
         // uncarried Item/Ticket-gate item a shop sells, detour to the
@@ -9294,6 +9389,13 @@ public sealed class AppServices
         Events.SetStashTransferHooks(StartStashTransfer, () => StashTransfer.Cancel("another event took over"));
         StashTransfer.Ended += Events.NoteStashTransferEnded;
         Events.SetRestHooks(() => Health.IsRecoveringRest || Health.RestInFlight, () => Health.Evaluate());
+        // Posted: the engine event that reports a refused walk back can arrive from
+        // inside the message pump, where a terminal write re-feeds the emulator.
+        Events.SetNotice(msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        // Stop with no engine running to report it (an event waiting or resting, or
+        // suspended behind a detour) still ends the event and its queue. Wired here,
+        // after Events exists; MovementControl is built further up.
+        MovementControl.Stopping += Events.NoteUserStop;
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);
@@ -9357,12 +9459,67 @@ public sealed class AppServices
             // a held name of one item meet however the floor words it.
             itemKey: name => ItemNames.FindByName(name) is int number ? $"#{number}" : ItemNameStore.Normalize(name),
             post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run),
-            log: Log);
+            log: Log,
+            // What tells a hang-up the penalty could have killed for from an ordinary
+            // reconnect, and a death from either. HP is the statline's; the maximum
+            // is a `stat` read's or the highest HP seen, and 0 until there is one (a
+            // character still dropped after a restart has shown none).
+            vitals: () => PlayerState.HasPromptData
+                ? (PlayerState.Hp, PlayerState.MaxHp > 0 ? PlayerState.MaxHp : null)
+                : null,
+            lives: () => PlayerStats.Lives > 0 ? PlayerStats.Lives : null,
+            // A player's attack counts for a while after it: the fight engine may
+            // not be fighting back (its response can be to do nothing, or to hang up).
+            pvpFight: () => PvpFight.IsActive
+                || PvpAttacks.Recent.Any(a => DateTimeOffset.Now - a.At < HangupPvpAttackWindow),
+            monsterFight: () => PlayerState.InCombat || CombatTracker.HasHostileMonster,
+            hpShareTop: (pvp, inFight) =>
+                Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
+            stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
+            recordDeath: RoomTracker.NoteUnwitnessedDeath,
+            staysOnDeath: EveryItemOfThisNameStaysOnDeath);
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
+        // The lives a `stat` on this connection gave: the count carried over a
+        // reconnect is the one from before the link dropped.
+        Stats.ScreenParsed += screen =>
+        {
+            // The name is on the same row of the screen as the lives.
+            if (Stats.LastCaptureReadLives) HangupItems.NoteLivesRead(screen.Lives, screen.Name);
+        };
+        // Stock's word, on the way in, that the last exit was a hang-up it didn't
+        // let go free. Without it a life lost isn't taken as lost to that hang-up.
+        Router.Subscribe(Services.Patterns.KnownPatterns.HangupLoginNotice, _ => HangupItems.NoteHangupLoginLine());
+        // Two things change the game's lives count with no screen telling the
+        // client: a life asked back after a death, and a level trained (which
+        // gives lives). The count the list carries must not be the stale one.
+        SysopGodLife.LifeRequested += () => HangupItems.NoteLivesChangedUnread("a life was asked back");
+        Router.Subscribe(Services.Patterns.KnownPatterns.TrainAttainLevel,
+            _ => HangupItems.NoteLivesChangedUnread("a level was trained"));
+        Router.Subscribe(Services.Patterns.KnownPatterns.TrainAttainNextLevel,
+            _ => HangupItems.NoteLivesChangedUnread("a level was trained"));
+        // A death the check works out after the fact (RoomTracker.NoteUnwitnessedDeath)
+        // reaches only the handlers that still make sense minutes later, in the room
+        // the character woke in: the engine stop (PlayerDeathMovementHalt), Death
+        // Recovery's grid, the default task (DefaultTaskRunner) and these two. The
+        // life is as spent as in a death that was seen, whenever it is found out;
+        // it is asked for under the master switch like everything else this check
+        // sends: a `stat` the user types can bring the verdict, and with the switch
+        // off nothing automatic goes out.
+        RoomTracker.UnwitnessedDeathRecorded += () =>
+        {
+            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
+        };
+        // The buff timers were only frozen when the link dropped. Cleared for a
+        // death found at the login only: one found later would wipe the timers of
+        // buffs cast since.
+        RoomTracker.PlayerDeathInferred += () => CastDirector.ClearSelfBuffTracking();
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
+        // The opens owed for what a hang-up took end with the check that would
+        // have picked it back up (AutoOpen is built far above).
+        HangupItems.CheckFinished += AutoOpen.OnHangupCheckFinished;
         Inventory.FullInventoryParsed += HangupItems.OnInventoryRead;
         Inventory.ItemTaken += HangupItems.OnItemTaken;
         GroundItems.SurveyUpdated += HangupItems.NoteFloorSurveyed;
@@ -10262,6 +10419,11 @@ public sealed class AppServices
             Log.Info(Game.Health.HangupPenaltyNotice.LogCategory, line);
     }
 
+    // How long after a player's attack a dropped link still counts as a hang-up in
+    // a fight with a player, for the list HangupItemRecheck writes. A client-side
+    // window: what the board itself counts as PvP combat isn't known to it.
+    private static readonly TimeSpan HangupPvpAttackWindow = TimeSpan.FromSeconds(30);
+
     // Live read of Sprint Mode from the char-tier General section — the same
     // store the toolbar toggle writes. Wired into HealthManager's rest-skip
     // selector (see the SetDoNotRestSelector call above) so flipping the
@@ -11037,6 +11199,9 @@ public sealed class AppServices
         ArgumentNullException.ThrowIfNull(send);
         _engineWireSend = send;
     }
+
+    // Whether SendGameCommand has a wire to send on, for the bug report.
+    public bool EngineWireBound => _engineWireSend is not null;
 
     // Un-wrapped wire sender that pierces the EngineSendGate — bound to the same raw
     // SendUserInput the emergency hangup uses (NOT the gate-wrapped engine sender).
@@ -12414,7 +12579,7 @@ public sealed class AppServices
         // already make (report paradigm-20260917-233549). Null when nothing acquirable is on
         // the way (suspending changes nothing), leaving the plain comparison unchanged.
         int? obtainableSteps;
-        using (Movement.SuspendAcquirableGates())
+        using (Movement.SuspendAcquirableGatesButUnprotectableHazards())
         {
             int? obt = Bfs.FindPath(src, destination, Movement)?.Count;
             obtainableSteps = obt is { } o && o < overland.Count ? o : null;
@@ -12856,20 +13021,20 @@ public sealed class AppServices
     private const int ContainerItemType = 8;
 
     // Resolve a carried entry for AutoOpen: map the loose carry wording to an
-    // item Number, read the verbatim Name, and resolve the AutoOpen flag gated
-    // on the item actually being a container (ItemType == 8) — a stale overlay
-    // flag on a non-container never opens. Returns null only when the entry
-    // isn't an item in the active set.
+    // item Number, read the verbatim Name and the AutoOpen flag. Null unless the
+    // item is a container (ItemType == 8), so a stale overlay flag on anything
+    // else never opens. A container comes back whether it is flagged or not: the
+    // engine counts them all, so that ticking the flag on one already carried is
+    // not a copy arriving.
     private Game.Inventory.AutoOpenManager.ResolvedOpen? ResolveAutoOpenItem(string entry)
     {
         if (ItemNames.FindByName(entry) is not int number) return null;
+        if (ItemNames.ItemTypeOf(number) != ContainerItemType) return null;
         string? name = ItemNames.GetName(number);
         if (string.IsNullOrWhiteSpace(name)) return null;
 
-        Models.GameData.ItemOverlay overlay = ResolveItemOverlay(number);
-        bool open = (overlay.AutoOpen ?? false)
-            && ItemNames.ItemTypeOf(number) == ContainerItemType;
-        return new Game.Inventory.AutoOpenManager.ResolvedOpen(number, name, open);
+        return new Game.Inventory.AutoOpenManager.ResolvedOpen(
+            number, name, ResolveItemOverlay(number).AutoOpen ?? false);
     }
 
     // The 4-tier ItemOverlay for an item Number (Defaults seed → Global → BBS →
@@ -13351,7 +13516,8 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(key)?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player counters it → survives
+            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+                continue;                                         // player counters it → survives
             if (!hazard.IsSurvivableDamage) return false;         // an unprotected grave hazard
             sawUnprotected = true;
         }
@@ -13372,7 +13538,8 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(path[i])?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried)) continue;   // player survives it
+            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+                continue;                                         // player survives it
             return i > 0 ? path[i - 1] : path[0];
         }
         return null;
@@ -13386,6 +13553,9 @@ public sealed class AppServices
         RoomHazardIndex.RoomHazard? hazard =
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
         if (hazard is null) return System.Array.Empty<int>();
+        // A boat is no counter on Crystal Lake: nothing is provisioned, or asked of
+        // the party, for a room its item doesn't make safe.
+        if (!MovementFilter.HazardCounterProtects(hazard)) return System.Array.Empty<int>();
         if (!JourneyHasFetchOrder) return hazard.MandatoryItems;
 
         System.Collections.Generic.List<int> items = new(hazard.MandatoryItems);

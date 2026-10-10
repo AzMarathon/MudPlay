@@ -46,5 +46,10 @@ public sealed class SysopGodLifeRecovery
         string command = $"sys god {name} add life";
         _log?.Info("SysopGodLife", $"Own death detected — sending '{command}' to recover the lost life.");
         _send(command);
+        LifeRequested?.Invoke();
     }
+
+    // The add-life command went out. The game's count is about to change with no
+    // screen telling the client: whoever keeps the lives must read them again.
+    public event Action? LifeRequested;
 }

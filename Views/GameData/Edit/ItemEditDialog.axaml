@@ -120,7 +120,7 @@
                                                       ToolTip.Tip="Never pick it up, even with Auto-collect on."/>
                                             <CheckBox Content="Auto-open" IsChecked="{Binding AutoOpen, Mode=TwoWay}"
                                                       IsVisible="{Binding CanAutoOpen}"
-                                                      ToolTip.Tip="Open this container as soon as it's in your inventory."/>
+                                                      ToolTip.Tip="Open this container when one comes into your pack (Auto Get Items must be on). It waits out a fight, and what it gives is listed on Workshop → Chest Offload. One you already carry isn't opened."/>
                                             <CheckBox Content="Auto-obtain for path" IsChecked="{Binding AutoObtainForPath, Mode=TwoWay}"
                                                       ToolTip.Tip="When a route needs this item, go get it (party redistribute, shop buy via bank withdraw, or drop reroute) instead of failing the only route or asking in the route picker. Min. to keep / Max to get set how many per person."/>
                                         </StackPanel>
@@ -173,7 +173,7 @@
                                             <CheckBox Content="Auto-stash" IsChecked="{Binding AutoStash, Mode=TwoWay}"
                                                       ToolTip.Tip="Hide it in a stash room as you pass through. With Must have minimum ticked, Min. to keep stays with you and only the copies above it are stashed; otherwise every copy goes. Works for keys on your key ring too."/>
                                             <CheckBox Content="Auto-discard" IsChecked="{Binding AutoDiscard, Mode=TwoWay}"
-                                                      ToolTip.Tip="Drop it as soon as it's picked up."/>
+                                                      ToolTip.Tip="Drop it as soon as it's picked up. With Must have minimum ticked, Min. to keep copies stay with you and only the ones above that are dropped; otherwise every copy goes. A copy you are wearing counts as one you keep and is never the one dropped. A lit light is not protected: the game picks which copy goes, and it can be the lit one. Hidden instead of dropped when Settings → Other → Hide items when discarding is ticked."/>
                                         </StackPanel>
                                     </Border>
 

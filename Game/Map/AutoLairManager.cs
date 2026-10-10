@@ -118,6 +118,48 @@ public sealed class AutoLairManager : IDisposable
     // which its 1 s tick refreshes.
     public string? LastWalkerFailure { get; private set; }
 
+    // Doors a walk of this run tried and couldn't open, each by the room it leaves
+    // and the room it leads to, and that this character cannot realistically open:
+    // its pick and bash are impossible, or a pick is under DoorPolicy.PoorPickChancePercent
+    // a try (KeepsDoorForTheRun). Every walk the run issues afterwards refuses them
+    // and every wait room is chosen round them: each walk is a trip of its own to
+    // the walker, which would otherwise spend its picks on the same door at every
+    // visit, and with no other way in would be sent back to it every two seconds
+    // by the retry below. A lair only such a door leads to is left out of the run.
+    // A door that failed at fair odds is not kept: bad luck, tried again on the
+    // lair's next visit.
+    private readonly HashSet<(RoomKey From, RoomKey To)> _abandonedDoors = new();
+    public IReadOnlyCollection<(RoomKey From, RoomKey To)> AbandonedDoors => _abandonedDoors;
+
+    // Bumped whenever _abandonedDoors changes, so a remembered "no route" can tell.
+    private int _abandonedDoorsVersion;
+
+    // Lairs the run is leaving out because nothing routes to them, so each is said
+    // once in the log and again only if it comes back and drops out a second time.
+    private readonly HashSet<RoomKey> _lairsLeftOut = new();
+    public IReadOnlyCollection<RoomKey> LairsLeftOut => _lairsLeftOut;
+    private const string NoLairInReach = "no marked lair can be reached from here";
+
+    // The "no route to this lair" verdicts. Finding none floods the whole graph (over
+    // 100 ms on a big realm), and the scheduler asks once a second for every marker,
+    // so a verdict stands until something that could change it does: the room we
+    // are in, the doors given up on, the stats the door rule reads, the marker set.
+    // Whatever else could change it (inventory, a key) is caught by the re-check.
+    private readonly Dictionary<RoomKey, NoRouteVerdict> _noRoute = new();
+    private static readonly TimeSpan NoRouteRecheck = TimeSpan.FromSeconds(30);
+    private readonly record struct NoRouteVerdict(RoomKey From, int DoorsVersion, int RuleStamp, DateTimeOffset At);
+    internal int NoRouteSearchesForTests { get; private set; }
+
+    // A failed walk into a lair is retried on a timer, starting at RetryBase and
+    // doubling for each further failed entry to the same lair up to RetryCap, so a
+    // lair that keeps refusing isn't re-sent whatever the entry sends every 2 s.
+    private static readonly TimeSpan RetryBase = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan RetryCap = TimeSpan.FromSeconds(60);
+    private RoomKey? _failedEntryLair;
+    private int _failedEntries;
+    internal int FailedEntriesForTests => _failedEntries;
+    internal TimeSpan RetryDelayForTests =>TimeSpan.FromMilliseconds(_retryTimer.Interval);
+
     // Latched entry-arrival instant for the current Waiting cycle. Set
     // once on Approaching→Waiting (and on the "already at wait-room"
     // short-circuit) and NOT recomputed on every scheduler tick — doing
@@ -158,6 +200,9 @@ public sealed class AutoLairManager : IDisposable
     // Fires when IsActive flips. Carries the new value.
     public event Action<bool>? ActiveChanged;
 
+    // The last Stop was by a caller that restarts the run itself (see Stop).
+    public bool StoppedForResume { get; private set; }
+
     // Fires when Phase changes; carries the new phase.
     public event Action<AutoLairPhase>? PhaseChanged;
 
@@ -195,7 +240,7 @@ public sealed class AutoLairManager : IDisposable
         _engageTimer.Tick += (_, _) => OnEngageTimerFired();
         _engageTimer.Stop();
 
-        _retryTimer = new System.Timers.Timer(2000) { AutoReset = false };
+        _retryTimer = new System.Timers.Timer(RetryBase.TotalMilliseconds) { AutoReset = false };
         _retryTimer.Elapsed += (_, _) => Dispatcher.UIThread.Post(EvaluateAndDispatch);
 
         _walker.Event += OnWalkerEvent;
@@ -223,6 +268,7 @@ public sealed class AutoLairManager : IDisposable
     {
         if (_markers.TryGetValue(key, out int? current) && current == overrideRespawnSeconds) return;
         _markers[key] = overrideRespawnSeconds;
+        _noRoute.Clear();
         _log?.Info("AutoLair",
             overrideRespawnSeconds is int s
                 ? $"marked {key} (override {s}s)"
@@ -233,6 +279,7 @@ public sealed class AutoLairManager : IDisposable
     public void Unmark(RoomKey key)
     {
         if (!_markers.Remove(key)) return;
+        _noRoute.Clear();
         _log?.Info("AutoLair", $"unmarked {key}");
         MarkedChanged?.Invoke();
     }
@@ -260,6 +307,7 @@ public sealed class AutoLairManager : IDisposable
     {
         if (_markers.Count == 0) return;
         _markers.Clear();
+        _noRoute.Clear();
         MarkedChanged?.Invoke();
     }
 
@@ -275,6 +323,7 @@ public sealed class AutoLairManager : IDisposable
     public bool Start(string? label = null)
     {
         if (IsActive) return true;
+        StoppedForResume = false;
         if (_markers.Count < 2)
         {
             _log?.Warn("AutoLair", $"need at least 2 markers; have {_markers.Count}.");
@@ -296,6 +345,13 @@ public sealed class AutoLairManager : IDisposable
         // scheduler ENTERS each lair as part of this run, not from
         // some wall-clock anchor the player set incidentally.
         _timers.ResetArrivalsFor(_markers.Keys);
+        _abandonedDoors.Clear();
+        _abandonedDoorsVersion++;
+        _lairsLeftOut.Clear();
+        _noRoute.Clear();
+        _failedEntryLair = null;
+        _failedEntries = 0;
+        _retryTimer.Interval = RetryBase.TotalMilliseconds;
 
         SetPhase(AutoLairPhase.Approaching);
         ActiveChanged?.Invoke(true);
@@ -305,9 +361,13 @@ public sealed class AutoLairManager : IDisposable
         return true;
     }
 
-    public void Stop(string reason = "user stop")
+    // willResume: the caller stops the run only to start it again itself (a bank or
+    // sell trip, a flee). ActiveChanged carries no detail, so a listener reads
+    // StoppedForResume while it handles the change.
+    public void Stop(string reason = "user stop", bool willResume = false)
     {
         if (!IsActive) return;
+        StoppedForResume = willResume;
         _schedulerTick.Stop();
         _entryTimer.Stop();
         _engageTimer.Stop();
@@ -411,7 +471,19 @@ public sealed class AutoLairManager : IDisposable
 
         LairDecision? pick = AutoLairScheduler.PickNext(
             candidates, TravelCostModel, Heuristic, IdlePenalty, DateTimeOffset.UtcNow);
-        if (pick is null) return;
+        if (pick is null)
+        {
+            // No marked lair has a route from here (a door that beat the character,
+            // a gate it can't pass). The run stays up, since that can change, but it
+            // says so on the nav status and once in the log instead of standing in
+            // silence.
+            if (LastWalkerFailure != NoLairInReach)
+            {
+                LastWalkerFailure = NoLairInReach;
+                _log?.Warn("AutoLair", $"{NoLairInReach}; waiting for that to change.");
+            }
+            return;
+        }
 
         LairDecision? prev = LastDecision;
         // Same-target tick during Waiting: the entry timer is already
@@ -474,8 +546,7 @@ public sealed class AutoLairManager : IDisposable
             if (!IssueWalk(pick.WaitRoom))
             {
                 _log?.Warn("AutoLair", $"walker rejected path to {pick.WaitRoom}; retrying in 2s.");
-                _retryTimer.Stop();
-                _retryTimer.Start();
+                ArmRetry();
             }
         }
     }
@@ -486,13 +557,95 @@ public sealed class AutoLairManager : IDisposable
     private bool IssueWalk(RoomKey target)
     {
         _issuingWalk = true;
-        try { return _walker.WalkTo(target); }
+        try
+        {
+            if (_abandonedDoors.Count > 0) _walker.RefuseDoorsOnNextWalk(_abandonedDoors);
+            return _walker.WalkTo(target);
+        }
         finally { _issuingWalk = false; }
+    }
+
+    private void ArmRetry(TimeSpan? delay = null)
+    {
+        _retryTimer.Stop();
+        _retryTimer.Interval = (delay ?? RetryBase).TotalMilliseconds;
+        _retryTimer.Start();
+    }
+
+    private static TimeSpan RetryDelayAfter(int failedEntries) =>
+        TimeSpan.FromMilliseconds(Math.Min(
+            RetryBase.TotalMilliseconds * Math.Pow(2, failedEntries - 1), RetryCap.TotalMilliseconds));
+
+    // Counts a failed entry and returns how long to wait before the next try. Said
+    // at Warn on the first failure and again when the wait first reaches the cap,
+    // not on every cycle in between.
+    private TimeSpan NoteFailedEntry(string detail)
+    {
+        _failedEntries = CurrentTarget is { } lair && _failedEntryLair == lair ? _failedEntries + 1 : 1;
+        _failedEntryLair = CurrentTarget;
+        TimeSpan wait = RetryDelayAfter(_failedEntries);
+        string said = $"walker failed: {detail} (entry {_failedEntries} to {CurrentTarget}; retrying in {wait.TotalSeconds:0}s)";
+        if (_failedEntries == 1 || (wait == RetryCap && RetryDelayAfter(_failedEntries - 1) < RetryCap))
+            _log?.Warn("AutoLair", said);
+        else
+            _log?.Debug("AutoLair", said);
+        return wait;
+    }
+
+    // Take over the doors the walk that just ended gave up on that this character
+    // can't realistically open. One it gave up on at fair odds is bad luck and is
+    // tried again the next time the run plans a walk to its lair.
+    private void NoteDoorsTheWalkGaveUpOn()
+    {
+        if (_walker.AbandonedDoors.Count == 0) return;
+        IRoomFilter? filter = _walker.AutomaticWalkFilter();
+        foreach ((RoomKey From, RoomKey To) door in _walker.AbandonedDoors)
+        {
+            if (!KeepsDoorForTheRun(door, filter))
+            {
+                _log?.Info("AutoLair",
+                    $"the door from {door.From} to {door.To} didn't open at fair odds; it is tried again on the next visit");
+                continue;
+            }
+            if (_abandonedDoors.Add(door))
+            {
+                _abandonedDoorsVersion++;
+                _log?.Info("AutoLair",
+                    $"the door from {door.From} to {door.To} couldn't be opened; walks and wait rooms go round it for the rest of this run");
+            }
+        }
+    }
+
+    // A door stays out for the whole run only when the character can't realistically
+    // open it: neither its pick nor its bash can work, or the pick is under
+    // DoorPolicy.PoorPickChancePercent a try (the filter's own door rule, so the
+    // threshold is the one routes go round). With the stats unread there is no
+    // chance to compute, and the filter says neither: fair odds, tried again.
+    private bool KeepsDoorForTheRun((RoomKey From, RoomKey To) door, IRoomFilter? filter)
+    {
+        if (filter is null || _graph.GetRoom(door.From) is not Room room) return false;
+        foreach (RoomExit exit in room.Exits.Values)
+        {
+            if (!exit.Target.Equals(door.To) || exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) continue;
+            if ((filter.DescribeExitBlock(in exit) & (ExitBlockReason.Door | ExitBlockReason.LockedDoor)) != 0
+                || filter.IsPoorOddsDoor(in exit))
+                return true;
+        }
+        return false;
+    }
+
+    // What this run's walks are planned with: the walker's own filter for a walk
+    // nobody chose a route for, with the doors the run gave up on refused.
+    private IRoomFilter? RouteFilter()
+    {
+        IRoomFilter? automatic = _walker.AutomaticWalkFilter();
+        return _abandonedDoors.Count == 0 ? automatic : new AbandonedDoorsFilter(automatic, _abandonedDoors);
     }
 
     private List<LairCandidate> BuildCandidates(RoomKey current)
     {
         List<LairCandidate> cands = new(_markers.Count);
+        IRoomFilter? filter = RouteFilter();
 
         foreach ((RoomKey lair, int? overrideSec) in _markers)
         {
@@ -508,19 +661,49 @@ public sealed class AutoLairManager : IDisposable
             // In both cases the scheduler treats it as "ready now" — see
             // LairCandidate.ReadyAt contract.
 
-            (RoomKey? waitRoom, int? hops) = PickWaitRoom(current, lair);
+            (RoomKey? waitRoom, int? hops) = PickWaitRoomUnlessKnownUnreachable(current, lair, filter);
+            if (waitRoom is not null) _lairsLeftOut.Remove(lair);
+            else if (_lairsLeftOut.Add(lair))
+                _log?.Info("AutoLair", $"lair {lair} can't be scheduled from {current} as things stand (no route, or no room to wait in beside it); leaving it out until it can");
             cands.Add(new LairCandidate(lair, readyAt, hops, waitRoom));
         }
         return cands;
     }
 
+    private (RoomKey? waitRoom, int? hops) PickWaitRoomUnlessKnownUnreachable(
+        RoomKey current, RoomKey lair, IRoomFilter? filter)
+    {
+        int ruleStamp = filter?.DoorRuleStamp ?? 0;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        if (_noRoute.TryGetValue(lair, out NoRouteVerdict verdict)
+            && verdict.From.Equals(current)
+            && verdict.DoorsVersion == _abandonedDoorsVersion
+            && verdict.RuleStamp == ruleStamp
+            && now - verdict.At < NoRouteRecheck)
+            return (null, null);
+
+        (RoomKey? waitRoom, int? hops) = PickWaitRoom(current, lair, filter);
+        if (waitRoom is null) _noRoute[lair] = new NoRouteVerdict(current, _abandonedDoorsVersion, ruleStamp, now);
+        else _noRoute.Remove(lair);
+        return (waitRoom, hops);
+    }
+
     // Choose the wait-room for lair from current. Preferred shape: the
-    // room immediately before lair on the shortest BFS path. Falls back
-    // to the closest non-marked neighbour when the preferred wait-room is
-    // itself a marked lair (would trigger a stray spawn check). Returns
-    // (null, null) when no eligible wait-room exists, signalling the
-    // candidate is unschedulable.
-    private (RoomKey? waitRoom, int? hops) PickWaitRoom(RoomKey current, RoomKey lair)
+    // room immediately before lair on the route the walk will take, so the
+    // step in from it is one move (user, 2026-10-10: a wait room can be any
+    // room that isn't the lair, ideally the one a step away). The route is
+    // planned as the walker plans it: a search with no filter put the wait
+    // room behind a door the character can't open (the Ancient Coliseum's
+    // Viewing Stands, one locked step above the Arena), and the walk in from
+    // there then went the long way round through two other lairs. When the
+    // preferred wait-room is itself a marked lair (a stray spawn check), falls
+    // back along that same route to the nearest room before it that isn't one,
+    // since the lair's own neighbours can lie behind the door the route avoids;
+    // and to the closest non-marked neighbour of the lair only when the route
+    // has no such room. Returns (null, null) when no eligible wait-room exists,
+    // signalling the candidate is unschedulable: a lair this character has no
+    // route to is one of those.
+    internal (RoomKey? waitRoom, int? hops) PickWaitRoom(RoomKey current, RoomKey lair, IRoomFilter? filter)
     {
         // Self-lair cycle: we're already standing in a marked lair
         // and want to re-trigger its respawn. MajorMUD only checks
@@ -531,12 +714,16 @@ public sealed class AutoLairManager : IDisposable
         // soonest-ready candidate.
         if (current.Equals(lair))
         {
-            (RoomKey? alt, _) = NearestNonMarkedNeighbour(current, lair);
+            (RoomKey? alt, _) = NearestNonMarkedNeighbour(current, lair, filter);
             return alt is null ? (null, null) : (alt, 1);
         }
 
-        IReadOnlyList<Direction>? path = _bfs.FindPath(current, lair);
-        if (path is null || path.Count == 0) return (null, null);
+        IReadOnlyList<Direction>? path = _bfs.FindPath(current, lair, filter);
+        if (path is null || path.Count == 0)
+        {
+            NoRouteSearchesForTests++;
+            return (null, null);
+        }
 
         // Walk the path to recover the room sequence and locate the
         // hop-before-lair as the natural wait-room.
@@ -546,12 +733,19 @@ public sealed class AutoLairManager : IDisposable
         RoomKey natural = roomSeq.Count == 1 ? current : roomSeq[^2];
         int hops = roomSeq.Count - 1; // hops from current to natural (excludes lair entry)
 
-        // Natural wait-room is itself a marker → would trigger that
-        // lair's spawn check when we waited there. Fall back to the
-        // closest non-marker neighbour of `lair`.
+        // Natural wait-room is itself a marker → would trigger that lair's spawn
+        // check when we waited there. Back along the route for the nearest room that
+        // isn't one: the route is the one the walk takes, so a room on it is
+        // reached without the door the route goes round. Only a route made of
+        // lairs falls back to a neighbour of `lair`.
         if (_markers.ContainsKey(natural))
         {
-            (RoomKey? alt, int? altHops) = NearestNonMarkedNeighbour(current, lair);
+            for (int i = roomSeq.Count - 3; i >= -1; i--)
+            {
+                RoomKey candidate = i < 0 ? current : roomSeq[i];
+                if (!_markers.ContainsKey(candidate)) return (candidate, i + 1);
+            }
+            (RoomKey? alt, int? altHops) = NearestNonMarkedNeighbour(current, lair, filter);
             return (alt, altHops);
         }
 
@@ -561,7 +755,7 @@ public sealed class AutoLairManager : IDisposable
     // BFS-shortest non-marker neighbour of lair from current. Used when
     // the natural wait-room (the BFS path's second-to-last room) is a
     // marker we don't want to disturb.
-    private (RoomKey? key, int? hops) NearestNonMarkedNeighbour(RoomKey current, RoomKey lair)
+    private (RoomKey? key, int? hops) NearestNonMarkedNeighbour(RoomKey current, RoomKey lair, IRoomFilter? filter)
     {
         if (_graph.GetRoom(lair) is not Room room) return (null, null);
 
@@ -572,7 +766,7 @@ public sealed class AutoLairManager : IDisposable
             RoomKey n = exit.Target;
             if (n.Equals(lair)) continue;
             if (_markers.ContainsKey(n)) continue;
-            int? d = _bfs.DistanceBetween(current, n);
+            int? d = _bfs.DistanceBetween(current, n, filter);
             if (d is not int dist) continue;
             if (dist < bestDist)
             {
@@ -640,8 +834,7 @@ public sealed class AutoLairManager : IDisposable
         if (!IssueWalk(lair))
         {
             _log?.Warn("AutoLair", $"walker rejected entry to {lair}; retrying in 2s.");
-            _retryTimer.Stop();
-            _retryTimer.Start();
+            ArmRetry();
         }
     }
 
@@ -649,6 +842,8 @@ public sealed class AutoLairManager : IDisposable
 
     private void StartEngagement()
     {
+        _failedEntryLair = null;
+        _failedEntries = 0;
         SetPhase(AutoLairPhase.Engaging);
         _engageSawCombat = false;
         // Arm the SHORT window first. Until a fight starts we're only waiting to
@@ -723,6 +918,9 @@ public sealed class AutoLairManager : IDisposable
     internal void StartEngagementForTests() => StartEngagement();
     internal TimeSpan EngageWindowForTests => _engageTimer.Interval;
     internal void FireEngageTimerForTests() => OnEngageTimerFired();
+    // The retry timer posts to the UI thread, which the unit tests don't pump either.
+    internal void FireRetryForTests() => EvaluateAndDispatch();
+    internal void FireEntryTimerForTests() => OnEntryTimerFired();
 
     private void FinishEngagement(string why)
     {
@@ -750,6 +948,7 @@ public sealed class AutoLairManager : IDisposable
         {
             case WalkEventKind.Finished:
                 LastWalkerFailure = null;   // arrived → approach is no longer stuck
+                NoteDoorsTheWalkGaveUpOn();
                 // The walker landed on its destination. Branch on phase.
                 if (Phase == AutoLairPhase.Approaching && CurrentTarget is { } target)
                 {
@@ -774,10 +973,28 @@ public sealed class AutoLairManager : IDisposable
                 break;
 
             case WalkEventKind.Failed:
-                _log?.Warn("AutoLair", $"walker failed: {evt.Detail}");
                 LastWalkerFailure = evt.Detail;   // surfaced on the nav status while we retry
-                _retryTimer.Stop();
-                _retryTimer.Start();
+                NoteDoorsTheWalkGaveUpOn();
+                TimeSpan retryIn = RetryBase;
+                // The walk into the lair failed. Left in Entering, the retry below
+                // re-evaluates and dispatches nothing, since only Approaching and
+                // Waiting dispatch: the run stood in the wait room for good (user,
+                // 2026-10-10: the character stood at the door after its picks
+                // failed). Back to Approaching with the leg dropped, as for a
+                // stopped walk, so the retry picks again from where we stand.
+                if (Phase == AutoLairPhase.Entering)
+                {
+                    retryIn = NoteFailedEntry(evt.Detail);
+                    LastDecision = null;
+                    CurrentTarget = null;
+                    CurrentWaitRoom = null;
+                    SetPhase(AutoLairPhase.Approaching);
+                }
+                else
+                {
+                    _log?.Warn("AutoLair", $"walker failed: {evt.Detail}");
+                }
+                ArmRetry(retryIn);
                 break;
 
             case WalkEventKind.StepCompleted:
@@ -816,8 +1033,7 @@ public sealed class AutoLairManager : IDisposable
                     CurrentTarget = null;
                     CurrentWaitRoom = null;
                     SetPhase(AutoLairPhase.Approaching);
-                    _retryTimer.Stop();
-                    _retryTimer.Start();
+                    ArmRetry();
                 }
                 break;
         }

@@ -54,14 +54,19 @@ public readonly record struct ExpTarget(
 // condition — a gated spell only summons while the room is EMPTY of monsters.
 //
 // How many rolls a visit yields is realm- and gate-dependent (issue #384): the spell
-// re-rolls on entry and once per room-spell tick while you're present — Paradigm ticks
-// on the combat round, Stock on the (slower) medium tick. An UNGATED spell rolls every
+// re-rolls on entry and once per room-spell tick while you're present — about every
+// 6 s on both realms, not the combat round. An UNGATED spell rolls every
 // such tick regardless of occupancy; a GATED one only rolls-and-summons while the room
 // is empty, so in a pass-through lair it effectively rolls once on an empty-entry visit
 // and not at all when you arrive to a full room. The fire count lives in the summon
 // credit in Simulate; see GAME_MECHANICS.md "Room-spell monster summons".
+//
+// A spell that isn't gated as a whole can still have lines of its table that are:
+// EmptyRoomExpPerRoll is the share of ExpPerRoll on those, counted as a gated spell's
+// is while the rest rolls through the fight.
 public readonly record struct RoomSummon(
-    string SpellName, double ExpPerRoll, double SummonChance, bool NoMonstersGated = false);
+    string SpellName, double ExpPerRoll, double SummonChance, bool NoMonstersGated = false,
+    double EmptyRoomExpPerRoll = 0);
 
 // One room in a lap (order matters), with its exp targets (may be empty — an
 // empty room still costs a travel step) and any monster-summoning entry spell.
@@ -340,7 +345,7 @@ public static class LoopExpSimulator
 
                 if (lap[p].Summon is { ExpPerRoll: > 0 } su)
                 {
-                    double roll = su.ExpPerRoll * SummonFires(su, killedHere, roomCombat, roomSpellTick);
+                    double roll = SummonExp(su, killedHere, roomCombat, roomSpellTick);
                     lapExp += roll;
                     if (measuring)
                     {
@@ -406,6 +411,15 @@ public static class LoopExpSimulator
             return roomOccupiedOnEntry ? 0.0 : 1.0;
         double perTick = roomSpellTick > 0 ? roomCombatSeconds / roomSpellTick : 0.0;
         return 1.0 + perTick;
+    }
+
+    // The exp one visit's rolls are expected to hand over: the lines that need an
+    // empty room on a gated spell's fires, the rest on an ungated one's.
+    internal static double SummonExp(RoomSummon su, bool roomOccupiedOnEntry, double roomCombatSeconds, double roomSpellTick)
+    {
+        double emptyRoomOnly = su.NoMonstersGated ? su.ExpPerRoll : Math.Clamp(su.EmptyRoomExpPerRoll, 0.0, su.ExpPerRoll);
+        return emptyRoomOnly * SummonFires(su with { NoMonstersGated = true }, roomOccupiedOnEntry, roomCombatSeconds, roomSpellTick)
+            + (su.ExpPerRoll - emptyRoomOnly) * SummonFires(su with { NoMonstersGated = false }, roomOccupiedOnEntry, roomCombatSeconds, roomSpellTick);
     }
 
     private static int CountReady(double[] clocks, double now)
