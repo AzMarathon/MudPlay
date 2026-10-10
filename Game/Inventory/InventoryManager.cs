@@ -62,6 +62,12 @@ public sealed partial class InventoryManager : IDisposable
     // in tests / when no game data is loaded: only a key already on the ring is
     // then known to be one.
     private readonly Func<string, bool>? _isKey;
+    // The named item is kept when its uses run out (the data's Retain After Uses).
+    private readonly Func<string, bool>? _staysWhenSpent;
+    // The light Stock's `You lit the <item>.` named since the last full read. Such a
+    // light is not listed apart (only a full read does that): its copy is still in
+    // the pack list, and this is the only record of which entry is burning.
+    private string? _litSinceRead;
 
     // The Items table's ItemType for a key.
     public const int KeyItemType = 7;
@@ -131,9 +137,11 @@ public sealed partial class InventoryManager : IDisposable
         Func<string, int?>? itemWeightResolver = null,
         Func<string, string?>? slotResolver = null,
         Func<string, bool>? isItemRecordName = null,
-        Func<string, bool>? isKey = null)
+        Func<string, bool>? isKey = null,
+        Func<string, bool>? staysWhenSpent = null)
     {
         _isKey = isKey;
+        _staysWhenSpent = staysWhenSpent;
         _log = log;
         _itemWeight = itemWeightResolver;
         _slotResolver = slotResolver;
@@ -460,6 +468,13 @@ public sealed partial class InventoryManager : IDisposable
                 });
                 RemoveCarried(name);
             });
+            return;
+        }
+
+        Match lit = LitLightRegex().Match(line);
+        if (lit.Success)
+        {
+            _litSinceRead = lit.Groups[1].Value.TrimEnd();
             return;
         }
 
@@ -1010,6 +1025,7 @@ public sealed partial class InventoryManager : IDisposable
             _equipped = equipped;
             _carried = NormalizeStacks(carried);
             _readiedLight = readiedLight;
+            _litSinceRead = null;
             _keys = keys;
             _loaded = true;
             _lastUpdated = DateTimeOffset.Now;
@@ -1217,6 +1233,56 @@ public sealed partial class InventoryManager : IDisposable
         bool listedApart = IsLitLight(name);
         ClearLitLight();
         if (listedApart) AddCarried(name);
+        if (string.Equals(_litSinceRead, name, StringComparison.OrdinalIgnoreCase)) _litSinceRead = null;
+    }
+
+    // The lit light burned out (KnownPatterns.LightBurnedOut; the line doesn't name
+    // the item in every wording, so the light is whichever is known to be lit). It
+    // is no longer lit, and unless its record is Retain After Uses it has left the
+    // pack: Stock's rule (GAME_MECHANICS "Light sources"), taken for Paradigm too,
+    // whose rule isn't recorded. Left as it was, the light stayed "lit" until the
+    // next full read, and a death in between recorded a light that no longer
+    // existed: a Stock pile then waits for it for good.
+    //   - listed apart by the last full read: it comes off the lit slot, and goes
+    //     back into the pack only if it is kept when spent;
+    //   - lit since (Stock's `You lit the <item>.`): its copy is still in the pack
+    //     list, and is taken out unless it is kept when spent.
+    // A light lit since the last read on a realm that words the lighting some other
+    // way can't be told from the rest of the pack, and waits for the next read.
+    public void NoteLitLightBurnedOut()
+    {
+        string? litSince = _litSinceRead;
+        _litSinceRead = null;
+        string? listedApart;
+        lock (_lock) listedApart = _readiedLight?.Name;
+
+        if (litSince is not null && !string.Equals(litSince, listedApart, StringComparison.OrdinalIgnoreCase))
+        {
+            bool kept = _staysWhenSpent?.Invoke(litSince) == true;
+            if (!kept)
+                AsOneChange(() =>
+                {
+                    RemoveCarried(litSince);
+                    AdjustItemWeight(litSince, -1);
+                });
+            _log?.Info(LogCategory, $"The lit {litSince} burned out — "
+                + (kept ? "kept in the pack, spent." : "taken out of the pack."));
+            return;
+        }
+        if (listedApart is null)
+        {
+            _log?.Info(LogCategory, "A light burned out, but none is known to be lit — the pack is left as it is until the next inventory read.");
+            return;
+        }
+        bool stays = _staysWhenSpent?.Invoke(listedApart) == true;
+        AsOneChange(() =>
+        {
+            ClearLitLight();
+            if (stays) AddCarried(listedApart);
+            else AdjustItemWeight(listedApart, -1);
+        });
+        _log?.Info(LogCategory, $"The lit {listedApart} burned out — "
+            + (stays ? "no longer lit, kept in the pack, spent." : "no longer lit, and gone from what is held."));
     }
 
     private bool IsKey(string name)
@@ -1681,6 +1747,10 @@ public sealed partial class InventoryManager : IDisposable
 
     [GeneratedRegex(@"^You have removed (.+) and extinguished it\.$")]
     private static partial Regex RemovedLitLightRegex();
+
+    // Stock's line for lighting a light (GAME_MECHANICS "Light sources").
+    [GeneratedRegex(@"^You lit the (.+)\.$")]
+    private static partial Regex LitLightRegex();
 
     [GeneratedRegex(@"^You now have no weapon readied\.$")]
     private static partial Regex NoWeaponReadiedRegex();
