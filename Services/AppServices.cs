@@ -4858,7 +4858,7 @@ public sealed class AppServices
                 // Out of a placed room into one the map doesn't hold, or back: no
                 // move to report, but a rest put off for the old room's spell is no
                 // longer owed "here".
-                Health.NoteRoomPlacementChanged();
+                Health.NoteRoomPlacementChanged(t.NewRoom?.Key);
                 return;
             }
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;

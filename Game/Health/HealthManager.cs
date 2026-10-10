@@ -573,6 +573,7 @@ public sealed class HealthManager : IDisposable
 
     private Func<string?>? _roomSpellHurting;
     private bool _roomSpellSkipLogged;       // once per room: the "not resting here" line
+    private Map.RoomKey? _roomSpellSkipRoom; // the placed room that flag stands for, null when not known
     private bool _restOwedFromDamagingRoom;  // a rest was put off for a room's spell and hasn't started since
 
     // The spell whose damage is keeping a due rest from starting in this room, or
@@ -2952,14 +2953,16 @@ public sealed class HealthManager : IDisposable
         }
         _restResumeOwed = false;
         _roomSpellSkipLogged = false;
+        _roomSpellSkipRoom = newRoom;
 
         // Arrived, still holding a rest gate from the room just left, in a room whose
         // spell bars resting: the leader's wait window ran out and it walked on into
         // the heat with us in tow. Settle it now, before the re-ask below: the gate
         // comes down, the wait that is out is released, and the rest is owed for the
         // next room that doesn't bar it. Left to the next prompt, the re-ask went out
-        // first and parked the party in the damage with nobody resting.
-        if ((_hpGateAsserted || _maGateAsserted) && _roomSpellHurting?.Invoke() is not null)
+        // first and parked the party in the damage with nobody resting. Not mid-flee,
+        // like the re-arm at the end: the flee drives its own arrivals.
+        if ((_hpGateAsserted || _maGateAsserted) && _fleeEngine is null && _roomSpellHurting?.Invoke() is not null)
             Evaluate();
 
         // Moved while still below a rest floor as a follower: our own movement is held
@@ -3003,9 +3006,18 @@ public sealed class HealthManager : IDisposable
     // probe answers for the room as it is now (an unplaced room bars nothing), so
     // asking again is all it takes. Not a move as far as the rest latch goes: the
     // tracker can lose its place without the character leaving the room.
-    public void NoteRoomPlacementChanged()
+    //
+    // placedIn is the room found, null when the place was lost. The once-per-room
+    // log line is said again only for a room other than the one it was last said
+    // in: a tracker flapping between placed and lost in a grid of barred rooms
+    // comes back to the same room each time, and said the line once per flap.
+    public void NoteRoomPlacementChanged(Map.RoomKey? placedIn = null)
     {
-        _roomSpellSkipLogged = false;
+        if (placedIn is { } room && !room.Equals(_roomSpellSkipRoom))
+        {
+            _roomSpellSkipLogged = false;
+            _roomSpellSkipRoom = room;
+        }
         if (_fleeEngine is not null) return;
         // Found again in a room that bars resting while a rest gate is up counts too.
         bool barredNow = (_hpGateAsserted || _maGateAsserted) && _roomSpellHurting?.Invoke() is not null;

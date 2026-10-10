@@ -5969,12 +5969,37 @@ public sealed class HealthManagerTests
         Assert.True(h.HealthGateHeld);
         Assert.Contains("rest", h.SentLines);
 
-        // Placed again, in the heat: the rest under way is given up, and it is said
-        // for this room as for any new one.
+        // Placed again, in another burning room: the rest under way is given up, and
+        // it is said for this room as for any new one.
         hurting = MagmaHeat;
-        h.Health.NoteRoomPlacementChanged();
+        h.Health.NoteRoomPlacementChanged(new MudPlay.Game.Map.RoomKey(16, 2));
         Assert.False(h.HealthGateHeld);
         Assert.Equal(2, info.Count(l => l.Contains("not resting here; healing as set")));
+    }
+
+    [Fact]
+    public void DamagingRoom_TrackerFlappingInOneRoom_SaysItOnce()
+    {
+        // Lost and found again in the same barred room, over and over (a grid of
+        // look-alike rooms): one line for the room, not one per flap.
+        using Harness h = new();
+        var room = new MudPlay.Game.Map.RoomKey(16, 10109);
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.Health.NoteRoomPlacementChanged(room);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+
+        for (int flap = 0; flap < 3; flap++)
+        {
+            hurting = null;
+            h.Health.NoteRoomPlacementChanged();       // lost
+            hurting = MagmaHeat;
+            h.Health.NoteRoomPlacementChanged(room);   // found, where we were
+        }
+
+        Assert.Single(info, l => l.Contains("not resting here; healing as set"));
     }
 
     [Fact]
