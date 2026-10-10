@@ -842,6 +842,356 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Walking, h.Walker.State);
     }
 
+    // The stretch of river in report paradigm-20261009-082958, as the Paradigm 1.9.1
+    // data has it. 14/3952 is another "Alba River" showing north and southeast, so
+    // 14/3946's display alone doesn't say which of the two it is.
+    private const string AlbaRiverGraphJson = """
+        [
+          { "Map Number": 14, "Room Number": 3944, "Name": "Alba River, Under a Stone Bridge",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "14/3945", "SE": "14/3805", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3945, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "14/3946", "SE": "14/3944", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3946, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "14/3947", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "14/3945", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3947, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "14/3948", "S": "14/3946", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 14, "Room Number": 3952, "Name": "Alba River",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "14/3953", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "14/3951", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    private static readonly HashSet<Direction> AlbaRiver3945Exits = new() { Direction.NW, Direction.SE };
+    private static readonly HashSet<Direction> AlbaRiver3946Exits = new() { Direction.N, Direction.SE };
+
+    // Report paradigm-20261009-082958: the walk was a room further up the river than
+    // the tracker had it. A fight held it in "Alba River" 14/3945; the room shown
+    // during the fight was 14/3946 (north, southeast), which made the tracker Suspect
+    // with the walker paused and deaf to it. When the fight ended the walk sent the
+    // step planned from 14/3945, northwest, into a wall, and a refusal of a move sent
+    // from Suspect wakes nothing: it sat there until the player typed `rm`. The resume
+    // now asks where we are first and plans from the answer.
+    [Fact]
+    public void Resume_TrackerWentSuspectWhilePausedBetweenSteps_AsksRmInsteadOfSendingTheStep()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+
+        fightEnds();
+
+        Assert.Single(rm.Asked);
+        Assert.Equal(new[] { "nw" }, SentText(h));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Contains(h.Events, e => e.Kind == WalkEventKind.Retrying && e.Detail.Contains("while paused"));
+
+        // `Location: 14,3946`: the walk goes on north from there.
+        rm.Answer(h, new RoomKey(14, 3946));
+
+        Assert.Equal(new[] { "nw", "n" }, SentText(h));
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Failed);
+    }
+
+    // The game's locator (`rm`, `sys st`) as the walker sees it: every ask is kept
+    // for the test to answer, fail or leave hanging. Off, there is nobody to ask.
+    private sealed class LocateAsks
+    {
+        public bool Available { get; set; } = true;
+        public List<(Action<RoomKey> Resolved, Action Failed)> Asked { get; } = new();
+
+        public bool Ask(string reason, Action<RoomKey> onResolved, Action onFailed)
+        {
+            if (!Available) return false;
+            Asked.Add((onResolved, onFailed));
+            return true;
+        }
+
+        // The resolver locates the tracker before it calls back.
+        public void Answer(Harness h, RoomKey key)
+        {
+            h.Tracker.SetLocated(key);
+            Asked[^1].Resolved(key);
+        }
+    }
+
+    // The report's fight: the walk up the river stands in 14/3945 with its next
+    // step held (a monster in the room), paused for the fight, and the room shown
+    // during it is 14/3946, which leaves the tracker Suspect on 14/3945.
+    private Harness HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds)
+    {
+        Harness h = NewHarness(AlbaRiverGraphJson, wireRecovery: true);
+        rm = new LocateAsks();
+        h.Gate!.TryResyncOnce = rm.Ask;
+        bool monsterInRoom = false;
+        h.Walker.SetMoveReadyCheck(() => !monsterInRoom);
+        h.Tracker.SetLocated(new RoomKey(14, 3944));
+        h.Walker.WalkTo(new RoomKey(14, 3947));      // NW, NW, N
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        monsterInRoom = true;
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3945Exits));
+        Assert.Equal(new RoomKey(14, 3945), h.Tracker.State.CurrentRoom?.Key);
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "daggerfish");
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3946Exits));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        fightEnds = () =>
+        {
+            monsterInRoom = false;
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "room cleared");
+        };
+        return h;
+    }
+
+    // Other gates come and go while the `rm` is out (a sneak settling right behind
+    // the fight). Each resume used to ask again and spend a re-plan, and the third
+    // failed the walk. The one ask stands and the walk waits for its answer.
+    [Fact]
+    public void Resume_GatesFlapWhileTheRmIsOut_AsksOnceAndWaits()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        fightEnds();
+
+        for (int i = 0; i < 3; i++)
+        {
+            h.Coordinator.AssertGate(MovementCoordinator.PartyWaitGate, "test", "flap");
+            h.Coordinator.ClearGate(MovementCoordinator.PartyWaitGate, "test", "flap");
+        }
+
+        Assert.Single(rm.Asked);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        rm.Answer(h, new RoomKey(14, 3946));
+        Assert.Equal(new[] { "nw", "n" }, SentText(h));
+    }
+
+    // A pause that is still up when the answer comes: the re-plan starts paused and
+    // goes on when the gate clears.
+    [Fact]
+    public void Resume_PausedAgainWhenTheRmAnswers_GoesOnWhenThePauseEnds()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        fightEnds();
+
+        h.Coordinator.AssertGate(MovementCoordinator.AcquisitionGate, "test", "loot");
+        rm.Answer(h, new RoomKey(14, 3946));
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        h.Coordinator.ClearGate(MovementCoordinator.AcquisitionGate, "test", "done");
+
+        Assert.Single(rm.Asked);
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new[] { "nw", "n" }, SentText(h));
+    }
+
+    // The answer belongs to the walk that asked. Stopped meanwhile, the walker
+    // stays stopped.
+    [Fact]
+    public void RmAnswerAfterTheWalkWasStopped_DoesNotStartItAgain()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        fightEnds();
+
+        h.Walker.Stop();
+        rm.Answer(h, new RoomKey(14, 3946));
+
+        Assert.Equal(WalkState.Idle, h.Walker.State);
+        Assert.Equal(new[] { "nw" }, SentText(h));
+    }
+
+    // And with another walk begun meanwhile, that walk keeps its own destination.
+    [Fact]
+    public void RmAnswerAfterAnotherWalkBegan_LeavesThatWalkAlone()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        fightEnds();
+
+        h.Tracker.SetLocated(new RoomKey(14, 3946));
+        h.Walker.WalkTo(new RoomKey(14, 3944));      // SE, SE
+        Assert.Equal(new[] { "nw", "se" }, SentText(h));
+        rm.Asked[0].Resolved(new RoomKey(14, 3946));
+
+        Assert.Equal(new RoomKey(14, 3944), h.Walker.Destination);
+        Assert.Equal(new[] { "nw", "se" }, SentText(h));
+    }
+
+    // The room the tracker holds is shown again before the fight ends: the doubt
+    // settled itself, so nothing is asked and the step goes out.
+    [Fact]
+    public void Resume_SuspectSettledBeforeThePauseEnded_SendsTheStepWithoutAsking()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3945Exits));
+        Assert.Equal(RoomConfidence.Confirmed, h.Tracker.State.Confidence);
+
+        fightEnds();
+
+        Assert.Empty(rm.Asked);
+        Assert.Equal(new[] { "nw", "nw" }, SentText(h));
+    }
+
+    // A realm with nobody to ask (Stock without sysop powers). A re-plan would start
+    // from the room the tracker already holds and send the same step, so the resume
+    // sends it as it always did, and neither it nor the stall watchdog spends a
+    // re-plan or disturbs the walk. The watchdog waits once more, and then lets be.
+    [Fact]
+    public void SuspectWithNobodyToAsk_ResumeAndWatchdogLeaveTheWalkAsItWas()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        rm.Available = false;
+        int watchdogArms = 0;
+        h.Walker.SetVoyageScheduler((_, _) => { watchdogArms++; return new NoopDisposable(); });
+
+        fightEnds();
+
+        Assert.Equal(new[] { "nw", "nw" }, SentText(h));
+        Assert.Equal(1, watchdogArms);
+        Assert.DoesNotContain(h.Events, e => e.Kind == WalkEventKind.Retrying);
+
+        // The game refuses the move; from Suspect that changes nothing.
+        h.Tracker.NoteMoveBlocked();
+        h.Walker.FireStallWatchdogForTests();
+        Assert.Equal(2, watchdogArms);
+        h.Walker.FireStallWatchdogForTests();
+        Assert.Equal(2, watchdogArms);
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(new[] { "nw", "nw" }, SentText(h));
+        Assert.Equal(TierLevel.Tier1, h.Gate!.CurrentTier);
+        Assert.DoesNotContain(h.Events, e => e.Kind is WalkEventKind.Retrying or WalkEventKind.Failed);
+    }
+
+    // The ask at the resume didn't come off (the resolver throttles one `rm` every
+    // two seconds), so the step went out from the room in doubt and was refused: the
+    // report's strand by another road. The stall watchdog asks, once, and the walk
+    // goes on from the answer.
+    [Fact]
+    public void StallWatchdog_MoveSentFromSuspectAndRefused_AsksRmOnce()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        rm.Available = false;
+        fightEnds();
+        Assert.Equal(new[] { "nw", "nw" }, SentText(h));
+        h.Tracker.NoteMoveBlocked();
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        rm.Available = true;
+        h.Walker.FireStallWatchdogForTests();
+        h.Walker.FireStallWatchdogForTests();
+
+        Assert.Single(rm.Asked);
+        Assert.Equal(new[] { "nw", "nw" }, SentText(h));
+
+        rm.Answer(h, new RoomKey(14, 3946));
+        Assert.Equal(new[] { "nw", "nw", "n" }, SentText(h));
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+    }
+
+    // The `rm` asked at the resume went unanswered (a confusion fumble eats it): the
+    // walk re-plans from the room it holds, the same step goes out and is refused,
+    // and the watchdog's ask is the second and last.
+    [Fact]
+    public void RmUnansweredAtTheResume_WatchdogAsksAgainAfterTheRefusal()
+    {
+        Harness h = HeldSuspectAtAlbaRiver(out LocateAsks rm, out Action fightEnds);
+        fightEnds();
+        rm.Asked[0].Failed();
+        Assert.Equal(new[] { "nw", "nw" }, SentText(h));
+
+        h.Tracker.NoteMoveBlocked();
+        h.Walker.FireStallWatchdogForTests();
+
+        Assert.Equal(2, rm.Asked.Count);
+        rm.Answer(h, new RoomKey(14, 3946));
+        Assert.Equal(new[] { "nw", "nw", "n" }, SentText(h));
+    }
+
+    // The same fight, with the pause landing while the step into 14/3945 was still
+    // in flight. The resume used to count that step as arrived from the Suspect
+    // tracker's room and send the next one from it.
+    [Fact]
+    public void Resume_TrackerWentSuspectWhilePausedMidStep_AsksRmInsteadOfSendingTheNextStep()
+    {
+        Harness h = NewHarness(AlbaRiverGraphJson, wireRecovery: true);
+        List<string> rmReasons = new();
+        h.Gate!.TryResyncOnce = (reason, _, _) => { rmReasons.Add(reason); return true; };
+        h.Tracker.SetLocated(new RoomKey(14, 3944));
+        h.Walker.WalkTo(new RoomKey(14, 3947));
+        Assert.Equal(new[] { "nw" }, SentText(h));
+
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "daggerfish");
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3945Exits));
+        h.Tracker.NoteRoomObserved(new RoomObservation("Alba River", AlbaRiver3946Exits));
+        Assert.Equal(RoomConfidence.Suspect, h.Tracker.State.Confidence);
+
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "room cleared");
+
+        Assert.Single(rmReasons);
+        Assert.Equal(new[] { "nw" }, SentText(h));
+    }
+
+    // Where the same report's walk went wrong to begin with, replayed through the
+    // fix that shipped after it was captured (3.153.19). An `rm` was asked from
+    // Ghille Village, Docks 14/3799, and the walk's first `w` went out behind it.
+    // The answer, `Location: 14,3799`, re-located the tracker and dropped that move,
+    // so the walk sent `w` again: one `w` too many, refused four rooms on at
+    // 14/3805 while a `nw` was pending, which was then sent twice in its turn.
+    [Fact]
+    public void RmAnsweredBehindTheWalksFirstMove_DoesNotSendTheMoveAgain()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "alpha"));
+        File.WriteAllText(Path.Combine(_root, "alpha", "Info.json"), "[{\"Legit\":2}]");   // a ParaMud set
+        const string docksJson = """
+            [
+              { "Map Number": 14, "Room Number": 3799, "Name": "Ghille Village, Docks",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "0", "E": "0", "W": "14/3800",
+                "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "14/3798", "D": "0" },
+              { "Map Number": 14, "Room Number": 3800, "Name": "Ghille Pond, Near Docks",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "0", "S": "14/3802", "E": "14/3799", "W": "14/3803",
+                "NE": "0", "NW": "14/3801", "SE": "0", "SW": "14/3813", "U": "0", "D": "0" },
+              { "Map Number": 14, "Room Number": 3803, "Name": "Ghille Pond",
+                "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+                "N": "14/3801", "S": "14/3813", "E": "14/3800", "W": "14/3804",
+                "NE": "0", "NW": "14/3806", "SE": "14/3802", "SW": "14/3812", "U": "0", "D": "0" }
+            ]
+            """;
+        Harness h = NewHarness(docksJson, wireRecovery: true);
+        GameDataCache cache = new(_root);
+        cache.SwitchSet("alpha");
+        MessageRouter router = new();
+        MudPlay.Services.Patterns.DefaultPatterns.Seed(router);
+        using ParadigmPositionResolver resolver = new(router, h.Tracker, h.Gate!, cache, log: null, useTimer: false);
+        List<byte[]> rmSent = new();
+        resolver.SetWireSender(rmSent.Add);
+        h.Tracker.SetLocated(new RoomKey(14, 3799));
+
+        Assert.True(resolver.TryRequestResync("step 44 landed at 14/3799 on resume (expected 14/4944)"));
+        h.Walker.WalkTo(new RoomKey(14, 3803));      // W, W
+        Assert.Equal(new[] { "w" }, SentText(h));
+
+        resolver.FeedLocationForTests(14, 3799);
+
+        Assert.Equal(new[] { "w" }, SentText(h));
+        Assert.Equal(RoomConfidence.Pending, h.Tracker.State.Confidence);
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("Ghille Pond, Near Docks",
+            new HashSet<Direction> { Direction.S, Direction.E, Direction.W, Direction.NW, Direction.SW }));
+        Assert.Equal(new RoomKey(14, 3800), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { "w", "w" }, SentText(h));
+    }
+
     [Fact]
     public void RemainingRoomKeys_TrimsToCurrentRoom_WhilePausedMidStep()
     {
