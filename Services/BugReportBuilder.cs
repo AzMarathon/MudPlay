@@ -1388,6 +1388,7 @@ public static class BugReportBuilder
           .Append(svc.ChestOpens.IsOpening ? ", an open in progress" : "")
           .Append(", coin ").Append(svc.ChestOpens.Coin.TotalCopperValue).Append("c")
           .Append(svc.ChestOpens.SayLootToRoom ? "; said to the room" : "; not said to the room")
+          .Append("; Drop sends `").Append(svc.AutoDiscard.DiscardVerb).Append('`')
           .Append(svc.ChestSellTour.IsRunning ? "; sell tour running" : "")
           .Append(svc.ChestSellTour.Status.Length > 0 ? $" — {svc.ChestSellTour.Status}" : "")
           .Append(")\n\n");
@@ -1396,6 +1397,23 @@ public static class BugReportBuilder
         else
             foreach ((string name, int count) in chestLoot)
                 sb.Append("- ").Append(count).Append(' ').Append(name).Append('\n');
+
+        // Discard hides a full room refused (AutoDiscardManager), each sent again in
+        // the next room entered: who sent each, the room that last had it and what
+        // it is waiting on, and how many hides are out with no answer yet.
+        var heldHides = svc.AutoDiscard.HeldHides;
+        sb.Append("\n**Discard hides held for the next room** (").Append(heldHides.Count)
+          .Append("; ").Append(svc.AutoDiscard.UnansweredHides).Append(" hides and ")
+          .Append(svc.AutoDiscard.UnansweredDrops).Append(" drops sent and unanswered")
+          .Append(svc.AutoDiscard.AwaitingInventoryRead ? "; waiting for an inventory read" : "")
+          .Append(")\n\n");
+        if (heldHides.Count == 0)
+            sb.Append("_(none)_\n");
+        else
+            foreach (Game.Inventory.AutoDiscardManager.HeldHideInfo held in heldHides)
+                sb.Append("- ").Append(held.Count).Append(' ').Append(held.Name)
+                  .Append(" (by hand ").Append(held.ByHand).Append(", auto-discard ").Append(held.Engine)
+                  .Append(", sent again ").Append(held.Out).Append(") — ").Append(held.Why).Append('\n');
 
         var plan = profile.CharacterPlan;
         sb.Append("\n**CP allocation plan (CharacterPlan)** (").Append(plan?.Count ?? 0).Append(")\n\n");
