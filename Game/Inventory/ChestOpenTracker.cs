@@ -176,6 +176,15 @@ public sealed class ChestOpenTracker : IDisposable
     // really carried this moment rather than a cached copy, then open.
     public void Open(string name)
     {
+        // With the master switch off the read after the open is not sent, so the
+        // button would send `i` and `open` and then list nothing. The whole press
+        // is refused instead, and so are the opens still waiting behind an
+        // earlier one. A typed `open` is the player's own command and goes out.
+        if (RefuseOpen?.Invoke(name) == true)
+        {
+            _queued.Clear();
+            return;
+        }
         if (_step != Step.Idle)
         {
             _queued.Enqueue(name);
@@ -352,6 +361,24 @@ public sealed class ChestOpenTracker : IDisposable
     private void SendOpen(InventorySnapshot before)
     {
         _beforeOverride = null;
+        // The master switch went off while the button's read before the open was
+        // out: the open is held back, as a press made now would be.
+        if (RefuseOpen?.Invoke(_buttonTarget) == true)
+        {
+            _queued.Clear();
+            _opened.Remove(_buttonTarget);
+            if (_opened.Count > 0)
+            {
+                // Opens typed meanwhile did go out. With no read after them they
+                // end as a typed open does with the switch off: not read.
+                _afterReadOut = false;
+                EndUnread();
+                return;
+            }
+            ++_generation;   // the before-read's timeout
+            _step = Step.Idle;
+            return;
+        }
         SendOwnOpen(_buttonTarget);
         PlayerOpened?.Invoke(_buttonTarget);
         StartAfterRead(before);
@@ -370,11 +397,23 @@ public sealed class ChestOpenTracker : IDisposable
         {
             if (gen != _generation) return;
             _afterReadSent = true;
+            _passedOver = false;
+            _afterReadOut = false;
+            // With the master switch off the open's own follow-up read is not
+            // sent ("stop those too"; user, 2026-10-10). Nothing went out, so no
+            // read is counted as out for it, and the open ends here as not read
+            // (never as having given nothing): the tracker is free for the next
+            // open, and what the chest gave shows in the pack at the next read.
+            if (MasterSwitchOff?.Invoke() == true)
+            {
+                _log?.Info(LogCategory,
+                    $"{Label(_opened)}: the master switch is off, so no `i` is sent to read what it gave");
+                EndUnread();
+                return;
+            }
             // Replies come in the order the reads were asked for, so every read
             // still out is answered before this one.
             _readsAhead = ReadsStillOut();
-            _passedOver = false;
-            _afterReadOut = false;
             _sendingAfterRead = true;
             try { _send("i"); }
             finally { _sendingAfterRead = false; }
@@ -382,6 +421,15 @@ public sealed class ChestOpenTracker : IDisposable
             _schedule(ReadTimeoutMs, () => OnReadTimeout(readGen));
         });
     }
+
+    // The master switch (true = off). Asked only where the tracker would send by
+    // itself: the read after an open, and the loot line said to the room.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    // Asked as the window's Open button is pressed, with the container's name:
+    // true means the press was refused (the master switch is off) and the user
+    // has been told, so nothing is sent.
+    public Func<string, bool>? RefuseOpen { get; set; }
 
     // Between an open and the read after it, whatever the pack is seen to gain or
     // lose line by line — a pickup, a sale, a piece put on — is not the chest's
@@ -503,6 +551,7 @@ public sealed class ChestOpenTracker : IDisposable
     private void Announce(string label, IReadOnlyList<(string Name, int Count)> items, CurrencyHoldings coin)
     {
         if (!SayLootToRoom) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         var coins = new List<string>();
         if (coin.Runic > 0) coins.Add($"{coin.Runic:N0} {_runicName()}");
         if (coin.Platinum > 0) coins.Add($"{coin.Platinum:N0} platinum");

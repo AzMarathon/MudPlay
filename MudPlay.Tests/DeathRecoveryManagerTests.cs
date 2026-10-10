@@ -81,6 +81,8 @@ public sealed partial class DeathRecoveryManagerTests
         public bool AutoSearches { get; set; }
         public List<RoomKey> Searched { get; } = new();
         public HashSet<string> Stays { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // Items that are keys by their game data.
+        public HashSet<string> KeyItems { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<RoomKey> StashRooms { get; } = new();
         private readonly List<IDisposable> _engines = new();
 
@@ -124,7 +126,7 @@ public sealed partial class DeathRecoveryManagerTests
                 userPaused: () => Coordinator.IsGateAsserted(MovementCoordinator.UserGate),
                 autoSearchesRooms: () => AutoSearches,
                 noteRoomSearched: Searched.Add);
-            Recovery.SetStaysOnDeathProbe(Stays.Contains);
+            Recovery.SetStaysOnDeathProbe(Stays.Contains, isKeyItem: KeyItems.Contains);
             // As the app wires it, after recovery's own subscription: the floor list
             // belongs to the room just left, so a genuine room change empties it.
             Tracker.StateChanged += t =>
@@ -202,9 +204,9 @@ public sealed partial class DeathRecoveryManagerTests
         Die(h, new[] { new EquippedItem("rusty dagger", "Weapon Hand") }, new[] { "torch" });
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();                                    // walk back into the death room → armed
-        Assert.Empty(h.Sent);                              // nothing sent until the survey lands
-        h.FeedSurvey("corpse of Ermias");                  // the floor survey shows our corpse
+        h.FeedSurvey("corpse of Ermias");                  // the floor survey shows our corpse,
+        Assert.Empty(h.Sent);                              // and nothing is sent for it
+        h.EnterGates();                                    // until the exits line says which room it is
 
         Assert.Contains("recover corpse Ermias", h.Sent);
         Assert.DoesNotContain(h.Sent, s => s.StartsWith("get ")); // NOT the old per-item get spam
@@ -243,8 +245,8 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Empty(h.Sent);
 
         h.Recovery.AutoRecover = true;
+        h.FeedSurvey("corpse of Ermias");                  // the floor line, ahead of the exits line
         h.EnterGates();
-        h.FeedSurvey("corpse of Ermias");
 
         Assert.Contains("recover corpse Ermias", h.Sent);
         h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
@@ -266,8 +268,8 @@ public sealed partial class DeathRecoveryManagerTests
         Die(h, new[] { new EquippedItem("rusty dagger", "Weapon Hand") }, new[] { "torch" });
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("corpse of Raijin");
+        h.EnterGates();
 
         Assert.Contains("recover corpse Raijin", h.Sent);
     }
@@ -281,8 +283,8 @@ public sealed partial class DeathRecoveryManagerTests
         Die(h, new[] { new EquippedItem("padded helm", "Head") }, new[] { "club" });
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("3 copper farthings");                // cash only — no corpse
+        h.EnterGates();
 
         Assert.Empty(h.Sent);
         Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
@@ -294,16 +296,16 @@ public sealed partial class DeathRecoveryManagerTests
         using GraphHarness h = new();
         Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
         h.Recovery.AutoRecover = true;
-        h.EnterGates();
-        h.FeedSurvey("3 copper farthings");                // → Missing
+        h.FeedSurvey("3 copper farthings");
+        h.EnterGates();                                    // → Missing
         Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
 
         // Leave and come back: a Missing pile must not re-arm, even if the corpse
         // now appears in the survey — no spam. (Recover Now is the explicit retry.)
         h.Tracker.NoteRoomObserved(Obs3());                // 1/3 North Square
         h.Sent.Clear();
-        h.EnterGates();
         h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
         Assert.Empty(h.Sent);
         Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
     }
@@ -332,8 +334,8 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
 
-        h.EnterGates();
         h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
         Assert.Contains("recover corpse Ermias", h.Sent);
 
         h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
@@ -499,8 +501,8 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
 
-        h.EnterGates();
         h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
         h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
 
         Assert.Contains("eq platinum mace", h.Sent);
@@ -516,8 +518,8 @@ public sealed partial class DeathRecoveryManagerTests
         Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
         Assert.Contains("recover corpse Ermias", h.Sent);
         Assert.DoesNotContain("recover corpse Ermias Asghedom", h.Sent);
     }
@@ -529,8 +531,8 @@ public sealed partial class DeathRecoveryManagerTests
         Die(h, Array.Empty<EquippedItem>(), new[] { "torch" });
         h.Recovery.AutoRecover = true;
 
-        h.EnterGates();
         h.FeedSurvey("corpse of Bob");                     // someone else's corpse
+        h.EnterGates();
         Assert.Empty(h.Sent);                              // never recover another player's corpse
         Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
     }
@@ -561,8 +563,8 @@ public sealed partial class DeathRecoveryManagerTests
 
         Assert.Equal(new RoomKey(1, 1), Assert.Single(asked));
 
-        h.EnterGates();                                    // arrived, however the cards routed it
         h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();                                    // arrived, however the cards routed it
         Assert.Contains("recover corpse Ermias", h.Sent);
     }
 
@@ -623,8 +625,8 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.AutoEquip = true;
         h.Hostiles = true;                                 // a live hostile shares the death room
 
-        h.EnterGates();
         h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
         Assert.Contains("recover corpse Ermias", h.Sent);  // recovery itself is unchanged (safe)
 
         h.Sent.Clear();
@@ -657,8 +659,8 @@ public sealed partial class DeathRecoveryManagerTests
         h.Recovery.AutoEquip = true;
         // Hostiles defaults false — an empty room recovers exactly as before.
 
-        h.EnterGates();
         h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
         h.Sent.Clear();
         h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
 

@@ -115,9 +115,20 @@ public sealed class PartyWaitMovementGate : IDisposable
     // Test seam — runs one expiry check without a real timer.
     internal void TickForTests() => Tick();
 
+    // The master switch (true = off). Off, the inbound waits are still recorded
+    // (the hold itself is parked by MovementCoordinator), and the wait limit does
+    // not run: it counts from the moment the switch is back on, so a follower
+    // still held then gets the whole of it.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void Tick()
     {
         if (!_gateAsserted || WaitWindow <= TimeSpan.Zero) { StopTimer(); return; }
+        if (MasterSwitchOff?.Invoke() == true)
+        {
+            _waitStarted = NowProvider();
+            return;
+        }
         if (NowProvider() - _waitStarted < WaitWindow) return;
         _log?.Info("Party",
             $"Party @wait timer expired after {WaitWindow.TotalSeconds:0}s — resuming.");

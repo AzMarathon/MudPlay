@@ -337,25 +337,24 @@ public partial class MainWindowViewModel : ObservableObject
     // buttons, the Action-menu check items, and the Settings → General
     // checkboxes all write here. The partial OnXxxChanged handlers persist to
     // the profile and refresh the toolbar IsActive badge.
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoCombatActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoNukeActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff), nameof(IsAutoHealRestActive))] private bool _isAutoHealActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff), nameof(IsAutoHealRestActive))] private bool _isAutoRestActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoBlessActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoLightActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoGetItemsActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoGetCashActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoSneakActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoHideActive;
-    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAllAutoOff))] private bool _isAutoSearchActive;
+    [ObservableProperty] private bool _isAutoCombatActive;
+    [ObservableProperty] private bool _isAutoNukeActive;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAutoHealRestActive))] private bool _isAutoHealActive;
+    [ObservableProperty][NotifyPropertyChangedFor(nameof(IsAutoHealRestActive))] private bool _isAutoRestActive;
+    [ObservableProperty] private bool _isAutoBlessActive;
+    [ObservableProperty] private bool _isAutoLightActive;
+    [ObservableProperty] private bool _isAutoGetItemsActive;
+    [ObservableProperty] private bool _isAutoGetCashActive;
+    [ObservableProperty] private bool _isAutoSneakActive;
+    [ObservableProperty] private bool _isAutoHideActive;
+    [ObservableProperty] private bool _isAutoSearchActive;
 
     // Master "Disable hangups" toggle. When on, every automatic disconnect
     // path (@hangup / @relog remote commands, low-HP emergency hangup,
     // nightly-cleanup log-off) is suppressed — the client drops the carrier
     // only on an explicit user action. Persisted in
     // Models.Profile.GeneralSettings.DisableHangups and reseeded on profile
-    // load like the auto-mode toggles. Not part of IsAllAutoOff — it gates
-    // disconnects, not auto-engines.
+    // load like the auto-mode toggles. It gates disconnects, not auto-engines.
     [ObservableProperty] private bool _isDisableHangupsActive;
 
     // Sprint Mode. A transient "just get me there" movement mode. While on:
@@ -367,7 +366,7 @@ public partial class MainWindowViewModel : ObservableObject
     // next lair; and manually turning any of those four engines back on ends it
     // too. See OnIsSprintModeActiveChanged + the nav-event handlers. Persisted
     // in Models.Profile.GeneralSettings.SprintMode, reseeded on profile load.
-    // Not part of IsAllAutoOff — it's a movement mode, not an auto-engine.
+    // It's a movement mode, not an auto-engine.
     [ObservableProperty] private bool _isSprintModeActive;
 
     // The auto-engines Sprint Mode forced off when it turned on — remembered so
@@ -411,6 +410,53 @@ public partial class MainWindowViewModel : ObservableObject
 
     // A Sprint start turned Sprint Mode on and it hasn't ended yet.
     private bool _tripStartedSprint;
+
+    // The open "which waiting events should run?" prompt, so a second ask brings
+    // it forward instead of opening another.
+    private HeldEventsPromptViewModel? _heldEventsPrompt;
+
+    // The events manager asks which waiting events should still run: the master
+    // switch held them for a long spell (EventManager's queue choice). Ticked
+    // ones run in their order and the rest are dropped. Closed by its X, every
+    // listed event is dropped ("drop all of them"; user, 2026-10-10).
+    private async Task ShowHeldEventsPromptAsync()
+    {
+        AppServices services = AppServices.Current;
+        if (_heldEventsPrompt is { Withdrawn: false } open && services.Dialogs.RaiseIfOpen(open)) return;
+        IReadOnlyList<Game.Events.EventManager.HeldQueueEntry> waiting = services.Events.OfferQueueChoice();
+        if (waiting.Count == 0) return;
+
+        HeldEventsPromptViewModel prompt = new(waiting);
+        _heldEventsPrompt = prompt;
+        IReadOnlyList<Models.GameData.ScheduledEvent>? run;
+        try
+        {
+            run = await services.Dialogs
+                .OpenWindowAsync<HeldEventsPromptViewModel, IReadOnlyList<Models.GameData.ScheduledEvent>>(prompt);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // No main window to own it. Nobody can be asked, and a question left
+            // standing would hold every later event behind it.
+            services.Log.Warn("Events", $"Couldn't open the waiting-events prompt ({ex.Message}).");
+            services.Events.DropQueueChoice("the Waiting Events window could not be shown");
+            return;
+        }
+        finally
+        {
+            if (ReferenceEquals(_heldEventsPrompt, prompt)) _heldEventsPrompt = null;
+        }
+
+        if (run is not null) services.Events.ResolveQueueChoice(run);
+        // Closed by its X. Not when the manager took the question back (the
+        // switch went off again, the queue is gone), nor when the whole client is
+        // closing and took the window with it.
+        else if (!prompt.Withdrawn && MainWindowIsOpen())
+            services.Events.DropQueueChoice(Game.Events.EventManager.PromptClosedUnanswered);
+    }
+
+    private static bool MainWindowIsOpen() =>
+        Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow.IsVisible: true };
 
     // Movement was stopped on purpose: the Stop button or its hotkey, the Navigation
     // window's Stop, or a remote @stop (which pauses, so endsTheRun is false). The
@@ -467,19 +513,16 @@ public partial class MainWindowViewModel : ObservableObject
     {
         if (!_tripTurnedOffCombat) return;
         _tripTurnedOffCombat = false;
+        // With the master switch off it is the switch's to give back.
+        if (AppServices.Current.AutoModeController.KeepsForSwitchOn("Run + Combat off", d => d.AutoCombat = true)) return;
         if (!IsAutoCombatActive) IsAutoCombatActive = true;
         AppServices.Current.Log.Info("AutoMode", "Run + Combat off: the run has begun — Auto-Combat back on.");
     }
 
-    // True when every wired auto-engine is off — drives the "Auto-All" master
-    // toggle's depressed/checked state. Mirrors
-    // Game.AutoModeController.AllWiredOff but computed from the live
-    // observables so the badge updates instantly.
-    public bool IsAllAutoOff =>
-        !IsAutoCombatActive && !IsAutoNukeActive && !IsAutoHealActive && !IsAutoRestActive
-        && !IsAutoBlessActive && !IsAutoLightActive && !IsAutoGetItemsActive
-        && !IsAutoGetCashActive && !IsAutoSneakActive && !IsAutoHideActive
-        && !IsAutoSearchActive;
+    // The master switch (Game.AutoModeController): drives the "Auto-All" button's
+    // depressed state and the menu item's tick. It follows the switch itself, not
+    // the eleven toggles: with every toggle unticked by hand the switch is still on.
+    [ObservableProperty] private bool _isMasterSwitchOn = true;
 
     public bool IsDisconnected => !IsConnected;
 
@@ -934,6 +977,16 @@ public partial class MainWindowViewModel : ObservableObject
         // (no-op for a character that predates the base/live split). Runs before
         // the badge reseed below; the reconcile also reseeds when it changes state.
         AppServices.Current.Profile.ProfileLoaded += _ => ReconcileAutoModeToBase("profile load");
+        AppServices.Current.AutoModeController.KillSwitchToggled += off =>
+            Dispatcher.UIThread.Post(() => IsMasterSwitchOn = !off);
+        AppServices.Current.AutoModeController.ResetByProfileLoad += () =>
+            Dispatcher.UIThread.Post(() => IsMasterSwitchOn = true);
+        // Posted: the switch can be switched by a remote `@auto-all` from inside
+        // the chat pump, and a window is not opened (nor a notice written) there.
+        AppServices.Current.Events.QueueChoiceNeeded += () =>
+            Dispatcher.UIThread.Post(() => _ = ShowHeldEventsPromptAsync());
+        AppServices.Current.Events.QueueChoiceWithdrawn += () =>
+            Dispatcher.UIThread.Post(() => _heldEventsPrompt?.Withdraw());
         AppServices.Current.Profile.ProfileLoaded += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileMutated += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileSaving  += _ => SyncAutoEngineTogglesFromProfile();
@@ -1344,19 +1397,26 @@ public partial class MainWindowViewModel : ObservableObject
         // TerminalControl + ConversationWindow's input both call into the
         // dispatcher on KeyDown — without a sender bound, the call returns
         // false and the keystroke falls through to normal handling.
-        AppServices.Current.MacroDispatcher.SetSender(engineSend);
+        // What a macro, an event's Command action and a trigger's response send is a
+        // command the user set up, not one an engine decided: marked so, a gear
+        // command among them mid-fight gets the same re-attack a typed one does.
+        // (An alias expands a typed line and goes out as typed already; the Action
+        // menu's Equip entries apply a gear set through the Equipment Manager, which
+        // re-attacks after its own swap.)
+        Action<byte[]> userCommandSend = AppServices.Current.EngineGate.MarkUserCommands(engineSend);
+        AppServices.Current.MacroDispatcher.SetSender(userCommandSend);
 
         // Bind the same gate-wrapped wire path to the EventManager so
         // Command-action events route through SendUserInput like every
         // other engine.
-        AppServices.Current.Events.SetWireSender(engineSend);
+        AppServices.Current.Events.SetWireSender(userCommandSend);
 
         // Trigger engine subscribes to the LineExtractor for game-message
         // dispatch (chat + system-log subscriptions wired in its ctor) and
         // borrows the same wire sender so a fired trigger's Response goes
         // through the canonical SendUserInput path.
         AppServices.Current.Triggers.AttachLineExtractor(Lines);
-        AppServices.Current.Triggers.SetSender(engineSend);
+        AppServices.Current.Triggers.SetSender(userCommandSend);
 
         // Remote-command engine borrows the same wire-sender so a handler's
         // ctx.Reply(text) routes through SendUserInput exactly like a
@@ -1681,8 +1741,13 @@ public partial class MainWindowViewModel : ObservableObject
         // The tracker asks the game to show the room when a step through a
         // teleporting exit wasn't followed by the displays the game owes it: a bare
         // Enter, through the same gate.
-        AppServices.Current.RoomTracker.SetRoomRedisplay(
-            () => engineSend(System.Text.Encoding.Latin1.GetBytes("\r")));
+        // Not with the master switch off: the tracker goes on reading the rooms it
+        // is shown, but asks for none.
+        AppServices.Current.RoomTracker.SetRoomRedisplay(() =>
+        {
+            if (AppServices.Current.AutoModeController.Blocks("Position fixes")) return;
+            engineSend(System.Text.Encoding.Latin1.GetBytes("\r"));
+        });
         // Teleport-maze solver — its look-peeks + reshuffle moves ride the same
         // gate-wrapped pipeline. The RoomParsed feed that drives its relocalize
         // is subscribed below beside the RoomDisplayParser.
@@ -1943,7 +2008,7 @@ public partial class MainWindowViewModel : ObservableObject
          && e.PropertyName != nameof(IsDisableHangupsActive)
          && e.PropertyName != nameof(IsSprintModeActive)
          && e.PropertyName != nameof(CombatProfileCycleLabel)
-         && e.PropertyName != nameof(IsAllAutoOff)) return;
+         && e.PropertyName != nameof(IsMasterSwitchOn)) return;
 
         foreach (ToolbarButtonItem row in ToolbarItems)
         {
@@ -2011,8 +2076,8 @@ public partial class MainWindowViewModel : ObservableObject
                 row.IsActive = IsAutoSearchActive;
                 break;
             case "ToggleAllAutoOff":
-                // Depressed = auto-responses running; inverse of "all off".
-                row.IsActive = !IsAllAutoOff;
+                // Depressed = the master switch is on.
+                row.IsActive = IsMasterSwitchOn;
                 break;
             case "MovementStart":
             {
@@ -3407,6 +3472,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (wasConnected) AppServices.Current.PartyReform.NoteDisconnected();
                 // The follower's reconnect @comeback is skipped after too long a drop.
                 if (wasConnected) AppServices.Current.PartyRejoin.NoteDisconnected();
+                // A member's @comeback kept for the master switch names a place
+                // from the stay that just ended.
+                AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");
                 // Cancel any pending stable-window reset — this drop
                 // happened before the 30s threshold, so the connect
                 // didn't earn a counter reset.
@@ -3742,12 +3810,12 @@ public partial class MainWindowViewModel : ObservableObject
         // Attack observer — a manually-typed physical attack verb (a/aa/bash/smash/bs/…)
         // is a user override: the engine holds its own swing until the next round.
         if (typed) AppServices.Current.OutboundAttack.ObserveOutbound(data);
-        // Gear observer — a hand-typed eq / wear / wield / rem mid-fight arms a re-attack
-        // for the *Combat Off* it draws. The client's own gear commands come through
-        // here as well (the Equipment Manager, an item cast, corpse recovery), each with
-        // its own re-attack after the swap, so only a line no wrapped sender is
-        // sending counts as typed.
-        if (typed && !AppServices.Current.EngineGate.SendingClientCommand)
+        // Gear observer — the user's own eq / wear / wield / rem mid-fight arms a
+        // re-attack for the *Combat Off* it draws, typed or sent by a macro, trigger or
+        // event of theirs. An engine's gear commands come through here as well (the
+        // Equipment Manager, an item cast, corpse recovery), each with its own
+        // re-attack after the swap, and are left to it.
+        if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand)
             AppServices.Current.OutboundGear.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
@@ -5173,6 +5241,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void StartLoopFavorite(Game.Map.Loop loop)
     {
         var s = AppServices.Current;
+        if (s.RefuseStartForMasterSwitch("Loop")) return;
         s.MovementControl.StartUserRun(() =>
         {
             if (s.AutoLair.IsActive) s.AutoLair.Stop("loop favorite started");
@@ -5186,6 +5255,7 @@ public partial class MainWindowViewModel : ObservableObject
     private void StartLairFavorite(Models.Profile.LairSetup setup)
     {
         var s = AppServices.Current;
+        if (s.RefuseStartForMasterSwitch("Auto-Lair")) return;
         s.MovementControl.StartUserRun(() =>
         {
             if (s.LoopRunner.State != Game.Map.LoopState.Idle) s.LoopRunner.Stop("auto-lair favorite started");
@@ -5202,6 +5272,9 @@ public partial class MainWindowViewModel : ObservableObject
     // entry point the Navigation manager's Walk buttons use).
     private async Task WalkToFavoriteRoomAsync(Game.Map.RoomKey key)
     {
+        // Before the Stop: a run frozen by the master switch is not given up for
+        // a walk that won't start.
+        if (AppServices.Current.RefuseStartForMasterSwitch("Walk")) return;
         MovementStop();
         await MudPlay.ViewModels.Navigation.RouteChoicePrompt.WalkAsync(AppServices.Current, key);
     }
@@ -6062,13 +6135,12 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    // Master "Auto-All" kill-switch. Delegates to the shared
-    // Game.AutoModeController so the toolbar button, the Action-menu item,
-    // and the @auto-all remote command all drive one session snapshot. The
-    // controller's profile write fires ProfileSaving, which reseeds the
-    // nine toggle observables (and thereby IsAllAutoOff).
+    // The master switch. Delegates to the shared Game.AutoModeController so the
+    // toolbar button, the Action-menu item and the @auto-all remote command all
+    // drive one switch. The controller's profile write fires ProfileSaving, which
+    // reseeds the toggle observables; IsMasterSwitchOn follows KillSwitchToggled.
     [RelayCommand]
-    private void AllAutoOff() => AppServices.Current.AutoModeController.ToggleAll();
+    private void AllAutoOff() => AppServices.Current.AutoModeController.ToggleAll(Game.AutoModeController.ByUserPress);
 
     // "Reset States" — the manual recovery escape hatch. First every engine goes
     // back to idle (AppServices.ResetEngineStates: walks, loops, lair, detours,
@@ -6313,23 +6385,11 @@ public partial class MainWindowViewModel : ObservableObject
         if (!any) return;
         if (AppServices.Current.Profile.Current is not { } profile) return;
 
+        // The toggles are the master switch's to guard: with it off nothing is
+        // re-enabled, Auto-Train included, and the switch stays off.
+        if (!AppServices.Current.AutoModeController.ReEnableOnReconnect(general)) return;
+
         profile.Settings ??= new();
-        Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
-        Models.Profile.AutoActionDefaults am = dto.AutoMode;
-        if (general.ReEnableAutoCombatOnReconnect)   am.AutoCombat   = true;
-        if (general.ReEnableAutoNukeOnReconnect)     am.AutoNuke     = true;
-        if (general.ReEnableAutoHealRestOnReconnect) { am.AutoHeal = true; am.AutoRest = true; }
-        if (general.ReEnableAutoBlessOnReconnect)    am.AutoBless    = true;
-        if (general.ReEnableAutoLightOnReconnect)    am.AutoLight    = true;
-        if (general.ReEnableAutoGetItemsOnReconnect) am.AutoGetItems = true;
-        if (general.ReEnableAutoGetCashOnReconnect)  am.AutoGetCash  = true;
-        if (general.ReEnableAutoSneakOnReconnect)    am.AutoSneak    = true;
-        if (general.ReEnableAutoHideOnReconnect)     am.AutoHide     = true;
-        if (general.ReEnableAutoSearchOnReconnect)   am.AutoSearch   = true;
-
-        profile.Settings["General"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
-
         // Auto-train isn't an AutoMode bit — flip it in the "AutoTrainer" entry
         // via read-modify-write so the trainer tab's other fields survive.
         if (general.ReEnableAutoTrainOnReconnect)
@@ -6438,13 +6498,22 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            // The Auto-All switch went on since: everything stays off, as asked.
-            if (AppServices.Current.AutoModeController.KillSwitchEngaged)
-            {
-                AppServices.Current.Log.Info("AutoMode",
-                    "Pyramid run-through over with Auto-All engaged: the autos stay off.");
+            // The master switch went off since: everything stays off, as asked. The
+            // switch remembered the toggles as the climb had left them, unticked,
+            // so the ones the climb owes back are handed to it and return when it
+            // is switched on, not as base modes and not never.
+            if (AppServices.Current.AutoModeController.KeepsForSwitchOn("Pyramid run-through over", d =>
+                {
+                    d.AutoCombat   = _climbTurnedOffCombat;
+                    d.AutoNuke     = _climbTurnedOffNuke;
+                    d.AutoRest     = _climbTurnedOffRest;
+                    d.AutoLight    = _climbTurnedOffLight;
+                    d.AutoGetItems = _climbTurnedOffGetItems;
+                    d.AutoGetCash  = _climbTurnedOffGetCash;
+                    d.AutoHide     = _climbTurnedOffHide;
+                    d.AutoSearch   = _climbTurnedOffSearch;
+                }))
                 return;
-            }
 
             // Sprint, switched on since, keeps its four off; turning one on here
             // would end it. They pass to Sprint, which gives them back when it ends.
@@ -6502,7 +6571,9 @@ public partial class MainWindowViewModel : ObservableObject
             else if (_detourTurnedOffCombat)
             {
                 _detourTurnedOffCombat = false;
-                IsAutoCombatActive = true;
+                // With the master switch off it is the switch's to give back.
+                if (!AppServices.Current.AutoModeController.KeepsForSwitchOn("Detour combat hold", d => d.AutoCombat = true))
+                    IsAutoCombatActive = true;
             }
         }
         finally { _detourDrivingCombat = false; }
@@ -6643,6 +6714,15 @@ public partial class MainWindowViewModel : ObservableObject
         _sprintDrivingEngines = true;
         try
         {
+            // With the master switch off they are the switch's to give back.
+            if (AppServices.Current.AutoModeController.KeepsForSwitchOn("Sprint Mode ended", d =>
+                {
+                    d.AutoCombat   = _sprintTurnedOffCombat;
+                    d.AutoGetItems = _sprintTurnedOffGetItems;
+                    d.AutoSearch   = _sprintTurnedOffSearch;
+                    d.AutoGetCash  = _sprintTurnedOffGetCash;
+                }))
+                return;
             if (_sprintTurnedOffCombat)   IsAutoCombatActive   = true;
             if (_sprintTurnedOffGetItems) IsAutoGetItemsActive = true;
             if (_sprintTurnedOffSearch)   IsAutoSearchActive   = true;
@@ -6692,19 +6772,10 @@ public partial class MainWindowViewModel : ObservableObject
     private void ReconcileAutoModeToBase(string reason)
     {
         if (AppServices.Current.Profile.Current is not { } profile) return;
-        Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
-
-        Models.Profile.AutoModeReconcileResult result =
-            Models.Profile.AutoActionDefaults.ReconcileToBase(dto.AutoModeBase, dto.AutoMode);
-        if (!result.BaseSeeded && !result.LiveChanged) return;   // already settled — nothing to write
-
-        bool combatWas = dto.AutoMode.AutoCombat;
-        dto.AutoModeBase = result.Base;
-        dto.AutoMode = result.Live;
-        profile.Settings ??= new();
-        profile.Settings["General"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
-        AppServices.Current.Profile.Save();
+        bool combatWas = ReadGeneralFromProfile(profile).AutoMode.AutoCombat;
+        // The switch decides and writes: with it off nothing is settled, and
+        // already settled writes nothing.
+        if (AppServices.Current.AutoModeController.ReconcileToBase(reason) is not { } result) return;
 
         if (result.LiveChanged)
         {

@@ -683,8 +683,8 @@ public sealed partial class CombatManager
         // don't parse would otherwise leave us idle for several rounds (the
         // "long pause before re-attack" symptom). Runs before the spell
         // gates because a pure-weapon build never wires the combat-spell
-        // caster. Weapon mode only (_castingSpellTarget null): in spell mode
-        // the heartbeat below owns the re-cast. Skipped after a kill
+        // caster. Weapon mode here (_castingSpellTarget null); spell mode has
+        // its own a few lines down, past the spell gates. Skipped after a kill
         // (_currentTarget cleared by the death watcher) so we never swing at
         // a corpse. TryResumeEngage's pacing prevents a double-fire with the
         // OnCombatLine resume in the same round.
@@ -703,9 +703,25 @@ public sealed partial class CombatManager
         if (!Fighting()) return;
         if (_combatOff)
         {
-            // Round interrupted; the resume path owns the re-engage — all but the one
-            // a user-typed attack held last round, which falls due here.
+            // Round interrupted. A between-round cast's Off is answered on the Off line
+            // itself, and the one a user-typed attack held last round falls due here.
             if (resumeHeldForUserAttack) ResumeSpellHeldForUserAttack();
+            // Any other Off left standing in a spell fight (a stun, a typed command,
+            // a resume that was rate-limited) used to wait for a combat line the
+            // client reads, and with a monster whose swings it doesn't read that
+            // never came. The round tick brings the spell back as it does the weapon
+            // (user, 2026-10-09), through the same door: TryResumeEngage keeps its
+            // guards (a fresh attack not yet answered, one resume a round, shared
+            // with OnCombatLine, so a line and the tick of one round are one
+            // re-announce), and the re-dispatch goes through the chooser, which is
+            // what holds the spell to its cast cap and mana floor. One announce a
+            // round is all it can send, and the game fires an announced spell as
+            // often as its energy allows from there, no more.
+            else if (_castingSpellTarget is { } spellTarget
+                && _currentTarget is not null
+                && _classifier.Current is { } spellRoom
+                && TargetPresent(spellRoom, spellTarget))
+                TryResumeEngage(spellRoom);
             return;
         }
 

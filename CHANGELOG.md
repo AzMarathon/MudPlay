@@ -1,12 +1,53 @@
 # Version history
 
-## 3.165.2
+## 3.167.1
 
 - After a death no walk takes a toll or paid transport until the inventory is read again (your coin went with the pile)
 - A toll the game refuses is not tried again: the inventory is re-read and the walk goes round it
 - A walk with no way round a toll you can't pay says so on the terminal, naming the toll and how short you are
 - Program log and bug report show the purse a toll was judged on
 - bug reports addressed: paradigm-20261010-145529
+
+## 3.167.0
+
+- Auto-All is a true master switch: off, nothing automatic acts
+- `@auto-all` is the only remote command followed while it is off
+- Switching it on gives back what was ticked when it went off
+- A walk, loop or Auto-Lair started with it off is refused, with a notice
+- Low-HP hang-up now needs Auto-Rest on
+- "Allow hangup in all-off mode" follows the master switch
+- Events held more than 5 minutes by it: you pick which still run
+
+## 3.166.0
+
+- New Settings tab **Periodic Damage Room Spells**: per room spell, whether it bars resting
+- Each spell's record, damage, how it comes, what counters it, and its rooms as map links
+- No rest or meditate in a barred room (by default: volcano heat, swamp poison, a river with no raft)
+- The walk carries on and the rest starts in the next room that isn't barred
+- *Heal (rest)* is cast standing while that rest is owed
+- A follower dragged into a barred room releases its `@wait` and asks again outside it
+- With the room's counter in effect, resting is as normal: a negating item worn, a raft or the sunstone wristband just held
+- A room's own damage no longer puts you in combat, swaps gear, sends an Enter or counts in Round Totals
+- A gear command from a macro, alias, trigger or event mid-fight re-attacks at once
+- A stopped spell fight is picked up on the next round tick, not only on a combat line
+- Paradigm: freezing cold, ocean drowning, bog poison and murky drown lines recognised
+- Bug report: the room's spell and whether it bars resting, and the spells changed from the default
+
+## 3.165.10
+
+- A handed-back item counts toward a Missing deathpile from anyone, at any time
+
+## 3.165.9
+
+- Paradigm: a pile is marked Missing only off a confirmed death-room display
+- Paradigm: Recover Now marks Missing when the look shows no corpse
+- Recover Now on a Missing pile walks there and looks again
+- A party member's hand-back reopens a Missing pile
+- A single spare of a worn item is recorded in the deathpile
+- The lit light and keys are recorded in the deathpile
+- A light that burns out comes off what you hold at once
+- Stock: being placed in a death room is not an empty floor
+- Bug report shows where the death-room pickup stands
 
 ## 3.165.1
 

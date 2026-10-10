@@ -190,6 +190,38 @@ public sealed class TriggerEngineTests
         Assert.Equal(new[] { "/Raijin @exp" }, sent);
     }
 
+    // Triggers are the user's own automation: with the master switch off a
+    // matched trigger's activation is skipped whole (user, 2026-10-09). On, it
+    // fires as before (NamedCaptures_PopulateWildcardStore_AndInterpolateResponse).
+    [Theory]
+    [InlineData(TriggerScope.GameMessages, "Joe enters the room.")]
+    [InlineData(TriggerScope.ChatAny, "Joe enters the room.")]
+    [InlineData(TriggerScope.SystemLog, "Joe enters the room.")]
+    public void MasterSwitchOff_MatchedTrigger_DoesNotCaptureSendOrPlay(TriggerScope scope, string line)
+    {
+        Trigger t = new(
+            Name: "enter", Enabled: true, Scope: scope,
+            MatchType: TriggerMatchType.Literal,
+            Pattern: "{usr} enters the room.", Response: "wave {usr}", SoundFile: "ding.wav");
+        TriggerEngine engine = new();
+        List<string> sent = new();
+        int played = 0, asked = 0;
+        engine.SetSender(bytes => sent.Add(Encoding.Latin1.GetString(bytes)));
+        engine.PlaySound = _ => played++;
+        engine.BlockedByMasterSwitch = () => { asked++; return true; };
+        engine.Triggers.Add(t);
+
+        engine.DispatchForTests(scope, line);
+        engine.DispatchForTests(scope, "nothing that matches");
+
+        Assert.Empty(sent);
+        Assert.Empty(engine.Variables);
+        Assert.Equal(0, played);
+        // Asked only for the line that matched, so the skip count means triggers
+        // that would have fired.
+        Assert.Equal(1, asked);
+    }
+
     [Fact]
     public void ClearWildcards_EmptiesStore_AndRaisesChanged()
     {

@@ -84,6 +84,64 @@ public sealed class AllyDroppedHandlerTests
         }
     }
 
+    // The master switch ends a rescue under way (its aid and poll would go on by
+    // themselves) but keeps who was down, and the rescue starts again when the
+    // switch is back on if they are still owed one.
+    [Fact]
+    public void MasterSwitch_RescueIsEnded_ThenStartedAgainForAnAllyStillDown()
+    {
+        using Harness h = new();
+        h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
+        h.Drop("MudPlay");
+
+        h.Handler.HoldForMasterSwitch();
+        h.Enabled = false;
+        Assert.False(h.GateAsserted);
+        Assert.False(h.Handler.IsTrackingForTests("MudPlay"));
+        h.Wire.Clear();
+
+        h.Enabled = true;
+        h.Handler.ResumeOwedRescues();
+
+        Assert.True(h.GateAsserted);
+        Assert.True(h.WireHas("aid MudPlay\r"));
+        Assert.True(h.Handler.IsTrackingForTests("MudPlay"));
+    }
+
+    // One who dropped while the switch was off is owed a rescue too.
+    [Fact]
+    public void MasterSwitch_AllyWhoDroppedWhileOff_IsRescuedWhenItIsBackOn()
+    {
+        using Harness h = new();
+        h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
+        h.Handler.HoldForMasterSwitch();
+        h.Enabled = false;
+
+        h.Drop("MudPlay");
+        Assert.Empty(h.Wire);
+
+        h.Enabled = true;
+        h.Handler.ResumeOwedRescues();
+        Assert.True(h.WireHas("aid MudPlay\r"));
+    }
+
+    [Fact]
+    public void MasterSwitch_AllyWhoDiedMeanwhile_IsNotRescued()
+    {
+        using Harness h = new();
+        h.Party.Members.Add(new PartyMember { Name = "MudPlay WuzHere" });
+        h.Drop("MudPlay");
+        h.Handler.HoldForMasterSwitch();
+        h.Enabled = false;
+        h.Handler.NoteAllyGoneForTests("MudPlay");
+        h.Wire.Clear();
+
+        h.Enabled = true;
+        h.Handler.ResumeOwedRescues();
+
+        Assert.Empty(h.Wire);
+    }
+
     [Fact]
     public void RosterMemberDrops_AidsAndHoldsMovement()
     {

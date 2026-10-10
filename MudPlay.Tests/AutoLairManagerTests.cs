@@ -427,6 +427,28 @@ public sealed class AutoLairManagerTests : IDisposable
         Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
     }
 
+    // Frozen by the master switch, the scheduler stands down too: its engage
+    // window does not call the lair empty, and the Combat gate being parked is
+    // not read as the fight being over. It carries on when the freeze lifts.
+    [Fact]
+    public void Engaging_FrozenByTheMasterSwitch_DoesNotFinishOnItsTimerOrOnAParkedGate()
+    {
+        using Harness h = Engaging(NewHarness());
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
+        h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
+        h.Coordinator.ParkHoldsForMasterSwitch();
+
+        h.Roam.FireEngageTimerForTests();
+        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+
+        h.Coordinator.RestoreHoldsAfterMasterSwitch();
+        h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
+        Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);   // the fight is still on
+
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "killed");
+        Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
+    }
+
     [Fact]
     public void Engaging_EmptyLair_UsesAShortWindowNotTheEngageTimeout()
     {
@@ -809,6 +831,60 @@ public sealed class AutoLairManagerTests : IDisposable
             Assert.Equal(new RoomKey(3, 595), h.Roam.CurrentTarget);
             Assert.Equal(new RoomKey(3, 592), h.Roam.CurrentWaitRoom);
             Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
+        }
+    }
+
+    // The entry timer's interval is the whole wait. A tick that lands while the
+    // master switch has the run frozen is not acted on, and left at that the
+    // entry came one more full wait after the switch was back on. It is owed
+    // instead, and made as the freeze lifts.
+    [Fact]
+    public void Waiting_EntryComesDueWhileFrozen_GoesInAsTheFreezeLifts()
+    {
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+            doors.Calls[0].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
+            h.Roam.FireRetryForTests();
+            Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
+
+            h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
+            h.Roam.FireEntryTimerForTests();
+            Assert.Equal(AutoLairPhase.Waiting, h.Roam.Phase);
+
+            h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
+            Assert.Equal(AutoLairPhase.Entering, h.Roam.Phase);
+        }
+    }
+
+    // The entry came due while frozen, and the user then walked into the lair by
+    // hand and a fight began. The gate change that lifts the freeze settles the
+    // owed entry (nothing to do: no longer waiting) and must still be read for
+    // the fight, or the fight's end is never seen as one.
+    [Fact]
+    public void Waiting_EntryOwed_ThenWalkedInByHandWhileFrozen_TheFreezeLiftingIsStillReadForTheFight()
+    {
+        (Harness h, DoorCalls doors) = NewColiseumHarness(wayRound: false, stats: null);
+        using (h)
+        {
+            Assert.True(h.Roam.Start());
+            h.Tracker.NoteRoomObserved(new RoomObservation("Viewing Stands",
+                new HashSet<Direction> { Direction.S, Direction.D }));
+            doors.Calls[0].Reply(new DoorOpenResult.Failed("waitingopen timed out with no response"));
+            h.Roam.FireRetryForTests();
+            h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test", "master switch off");
+            h.Roam.FireEntryTimerForTests();
+
+            h.Roam.StartEngagementForTests();           // in the lair, by the user's own steps
+            h.Coordinator.AssertGate(MovementCoordinator.CombatGate, "test", "fight on");
+            h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test", "master switch on");
+            Assert.Equal(AutoLairPhase.Engaging, h.Roam.Phase);
+
+            h.Coordinator.ClearGate(MovementCoordinator.CombatGate, "test", "killed");
+            Assert.NotEqual(AutoLairPhase.Engaging, h.Roam.Phase);
         }
     }
 }

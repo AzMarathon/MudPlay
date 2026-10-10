@@ -87,10 +87,16 @@ public sealed class DivertHandler : IDisposable
         ctx.Reply($"Now diverting telepaths to: {target}");
     }
 
+    // The master switch (true = off): off, nothing is forwarded. The divert a
+    // remote command set stays set; a telepath that arrives meanwhile is not
+    // forwarded later.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnChatEntry(ChatLogEntry entry)
     {
         if (_target is null) return;
         if (entry.Channel != ChatChannel.TelepathIncoming) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         if (string.IsNullOrEmpty(entry.Speaker) || string.IsNullOrEmpty(entry.Message)) return;
 
         // Don't forward the @divert control verb itself (see class remarks).

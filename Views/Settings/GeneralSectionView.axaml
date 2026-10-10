@@ -347,16 +347,15 @@
                               ToolTip.Tip="Detour to a trainer and train when a level-up is available during a loop/auto-lair. Mirrors the master toggle on the Auto-Trainer tab."/>
                 </StackPanel>
 
-                <!-- Emergency hangup carve-out for fully-manual mode. When
-                     every auto-engine above is off, HealthManager normally
-                     does nothing; this opt-in keeps just the HP-below-hangup-
-                     threshold hangup branch live so a manual character still
-                     drops the line at the edge of death. Consumed live via
-                     GeneralSettings.AllowHangupInAllOffMode. -->
+                <!-- Hang-up carve-out for the master switch. With the switch
+                     off nothing automatic responds; this opt-in keeps the
+                     automatic hang-ups (low HP, a received @panic, the PvP
+                     hang-up actions, a Hangup-relationship monster) live.
+                     Consumed live via GeneralSettings.AllowHangupInAllOffMode. -->
                 <CheckBox Margin="0,12,0,0"
                           IsChecked="{Binding AllowHangupInAllOffMode, Mode=TwoWay}"
                           Content="Allow hangup in all-off mode"
-                          ToolTip.Tip="When checked: even with every Auto-* engine off, MudPlay still drops the line if your HP falls to the Health → 'hang up if below' threshold. Default off — opt-in safety net for fully-manual play."/>
+                          ToolTip.Tip="All-off mode is the master switch (Auto-All) being off; unticking the auto toggles one by one is not it. When checked, the automatic hang-ups still fire with the master switch off: low HP, a received @panic, the PvP hang-up actions and a Hangup-relationship monster. Unchecked (default), nothing hangs up on its own while the switch is off. Disable Hangups still stops them all."/>
 
                 <!-- Re-enable auto-actions on reconnect. One checkbox per
                      auto-action (1-to-1 with the auto-engine switches above).

@@ -5,7 +5,7 @@ namespace MudPlay.Models.Profile;
 // One item dropped into a deathpile, captured on a DeathRecord at the moment of
 // death. Split across the record's two lists: items worn at death
 // (DeathRecord.EquippedAtDeath) carry their Slot; carried-but-unworn items
-// (DeathRecord.LostItems) leave Slot null.
+// (DeathRecord.LostItems: the pack, the lit light, the keys) leave Slot null.
 public sealed class DeathItem
 {
     // Bare item name as the game prints it (slot suffix stripped).
@@ -21,11 +21,18 @@ public sealed class DeathItem
     [JsonIgnore]
     public bool IsHeld => Slot is "Weapon Hand" or "Off-Hand";
 
+    // True for a key-ring entry. The game keeps keys apart from the pack and treats
+    // them differently at a death (a key never stays with the character), so the
+    // record has to know which lost entries were keys.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool OnKeyRing { get; set; }
+
     public DeathItem() { }
 
-    public DeathItem(string name, string? slot = null)
+    public DeathItem(string name, string? slot = null, bool onKeyRing = false)
     {
         Name = name;
         Slot = slot;
+        OnKeyRing = onKeyRing;
     }
 }

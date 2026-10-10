@@ -131,11 +131,17 @@ public sealed class TokenTracker : IDisposable
         _lines.LineEmitted += OnLine;
     }
 
+    // The master switch (true = off): off, no token is looked at, at login or
+    // after a use. Using a token by hand still arms and clears its buff pause;
+    // only the look that reads the charges is skipped.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Read the charges of every held token — one paced `look` each, then a settle
     // window. Called once on login (Paradigm only). No-op with no tokens held.
     public async Task RefreshAsync(CancellationToken ct = default)
     {
         if (_disposed || !_onParadigm()) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         IReadOnlyList<(string LookName, string Place)> held = TokenCatalog.HeldTokens(_carried());
         if (held.Count == 0) return;
 
@@ -230,6 +236,7 @@ public sealed class TokenTracker : IDisposable
         try { await Task.Delay(RelookDelay).ConfigureAwait(true); }
         catch (OperationCanceledException) { return; }
         if (_disposed || !_onParadigm()) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         BeginCollect();
         _send($"look {TokenCatalog.LookName(place)}");
         try { await Task.Delay(SettleWindow).ConfigureAwait(true); }

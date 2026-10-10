@@ -13,8 +13,16 @@ namespace MudPlay.Tests;
 // comes from the Monsters table (dark force, chaos storm and shadow breath here).
 public sealed class OffRoundDamageLinesTests
 {
-    private const int MagmaHeat = 526, MagmaExplosion = 944, ChaosStorm = 212;
+    internal const int MagmaHeat = 526, MagmaExplosion = 944, ChaosStorm = 212;
     private const int DarkForce = 225, ShadowBreath = 1011, BurnHits = 589;
+
+    // The rule as AppServices hands it to the round clock and the combat engines,
+    // for a character standing in a room with roomSpell (0: none, or not placed).
+    internal static Func<string, bool> ProbeIn(int roomSpell)
+    {
+        OffRoundDamageLines rule = Build();
+        return line => rule.IsOffRound(line, roomSpell);
+    }
 
     private static MessageRecord Record(int spell, string name, string caster, string target) => new(
         Id: $"T{spell}", Name: name, Flags: MessageFlags.None, RawFlagsHex: 0,
@@ -79,6 +87,20 @@ public sealed class OffRoundDamageLinesTests
         Assert.True(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", ChaosStorm));
         Assert.False(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", 0));
         Assert.False(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", MagmaHeat));
+    }
+
+    // With a monster in the room that casts the room's own spell as its attack, the
+    // two can't be told apart: the line is the round. A line no dealer is named in
+    // (magma heat) is the room's whoever stands there.
+    [Fact]
+    public void SameTextFromARoomAndFromAMonsterStandingInIt_IsTheRound()
+    {
+        OffRoundDamageLines lines = Build();
+        static bool DruidHere(int spell) => spell == ChaosStorm;
+
+        Assert.False(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", ChaosStorm, DruidHere));
+        Assert.True(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", ChaosStorm, _ => false));
+        Assert.True(lines.IsOffRound("You are seared by the flames for 46 damage!", MagmaHeat, DruidHere));
     }
 
     // An on-hit effect isn't an attack slot's spell: it stays out, and the hit ahead
