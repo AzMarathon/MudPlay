@@ -294,7 +294,7 @@ public sealed class HangupItemRecheckTests
             list.PvpFight = pvp;
             list.InCombat = inFight;
             list.Worn = DeathLootCapture.FromSnapshot(before).Equipped;
-            list.Carried = MudPlay.Game.Recovery.HangupDeath.CarriedOf(before);
+            list.Carried = DeathLootCapture.LostOf(before);
             list.Coins = before.Currency;
         }
 

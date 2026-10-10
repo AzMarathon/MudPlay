@@ -333,15 +333,17 @@ public sealed partial class DeathRecoveryManagerTests
     [Fact]
     public void Paradigm_ArmedGrab_SurvivesADisconnect()
     {
-        // A Paradigm walk-in arms the corpse grab after the arrival's survey has
-        // printed, so armed-and-waiting is its normal state. The room isn't entered
-        // again after logging back in, so nothing would arm it a second time.
+        // A Paradigm walk-in into the dark reads nothing and leaves the corpse grab
+        // armed. The room isn't entered again after logging back in, so nothing
+        // would arm it a second time.
         using GraphHarness h = new();   // Paradigm
         Die(h, new[] { new EquippedItem("rusty dagger", "Weapon Hand") }, new[] { "torch" });
         h.Recovery.AutoRecover = true;
-        h.FeedSurvey("corpse of Ermias");
-        h.EnterGates();
+        h.Tracker.NoteRoomObserved(Obs3());
+        h.Tracker.NoteMoveSent(Direction.S);
+        h.Tracker.NoteDarkRoomEntered();
         Assert.Empty(h.Sent);
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
 
         h.Recovery.NotifyDisconnected();
         h.FeedSurvey("corpse of Ermias");   // the room display after logging back in
