@@ -132,6 +132,12 @@ public sealed class RemoteCommandManager : IDisposable
     // gate stands.
     public Func<string, bool>? ForgetEligibility { get; set; }
 
+    // Follower-side eligibility hook for `@ptrain`: the leader whose party train
+    // trip we set out on. A follower turned away at an exit on the way is out of
+    // that leader's party on our own side too, and still has to be told the trip
+    // is over. Consulted ONLY for @ptrain (see IsAuthorised).
+    public Func<string, bool>? PartyTrainEligibility { get; set; }
+
     // Drop @-commands arriving on the Telepath channel.
     public bool DisableTelepathChannel { get; set; }
 
@@ -781,6 +787,8 @@ public sealed class RemoteCommandManager : IDisposable
             // for a recently-partied member or a remembered leader.
             if (command.Equals("@forget", StringComparison.OrdinalIgnoreCase))
                 return ForgetEligibility?.Invoke(sender) ?? false;
+            if (command.Equals("@ptrain", StringComparison.OrdinalIgnoreCase))
+                return PartyTrainEligibility?.Invoke(sender) ?? false;
             return false;
         }
 
