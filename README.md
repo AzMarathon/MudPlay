@@ -1,12 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.162.0**
+> **Version 3.164.0**
 > - Auto-All is a true master switch: off, nothing automatic acts (engines, remote commands, triggers, events, polls, position fixes, holds, party signals, trips)
 > - Only the Auto-All switch counts as "all autos off"; unticking the toggles one by one does not
-> - `@auto-all` is the one remote command followed while it is off; the others are ignored with no reply
-> - `@auto-all off` engages the switch even with every toggle already off; `@auto-all on` with nothing remembered turns on the base modes
-> - A walk, loop or Auto-Lair started by hand with the switch off is refused with a terminal notice
+> - `@auto-all` is the one remote command followed while it is off, by chat or the local API; the others are ignored with no reply
+> - `@auto-all off` engages the switch even with every toggle already off
+> - Switching it on gives back exactly what was ticked when it went off; base modes only when nothing is remembered
+> - A walk, loop or Auto-Lair started or resumed by hand with the switch off is refused with a terminal notice
+> - Going off, a `@wait` already sent is released with `@ok`; coming on, holds, a downed ally's rescue and a pending `@comeback` are picked up again
 > - Low-HP hang-up now needs Auto-Rest on (it used to run under Auto-Heal alone too)
 > - "Allow hangup in all-off mode" now means the master switch: off, it lets every automatic hang-up through (low HP, `@panic`, PvP, Hangup monster)
 > - Nightly-cleanup log-off does not start while the switch is off

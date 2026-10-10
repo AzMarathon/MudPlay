@@ -243,6 +243,31 @@ public sealed class HangupPenaltyTests : IDisposable
             HangupPenaltyNotice.Describe(Penalised(pve: false)));
     }
 
+    // A realm set as penalising every hang-up says so in both places; the box
+    // means nothing without the PvE side it takes its figures from.
+    [Fact]
+    public void ARealmThatPenalisesEveryHangUp_SaysSo()
+    {
+        RealmProfile every = Penalised(pve: true);
+        every.HangupOutsideFightPenaltyEnabled = true;
+
+        Assert.Equal(
+            "PvP: 25–50% of max HP and up to 3 items; PvE: 10–20% of max HP; outside a fight too, as PvE",
+            HangupPenaltyNotice.Describe(every));
+        Assert.Equal(
+            "This realm penalises every hang-up: in PvP 25–50% of max HP and up to 3 items, otherwise 10–20% of max HP.",
+            HangupPenaltyNotice.ForHangup(every, pvp: false, inCombat: false));
+
+        RealmProfile pvpOnly = Penalised(pve: false);
+        pvpOnly.HangupOutsideFightPenaltyEnabled = true;
+        Assert.Equal(
+            "PvP: 25–50% of max HP and up to 3 items; PvE: not penalised",
+            HangupPenaltyNotice.Describe(pvpOnly));
+        Assert.Equal(
+            "This realm penalises a hang-up in PvP only: 25–50% of max HP and up to 3 items.",
+            HangupPenaltyNotice.ForHangup(pvpOnly, pvp: false, inCombat: false));
+    }
+
     // ----- Settings → BBS staging --------------------------------------
 
     // The realm fields are staged per board as they're edited: an edit on one
@@ -270,6 +295,7 @@ public sealed class HangupPenaltyTests : IDisposable
         vm.HangupPveHpFromPercent = 5;
         vm.HangupPveHpToPercent = 15;
         vm.HangupPveItemsDropped = 1;
+        vm.HangupOutsideFightPenaltyEnabled = true;
         Assert.True(vm.IsDirty);
 
         vm.SelectedBbsName = b;
@@ -293,9 +319,11 @@ public sealed class HangupPenaltyTests : IDisposable
         Assert.Equal(5, savedA.HangupPveHpFromPercent);
         Assert.Equal(15, savedA.HangupPveHpToPercent);
         Assert.Equal(1, savedA.HangupPveItemsDropped);
+        Assert.True(savedA.HangupOutsideFightPenaltyEnabled);
 
         RealmProfile savedB = new BbsProfileStore().Get(b)!.Realms[0];
         Assert.False(savedB.HangupPenaltyEnabled);
+        Assert.False(savedB.HangupOutsideFightPenaltyEnabled);
         Assert.Equal(25, savedB.HangupPvpHpFromPercent);
     }
 

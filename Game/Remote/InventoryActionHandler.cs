@@ -198,18 +198,28 @@ public sealed class InventoryActionHandler : IDisposable
     public void CancelPaced() => _pacer?.Cancel();
 
     // Item commands from elsewhere (the Chest Offload tab's discards, the
-    // auto-discard engine's held hides on entering a room) that should share the
-    // sweeps' pacing.
-    public void SendPaced(IReadOnlyList<string> commands)
+    // auto-discard engine's piles and its held hides on entering a room) that
+    // should share the sweeps' pacing. A sender that may want its waiting commands
+    // back names itself as their owner (RecallPaced), and may ask to be consulted
+    // just before each one goes (`mayGo`; see BulkCommandPacer.Enqueue).
+    public void SendPaced(IReadOnlyList<string> commands, object? owner = null, Func<string, bool>? mayGo = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
-        Dispatch(commands);
+        Dispatch(commands, owner, mayGo);
     }
 
-    private void Dispatch(IReadOnlyList<string> commands)
+    // Take back the owner's commands still waiting in the pacer that `take` picks.
+    // Returns the ones taken; without a pacer everything has gone out already.
+    public IReadOnlyList<string> RecallPaced(object owner, Func<string, bool> take)
+        => _pacer?.CancelOwned(owner, take) ?? Array.Empty<string>();
+
+    private void Dispatch(IReadOnlyList<string> commands, object? owner = null, Func<string, bool>? mayGo = null)
     {
-        if (_pacer is { } pacer) pacer.Enqueue(commands);
-        else foreach (string command in commands) Send(command);
+        if (_pacer is { } pacer) pacer.Enqueue(commands, owner, mayGo);
+        else foreach (string command in commands)
+        {
+            if (mayGo is null || mayGo(command)) Send(command);
+        }
     }
 
     // What a drop-all / hide-all sweep takes. Unworn is the original @drop-all: the

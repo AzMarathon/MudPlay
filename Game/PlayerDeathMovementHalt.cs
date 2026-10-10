@@ -74,6 +74,7 @@ public sealed class PlayerDeathMovementHalt : IDisposable
         _resyncTimer.Tick += (_, _) => FireGraveyardResync();
 
         _tracker.PlayerDeathObserved += OnPlayerDied;
+        _tracker.PlayerDeathInferred += StopEngines;
     }
 
     // Bind the wire sender used for the post-death graveyard-resync CR. Until set,
@@ -96,22 +97,31 @@ public sealed class PlayerDeathMovementHalt : IDisposable
 
     private void OnPlayerDied()
     {
-        // Clean stop, same as the Navigation Stop button: full-stop every engine
-        // (which clears each one's retained destination) and clear the user gate so
-        // nothing is left paused. Clearing the gate AFTER the stop covers the case
-        // where the player was manually paused when they died — we don't want a
-        // stale pause outliving the death and blocking their next move. Nothing
-        // survives to re-drive us back into the room we died in, and a manual or
-        // remote nav action afterward runs freely.
-        _stopEngines?.Invoke();
-        _coordinator.ClearGate(MovementCoordinator.UserGate, AsserterName);
-        _log?.Info(DeathLineWatcher.LogCategory,
-            "Movement stopped after death — engines and destinations cleared.");
+        StopEngines();
 
         // Arm the graveyard-resync fallback: if the respawn room display hasn't
         // landed us within ResyncDelay, force it with a CR (see the field comment).
         _resyncTimer.Stop();
         _resyncTimer.Start();
+    }
+
+    // Clean stop, same as the Navigation Stop button: full-stop every engine (which
+    // clears each one's retained destination) and clear the user gate so nothing is
+    // left paused. Clearing the gate AFTER the stop covers the case where the player
+    // was manually paused when they died — we don't want a stale pause outliving the
+    // death and blocking their next move. Nothing survives to re-drive us back into
+    // the room we died in, and a manual or remote nav action afterward runs freely.
+    //
+    // A death found out on re-entry (PlayerDeathInferred) gets this and no more: a
+    // loop the reconnect restarted would otherwise walk a stripped character out of
+    // the temple, and the room it stands in has already been read, so there is no
+    // respawn display to hurry along.
+    private void StopEngines()
+    {
+        _stopEngines?.Invoke();
+        _coordinator.ClearGate(MovementCoordinator.UserGate, AsserterName);
+        _log?.Info(DeathLineWatcher.LogCategory,
+            "Movement stopped after death — engines and destinations cleared.");
     }
 
     // The master switch (true = off).
@@ -145,5 +155,6 @@ public sealed class PlayerDeathMovementHalt : IDisposable
         _disposed = true;
         _resyncTimer.Stop();
         _tracker.PlayerDeathObserved -= OnPlayerDied;
+        _tracker.PlayerDeathInferred -= StopEngines;
     }
 }

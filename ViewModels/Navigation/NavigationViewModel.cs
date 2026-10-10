@@ -108,6 +108,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.DeathRecovery.PropertyChanged += OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved += RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved += ClearNavIntentOnDeath;
+        // A death found out on re-entry: the skull lands through the Records change.
+        _services.RoomTracker.PlayerDeathInferred += ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged += OnConditionsChanged;
         _services.RoomGraph.GraphReloaded += OnGraphReloaded;
         _services.TBInfo.StoreReloaded    += RefreshTeleportRooms;
@@ -291,6 +293,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         _services.DeathRecovery.PropertyChanged -= OnDeathRecoveryChanged;
         _services.RoomTracker.PlayerDeathObserved -= RefreshDeathRooms;
         _services.RoomTracker.PlayerDeathObserved -= ClearNavIntentOnDeath;
+        _services.RoomTracker.PlayerDeathInferred -= ClearNavIntentOnDeath;
         _services.Conditions.PropertyChanged -= OnConditionsChanged;
         _services.RoomGraph.GraphReloaded -= OnGraphReloaded;
         _services.TBInfo.StoreReloaded    -= RefreshTeleportRooms;
@@ -4310,7 +4313,8 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
 
     // A route between two rooms as an inclusive RoomKey polyline. Tries the
     // gate-respecting BFS first, then re-plans with acquirable gates suspended so a
-    // route through an item / hazard gate still draws (the same line Go would take).
+    // route through an item / hazard gate still draws (the same line Go would take),
+    // but never through rooms nothing protects from, which no walk does by itself.
     // Null when no route exists either way, or the ends coincide.
     // onTheJourney: the line is a leg of the walk under way, so the gates its route
     // goes round stay closed as they will for the walker, or the onward line would
@@ -4321,7 +4325,7 @@ public sealed partial class NavigationViewModel : ObservableObject, IDisposable
         IReadOnlyList<Direction>? path = _services.Bfs.FindPath(src, dest, _services.Movement);
         if (path is null || path.Count == 0)
         {
-            using (onTheJourney ? _services.SuspendGatesAsTheJourneyDoes() : _services.Movement.SuspendAcquirableGates())
+            using (onTheJourney ? _services.SuspendGatesAsTheJourneyDoes() : _services.Movement.SuspendAcquirableGatesButUnprotectableHazards())
                 path = _services.Bfs.FindPath(src, dest, _services.Movement);
             if (path is null || path.Count == 0) return null;
         }

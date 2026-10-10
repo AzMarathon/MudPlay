@@ -290,6 +290,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // before the graveyard room display floods scrollback and pushes the
         // fatal scene out of the "How did I Die?" window.
         _roomTracker.PlayerDeathObserved += OnDeathObserved;
+        _roomTracker.PlayerDeathInferred += OnDeathInferred;
+        _roomTracker.UnwitnessedDeathRecorded += OnUnwitnessedDeathRecorded;
         _roomTracker.MoveBlocked += OnMoveBlocked;
         _profile.ProfileLoaded += OnProfileLoaded;
         _profile.ProfileClosed += OnProfileChanged;
@@ -2717,6 +2719,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         CaptureDeathLog(last);
     }
 
+    // RoomTracker.PlayerDeathInferred: a death worked out at the login. The pieces
+    // held to go back on are on that pile now, as above.
+    private void OnDeathInferred() => _heldEquip.Clear();
+
+    // RoomTracker.UnwitnessedDeathRecorded: a death recorded after the fact, at
+    // the login or later. The grid gets its row. No backscroll is kept for it,
+    // and none of what only the moment of death can tell (CaptureSpillFacts): by
+    // now the terminal shows a login, and the rooms last walked are this
+    // connection's, not the ones that led to where the character died.
+    private void OnUnwitnessedDeathRecorded() => OnPropertyChanged(nameof(Records));
+
     // What only the moment of death can tell a Stock recovery (GAME_MECHANICS
     // "Deathpile — where the items go"): which items the game said were gone for
     // good, and the rooms walked on the way here, which the engine falls back to,
@@ -2827,6 +2840,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _deathWatcher.PlayerDied -= OnPlayerDied;
         _roomTracker.StateChanged -= OnRoomChanged;
         _roomTracker.PlayerDeathObserved -= OnDeathObserved;
+        _roomTracker.PlayerDeathInferred -= OnDeathInferred;
+        _roomTracker.UnwitnessedDeathRecorded -= OnUnwitnessedDeathRecorded;
         _roomTracker.MoveBlocked -= OnMoveBlocked;
         _profile.ProfileLoaded -= OnProfileLoaded;
         _profile.ProfileClosed -= OnProfileChanged;

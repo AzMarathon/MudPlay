@@ -77,6 +77,10 @@ public sealed partial class StatParser : IDisposable
     public bool LastCaptureReadStealth { get; private set; }
     private bool _stealthReadThisArm;
     public bool LastCaptureReadPool { get; private set; }
+    // The last screen carried the Lives figure (a `stat`; an `exp` line doesn't), so
+    // the count is the game's own as of now and not one remembered from before.
+    public bool LastCaptureReadLives { get; private set; }
+    private bool _livesReadThisArm;
 
     // The screen being read: which of the six stats it has shown, which of those it
     // marked modified, which marks could be read at all, and the effect lines under
@@ -395,7 +399,7 @@ public sealed partial class StatParser : IDisposable
         _windowOpenedAt = NowProvider();
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
-        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
+        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = _livesReadThisArm = false;
         ResetArmMarks();
         _home = SynchronizationContext.Current;   // (re)capture the pipeline thread for the settle-close
         _settleSession++;                          // invalidate any prior window's pending settle timer
@@ -420,7 +424,7 @@ public sealed partial class StatParser : IDisposable
         _windowOpenedAt = NowProvider();
         _capturedThisArm = false;
         _fieldsCapturedThisArm = 0;
-        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
+        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = _livesReadThisArm = false;
         ResetArmMarks();
         _home = SynchronizationContext.Current;
         _settleSession++;
@@ -574,7 +578,7 @@ public sealed partial class StatParser : IDisposable
         TryString(text, ClassRx(), "Class", v => Stats.Class = v);
 
         // Paired N/M fields.
-        TryPair(text, LivesCpRx(),     "Lives/CP",     (a, b) => { Stats.Lives = a; Stats.Cp = b; BeginScreenMarks(); });
+        TryPair(text, LivesCpRx(),     "Lives/CP",     (a, b) => { Stats.Lives = a; Stats.Cp = b; _livesReadThisArm = true; BeginScreenMarks(); });
         TryPair(text, HitsRx(),        "Hits",         (a, b) => { Stats.Hits = a; Stats.MaxHits = b; _hitsReadThisArm = true; });
         TryPair(text, KaiRx(),         "Kai",          (a, b) => { Stats.Kai  = a; Stats.MaxKai  = b; _poolReadThisArm = true; });
         TryPair(text, ManaRx(),        "Mana",         (a, b) => { Stats.Mana = a; Stats.MaxMana = b; _poolReadThisArm = true; });
@@ -938,7 +942,8 @@ public sealed partial class StatParser : IDisposable
         LastCaptureReadHits = _hitsReadThisArm;
         LastCaptureReadStealth = _stealthReadThisArm;
         LastCaptureReadPool = _poolReadThisArm;
-        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = false;
+        LastCaptureReadLives = _livesReadThisArm;
+        _hitsReadThisArm = _poolReadThisArm = _stealthReadThisArm = _livesReadThisArm = false;
         PublishScreenMarks();
         _settleSession++;   // cancel any settle timer still pending for this window
         // Fire ScreenParsed only when something actually changed —

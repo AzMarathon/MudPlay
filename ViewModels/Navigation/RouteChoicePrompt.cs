@@ -207,6 +207,22 @@ public static class RouteChoicePrompt
                     + $" ({bossRoom.Map}/{bossRoom.Room})";
                 return await RunPickerAsync(services, destination, src,
                     bossChoice with { BossRoomLabel = bossLabel }, previewSink, calcVm, calcDialogTask, startMode);
+            case RoutePlanKind.ItemGate when plan.Choice is { UnprotectedRoomNames.Count: > 0 } crossing
+                && services.Movement.TeleportsOnArrival(destination):
+                // The card that crosses the lake's teleporting rooms to a room that
+                // teleports on is for a walk the user starts. One the client starts on
+                // their behalf takes the plain walk, which finds no route and says why.
+                if (askOnlyOverAvoids)
+                {
+                    calcVm?.Close();
+                    CommitWalk(services, destination, gated: false, stopForBossRooms: stopsForBossRooms);
+                    return true;
+                }
+                // Named here, on the UI thread: the plan may have run off it.
+                string? goalSpell = services.RoomGraph.GetRoom(destination)?.Spell is > 0 and int goal
+                    ? services.GameData.FindNameByNumber("Spells", goal) ?? $"spell {goal}" : null;
+                return await RunPickerAsync(services, destination, src,
+                    crossing with { CrossingGoalSpell = goalSpell }, previewSink, calcVm, calcDialogTask, startMode);
             case RoutePlanKind.AutoObtainSole:
                 calcVm?.Close();
                 ApplyStartMode(services, startMode);
@@ -397,7 +413,8 @@ public static class RouteChoicePrompt
         }
 
         static string Summarize(IReadOnlyList<RouteRequirement> reqs) => string.Join(", ", reqs.Select(r =>
-            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"));
+            $"{r.Kind}[{string.Join("/", r.ItemIds)}]{(r.Carried ? " (carried)" : "")}"
+            + (r.NoProtection ? " (no protection: its holders are teleported too)" : "")));
         string reqSummary = Summarize(choice.Requirements);
         if (choice.GatedWalk is not null)
             avoidAltNote += " (the gates are on a lever detour, not the route itself)";
@@ -405,6 +422,18 @@ public static class RouteChoicePrompt
         // cards offered rather than one route and a saving.
         if (!choice.HasFreeRoute)
             reqSummary += $" over {choice.GatedStepCount} step(s)";
+        // How many hazard rooms the route walks into: the first thing asked of a
+        // route that goes near a lake.
+        if (RouteChoicePlanner.UncounteredHazardRooms(services.Movement, choice.GatedPath) is { Count: > 0 } crossed)
+            reqSummary += $", crossing {crossed.Count} hazard room(s)"
+                + (choice.UnprotectedRoomNames is { Count: > 0 } unprotected
+                    ? $", {unprotected.Count} of them teleporting room(s) "
+                      + $"({RouteChoicePlanner.ListAvoided(unprotected)}): "
+                      + (services.Movement.TeleportsOnArrival(destination)
+                          ? "the crossing to a room that teleports on, "
+                          : "the only way there, ")
+                      + "offered because the level and the boat it asks are met"
+                    : "");
         if (choice.ClosedGateItems is { Count: > 0 } closed)
             reqSummary += $", going round the gates that need item(s) {string.Join("/", closed)}";
         string shortcutNote = choice.ShortcutItems is { Count: > 0 } sc
@@ -509,7 +538,8 @@ public static class RouteChoicePrompt
         if (crossesHazard)
             foreach (RouteRequirement req in choice.Requirements)
             {
-                if (req.Kind != RouteRequirementKind.HazardProtection) continue;
+                // An item that doesn't stop the room teleporting is not fetched or searched for.
+                if (req.Kind != RouteRequirementKind.HazardProtection || req.NoProtection) continue;
                 foreach (int cid in req.ItemIds)
                     if (!hazardCounterIds.Contains(cid)) hazardCounterIds.Add(cid);
                 // A counter already chosen for an earlier hazard that also appears in
@@ -936,7 +966,10 @@ public static class RouteChoicePrompt
         // Here, not left to the approach walk's own check, so the notice names
         // the loop the user asked for.
         if (services.RefuseStartForMasterSwitch("Loop")) return;
+        // A loop the runner will refuse is handed straight to it, to be refused there
+        // with its reason, instead of walking to the loop first.
         RoomKey? entry = services.RoomTracker.State.CurrentRoom is { } here
+            && services.LoopRunner.RefusalFor(loop) is null
             ? services.LoopRunner.NearestRoomOf(loop, here.Key)
             : null;
         if (entry is not { } loopRoom)

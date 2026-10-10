@@ -113,7 +113,7 @@ public sealed class PvpResponder : IDisposable
 
     // Whether this roster is the PvP response's to answer: the realm has PvP on and
     // an Enemy outside the party is on it. It reads nothing but the roster, so it
-    // can be asked ahead of the response (MonsterHangupWatcher stands down on it)
+    // can be asked ahead of the response (MonsterRelationshipWatcher stands down on it)
     // without using up the response's quiet time. True inside that quiet time too:
     // an Enemy answered a moment ago is still the PvP actions' business.
     public bool IsAnswering(RoomEntitiesObservation obs) => EnemyOn(obs) is not null;

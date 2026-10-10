@@ -2092,6 +2092,14 @@ public sealed class HealthManagerTests
         public void PauseForRecovery(string reason) => PausedReason = reason;
         public void ResumeAfterRecovery(Game.Map.RoomKey k) => ResumedAtRoom = k;
         public void AbortFromRecoveryFailure(string _) { }
+
+        // Whether the resume after a flee said to carry on from where it landed.
+        public bool? CarriedOn { get; private set; }
+        public void ResumeAfterFlee(Game.Map.RoomKey k, bool carryOnFromHere = false)
+        {
+            CarriedOn = carryOnFromHere;
+            ResumedAtRoom = k;
+        }
     }
 
     private sealed class FleeHarness : IDisposable
@@ -2107,6 +2115,9 @@ public sealed class HealthManagerTests
         public Game.Map.Direction? LastSent { get; set; } = Game.Map.Direction.N;
         public bool HostilesPresent { get; set; }
         public bool HostileInRoom { get; set; } = true;
+
+        // Auto-Heal or Auto-Rest on: the health engine runs.
+        public bool Enabled { get; set; } = true;
 
         // When true, the flee's deferred reaction is queued (into Posted) instead
         // of running inline — lets a test simulate the room clearing between the
@@ -2127,7 +2138,7 @@ public sealed class HealthManagerTests
             Coordinator = new MovementCoordinator(Log);
             Health = new HealthManager(State, Coordinator,
                 readSettings: () => HealthSettings,
-                isEnabled: () => true,
+                isEnabled: () => Enabled,
                 readHangupCommand: () => string.Empty,
                 getActiveMovementEngine: () => Engine,
                 getLastSentDirection: () => LastSent,
@@ -2505,6 +2516,137 @@ public sealed class HealthManagerTests
             h.Engine!.SentBacktrackMoves);
     }
 
+    // Crystal Lake's teleporting rooms are closed to every route; a flee builds its own
+    // retreat, so it is told which rooms they are. WalkStartFlee's map: 8 - 9 - 10 - 11,
+    // with 12 north of 10.
+    [Fact]
+    public void Flee_Backward_StopsShortOfARoomClosedToRoutes()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Combat.RunDistance = 2;
+        h.Health.IsClosedToRoutes = k => k.Room == 10;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 8));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        Assert.Equal(new[] { Game.Map.Direction.E }, h.Engine!.SentBacktrackMoves);   // 9, and not on into 10
+
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        Assert.Single(h.Engine.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Backward_TrailBackClosed_TakesAnotherOpenExit()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 10;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Equal(new[] { Game.Map.Direction.W }, h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_AWayOutLeadingIntoAClosedRoom_IsNeverTheAwayFromThePlanPick()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 9;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 10));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        // West, opposite the plan, would be the pick but for 9; north is open.
+        Assert.Equal(new[] { Game.Map.Direction.N }, h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Backward_EveryWayClosed_StartsNoRun()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 10;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 11));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+    }
+
+    [Fact]
+    public void Flee_Forward_StopsShortOfARoomClosedToRoutes()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Forward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 3;
+        h.Engine!.PlannedForward.AddRange(new[]
+        {
+            Game.Map.Direction.E, Game.Map.Direction.E, Game.Map.Direction.E,
+        });
+        h.Health.RoomExits = k => k.Room < 4
+            ? new Dictionary<Game.Map.Direction, Game.Map.RoomKey>
+                { [Game.Map.Direction.E] = new Game.Map.RoomKey(1, k.Room + 1) }
+            : null;
+        h.Health.IsClosedToRoutes = k => k.Room == 3;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 1));
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+        Assert.Single(h.Engine.SentBacktrackMoves);
+
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 2));
+        Assert.Single(h.Engine.SentBacktrackMoves);   // 1 → 2, and not on into 3
+    }
+
+    [Fact]
+    public void Flee_Forward_NextRoomClosed_StartsNoRun()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Forward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 2;
+        h.Engine!.PlannedForward.Add(Game.Map.Direction.E);
+        h.Health.RoomExits = k => new Dictionary<Game.Map.Direction, Game.Map.RoomKey>
+            { [Game.Map.Direction.E] = new Game.Map.RoomKey(1, k.Room + 1) };
+        h.Health.IsClosedToRoutes = k => k.Room == 2;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 1));
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+
+        Assert.Empty(h.Engine.SentBacktrackMoves);
+    }
+
+    // Standing in a closed room already, the first step out is the character's to take.
+    [Fact]
+    public void Flee_FromInsideAClosedRoom_StillLeaves()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 9;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Equal(new[] { Game.Map.Direction.E }, h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Backward_WithoutTheProbe_RunsEveryRoomBack()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Combat.RunDistance = 2;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 8));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+
+        Assert.Equal(new[] { Game.Map.Direction.E, Game.Map.Direction.E }, h.Engine!.SentBacktrackMoves);
+    }
+
     private static FleeHarness HitAndRunFlee()
     {
         FleeHarness h = new();
@@ -2678,6 +2820,557 @@ public sealed class HealthManagerTests
         using FleeHarness h = new() { Engine = null };
 
         Assert.False(h.Health.FleeFromPlayer("Bob attacked us", rooms: 5, stayAway: TimeSpan.FromSeconds(30)));
+    }
+
+    // ----- a Flee-relationship monster in the room ----------------------
+    //
+    // FleeFromMonster is the run-if-below retreat started by a sight, not by HP: the
+    // same route, distance, break and resume, at full health and outside a fight.
+
+    private const string FleeSight = "ooze (#63) is here, relationship Flee";
+
+    [Fact]
+    public void FleeFromMonster_AtFullHealth_OutsideAFight_RunsAndThenResumes()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.HostileInRoom = false;                                     // a Flee monster is not counted a hostile
+        int started = 0;
+        h.Health.FleeStarted += () => started++;
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Equal(new[] { Game.Map.Direction.S }, h.Engine!.SentBacktrackMoves);
+        Assert.Contains("relationship Flee", h.Engine.PausedReason);
+        Assert.Equal(1, started);
+        Assert.True(h.Health.IsFleeing);
+        Assert.False(h.Health.IsGateFleeing);                        // not a low-HP run
+        Assert.Null(h.Engine.ResumedAtRoom);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));      // landed
+        Assert.Equal(new Game.Map.RoomKey(1, 49), h.Engine.ResumedAtRoom);
+        Assert.False(h.Health.IsFleeing);
+    }
+
+    [Fact]
+    public void FleeFromMonster_RunsTheCombatTabsDistance_AndBreaksAFightUnderWay()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.RunDistance = 2;
+        h.Combat.BreakBeforeFleeing = true;
+        h.Health.IsServerEngaged = () => true;
+        h.ReversePath = (_, _) => new[]
+        {
+            Game.Map.Direction.S, Game.Map.Direction.W, Game.Map.Direction.U,
+        };
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Equal(new[] { "break" }, h.SentLines);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+        Assert.Equal(new[] { Game.Map.Direction.S, Game.Map.Direction.W }, h.Engine!.SentBacktrackMoves);
+        Assert.Null(h.Engine.ResumedAtRoom);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 48));
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+        Assert.Equal(new Game.Map.RoomKey(1, 48), h.Engine.ResumedAtRoom);
+    }
+
+    // With Go backwards if running unticked the run goes on along the engine's own
+    // route, out of the monster's room on the far side, and the engine is picked
+    // up again where it lands.
+    [Fact]
+    public void FleeFromMonster_GoBackwardsUnticked_RunsOnAlongTheRoute()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Forward;
+        h.Combat.RunDistance = 2;
+        h.Engine!.PlannedForward.AddRange(new[]
+        {
+            Game.Map.Direction.E, Game.Map.Direction.N, Game.Map.Direction.W,
+        });
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Equal(new[] { Game.Map.Direction.E }, h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));
+        Assert.Equal(new[] { Game.Map.Direction.E, Game.Map.Direction.N }, h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 52));
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+        Assert.Equal(new Game.Map.RoomKey(1, 52), h.Engine.ResumedAtRoom);
+    }
+
+    // A low-HP run has landed and waits for HP with the engine still paused. A Flee
+    // monster seen there is run from: another leg, on the same engine.
+    [Fact]
+    public void FleeFromMonster_AfterALowHpRunHasLanded_RunsAgainFromThere()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.State.InCombat = true;
+        h.State.Hp = 30;                                             // under the 20% run trigger
+        Assert.Single(h.Engine!.SentBacktrackMoves);
+        h.HostileInRoom = false;                                     // nothing followed
+        h.State.InCombat = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));       // landed, still low
+        Assert.Null(h.Engine.ResumedAtRoom);
+        Assert.False(h.Health.IsFleeInFlight);
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+        Assert.True(h.Health.IsFleeInFlight);
+    }
+
+    // The game refuses the run's first move: the retreat stops where it stands and
+    // the run is no longer in flight, which is what the monster watch asks before
+    // it lets self-defence fight the monster back.
+    [Fact]
+    public void FleeFromMonster_FirstMoveRefused_TheRunIsOver()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.True(h.Health.IsFleeInFlight);
+
+        h.Health.NoteMoveBlocked();
+
+        Assert.False(h.Health.IsFleeInFlight);
+        Assert.Single(h.Engine!.SentBacktrackMoves);                 // and no second run is chained
+    }
+
+    // A player's flee has landed and is staying away, still holding its own run
+    // length. A Flee monster seen there is run from by the Combat tab's distance,
+    // and the stay-away stands.
+    [Fact]
+    public void FleeFromMonster_DuringAPlayersStayAway_RunsTheCombatTabsDistance()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Clock = new DateTimeOffset(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        h.ReversePath = (_, _) => new[]
+        {
+            Game.Map.Direction.S, Game.Map.Direction.W, Game.Map.Direction.U,
+        };
+        h.Health.FleeFromPlayer("Bob attacked us", rooms: 2, stayAway: TimeSpan.FromSeconds(60));
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 49));
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 48));       // landed; staying away
+        Assert.Equal(2, h.Engine!.SentBacktrackMoves.Count);
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Equal(3, h.Engine.SentBacktrackMoves.Count);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 47));       // RunDistance 1: landed
+        Assert.Equal(3, h.Engine.SentBacktrackMoves.Count);
+        Assert.Null(h.Engine.ResumedAtRoom);                         // the stay-away is not over
+    }
+
+    // The game refused the run's way out. A fresh sighting in the same room must
+    // not start the same refused run again (a `break` and a move into the wall each
+    // time): the refused way is remembered until the room is left.
+    [Fact]
+    public void FleeFromMonster_AWayOutRefused_IsNotTriedAgainFromThatRoom_UntilItIsLeft()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.BreakBeforeFleeing = true;
+        h.Health.IsServerEngaged = () => true;
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        h.Health.NoteMoveBlocked();                                  // refused; the engine is handed back
+        Assert.NotNull(h.Engine!.ResumedAtRoom);
+        int breaks = h.SentLines.Count(l => l == "break");
+
+        Assert.Equal(FleeOutcome.NoRoute, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Single(h.Engine.SentBacktrackMoves);
+        Assert.Equal(breaks, h.SentLines.Count(l => l == "break"));
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));       // walked on, and came back
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+    }
+
+    // The run waited for a move in flight to land, and the user paused the walk or
+    // loop in the meantime: a paused one is idle for this flee, at the landing as
+    // at the sighting.
+    [Fact]
+    public void FleeFromMonster_HeldForAMove_IsDroppedIfTheUserPausedMeanwhile()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        bool pending = true, userPaused = false;
+        h.Health.IsMovePending = () => pending;
+        h.Health.IsNavigationPausedByUser = () => userPaused;
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        userPaused = true;
+        pending = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+        Assert.Null(h.Engine.PausedReason);
+    }
+
+    // ----- a flee cut short ------------------------------------------------
+    //
+    // "if we died, the flee needs to end" (user, 2026-10-10). A death, a profile
+    // load and a drop of the line all end it at once: left standing it read as in
+    // flight until the next move, and that move sent its next queued step.
+
+    private static FleeHarness RunWithTwoRoomsQueued()
+    {
+        FleeHarness h = HitAndRunFlee();
+        h.Combat.RunDistance = 3;
+        h.ReversePath = (_, _) => new[]
+        {
+            Game.Map.Direction.S, Game.Map.Direction.W, Game.Map.Direction.U,
+        };
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Single(h.Engine!.SentBacktrackMoves);                 // S sent; W and U queued
+        Assert.True(h.Health.IsFleeInFlight);
+        return h;
+    }
+
+    [Theory]
+    [InlineData("died")]
+    [InlineData("another profile was loaded")]
+    [InlineData("the profile was closed")]
+    public void AFleeCutShort_EndsAtOnce_AndTheNextRoomChangeSendsNothing(string why)
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        List<LogEntry> logged = new();
+        h.Log.EntryAdded += logged.Add;
+
+        Assert.True(h.Health.EndFlee(why));
+
+        Assert.False(h.Health.IsFleeInFlight);                       // combat engages again
+        Assert.False(h.Health.IsFleeing);
+        Assert.Contains(logged, e => e.Severity == LogSeverity.Info && e.Message.Contains($"flee ended — {why}"));
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 7));        // the graveyard, or the next character's room
+        h.Health.Evaluate();
+
+        Assert.Single(h.Engine!.SentBacktrackMoves);                 // no queued step went out
+        Assert.Null(h.Engine.ResumedAtRoom);                         // and nothing was resumed
+        // A new sighting is a new run, not one "already under way".
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+    }
+
+    [Fact]
+    public void EndFlee_WithNoFleeOn_SaysSo()
+    {
+        using FleeHarness h = HitAndRunFlee();
+
+        Assert.False(h.Health.EndFlee("died"));
+    }
+
+    // A drop of the line ends the run too, but a walk lives through it: the one the
+    // flee had paused is handed back, at the first game prompt of the next stay and
+    // not before (the prompt data is as it was, so Evaluate alone would resume it
+    // offline).
+    [Fact]
+    public void AFleeCutByADisconnect_HandsTheWalkBackAtTheFirstGamePrompt()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+
+        Assert.True(h.Health.EndFlee("disconnected", handBackLiveEngine: true));
+
+        Assert.False(h.Health.IsFleeInFlight);
+        h.Health.Evaluate();                                         // offline: a timer, a party event
+        h.State.Hp = 199;
+        Assert.Null(h.Engine!.ResumedAtRoom);
+        Assert.Single(h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteInGamePrompt();
+
+        Assert.Equal(new Game.Map.RoomKey(1, 50), h.Engine.ResumedAtRoom);
+        Assert.Single(h.Engine.SentBacktrackMoves);                  // the queued steps are gone
+        Assert.False(h.Health.IsFleeing);
+    }
+
+    // The engine the flee paused is no longer the one running (the loop is stopped
+    // by the disconnect and restarts by its own reconnect resume): nothing is kept.
+    [Fact]
+    public void AFleeCutByADisconnect_WithItsEngineStopped_ResumesNothing()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        FakeFleeEngine paused = h.Engine!;
+        h.Engine = null;
+
+        Assert.True(h.Health.EndFlee("disconnected", handBackLiveEngine: true));
+        h.Health.NoteInGamePrompt();
+
+        Assert.False(h.Health.IsFleeing);
+        Assert.Null(paused.ResumedAtRoom);
+    }
+
+    // A death after the drop ends the hand-back as well.
+    [Fact]
+    public void ADeathAfterTheDisconnect_DropsTheHandBack()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        h.Health.EndFlee("disconnected", handBackLiveEngine: true);
+
+        Assert.True(h.Health.EndFlee("died"));
+        h.Health.NoteInGamePrompt();
+
+        Assert.Null(h.Engine!.ResumedAtRoom);
+    }
+
+    // The toolbar Stop ends the walk or loop without telling this class. The first
+    // move of the retreat then lands with a step still queued: it is not sent
+    // through a stopped engine, and the flee is over rather than left in flight (and
+    // combat declining every engage) until enough rooms are crossed to drain it.
+    [Theory]
+    [InlineData(false)]   // nothing is running
+    [InlineData(true)]    // another engine is
+    public void AFlee_WhoseEngineWasStopped_EndsAtTheNextRoomChange_AndSendsNothing(bool anotherEngineRuns)
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        FakeFleeEngine stopped = h.Engine!;
+        h.Engine = anotherEngineRuns ? new FakeFleeEngine() : null;
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));       // the first move landed
+
+        Assert.Single(stopped.SentBacktrackMoves);                   // the queued step stays unsent
+        Assert.False(h.Health.IsFleeInFlight);
+        Assert.False(h.Health.IsFleeing);
+        Assert.Null(stopped.ResumedAtRoom);
+        if (anotherEngineRuns) Assert.Empty(h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void AFlee_WhoseEngineIsStillRunning_SendsItsNextQueuedStep()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));
+
+        Assert.Equal(2, h.Engine!.SentBacktrackMoves.Count);
+        Assert.True(h.Health.IsFleeInFlight);
+    }
+
+    // A profile load or close takes the character's walk or loop with it: the engine
+    // the flee had paused is stopped, not left paused for good.
+    [Fact]
+    public void AFleeCutByAProfileChange_StopsTheEngineItHadPaused()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        List<(Game.Map.IRecoverableEngine Engine, string Why)> stopped = new();
+        h.Health.StopMovementEngine = (engine, why) => stopped.Add((engine, why));
+
+        Assert.True(h.Health.EndFlee("another profile was loaded", stopItsEngine: true));
+
+        Assert.Equal((h.Engine!, "another profile was loaded"), Assert.Single(stopped));
+        Assert.False(h.Health.IsFleeing);
+    }
+
+    [Fact]
+    public void AFleeCutByADeath_LeavesStoppingTheEngineToTheDeathHalt()
+    {
+        using FleeHarness h = RunWithTwoRoomsQueued();
+        int stopped = 0;
+        h.Health.StopMovementEngine = (_, _) => stopped++;
+
+        Assert.True(h.Health.EndFlee("died"));
+
+        Assert.Equal(0, stopped);
+    }
+
+    // Which runs tell the engine to carry on from where they landed (user,
+    // 2026-10-10): the ones that ran forward to get away from something. A
+    // hit-and-run or a failed backstab's run comes back for the monster, a player's
+    // is walked back after its stay-away, and nothing changes when running back.
+    [Theory]
+    [InlineData("monster", true, true)]
+    [InlineData("low-hp", true, true)]
+    [InlineData("hit-and-run", true, false)]
+    [InlineData("backstab", true, false)]
+    [InlineData("player", true, false)]
+    [InlineData("monster", false, false)]
+    [InlineData("low-hp", false, false)]
+    public void AfterARun_TheEngineIsToldWhetherToCarryOn(string run, bool forward, bool carriesOn)
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.RunDirection = forward ? Models.Profile.RunDirection.Forward : Models.Profile.RunDirection.Backward;
+        h.Engine!.PlannedForward.Add(Game.Map.Direction.E);
+
+        switch (run)
+        {
+            case "monster": h.Health.FleeFromMonster(FleeSight, () => true); break;
+            case "hit-and-run": h.Health.BackstabLanded(runNow: true); break;
+            case "backstab": h.Health.RunFromBackstabFailure(); break;
+            case "player": h.Health.FleeFromPlayer("Bob attacked us", rooms: 1, stayAway: TimeSpan.Zero); break;
+            default:
+                h.State.InCombat = true;
+                h.State.Hp = 30;                                     // under the 20% run trigger
+                break;
+        }
+        Assert.Single(h.Engine.SentBacktrackMoves);
+
+        h.HostileInRoom = false;
+        h.State.InCombat = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));       // landed
+        h.State.Hp = 200;                                            // and recovered
+
+        Assert.Equal(new Game.Map.RoomKey(1, 51), h.Engine.ResumedAtRoom);
+        Assert.Equal(carriesOn, h.Engine.CarriedOn);
+    }
+
+    // The run-if-below flee's own gate: with Auto-Heal and Auto-Rest both off the
+    // engine that runs every flee is off. There is no carve-out for it like the
+    // hang-up's all-off option.
+    [Fact]
+    public void FleeFromMonster_AutoHealAndAutoRestOff_SendsNothing()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Enabled = false;
+
+        Assert.Equal(FleeOutcome.EngineOff, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.Null(h.Engine.PausedReason);
+        Assert.Empty(h.Sent);
+    }
+
+    // The low-HP rule: a follower does not run off alone. There is no HP to ask
+    // for, so no @heal goes out either.
+    [Fact]
+    public void FleeFromMonster_APartyFollower_StaysWithTheParty()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        int heals = 0, waits = 0;
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { },
+            requestPartyHeal: () => heals++);
+
+        Assert.Equal(FleeOutcome.Follower, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.Null(h.Engine.PausedReason);
+        Assert.Equal(0, heals);
+        Assert.Equal(0, waits);
+    }
+
+    [Fact]
+    public void FleeFromMonster_NoWalkOrLoopRunning_SaysSo_AndSendsNoHangUp()
+    {
+        using FleeHarness h = new() { Engine = null };
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 200;
+
+        Assert.Equal(FleeOutcome.NoEngine, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void FleeFromMonster_NoWayOut_SaysSo_AndLeavesTheEngineRunning()
+    {
+        using FleeHarness h = new() { LastSent = null };
+        h.Combat.RunDirection = Models.Profile.RunDirection.Backward;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 50));
+        h.State.MaxHp = 200;
+        h.State.HasPromptData = true;
+        h.State.Hp = 200;
+
+        Assert.Equal(FleeOutcome.NoRoute, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.Null(h.Engine.PausedReason);
+        Assert.False(h.Health.IsFleeing);
+        Assert.Empty(h.Sent);
+    }
+
+    // A move sent at 0 HP or below is refused, and a flee that never lands would
+    // hold the engine paused for good.
+    [Fact]
+    public void FleeFromMonster_WhileDown_StartsNothing()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.State.Hp = 0;
+
+        Assert.Equal(FleeOutcome.Down, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+    }
+
+    // A wimpy jump has just gone out for the same roster: a move behind it would be
+    // walked from the wimpy location.
+    [Fact]
+    public void FleeFromMonster_RightAfterAnEscape_SendsNoMove()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Clock = new DateTimeOffset(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
+        h.HealthSettings.SysGotoWimpyInsteadOfHanging = true;
+        h.HealthSettings.SysGotoWimpyLocation = "town";
+        h.Health.SetWimpyGoto(_ => true);
+        Assert.Equal(EscapeOutcome.Jumped, h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup"));
+
+        Assert.Equal(FleeOutcome.Escaping, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+
+        h.Clock += TimeSpan.FromSeconds(3);
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+    }
+
+    [Fact]
+    public void FleeFromMonster_WhileAnotherFleeIsInFlight_SendsNoSecondMove()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Health.RunFromBackstabFailure();
+
+        Assert.Equal(FleeOutcome.AlreadyRunning, h.Health.FleeFromMonster(FleeSight, () => true));
+
+        Assert.Single(h.Engine!.SentBacktrackMoves);
+    }
+
+    // The room display that shows the monster is read before the move into its room
+    // is confirmed, so the run usually has to wait for that move to land. A Flee
+    // monster is not counted a hostile, so the held run asks after the monster and
+    // not after hostiles.
+    [Theory]
+    [InlineData(true, false, 1)]    // the monster is where the move landed; no hostile is
+    [InlineData(false, true, 0)]    // the move carried us out of its room, into a hostile's
+    public void FleeFromMonster_HeldForAMoveInFlight_AsksAfterTheMonsterWhenItLands(
+        bool monsterThere, bool hostileThere, int expectedMoves)
+    {
+        using FleeHarness h = HitAndRunFlee();
+        bool pending = true;
+        h.Health.IsMovePending = () => pending;
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => monsterThere));
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.True(h.Health.IsFleeInFlight);                        // combat holds its engages meanwhile
+
+        pending = false;
+        h.HostileInRoom = hostileThere;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));
+
+        Assert.Equal(expectedMoves, h.Engine.SentBacktrackMoves.Count);
+        Assert.Equal(expectedMoves == 1, h.Health.IsFleeInFlight);
+    }
+
+    // A held run from a fight still asks after hostiles: the monster's own check
+    // does not outlive its run.
+    [Fact]
+    public void FleeFromMonster_ItsLandingCheckDoesNotOutliveIt()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        bool pending = true;
+        h.Health.IsMovePending = () => pending;
+        h.Health.FleeFromMonster(FleeSight, () => false);
+        pending = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));       // dropped: no monster there
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+
+        pending = true;
+        h.Health.RunFromBackstabFailure();                           // held, from a fight
+        pending = false;
+        h.HostileInRoom = true;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 52));
+
+        Assert.Single(h.Engine.SentBacktrackMoves);
     }
 
     // Report paradigm-20260927-011659: one retreat at a time.
