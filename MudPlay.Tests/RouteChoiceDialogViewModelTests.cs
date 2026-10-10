@@ -734,29 +734,51 @@ public sealed class RouteChoiceDialogViewModelTests
         Assert.True(noCounter.ShowGatedCard);      // "walk to the hazard and stop"
     }
 
-    // A sole route through a hazard whose counter does nothing at the crosser's level
-    // (Crystal Lake below level 50): one card, the route itself, saying the boats are
-    // no help. Nothing to obtain, nothing to search for, no "take the damage".
+    // The only way there crosses rooms no item makes safe (Crystal Lake's sea rooms):
+    // one card, the crossing itself, naming the rooms and saying the boats are no
+    // help. Nothing to obtain, nothing to search for, no "take the damage".
     [Fact]
-    public void SoleHazard_NoItemProtectsAtThisLevel_OffersTheRouteAndNothingToFetch()
+    public void SoleRouteAcrossTheLake_IsOneCard_ThatFetchesNothing()
     {
         var choice = SoleChoice(
-            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }) { NoProtection = true });
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }) { NoProtection = true })
+            with { UnprotectedRoomNames = new[] { "Crystal Lake (17/1200)", "Crystal Lake (17/1201)" } };
 
         var vm = new RouteChoiceDialogViewModel(
-            choice, "Crystal Lake (17/1201)", id => id == 690 ? "log raft" : "wooden skiff",
+            choice, "Island of Bones (17/1297)", id => id == 690 ? "log raft" : "wooden skiff",
             hazardCounterSource: null, hazardSurvivable: false);
 
         Assert.True(vm.ShowGatedCard);
         Assert.False(vm.HazardObtain);
         Assert.False(vm.ShowSearchCard);
         Assert.False(vm.ShowSendItCard);
-        Assert.StartsWith("Route — ", vm.GatedSummary);
-        Assert.Contains("nothing protects you from at your level", vm.FreeSummary);
+        Assert.StartsWith("Cross the teleport rooms — ", vm.GatedSummary);
         Assert.Equal(
-            "Requires nothing that helps: at your level log raft or wooden skiff does not protect you "
-            + "in the hazard rooms on this route",
+            "No way round — the only way there crosses rooms that teleport at random, and nothing protects from them",
+            vm.FreeSummary);
+        Assert.Equal(
+            "Crosses 2 rooms that can teleport you away as you enter: Crystal Lake (17/1200), Crystal Lake (17/1201). "
+            + "Nothing protects from them (log raft or wooden skiff does not), so nothing is fetched and the walk "
+            + "may be thrown off its route.",
             vm.RequirementSummary);
+    }
+
+    // The same crossing with a door key past it: the key is what the card asks for,
+    // and the lake is said apart, never as something to bring.
+    [Fact]
+    public void RouteAcrossTheLake_ThenAKeyedDoor_AsksForTheKeyOnly()
+    {
+        var choice = SoleChoice(
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }) { NoProtection = true },
+            new RouteRequirement(RouteRequirementKind.DoorKey, new[] { 757 }))
+            with { UnprotectedRoomNames = new[] { "Crystal Lake (17/1201)" } };
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "Vault (1/9)", id => id switch { 757 => "the dragon key", 690 => "log raft", _ => "wooden skiff" },
+            hazardCounterSource: null, hazardSurvivable: false);
+
+        Assert.False(vm.ShowSearchCard);
+        Assert.StartsWith("Requires the dragon key. Crosses 1 room that can teleport you away", vm.RequirementSummary);
     }
 
     // A MIXED route — a survivable hazard (raft) AND a hard gate past it (a door key)

@@ -1731,6 +1731,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // — directional, from the blocking room's own exit, so it can't be confused
         // with the far side (which may have a different requirement entirely).
         (RoomKey From, Direction Dir, RoomExit Exit)? doorGate = null;
+        // The rooms on the way that no route enters whatever is carried (Crystal
+        // Lake's sea rooms): how many, and the first, so the message says what the
+        // hazard is and that fetching something won't help.
+        (RoomKey First, int Count)? closedRooms = null;
         RoomKey cur = source;
         foreach (Direction dir in ungatedPath)
         {
@@ -1741,6 +1745,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             {
                 ExitBlockReason hop = f.DescribeExitBlock(in exit);
                 reasons |= hop;
+                if (hop.HasFlag(ExitBlockReason.Hazard) && f.IsClosedToRoutes(exit.Target))
+                    closedRooms = (closedRooms?.First ?? exit.Target, (closedRooms?.Count ?? 0) + 1);
                 if (hop.HasFlag(ExitBlockReason.Item)) ExitGateItems.Collect(in exit, missingItems);
                 if (hop.HasFlag(ExitBlockReason.Level) && levelGate is null)
                     levelGate = (exit.Target, exit.MinLevel, exit.MaxLevel);
@@ -1750,7 +1756,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
             cur = exit.Target;
         }
-        return FormatBlockReasons(reasons, missingItems, levelGate, doorGate);
+        return FormatBlockReasons(reasons, missingItems, levelGate, doorGate, closedRooms);
     }
 
     // "no route without the teleport from 3/784 (Darkwood Forest) to 3/740 (Black
@@ -1825,7 +1831,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems,
         (RoomKey Room, int Min, int Max)? levelGate,
-        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate)
+        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate,
+        (RoomKey First, int Count)? closedRooms = null)
     {
         // Classification came up empty (e.g. a bare IRoomFilter with no gate
         // model) — keep a truthful generic line rather than inventing a cause.
@@ -1844,7 +1851,12 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (reasons.HasFlag(ExitBlockReason.LockedDoor) || reasons.HasFlag(ExitBlockReason.Door))
             parts.Add(DescribeDoorGate(doorGate));
         if (reasons.HasFlag(ExitBlockReason.Item)) parts.Add(DescribeMissingItems(missingItems));
-        if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
+        // A walk nobody picked on a route card never crosses these, and no item
+        // would let it: say so, and how the user can cross them if they mean to.
+        if (closedRooms is { } closed)
+            parts.Add($"{closed.Count} room(s) that teleport at random and that nothing protects from, "
+                + $"from {NameRoom(closed.First)} on (only a walk you start and pick on its route card crosses them)");
+        else if (reasons.HasFlag(ExitBlockReason.Hazard)) parts.Add("a room hazard you can't survive");
         if (reasons.HasFlag(ExitBlockReason.Alignment)) parts.Add("an alignment-gated entrance a party member can't enter");
         return "all routes blocked by " + string.Join(" or ", parts);
     }

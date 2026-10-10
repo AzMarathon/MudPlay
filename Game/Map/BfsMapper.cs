@@ -170,6 +170,12 @@ public sealed class BfsMapper
         if (source.Equals(destination))
             return returnEmptyWhenAtDestination ? Array.Empty<Direction>() : null;
 
+        // Standing in a room no route enters (teleported onto Crystal Lake, or
+        // part-way across it), every way on starts through more such rooms and an
+        // ordinary search finds nothing. The way out is always allowed.
+        if (!ignoreExitGates && filter is not null && filter.IsClosedToRoutes(source))
+            return FindPathOutOfClosedRooms(source, destination, filter, refuseTeleports, avoidTraps, ignoreAvoids);
+
         // Trap-minimising route is a cost search (fewest traps, then fewest hops),
         // not a plain BFS — a refuse-all-traps BFS would return NOTHING the moment
         // one trap on the way is unavoidable, stranding the whole "avoid" offer.
@@ -186,6 +192,83 @@ public sealed class BfsMapper
         // walker re-plans from wherever the cast drops it.
         return FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: false, ignoreAvoids)
             ?? FindPathCore(source, destination, filter, ignoreExitGates, refuseTeleports, allowGateway: true, ignoreAvoids);
+    }
+
+    // The route from a room no route enters (IRoomFilter.IsClosedToRoutes): out of
+    // the closed rooms by the fewest steps, then on to the destination as any route
+    // goes, never back in. The nearest way out is tried first and the next nearest
+    // only when the destination can't be reached from there (the lake has an island
+    // with no way off but the lake); of several equally near, the one with the
+    // shortest way on. Null when no way out reaches it, the destination being in
+    // the closed rooms itself included: that crossing is the user's to pick on a
+    // route card.
+    private IReadOnlyList<Direction>? FindPathOutOfClosedRooms(
+        RoomKey source, RoomKey destination, IRoomFilter filter,
+        bool refuseTeleports, bool avoidTraps, bool ignoreAvoids)
+    {
+        var parent = new Dictionary<RoomKey, (RoomKey ParentKey, Direction Step)> { [source] = (source, default) };
+        var stepsIn = new Dictionary<RoomKey, int> { [source] = 0 };
+        var queue = new Queue<RoomKey>();
+        queue.Enqueue(source);
+        // Rooms the destination has been found unreachable from. A way out that
+        // lands in one is not searched again: what a room can't reach, no room it
+        // reaches can.
+        HashSet<RoomKey> deadEnds = new();
+        IReadOnlyList<Direction>? best = null;
+        int bestWayOut = int.MaxValue;
+
+        while (queue.Count > 0)
+        {
+            RoomKey here = queue.Dequeue();
+            // The search is breadth-first, so every way out from here on is longer
+            // than the one already found.
+            if (stepsIn[here] + 1 > bestWayOut) break;
+            if (_graph.GetRoom(here) is not { } room) continue;
+
+            foreach ((Direction dir, RoomExit exit) in room.Exits)
+            {
+                RoomKey next = exit.Target;
+                if (parent.ContainsKey(next) || _graph.GetRoom(next) is null) continue;
+                if (exit.CastTeleportRandom || exit.GatewayTeleport) continue;
+                if (exit.Hint == RoomExitHint.MultiActionHidden
+                    && exit.MultiAction is not { IsSatisfiable: true }) continue;
+                if (refuseTeleports && exit.Hint == RoomExitHint.Teleport) continue;
+                if (filter.IsTeleportRefused(here, in exit)) continue;
+                if (!ignoreAvoids && filter.IsAvoided(next)) continue;
+
+                // Between two closed rooms the room itself is the one gate set aside;
+                // any other on the exit still stands.
+                bool closed = filter.IsClosedToRoutes(next);
+                if (closed
+                        ? (filter.DescribeExitBlock(in exit) & ~ExitBlockReason.Hazard) != ExitBlockReason.None
+                        : filter.IsExitBlocked(in exit))
+                    continue;
+
+                parent[next] = (here, dir);
+                if (closed)
+                {
+                    stepsIn[next] = stepsIn[here] + 1;
+                    queue.Enqueue(next);
+                    continue;
+                }
+
+                IReadOnlyList<Direction> wayOut = ReconstructPath(parent, source, next);
+                IReadOnlyList<Direction>? onward = next.Equals(destination) ? Array.Empty<Direction>()
+                    : deadEnds.Contains(next) ? null
+                    : FindPath(next, destination, filter, refuseTeleports: refuseTeleports,
+                        avoidTraps: avoidTraps, ignoreAvoids: ignoreAvoids);
+                if (onward is null)
+                {
+                    if (!deadEnds.Contains(next))
+                        deadEnds.UnionWith(Distances(next, filter, viaBoats: false, targets: null, allowGateway: false).Keys);
+                    continue;
+                }
+                if (best is null || wayOut.Count + onward.Count < best.Count)
+                    best = wayOut.Concat(onward).ToList();
+                bestWayOut = wayOut.Count;
+            }
+        }
+        return best;
     }
 
     private IReadOnlyList<Direction>? FindPathCore(

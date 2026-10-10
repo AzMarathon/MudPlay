@@ -1817,7 +1817,7 @@ public static class BugReportBuilder
             {
                 string items = string.Join("/", r.ItemIds.Select(id => $"{id} {svc.ItemNames.GetName(id) ?? "?"}"));
                 if (r.Carried) return $"{r.Kind} {items} (carried)";
-                if (r.NoProtection) return $"{r.Kind} {items} (does not protect at this level)";
+                if (r.NoProtection) return $"{r.Kind} {items} (no protection: its holders are teleported too; nothing is fetched)";
                 if (r.Kind != RouteRequirementKind.DoorKey) return $"{r.Kind} {items}";
                 string source = fetchable.Contains(r.ItemIds[0])
                     ? " — a route card's pick fetches it" : " — nothing fetches it";
@@ -1992,6 +1992,11 @@ public static class BugReportBuilder
         Game.Map.Room? here = svc.RoomTracker.State.CurrentRoom;
         RoomHazardIndex.RoomHazard? hazard = here is { Spell: > 0 }
             ? svc.RoomHazards.HazardForSpell(here.Spell) : null;
+        // A "stuck on the lake" / "why did it walk off that way" report turns on this:
+        // from such a room every plan starts with the shortest way out.
+        Kv(sb, "Room no route enters (teleports its counter's holders too)",
+            here is not null && svc.Movement.IsClosedToRoutes(here.Key)
+                ? "yes — routes from here take the nearest way out first" : "no");
         if (hazard is null || hazard.BuffCounters.Count == 0)
             Kv(sb, "Checkspell hazard", "(none — current room needs no buff counter)");
         else foreach (RoomHazardIndex.BuffCounter bc in hazard.BuffCounters)

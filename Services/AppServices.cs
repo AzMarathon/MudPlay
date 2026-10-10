@@ -13168,7 +13168,7 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(key)?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried) && Movement.HazardCounterProtects(hazard))
+            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
                 continue;                                         // player counters it → survives
             if (!hazard.IsSurvivableDamage) return false;         // an unprotected grave hazard
             sawUnprotected = true;
@@ -13190,7 +13190,7 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(path[i])?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried) && Movement.HazardCounterProtects(hazard))
+            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
                 continue;                                         // player survives it
             return i > 0 ? path[i - 1] : path[0];
         }
@@ -13205,6 +13205,9 @@ public sealed class AppServices
         RoomHazardIndex.RoomHazard? hazard =
             RoomHazards.HazardForSpell(RoomGraph.GetRoom(key)?.Spell ?? 0);
         if (hazard is null) return System.Array.Empty<int>();
+        // A boat is no counter on Crystal Lake: nothing is provisioned, or asked of
+        // the party, for a room its item doesn't make safe.
+        if (!MovementFilter.HazardCounterProtects(hazard)) return System.Array.Empty<int>();
         if (!JourneyHasFetchOrder) return hazard.MandatoryItems;
 
         System.Collections.Generic.List<int> items = new(hazard.MandatoryItems);

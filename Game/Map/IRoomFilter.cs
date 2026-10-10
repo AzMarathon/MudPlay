@@ -120,6 +120,17 @@ public interface IRoomFilter
         IReadOnlyCollection<RoomKey>? openHazardRooms = null)
         => keepUncounteredHazards ? SuspendAcquirableGatesButUncounteredHazards() : SuspendAcquirableGates();
 
+    // A room no route is planned into as things stand, whatever is carried, though a
+    // character standing in one is always planned out of it (BfsMapper.FindPath
+    // takes the shortest way out first). Crystal Lake's teleporting sea rooms are
+    // the case. Default: none; only Services.MovementFilter knows of any.
+    bool IsClosedToRoutes(RoomKey room) => false;
+
+    // The scope a loop's own legs are planned in: the path is one the user laid out,
+    // so a room closed to routes is judged the way it was before it was closed (by
+    // its counter item), and a loop that ran across it still expands. Default no-op.
+    IDisposable PlanningRecordedPath() => NoGateSuspension.Instance;
+
     // The default-implementation's inert scope — disposing it does nothing.
     private sealed class NoGateSuspension : IDisposable
     {

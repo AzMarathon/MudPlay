@@ -39,13 +39,6 @@ namespace MudPlay.Services;
 // heat is NOT such a case — spell 526 is countered by the magma amulet or
 // phoenix feather and is indexed like any other protectable hazard.)
 //
-// A `failitem` counter can be worth nothing at some levels: Crystal Lake's
-// textblock sends a boat holder under level 50 down a branch that teleports them
-// nearly as often as having no boat. Those levels are decoded too
-// (RoomHazard.UnprotectedLevels), and the router then treats the room as one no
-// item counters for such a character: gone round when it can be, crossed only as
-// the sole way there.
-//
 // Mirrors ShopStockIndex / MonsterDropIndex: subscribes to
 // GameDataCache.ActiveSetChanged, reads the raw tables it needs once (Rooms for
 // the room-entry spell set, Spells for the ability chains, Items for the
@@ -76,20 +69,6 @@ public sealed class RoomHazardIndex
         int BuffSpell, int LapseSpell, int DurationSeconds, IReadOnlyList<int> SourceItems,
         IReadOnlyList<int> ImmunityItems);
 
-    // A span of character levels, both ends included; 0 leaves that end open.
-    public readonly record struct LevelBand(int Min, int Max)
-    {
-        public bool Contains(int level) => (Min <= 0 || level >= Min) && (Max <= 0 || level <= Max);
-
-        public override string ToString() => (Min, Max) switch
-        {
-            ( <= 0, <= 0) => "any level",
-            ( <= 0, _) => $"level {Max} and under",
-            (_, <= 0) => $"level {Min} and over",
-            _ => $"levels {Min} to {Max}",
-        };
-    }
-
     public sealed class RoomHazard
     {
         public IReadOnlyList<IReadOnlyList<int>> RequirementGroups { get; }
@@ -110,32 +89,25 @@ public sealed class RoomHazardIndex
         // never offered that — the crosser can only pass it with a counter in hand.
         public bool IsSurvivableDamage { get; }
 
-        // Character levels at which holding a counter leaves the room about as
-        // harmful as holding none. The spell's textblock sends an item holder of
-        // such a level down a branch of its own that still relocates them (Crystal
-        // Lake: `maxlevel 49:checkitem 690:random 9445`, where 9445 teleports two
-        // rolls in three), so a boat is no protection there below level 50. Empty
-        // for every hazard whose counter works at any level.
-        public IReadOnlyList<LevelBand> UnprotectedLevels { get; }
+        // True when the room teleports whoever holds its `failitem` item as well:
+        // the textblock gives a holder a `checkitem` line of their own, and that
+        // line leads to a teleport too. Crystal Lake's three sea spells are the
+        // case, on both realms: with a raft or skiff the lake still moves you. No
+        // route is planned into such a room, boat or no boat (user, 2026-10-09:
+        // nobody "should ever enter the room spell area of crystal lake, even with a
+        // raft"), so for routing the item is no counter at all.
+        public bool TeleportsCounterHolders { get; }
 
         public RoomHazard(
             IReadOnlyList<IReadOnlyList<int>> groups,
             IReadOnlyList<BuffCounter>? buffCounters = null,
             bool isSurvivableDamage = false,
-            IReadOnlyList<LevelBand>? unprotectedLevels = null)
+            bool teleportsCounterHolders = false)
         {
             RequirementGroups = groups;
             BuffCounters = buffCounters ?? Array.Empty<BuffCounter>();
             IsSurvivableDamage = isSurvivableDamage;
-            UnprotectedLevels = unprotectedLevels ?? Array.Empty<LevelBand>();
-        }
-
-        // Whether a counter in hand makes the room safe for a character of this level.
-        public bool CounterProtectsAt(int level)
-        {
-            foreach (LevelBand band in UnprotectedLevels)
-                if (band.Contains(level)) return false;
-            return true;
+            TeleportsCounterHolders = teleportsCounterHolders;
         }
 
         // Every distinct protecting item across all groups — the set the route
@@ -169,13 +141,6 @@ public sealed class RoomHazardIndex
     private const int AbilTextBlock = 148;
     private const int AbilEndCast = 151;
     private const int MaxChainDepth = 16;
-
-    // A counter counts as protection at a level only when holding it at least halves
-    // the room's chance of harming the holder. The one hazard that splits its
-    // holders by level is far from the line on both sides: Crystal Lake moves a boat
-    // holder under level 50 on 68% of entries against 70% with no boat, and one of
-    // level 50 or over on 2% at most.
-    private const double CounterMustCutHarmTo = 0.5;
 
     private readonly GameDataCache _cache;
     private readonly LogService? _log;
@@ -310,109 +275,79 @@ public sealed class RoomHazardIndex
         if (!harmful || groups.Count == 0) return null;
 
         bool survivable = IsSurvivableHazardDamage(rootSpell, spellAbils, tbActions);
-        List<LevelBand> unprotected = new();
+        bool holdersTeleported = false;
         foreach (int tb in textBlocks)
-            foreach (LevelBand band in UnprotectedHolderLevels(tb, tbActions))
-                if (!unprotected.Contains(band)) unprotected.Add(band);
-        return new RoomHazard(groups, buffCounters, survivable, unprotected);
+            holdersTeleported |= TeleportsHolders(tb, tbActions);
+        return new RoomHazard(groups, buffCounters, survivable, holdersTeleported);
     }
 
-    // The level bands in which a `failitem` counter doesn't protect, read off the
-    // hazard's own textblock. Its lines are tried in order: the `failitem` line is
-    // what happens to a crosser holding none of the items, and a line that opens
-    // with `checkitem` on one of them, optionally behind `minlevel` / `maxlevel`, is
-    // what happens to a holder of that level. A holder's line that harms at least
-    // CounterMustCutHarmTo as often as the no-item line marks its band unprotected.
-    // A textblock with no holder lines protects at every level (the river, the ice
-    // cavern), which is every hazard but the lake.
-    private List<LevelBand> UnprotectedHolderLevels(int tb, Dictionary<int, string> tbActions)
+    // Steps that relocate whoever the textblock runs on.
+    private static readonly string[] RelocatingTbDirectives = { "teleport", "transfer" };
+
+    // Whether the hazard's own textblock teleports a holder of its `failitem` item.
+    // Its lines are tried in order: the `failitem` line is what happens with none of
+    // the items, and a line that passes on `checkitem <one of them>` is what happens
+    // to a holder. The sea spells have such lines for each boat, split by level
+    // (`maxlevel 49:checkitem 690:random 9445`, `minlevel 50:checkitem 690:random
+    // 9361`), and both lead on to a teleport. No other hazard in either realm's data
+    // has a holder line at all: the river, the ice cavern and the desert stop at
+    // their `failitem`.
+    private bool TeleportsHolders(int tb, Dictionary<int, string> tbActions)
     {
-        List<LevelBand> bands = new();
         if (!tbActions.TryGetValue(tb, out string? action) || string.IsNullOrWhiteSpace(action))
-            return bands;
+            return false;
 
         HashSet<int> counters = new();
-        double bare = 0;
-        List<(int Item, LevelBand Band, double Harm)> holders = new();
+        List<string[]> holderLines = new();
         foreach (string line in action.Split('\n'))
         {
             string[] steps = line.Split(':');
-            int min = 0, max = 0, held = 0, at = 0;
-            bool guarded = false;
-            // The conditions lead the line; what follows them is what the line does.
-            for (; at < steps.Length; at++)
+            bool guarded = false, holder = false;
+            foreach (string raw in steps)
             {
-                string tok = steps[at].Trim();
+                string tok = raw.Trim();
                 if (StartsWith(tok, "failitem"))
                 {
                     guarded = true;
                     if (FirstIntAfter(tok, "failitem") is > 0 and int item) counters.Add(item);
                 }
-                else if (StartsWith(tok, "checkitem")) held = FirstIntAfter(tok, "checkitem");
-                else if (StartsWith(tok, "minlevel")) min = FirstIntAfter(tok, "minlevel");
-                else if (StartsWith(tok, "maxlevel")) max = FirstIntAfter(tok, "maxlevel");
-                else break;
+                else if (StartsWith(tok, "checkitem")) holder = true;
             }
-            double harm = HarmChance(steps, at, 0, tbActions, new HashSet<int> { tb });
-            if (guarded) bare = Math.Max(bare, harm);
-            else if (held > 0) holders.Add((held, new LevelBand(min, max), harm));
+            if (holder && !guarded) holderLines.Add(steps);
         }
 
-        if (bare <= 0) return bands;
-        foreach ((int item, LevelBand band, double harm) in holders)
-            if (counters.Contains(item) && harm >= bare * CounterMustCutHarmTo && !bands.Contains(band))
-                bands.Add(band);
-        return bands;
-    }
-
-    // The chance that a run of textblock steps, from `from` on, ends in a harmful
-    // directive. The first harmful step settles it; a `random` / link step hands over
-    // to that block's roll. Conditions on the way (`nomonsters`, `message`) are taken
-    // as passed: the room may well be empty, and the worst case is what a route is
-    // judged on.
-    private double HarmChance(
-        string[] steps, int from, int depth, Dictionary<int, string> tbActions, HashSet<int> onPath)
-    {
-        for (int i = from; i < steps.Length; i++)
+        foreach (string[] steps in holderLines)
         {
-            string tok = steps[i].Trim();
-            if (tok.Length == 0) continue;
-            foreach (string kw in HarmfulTbDirectives)
-                if (StartsWith(tok, kw)) return 1;
-            foreach (string flow in BranchFlowDirectives)
-                if (StartsWith(tok, flow))
-                    return BlockHarmChance(FirstIntAfter(tok, flow), depth + 1, tbActions, onPath);
-        }
-        return 0;
-    }
-
-    // HarmChance of a whole block. A roll table's lines lead with a cumulative
-    // threshold and each carries the share of the roll between it and the line
-    // before; a block that isn't a roll table runs its first line. A block already
-    // on the path counts for nothing, so a table that can roll its way back to
-    // itself (9390 and 9394 do) ends.
-    private double BlockHarmChance(int tb, int depth, Dictionary<int, string> tbActions, HashSet<int> onPath)
-    {
-        if (depth > MaxChainDepth || tb <= 0 || !onPath.Add(tb)) return 0;
-        try
-        {
-            if (!tbActions.TryGetValue(tb, out string? action) || string.IsNullOrWhiteSpace(action))
-                return 0;
-
-            double harm = 0;
-            int previous = 0, top = 0;
-            foreach (string line in action.Split('\n'))
+            bool holdsCounter = false;
+            foreach (string raw in steps)
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                string[] steps = line.Split(':');
-                if (!int.TryParse(steps[0].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int threshold))
-                    return top > 0 ? harm / top : HarmChance(steps, 0, depth, tbActions, onPath);
-                harm += Math.Max(0, threshold - previous) * HarmChance(steps, 1, depth, tbActions, onPath);
-                previous = top = threshold;
+                string tok = raw.Trim();
+                if (StartsWith(tok, "checkitem")) holdsCounter |= counters.Contains(FirstIntAfter(tok, "checkitem"));
+                else if (holdsCounter && Relocates(tok, 0, tbActions, new HashSet<int> { tb })) return true;
             }
-            return top > 0 ? harm / top : 0;
         }
-        finally { onPath.Remove(tb); }
+        return false;
+    }
+
+    // Whether one textblock step relocates, itself or through the blocks a `random`
+    // / link step hands over to. Bounded like BranchHarmful, which this mirrors for
+    // the two relocating directives alone.
+    private bool Relocates(string tok, int depth, Dictionary<int, string> tbActions, HashSet<int> visited)
+    {
+        foreach (string kw in RelocatingTbDirectives)
+            if (StartsWith(tok, kw)) return true;
+        foreach (string flow in BranchFlowDirectives)
+        {
+            if (!StartsWith(tok, flow)) continue;
+            int target = FirstIntAfter(tok, flow);
+            if (depth >= MaxChainDepth || target <= 0 || !visited.Add(target)) return false;
+            if (!tbActions.TryGetValue(target, out string? action) || string.IsNullOrWhiteSpace(action))
+                return false;
+            foreach (string line in action.Split('\n'))
+                foreach (string raw in line.Split(':'))
+                    if (Relocates(raw.Trim(), depth + 1, tbActions, visited)) return true;
+        }
+        return false;
     }
 
     // Classify a room-entry hazard's unprotected outcome as survivable damage or

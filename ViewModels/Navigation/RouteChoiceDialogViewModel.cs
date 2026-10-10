@@ -552,10 +552,16 @@ public sealed partial class RouteChoiceDialogViewModel
             }
             else if (soleHazardOnly)
             {
-                FreeSummary = choice.Requirements.All(r => r.NoProtection)
-                    ? "No hazard-free route — every path there crosses a hazard nothing protects you from at your level"
+                bool nothingProtects = choice.Requirements.All(r => r.NoProtection);
+                FreeSummary = nothingProtects
+                    ? "No way round — the only way there crosses rooms that teleport at random, and nothing protects from them"
                     : "No hazard-free route — every path there crosses a hazard you must counter";
-                if (HazardObtain)
+                if (nothingProtects)
+                {
+                    // The one card: the crossing itself, on the player's say-so.
+                    GatedSummary = $"Cross the teleport rooms — {StepsEta(choice.GatedStepCount, gatedEta)}";
+                }
+                else if (HazardObtain)
                 {
                     GatedSummary = $"Obtain, then cross — {StepsEta(choice.GatedStepCount, gatedEta)}";
                 }
@@ -593,11 +599,28 @@ public sealed partial class RouteChoiceDialogViewModel
                 GatedSummary = $"Route — {StepsEta(choice.GatedStepCount, gatedEta)}";
             }
 
-            RequirementSummary = "Requires "
-                + DescribeRequirements(
-                    choice.Requirements, itemName, giveNameForItem, shopBuyPhraseForItem,
-                    dropNameForItem, resolvedHazardCounter)
-                + (string.IsNullOrEmpty(economyNote) ? "" : $" — {economyNote}");
+            // A hazard no item makes safe is not something to bring: it is said apart,
+            // as what the route does, with the items that don't help named so nobody
+            // buys one to find out.
+            List<RouteRequirement> toBring = choice.Requirements.Where(r => !r.NoProtection).ToList();
+            string requires = toBring.Count == 0 ? string.Empty
+                : "Requires "
+                  + DescribeRequirements(
+                      toBring, itemName, giveNameForItem, shopBuyPhraseForItem,
+                      dropNameForItem, resolvedHazardCounter)
+                  + (string.IsNullOrEmpty(economyNote) ? "" : $" — {economyNote}");
+            string crosses = string.Empty;
+            if (choice.Requirements.FirstOrDefault(r => r.NoProtection) is { } unprotected)
+            {
+                int rooms = choice.UnprotectedRoomNames?.Count ?? 0;
+                string useless = string.Join(" or ", unprotected.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
+                crosses = (rooms > 0
+                        ? $"Crosses {rooms} room{(rooms == 1 ? "" : "s")} that can teleport you away as you enter: "
+                          + $"{RouteChoicePlanner.ListAvoided(choice.UnprotectedRoomNames)}. "
+                        : "Crosses rooms that can teleport you away as you enter. ")
+                    + $"Nothing protects from them ({useless} does not), so nothing is fetched and the walk may be thrown off its route.";
+            }
+            RequirementSummary = requires.Length > 0 && crosses.Length > 0 ? $"{requires}. {crosses}" : requires + crosses;
 
             // An optional shortcut avoids the committed (reliable) route: offer it as
             // its own selectable card naming the item it needs and the rooms it saves.
@@ -708,9 +731,6 @@ public sealed partial class RouteChoiceDialogViewModel
             // A gate the crosser already satisfies — surfaced so the route's real
             // requirements read completely, not silently dropped as "not needed".
             if (r.Carried) return $"{carriedItems} (you have it)";
-            // Named so the player isn't left to find out by buying one.
-            if (r.NoProtection)
-                return $"nothing that helps: at your level {carriedItems} does not protect you in the hazard rooms on this route";
 
             // A resolved hazard counter names the SPECIFIC item the run will obtain +
             // how ("log raft (buy at Pier)") — the picker already chose the cheapest

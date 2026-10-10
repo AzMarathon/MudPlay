@@ -192,8 +192,8 @@ public sealed class MovementFilter : IRoomFilter
     // Set/cleared through SuspendAcquirableGatesButUncounteredHazards' scope.
     private bool _keepUncounteredHazards;
 
-    // While gates are suspended, a hazard room stays closed when no item protects
-    // this crosser from it (HazardCounterProtects): the pass asks what could be
+    // While gates are suspended, a hazard room stays closed when no item makes it
+    // safe to route through (HazardCounterProtects): the pass asks what could be
     // walked with every gate item in hand, and having one opens nothing there.
     // Set/cleared through SuspendAcquirableGatesButUnprotectableHazards' scope.
     private bool _keepUnprotectableHazards;
@@ -389,9 +389,10 @@ public sealed class MovementFilter : IRoomFilter
         if (spell <= 0) return false;
         RoomHazardIndex.RoomHazard? hazard = Hazards.HazardForSpell(spell);
         if (hazard is null) return false;
-        // A counter that does nothing at the crosser's level opens the room to no
-        // plan: not carried, not arranged for, not assumed in hand.
-        if (!HazardCounterProtects(hazard)) return true;
+        // A room that teleports its counter's holders too opens to no plan: not with
+        // the item carried, arranged for or assumed in hand. A loop's own legs are
+        // the exception, judged by the item as they always were.
+        if (!HazardCounterProtects(hazard) && !_recordedPath) return true;
         if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries);
         if (!_keepUncounteredHazards) return false;
 
@@ -401,14 +402,48 @@ public sealed class MovementFilter : IRoomFilter
         return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id));
     }
 
-    // Whether holding the hazard's counter makes its rooms safe for this crosser.
-    // Crystal Lake's boats protect from level 50 only (GAME_MECHANICS "Crystal Lake:
-    // the sea room spells"). Judged on our own level, as the counter is on our own
-    // pack; an unknown level never refuses, the rule for every gate.
-    public bool HazardCounterProtects(RoomHazardIndex.RoomHazard hazard)
+    // Whether holding the hazard's counter makes its rooms safe to route through.
+    // Not on Crystal Lake, whose sea rooms teleport a boat's holder as well
+    // (GAME_MECHANICS "Crystal Lake: the sea room spells").
+    public static bool HazardCounterProtects(RoomHazardIndex.RoomHazard hazard)
     {
         ArgumentNullException.ThrowIfNull(hazard);
-        return LevelProvider?.Invoke() is not { } level || hazard.CounterProtectsAt(level);
+        return !hazard.TeleportsCounterHolders;
+    }
+
+    // A room no route is planned into as things stand, though a character standing
+    // in one is always planned out of it (BfsMapper.FindPath): a hazard room nothing
+    // counters, unless this plan has it open (a route card's pick agreed to it, or
+    // every gate is stood down to find the route that card offers).
+    public bool IsClosedToRoutes(RoomKey room)
+    {
+        int spell = RoomEntrySpellProbe?.Invoke(room) ?? 0;
+        return spell > 0
+            && Hazards?.HazardForSpell(spell) is { } hazard
+            && !HazardCounterProtects(hazard)
+            && IsUncounteredHazardRoom(room);
+    }
+
+    // While set, a room that teleports its counter's holders is judged by the item
+    // like any other hazard room. Set/cleared through PlanningRecordedPath's scope.
+    private bool _recordedPath;
+
+    // The scope a loop's legs are planned in. A loop is a path the user laid out
+    // room by room; one that crosses the lake with a boat ran before the lake was
+    // closed to routes and still does (user, 2026-10-09).
+    public IDisposable PlanningRecordedPath() => new RecordedPathScope(this);
+
+    private sealed class RecordedPathScope : IDisposable
+    {
+        private readonly MovementFilter _filter;
+        private readonly bool _was;
+        public RecordedPathScope(MovementFilter filter)
+        {
+            _filter = filter;
+            _was = filter._recordedPath;
+            filter._recordedPath = true;
+        }
+        public void Dispose() => _filter._recordedPath = _was;
     }
 
     private bool InventoryKnown => InventoryReadyProbe?.Invoke() == true;
@@ -425,10 +460,10 @@ public sealed class MovementFilter : IRoomFilter
         new GateSuspensionScope(this, keepClosed: null, keepUncounteredHazards: true);
 
     // The suspension for asking what the crosser could walk by obtaining something:
-    // every gate stands down but a hazard room no item protects them from, which
-    // obtaining its counter would not open. The route picker weighs its "acquire,
-    // then go" route against the free one under this, so it never offers a boat for
-    // a lake the boat does nothing on.
+    // every gate stands down but a hazard room no item makes safe, which obtaining
+    // its counter would not open. The route picker weighs its "acquire, then go"
+    // route against the free one under this, so it never offers a boat as the way
+    // across Crystal Lake.
     public IDisposable SuspendAcquirableGatesButUnprotectableHazards() =>
         new GateSuspensionScope(this, keepClosed: null, keepUnprotectableHazards: true);
 
@@ -444,6 +479,13 @@ public sealed class MovementFilter : IRoomFilter
         IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards = false,
         IReadOnlyCollection<RoomKey>? openHazardRooms = null) =>
         new GateSuspensionScope(this, keepClosed, keepUncounteredHazards, openHazardRooms);
+
+    // The same with the two hazard rules named apart, for the route picker's sole
+    // route: uncountered hazards kept closed, or only those no item makes safe.
+    public IDisposable SuspendAcquirableGatesExcept(
+        IReadOnlyCollection<int> keepClosed, bool keepUncounteredHazards, bool keepUnprotectableHazards) =>
+        new GateSuspensionScope(this, keepClosed, keepUncounteredHazards,
+            keepUnprotectableHazards: keepUnprotectableHazards);
 
     // Whether stepping into this room is refused, as things stand, for want of a
     // counter to its cast-on-enter hazard. What a route card's "cross it" asks the

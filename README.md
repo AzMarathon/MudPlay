@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.1**
-> - Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
-> - In that mode the room tooltip and the Legend name the colours
+> **Version 3.160.4**
+> - Crystal Lake's teleport rooms are never on a route, for any character, with or without a boat: walks, loop approaches, Auto-Lair travel and automatic trips go round them, and no raft or skiff is offered, fetched or bought for the lake
+> - When those rooms are the only way, a walk you start shows one card to cross them on your pick (nothing fetched); a trip the client starts stops and logs why
+> - Standing in one of those rooms, you are always planned out by the nearest way that leads on to where you are going
+> - A route whose only way there needs a key or other item goes round hazard rooms you hold no counter for when it can, and asks for the key alone (the walk to the Hidden Study no longer crossed the lake or sent for a log raft)
+> - A loop recorded across the lake still runs as before
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
