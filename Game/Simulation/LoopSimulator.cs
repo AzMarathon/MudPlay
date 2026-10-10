@@ -286,19 +286,23 @@ public static class LoopSimulator
 
         // The room's entry spell rolls its d100 table: on entry, then on the realm's
         // room-spell tick (6.05 s on Paradigm, 6 s on Stock) while we're here; a
-        // `nomonsters:` table only rolls in an empty room (GAME_MECHANICS "Room-spell
-        // monster summons").
+        // `nomonsters:` table only rolls in an empty room, and a line with its own
+        // `nomonsters` brings nothing into an occupied one (GAME_MECHANICS "Room-spell
+        // monster summons"). A line brings every monster it names, up to the room cap.
         private void RoomSummon()
         {
             if (_lap[_pos].Summon is not { } table) return;
             RoomState state = Here();
-            if (table.NoMonstersGate && state.Mobs.Any(m => m.Alive)) return;
+            bool occupied = state.Mobs.Any(m => m.Alive);
+            if (table.NoMonstersGate && occupied) return;
             double roll = _rng.NextDouble();
             foreach (RoomSummonEntry e in table.Entries)
             {
                 roll -= e.Probability;
                 if (roll >= 0) continue;
-                if (state.Mobs.Count(m => m.Alive) < _roomMonsterCap) AddMob(state, e.Monster, lairSlot: -2);
+                if (e.EmptyRoomOnly && occupied) return;
+                foreach (int monster in e.Monsters)
+                    if (state.Mobs.Count(m => m.Alive) < _roomMonsterCap) AddMob(state, monster, lairSlot: -2);
                 return;
             }
         }

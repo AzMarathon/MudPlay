@@ -396,6 +396,13 @@ The estimate's assumptions live in the **⚙ Estimate Settings** flyout at the t
 
 Click **Start estimating**, then **click the rooms** on the map to sketch the circuit (**Alt+click** a room to take it back out, or **drag** a numbered chip onto another room to move it); the panel shows a running **exp/hr** figure as you add rooms. **Save as loop** turns the sketch into a real loop, **Load loop…** pulls an existing loop in to evaluate it, **Clear rooms** starts over, and **Stop Estimating** exits the mode.
 
+**Room summons** lists the rooms on the circuit whose room spell can summon monsters, with the exp those rolls are expected to add. Every monster a roll brings is counted, and a summon that only happens in a room with no monsters in it is counted only when you walk into the room empty. Two kinds of summon are left out, in the estimate and in the loop simulator alike:
+
+- **A boss only one of which can be alive in the game, and which waits a while to come back** (Lord Skorne from the Farnholme portal, the Angelic Hunter in the Ancient Fortress). Once killed it is gone for its regen time, so later rolls of its line bring nothing and counting it on every roll would wildly overstate the loop. A one-at-a-time monster with no regen wait, like the tyrannosaurs on Paradigm's dinosaur forest trails, can be summoned again as soon as it is dead and is counted like any other. A room spell that summons nothing else, like the Ancient Fortress's, shows no summon at all.
+- **A summon that needs an item in the room.** The graveyard's Death Shrieker appears only where a weeping statue stands, in 7 of the graveyard's 110 rooms, and takes the statue until the next cleanup. The graveyard counts its vampire fledglings and weeping apparitions alone.
+
+The program log names each summon left out, the first time a set's room spells are read.
+
 A small **Realm:** line under the headline notes which game-data realm is active — it never changes your kill rate, but it changes two things:
 
 - **How a lair respawns.** On **Stock** a lair room keeps one clock, restarted by every kill in it (its placed fixture's too), and the whole room comes back together **`Delay` to `Delay + 1` minutes after its last kill** — the estimate uses the middle of that window. Killing a room's fixture on every pass can hold its lair empty. On **Paradigm** each monster comes back on its own, **`(Delay − 1)` minutes + 30 s** after it was killed.
