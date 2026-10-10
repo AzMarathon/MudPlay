@@ -1,13 +1,48 @@
 # Version history
 
-## 3.160.5
+## 3.161.6
 
 - The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
 - Every line from the game is read faster (a slowdown that came in with 3.157.8)
 - Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
-- The program log names any line that held the client up for a quarter of a second or more
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
 - Bug report: how much is on the floor here and Roomba's slowest floor read
 - bug reports addressed: paradigm-20261009-164508
+
+## 3.161.5
+
+- A room's heat (*You are seared by the flames*) no longer counts as a combat round
+- No more heals or buffs sent mid-round into `You have already cast a spell this round!`
+- A fight stopped just after an attack is re-attacked on the next round line
+- A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
+- A refused cast no longer leaves a re-attack armed
+- Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
+- The giant hellhound's death line is recognised
+- Program log and bug report show re-attack decisions
+- bug reports addressed: paradigm-20261009-120757, paradigm-20261009-122342
+
+## 3.161.2
+
+- A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
+- A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
+- bug reports addressed: paradigm-20261009-082958
+
+## 3.161.1
+
+- Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+- A copy you handed them and the game confirmed is remembered until the party changes
+
+## 3.161.0
+
+- Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
+- With items still missing, it searches the rooms walked before the death (never a stash room)
+- The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
+- It walks to 12 rooms at most and returns; Stop and Pause reach it
+- It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
+- Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
+- Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+- Stop calls off a Recover Now that was still walking (both realms)
+- Bug report: the pile's missing items and the sweep's plan, state and blockers
 
 ## 3.160.4
 
