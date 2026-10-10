@@ -1,6 +1,6 @@
 # Version history
 
-## 3.160.7
+## 3.161.3
 
 - Crystal Lake's teleport rooms are never on a route, for any character, with or without a boat: walks, loop approaches, Auto-Lair travel and automatic trips go round them, and no raft or skiff is offered, fetched or bought for the lake
 - When those rooms are the only way, a walk you start shows one card to cross them on your pick (nothing fetched); a trip the client starts stops and logs why
@@ -8,6 +8,18 @@
 - A route whose only way there needs a key or other item goes round hazard rooms you hold no counter for when it can, and asks for the key alone (the walk to the Hidden Study no longer crossed the lake or sent for a log raft)
 - A loop recorded across the lake still runs as before
 - bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.161.0
+
+- Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
+- With items still missing, it searches the rooms walked before the death (never a stash room)
+- The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
+- It walks to 12 rooms at most and returns; Stop and Pause reach it
+- It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
+- Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
+- Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+- Stop calls off a Recover Now that was still walking (both realms)
+- Bug report: the pile's missing items and the sweep's plan, state and blockers
 
 ## 3.160.4
 

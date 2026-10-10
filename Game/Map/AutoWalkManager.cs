@@ -972,7 +972,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // of its own. It ends when a leg to its destination arrives or fails, when the
     // walker is stopped, or when EndJourney says so; an internal Reset never ends it.
     private WalkJourney? _journey;
-    public WalkJourney? Journey => _journey;
+    // An owned leg isn't reported (see WalkJourney.OwnedLeg): to everything that
+    // would save the journey and resume it later, no journey is under way.
+    public WalkJourney? Journey => _journey is { OwnedLeg: true } ? null : _journey;
 
     // Where a journey to a stop-before boss room actually walks to (one room short).
     // A leg there is a leg to the journey's destination.
@@ -1120,7 +1122,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // fetch: what this walk is to fetch on its way and the trades agreed for it.
         // Held on the journey this walk begins, so it is there for that journey's
         // legs and restarts and for no other walk.
-        JourneyFetch? fetch = null)
+        JourneyFetch? fetch = null,
+        // ownedLeg: this walk is one leg of something that ends when its walk is
+        // taken; its journey is not reported through Journey (WalkJourney.OwnedLeg).
+        bool ownedLeg = false)
     {
         // A silent walk while a journey stands is one of its legs, and is planned by
         // the journey's rules where it states none of its own.
@@ -1203,7 +1208,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                     ignoreAvoids, preferTeleportFree, pickedRoute,
                     keepGatesClosedFor is { Count: > 0 } ? keepGatesClosedFor : null,
                     pickedRoute ? agreedHazardRooms : null,
-                    fetch);
+                    fetch,
+                    ownedLeg);
                 _journeyStopsAt = null;
             }
             _legToJourneyGoal = IsJourneyGoal(destination);
@@ -1912,13 +1918,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // Null when either room is outside the active graph or no route exists.
     // Side-effect-free — nothing is sent and no walk state changes, so a caller can
     // inspect a leg (e.g. a reroute deciding whether it runs dark) without
-    // committing to walk it.
-    public IReadOnlyList<RoomKey>? TryComputeRouteKeys(RoomKey from, RoomKey to)
+    // committing to walk it. avoidTeleports plans it as WalkTo(avoidTeleports: true)
+    // does, for a caller that will walk it that way and is bounding its length.
+    public IReadOnlyList<RoomKey>? TryComputeRouteKeys(RoomKey from, RoomKey to, bool avoidTeleports = false)
     {
         if (_graph.GetRoom(from) is null || _graph.GetRoom(to) is null) return null;
         if (from.Equals(to)) return new[] { from };
 
-        IReadOnlyList<Direction>? path = _bfs.FindPath(from, to, Filter);
+        IReadOnlyList<Direction>? path = _bfs.FindPath(from, to, Filter, refuseTeleports: avoidTeleports);
         if (path is null || path.Count == 0) return null;
         return ExpandRouteKeys(from, path);
     }

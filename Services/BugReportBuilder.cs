@@ -344,6 +344,24 @@ public static class BugReportBuilder
             ? "(none)"
             : $"{lastDeath.Status} @ {lastDeath.RoomKeyText}"
               + (lastDeath.RecoveryMessage is { Length: > 0 } msg ? $" — {msg}" : ""));
+        // The Stock spill sweep: what the pile is still waiting on, where the sweep
+        // is (or how the last one ended), and the rooms it tries in order — a "it
+        // walked off and found nothing" or "it never looked there" report needs all
+        // three, plus what this death said was gone and the trail it kept.
+        if (lastDeath is not null)
+        {
+            Kv(sb, "Latest deathpile still missing",
+                lastDeath.UnrecoveredItems is { Count: > 0 } missing ? string.Join(", ", missing) : "(nothing)");
+            if (lastDeath.ReturnedItems is { Count: > 0 } returned)
+                Kv(sb, "Latest death: returned to their rightful place", string.Join(", ", returned));
+            if (lastDeath.Trail is { Count: > 0 } trail)
+                Kv(sb, "Latest death: rooms walked up to it (newest first)",
+                    string.Join(", ", trail.Select(r => $"{r.Map}/{r.Room}")));
+        }
+        Kv(sb, "Stock spill sweep", svc.DeathRecovery.SpillSweepState);
+        Kv(sb, "Stock spill sweep held back right now by", svc.DeathRecovery.SpillSweepBlockers);
+        if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)
+            Kv(sb, "Stock spill sweep rooms, in order", plan);
         return sb.ToString();
     }
 
@@ -1909,7 +1927,12 @@ public static class BugReportBuilder
         // back to. A journey can stand with the walker idle, between two legs.
         Kv(sb, "Whole trip (every leg keeps to this)",
             walker.Journey is not { } journey
-                ? (walker.State == Game.Map.WalkState.Idle ? "(none)" : "(none — this walk is on no trip's rules)")
+                ? (walker.State == Game.Map.WalkState.Idle ? "(none)"
+                    // A spill sweep's leg is a journey the walker doesn't report, so
+                    // nothing saves it to resume; here it is named for what it is.
+                    : svc.DeathRecovery.SpillSweepActive && walker.Destination is { } stop
+                        ? $"a Stock spill sweep's leg to {stop.Map}/{stop.Room}, on foot (not a trip anything resumes)"
+                    : "(none — this walk is on no trip's rules)")
             : $"to {journey.Destination.Map}/{journey.Destination.Room}: {journey.Describe()}"
               + (journey.ClosedGates is { Count: > 0 } closed
                   ? $" ({string.Join(", ", closed.Select(id => $"#{id} {svc.ItemNames.GetName(id) ?? "?"}"))})" : string.Empty)

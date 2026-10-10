@@ -75,6 +75,17 @@ public sealed class DeathRecord
     // wording quirk). null / empty once everything has been seen recovered.
     public List<string>? UnrecoveredItems { get; set; }
 
+    // Stock only. Items the game said were gone for good at this death (`Your <item>
+    // has returned to its rightful place.`): nothing to look for, so recovery leaves
+    // them off the missing list. null when none were, or on Paradigm.
+    public List<string>? ReturnedItems { get; set; }
+
+    // Stock only. The rooms walked before this death, newest first, starting with
+    // the death room. When no floor nearby had room for an item the game put it in
+    // one of these, hidden, so the spill sweep searches them. null when the position
+    // wasn't known at death, on Paradigm, and on records from before it was kept.
+    public List<RoomRef>? Trail { get; set; }
+
     // Coins on hand at the moment of death — they drop into the deathpile with
     // the carried items, so they're shown alongside them under "Inventory lost".
     // Stored as per-denomination counts (not a consolidated copper total) so the
