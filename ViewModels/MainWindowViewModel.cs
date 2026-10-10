@@ -3425,6 +3425,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // the character stands and how far the trade had got can't be vouched
                 // for. A walk still standing fetches as before, and trades nothing.
                 AppServices.Current.EndTradeSession();
+                // The party is rebuilt after a drop, and what its members hold by
+                // then is not known: a hand-over remembered from before isn't kept.
+                if (wasConnected) AppServices.Current.PartyHandOvers.Clear("disconnected");
                 // A fight with a player can't outlive the connection; left standing
                 // it would keep the combat engine stood down after the reconnect.
                 AppServices.Current.PvpFight.Stop("disconnected", resume: false, connected: false);

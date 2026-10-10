@@ -1,10 +1,15 @@
 # Version history
 
-## 3.161.1
+## 3.161.2
 
 - A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
 - A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
 - bug reports addressed: paradigm-20261009-082958
+
+## 3.161.1
+
+- Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
+- A copy you handed them and the game confirmed is remembered until the party changes
 
 ## 3.161.0
 
