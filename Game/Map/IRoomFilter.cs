@@ -69,6 +69,12 @@ public interface IRoomFilter
     // opened at all, or only at poor odds. Null for any exit routes use freely.
     string? DescribeDoorRefusal(in RoomExit exit) => null;
 
+    // How the crosser's purse stands against what this exit charges (a toll, an NPC
+    // transport's fare), in words: what is carried and how far short it falls. Null
+    // for an exit that charges nothing; only the wealth-aware Services.MovementFilter
+    // says anything.
+    string? DescribePurseFor(in RoomExit exit) => null;
+
     // Changes whenever the stats the door rule reads change, so a caller that
     // remembers "no route from here" can tell when the answer may have changed.
     int DoorRuleStamp => 0;

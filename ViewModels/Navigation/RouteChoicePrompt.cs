@@ -1148,6 +1148,12 @@ public static class RouteChoicePrompt
             plan.StopRoom, plan.BlockDir, plan.BlockExit,
             key => services.RoomGraph.GetRoom(key)?.Name,
             services.ItemNames.GetName);
+        // A toll or fare that stops the walk: say what the purse was taken to be,
+        // since a count the client has wrong is the usual reason it surprises.
+        RoomExit blockExit = plan.BlockExit;
+        if ((services.Movement.DescribeExitBlock(in blockExit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0
+            && services.Movement.DescribePurseFor(in blockExit) is { } purse)
+            reason += $": {purse}";
         return new RouteChoice(
             FreeStepCount: 0,
             GatedStepCount: plan.Preview.Count > 0 ? plan.Preview.Count - 1 : 0,

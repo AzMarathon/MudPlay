@@ -28,6 +28,7 @@ public sealed class AbandonedDoorsFilter : IRoomFilter
     public bool IsExitBlocked(in RoomExit exit) => _inner?.IsExitBlocked(in exit) ?? false;
     public bool IsPoorOddsDoor(in RoomExit exit) => _inner?.IsPoorOddsDoor(in exit) ?? false;
     public string? DescribeDoorRefusal(in RoomExit exit) => _inner?.DescribeDoorRefusal(in exit);
+    public string? DescribePurseFor(in RoomExit exit) => _inner?.DescribePurseFor(in exit);
     public int DoorRuleStamp => _inner?.DoorRuleStamp ?? 0;
     public ExitBlockReason DescribeExitBlock(in RoomExit exit) => _inner?.DescribeExitBlock(in exit) ?? ExitBlockReason.None;
     public bool IsBoatPassable(in BoatPassage passage) => _inner?.IsBoatPassable(in passage) ?? true;

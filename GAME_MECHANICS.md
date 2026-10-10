@@ -5489,6 +5489,11 @@ Among protectable hazards, a further split governs whether the navigator may off
 - **The check is per-crosser.** Every party member needs their own `N × 100` on hand, and a member who
   can't cover it is refused at the gate and left behind while the rest pass.
 - **Stock: the toll is taken before the room's entry rule and the monsters' parting attack, and paying it ends a sneak** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_move_user` @0x417e0e–0x417e76; Realm: Stock, Paradigm not recorded)*. The payer sees `You just paid`, the coins handed over, then ` in toll charges.`, and the move goes on (which coins a charge takes, and how the list reads, is in *Money, banks & shops → How a charge takes coins, and when the purse is re-bucketed*). Paying clears that move's "sneak held" flag (@0x417e38), so a sneaking mover goes through every toll exit on the lost-sneak path. Each follower pays on its own follow move (*Party → Following the leader: follow / drag movement*).
+- **Client use:**
+  - `MovementFilter.IsTollGateBlocked` judges a toll on the purse the last full inventory read recorded, and a purse nobody has read refuses no toll. Two events put that record in doubt, and while it is in doubt no toll or fare is taken, until the next full read (`MovementFilter.NotePurseRead`):
+    - **a death** (`MovementFilter.NotePurseLostAtDeath`), because the coin carried goes with the pile (*Death & corpse recovery → Coins in the deathpile*). The record is marked stale at a death and so read as "purse unknown": a walk started from the graveyard went through the first toll on its way on the coin carried before the death (report `paradigm-20261010-145529`, Paradigm; the `i` read after that death showed `Wealth: 0 copper farthings`).
+    - **the refusal line, when the record covered the toll** (`MovementRefusalDetector.TollRefused` → `MovementFilter.NoteTollRefused`). The client then sends `i`, and `AutoWalkManager` re-plans round the toll without trying the step again.
+  - A walk whose only route crosses a toll or fare the purse doesn't cover fails naming the exit, its price and the purse it was judged on (`AutoWalkManager.DescribeUnpaidCrossing`, `MovementFilter.DescribePurseFor`), on the terminal as well as in the Navigation window.
 
 ### Gating a party's route through toll and level exits
 *Status: CONFIRMED*

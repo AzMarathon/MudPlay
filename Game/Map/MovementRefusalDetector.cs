@@ -139,6 +139,10 @@ public sealed partial class MovementRefusalDetector : IDisposable
         if (ExitGateRefused().IsMatch(text))
         {
             if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+            // Ahead of the revert: the walker re-plans off the revert, and by then
+            // the toll gate must already know the purse on record was wrong.
+            if (TollRefusal().Match(text) is { Success: true } toll)
+                TollRefused?.Invoke(TollCopper(toll));
             _tracker.NoteMoveBlocked(when);
             _log?.Info("MoveRefusal", $"exit refused: {text.Trim()}");
             return;
@@ -241,6 +245,23 @@ public sealed partial class MovementRefusalDetector : IDisposable
         @"^\s*(?:" + DefaultPatterns.ExitGateRefusals + @")\s*$",
         RegexOptions.CultureInvariant)]
     private static partial Regex ExitGateRefused();
+
+    // A move of ours was turned away at a toll, with the toll in copper: the game
+    // words the bar as "N gold crowns" whatever coins would have paid it
+    // (GAME_MECHANICS "Toll exits"). Null for any other coin wording, which nothing
+    // on record says how to value.
+    public event Action<long?>? TollRefused;
+
+    private static long? TollCopper(Match toll) =>
+        toll.Groups["coin"].Value is "gold crown" or "gold crowns"
+        && long.TryParse(toll.Groups["n"].Value, out long gold)
+            ? gold * 100
+            : null;
+
+    [GeneratedRegex(
+        @"^\s*You do not have enough to cover the toll of (?<n>\d+) (?<coin>.+)\.\s*$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex TollRefusal();
 
     [GeneratedRegex(
         @"^\s*You can't see well enough to move[.!]?\s*$",

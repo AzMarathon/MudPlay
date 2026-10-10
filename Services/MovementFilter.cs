@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using MudPlay.Game.Cash;
 using MudPlay.Game.Map;
 using MudPlay.Models.Profile;
 
@@ -680,16 +681,102 @@ public sealed class MovementFilter : IRoomFilter
     // at the gate; a member who hasn't reported fresh wealth counts as
     // unaffordable. Returns false (don't gate) when solo / not leading / own
     // wallet unknown — same "don't refuse on what we can't evaluate" rule as an
-    // unknown level. Demand-driven: invoked only for a toll exit, an NPC transport
-    // fare, or a boat fare, so nothing polls unless one is actually in play. Shared
-    // by the toll, transport-fare, and boat-fare gates.
+    // unknown level — except while the record is known to be wrong (PurseDoubt),
+    // when nothing is affordable. Demand-driven: invoked only for a toll exit, an
+    // NPC transport fare, or a boat fare, so nothing polls unless one is actually
+    // in play. Shared by the toll, transport-fare, and boat-fare gates.
     private bool CannotAfford(long cost)
     {
         if (cost <= 0) return false;
         if (_tollGateForcedClosed) return true;
+        // Ahead of the party's purse: it is our own record that isn't believed.
+        if (_purseDoubt != PurseDoubt.None) return true;
         if (PartyWealthProvider?.Invoke() is { } partyMin) return partyMin < cost;
         if (WealthProvider?.Invoke() is not { } wealth) return false;
         return wealth - Math.Max(0, ReservedCopper) < cost;
+    }
+
+    // ----- The purse on record, when it is known to be wrong ----------------
+    // The inventory record is only rebuilt by a full `i`. Until one is read, two
+    // events prove what it says about coin is out of date, and an unknown purse
+    // must not then fall back on "never refuses a walk": that rule is for a purse
+    // nobody has read, not for one known to be short.
+    private enum PurseDoubt
+    {
+        None,
+        // A death takes the coin carried along with the pile, on both realms
+        // (GAME_MECHANICS "Coins in the deathpile"), so the purse is empty.
+        Death,
+        // The game turned us away at a toll the record covered.
+        Refused,
+    }
+
+    private PurseDoubt _purseDoubt;
+
+    // RoomTracker.PlayerDeathObserved. A walk started from the graveyard on the
+    // coin carried before the death went through the first toll on its way and
+    // stood at the gate (report paradigm-20261010-145529).
+    public void NotePurseLostAtDeath()
+    {
+        _purseDoubt = PurseDoubt.Death;
+        _log?.Info("Tolls",
+            "The coin carried went with the deathpile: no toll or fare is taken until the inventory is read again.");
+    }
+
+    // The game refused a toll of costCopper (null when the line's coin isn't one we
+    // can value). Returns true when that contradicts the record, so the caller reads
+    // the inventory again; false when the record already said we were short, as
+    // when a toll is walked into by hand with an empty purse.
+    public bool NoteTollRefused(long? costCopper)
+    {
+        if (_purseDoubt != PurseDoubt.None) return false;
+        if (costCopper is { } cost && WealthProvider?.Invoke() is { } wealth && wealth < cost) return false;
+        _purseDoubt = PurseDoubt.Refused;
+        _log?.Info("Tolls",
+            "The game refused a toll the purse on record covered: no toll or fare is taken until the inventory is read again.");
+        return true;
+    }
+
+    // InventoryManager.FullInventoryParsed: the record is the game's own again.
+    public void NotePurseRead()
+    {
+        if (_purseDoubt == PurseDoubt.None) return;
+        _purseDoubt = PurseDoubt.None;
+        _log?.Info("Tolls", "Inventory read: tolls and fares go by the purse on record again.");
+    }
+
+    // How the purse stands against what this exit charges, for a walk's log line
+    // and for the line a walk with no route gives. Null for an exit that charges
+    // nothing.
+    public string? DescribePurseFor(in RoomExit exit)
+    {
+        long cost = exit.Hint == RoomExitHint.Toll && exit.TollGold > 0 ? (long)exit.TollGold * 100 : exit.FareCopper;
+        return cost > 0 ? DescribePurse(cost) : null;
+    }
+
+    // The same with nothing to pay, for the bug report.
+    public string DescribePurse() => DescribePurse(cost: 0);
+
+    private string DescribePurse(long cost)
+    {
+        switch (_purseDoubt)
+        {
+            case PurseDoubt.Death:
+                return "your coin went with the deathpile and the inventory hasn't been read since (type i)";
+            case PurseDoubt.Refused:
+                return "the game refused a toll the purse on record covered, so none is taken until the inventory is read again (type i)";
+        }
+        if (PartyWealthProvider?.Invoke() is { } partyMin)
+            return $"the party's poorest known purse holds {CurrencyFormat.Full(partyMin)}{Short(cost - partyMin)}";
+        if (WealthProvider?.Invoke() is not { } wealth)
+            return "the purse isn't known (inventory not read), so tolls and fares aren't refused on it";
+        long reserved = Math.Max(0, ReservedCopper);
+        string carried = reserved > 0
+            ? $"you carry {CurrencyFormat.Full(wealth)}, {CurrencyFormat.Full(reserved)} of it set aside for fees ahead"
+            : $"you carry {CurrencyFormat.Full(wealth)}";
+        return carried + Short(cost - (wealth - reserved));
+
+        static string Short(long by) => by > 0 ? $", {CurrencyFormat.Full(by)} short" : string.Empty;
     }
 
     // Copper set aside from our own wallet for something the walk is heading to pay,
@@ -902,6 +989,8 @@ public sealed class MovementFilter : IRoomFilter
     {
         _avoided.Clear();
         _stash.Clear();
+        // Another character's purse: its own first inventory read settles it.
+        _purseDoubt = PurseDoubt.None;
 
         if (profile.AvoidedRooms is { } a)
             foreach (RoomRef r in a) _avoided.Add(new RoomKey(r.Map, r.Room));
@@ -918,6 +1007,7 @@ public sealed class MovementFilter : IRoomFilter
         bool hadStash   = _stash.Count > 0;
         _avoided.Clear();
         _stash.Clear();
+        _purseDoubt = PurseDoubt.None;
         if (hadAvoided) AvoidedChanged?.Invoke();
         if (hadStash)   StashChanged?.Invoke();
     }

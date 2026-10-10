@@ -1,5 +1,13 @@
 # Version history
 
+## 3.165.2
+
+- After a death no walk takes a toll or paid transport until the inventory is read again (your coin went with the pile)
+- A toll the game refuses is not tried again: the inventory is re-read and the walk goes round it
+- A walk with no way round a toll you can't pay says so on the terminal, naming the toll and how short you are
+- Program log and bug report show the purse a toll was judged on
+- bug reports addressed: paradigm-20261010-145529
+
 ## 3.165.1
 
 - Conversation window: a picture emote no longer draws over the lines above and below it

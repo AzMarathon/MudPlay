@@ -1518,9 +1518,18 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 // DescribeBlockedRoute runs with gating restored (the suspension
                 // scope has closed), so DescribeExitBlock reports the real
                 // acquirable-gate reasons on the front-door route's hops.
+                bool unpaid = false;
                 string reason = describePath is { Count: > 0 }
-                    ? DescribeBlockedRoute(source.Key, describePath)
+                    ? DescribeBlockedRoute(source.Key, describePath, out unpaid)
                     : DescribeNoPlainRoute(source.Key, destination);
+                // A walk that can't pay its way says so where the user is looking,
+                // not only on the Navigation window's chip, and in the log from
+                // here: that window writes a failed walk's reason, and it may be shut.
+                if (unpaid)
+                {
+                    _log?.Info("Walker", $"walk to {destination}: {reason}");
+                    _unpaidCrossingHandler?.Invoke(destination, reason);
+                }
                 Raise(new WalkEvent(WalkEventKind.Failed, reason, destination));
                 return false;
             }
@@ -1531,6 +1540,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 IReadOnlySet<Direction>? openHere = _tracker.State.CurrentRoom?.Key.Equals(source.Key) == true
                     ? _tracker.ShownOpenExits()
                     : null;
+                LogPaidCrossings(source.Key, path, destination);
                 expanded = RemoteActionPathExpander.Expand(_graph, source.Key, path, _bfs, Filter, _log, openHere, unroutable);
             }
         }
@@ -1856,9 +1866,16 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // reasons tells the user the real obstacle — a locked door, a missing item,
     // a level window, a toll, a class hall, or a room hazard — instead of the
     // old fixed "level, toll, or class" line that misnamed a key-door block.
-    private string DescribeBlockedRoute(RoomKey source, IReadOnlyList<Direction> ungatedPath)
+    //
+    // unpaid: a toll or fare the crosser can't pay is among the reasons.
+    private string DescribeBlockedRoute(RoomKey source, IReadOnlyList<Direction> ungatedPath, out bool unpaid)
     {
+        unpaid = false;
         ExitBlockReason reasons = ExitBlockReason.None;
+        // The first toll and the first paid transport that turn the crosser away,
+        // kept whole so the message names the room, the way, the price and how
+        // the purse stands against it.
+        (RoomKey From, Direction Dir, RoomExit Exit)? tollGate = null, fareGate = null;
         List<int> missingItems = new();
         // The first level-gated hop's target + window, so the message can name the
         // actual barrier room and level instead of a bare "a level requirement".
@@ -1889,6 +1906,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 if ((hop.HasFlag(ExitBlockReason.LockedDoor) || hop.HasFlag(ExitBlockReason.Door))
                     && doorGate is null)
                     doorGate = (cur, dir, exit);
+                if (hop.HasFlag(ExitBlockReason.Toll)) tollGate ??= (cur, dir, exit);
+                if (hop.HasFlag(ExitBlockReason.Fare)) fareGate ??= (cur, dir, exit);
             }
             cur = exit.Target;
         }
@@ -1896,7 +1915,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // level opens them, so they are the whole of the reason.
         if (closedRooms is { } closed && Filter is { } filter)
             return DescribeClosedRooms(source, cur, closed.First, closed.Count, filter);
-        return FormatBlockReasons(reasons, missingItems, levelGate, doorGate);
+        unpaid = tollGate is not null || fareGate is not null;
+        return FormatBlockReasons(reasons, missingItems, levelGate, doorGate, tollGate, fareGate);
     }
 
     // Why a walk that would have to go through rooms closed to routes has no route,
@@ -2003,7 +2023,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         if (probe is null || probe.Count == 0)
             probe = _bfs.FindPath(leg.From, leg.To, Filter, ignoreExitGates: true);
         string why = probe is { Count: > 0 }
-            ? DescribeBlockedRoute(leg.From, probe)
+            ? DescribeBlockedRoute(leg.From, probe, out _)
             : DescribeNoPlainRoute(leg.From, leg.To);
 
         string exit = $"the exit {leg.GateDir.ToLongName()} of {NameRoom(leg.GateRoom)}";
@@ -2040,7 +2060,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
     private string FormatBlockReasons(ExitBlockReason reasons, IReadOnlyList<int> missingItems,
         (RoomKey Room, int Min, int Max)? levelGate,
-        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate)
+        (RoomKey From, Direction Dir, RoomExit Exit)? doorGate,
+        (RoomKey From, Direction Dir, RoomExit Exit)? tollGate,
+        (RoomKey From, Direction Dir, RoomExit Exit)? fareGate)
     {
         // Classification came up empty (e.g. a bare IRoomFilter with no gate
         // model) — keep a truthful generic line rather than inventing a cause.
@@ -2049,8 +2071,10 @@ public sealed class AutoWalkManager : IRecoverableEngine
 
         List<string> parts = new();
         if (reasons.HasFlag(ExitBlockReason.Level)) parts.Add(DescribeLevelGate(levelGate));
-        if (reasons.HasFlag(ExitBlockReason.Toll)) parts.Add("a toll you can't afford");
-        if (reasons.HasFlag(ExitBlockReason.Fare)) parts.Add("a paid transport a party member can't afford");
+        if (reasons.HasFlag(ExitBlockReason.Toll))
+            parts.Add(DescribeUnpaidCrossing(tollGate) ?? "a toll you can't afford");
+        if (reasons.HasFlag(ExitBlockReason.Fare))
+            parts.Add(DescribeUnpaidCrossing(fareGate) ?? "a paid transport a party member can't afford");
         if (reasons.HasFlag(ExitBlockReason.Class)) parts.Add("a class restriction");
         if (reasons.HasFlag(ExitBlockReason.Race)) parts.Add("a race restriction");
         // A locked or plain door blocks the same way to the user — name the one
@@ -2075,6 +2099,57 @@ public sealed class AutoWalkManager : IRecoverableEngine
         return BlockedExitDescriber.Describe(g.From, g.Dir, in exit,
             key => _graph.GetRoom(key)?.Name,
             id => _itemNameResolver?.Invoke(id));
+    }
+
+    // "a toll east from 1/1381 (Town Gates, Inner Bailey) (5 gold) you can't pay: you
+    // carry 0 copper, 5 gold short" — the crossing, its price and the purse it was
+    // judged on, since a purse the client has wrong is the usual reason this
+    // surprises. Null when the filter in use says nothing of purses.
+    private string? DescribeUnpaidCrossing((RoomKey From, Direction Dir, RoomExit Exit)? gate)
+    {
+        if (gate is not { } g) return null;
+        RoomExit exit = g.Exit;
+        return Filter?.DescribePurseFor(in exit) is { } purse
+            ? $"{DescribePaidCrossing(g.From, g.Dir, in exit)} you can't pay: {purse}"
+            : null;
+    }
+
+    private string DescribePaidCrossing(RoomKey from, Direction dir, in RoomExit exit) =>
+        exit.Hint == RoomExitHint.Toll && exit.TollGold > 0
+            ? $"a toll {RoomTooltipBuilder.DirectionLabel(dir)} from {NameRoom(from)} ({exit.TollGold} gold)"
+            : $"a paid transport from {NameRoom(from)} ({Cash.CurrencyFormat.Full(exit.FareCopper)} per person)";
+
+    // The tolls and fares a planned route pays, with the purse they were allowed on:
+    // the line that shows a walk went through a toll on a coin count that was wrong
+    // (report paradigm-20261010-145529, where nothing in the log said why).
+    private void LogPaidCrossings(RoomKey source, IReadOnlyList<Direction> path, RoomKey destination)
+    {
+        if (_log is null || Filter is not { } filter) return;
+        string? first = null;
+        int crossings = 0;
+        RoomKey cur = source;
+        foreach (Direction dir in path)
+        {
+            if (_graph.GetRoom(cur) is not { } room || !room.Exits.TryGetValue(dir, out RoomExit exit)) break;
+            if (filter.DescribePurseFor(in exit) is { } purse)
+            {
+                first ??= $"{DescribePaidCrossing(cur, dir, in exit)}: {purse}";
+                crossings++;
+            }
+            cur = exit.Target;
+        }
+        if (first is null) return;
+        _log.Info("Walker", $"walk to {destination} pays {first}"
+            + (crossings > 1 ? $" (and {crossings - 1} more toll(s) or fare(s) further on)" : string.Empty));
+    }
+
+    // Told when a walk has no route for want of a toll or fare, with the walk's
+    // destination and the reason it failed with.
+    private Action<RoomKey, string>? _unpaidCrossingHandler;
+    public void SetUnpaidCrossingHandler(Action<RoomKey, string> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        _unpaidCrossingHandler = handler;
     }
 
     // "a level requirement (1/1420 (Marble Passage) needs level 30+)" — names the
@@ -3198,6 +3273,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
             }
 
             if (TryResendRolledReveal(sourceForCurrentStep)) return;
+
+            // A toll or fare the purse doesn't cover is refused again on a retry, and
+            // a re-plan now goes round it: the walker stood at a toll gate sending
+            // the same step six times (report paradigm-20261010-145529).
+            if (_path is { } steps && _index < steps.Count && steps[_index] is MoveStep refused
+                && sourceForCurrentStep.Exits.TryGetValue(refused.Direction, out RoomExit refusedExit)
+                && Filter is { } gates
+                && (gates.DescribeExitBlock(in refusedExit) & (ExitBlockReason.Toll | ExitBlockReason.Fare)) != 0)
+            {
+                _log?.Info("Walker",
+                    $"step {_index + 1} refused at {DescribePaidCrossing(sourceForCurrentStep.Key, refused.Direction, in refusedExit)}; "
+                    + "re-planning without it");
+                TryReplanOrFail(RoomConfidence.Confirmed);
+                return;
+            }
 
             if (_retryCount < MaxRetriesPerStep)
             {

@@ -8477,6 +8477,32 @@ public sealed class AppServices
         };
         Profile.ProfileLoaded += _ => InventoryAfterDeath.Reset();
 
+        // The toll gate hears of the death too. The stale record above reads as "purse
+        // unknown", which a toll is not refused on, and the coin is known gone: until
+        // the re-read lands (or if its `i` never goes out) a walk from the graveyard
+        // would head for a toll it can't pay (report paradigm-20261010-145529).
+        RoomTracker.PlayerDeathObserved += Movement.NotePurseLostAtDeath;
+        Inventory.FullInventoryParsed += Movement.NotePurseRead;
+
+        // A walk with no route for want of a toll or fare says so on the terminal.
+        // Once per reason until a walk gets going: an engine that keeps asking for
+        // the same walk would otherwise repeat it.
+        string? lastUnpaidNotice = null;
+        Walker.SetUnpaidCrossingHandler((destination, reason) =>
+        {
+            string where = RoomGraph.GetRoom(destination)?.Name is { Length: > 0 } name
+                ? $"{destination} ({name})" : destination.ToString();
+            string notice = $"[Navigation: no walk to {where} - {reason}]";
+            if (notice == lastUnpaidNotice) return;
+            lastUnpaidNotice = notice;
+            // Posted: a re-plan can fail from inside the emulator's message pump.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(notice));
+        });
+        Walker.Event += e =>
+        {
+            if (e.Kind == Game.Map.WalkEventKind.Started) lastUnpaidNotice = null;
+        };
+
         // A held or knocked-down character can't walk and isn't dragged by a leader,
         // so a move that lands proves a latched hold is stale (its wear-off line was
         // missed). Without this the walker sits "Paused by: Held" and the hold cure
@@ -11234,6 +11260,18 @@ public sealed class AppServices
         if (_engineWireSend is null || string.IsNullOrWhiteSpace(command)) return false;
         _engineWireSend(System.Text.Encoding.Latin1.GetBytes(command.Trim() + "\r"));
         return true;
+    }
+
+    // MovementRefusalDetector.TollRefused. A toll the purse on record covered was
+    // refused, so the record is wrong (coin can go with nothing printed, as a room
+    // script's price does: GAME_MECHANICS "How a charge takes coins, and when the
+    // purse is re-bucketed"). The toll gate stops believing it at once, and the
+    // inventory is read again so that it can. Nothing is sent with Auto-All off,
+    // where the move was the user's own.
+    public void OnTollRefused(long? costCopper)
+    {
+        if (!Movement.NoteTollRefused(costCopper)) return;
+        if (!AutoModeController.KillSwitchEngaged) SendGameCommand("i");
     }
 
     // A Grab-All boss's loot just hit the floor: fire a blind `get <item>` for every

@@ -1187,6 +1187,7 @@ public partial class MainWindowViewModel : ObservableObject
             AppServices.Current.RoomTracker, AppServices.Current.Log,
             AppServices.Current.Conditions.IsConfuseFumbleLine,
             AppServices.Current.Conditions.IsActiveHoldLine);
+        _movementRefusalDetector.TollRefused += AppServices.Current.OnTollRefused;
         // Feeds the server's move-command echo ("[HP=..]:e") to the tracker so it
         // confirms a move's landing on that causal signal rather than guessing by
         // timing — the fix for phantom-advancing through identically-named grids.
