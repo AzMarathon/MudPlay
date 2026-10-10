@@ -6282,23 +6282,11 @@ public partial class MainWindowViewModel : ObservableObject
         if (!any) return;
         if (AppServices.Current.Profile.Current is not { } profile) return;
 
+        // The toggles are the master switch's to guard: with it off nothing is
+        // re-enabled, Auto-Train included, and the switch stays off.
+        if (!AppServices.Current.AutoModeController.ReEnableOnReconnect(general)) return;
+
         profile.Settings ??= new();
-        Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
-        Models.Profile.AutoActionDefaults am = dto.AutoMode;
-        if (general.ReEnableAutoCombatOnReconnect)   am.AutoCombat   = true;
-        if (general.ReEnableAutoNukeOnReconnect)     am.AutoNuke     = true;
-        if (general.ReEnableAutoHealRestOnReconnect) { am.AutoHeal = true; am.AutoRest = true; }
-        if (general.ReEnableAutoBlessOnReconnect)    am.AutoBless    = true;
-        if (general.ReEnableAutoLightOnReconnect)    am.AutoLight    = true;
-        if (general.ReEnableAutoGetItemsOnReconnect) am.AutoGetItems = true;
-        if (general.ReEnableAutoGetCashOnReconnect)  am.AutoGetCash  = true;
-        if (general.ReEnableAutoSneakOnReconnect)    am.AutoSneak    = true;
-        if (general.ReEnableAutoHideOnReconnect)     am.AutoHide     = true;
-        if (general.ReEnableAutoSearchOnReconnect)   am.AutoSearch   = true;
-
-        profile.Settings["General"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
-
         // Auto-train isn't an AutoMode bit — flip it in the "AutoTrainer" entry
         // via read-modify-write so the trainer tab's other fields survive.
         if (general.ReEnableAutoTrainOnReconnect)

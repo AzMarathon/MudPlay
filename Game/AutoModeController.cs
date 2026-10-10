@@ -221,6 +221,39 @@ public sealed class AutoModeController
         KillSwitchToggled?.Invoke(false);
     }
 
+    // The Settings → General "re-enable on reconnect" boxes: switch each ticked
+    // toggle back on after a reconnect. Not with the master switch off: a user
+    // who was connected, turned the autos off and then reconnected set them that
+    // way, and the reconnect respects it (user, 2026-10-09). It neither ticks a
+    // toggle nor clears the switch then. False when it held back for that.
+    public bool ReEnableOnReconnect(GeneralSettings optIns)
+    {
+        ArgumentNullException.ThrowIfNull(optIns);
+        if (_killEngaged)
+        {
+            _log?.Log(LogSeverity.Info, LogCategory,
+                "Reconnected with the master switch off: the autos stay off, as set (re-enable on reconnect skipped).");
+            return false;
+        }
+        if (_profile.Current is not { } profile) return true;
+
+        GeneralSettings general = ReadGeneral(profile);
+        AutoActionDefaults am = general.AutoMode;
+        AutoActionDefaults before = am.Clone();
+        if (optIns.ReEnableAutoCombatOnReconnect)   am.AutoCombat   = true;
+        if (optIns.ReEnableAutoNukeOnReconnect)     am.AutoNuke     = true;
+        if (optIns.ReEnableAutoHealRestOnReconnect) { am.AutoHeal = true; am.AutoRest = true; }
+        if (optIns.ReEnableAutoBlessOnReconnect)    am.AutoBless    = true;
+        if (optIns.ReEnableAutoLightOnReconnect)    am.AutoLight    = true;
+        if (optIns.ReEnableAutoGetItemsOnReconnect) am.AutoGetItems = true;
+        if (optIns.ReEnableAutoGetCashOnReconnect)  am.AutoGetCash  = true;
+        if (optIns.ReEnableAutoSneakOnReconnect)    am.AutoSneak    = true;
+        if (optIns.ReEnableAutoHideOnReconnect)     am.AutoHide     = true;
+        if (optIns.ReEnableAutoSearchOnReconnect)   am.AutoSearch   = true;
+        if (!am.SameAs(before)) WriteGeneral(profile, general);
+        return true;
+    }
+
     // "Remote commands 3, Triggers 12" — the skip counters as one phrase.
     public string DescribeSkipped()
     {

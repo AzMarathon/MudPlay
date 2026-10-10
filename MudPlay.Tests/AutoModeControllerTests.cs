@@ -224,6 +224,59 @@ public sealed class AutoModeControllerTests
         Assert.False(engagedWhenAsked);
     }
 
+    // "the reconnect should not turn autos back on in the situation that the user
+    // was connected, then hung up and turned them off, then reconnect" (user,
+    // 2026-10-09): with the switch off the re-enable boxes change nothing and the
+    // switch stays off.
+    [Fact]
+    public void ReEnableOnReconnect_SwitchOff_ChangesNothing_AndLeavesTheSwitchOff()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+        controller.TurnOff("test");
+        List<bool> events = new();
+        controller.KillSwitchToggled += events.Add;
+
+        bool done = controller.ReEnableOnReconnect(new GeneralSettings
+        {
+            ReEnableAutoCombatOnReconnect = true,
+            ReEnableAutoHealRestOnReconnect = true,
+        });
+
+        Assert.False(done);
+        Assert.True(controller.KillSwitchEngaged);
+        Assert.True(ReadAutoMode(profile).SameAs(AllOff()));
+        Assert.Empty(events);
+
+        // What the user had is still what comes back when they switch it on.
+        controller.TurnOn("test");
+        AutoActionDefaults mode = ReadAutoMode(profile);
+        Assert.True(mode.AutoCombat);
+        Assert.False(mode.AutoHeal);
+    }
+
+    [Fact]
+    public void ReEnableOnReconnect_SwitchOn_TicksTheOptedInToggles()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, AllOff());
+        AutoModeController controller = new(profile);
+
+        bool done = controller.ReEnableOnReconnect(new GeneralSettings
+        {
+            ReEnableAutoCombatOnReconnect = true,
+            ReEnableAutoHealRestOnReconnect = true,
+        });
+
+        Assert.True(done);
+        AutoActionDefaults mode = ReadAutoMode(profile);
+        Assert.True(mode.AutoCombat);
+        Assert.True(mode.AutoHeal);
+        Assert.True(mode.AutoRest);
+        Assert.False(mode.AutoNuke);
+    }
+
     [Fact]
     public void ResetSnapshot_ClearsTheSwitch_AndSaysSo()
     {
