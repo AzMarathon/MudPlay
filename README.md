@@ -7,7 +7,9 @@
 > - With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
 > - Go backwards if running unticked: the run goes on past it, and a loop carries on from there
 > - Ticked: a monster on your route is run from on every return
+> - A low-HP or low-mana flee set to run forwards now carries a loop on too, instead of returning to the fight room
 > - A forward flee no longer starts with the step just walked
+> - A flee ends when you die, disconnect or load another character
 > - Two monsters ship set to Flee; set Neutral or Enemy to turn it off
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
