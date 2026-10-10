@@ -856,6 +856,50 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(new[] { Direction.N }, h.Walker.PeekPlannedDirections(2));   // only B → C is left
     }
 
+    // 1/1 ──N── 1/2 ──N── 1/3 ──N── 1/4
+    private const string FourRoomLineJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A later leg of the same run: the earlier leg walked a step of the path the
+    // index knows nothing of, and the walk no longer stands where its paused step
+    // landed. Peeked from the index, the leg was planned two rooms behind itself.
+    [Fact]
+    public void ForwardPeek_ForALaterLegOfARun_StartsAfterTheStepsItHasWalked()
+    {
+        Harness h = NewHarness(FourRoomLineJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 4));                           // N, N, N; the first is in flight
+        h.Walker.PauseForFlee("low HP");
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(new[] { Direction.N, Direction.N }, h.Walker.PeekPlannedDirections(3));   // leg 1: B → C → D
+
+        h.Walker.SendBacktrackMove(Direction.N);
+        h.Tracker.NoteRoomObserved(new RoomObservation("C",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { Direction.N }, h.Walker.PeekPlannedDirections(3));                // leg 2: only C → D is left
+    }
+
     // The other ordering: the walker saw the arrival, advanced and sent the next
     // step. That step has not landed, so it is still the one ahead.
     [Fact]

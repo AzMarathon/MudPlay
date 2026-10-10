@@ -440,6 +440,12 @@ public sealed class LoopRunner : IRecoverableEngine
         // from advancing the index. Counting it sent a forward flee off with the
         // direction it had just come in by.
         int from = _index + (InFlightStepHasLanded() ? 1 : 0);
+        // A flee already holds the loop: this is a later leg of its run, and its
+        // earlier legs have walked steps of the lap the index knows nothing of. The
+        // lap goes on from the step that leads into the room we stand in.
+        if (_fleeHolding && _tracker.State.CurrentRoom?.Key is { } here
+            && FirstStepLeadingTo(here, _index, n, out _) is >= 0 and int walked)
+            from = walked + 1;
         // Loops are circular — wrap around the circuit to fill the count. Stop at
         // the first command / delay step: a forward flee sends plain cardinals
         // only and can't run a custom-command step mid-escape.
@@ -534,32 +540,62 @@ public sealed class LoopRunner : IRecoverableEngine
     // them as walked: the last becomes the step in flight with its move landed, so
     // the resume advances past it and the lap goes on from the room the run stopped
     // in (user, 2026-10-10), where walking back would only meet again what was run
-    // from. Nothing is adopted when that room is not ahead on this lap: the run was
-    // turned onto another exit, or ran over the lap's end.
+    // from. Nothing is adopted when that room is not ahead on the lap, this one or
+    // the start of the next: the run was turned onto another exit.
     private void TakeStepsRunForwardAsWalked(RoomKey landedAt)
     {
-        if (_graph is null || State != LoopState.Paused || _circleStartRoom is not { } here) return;
-        for (int k = 0; k < _expandedSteps.Count; k++)
+        if (State != LoopState.Paused) return;
+        int was = _index;
+        int k = FirstStepLeadingTo(landedAt, _index, _expandedSteps.Count, out RoomKey from);
+        // Not ahead on this lap, with nothing but moves left in it: the run may have
+        // walked over the lap's end. Then the lap is done, and is counted and
+        // announced as any other, before the steps of the next one are taken.
+        if (k < 0 && RestOfLapIsMoves()
+            && FirstStepLeadingTo(landedAt, 0, _index, out _) >= 0)
+        {
+            RollLapOver();
+            // A wrap's listener may stop the loop.
+            if (_loop is null || State != LoopState.Paused) return;
+            k = FirstStepLeadingTo(landedAt, 0, _expandedSteps.Count, out from);
+        }
+        if (k < 0) return;
+
+        _log?.Info("LoopRunner",
+            $"ResumeAfterFlee: the run went forward to {landedAt}, the room step {k + 1} leads to; carrying on from step {k + 2} (was at step {was + 1})");
+        _index = k;
+        _stepInFlight = true;
+        _expectedMoveSource = from;
+        _expectedMoveTarget = landedAt;
+    }
+
+    private bool RestOfLapIsMoves()
+    {
+        for (int k = _index; k < _expandedSteps.Count; k++)
+            if (_expandedSteps[k] is not MoveLoopStep) return false;
+        return true;
+    }
+
+    // The first step in [first, end) whose move leads into this room, found by
+    // walking the lap from its start, and the room that step leaves from; -1 when
+    // there is none. It stops at the first step in that range that is not a move: a
+    // flee sends moves only, so it cannot have crossed one.
+    private int FirstStepLeadingTo(RoomKey room, int first, int end, out RoomKey from)
+    {
+        from = default;
+        if (_graph is null || _circleStartRoom is not { } here) return -1;
+        for (int k = 0; k < end && k < _expandedSteps.Count; k++)
         {
             if (_expandedSteps[k] is not MoveLoopStep move)
             {
-                // A flee sends moves only, so it cannot have crossed this step.
-                if (k >= _index) return;
+                if (k >= first) return -1;
                 continue;
             }
-            if (_graph.GetRoom(here) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) return;
-            RoomKey from = here;
+            if (_graph.GetRoom(here) is not { } at || !at.Exits.TryGetValue(move.Direction, out RoomExit exit)) return -1;
+            from = here;
             here = exit.Target;
-            if (k < _index || !here.Equals(landedAt)) continue;
-
-            _log?.Info("LoopRunner",
-                $"ResumeAfterFlee: the run went forward to {landedAt}, the room step {k + 1} leads to; carrying on from step {k + 2} (was at step {_index + 1})");
-            _index = k;
-            _stepInFlight = true;
-            _expectedMoveSource = from;
-            _expectedMoveTarget = landedAt;
-            return;
+            if (k >= first && here.Equals(room)) return k;
         }
+        return -1;
     }
 
     // The room the loop stood in, with nothing in flight, when the recovery gate
@@ -1609,6 +1645,40 @@ public sealed class LoopRunner : IRecoverableEngine
 
     // ----- internals -------------------------------------------------
 
+    // The lap's last step is behind us: count and time the lap, go back to step 0
+    // and announce the wrap. Called where the steps run out, and by a forward flee's
+    // resume when the run itself walked over the lap's end.
+    private void RollLapOver()
+    {
+        if (_loop is null) return;
+        // Record the just-completed lap's duration into the rolling
+        // history (capped at MaxLapHistory) so AverageLapTime stays
+        // bounded in memory across long-running sessions.
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        bool partLap = _partialLap;
+        _partialLap = false;
+        if (!partLap)
+        {
+            TimeSpan lapTime = now - _lapStartedAt;
+            _lapDurations.Add(lapTime);
+            if (_lapDurations.Count > MaxLapHistory) _lapDurations.RemoveAt(0);
+            _completedLaps++;
+        }
+        _lapStartedAt = now;
+        _index = 0;
+
+        // A live per-room edit that added or removed a command deferred its
+        // re-expansion to here — the one safe point to swap the step list, with
+        // _index at 0 and the player back at the entry room after the closing leg.
+        if (_reExpandAtLapEnd)
+        {
+            _reExpandAtLapEnd = false;
+            ExpandSteps();
+        }
+
+        if (!partLap) Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
+    }
+
     private void SendNextStep()
     {
         if (_loop is null || State != LoopState.Running) return;
@@ -1622,32 +1692,7 @@ public sealed class LoopRunner : IRecoverableEngine
         // runs until the user Stops or the recovery gate aborts it.
         if (_index >= _expandedSteps.Count)
         {
-            // Record the just-completed lap's duration into the rolling
-            // history (capped at MaxLapHistory) so AverageLapTime stays
-            // bounded in memory across long-running sessions.
-            DateTimeOffset now = DateTimeOffset.UtcNow;
-            bool partLap = _partialLap;
-            _partialLap = false;
-            if (!partLap)
-            {
-                TimeSpan lapTime = now - _lapStartedAt;
-                _lapDurations.Add(lapTime);
-                if (_lapDurations.Count > MaxLapHistory) _lapDurations.RemoveAt(0);
-                _completedLaps++;
-            }
-            _lapStartedAt = now;
-            _index = 0;
-
-            // A live per-room edit that added or removed a command deferred its
-            // re-expansion to here — the one safe point to swap the step list, with
-            // _index at 0 and the player back at the entry room after the closing leg.
-            if (_reExpandAtLapEnd)
-            {
-                _reExpandAtLapEnd = false;
-                ExpandSteps();
-            }
-
-            if (!partLap) Raise(new LoopEvent(LoopEventKind.RepeatStarted, _loop.Name));
+            RollLapOver();
 
             // A RepeatStarted subscriber can react synchronously — e.g. a
             // room-arrival dispatcher asserting a MovementCoordinator gate to

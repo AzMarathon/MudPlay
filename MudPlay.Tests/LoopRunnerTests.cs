@@ -1540,6 +1540,62 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // A square: 1/1 ─E─ 1/2 ─N─ 1/3 ─W─ 1/4 ─S─ back to 1/1.
+    private const string RingGraphJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "SW",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "0", "E": "1/2", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "SE",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "0", "E": "0", "W": "1/1",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "NE",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/2", "E": "0", "W": "1/4",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "NW",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/1", "E": "1/3", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A forward run that walked over the lap's end: the lap it finished is counted
+    // and announced like any other, and the next one goes on from where the run
+    // landed. It used to be re-planned from there as a fresh start, the lap lost.
+    [Fact]
+    public void ForwardFleeResume_OverTheLapsEnd_CountsTheLap_AndCarriesOn()
+    {
+        Harness h = NewHarness(RingGraphJson, withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ring", new[]
+        {
+            new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3), new RoomKey(1, 4),
+        }));                                                          // E, N, W, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("SE", new HashSet<Direction> { Direction.N, Direction.W }));
+        h.Drain();
+        h.Tracker.NoteRoomObserved(new RoomObservation("NE", new HashSet<Direction> { Direction.S, Direction.W }));
+        h.Drain();                                                    // step 3 (W into NW) is in flight
+        h.Runner.PauseForFlee("a Flee monster");
+        h.Tracker.NoteRoomObserved(new RoomObservation("NW", new HashSet<Direction> { Direction.S, Direction.E }));
+        Assert.Equal(new[] { Direction.S, Direction.E }, h.Runner.PeekPlannedDirections(2));   // over the lap's end
+        int sentBefore = h.Sent.Count;
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));                     // the run walked S and then E itself
+        h.Runner.ResumeAfterFlee(new RoomKey(1, 2), carryOnFromHere: true);
+        h.Drain();
+
+        Assert.Equal(1, h.Runner.CompletedLaps);
+        Assert.Single(h.Events, e => e.Kind == LoopEventKind.RepeatStarted);
+        Assert.Single(h.Events, e => e.Kind == LoopEventKind.Started);                         // not restarted
+        Assert.Equal(LoopState.Running, h.Runner.State);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));                            // step 2 of the new lap
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
     // A forward flee walks the loop's next steps. Asked in a room the loop came into
     // while paused (a fight there, or the flee itself pausing it as the move
     // confirms), the step that carried it in is still the one at the index: counted,
@@ -1562,6 +1618,30 @@ public sealed class LoopRunnerTests : IDisposable
 
         Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
         Assert.Equal(new[] { Direction.S, Direction.S }, h.Runner.PeekPlannedDirections(2));
+    }
+
+    // A later leg of the same run (still under the run trigger, or a Flee monster
+    // seen where a low-HP run landed): the earlier leg walked a step of the lap the
+    // index knows nothing of, and the loop no longer stands where its paused step
+    // landed. Peeked from the index, the leg set off back into the room it had run
+    // from.
+    [Fact]
+    public void ForwardPeek_ForALaterLegOfARun_StartsAfterTheStepsItHasWalked()
+    {
+        Harness h = NewHarness(withWalker: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+        h.Runner.PauseForFlee("low HP");
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        Assert.Equal(new[] { Direction.S }, h.Runner.PeekPlannedDirections(1));           // leg 1: C → B
+
+        h.Runner.SendBacktrackMove(Direction.S);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 2), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { Direction.S }, h.Runner.PeekPlannedDirections(1));           // leg 2: B → A, not N back into C
     }
 
     // The other ordering: the loop saw the arrival, advanced and sent the next step.

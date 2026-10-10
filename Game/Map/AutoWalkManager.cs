@@ -355,7 +355,21 @@ public sealed class AutoWalkManager : IRecoverableEngine
             && _index < _path.Count
             && _path[_index] is MoveStep { ExpectedTarget: var target }
             && _tracker.State.CurrentRoom?.Key.Equals(target) == true;
-        for (int i = _index + (landed ? 1 : 0); i < _path.Count && dirs.Count < count; i++)
+        int from = _index + (landed ? 1 : 0);
+        // A later leg of a flee that already holds the walk: its earlier legs have
+        // walked steps the index knows nothing of. The path goes on from the step
+        // that leads into the room we stand in. Only moves are looked through: a
+        // flee sends nothing else.
+        if (_fleeHolding && _tracker.State.CurrentRoom?.Key is { } here)
+        {
+            for (int i = _index; i < _path.Count && _path[i] is MoveStep ahead; i++)
+            {
+                if (!ahead.ExpectedTarget.Equals(here)) continue;
+                from = i + 1;
+                break;
+            }
+        }
+        for (int i = from; i < _path.Count && dirs.Count < count; i++)
         {
             // Stop at the first command / action step — a forward flee sends
             // plain cardinals only, so we can't cross a lever / door step here.
