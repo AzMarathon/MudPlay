@@ -1193,8 +1193,9 @@ public sealed partial class CombatManager : IDisposable
     // Wire the read of MonsterRelationshipWatcher.NoAnswerComing, asked for the two
     // relationships that are answered on sight and otherwise left out of the fight.
     // It is true for Hangup while no hang-up will come (Disable Hangups on, or the
-    // minute after a reconnect), and self-defence then fights one back when it
-    // attacks; it is never true for Flee. Unset ⇒ neither is ever fought back.
+    // minute after a reconnect), and for Flee while no run will (nothing to run
+    // along, no way out, a follower, the flee's switches off). Self-defence then
+    // fights one back when it attacks. Unset ⇒ neither is ever fought back.
     public void SetNoAnswerComingProbe(Func<MonsterRelationship, bool> noAnswerComing)
     {
         ArgumentNullException.ThrowIfNull(noAnswerComing);
@@ -3967,12 +3968,13 @@ public sealed partial class CombatManager : IDisposable
     // line — each carries the attacker's name in group 0). When auto-combat is
     // engaging this room (so _isEnabled: auto-combat on AND not a do-not-attack /
     // combat-suppressed room) and the attacker's relationship lets us fight back —
-    // Friend, Enemy, or Neutral, but NOT Flee, and Hangup only while no hang-up
-    // will come for it: a Hangup monster is answered with a hang-up on sight
-    // (MonsterRelationshipWatcher), so it is fought back only with Disable Hangups
-    // on or in the minute after a reconnect (user, 2026-10-09: "fight back"), and a
-    // Flee monster is run from on sight and never fought back, run or no run — mark
-    // its instance user-engaged so the engine takes it over,
+    // Friend, Enemy, or Neutral, and Hangup or Flee only while the answer of their
+    // own is not coming: a Hangup monster is answered with a hang-up on sight and a
+    // Flee monster with a run (MonsterRelationshipWatcher), so one is fought back
+    // only when no hang-up will come (Disable Hangups on, or the minute after a
+    // reconnect) and the other only when no run will (user, 2026-10-09: "fight
+    // back", asked of each) — mark its instance user-engaged so the engine takes it
+    // over,
     // even a Friend it would normally leave alone or a neutral we never provoked.
     // Report paradigm-20260921-132800: a hand-attacked Friend (a Friend-relationship
     // NPC) kept hitting the player every round while the engine sat idle, because a

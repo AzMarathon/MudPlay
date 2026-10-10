@@ -2726,6 +2726,31 @@ public sealed class HealthManagerTests
         Assert.Equal(new Game.Map.RoomKey(1, 48), h.Engine.ResumedAtRoom);
     }
 
+    // With Go backwards if running unticked the run goes on along the engine's own
+    // route, out of the monster's room on the far side, and the engine is picked
+    // up again where it lands.
+    [Fact]
+    public void FleeFromMonster_GoBackwardsUnticked_RunsOnAlongTheRoute()
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Forward;
+        h.Combat.RunDistance = 2;
+        h.Engine!.PlannedForward.AddRange(new[]
+        {
+            Game.Map.Direction.E, Game.Map.Direction.N, Game.Map.Direction.W,
+        });
+
+        Assert.Equal(FleeOutcome.Started, h.Health.FleeFromMonster(FleeSight, () => true));
+        Assert.Equal(new[] { Game.Map.Direction.E }, h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));
+        Assert.Equal(new[] { Game.Map.Direction.E, Game.Map.Direction.N }, h.Engine.SentBacktrackMoves);
+
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 52));
+        Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
+        Assert.Equal(new Game.Map.RoomKey(1, 52), h.Engine.ResumedAtRoom);
+    }
+
     // The run-if-below flee's own gate: with Auto-Heal and Auto-Rest both off the
     // engine that runs every flee is off. There is no carve-out for it like the
     // hang-up's all-off option.

@@ -44,19 +44,26 @@ namespace MudPlay.Game.Combat;
 // engine on, a character that is not a party follower) and ends as that ends: the
 // walk or loop is picked up again once the run has landed, and it walks back. A
 // monster that stands on the route is therefore met again, and run from again, for
-// as long as it stands there: nothing here stops that, as nothing stops it after a
-// hit-and-run retreat. No run starts while Auto-All, the master switch, is off
-// (user, 2026-10-09: all autos off means the master switch is off, and with it off
-// nothing automatic fires at all). The board's menu, the PvP side, the master
-// switch and the health engine being off leave the sighting open, as the first two
-// do for Hangup. A run that could not start (no walk or loop, no way out, a
-// follower) is not tried again inside the same sighting: a walk started beside the
-// monster would otherwise be turned round by the next roster. No hang-up is sent
-// in a run's place.
+// as long as it stands there, and nothing here stops that (user, 2026-10-09:
+// "thats the users problem to figure out, leave it as is"). No run starts while
+// Auto-All, the master switch, is off (user, 2026-10-09: "when i say all auto's
+// off, i mean the master switch is off"; "none of our auto systems should
+// respond"). The board's menu, the PvP side, the master switch and the health
+// engine being off leave the sighting open, as the first two do for Hangup. A run
+// that could not start (no walk or loop, no way out, a follower) is not tried again
+// inside the same sighting: a walk started beside the monster would otherwise be
+// turned round by the next roster. No hang-up is sent in a run's place.
+//
+// A Flee monster no run is coming for is fought back when it attacks (user,
+// 2026-10-09: "fight back"), as a Hangup monster is when no hang-up is coming:
+// NoAnswerComing says so to self-defence. It is still never picked on sight.
 //
 // Hangup outranks Flee. With both on the roster the hang-up is the answer and no
 // run is started, unless no hang-up is coming (HangupWatchIsOff): then the Flee
-// monster is run from.
+// monster is run from if a walk or loop is running, and otherwise both are left
+// alone until they attack (user, 2026-10-09: "it would only run from the flee
+// monster if a navigation engine was running ... otherwise it'd fight, and if it
+// was idle, and disable hangups was on, it would fight both").
 //
 // After a hang-up for a monster seen here, the watch is off for a minute once the
 // character is back in the game (user, 2026-10-09: "if a user manually reconnects
@@ -105,6 +112,12 @@ public sealed class MonsterRelationshipWatcher : IDisposable
     private readonly HashSet<int> _fleeAnswered = new();
     private string? _fleeHeldFor;
 
+    // A Flee monster is in the room and the client is not going to run from it, so
+    // it is to be fought back if it attacks. False while a run is under way or on
+    // its way, and for the holds that are someone else's to answer: the hang-up, the
+    // PvP actions, the board's menu, a character that is down.
+    private bool _noRunComing;
+
     private DateTimeOffset? _hungUpAt;      // our exit command went out; the drop is awaited
     private DateTimeOffset? _escapeSeenAt;  // a Hangup monster was seen just after another path's escape went out
     private bool _holdArmed;                // dropped by our hang-up; the minute starts at the next game prompt
@@ -136,13 +149,13 @@ public sealed class MonsterRelationshipWatcher : IDisposable
 
     // Whether a monster of this relationship that attacks is to be fought back
     // because its own answer is not coming. Self-defence asks it for the two
-    // relationships it otherwise leaves alone.
+    // relationships it otherwise leaves alone. With the master switch off no run is
+    // coming either, and whether anything is fought then is self-defence's own gate
+    // to say, as it is for a Neutral monster.
     public bool NoAnswerComing(MonsterRelationship relationship) => relationship switch
     {
         MonsterRelationship.Hangup => HangupWatchIsOff,
-        // A Flee monster is not fought back, whether or not a run was started for
-        // it: Flee kept the monster out of the fight before it started runs, and
-        // nothing has ruled otherwise.
+        MonsterRelationship.Flee => _noRunComing,
         _ => false,
     };
 
@@ -401,18 +414,18 @@ public sealed class MonsterRelationshipWatcher : IDisposable
 
         if (hangupAnswers)
         {
-            NoRun("hangup", what, "a Hangup monster is here as well, and the hang-up is the answer to this room");
+            NoRun("hangup", what, "a Hangup monster is here as well, and the hang-up is the answer to this room", fightBack: false);
             return;
         }
         if (_atBoardMenu())
         {
-            NoRun("menu", what, "the character is at the board's menu, not in the game");
+            NoRun("menu", what, "the character is at the board's menu, not in the game", fightBack: false);
             return;
         }
         if (_pvpHandles(obs))
         {
             // Answered when the fight ends or the player leaves, as a Hangup monster is.
-            NoRun("pvp", what, "the PvP actions come first (a fight with a player, or an Enemy player in the room)");
+            NoRun("pvp", what, "the PvP actions come first (a fight with a player, or an Enemy player in the room)", fightBack: false);
             return;
         }
         if (_masterSwitchOff())
@@ -420,14 +433,14 @@ public sealed class MonsterRelationshipWatcher : IDisposable
             // Asked here and not of HealthManager, whose other flees are not held
             // to the master switch. An auto turned back on by hand leaves the
             // switch off, so the health engine's own test below does not cover it.
-            NoRun("master-off", what, "Auto-All is off (the master switch), so nothing automatic runs");
+            NoRun("master-off", what, "Auto-All is off (the master switch), so nothing automatic runs", fightBack: true);
             return;
         }
 
         FleeOutcome outcome = _flee($"{what} is here, relationship Flee", FleeMonsterStillHere);
         if (outcome == FleeOutcome.EngineOff)
         {
-            NoRun("engine-off", what, "Auto-Heal and Auto-Rest are both off, and they run every flee");
+            NoRun("engine-off", what, "Auto-Heal and Auto-Rest are both off, and they run every flee", fightBack: true);
             return;
         }
 
@@ -436,29 +449,26 @@ public sealed class MonsterRelationshipWatcher : IDisposable
         switch (outcome)
         {
             case FleeOutcome.Started:
-                _fleeHeldFor = null;
-                RecordFlee($"{what} seen {_describeRoom()}: its relationship is Flee, running (the Combat tab's run distance and direction)");
+                Running($"{what} seen {_describeRoom()}: its relationship is Flee, running (the Combat tab's run distance and direction)");
                 break;
             case FleeOutcome.AlreadyRunning:
-                _fleeHeldFor = null;
-                RecordFlee($"{what} seen {_describeRoom()}: its relationship is Flee, and a flee was already under way, so nothing more was sent");
+                Running($"{what} seen {_describeRoom()}: its relationship is Flee, and a flee was already under way, so nothing more was sent");
                 break;
             case FleeOutcome.Escaping:
-                _fleeHeldFor = null;
-                RecordFlee($"{what} seen {_describeRoom()}: its relationship is Flee, and a hang-up or wimpy jump had just gone out, so no run was started");
+                Running($"{what} seen {_describeRoom()}: its relationship is Flee, and a hang-up or wimpy jump had just gone out, so no run was started");
                 break;
             case FleeOutcome.Follower:
-                NoRun("follower", what, "this character is following a party leader, and a follower does not run off alone");
+                NoRun("follower", what, "this character is following a party leader, and a follower does not run off alone", fightBack: true);
                 break;
             case FleeOutcome.NoEngine:
-                NoRun("no-engine", what, "no walk or loop is running, so there is no route to run back along");
+                NoRun("no-engine", what, "no walk or loop is running, so there is no route to run back along", fightBack: true);
                 break;
             case FleeOutcome.Down:
-                NoRun("down", what, "the character is down and cannot move");
+                NoRun("down", what, "the character is down and cannot move", fightBack: false);
                 break;
             default:
                 // HealthManager has said which route failed in its own line.
-                NoRun("no-route", what, "no way out of the room could be found");
+                NoRun("no-route", what, "no way out of the room could be found", fightBack: true);
                 break;
         }
     }
@@ -494,11 +504,23 @@ public sealed class MonsterRelationshipWatcher : IDisposable
     }
 
     // No run was started. Said once per sighting for each reason, like Hold.
-    private void NoRun(string key, string what, string why)
+    // fightBack is whether the monster is then fought back when it attacks
+    // (NoAnswerComing): it is, wherever the client itself is not going to run.
+    private void NoRun(string key, string what, string why, bool fightBack)
     {
+        _noRunComing = fightBack;
         if (_fleeHeldFor == key) return;
         _fleeHeldFor = key;
-        RecordFlee($"{what} seen {_describeRoom()}: its relationship is Flee, but {why}");
+        RecordFlee($"{what} seen {_describeRoom()}: its relationship is Flee, but {why}"
+            + (fightBack ? "; it is fought back if it attacks" : ""));
+    }
+
+    // A run, or an escape that stands in for one, is the answer: nothing is fought.
+    private void Running(string what)
+    {
+        _noRunComing = false;
+        _fleeHeldFor = null;
+        RecordFlee(what);
     }
 
     private void EndSighting()
@@ -517,6 +539,7 @@ public sealed class MonsterRelationshipWatcher : IDisposable
     {
         _fleeAnswered.Clear();
         _fleeHeldFor = null;
+        _noRunComing = false;
     }
 
     // The first of these monsters not yet answered in this sighting. One that left

@@ -1169,21 +1169,108 @@ public sealed class MonsterRelationshipWatcherTests
         Assert.False(h.StillHere!());
     }
 
-    // Self-defence asks this of the two relationships it leaves out of the fight.
-    // A Flee monster is not fought back, run or no run.
+    // ----- a Flee monster: fought back when no run is coming --------------
+    //
+    // "fight back" (user, 2026-10-09). Self-defence asks NoAnswerComing of the two
+    // relationships it leaves out of the fight: for Flee it is true exactly where
+    // the client itself is not going to run.
+
     [Theory]
-    [InlineData(FleeOutcome.Started)]
-    [InlineData(FleeOutcome.NoEngine)]
-    [InlineData(FleeOutcome.EngineOff)]
-    public void AFleeMonster_IsNeverSaidToHaveNoAnswerComing(FleeOutcome outcome)
+    [InlineData(FleeOutcome.NoEngine, true)]         // nothing to run along
+    [InlineData(FleeOutcome.NoRoute, true)]          // no way out
+    [InlineData(FleeOutcome.Follower, true)]         // stays with the party
+    [InlineData(FleeOutcome.EngineOff, true)]        // Auto-Heal and Auto-Rest both off
+    [InlineData(FleeOutcome.Started, false)]         // a run is under way
+    [InlineData(FleeOutcome.AlreadyRunning, false)]  // so is another
+    [InlineData(FleeOutcome.Escaping, false)]        // a hang-up or jump is the answer
+    [InlineData(FleeOutcome.Down, false)]            // cannot fight either
+    public void NoRunComing_IsSaidToSelfDefence_ByWhatCameOfTheRun(FleeOutcome outcome, bool fightBack)
     {
-        using Harness h = new() { FleeOutcome = outcome, HangupsDisabled = true };
+        using Harness h = new() { FleeOutcome = outcome };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));   // none in sight
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Equal(fightBack, h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+        Assert.Equal(fightBack, Assert.Single(h.FleeLines).Contains("it is fought back if it attacks"));
+        // A Flee monster's state says nothing about a Hangup one.
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Hangup));
+    }
+
+    // The holds that are someone else's to answer do not turn self-defence on: the
+    // PvP actions' roster, the board's menu, and a room the hang-up answers.
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public void HeldForSomeoneElsesAnswer_TheFleeMonsterIsNotFoughtBack(bool pvp, bool atBoardMenu, bool hangupMonster)
+    {
+        using Harness h = new() { PvpFightActive = pvp, AtBoardMenu = atBoardMenu };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        if (hangupMonster) h.Relationships[Troll] = MonsterRelationship.Hangup;
+
+        h.Feed("Also here: ogre, troll.");
+
+        Assert.Empty(h.Flees);
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
+    // With the master switch off no run is coming. Whether anything is fought then
+    // is self-defence's own gate, as for a Neutral monster: Auto-Combat is among
+    // the autos the switch turned off.
+    [Fact]
+    public void MasterSwitchOff_NoRunIsComing()
+    {
+        using Harness h = new() { MasterSwitchOff = true };
         h.Relationships[Ogre] = MonsterRelationship.Flee;
 
         h.Feed("Also here: ogre.");
 
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
+    // What was true of a monster that has gone is not true of the next one.
+    [Fact]
+    public void NoRunComing_EndsWithTheSighting_AndWhenARunStarts()
+    {
+        using Harness h = new() { FleeOutcome = FleeOutcome.EngineOff };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Feed("Also here: ogre.");
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+
+        // An auto goes back on: the open sighting is answered with a run.
+        h.FleeOutcome = FleeOutcome.Started;
+        h.Classifier.ReemitCurrent();
         Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+
+        h.FleeOutcome = FleeOutcome.NoEngine;
+        h.Feed("Also here: ogre.");
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+
+        h.Feed("Also here: giant rat.");
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+    }
+
+    // A Hangup and a Flee monster in the room with Disable Hangups on (user,
+    // 2026-10-09): "it would only run from the flee monster if a navigation engine
+    // was running ... otherwise it'd fight, and if it was idle, and disable hangups
+    // was on, it would fight both".
+    [Theory]
+    [InlineData(FleeOutcome.Started, false)]    // a walk or loop is running: run
+    [InlineData(FleeOutcome.NoEngine, true)]    // idle: neither answered on sight, both fought back
+    public void HangupAndFleeMonster_WithDisableHangupsOn(FleeOutcome outcome, bool fleeFoughtBack)
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HangupsDisabled, HangupsDisabled = true, FleeOutcome = outcome };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: troll, ogre.");
+
+        Assert.Equal("troll (#9) is here, relationship Flee", Assert.Single(h.Flees));
         Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Hangup));
+        Assert.Equal(fleeFoughtBack, h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
     }
 
     [Fact]

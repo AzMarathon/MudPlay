@@ -5395,7 +5395,7 @@ public sealed class AppServices
             && LoopRunner.State == Game.Map.LoopState.Idle
             && !AutoLair.IsActive);
         // A Hangup-relationship monster is fought back only while no hang-up will
-        // come for it; a Flee one never is.
+        // come for it, and a Flee one only while no run will.
         Combat.SetNoAnswerComingProbe(relationship => MonsterWatch.NoAnswerComing(relationship));
         // A fresh hide re-arms the surprise round for the stationary hidden opener:
         // when the FSM latches Hidden, re-open so a monster that wanders in is a
