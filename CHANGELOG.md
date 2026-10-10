@@ -1,12 +1,26 @@
 # Version history
 
-## 3.161.6
+## 3.161.8
 
 - Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
 - One-at-a-time bosses a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter) and Paradigm's dinosaur forest (tyrannosaurs)
 - A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
 - Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
 - Program log lists the summoning room spells and each summon left out
+
+## 3.161.7
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
+
+## 3.161.6
+
+- The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+- Every line from the game is read faster (a slowdown that came in with 3.157.8)
+- Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+- The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+- Bug report: how much is on the floor here and Roomba's slowest floor read
+- bug reports addressed: paradigm-20261009-164508
 
 ## 3.161.5
 

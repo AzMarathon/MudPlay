@@ -63,6 +63,11 @@ public sealed class GroundItemTracker : IDisposable
     // current. A get-all that found an empty cache can re-survey and grab on this.
     public event Action? SurveyUpdated;
 
+    // How long the latest survey took to split into Items. A Paradigm room has no
+    // item cap, so a list can run to hundreds of stacks; Roomba reports this beside
+    // its own stages so a slow floor read shows in a capture.
+    public TimeSpan LastSurveyReadTime { get; private set; }
+
     // Bind the per-session LineExtractor so the tracker can stitch a wrapped
     // "You notice" survey back together — same shape as AutoGetItemsManager /
     // the CashManager.
@@ -129,12 +134,14 @@ public sealed class GroundItemTracker : IDisposable
     // keep item wording verbatim.
     private void RebuildFrom(string list)
     {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         _items.Clear();
         foreach (string entry in SplitEntries(list))
         {
             if (IsCashEntry(entry)) continue;
             _items.Add(entry);
         }
+        LastSurveyReadTime = System.Diagnostics.Stopwatch.GetElapsedTime(started);
         SurveyUpdated?.Invoke();
     }
 

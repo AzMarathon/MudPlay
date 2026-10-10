@@ -65,6 +65,12 @@ public sealed class PartyPathItemGateTests
         public int ChipRefreshes;
         // Items with a limited number of uses; every other item is kept for good.
         public readonly HashSet<int> LimitedUse = new();
+        // Each `par` the gate asked for, by its reason. ParMayGo false is a poller
+        // that holds it back, as with the master switch off.
+        public readonly List<string> ParAsked = new();
+        public bool ParMayGo = true;
+        // The members the last `par` read listed as following.
+        public readonly HashSet<string> Following = new(StringComparer.OrdinalIgnoreCase);
         public readonly PartyHandOverMemory HandOvers;
         public readonly PartyPathItemGate Gate;
 
@@ -123,7 +129,14 @@ public sealed class PartyPathItemGateTests
                 },
                 journey: () => Journey,
                 now: () => Now,
-                handOvers: HandOvers);
+                handOvers: HandOvers,
+                askPartyList: why =>
+                {
+                    if (!ParMayGo) return false;
+                    ParAsked.Add(why);
+                    return true;
+                },
+                followingMembers: () => Following.ToArray());
             Gate.HoldingWalkForChanged += () => ChipRefreshes++;
             if (bindWire)
                 Gate.SetWireSender(b => Sent.Add(Encoding.Latin1.GetString(b)));
@@ -2084,7 +2097,7 @@ public sealed class PartyPathItemGateTests
     public void TheConfirmingLine_AndTheCount_MatchWhateverTheCase()
     {
         var h = new Harness { IsLeader = true };
-        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Sil");
+        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Sil", recipientSilent: true);
 
         h.HandOvers.OnItemGivenAway("Darkwood Ring", 1, "SIL");
         PartyInventoryProbe.PartyItemResult counted =
@@ -2137,8 +2150,8 @@ public sealed class PartyPathItemGateTests
     public void ARefusalThatNamesNobody_EndsTheOldestWait_AndOneForAnotherPlayerEndsNone()
     {
         var h = new Harness { IsLeader = true };
-        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Sil");
-        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Al");
+        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Sil", recipientSilent: true);
+        h.HandOvers.NoteGiveSent(Ring, "darkwood ring", "Al", recipientSilent: true);
 
         h.HandOvers.OnGiveRefused("Bob");
         Assert.Contains("Sil: darkwood ring", h.HandOvers.Summary);
@@ -2156,9 +2169,159 @@ public sealed class PartyPathItemGateTests
         var h = new Harness { IsLeader = true };
         h.LimitedUse.Add(Ticket);
 
-        h.HandOvers.NoteGiveSent(Ticket, "room ticket", "Sil");
+        h.HandOvers.NoteGiveSent(Ticket, "room ticket", "Sil", recipientSilent: true);
         h.HandOvers.OnItemGivenAway("room ticket", 1, "Sil");
 
         Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    // ----- After a gate, `par` says whether a credited member came across -------
+    //
+    // A member credited with a copy they no longer hold is refused at the exit and
+    // is out of the party, and the game doesn't always tell the leader. The user's
+    // ruling (2026-10-09) on dropping their credit: "yes, but before forgetting
+    // them we check PAR, that will tell us if they're in our room or not, as
+    // another member in our party, that is actively in our par, has to be in our
+    // room."
+
+    [Fact]
+    public void CrossingAGate_WithASilentMemberCredited_AsksParOnce()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+
+        h.Gate.OnGateCrossed(Ring);
+
+        Assert.Single(h.ParAsked);
+        Assert.Equal("Sil after the gate needing darkwood ring", h.Gate.PartyListCheckSummary);
+    }
+
+    [Fact]
+    public void CrossingAGate_WithNobodyCredited_AsksNothing()
+    {
+        var nobody = new Harness { IsLeader = true };
+        nobody.Names[Ring] = "darkwood ring";
+        nobody.Gate.OnGateCrossed(Ring);
+        Assert.Empty(nobody.ParAsked);
+
+        // A member who answered none and was handed a copy speaks for themselves.
+        var answers = new Harness { IsLeader = true, SearchEnabled = false, Journey = new object() };
+        answers.Names[Ring] = "darkwood ring";
+        answers.SelfCounts[Ring] = 2;
+        answers.SetResult(Ring, ("Bob", 0));
+        answers.Gate.OnPathItemsRequired(new[] { Ring });
+        Assert.Equal("give darkwood ring to Bob\r", Assert.Single(answers.Sent));
+        answers.HandOvers.OnItemGivenAway("darkwood ring", 1, "Bob");
+
+        answers.Gate.OnGateCrossed(Ring);
+
+        Assert.Empty(answers.ParAsked);
+    }
+
+    [Fact]
+    public void AMemberWhoHasSinceAnswered_IsNotAskedAbout()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.Results[Ring] = Answer(Ring, ("Sil", 1));
+        NextTrip(h, Ring);
+
+        h.Gate.OnGateCrossed(Ring);
+
+        Assert.Empty(h.ParAsked);
+    }
+
+    // A crossing uses a limited-use copy up, so nothing is left to check.
+    [Fact]
+    public void CrossingAGate_ThatForgetsALimitedUseHandOver_AsksNothing()
+    {
+        Harness h = LeaderHandsSilACopy(Ticket, "room ticket", limitedUse: true);
+
+        h.Gate.OnGateCrossed(Ticket);
+
+        Assert.Empty(h.ParAsked);
+        Assert.Equal("(none)", h.HandOvers.Summary);
+    }
+
+    [Fact]
+    public void AMemberTheReplyNoLongerListsAsFollowing_LosesTheCredit_AndIsFetchedForNextTrip()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.Gate.OnPathItemsRequired(new[] { Ring });        // a later leg: the count stands as "enough"
+        h.Gate.OnGateCrossed(Ring);
+
+        h.Gate.OnPartyListRead();                         // nobody is following
+
+        Assert.Equal("(none)", h.HandOvers.Summary);
+        Assert.Equal("(none)", h.Gate.PartyListCheckSummary);
+        Assert.Equal("(none)", h.Gate.JourneyCountsSummary);
+        NextTrip(h, Ring);
+        Assert.Equal((Ring, 2), Assert.Single(h.ForwardedReq));
+    }
+
+    [Fact]
+    public void AMemberTheReplyStillListsAsFollowing_KeepsTheCredit()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.Following.Add("Sil");
+        h.Gate.OnGateCrossed(Ring);
+
+        h.Gate.OnPartyListRead();
+
+        Assert.Equal("Sil: darkwood ring x1", h.HandOvers.Summary);
+        Assert.Equal("(none)", h.Gate.PartyListCheckSummary);
+        NextTrip(h, Ring);
+        Assert.Empty(h.Forwarded);
+        Assert.Empty(h.Sent);
+    }
+
+    // Nothing is forgotten on the crossing alone, and a `par` read at any other
+    // time is not an answer to a question nobody asked.
+    [Fact]
+    public void TheCreditStands_UntilAReplyToTheCrossingsParIsRead()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+
+        h.Gate.OnPartyListRead();                         // the regular poll, before any crossing
+        Assert.Equal("Sil: darkwood ring x1", h.HandOvers.Summary);
+
+        h.Gate.OnGateCrossed(Ring);
+        Assert.Equal("Sil: darkwood ring x1", h.HandOvers.Summary);
+        NextTrip(h, Ring);
+        Assert.Empty(h.Forwarded);
+    }
+
+    // With the master switch off the poller sends nothing, so nothing was asked
+    // and a list read later answers nothing.
+    [Fact]
+    public void WhenParMayNotBeSent_NothingIsAsked_AndTheCreditStands()
+    {
+        Harness h = LeaderHandsSilACopy(Ring, "darkwood ring");
+        h.ParMayGo = false;
+
+        h.Gate.OnGateCrossed(Ring);
+        h.Gate.OnPartyListRead();
+
+        Assert.Empty(h.ParAsked);
+        Assert.Equal("(none)", h.Gate.PartyListCheckSummary);
+        Assert.Equal("Sil: darkwood ring x1", h.HandOvers.Summary);
+    }
+
+    [Fact]
+    public void TwoCreditedMembers_AreSettledByOnePar()
+    {
+        var h = new Harness { IsLeader = true, SearchEnabled = false, Journey = new object() };
+        h.Names[Ring] = "darkwood ring";
+        h.SelfCounts[Ring] = 3;
+        h.Results[Ring] = Answer(Ring, new[] { "Sil", "Al" });
+        h.Gate.OnPathItemsRequired(new[] { Ring });
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Sil");
+        h.HandOvers.OnItemGivenAway("darkwood ring", 1, "Al");
+
+        h.Gate.OnGateCrossed(Ring);
+        Assert.Single(h.ParAsked);
+
+        h.Following.Add("Al");                            // Al came across, Sil did not
+        h.Gate.OnPartyListRead();
+
+        Assert.Equal("Al: darkwood ring x1", h.HandOvers.Summary);
     }
 }
