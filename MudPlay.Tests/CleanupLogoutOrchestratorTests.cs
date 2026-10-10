@@ -89,6 +89,48 @@ public sealed class CleanupLogoutOrchestratorTests
         Assert.Empty(h.Engine.LastSentForTests);
     }
 
+    // The cleanup log-off is not a hang-up, but it is automatic: with the master
+    // switch off it doesn't start (user, 2026-10-09). On, it runs as before
+    // (Warning_WhenAlreadySafe_ExitsImmediately).
+    [Fact]
+    public void Warning_MasterSwitchOff_StaysIdle_AndALaterWarningArmsOnceItIsBackOn()
+    {
+        Harness h = Setup();
+        bool off = true;
+        h.Engine.SetMasterSwitchCheck(() => off);
+        h.Safe = true;
+
+        FireWarning(h, 20);
+        Assert.Equal(CleanupLogoutPhase.Idle, h.Engine.Phase);
+        Assert.Empty(h.Engine.LastSentForTests);
+
+        off = false;
+        FireWarning(h, 5);
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+        Assert.Equal("x\r", LastSent(h.Engine));
+    }
+
+    [Fact]
+    public void PendingLogoff_MasterSwitchGoesOff_WaitsUntilItIsBackOn()
+    {
+        Harness h = Setup();
+        bool off = false;
+        h.Engine.SetMasterSwitchCheck(() => off);
+        h.Safe = false;
+        FireWarning(h);
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+
+        off = true;
+        h.Safe = true;
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Pending, h.Engine.Phase);
+        Assert.Empty(h.Engine.LastSentForTests);
+
+        off = false;
+        h.Engine.EvaluateForTests();
+        Assert.Equal(CleanupLogoutPhase.Exiting, h.Engine.Phase);
+    }
+
     [Fact]
     public void Warning_WhenDisconnected_StaysIdle()
     {

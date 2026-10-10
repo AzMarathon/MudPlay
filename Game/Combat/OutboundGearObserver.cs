@@ -3,9 +3,10 @@ using MudPlay.Game.Inventory;
 
 namespace MudPlay.Game.Combat;
 
-// Sniffs outbound user commands for a hand-typed gear command (`eq`, `wear`, `wield`,
-// `rem` and their short forms, with an item named) so the combat engine re-attacks at
-// once when the game stops the fight for it.
+// Sniffs outbound commands for a gear command of the user's own (`eq`, `wear`,
+// `wield`, `rem` and their short forms, with an item named), typed or sent by a
+// macro, trigger or event they set up, so the combat engine re-attacks at once when
+// the game stops the fight for it.
 //
 // Putting gear on or taking it off mid-fight prints *Combat Off* on both realms
 // (GAME_MECHANICS "Non-swing actions break combat (casting, equipping)"). The engine
@@ -18,10 +19,10 @@ namespace MudPlay.Game.Combat;
 // command typed out of combat arms nothing.
 //
 // Hooked into the wire-send pipeline by MainWindowViewModel.SendUserInput, which
-// hands it typed lines only: the client's own gear commands (the Equipment Manager,
-// an item cast, the corpse recovery) come through EngineSendGate's wrapper and are
-// left out, since each of those owns the re-attack after its own swap. Short payloads
-// only: anything past ~64 bytes can't be a bare gear command.
+// hands it the user's own lines only (EngineSendGate.SendingUsersOwnCommand): an
+// engine's gear commands (the Equipment Manager, an item cast, the corpse recovery)
+// are left out, since each of those owns the re-attack after its own swap. Short
+// payloads only: anything past ~64 bytes can't be a bare gear command.
 public sealed class OutboundGearObserver
 {
     private const int MaxBytes = 64;

@@ -134,6 +134,27 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
     }
 
+    // The hang-up carve-out as the engines read it (the character's own tier),
+    // for the bug report.
+    public bool AllowHangupInAllOffMode =>
+        ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").AllowHangupInAllOffMode;
+
+    // A walk, loop or Auto-Lair started by hand with the master switch off is
+    // refused up front, with a notice naming what could not start (user,
+    // 2026-10-09), where it used to plan and then sit frozen with nothing said.
+    // True when refused: the caller starts nothing, and stops nothing for it
+    // either. what is "Walk", "Loop" or "Auto-Lair"; verb is "resume" for a
+    // paused run the user tries to carry on. One already running when the switch
+    // goes off is not stopped here: it freezes on MovementCoordinator.AutoAllGate
+    // and resumes.
+    public bool RefuseStartForMasterSwitch(string what, string verb = "start")
+    {
+        if (!AutoModeController.Blocks("Hand-started navigation", $"{what} ({verb})")) return false;
+        Log.Info("Navigation", $"{what} cannot {verb}: the master switch is off.");
+        WriteTerminalNotice($"[{what} cannot {verb}: the master switch (Auto-All) is off]");
+        return true;
+    }
+
     // Toggle the Profile Management window. The window is owned by the main VM
     // (it borrows that VM's connection gate + profile-swap path), so non-main
     // surfaces — the Settings → BBS tab's "Open Profile Management" button —
@@ -579,10 +600,14 @@ public sealed class AppServices
     // engage even with master auto-attack off) and stays silent on success.
     public Game.Remote.KillHandler Kill { get; }
 
-    // Master "Auto-All" kill-switch shared by the toolbar / Action-menu
-    // button and the @auto-all remote command. One press snapshots
-    // + clears every wired auto-engine; the next restores the snapshot.
+    // The master switch, shared by the toolbar / Action-menu "Auto-All" button
+    // and the @auto-all remote command. Off silences every automatic system.
     public Game.AutoModeController AutoModeController { get; }
+
+    // An enable probe for an automatic system that has no toggle of its own:
+    // true while the master switch is off, counting the skip under the system's
+    // name (AutoModeController.Blocks).
+    private Func<bool> MasterSwitchOff(string system) => () => AutoModeController.Blocks(system);
 
     // Leader-side @comeback party-pickup flow — pauses the
     // running movement engine, walks to recover a stranded follower
@@ -1309,6 +1334,10 @@ public sealed class AppServices
     public string? StartStashTransfer(Game.Map.RoomKey stash, Game.GameData.BankShop bank)
     {
         if (StashTransfer.IsBusy) return "a stash transfer is already running";
+        // A trip started by hand is a walk started by hand; the caller prints the
+        // refusal. An Event's transfer never gets here with the switch off.
+        if (AutoModeController.Blocks("Hand-started navigation", "Stash transfer"))
+            return "the master switch (Auto-All) is off";
         if (ErrandHasTheWalker) return "another trip is using the walker — stop it first";
         if (AutoLair.IsActive) AutoLair.Stop("stash transfer started");
         if (LoopRunner.State != Game.Map.LoopState.Idle) LoopRunner.Stop("stash transfer started");
@@ -1406,6 +1435,13 @@ public sealed class AppServices
     // an armed auto-stash would hide the very coin we walked there to collect. So
     // the override is asymmetric — collection on, stashing off — for its duration.
     internal bool FundingErrandActive => _autoGetCashOverride == true;
+
+    // Whether coin is collected right now: the errand's override, else the Auto Get
+    // Cash toggle. The master switch outranks both. The override stays set while
+    // the switch is off, so a funding trip it froze collects again once it is on.
+    private bool CashCollectionOn() =>
+        !AutoModeController.KillSwitchEngaged
+        && (_autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash));
 
     // An errand engine is driving the walker for one of its own legs — a bank / stash
     // trip, a sell detour, a trainer or funding trip, a token route, a party pickup, a
@@ -2080,6 +2116,11 @@ public sealed class AppServices
     // GameDataCache.ActiveSetChanged.
     public RoomSpellTeleportIndex RoomSpellTeleports { get; private set; } = null!;
 
+    // The active set's room-entry spells classed by whether they damage whoever
+    // stands in the room. Feeds the rule that no rest is started in such a room;
+    // rebuilt on GameDataCache.ActiveSetChanged.
+    public RoomSpellDamageIndex RoomSpellDamage { get; private set; } = null!;
+
     // Active fulfiller for NeedKind.PathItem needs no shop can
     // satisfy: on a one-shot walk-to that needs an uncarried item no shop
     // sells, prompts to reroute to the nearest room a monster that drops it
@@ -2726,6 +2767,9 @@ public sealed class AppServices
         // audit (load / swap / close / re-home) rides the always-on Info stream.
         Profile.Log = bootstrapLog;
         Profile.Performance = Performance;
+        // Built ahead of every engine: each one's enable probe reads the master
+        // switch, and a probe must never run before its target exists.
+        AutoModeController = new Game.AutoModeController(Profile, Log);
         Bbs = new BbsProfileStore(() => Settings.Current.DefaultGameDataSet, bootstrapLog);
         Realms = new RealmCatalog(Bbs, Profile, bootstrapLog);
 
@@ -2856,7 +2900,10 @@ public sealed class AppServices
         // RemoteCommands is constructed AFTER Chat / Party / Players are
         // ready (they're all dependencies). Handlers register later — the
         // engine is empty here; we just wire the plumbing.
-        Triggers = new TriggerEngine(Profile, Chat, Log, ProfileGameDataSet);
+        Triggers = new TriggerEngine(Profile, Chat, Log, ProfileGameDataSet)
+        {
+            BlockedByMasterSwitch = MasterSwitchOff("Triggers"),
+        };
         Aliases = new AliasEngine(Profile);
         Macros = new MacroStore(Profile);
         MacroDispatcher = new MacroDispatcher(Macros);
@@ -2893,7 +2940,10 @@ public sealed class AppServices
         Chat.IsKnownPlayer = IsKnownRoomPlayer;
         // Engine only — other subsystems register additional
         // handlers without touching the engine.
-        RemoteCommands = new Game.Remote.RemoteCommandManager(Chat, PartyState, Players, Log);
+        RemoteCommands = new Game.Remote.RemoteCommandManager(Chat, PartyState, Players, Log)
+        {
+            BlockedByMasterSwitch = what => AutoModeController.Blocks("Remote commands", what),
+        };
         // Reserve the party ailment-sync announces (@poisoned / @blind / @held …)
         // so the engine swallows them instead of bouncing a "{command invalid}"
         // reply at the member who announced — PartyAilmentTracker consumes them on
@@ -3309,11 +3359,9 @@ public sealed class AppServices
         // loaded profile's General section + persists. (@comeback is
         // wired in the Navigation block below as PartyComebackManager,
         // which needs the movement engines.)
-        // AutoModeController owns the master "Auto-All" snapshot; the
-        // remote handler reuses it for @auto-all so button + telepath
-        // share one session snapshot. ResetSnapshot on load so a freshly
-        // loaded character doesn't restore the previous one's state.
-        AutoModeController = new Game.AutoModeController(Profile, Log);
+        // The remote handler shares AutoModeController with the Auto-All button,
+        // so button + telepath drive one master switch. ResetSnapshot on load so
+        // a freshly loaded character doesn't inherit the previous one's switch.
         Profile.ProfileLoaded += _ => AutoModeController.ResetSnapshot();
         // A `par` asked for to check who is in the party isn't a health read, so
         // the auto-heal toggle doesn't hold it. The master switch does.
@@ -3420,20 +3468,19 @@ public sealed class AppServices
         // never trick it; ALSO skips on the first connect after a
         // hangup (HangupSignal.ConsumeSuppressEntry) so the user can
         // read the screen before they decide to act.
-        // Auto-entry obeys the Auto-All kill switch: when the user (or an
-        // @auto-all off) actively silences automation, the menu-match send
-        // is suppressed too. We gate on KillSwitchEngaged, NOT AllWiredOff —
-        // a manual-play character runs with every auto-engine off but never
-        // pressed the kill switch, and must still auto-enter the realm.
+        // Auto-entry is the last step of logging in, and login automation works
+        // whatever the master switch says (user, 2026-10-09), so it is not given
+        // the switch as its enable probe: a reconnect made under the BBS's
+        // reconnect settings ends in the realm, as a first login does.
         MainMenuEntry = new Game.MainMenuEntryAutomation(
             Router, GameCommands, HangupSignal,
-            isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
             log: Log);
         // Cleanup-driven proactive log-off. Subscribes to the same
         // CleanupWarningWatcher the reconnect scheduler reads; its safe
         // predicate + connection check + disconnect callback are wired by
         // MainWindowViewModel (they depend on VM-level connection state).
         CleanupLogout = new Game.CleanupLogoutOrchestrator(Cleanup, Router, Log);
+        CleanupLogout.SetMasterSwitchCheck(MasterSwitchOff("Cleanup log-off"));
         PromptScanner.RealmLeftPromptObserved += () => CleanupLogout.NoteRealmLeftPrompt();
 
         // Bridge: load persisted panel layouts on profile load; snapshot back
@@ -3793,6 +3840,13 @@ public sealed class AppServices
         if (GameData.ActiveSet is not null)
             RoomSpellTeleports.OnActiveSetChanged(GameData.ActiveSet);
 
+        // RoomSpellDamageIndex — room-entry Spell → damages whoever stands there, for
+        // the no-rest-in-a-damaging-room rule. Subscribed here for the same reason.
+        RoomSpellDamage = new RoomSpellDamageIndex(GameData, RoomGraph, SpellCatalog, TBInfo, Log);
+        GameData.ActiveSetChanged += RoomSpellDamage.OnActiveSetChanged;
+        if (GameData.ActiveSet is not null)
+            RoomSpellDamage.OnActiveSetChanged(GameData.ActiveSet);
+
         // Room tracker. Resets to Unknown on every
         // graph reload because per-room references are invalidated
         // when the active set rebuilds.
@@ -4048,9 +4102,14 @@ public sealed class AppServices
         // sent mid-rest only breaks a rest that has to start again (and for a trap
         // that just fired, risks it again on low HP). The loop or walk is held for
         // the rest anyway, so nothing is lost by waiting.
+        // The master switch holds them the same way: a door, search, winch or
+        // disarm try caught mid-way when it goes off waits and picks up when it is
+        // back on, with its walk, where an early return would strand the walk's
+        // callback.
         bool RestHeld() =>
             MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.HealthRecoveryGate)
-            || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.ManaRecoveryGate);
+            || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.ManaRecoveryGate)
+            || MovementCoordinator.IsGateAsserted(Game.Map.MovementCoordinator.AutoAllGate);
         Door.SetRestHold(RestHeld);
         // A door request belongs to the room it was asked in; once the tracker is
         // sure of another, the door manager drops it rather than work some other
@@ -4461,7 +4520,9 @@ public sealed class AppServices
         SummonSettle = new Game.Combat.SummonOnDeathSettle(
             MonsterDeath, RoomClassifier, MovementCoordinator, MonsterDeathSummon,
             currentTargetName: () => Combat.DeathAttributionTarget,
-            movementActive: () => MovementControl.IsActive,
+            // A run frozen by the master switch still reads as active, and its
+            // redisplay must not go out then.
+            movementActive: () => MovementControl.IsActive && !AutoModeController.KillSwitchEngaged,
             log: Log);
         // A drop lands on the ground with no line of its own, so the kill of a monster
         // that can drop something flagged for auto-collect re-displays the room. Wired
@@ -4810,6 +4871,9 @@ public sealed class AppServices
         // its waypoints flagged DoNotRest. Matched by room key (per-room), so it
         // clears the instant the loop steps into any other room. Loops only.
         Health.SetRestEnabledGate(() => ReadAutoModeFlag(d => d.AutoRest));
+        Health.SetMasterSwitch(
+            () => AutoModeController.KillSwitchEngaged,
+            what => AutoModeController.Blocks("Hang-ups", what));
         Health.SetHangupPenaltyLog(LogHangupPenalty);
         Health.SetDoNotRestSelector(() =>
             ReadSprintMode()
@@ -4817,6 +4881,10 @@ public sealed class AppServices
                 && RoomTracker.State.CurrentRoom is { } here
                 && LoopRunner.CurrentLoop?.Waypoints is { } wps
                 && wps.Any(w => w.DoNotRest && w.Key.Equals(here.Key))));
+        // A third source, the game's own: a room whose spell damages us (magma heat
+        // with no feather on) breaks every rest on its six-second tick.
+        Health.SetRoomSpellDamageProbe(() =>
+            RoomSpellHurtingUs() is { } spell ? $"{spell.Name} (#{spell.Number})" : null);
         // The loop's "rest up here" rooms: rest to rest-max there before moving on.
         // A Rest-up event makes wherever we stand one (Events is built later).
         Health.SetRestHereSelector(() =>
@@ -4836,8 +4904,15 @@ public sealed class AppServices
         // again instead of skipping it on a stale _restInFlight.
         RoomTracker.StateChanged += t =>
         {
-            if (t.PreviousRoom is null || t.NewRoom is null) return;
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
+            if (t.PreviousRoom is null || t.NewRoom is null)
+            {
+                // Out of a placed room into one the map doesn't hold, or back: no
+                // move to report, but a rest put off for the old room's spell is no
+                // longer owed "here".
+                Health.NoteRoomPlacementChanged(t.NewRoom?.Key);
+                return;
+            }
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Health.NoteRoomChanged(t.NewRoom.Key);
             // A move retries any party-buff targets we'd backed off as hidden.
@@ -5041,6 +5116,9 @@ public sealed class AppServices
         // suppressed (no Bless / regen / when-full buff fires).
         CastDirector.SetAutoBlessGate(() => ReadAutoModeFlag(d => d.AutoBless));
         CastDirector.SetTriggeredRestGate(() => Health.IsRecoveringRest);
+        // In a room whose own spell does damage no rest is started, so the rest-time
+        // heal fires standing while an HP rest is owed there.
+        CastDirector.SetRestDeferredGate(() => Health.HpRestDeferredByRoomSpell);
         // Mana-rest lock for "cast before resting for mana" slots — held while the
         // mana-recovery gate is asserted (mana below target), durable across a combat
         // interruption, released when mana tops back up.
@@ -5191,7 +5269,8 @@ public sealed class AppServices
         // landing and a second uncoordinated one would race it.
         SysopLocate = new Game.Map.SysopPositionResolver(
             SysStatus, RoomGraph, RoomTracker,
-            suppressed: () => MazeSolver.Active,
+            // With the master switch off no position fix is asked for either.
+            suppressed: () => MazeSolver.Active || AutoModeController.KillSwitchEngaged,
             log: Log,
             post: action => Avalonia.Threading.Dispatcher.UIThread.Post(action));
         SysopLocate.PositionResolved += Recovery.NoteAuthoritativePosition;
@@ -5203,7 +5282,7 @@ public sealed class AppServices
         // signal (fired by DeathDetector.NoteDeath for both death phrasings) — the same
         // one the movement-halt / loop-stop bridges use.
         SysopGodLife = new Game.SysopGodLifeRecovery(
-            enabled: SysopGodLivesEnabledHere,
+            enabled: () => SysopGodLivesEnabledHere() && !AutoModeController.Blocks("Sysop life recovery"),
             characterName: () => PlayerStats.Name,
             send: cmd => SendGameCommand(cmd),
             log: Log);
@@ -5533,11 +5612,16 @@ public sealed class AppServices
         MonsterCatalog = new Game.Combat.MonsterCatalog(GameData, RoomGraph.GetRoom);
         // Room tooltips and room panels leave out what the Unobtainable list holds.
         MonsterSpawns.OutOfPlay = MonsterCatalog.IsOutOfPlay;
-        // The round clock leaves out a room spell's damage, told by the spell on the
-        // room we stand in and by which wordings are a monster's attack spell
-        // (OffRoundDamageLines). Until here TickEngine goes by the wording alone.
-        Tick.SetOffRoundDamageProbe(line =>
-            OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0));
+        // A room spell's damage is no part of a fight, told by the spell on the room
+        // we stand in and by which wordings are a monster's attack spell
+        // (OffRoundDamageLines). One test for everything that would otherwise take
+        // the line for a hit: the round clock (until here TickEngine goes by the
+        // wording alone), the in-combat flag, the engine's re-attack and "room
+        // appears empty" re-display, and Round Totals.
+        Tick.SetOffRoundDamageProbe(IsRoomOrEffectDamage);
+        CombatTracker.SetNotCombatLineProbe(IsRoomOrEffectDamage);
+        Combat.SetNotCombatLineProbe(IsRoomOrEffectDamage);
+        RoundDamage.SetOffRoundDamageCheck(IsRoomOrEffectDamage);
         GameData.ActiveSetChanged += _ => _offRoundDamage = null;
         Messages.Messages.CollectionChanged += (_, _) => _offRoundDamage = null;
 
@@ -5641,7 +5725,11 @@ public sealed class AppServices
             if (prev == Game.Stealth.StealthState.AttemptingSneak && next == Game.Stealth.StealthState.Sneaking)
                 CombatTracker.NoteSneakRegained();
         };
-        Combat.SetSeeHiddenClearGate(() => CombatTracker.SeeHiddenClearActive || CombatTracker.SneakFailClearActive);
+        // Both force-clear gates engage with Auto Combat off, so they read the
+        // master switch themselves: a latch set before it went off must not fire
+        // an attack after.
+        Combat.SetSeeHiddenClearGate(() => !AutoModeController.KillSwitchEngaged
+            && (CombatTracker.SeeHiddenClearActive || CombatTracker.SneakFailClearActive));
 
         // Engage-to-clear a rest-blocker with Auto-Combat OFF (report
         // paradigm-20260901-093301): HealthManager owns the decision (it has the
@@ -5658,8 +5746,9 @@ public sealed class AppServices
             requestEngage: Combat.RequestRestClearEngage);
         // The walker and the loop ask for the same clear while a room command that
         // only works in an empty room waits on a monster (AwaitingEmptyRoom on each).
-        Combat.SetRestClearGate(() => Health.ForceClearForRest
-            || Walker is { AwaitingEmptyRoom: true } || LoopRunner is { AwaitingEmptyRoom: true });
+        Combat.SetRestClearGate(() => !AutoModeController.KillSwitchEngaged
+            && (Health.ForceClearForRest
+                || Walker is { AwaitingEmptyRoom: true } || LoopRunner is { AwaitingEmptyRoom: true }));
 
         // Break-before-run: turning auto-attack OFF mid-fight releases the Combat
         // gate so the walker resumes — send `break` first when the user has
@@ -6466,7 +6555,8 @@ public sealed class AppServices
             // same question — don't send a second (report paradigm-20260928-231447).
             canCheckNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
                 && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard
-                && !Stats.ScreenExpected,
+                && !Stats.ScreenExpected
+                && !AutoModeController.Blocks("Info polls"),
             sendStat: () => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes("stat\r")),
             log: Log);
         Tick.HeartbeatElapsed += PoolBaseline.Poll;
@@ -6476,7 +6566,8 @@ public sealed class AppServices
             markVerified: () => { if (Profile.Current is { } p) { p.StateUnverified = false; Profile.Save(); } },
             canAskNow: () => PlayerState.HasPromptData && !PlayerState.InCombat
                 && !Equipment.IsApplyingSet && !TrainerMenu.MenuOwnsKeyboard
-                && !Stats.ScreenExpected,
+                && !Stats.ScreenExpected
+                && !AutoModeController.Blocks("Info polls"),
             inventoryLoaded: () => Inventory.IsLoaded,
             send: command => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes(command + "\r")),
             log: Log);
@@ -6584,8 +6675,14 @@ public sealed class AppServices
         // An attack is re-sent only until `*Combat Engaged*` answers it: once the fight
         // is under way a fumble line starts no fresh attack, weapon or spell (user,
         // 2026-10-09). Everything else is re-fired as before.
+        // With the master switch off nothing is re-fired at all: the last engine
+        // command is from before it went off, and a fumble of the user's own is
+        // theirs to repeat.
         Conditions.ActionFailed += _ =>
+        {
+            if (AutoModeController.Blocks("Fumble replay")) return;
             Combat.HandleFumble(EngineGate.LastClientCommandText, EngineGate.ReplayLastClientCommand);
+        };
 
         // CashManager. Subscribes to cash-on-ground
         // / cash-picked-up / cash-dropped patterns and dispatches
@@ -6596,7 +6693,7 @@ public sealed class AppServices
             // An auto-train funding errand forces collection on regardless of the
             // toggle — the stash leg only searches, and it's this engine that takes
             // what the search reveals.
-            isEnabled: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
+            isEnabled: CashCollectionOn,
             // Shared Cash + Items timing toggle: defer ground / corpse / notice
             // cash until the room clears so a get between kills doesn't burn the
             // pre-attack round. hasEngageableHostiles reads CombatTracker, which
@@ -7219,8 +7316,10 @@ public sealed class AppServices
         // single-fire-per-arrival demand mechanism.
         AutoSearch = new Game.Map.AutoSearchManager(
             isEnabled: () => ReadAutoModeFlag(d => d.AutoSearch),
-            isDemandActive: () =>
-                PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive,
+            // A route's demand for a search is not the Auto Search toggle, so it
+            // reads the master switch itself.
+            isDemandActive: () => !AutoModeController.KillSwitchEngaged
+                && (PathItemDemand.SearchDemandActive || PartyPathItemGate.SearchDemandActive),
             // Probe THIS room's live roster (not CombatTracker.HasEngageableHostiles —
             // the sticky cross-room gate, which stays asserted while combat winds down
             // on a left-behind target and made AutoSearch skip empty rooms; report
@@ -7429,8 +7528,12 @@ public sealed class AppServices
         // Let the tracker request the fix itself, but ONLY in that no-engine gap so it
         // can't race the gate's own resync; the maze solver drives its own `rm`, so
         // stay out of its way too.
+        // This is the fix asked for with no engine running, so on a move made by
+        // hand: with the master switch off it is not sent (no `rm`, no `sys st`).
+        // The tracker goes on reading the rooms it is shown.
         RoomTracker.RequestAuthoritativeResync = reason =>
             Recovery.AttachedEngine is null && !MazeSolver.Active
+            && !AutoModeController.Blocks("Position fixes")
             && (ParadigmResync.TryRequestResync(reason)
                 || SysopLocate.TryRequestLocate(reason));   // sysop mirror of the no-engine `rm` gap (throttled)
         // DeathRecoveryManager's Walk-to-Room / Recover-Now actions route
@@ -7471,12 +7574,6 @@ public sealed class AppServices
             EveryItemOfThisNameStaysOnDeath,
             isKeyItem: name => ItemNames.FindByName(name) is int number
                 && ItemNames.ItemTypeOf(number) == Game.Inventory.InventoryManager.KeyItemType);
-        // A gift reopens a pile marked Missing only from someone following in our
-        // party now (an invited row is not in it).
-        DeathRecovery.SetPartyMemberProbe(giver =>
-            GivenNameOf(giver) is { Length: > 0 } given
-            && PartyState.Members.Any(m => !m.IsSelf && !m.IsInvited
-                && string.Equals(GivenNameOf(m.Name), given, StringComparison.OrdinalIgnoreCase)));
         // The walker's abandoned-combat halt: the sweep ends in place on it.
         CombatTracker.EngagedTargetAbandoned += _ => DeathRecovery.NoteEngagedTargetAbandoned();
         // Combat-aware re-equip interleaving: recovering a corpse in a room with a
@@ -7735,8 +7832,9 @@ public sealed class AppServices
         // committed step it resolves the room's hazard and, for a carried buff
         // source (the desert waterskin), `use`s it so the buff is up on arrival —
         // re-`use`ing only when the buff's own duration would have lapsed so a fast
-        // traverse spends one charge. No opt-in gate: a route the user chose to run
-        // through a hazard room must survive it.
+        // traverse spends one charge. No toggle of its own: a route the user chose to
+        // run through a hazard room must survive it. Only the master switch stops it
+        // (WireMasterSwitch).
         AutoHazardCounterProvisioner = new Game.Map.AutoHazardCounterProvisioner(
             resolveRoom:    RoomGraph.GetRoom,
             hazardForSpell: spell => RoomHazards.HazardForSpell(spell),
@@ -8136,6 +8234,11 @@ public sealed class AppServices
         LoopRunner.Event += e =>
         {
             if (e.Kind != Game.Map.LoopEventKind.ReachedFirstWaypoint) return;
+            // No loop starts by itself with the master switch off, but one frozen
+            // on it can still be restarted under it (an avoid-list edit re-routes
+            // by Stop + Start): that must not swap gear, wipe the session's stats
+            // or telepath @reset to the party.
+            if (AutoModeController.Blocks("Loop start reset")) return;
             // A loop actually beginning is one of the moments the Default gear set
             // may auto-equip (we're moving out under normal combat gear). Auto-Lair
             // start does the same via AutoLair.ActiveChanged below.
@@ -8301,7 +8404,11 @@ public sealed class AppServices
             sendGang: text => _engineWireSend?.Invoke(System.Text.Encoding.Latin1.GetBytes($"bg {text}\r")),
             roomName: () => RoomTracker.State.CurrentRoom?.Name,
             schedule: pacedReplyScheduler,
-            log: Log);
+            log: Log)
+        {
+            IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
+            SkippedForMasterSwitch = why => AutoModeController.Blocks("PvP response", why),
+        };
         PvpResponse.Responded += what => WriteTerminalNotice($"[PvP: {what}]");
 
         // Always-alive control surface over the three movement engines.
@@ -8424,18 +8531,11 @@ public sealed class AppServices
         // funnel through AutoModeController.ToggleAll, so this one bridge covers
         // both. (MovementControl is built here, after AutoModeController, so the
         // hook is wired at this point rather than at the controller's construction.)
-        AutoModeController.KillSwitchToggled += engaged =>
-        {
-            if (engaged) MovementControl.SuspendForAutoAll();
-            else MovementControl.ReleaseFromAutoAll();
-        };
+        // The switch's own handler is OnMasterSwitchChanged, subscribed in
+        // WireMasterSwitch once every service it reaches exists.
         // Auto-equip on recovery follows the same switch: a corpse recovered by hand
         // with Auto-All off keeps its worn gear in the pack until it is back on.
         DeathRecovery.SetAutoEnabledProbe(() => !AutoModeController.KillSwitchEngaged);
-        AutoModeController.KillSwitchToggled += engaged =>
-        {
-            if (!engaged) DeathRecovery.OnAutoAllRestored();
-        };
 
         // Death engine-quiescence. On our death RoomTracker fires
         // PlayerDeathObserved (both death phrasings). PlayerDeathHalt does a clean
@@ -8647,7 +8747,7 @@ public sealed class AppServices
             limitCollection: copper => Cash.SetCollectLimit(copper),
             surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
             collectSurveyed: copper => Cash.CollectSurveyed(copper),
-            autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
+            autoGetCash: CashCollectionOn,
             setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
             log: Log,
             // Keep-on-hand is an amount of a chosen denomination; the router wants it
@@ -9371,7 +9471,11 @@ public sealed class AppServices
         // AutoLair target references against their managers'
         // collections.
         Events = new Game.Events.EventManager(
-            Profile, Loops, Lairs, LoopRunner, AutoLair, Walker, Log);
+            Profile, Loops, Lairs, LoopRunner, AutoLair, Walker, Log)
+        {
+            BlockedByMasterSwitch = what => AutoModeController.Blocks("Events", what),
+            IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
+        };
 
         // EventScheduler. Owns the AtTime ticker +
         // per-event Every-timers + connection-aware Logon / Re-log
@@ -9426,13 +9530,17 @@ public sealed class AppServices
         BossTimers.BossKilled += EventBoss.OnBossKilled;
 
         WireSounds();
+        WireMasterSwitch();
 
         // DefaultTaskRunner. Starts the character's configured "Default task"
         // (loop / Auto-Lair) on the first in-game prompt with a known room,
         // holding for the party-reform window on a party-session reconnect.
         DefaultTaskRunner = new Game.DefaultTaskRunner(
             PromptScanner, RoomTracker, Profile, Loops, Lairs,
-            LoopRunner, AutoLair, PartyState, Party, Log);
+            LoopRunner, AutoLair, PartyState, Party, Log)
+        {
+            BlockedByMasterSwitch = what => AutoModeController.Blocks("Default task", what),
+        };
 
         // What a penalised hang-up dropped, looked for on the way back in. Gated on
         // the realm's own settings, and on Auto-All for anything it sends. Its gets
@@ -9905,6 +10013,257 @@ public sealed class AppServices
         Health.FleeStarted += () => Sounds.Fire(Game.Sounds.SoundCues.Flee);
     }
 
+    // The master switch reaches the automatic systems that have no toggle of their
+    // own. Each is handed the probe here, under the name its skips are counted by
+    // (bug report, switch-on log line). The toggled engines read the switch
+    // through ReadAutoModeFlag; remote commands, triggers, events, hang-ups, the
+    // default task and the hand-started runs are wired where they are built.
+    // Called once every service below exists: a probe handed to a service that is
+    // not built yet would crash at startup.
+    private void WireMasterSwitch()
+    {
+        // Party signals and party upkeep.
+        PartyRest.MasterSwitchOff = MasterSwitchOff("Party wait signals");
+        Profile.ProfileLoaded += _ => PartyRest.ForgetLeaderHold();
+        PartyWaitMovement.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
+        AilmentSync.MasterSwitchOff = MasterSwitchOff("Ailment announces");
+        TooHeavyWait.MasterSwitchOff = MasterSwitchOff("Info polls");
+        PartyPoller.MasterSwitchOff = MasterSwitchOff("Party polls");
+        PartyProbe.MasterSwitchOff = MasterSwitchOff("Party polls");
+        PartyLevel.MasterSwitchOff = MasterSwitchOff("Party polls");
+        PartyWealth.MasterSwitchOff = MasterSwitchOff("Party polls");
+        LeaderBossTravel.MasterSwitchOff = MasterSwitchOff("Party polls");
+        Party.MasterSwitchOff = MasterSwitchOff("Party upkeep");
+        AutoParty.MasterSwitchOff = MasterSwitchOff("Party upkeep");
+        PartyComeback.MasterSwitchOff = MasterSwitchOff("Party upkeep");
+        ComebackRequest.MasterSwitchOff = MasterSwitchOff("Party upkeep");
+        PartyDeathCleanup.MasterSwitchOff = MasterSwitchOff("Party upkeep");
+        PartyTrain.MasterSwitchOff = MasterSwitchOff("Party training");
+        LeaderDoorAssist.MasterSwitchOff = MasterSwitchOff("Party upkeep");
+        TrapDelegation.MasterSwitchOff = MasterSwitchOff("Party polls");
+
+        // Info polls, token looks, quest syncs, position fixes.
+        Tokens.MasterSwitchOff = MasterSwitchOff("Token looks");
+        ItemCharges.MasterSwitchOff = MasterSwitchOff("Info polls");
+        QuestFlagSync.MasterSwitchOff = MasterSwitchOff("Quest sync");
+        InventoryAfterDeath.MasterSwitchOff = MasterSwitchOff("Info polls");
+        AlignmentCheck.MasterSwitchOff = MasterSwitchOff("Info polls");
+        PvpStrangers.MasterSwitchOff = MasterSwitchOff("Info polls");
+        PlayerDeathHalt.MasterSwitchOff = MasterSwitchOff("Position fixes");
+        CombatTracker.MasterSwitchOff = MasterSwitchOff("Position fixes");
+
+        // Social.
+        Greet.MasterSwitchOff = MasterSwitchOff("Greets and looks");
+        PlayerLook.MasterSwitchOff = MasterSwitchOff("Greets and looks");
+        LevelUp.MasterSwitchOff = MasterSwitchOff("Level-up announce");
+        Divert.MasterSwitchOff = MasterSwitchOff("Telepath divert");
+
+        // Training, money, gear, loot, PvP.
+        TrainerWalk.MasterSwitchOff = MasterSwitchOff("Auto-train");
+        AutoTrain.MasterSwitchOff = MasterSwitchOff("Auto-train");
+        Cash.MasterSwitchOff = MasterSwitchOff("Bank and stash trips");
+        LocationEquip.MasterSwitchOff = MasterSwitchOff("Location gear");
+        PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
+        ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
+        ChestOpens.RefuseOpen = name =>
+        {
+            if (!AutoModeController.Blocks("Chest open read", $"Open button ({name})")) return false;
+            Log.Info(Game.Inventory.ChestOpenTracker.LogCategory,
+                $"Open button for {name} refused: the master switch is off.");
+            WriteTerminalNotice("[Chest Offload cannot open and read a chest: the master switch (Auto-All) is off]");
+            return true;
+        };
+        AutoDiscard.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
+        AutoHazardCounterProvisioner.MasterSwitchOff = MasterSwitchOff("Hazard counter item");
+        ManaRegen.MasterSwitchOff = MasterSwitchOff("Mana-regen reroll");
+        PvpFight.MasterSwitchOff = MasterSwitchOff("PvP response");
+
+        MovementControl.RefuseResume = () => RefuseStartForMasterSwitch("Run", "resume");
+        LoopRunner.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
+
+        AutoModeController.DescribeInFlight = DescribeInFlightForMasterSwitch;
+        AutoModeController.KillSwitchToggled += OnMasterSwitchChanged;
+        AutoModeController.ResetByProfileLoad += OnMasterSwitchResetByProfileLoad;
+        // A switch-on that arrived outside the game is finished on the way back in.
+        // Another character loaded first ends it as a profile load ends the switch.
+        // Posted: the prompt that says so is read off the wire ahead of the room it
+        // came with, and the engines re-run here decide on that room.
+        InGameCapture.InGameChanged += inGame =>
+        {
+            if (inGame && _masterSwitchSettleOwed)
+                Avalonia.Threading.Dispatcher.UIThread.Post(FinishSwitchOnOwedOutsideTheGame);
+        };
+        Profile.ProfileLoaded += _ =>
+        {
+            if (_masterSwitchSettleOwed) OnMasterSwitchResetByProfileLoad();
+            RemoteCommands.DropHeldComebacks("another profile was loaded");
+        };
+        SneakGuard.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
+    }
+
+    // What the master switch is about to stop or hold, for its one log line.
+    private string DescribeInFlightForMasterSwitch()
+    {
+        List<string> parts = new();
+        if (AutoLair.IsActive) parts.Add("Auto-Lair frozen");
+        else if (LoopRunner.State != Game.Map.LoopState.Idle) parts.Add($"loop '{LoopRunner.CurrentLoop?.Name}' frozen");
+        else if (Walker.State != Game.Map.WalkState.Idle) parts.Add("walk frozen");
+        List<string> holds = MovementCoordinator.AssertedGates
+            .Where(g => g != Game.Map.MovementCoordinator.UserGate && g != Game.Map.MovementCoordinator.AutoAllGate)
+            .ToList();
+        if (holds.Count > 0) parts.Add($"holds released: {string.Join(", ", holds)}");
+        if (PartyRest.IsHoldingWait) parts.Add($"a @wait is out ({string.Join(", ", PartyRest.HeldReasons)}): nothing more is sent");
+        if (Events.RunSummary != "(none)") parts.Add($"event held: {Events.RunSummary}");
+        if (PvpFight.IsActive) parts.Add("PvP fight ended");
+        if (AllyDropped.DownedGivenNames.Count > 0) parts.Add("downed-ally rescue dropped");
+        return parts.Count == 0 ? "Nothing was in flight." : "In flight: " + string.Join("; ", parts) + ".";
+    }
+
+    // The room a post-fight collect was cancelled in as the master switch went
+    // off; null when none was.
+    private Game.Map.RoomKey? _collectOwedInRoom;
+
+    // A profile load cleared a switch that was off. Only the freeze and the parked
+    // holds are let go: the rest of the switch-on work re-runs engines and talks
+    // to the party, and this arrives in the middle of the load, with half the
+    // services still holding the last character's state.
+    private void OnMasterSwitchResetByProfileLoad()
+    {
+        _collectOwedInRoom = null;
+        _masterSwitchSettleOwed = false;
+        _masterSwitchEventsOwed = false;
+        LoopRunner.DropResumeHeldForMasterSwitch("another profile was loaded");
+        MovementControl.ReleaseFromAutoAll();
+    }
+
+    // The switch came back on with the link down or the character at the board's
+    // menus. Everything the switch-on does sends or starts something, so it waits
+    // for the first game prompt, with movement still frozen until then.
+    private bool _masterSwitchSettleOwed;
+    // Set with it when the events have yet to be told the switch is back on, and
+    // whether that switch-on was a remote one.
+    private bool _masterSwitchEventsOwed;
+    private bool _masterSwitchEventsOwedRemote;
+
+    // The first game prompt after a switch-on made outside the game.
+    private void FinishSwitchOnOwedOutsideTheGame()
+    {
+        if (!_masterSwitchSettleOwed || !InGameCapture.InGame) return;
+        SettleAfterMasterSwitchOn();
+        if (!_masterSwitchEventsOwed) return;
+        _masterSwitchEventsOwed = false;
+        Events.NoteMasterSwitchChanged(_masterSwitchEventsOwedRemote);
+    }
+
+    // The master switch changed. Off: freeze movement and park the holds, then
+    // drop what would otherwise go on sending by itself. On: put back every hold
+    // still owed and re-run the engines that derive one from current state, all
+    // before the freeze lifts, so nothing moves ahead of a hold that came due
+    // meanwhile; then settle the party signals.
+    private void OnMasterSwitchChanged(bool off)
+    {
+        if (off)
+        {
+            _masterSwitchSettleOwed = false;
+            _masterSwitchEventsOwed = false;
+            // Ahead of everything else: the leader is let go before this client
+            // goes quiet.
+            PartyRest.ReleaseForMasterSwitch();
+            MovementControl.SuspendForAutoAll();
+            // The events' clocks stop now, not at their next tick.
+            Events.NoteMasterSwitchChanged();
+            // Each thing ended here is either held where it stands or put back
+            // when the switch comes on. Held: the sneak hold's queue (SneakGuard
+            // stops re-checking) and a comeback recovery (its walk freezes, its
+            // timers wait). Put back: a downed ally's rescue, whose aid and
+            // @health poll would go on by themselves, and a collect put off until
+            // the fight ends, which would go out when it does.
+            AllyDropped.HoldForMasterSwitch();
+            // A PvP fight is ended outright. An Enemy still in the room when the
+            // switch is back on draws the response afresh from the roster.
+            if (PvpFight.IsActive) PvpFight.Stop("the master switch went off");
+            bool collectOwed = Cash.CancelDeferredCollect("master switch off");
+            collectOwed |= AutoGetItems.CancelDeferredCollect("master switch off");
+            _collectOwedInRoom = collectOwed ? RoomTracker.State.CurrentRoom?.Key : null;
+            ReevaluateEnginesForMasterSwitch();
+            return;
+        }
+
+        // Not the user's own press (a party member's `@auto-all on`, the local
+        // API): nobody is taken to be at the keyboard, so the events ask nothing.
+        bool remote = !AutoModeController.SwitchedByUserPress;
+        // InGameCapture, not the event scheduler's latch: that one stays set at the
+        // board's menu after an `exit` with the link still up.
+        if (!InGameCapture.InGame)
+        {
+            _masterSwitchSettleOwed = true;
+            Log.Info("AutoMode",
+                "Master switch back on outside the game: movement stays frozen and nothing is sent or started until the first game prompt.");
+            // With the link down the events know it: their clocks restart now, they
+            // may ask which waiting events to run, and they start nothing. At the
+            // board's menu they do not know (to them the link is up), so they hear
+            // of the switch on the way back in.
+            _masterSwitchEventsOwed = InGameCapture.AtBoardMenu;
+            _masterSwitchEventsOwedRemote = remote;
+            if (!_masterSwitchEventsOwed) Events.NoteMasterSwitchChanged(remote);
+            return;
+        }
+        SettleAfterMasterSwitchOn();
+        // Last, with movement free again: an event's Then that landed meanwhile
+        // runs, and with nothing running the next waiting event starts.
+        Events.NoteMasterSwitchChanged(remote);
+    }
+
+    // Everything the switch-on sends or starts, run at once in the game and at the
+    // first game prompt otherwise. The events are not told from here: they hear of
+    // the switch when it is switched and of the way back in from the scheduler.
+    private void SettleAfterMasterSwitchOn()
+    {
+        _masterSwitchSettleOwed = false;
+        MovementControl.RestoreHoldsBeforeAutoAllRelease();
+        ReevaluateEnginesForMasterSwitch();
+        AllyDropped.ResumeOwedRescues();
+        // A hide refused in one room and held for the next was not retried
+        // while the switch was off.
+        AutoDiscard.RecheckHeldHides();
+        PartyComeback.SettleAfterMasterSwitch();
+        RemoteCommands.ReplayHeldComebacks();
+        // The collect cancelled on the way off: if we still stand in that room,
+        // show it once more, and the get engines take what is still on the floor.
+        if (_collectOwedInRoom is { } owedIn && RoomTracker.State.CurrentRoom?.Key == owedIn
+            && (ReadAutoModeFlag(d => d.AutoGetItems) || CashCollectionOn()))
+        {
+            Log.Info("AutoMode", "Master switch back on — showing the room again for the pickup it put off.");
+            _engineWireSend?.Invoke(new[] { (byte)'\r' });
+        }
+        _collectOwedInRoom = null;
+        // A follower standing in a hazard room whose arrival was skipped while off
+        // raises the buff now; the per-item timer was never stamped by the skip, and
+        // an own walk is left to its next approach hook.
+        if (RoomTracker.State.CurrentRoom is { } hazardRoom)
+            AutoHazardCounterProvisioner.OnArrivedInRoom(hazardRoom.Key);
+        AilmentSync.ReevaluateWaits();
+        PartyRest.ResyncAfterMasterSwitch();
+        // A loop the last reconnect set aside, not restarted while the switch was
+        // off. Behind the freeze still, so its first step waits for the holds.
+        LoopRunner.ResumeAfterMasterSwitch();
+        MovementControl.ReleaseFromAutoAll();
+        DeathRecovery.OnAutoAllRestored();
+    }
+
+    // The switch moves the toggles through a profile reseed, which is not a
+    // genuine flip, so nothing re-decides on its own. The engines that only
+    // decide on an event are told here, as a hand flip of a toggle tells them:
+    // going off, a hold in progress is let go; coming on, a monster already in
+    // the room is fought and a rest that is due starts.
+    private void ReevaluateEnginesForMasterSwitch()
+    {
+        CombatTracker.OnAutoAttackChanged();
+        RoomClassifier.ReemitCurrent();
+        Health.Evaluate();
+        CastDirector.Evaluate();
+    }
+
     // Settings → Health reads its mana thresholds as raw amounts rather than percents;
     // a buff slot's own mana floor is in the same unit.
     public bool ManaThresholdsAreAbsolute =>
@@ -10056,6 +10415,9 @@ public sealed class AppServices
 
     private bool ReadAutoModeFlag(Func<Models.Profile.AutoActionDefaults, bool> selector)
     {
+        // The master switch outranks the toggles: one ticked by hand while it is
+        // off stays ticked for when it comes back on, but runs nothing meanwhile.
+        if (AutoModeController.KillSwitchEngaged) return false;
         Models.Profile.CharacterProfile? profile = Profile.Current;
         System.Text.Json.JsonElement entry = default;
         bool present = profile?.Settings?.TryGetValue("General", out entry) == true;
@@ -11261,6 +11623,7 @@ public sealed class AppServices
     private void FireBossGrabAll(Models.Profile.BossDef def, string? deadName, int? expGained)
     {
         if (!def.GrabAll) return;
+        if (AutoModeController.Blocks("Boss Grab All", def.Name)) return;
         IReadOnlyList<Game.Inventory.BossDeathLoot.ChainMonster> chain = BossDeathChain(def);
         if (chain.Count == 0)
         {
@@ -11426,6 +11789,9 @@ public sealed class AppServices
     private void FireTempDeathResponse(Game.Combat.MonsterDeathEvent evt)
     {
         if (_engineWireSend is null) return;
+        // The nudge is ours to send, not the game's to need: with the master
+        // switch off the stall runs its length, or the user's own Enter ends it.
+        if (AutoModeController.KillSwitchEngaged) return;
         foreach (int num in DyingMonsterNumbers(evt))
         {
             int deathSpell = MonsterCatalog.Get(num)?.DeathSpell ?? 0;
@@ -11488,6 +11854,7 @@ public sealed class AppServices
             if (!def.GrabAll) continue;
             if (BossGrabClassifier.Classify(GameData, def) != Game.Inventory.BossGrabKind.Item) continue;
             if (!BossDefRoomsContain(def, room)) continue;
+            if (AutoModeController.Blocks("Boss Grab All", def.Name)) continue;
             string getName = BossGrabClassifier.ItemGetName(GameData, def.MatchName) ?? def.MatchName.Trim();
             SendGameCommand($"get {getName}");
             Log.Info("GrabAll", $"entered {room} — grabbing item boss '{def.Name}'");
@@ -11862,6 +12229,62 @@ public sealed class AppServices
         return _offRoundDamage = built;
     }
 
+    // True when a "… for N damage!" line is a room spell's damage or an effect paying
+    // out, not a hit in a fight (OffRoundDamageLines). The one test the round clock,
+    // the in-combat flag, the combat engine and Round Totals are all given.
+    public bool IsRoomOrEffectDamage(string line) =>
+        OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0, MonsterHereCasts);
+
+    // Whether a monster in the room we stand in casts the spell in an attack slot.
+    private bool MonsterHereCasts(int spell) =>
+        RoomClassifier.Current is { } here
+        && here.Entities.Any(e => e.MonsterNumber is { } number && MonsterCatalog.Get(number)?.CastLevelFor(spell) > 0);
+
+    // The spell on the room we stand in, when it keeps a rest from starting: it is
+    // set to bar resting (Settings → Periodic Damage Room Spells; by default the
+    // spells that damage on every tick) and nothing worn or held counters it
+    // (RoomHazardIndex). Null in a room that isn't placed, so an unknown room rests
+    // as it always did.
+    public (int Number, string Name)? RoomSpellHurtingUs()
+    {
+        if (RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return null;
+        if (!RoomSpellBarsResting(here.Spell)) return null;
+        if (RoomSpellCounteredNow(here.Spell)) return null;
+        return (here.Spell, SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell");
+    }
+
+    // The loaded character's choice for the spell, or the default for its class.
+    // Read off the character tier like the Health tab's rest settings, each time it
+    // is asked, so a save in Settings is in effect at the next rest decision.
+    public bool RoomSpellBarsResting(int spell) =>
+        RoomSpellDamage.BarsResting(spell, () => ReadSection<Models.Profile.PeriodicDamageRoomSpellSettings>(
+            Profile.Current, Models.Profile.PeriodicDamageRoomSpellSettings.TabKey).BarsResting);
+
+    public bool RoomSpellCounteredNow(int spell) =>
+        RoomHazards.HazardForSpell(spell) is { } hazard && hazard.IsCounteredNow(IsItemWorn, IsItemCarried);
+
+    // The damaging room spells of the loaded game data, for Settings → Periodic
+    // Damage Room Spells: every tick first, then by how many rooms carry each.
+    public IReadOnlyList<Game.Map.PeriodicDamageRoomSpell> PeriodicDamageRoomSpells() =>
+        RoomSpellDamage.Readings
+            .Select(entry => new Game.Map.PeriodicDamageRoomSpell(
+                entry.Key,
+                SpellCatalog.GetSpellNameByNumber(entry.Key) ?? "room spell",
+                entry.Value,
+                RoomHazards.HazardForSpell(entry.Key)?.DescribeCounters(ItemNames.GetName) ?? string.Empty,
+                RoomSpellDamage.RoomsOf(entry.Key)))
+            .OrderByDescending(static s => s.Reading.Kind)
+            .ThenByDescending(static s => s.Rooms.Count)
+            .ThenBy(static s => s.Number)
+            .ToList();
+
+    private bool IsItemWorn(int itemId)
+    {
+        foreach (Game.Inventory.EquippedItem e in Inventory.Snapshot.EquippedItems)
+            if (ItemNames.FindByName(e.Name) == itemId) return true;
+        return false;
+    }
+
     // Find the active set's Models.GameData.MessageRecord
     // for a spell — by Spells#N link first, then by name. Returns
     // null when the catalogue has no record for the spell.
@@ -12169,6 +12592,8 @@ public sealed class AppServices
     private void ReadSpellListIfNeverSeen()
     {
         if (_spellListAsked || Spellbook.ObtainedCount > 0 || Spellbook.ClassSpells.Count == 0) return;
+        // Before the latch, so the read is still owed at the next stat screen.
+        if (AutoModeController.Blocks("Info polls")) return;
         _spellListAsked = true;
         string command = SpellListCommand;
         Log.Info("Spellbook", $"no learned spells are known for this character — sending `{command}` to read them");
@@ -13934,6 +14359,7 @@ public sealed class AppServices
         Party.ComebackWindow = window;
         PartyComeback.ComebackWindow = window;
         PartyRejoin.ComebackWindow = window;
+        RemoteCommands.ComebackWindow = window;
     }
 
     public void ApplyPartyFromActiveProfile()

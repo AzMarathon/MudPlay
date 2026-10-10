@@ -604,6 +604,39 @@ public sealed class RoundDamageTrackerTests
         Assert.Equal(0, r.UnknownDealt);
     }
 
+    // Report paradigm-20261009-120757: the room's heat, two seconds after the round,
+    // showed in Round Totals as a round of its own ("Round 2 taken: You 46").
+    [Fact]
+    public void RoomSpellDamage_MidFight_OpensNoRound_AndIsTakenInOneAlreadyOpen()
+    {
+        using Harness h = new();
+        h.Tracker.SetOffRoundDamageCheck(OffRoundDamageLinesTests.ProbeIn(OffRoundDamageLinesTests.MagmaHeat));
+        h.State.InCombat = true;
+
+        h.Feed("You are seared by the flames for 46 damage!");
+        h.Tracker.OnCombatTick();
+        Assert.Empty(h.Completed);
+
+        h.Feed("The goblin bites you for 2 damage!");
+        h.Feed("You are seared by the flames for 28 damage!");
+        RoundSummary r = h.CloseRound();
+        Assert.Single(h.Completed);
+        Assert.Equal(30, r.DamageTaken);
+    }
+
+    [Fact]
+    public void TheSameTextFromAMonsterElsewhere_OpensARound()
+    {
+        using Harness h = new();
+        h.Tracker.SetOffRoundDamageCheck(OffRoundDamageLinesTests.ProbeIn(roomSpell: 0));
+        h.State.InCombat = true;
+
+        h.Feed("A chaotic storm assaults you for 30 damage!");
+        RoundSummary r = h.CloseRound();
+
+        Assert.Equal(30, r.DamageTaken);
+    }
+
     [Fact]
     public void DamageToYouWithNoSource_BetweenFights_OpensNoRound()
     {

@@ -103,9 +103,14 @@ public sealed class PlayerLookManager : IDisposable
         _roomEntry.ArrivalObserved -= OnArrival;
     }
 
+    // The master switch (true = off): off, no look is sent, back at a looker or at
+    // an arrival. Nothing is stamped, so the look is made at the next occasion.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnLookedAt(MatchResult match)
     {
         if (!LookBackWhenLookedAt) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         if (match.Groups.Count < 1) return;
         TryLookBack(match.Groups[0]);
     }
@@ -125,6 +130,7 @@ public sealed class PlayerLookManager : IDisposable
     {
         if (!LookAtPlayersOnArrival) return;
         if (e.Kind != EntityKind.Player) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         TryLookAtArrival(e.Name);
     }
 

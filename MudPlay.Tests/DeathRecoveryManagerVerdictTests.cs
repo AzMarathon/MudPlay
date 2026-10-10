@@ -200,6 +200,32 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
     }
 
+    // Auto-All went off between the verdict and the display that takes it back:
+    // the record is put right, but no `recover corpse` goes out by itself. Recover
+    // Now, the user's own press, still gets it.
+    [Fact]
+    public void MarkedMissing_ThenTheCorpseIsShown_WithAutoAllOff_IsReopenedButNotAskedFor()
+    {
+        using GraphHarness h = DiedAtTheGates();
+        bool autoOn = true;
+        h.Recovery.SetAutoEnabledProbe(() => autoOn);
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.EnterGates();
+        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
+
+        autoOn = false;
+        h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
+
+        Assert.Empty(h.Sent);
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
+        Assert.Contains("Auto-All is off", h.Latest.RecoveryMessage);
+
+        Assert.True(h.Recovery.RecoverNow(h.Latest));
+        h.FeedSurvey("corpse of Ermias");
+        Assert.Equal(new[] { "look", "recover corpse Ermias" }, h.Sent.ToArray());
+    }
+
     [Fact]
     public void MarkedMissing_ThenLeftAndComeBackTo_IsNotReopenedByItself()
     {

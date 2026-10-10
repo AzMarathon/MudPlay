@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.165.14**
+> **Version 3.167.5**
 > - Roomba adds a room's hidden copies to its visible ones
 > - A hidden count is the highest any one search showed
 > - Item-location log written once per room

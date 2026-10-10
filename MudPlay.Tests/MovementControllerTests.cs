@@ -164,6 +164,49 @@ public sealed class MovementControllerTests : IDisposable
         Assert.Equal(MovementEngineState.Running, h.Controller.State);
     }
 
+    // A Resume with the master switch off is refused (with its notice, by the
+    // hook) and the user's pause stays; with it on, Resume works as above.
+    [Fact]
+    public void Resume_RefusedForTheMasterSwitch_KeepsTheUserPause()
+    {
+        using Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Controller.Pause();
+        int asked = 0;
+        bool refuse = true;
+        h.Controller.RefuseResume = () => { asked++; return refuse; };
+
+        h.Controller.Resume();
+        h.Controller.TogglePause();
+
+        Assert.Equal(2, asked);
+        Assert.True(h.Controller.IsUserPaused);
+
+        refuse = false;
+        h.Controller.Resume();
+        Assert.False(h.Controller.IsUserPaused);
+    }
+
+    // A loop the reconnect set aside waits for the master switch; Stop is how the
+    // user says it should not come back with it.
+    [Fact]
+    public void Stop_CallsOffALoopRestartHeldForTheMasterSwitch()
+    {
+        using Harness h = NewHarness();
+        h.Loops.MasterSwitchOff = () => true;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Loops.Start(new Loop("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) }));
+        h.Loops.NotifyDisconnected();
+        h.Loops.FirePromptObservedForTests();
+        Assert.True(h.Loops.ReconnectResumeHeldForMasterSwitch);
+
+        h.Controller.Stop();
+
+        Assert.False(h.Loops.ReconnectResumeHeldForMasterSwitch);
+        Assert.Null(h.Loops.PendingReconnectResumeForTests);
+    }
+
     [Fact]
     public void TogglePause_FlipsBothWays()
     {

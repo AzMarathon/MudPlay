@@ -501,6 +501,9 @@ public sealed class CombatStateTracker : IDisposable
         if (_classifier.Current is { } obs) OnEntitiesObserved(obs);
     }
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Idle-stall watchdog, driven by the 1s heartbeat (TickEngine's
     // HeartbeatElapsed). Rescues two stall shapes after IdleStallThreshold of
     // zero combat activity — a live fight emits a line every 5s round, so total
@@ -560,7 +563,9 @@ public sealed class CombatStateTracker : IDisposable
             + (dark
                 ? "room empty; dark room, skipping resync CR and clearing stuck combat state"
                 : "room empty; resyncing and clearing stuck combat state"));
-        if (!dark)
+        // With the master switch off the stuck state is still cleared, but the
+        // redisplay is not sent: nothing automatic goes on the wire.
+        if (!dark && MasterSwitchOff?.Invoke() != true)
             _wireSender(Encoding.Latin1.GetBytes("\r"));
         ResetCombatState("idle-stall watchdog: no combat activity — room empty");
     }
@@ -949,8 +954,23 @@ public sealed class CombatStateTracker : IDisposable
 
     // ----- InCombat plumbing ----------------------------------------
 
-    private void OnAnyCombatLine(MatchResult _)
+    // A room's own damage reads like a hit ("You are seared by the flames for 46
+    // damage!") and is no fight: nothing is there to fight. Taken for one it put the
+    // client in combat in an empty room, which broke off a rest in the bookkeeping,
+    // swapped gear to the fighting set and back, and kept the idle watchdog fed. The
+    // probe is the round clock's own test (OffRoundDamageLines, wired by
+    // AppServices); unset, every line is a combat line as before.
+    private Func<string, bool>? _isNotCombatLine;
+
+    public void SetNotCombatLineProbe(Func<string, bool> isNotCombatLine)
     {
+        ArgumentNullException.ThrowIfNull(isNotCombatLine);
+        _isNotCombatLine = isNotCombatLine;
+    }
+
+    private void OnAnyCombatLine(MatchResult match)
+    {
+        if (_isNotCombatLine?.Invoke(match.Text) == true) return;
         // A damage/miss line is proof the fight is live — refresh the
         // watchdog's activity stamp so it never fires mid-fight.
         _lastCombatActivityAt = _now();
