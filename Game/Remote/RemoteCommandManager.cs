@@ -94,6 +94,21 @@ public sealed class RemoteCommandManager : IDisposable
     // sneak"), so it goes back by telepath instead (user, 2026-09-28).
     public Func<bool>? StealthedProvider { get; set; }
 
+    // The master switch. Asked with a description of the command; true means the
+    // switch is off and the command must not be obeyed (AutoModeController.Blocks
+    // counts and logs the skip). With it off no remote command is followed except
+    // MasterSwitchCommand, which is how a party member switches it back on (user,
+    // 2026-10-09). A skipped command gets no reply at all, WarnOnDenial or not:
+    // like a hard-block, an answer would let any caller probe whether we are
+    // unattended.
+    public Func<string, bool>? BlockedByMasterSwitch { get; set; }
+
+    public const string MasterSwitchCommand = "@auto-all";
+
+    // Senders already told about (in the log) since the switch went off, so the
+    // Info line is written once each and a chatty party can't flood it.
+    private readonly HashSet<string> _masterOffNoticed = new(StringComparer.OrdinalIgnoreCase);
+
     // ----- Settings.Talk-driven knobs --------------------------------------
     // Pushed by TalkSectionViewModel.ApplyToServices on Apply / on profile
     // load. Defaults match the TalkSettings DTO defaults — anything not yet
@@ -428,6 +443,15 @@ public sealed class RemoteCommandManager : IDisposable
         // unknown-command denial path and bounce a reply at the sender.
         if (_ignored.Contains(command)) return;
 
+        // Ahead of every block and denial below, so nothing here answers while
+        // the switch is off. Only a command this client knows: ordinary chat that
+        // starts with '@' is not a command we declined.
+        bool known = _handlers.ContainsKey(command) || TryMatchPrefixHandler(command, out _, out _);
+        if (known
+            && !command.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
+            && SkippedForMasterSwitch(entry.Speaker, command))
+            return;
+
         // @help is a pure query — describing a command isn't executing it — so it's
         // exempt from the suicide / reroll content guards below, which scan the args
         // for dangerous tokens meant for action commands (@do suicide, @party reroll).
@@ -566,6 +590,9 @@ public sealed class RemoteCommandManager : IDisposable
                 $"Ignoring relay-back of unknown command {command} from {sender} (no reply).");
             return;
         }
+        // A relay-back makes us send, so it is a remote command like any other:
+        // `&@auto-all` included, which asks us to switch the SENDER, not ourselves.
+        if (SkippedForMasterSwitch(sender, "&" + command)) return;
         if (!IsAuthorised(sender, RelayBackCategory, RelayBackPrefix))
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
@@ -577,6 +604,23 @@ public sealed class RemoteCommandManager : IDisposable
         _log?.Log(LogSeverity.Info, "RemoteCmd",
             $"Relaying {payload} back to {sender} on {channel} (&@ request).");
         SendLine(channel, sender, payload);
+    }
+
+    // True when the master switch is off and this command is therefore dropped,
+    // silently. The first one from each sender is logged at Info; the rest only
+    // at Debug, by the switch itself.
+    private bool SkippedForMasterSwitch(string sender, string command)
+    {
+        if (BlockedByMasterSwitch is not { } blocked) return false;
+        if (!blocked($"{command} from {sender}"))
+        {
+            _masterOffNoticed.Clear();
+            return false;
+        }
+        if (_masterOffNoticed.Add(sender))
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Ignoring {command} from {sender}: the master switch is off, so no remote command is followed except {MasterSwitchCommand} (no reply sent; further commands from {sender} are logged at Debug).");
+        return true;
     }
 
     // The relay-back marker and the grant it needs (see HandleRelayBack).

@@ -2893,7 +2893,10 @@ public sealed class AppServices
         Chat.IsKnownPlayer = IsKnownRoomPlayer;
         // Engine only — other subsystems register additional
         // handlers without touching the engine.
-        RemoteCommands = new Game.Remote.RemoteCommandManager(Chat, PartyState, Players, Log);
+        RemoteCommands = new Game.Remote.RemoteCommandManager(Chat, PartyState, Players, Log)
+        {
+            BlockedByMasterSwitch = what => AutoModeController.Blocks("Remote commands", what),
+        };
         // Reserve the party ailment-sync announces (@poisoned / @blind / @held …)
         // so the engine swallows them instead of bouncing a "{command invalid}"
         // reply at the member who announced — PartyAilmentTracker consumes them on
