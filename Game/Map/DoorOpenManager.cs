@@ -83,6 +83,11 @@ public sealed class DoorOpenManager : IDisposable
     private string? _verb;                                // "bash" / "pick"
     private int _verbAttempts;
     private bool _triedFallbackVerb;
+    // The key is being tried as the last resort, after bash and pick ran out. When
+    // it then turns out not to be held, the door has beaten the character like any
+    // other it couldn't force, which a key tried first (a walk that went to fetch
+    // one) is not.
+    private bool _keyIsLastResort;
 
     // Response watchdog. The FSM is event-driven on server result lines with no
     // timer of its own, so a bash/pick/open/use that draws a response matching
@@ -258,6 +263,7 @@ public sealed class DoorOpenManager : IDisposable
         _verb = null;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
+        _keyIsLastResort = false;
         _log?.Info("Door", "Door flow stopped — queue drained.");
     }
 
@@ -272,6 +278,7 @@ public sealed class DoorOpenManager : IDisposable
         _state = DoorState.SelectingVerb;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
+        _keyIsLastResort = false;
         StartChosenVerb();
     }
 
@@ -646,7 +653,7 @@ public sealed class DoorOpenManager : IDisposable
         // reason is what the walk fails with, and it is all the user is told about
         // why a walk that went to fetch a key stopped at the door.
         string key = _itemNameLookup(_current.KeyItemId) is { Length: > 0 } name ? name : $"item #{_current.KeyItemId}";
-        FailCurrent($"use-key failed (the {key} is missing or wrong)");
+        FailCurrent($"use-key failed (the {key} is missing or wrong)", unopenable: _keyIsLastResort);
     }
 
     private void OnIsLocked(MatchResult _)
@@ -681,6 +688,7 @@ public sealed class DoorOpenManager : IDisposable
             {
                 _log?.Info("Door",
                     $"{reason}; falling back to key for door {cur.DirectionShort}.");
+                _keyIsLastResort = true;
                 StartUseKey();
                 return;
             }
@@ -702,6 +710,7 @@ public sealed class DoorOpenManager : IDisposable
             {
                 _log?.Info("Door",
                     $"{reason}; alt verb unviable, falling back to key for door {cur.DirectionShort}.");
+                _keyIsLastResort = true;
                 StartUseKey();
                 return;
             }
@@ -780,6 +789,7 @@ public sealed class DoorOpenManager : IDisposable
         _verb = null;
         _verbAttempts = 0;
         _triedFallbackVerb = false;
+        _keyIsLastResort = false;
     }
 
     // ----- helpers ----------------------------------------------------

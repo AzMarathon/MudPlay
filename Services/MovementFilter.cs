@@ -148,12 +148,6 @@ public sealed class MovementFilter : IRoomFilter
     // DoorPolicy's own threshold when unset.
     public Func<int>? MaxBashableStrengthProvider { get; set; }
 
-    // Whether the active realm's chance to pick a lock is known (GAME_MECHANICS
-    // "Locked doors — picking, opening and bashing" has the Stock engine's rule and
-    // none for Paradigm). Where it isn't, or while unset, no door is called
-    // poor-odds: a lock the character's Picklocks meets is planned through.
-    public Func<bool>? PickChanceKnownProbe { get; set; }
-
     // Resolves a room key to its cast-on-enter spell (Room.Spell), 0 when the
     // room is benign or not in the live graph. Wired by AppServices to
     // RoomGraph. Feeds hazard-room entry blocking.
@@ -375,11 +369,11 @@ public sealed class MovementFilter : IRoomFilter
     // A door or keyed door whose only opener for this crosser is a pick at poor odds.
     // The key in hand (or assumed in hand, on a pass planning through acquirable
     // gates) opens it for certain, a key-only door has no lock to pick, and unknown
-    // stats or an unknown pick formula say nothing either way: none of those is one.
+    // stats say nothing either way: none of those is one. The same on both realms
+    // (GAME_MECHANICS "Locked doors — picking, opening and bashing").
     public bool IsPoorOddsDoor(in RoomExit exit)
     {
         if (exit.Hint is not (RoomExitHint.Door or RoomExitHint.KeyLocked)) return false;
-        if (PickChanceKnownProbe?.Invoke() != true) return false;
         if (exit.Hint == RoomExitHint.KeyLocked && exit.KeyItemId > 0)
         {
             if (exit.StatRequirement <= 0) return false;
@@ -401,8 +395,7 @@ public sealed class MovementFilter : IRoomFilter
         if (exit.KeyItemId > 0 && exit.StatRequirement <= 0) return $"needs its key (item {exit.KeyItemId}), not carried";
         if (StrengthProvider?.Invoke() is not { } strength || PicklocksProvider?.Invoke() is not { } picks) return null;
         int maxBash = MaxBashableStrengthProvider?.Invoke() ?? DoorPolicy.UnbashableStrengthThreshold;
-        string odds = DoorPolicy.DescribeOdds(exit.StatRequirement, exit.CanBash, strength, picks, maxBash,
-            PickChanceKnownProbe?.Invoke() == true);
+        string odds = DoorPolicy.DescribeOdds(exit.StatRequirement, exit.CanBash, strength, picks, maxBash);
         return exit.KeyItemId > 0 ? $"its key (item {exit.KeyItemId}) isn't carried; {odds}" : odds;
     }
 

@@ -34,9 +34,10 @@ public static class DoorPolicy
     public const int PoorPickDetourSteps = 10;
 
     // Chance in 100 that one `pick` opens a lock (GAME_MECHANICS "Locked doors —
-    // picking, opening and bashing", read from the Stock engine): one roll under
-    // Picklocks less the lock's N − 1, and an "any" lock adds to the skill instead.
-    // No Picklocks never opens anything.
+    // picking, opening and bashing": read from the Stock engine, and the same on
+    // Paradigm as far as the user knows): one roll under Picklocks less the lock's
+    // N − 1, and an "any" lock adds to the skill instead. No Picklocks never opens
+    // anything.
     public static int PickChancePercent(int statRequirement, int playerPicklocks)
     {
         if (playerPicklocks <= 0) return 0;
@@ -56,20 +57,16 @@ public static class DoorPolicy
         && PickChancePercent(statRequirement, playerPicklocks) < PoorPickChancePercent;
 
     // Why a route keeps off this door, for the log and the bug report: "bash needs
-    // 301 Strength, you have 120; pick chance 3% (Picklocks 303)". The chance is
-    // left out where the realm's pick formula isn't known.
+    // 301 Strength, you have 120; pick chance 3% (Picklocks 303)".
     public static string DescribeOdds(
         int statRequirement, bool canBash, int playerStrength, int playerPicklocks,
-        int maxBashableStrength, bool pickChanceKnown)
+        int maxBashableStrength)
     {
         string bash = !canBash ? "can't be bashed"
             : statRequirement > maxBashableStrength
                 ? $"bash needs {statRequirement} Strength, more than any character can reach"
             : $"bash needs {statRequirement} Strength, you have {playerStrength}";
-        string pick = pickChanceKnown
-            ? $"pick chance {PickChancePercent(statRequirement, playerPicklocks)}% (Picklocks {playerPicklocks})"
-            : $"pick needs {statRequirement} Picklocks, you have {playerPicklocks}";
-        return $"{bash}; {pick}";
+        return $"{bash}; pick chance {PickChancePercent(statRequirement, playerPicklocks)}% (Picklocks {playerPicklocks})";
     }
 
     // True when the door has at least one viable opening path for the

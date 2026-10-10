@@ -77,12 +77,11 @@ public sealed class DoorDetourTests
         }
     }
 
-    private static void SetStats(MovementFilter filter, int strength, int picklocks, bool pickChanceKnown = true)
+    private static void SetStats(MovementFilter filter, int strength, int picklocks)
     {
         filter.StrengthProvider = () => strength;
         filter.PicklocksProvider = () => picklocks;
         filter.MaxBashableStrengthProvider = () => 200;
-        filter.PickChanceKnownProbe = () => pickChanceKnown;
     }
 
     private static readonly Direction[] ThroughTheDoor = { Direction.D };
@@ -147,7 +146,8 @@ public sealed class DoorDetourTests
     {
         WithGraph(Coliseum(), (bfs, _, filter) =>
         {
-            filter.PickChanceKnownProbe = () => true;   // no stat screen read yet
+            // No stat screen read yet: the filter has no Strength or Picklocks.
+            Assert.False(filter.IsPoorOddsDoor(DownDoor()));
             Assert.Equal(ThroughTheDoor, bfs.FindPath(Stands, Arena, filter));
         });
     }
@@ -200,17 +200,6 @@ public sealed class DoorDetourTests
         WithGraph(Coliseum(wayRound: false), (bfs, _, filter) =>
         {
             SetStats(filter, strength: 120, picklocks: 303);
-            Assert.Equal(ThroughTheDoor, bfs.FindPath(Stands, Arena, filter));
-        });
-    }
-
-    [Fact]
-    public void PoorOddsPick_OnARealmWhosePickChanceIsNotKnown_IsPlannedThrough_AsBefore()
-    {
-        WithGraph(Coliseum(), (bfs, _, filter) =>
-        {
-            SetStats(filter, strength: 120, picklocks: 303, pickChanceKnown: false);
-            Assert.False(filter.IsPoorOddsDoor(DownDoor()));
             Assert.Equal(ThroughTheDoor, bfs.FindPath(Stands, Arena, filter));
         });
     }

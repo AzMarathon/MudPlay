@@ -390,6 +390,51 @@ public sealed class DoorOpenManagerTests
         Assert.False(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
     }
 
+    // A keyed door the character tried to pick: the picks ran out, the key was the
+    // last thing left to try, and it isn't held. That is the door beating the
+    // character, the same as a keyless one.
+    [Fact]
+    public void KeyedDoor_PicksRunOut_ThenKeyNotHeld_FailsAsUnopenable()
+    {
+        using Harness h = new() { MaxPick = 2 };
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 303;
+        DoorOpenResult? result = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, keyItemId: 172, "walker", r => result = r);
+
+        h.Line("Your skill fails you this time.");
+        h.Line("Your skill fails you this time.");
+        Assert.Equal("use black star key d", h.LastSent);
+        Assert.Null(result);
+
+        h.Line("You don't have black star key.");
+
+        Assert.True(Assert.IsType<DoorOpenResult.Failed>(result).Unopenable);
+    }
+
+    // A failed door re-asked for at once (a walk failing and being issued again from
+    // inside the reply) starts afresh. Still standing as the request in flight, it
+    // was swallowed as a duplicate and its caller left waiting for good.
+    [Fact]
+    public void Failed_ThenTheSameDoorAskedForAgainFromInsideTheReply_IsStarted()
+    {
+        using Harness h = new() { MaxPick = 1 };
+        h.Stats.Strength = 120;
+        h.Stats.Picklocks = 303;
+        DoorOpenResult? second = null;
+        h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker",
+            _ => h.Mgr.Enqueue(Direction.D, 301, canBash: true, "walker", r => second = r));
+        Assert.Single(h.Sent);
+
+        h.Line("Your skill fails you this time.");
+
+        Assert.Equal(2, h.Sent.Count);
+        Assert.Equal("pick d", h.LastSent);
+        Assert.Equal(DoorOpenManager.DoorState.WaitingPick, h.Mgr.CurrentState);
+        h.Line("Your skill fails you this time.");
+        Assert.True(Assert.IsType<DoorOpenResult.Failed>(second).Unopenable);
+    }
+
     // The caller re-plans from inside the reply and may ask for another door out of
     // the same room at once: the failed request must be gone by then.
     [Fact]

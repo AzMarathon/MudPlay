@@ -1909,10 +1909,8 @@ public static class BugReportBuilder
         Kv(sb, "Door planning reads", svc.Stats.HasParsed
             ? $"Strength {svc.PlayerStats.Strength}, Picklocks {svc.PlayerStats.Picklocks} (last stat screen); "
               + $"bash ceiling {svc.MaxStrength.MaxAchievableStrength}; "
-              + (svc.Movement.PickChanceKnownProbe?.Invoke() == true
-                  ? $"a lock under {Game.Map.DoorPolicy.PoorPickChancePercent}% a try is gone round when that costs at most "
-                    + $"{Game.Map.DoorPolicy.PoorPickDetourSteps} extra steps"
-                  : "pick chance not known on this realm, so a lock the skill meets is planned through")
+              + $"a lock under {Game.Map.DoorPolicy.PoorPickChancePercent}% a try is gone round when that costs at most "
+              + $"{Game.Map.DoorPolicy.PoorPickDetourSteps} extra steps"
             : "no stat screen read yet: every door is planned through and left to the door handler");
         Kv(sb, "Doors the last plan went round", walker.DoorsWalkedRound.Count == 0
             ? "none" : string.Join(" | ", walker.DoorsWalkedRound));
@@ -1920,6 +1918,8 @@ public static class BugReportBuilder
             ? "none" : string.Join(", ", walker.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
         Kv(sb, "Doors given up on (loop run)", svc.LoopRunner.AbandonedDoors.Count == 0
             ? "none" : string.Join(", ", svc.LoopRunner.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
+        Kv(sb, "Doors given up on (Auto-Lair run)", svc.AutoLair.AbandonedDoors.Count == 0
+            ? "none" : string.Join(", ", svc.AutoLair.AbandonedDoors.Select(d => $"{d.From} → {d.To}")));
         // The retained last event carries the failure/stop reason (Detail) — the
         // single most useful line for "why did the walk quit".
         Kv(sb, "Last walk event",

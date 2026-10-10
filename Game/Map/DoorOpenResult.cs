@@ -17,7 +17,8 @@ public abstract record DoorOpenResult
     // required but unavailable, or an unknown server reply broke the FSM.
     // Reason is a short user-facing failure detail. Unopenable says the door itself
     // beat this character (no verb it has can open it, or the ones it has ran out),
-    // as opposed to the request breaking (stopped, a reply lost, a key missing): the
+    // as opposed to the request breaking (stopped, a reply lost, the key a walk went
+    // to fetch turning out missing): the
     // caller goes round such a door when it can, and trying it again would end the
     // same way.
     public sealed record Failed(string Reason, bool Unopenable = false) : DoorOpenResult;

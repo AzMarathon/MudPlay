@@ -1080,6 +1080,13 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // The setting as it stands now, for the bug report. Null: nothing is refused.
     public IReadOnlySet<(RoomKey From, RoomKey To)>? AutomaticWalkTeleports => _automaticWalkTeleports?.Invoke();
 
+    // What a walk the client starts on its own is planned with: the movement filter
+    // and the automatic-walk teleport list on top. For an engine that has to know
+    // the route such a walk will take before it issues one: Auto-Lair waits in the
+    // last room before the lair on it.
+    public IRoomFilter? AutomaticWalkFilter() =>
+        _automaticWalkTeleports?.Invoke() is { } allowed ? new AutomaticWalkTeleportFilter(_filter, allowed) : _filter;
+
     private IReadOnlySet<(RoomKey From, RoomKey To)>? _deferredWalkAutomaticTeleports;
     private IReadOnlySet<(RoomKey From, RoomKey To)>? _activeAutomaticTeleports;
 
