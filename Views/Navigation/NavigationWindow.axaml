@@ -633,7 +633,7 @@
                                     <Button Classes="ToggleChip" Content="{Binding SpellButtonLabel}"
                                             Command="{Binding ToggleSpellsCommand}"
                                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                            ToolTip.Tip="Room-spell highlight: click to cycle one flat colour → colour each room by its spell (hover a room to see the spell name) → off. Your choice is saved per character."
+                                            ToolTip.Tip="Room-spell highlight: click to cycle one flat colour → colour each room by its spell (hover a room to see the spell name) → colour each room by teleport (red: the spell teleports you, always or at random; yellow: only on a condition, such as an item, your class or level, or an empty room; green: it doesn't) → off. Your choice is saved per character."
                                             Classes.SpellFill="{Binding HighlightSpells}"/>
                                     <Button Classes="ToggleChip" Content="Level gates"
                                             Command="{Binding ToggleLevelGatesCommand}"
@@ -794,6 +794,7 @@
                                  LairMonsterCounts="{Binding LairMonsterCounts}"
                                  HighlightShops="{Binding HighlightShops}"
                                  SpellMode="{Binding SpellMode}"
+                                 SpellTeleportClasses="{Binding SpellTeleportClasses}"
                                  NavLineStyles="{Binding NavLineStyles}"
                                  AutoFollowHoldSeconds="{Binding MapRecenterHoldSeconds}"
                                  ComparisonRecordedPath="{Binding ComparisonRecordedPath}"
@@ -1085,9 +1086,29 @@
                         </Grid>
                         <TextBlock Text="Holds a level gate" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="6">
+                    <!-- The flat spell purple: every spell room outside the by-teleport
+                         mode, and in it only a room whose spell couldn't be classed. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding !SpellsByTeleport}">
                         <Border Width="14" Height="14" Background="#6428A0"/>
                         <TextBlock Text="Spell room" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <!-- The Spells chip's by-teleport colours (MapControl.SpellTeleportHex),
+                         listed only while that mode paints them. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SpellsByTeleport}">
+                        <Border Width="14" Height="14" Background="#C81E3C"/>
+                        <TextBlock Text="Spell room: teleports, always or at random" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SpellsByTeleport}">
+                        <Border Width="14" Height="14" Background="#F2DC5A"/>
+                        <TextBlock Text="Spell room: teleports on a condition" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SpellsByTeleport}">
+                        <Border Width="14" Height="14" Background="#218A45"/>
+                        <TextBlock Text="Spell room: no teleport" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding SpellTeleportUnknownInLegend}">
+                        <Border Width="14" Height="14" Background="#6428A0"/>
+                        <TextBlock Text="Spell room: teleport unknown" FontSize="11" Foreground="{StaticResource ChromeFgSecBrush}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <Border Width="14" Height="14" Background="#DC821E"/>

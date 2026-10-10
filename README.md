@@ -1,11 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.159.30**
-> - A route whose only way there needs a key or other item goes round hazard rooms you hold no counter for when it can, and asks for the key alone (the walk to the Hidden Study no longer crossed Crystal Lake's teleport rooms or sent for a log raft)
-> - Crystal Lake: a log raft or wooden skiff counts as protection from level 50 only, as the game data has it; below that the lake's teleport rooms are walked round even with a boat, and a boat is no longer offered as a shortcut across
-> - When the lake's teleport rooms are the only way for a character under level 50, the route card says the boats are no help and crosses on your pick
-> - The program log says when a walk goes the longer way round hazard rooms, and a route card's log line and the bug report count the hazard rooms a route crosses or goes round
+> **Version 3.160.1**
+> - Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
+> - In that mode the room tooltip and the Legend name the colours
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
