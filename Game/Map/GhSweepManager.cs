@@ -358,7 +358,8 @@ public sealed class GhSweepManager : IDisposable
     // it, plus every copy confirmed dropped in it, kept as the sort goes. Each
     // room's display on that lap is held against it once. Null on a resumed sweep,
     // which ran no recon to start it from. _hiddenTaken is the same for the copies
-    // taken out of hidden stacks.
+    // taken out of hidden stacks, and for the ones a second search showed were no
+    // longer in them.
     private GhFloorCounts? _expectedAfterSort;
     private GhFloorCounts? _hiddenTaken;
     private readonly HashSet<RoomKey> _readOnFinalLap = new();
@@ -2503,6 +2504,10 @@ public sealed class GhSweepManager : IDisposable
             _outstandingDispatch.Remove(get);
         }
         ForgetRefusedPickups();
+        // The pickups not yet sent, and a second read queued behind them, are given
+        // up with the rest: sent now they would only be refused too, or land after
+        // the re-plan has walked on, in another room.
+        ClearCommandQueue();
         _resyncPending = true;
         _log?.Info(LogCategory,
             $"capacity refused {outstandingGets.Count} pending pickup(s) at {_dispatchRoom}; "
@@ -2567,6 +2572,9 @@ public sealed class GhSweepManager : IDisposable
 
     private void ForgetRefusedPickups()
     {
+        // A pickup still waiting here never had its second read (a full pack or a
+        // timeout ended the room first), so it is owed one on the next visit.
+        foreach (PendingSortMove unread in _refusedVisible.Concat(_refusedHidden)) unread.Recounted = false;
         _refusedVisible.Clear();
         _refusedHidden.Clear();
         _heldForVisibleTwin.Clear();
@@ -2668,8 +2676,10 @@ public sealed class GhSweepManager : IDisposable
                 {
                     _log?.Info(LogCategory,
                         $"{move.From} holds {there} {move.ItemName}, not {move.Count}: picking up {there}");
-                    // The copies that aren't there were never the sort's to account for.
-                    if (!hidden) _expectedAfterSort?.Add(move.From, move.ItemName, there - move.Count);
+                    // The copies that aren't there were never the sort's to account
+                    // for, and come off the room's record with the ones it takes.
+                    if (hidden) _hiddenTaken?.Add(move.From, move.ItemName, move.Count - there);
+                    else _expectedAfterSort?.Add(move.From, move.ItemName, there - move.Count);
                     move.Count = there;
                 }
                 _commandQueue.Enqueue(("get", move));

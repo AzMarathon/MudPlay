@@ -6586,6 +6586,14 @@ A `get <item>` that can't succeed replies with one of these shapes:
     when a stack runs out go on as a carried move of their own (`KeepWhatWasTaken`) and only the rest is
     left. A hidden stack left this way is recorded as not found by the search
     (`GhLeftReason.NotFoundBySearch`), not as gone.
+  - **Client policy:** a hidden pickup cut down to what its second search showed takes the copies that
+    weren't shown off the room's hidden record as well, so the item-location log doesn't keep copies of
+    a stack the game refused to hand over in full. A search lists only the share it finds, so a larger
+    stack can still hold copies the log no longer shows until the next sweep reads the room.
+  - Known gaps: on a statline that puts text after the prompt, a search's reply is of unknown source
+    and settles a look still waiting in the same room, so a refused visible stack can be resized from
+    hidden copies. An arrival is any room change the tracker reports, so one made with no room display
+    (a re-anchor) reads as an empty floor.
 - **`Syntax: GET {Amount} {Currency}`**: the game misparsed the item name as a **currency** get.
   - Observed for some multi-word names, e.g. `get silk cape`, and for gem/stone names like `piece of amber`.
   - No item name is echoed, and retrying the same name can't help.
@@ -6597,6 +6605,7 @@ A `get <item>` that can't succeed replies with one of these shapes:
   - Unlike the two shapes above, the item is NOT gone. It's a transient block that clears once weight is shed.
   - No item name is echoed.
   - Confirmed by screenshot: `get 20 torch` succeeds twice, then a third `get 20 tor` while overloaded → `You cannot carry that much!`.
+  - **Client use:** `GhSweepManager.HandleCapacityRefusal`. The room's outstanding pickups stay queued for a later visit, the ones not yet sent are taken off the command queue with a second read queued behind them (`ClearCommandQueue`), and the pack is read again (`i`) before the re-plan. A pickup that was still waiting on its second read (*`get` failure responses*, Client use) is owed one on the next visit (`ForgetRefusedPickups`).
   - **Stock: the same line also means "no free slot"** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_add_item_to_inventory` @0x41b19e (weight) and @0x41b292–0x41b2bb (slots); Realm: Stock, Paradigm not recorded)*. It prints when the item would take the weight above the max (exactly the max is allowed), and also when all 100 pack slots are in use or, for a key, the key ring is full (50 at most). The line doesn't say which. The weight side is in *The `i` listing and carried weight*.
   - **In play the line means encumbrance** *([CONFIRMED] 2026-10-09, user: "means that we do not have available encumbrance to pick up an item... there isnt a limit on how many different items we can hold.. or how many total items of 1 item we can hold... unless that exceeds our encumbrance")*. The engine's slot test above is a second cause on paper; the user has not met it, so the client treats the line as a weight refusal only.
 - **Stock: `A strange force stops you from getting this item.`** is a second refusal from the same routine *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_add_item_to_inventory` @0x41b15f; Realm: Stock, Paradigm not recorded)*. It prints when the engine's `_add_logical_to_user` test refuses the item; what that test checks wasn't traced. A `buy` goes through the same routine and can print either line (*Money, banks & shops → Buy / sell result lines*).

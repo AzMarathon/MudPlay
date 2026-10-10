@@ -33,6 +33,8 @@ internal sealed class RoombaHouse : IDisposable
     private readonly MovementCoordinator _coordinator = new();
     private readonly InventoryManager _inventory;
     private RoomKey _here = A;
+    private readonly Dictionary<string, int> _pack = new();
+    private int _packHolds = 5000;
     private int _answered;
     private int _clock;
 
@@ -58,6 +60,10 @@ internal sealed class RoombaHouse : IDisposable
     public Func<bool> SearchFinds { get; set; } = () => true;
     // A line the game prints between a search's echo and its reply.
     public string? LineBetweenEchoAndReply { get; set; }
+    // Whether the game answers this `get` with `You cannot carry that much!`.
+    public Func<string, bool> TooHeavy { get; set; } = _ => false;
+    // Every command the game answered, with the room it was answered in.
+    public List<(RoomKey Room, string Command)> Played { get; } = new();
     // Who the room's display names under its floor list, if anyone.
     public string? AlsoHere { get; set; }
     // Whether the room being walked into is too dark to show.
@@ -154,11 +160,24 @@ internal sealed class RoombaHouse : IDisposable
     }
 
     // An `i` showing an empty pack that can carry this much. Every item weighs 1.
-    public void PackCarries(int most) => Wire(
-        "You are carrying nothing.",
-        "You have no keys.",
-        "Wealth:    0 copper farthings",
-        $"Encumbrance:    0/{most}  -  None  [0%]");
+    public void PackCarries(int most)
+    {
+        _packHolds = most;
+        ShowInventory();
+    }
+
+    private void ShowInventory()
+    {
+        int carried = _pack.Values.Sum();
+        string list = carried == 0
+            ? "nothing"
+            : string.Join(", ", _pack.Where(s => s.Value > 0).Select(s => s.Value > 1 ? $"{s.Value} {s.Key}" : s.Key));
+        Wire(
+            $"You are carrying {list}.",
+            "You have no keys.",
+            "Wealth:    0 copper farthings",
+            $"Encumbrance:    {carried}/{_packHolds}  -  None  [{carried * 100 / _packHolds}%]");
+    }
 
     public void Wire(params string[] rows)
     {
@@ -175,8 +194,14 @@ internal sealed class RoombaHouse : IDisposable
             Assert.True(guard < 500, "the sweep never came to rest");
             beforeEach?.Invoke();
             string command = Sent[_answered++];
+            if (command is not ("n" or "s")) Played.Add((_here, command));
             if (command is "n" or "s") Walk(command);
             else if (command == "sea") Search();
+            else if (command == "i")
+            {
+                Wire(Prompt + "i");
+                ShowInventory();
+            }
             else if (command == "l")
             {
                 Wire(Display(Prompt + "l"));
@@ -270,12 +295,22 @@ internal sealed class RoombaHouse : IDisposable
         if (LineBetweenEchoAndReply is { } between) rows.Add(between);
         rows.Add(list ?? "Your search revealed nothing.");
         Wire(rows.ToArray());
+        int sent = Sent.Count;
         Invoke("OnReconSearchSettleElapsed");
+        // A search sent in the middle of a room's batch is paced like the rest of it.
+        if (Sweep.Phase == GhSweepManager.SweepPhase.Sorting && Sent.Count == sent)
+            Sweep.FirePromptWaitTimeoutForTests();
     }
 
     private void Get(string argument)
     {
         (int count, string name) = Counted(argument);
+        if (TooHeavy(argument))
+        {
+            Wire(Prompt + "get " + argument, "You cannot carry that much!");
+            Sweep.FirePromptWaitTimeoutForTests();
+            return;
+        }
         int visible = Floor[_here].GetValueOrDefault(name);
         int hidden = _found[_here].Contains(name) ? Stash[_here].GetValueOrDefault(name) : 0;
         if (count > visible + hidden)
@@ -288,6 +323,7 @@ internal sealed class RoombaHouse : IDisposable
         if (fromVisible > 0 && (Floor[_here][name] -= fromVisible) == 0) Floor[_here].Remove(name);
         int fromHidden = count - fromVisible;
         if (fromHidden > 0 && (Stash[_here][name] -= fromHidden) == 0) Stash[_here].Remove(name);
+        _pack[name] = _pack.GetValueOrDefault(name) + count;
         Wire(Prompt + "get " + argument, $"You took {argument}.");
         Sweep.FirePromptWaitTimeoutForTests();
     }
@@ -296,6 +332,7 @@ internal sealed class RoombaHouse : IDisposable
     {
         (int count, string name) = Counted(argument);
         Floor[_here][name] = Floor[_here].GetValueOrDefault(name) + count;
+        _pack[name] = _pack.GetValueOrDefault(name) - count;
         Wire(Prompt + "drop " + argument, $"You dropped {argument}.");
         Sweep.FirePromptWaitTimeoutForTests();
     }

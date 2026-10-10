@@ -123,6 +123,88 @@ public sealed class GhSweepRefusedPickupTests : IDisposable
         Assert.Empty(Sweep.RoomsChangedAfterSort);
     }
 
+    // `get 5 mace` is answered `You cannot carry that much!`: the pack is fuller
+    // than reckoned, and it is read again before anything more is tried. The two
+    // pickups queued behind the maces used to go out all the same, one of them a
+    // room later, where the re-plan had walked to by then.
+    [Fact]
+    public void Paradigm_APickupTooHeavy_GivesUpTheRestOfTheBatch_UntilThePackIsRead()
+    {
+        _house.Floor[C]["mace"] = 5;
+        _house.Floor[C]["war hammer"] = 1;
+        _house.Floor[C]["chain shirt"] = 1;
+        bool refused = false;
+        _house.TooHeavy = argument =>
+            !refused && argument.EndsWith("mace", StringComparison.Ordinal) && (refused = true);
+        Assert.True(Sweep.Start());
+        _house.PlayOn();
+
+        Assert.True(refused);
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, Sweep.Phase);
+        List<(Game.Map.RoomKey Room, string Command)> packReadsAndPickups = _house.Played
+            .Where(p => p.Command == "i" || p.Command.StartsWith("get ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(("get 5 mace", "i"), (packReadsAndPickups[0].Command, packReadsAndPickups[1].Command));
+        // One pickup each for the three stacks after that, all in the room they lie in.
+        Assert.Equal(new[] { "get 5 mace", "get chain shirt", "get war hammer" },
+            packReadsAndPickups.Skip(2).Select(p => p.Command).OrderBy(c => c, StringComparer.Ordinal));
+        Assert.All(packReadsAndPickups, p => Assert.Equal(C, p.Room));
+        Assert.Empty(Sweep.LeftInPlace);
+        Assert.Equal(5, _house.Floor[A].GetValueOrDefault("mace"));
+        Assert.Equal(1, _house.Floor[A].GetValueOrDefault("war hammer"));
+        Assert.Equal(1, _house.Floor[B].GetValueOrDefault("chain shirt"));
+    }
+
+    // A stack refused as smaller than recorded, then a pickup too heavy, in one
+    // batch. The room's second look is given up with the rest of the batch: it used
+    // to go out later, in another room, and the stack, marked as read again when it
+    // never was, was left as gone on the next visit with three copies in plain sight.
+    [Fact]
+    public void Paradigm_ARefusedStack_ThenAPickupTooHeavy_IsReadAgainOnTheNextVisit()
+    {
+        _house.Labels.SetSearchForHidden(true);
+        _house.Floor[B]["mace"] = 5;
+        _house.Stash[B]["mace"] = 1;
+        _house.Floor[B]["war hammer"] = 2;
+        bool refused = false;
+        _house.TooHeavy = argument =>
+            !refused && argument.EndsWith("war hammer", StringComparison.Ordinal) && (refused = true);
+        Assert.True(Sweep.Start());
+        PlayOn_WithTheFloorsChangedBeforeTheSort(() => _house.Floor[B]["mace"] = 3);
+
+        Assert.True(refused);
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, Sweep.Phase);
+        Assert.All(_house.Played.Where(p => p.Command == "l"), p => Assert.Equal(B, p.Room));
+        Assert.Equal(1, _house.Sends("l"));
+        Assert.Empty(Sweep.LeftInPlace);
+        Assert.Equal(4, _house.Floor[A].GetValueOrDefault("mace"));
+        Assert.Equal(2, _house.Floor[A].GetValueOrDefault("war hammer"));
+        Assert.Equal(4, InTheHouse("mace"));
+        Assert.Empty(_house.LoggedAt(B));
+    }
+
+    // Two hidden war hammers were recorded and one is there by sort time. The
+    // second search shows one, and one is picked up; the other comes off the room's
+    // record with it, or the item-location log would keep a war hammer in a room
+    // that holds none.
+    [Fact]
+    public void Paradigm_AHiddenStackFoundSmaller_ComesOffTheRoomsRecordAtItsRecordedCount()
+    {
+        _house.Labels.SetSearchForHidden(true);
+        _house.Stash[B]["war hammer"] = 2;
+        Assert.True(Sweep.Start());
+        PlayOn_WithTheFloorsChangedBeforeTheSort(() => _house.Stash[B]["war hammer"] = 1);
+
+        Assert.Equal(GhSweepManager.SweepPhase.Idle, Sweep.Phase);
+        Assert.Equal(new[] { "get 2 war hammer", "get war hammer" },
+            _house.Sent.Where(c => c.StartsWith("get ", StringComparison.Ordinal)));
+        Assert.Single(_house.SweepLog("1/2 holds 1 war hammer, not 2"));
+        Assert.Empty(Sweep.LeftInPlace);
+        Assert.Equal(1, _house.Floor[A].GetValueOrDefault("war hammer"));
+        Assert.Empty(_house.Stash[B]);
+        Assert.Empty(_house.LoggedAt(B));
+        Assert.Equal(new Dictionary<string, int> { ["war hammer"] = 1 }, _house.LoggedAt(A));
+    }
+
     // One of the two refused stacks is gone altogether: the one look still serves
     // both, taking what is left of the one and leaving the other as gone.
     [Fact]
