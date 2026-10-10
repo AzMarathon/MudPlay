@@ -25,10 +25,6 @@ namespace MudPlay.Game.Map;
 public readonly record struct RoomSummonEntry(
     IReadOnlyList<int> Monsters, double Probability, int Exp, bool EmptyRoomOnly);
 
-// A summon line the table names and the estimate doesn't count, kept so the log can
-// say what was left out and why.
-public readonly record struct RoomSummonLeftOut(int Threshold, IReadOnlyList<int> Monsters, string Reason);
-
 // ExpPerRoll = Σ (line% × its monsters' exp) — the probability-weighted exp of one
 // roll; EmptyRoomExpPerRoll is the share of it on lines that run only in an empty
 // room. SummonChance = Σ line% — the chance any monster is summoned. NoMonstersGate
