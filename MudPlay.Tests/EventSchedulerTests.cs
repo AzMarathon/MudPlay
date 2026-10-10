@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using MudPlay.Game.Events;
 using MudPlay.Models.GameData;
@@ -53,6 +54,42 @@ public sealed class EventSchedulerTests
             ActionType = EventActionType.Command,
             CommandText = cmd,
         };
+
+    // ----- Reconnect ---------------------------------------------------
+
+    // An event that was waiting when the connection dropped is still waiting after
+    // the reconnect, and the Logon event that fires on the way back in takes its
+    // place behind it.
+    [Fact]
+    public void AfterAReconnect_TheWaitingEventRunsBeforeTheLogonEvent()
+    {
+        var (events, scheduler, prompt, sent) = Build();
+        DateTimeOffset now = new(2026, 10, 10, 18, 0, 0, TimeSpan.Zero);
+        events.Now = () => now;
+        ScheduledEvent hold = new() { Name = "hold", ActionType = EventActionType.Wait, WaitSeconds = 60, Then = EventThenType.Nothing };
+        ScheduledEvent waiting = CommandEvent(EventTriggerType.Every, "stat", "waiting");
+        waiting.Then = EventThenType.Resume;
+        ScheduledEvent logon = CommandEvent(EventTriggerType.Logon, "hello", "logon");
+        logon.Then = EventThenType.Resume;
+        events.Add(hold);
+        events.Add(waiting);
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);
+        events.Add(logon);
+        events.Fire(hold);
+        events.Fire(waiting);
+
+        scheduler.NotifyDisconnected();
+        now += TimeSpan.FromMinutes(2);
+        events.Tick();
+        Assert.Empty(sent);                                 // nothing ends or starts while the link is down
+
+        scheduler.NotifyConnected();
+        prompt.Append(PromptBytes);
+        events.Tick();
+
+        Assert.Equal(new[] { "stat\r", "hello\r" }, sent.Select(b => Encoding.Latin1.GetString(b)));
+    }
 
     // ----- Logon ------------------------------------------------------
 

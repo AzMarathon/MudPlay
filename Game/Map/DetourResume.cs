@@ -37,9 +37,11 @@ public readonly record struct DetourResume(DetourResumeKind Kind, Loop? Loop = n
 
     public void Stop(AutoWalkManager walker, LoopRunner loops, AutoLairManager lair, string reason)
     {
-        if (lair.IsActive) lair.Stop(reason);
-        if (loops.State is not LoopState.Idle) loops.Stop(reason);
-        if (Kind == DetourResumeKind.Walk) walker.Stop(reason);
+        // Said to be coming back: an event run on the engine waits out the detour
+        // instead of reading the stop as the user calling it off.
+        if (lair.IsActive) lair.Stop(reason, willResume: true);
+        if (loops.State is not LoopState.Idle) loops.Stop(reason, willResume: true);
+        if (Kind == DetourResumeKind.Walk) walker.Stop(reason, willResume: true);
     }
 
     public void Resume(AutoWalkManager walker, LoopRunner loops, AutoLairManager lair)

@@ -1,6 +1,6 @@
 # Version history
 
-## 3.164.0
+## 3.165.0
 
 - Auto-open opens a flagged container on arrival; it did nothing before
 - Its contents go on the Chest Offload list
@@ -13,6 +13,21 @@
 - Chest Offload: one inventory read the game never answers no longer leaves every later open unread
 - Auto-open: a copy opened by hand clears the open owed if it returns, and a hang-up's ends with its item check
 - Bug report shows auto-open's state
+
+## 3.164.0
+
+- Events run one at a time, start to finish, in the order they fired: one that fires while another is running waits its turn
+- A loop or Auto-Lair event with a Stop after rule finishes (its Then included) before the next starts; one with no rule is done once it has started
+- With an event waiting, the finished one's "go back" or loop passes to it, so the loop is restarted once, after the last
+- Logoff events start at once; every other event waits its turn
+- An event isn't queued twice; Settings → Events sets how many may wait (10) and for how long (30 minutes), and one dropped at either says so in the terminal
+- Stop, dying or Reset States ends the running event and drops the waiting ones; Stop now ends an event that is waiting or resting too
+- A lost connection keeps the waiting events: they run, in order, once back in the game
+- A bank or sell trip, a flee or a reconnect no longer ends an event's loop or walk: it goes on afterwards, laps and Stop after rule intact
+- A walk refused as an automatic walk says so in the terminal and names the Settings → Teleports line to tick
+- Bug report: the events waiting, the queue limits and what the last Then came to
+- Settings → Events: how long a paused event may stand still before it is given up (5 minutes)
+- bug reports addressed: paradigm-20261009-185106, paradigm-20261009-220128
 
 ## 3.163.0
 

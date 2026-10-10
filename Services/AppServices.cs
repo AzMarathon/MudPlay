@@ -7317,6 +7317,8 @@ public sealed class AppServices
         // change reaches the next walk and a profile swap brings its own list.
         Walker.SetAutomaticWalkTeleports(() => Game.Map.TeleportCatalog.ParseKeys(
             ReadSection<Models.Profile.TeleportSettings>(Profile.Current, "Teleports").AutomaticWalkTeleports));
+        // A refused automatic walk names the line to tick by its title on that tab.
+        Walker.SetTeleportChoices(() => TeleportChoices);
         RoomGraph.GraphReloaded += () => _teleportChoices = null;
         // Great Pyramid climb solver — same no-route hand-off as the maze solver,
         // on its own slot. Drives the leader only, and only when leading or solo
@@ -8435,6 +8437,9 @@ public sealed class AppServices
             Walker.Stop("player died — halting in graveyard");
             AutoLair.Stop("player died — halting in graveyard");
             MovementControl.DropQueuedRun();
+            // After the engines: a run their stop didn't end (a wait, a rest) and
+            // the events queued behind it end here.
+            Events.NoteDeath();
         });
         // Wipe the classifier's room view so a hostile from the room we died in
         // doesn't linger as a stale target the combat engine re-attacks when a
@@ -9384,6 +9389,13 @@ public sealed class AppServices
         Events.SetStashTransferHooks(StartStashTransfer, () => StashTransfer.Cancel("another event took over"));
         StashTransfer.Ended += Events.NoteStashTransferEnded;
         Events.SetRestHooks(() => Health.IsRecoveringRest || Health.RestInFlight, () => Health.Evaluate());
+        // Posted: the engine event that reports a refused walk back can arrive from
+        // inside the message pump, where a terminal write re-feeds the emulator.
+        Events.SetNotice(msg => Avalonia.Threading.Dispatcher.UIThread.Post(() => WriteTerminalNotice(msg)));
+        // Stop with no engine running to report it (an event waiting or resting, or
+        // suspended behind a detour) still ends the event and its queue. Wired here,
+        // after Events exists; MovementControl is built further up.
+        MovementControl.Stopping += Events.NoteUserStop;
         Events.SetStatsReader(ReadEventReadings);
         GhSweep.SweepCompleted += _ => Events.NoteRoombaFinished();
         BossTimers.BossKilled += def => Events.NoteBossKilled(def.Name);
