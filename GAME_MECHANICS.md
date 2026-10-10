@@ -90,20 +90,48 @@ how many swings or spell fires a player or monster gets inside one round.
     - A tick more than 40 s after the last thing that placed the grid (11 s until a regen pass
       has measured the round) frees no slot (`TickEngine.LastCombatTickWasPlaced`): the cast
       then waits out `CastCoordinator.CastCommandCooldown` (5.5 s), longer than any round.
-  - **Damage on us that nobody dealt is not a round** (report `paradigm-20261009-120757`). A
-    room's own spell lands on the spell round (*Monsters, lairs & spawns → Room-spell monster
-    summons*), one to four seconds into the combat round, in the hit wording the round's own
-    lines use (`You are seared by the flames for 46 damage!`). `TickEngine` took it for a round
-    seen on the wire: the round clock moved onto it and the cast slot came free, and nine
-    between-round casts in 70 s drew `You have already cast a spell this round!`, each within
-    a second or two of a flames line. `TickEngine.IsDamageNobodyDealt` now leaves out a damage
-    line `DamageLineAttributor` reads as taken by us with no dealer (`You are …`, `You take …`,
-    `You feel …`), and `TickTimingLog` records it as a `damage` row with its offset from the
-    last round seen. A monster's on-hit effect in the same wording (`You are burned for 5
-    damage!`) follows the hit that caused it, which marks the round by itself. Not covered:
-    a room spell worded with a subject (`A magma explosion hits you for %d damage!`, `A chaotic
-    storm assaults you for %d damage!`, 12 rooms in the Paradigm 1.9.1 data), which can't be
-    told from a named attacker's hit by its wording.
+  - **A room spell's damage is not a round** (report `paradigm-20261009-120757`). A room's own
+    spell is re-cast every second spell round (*Monsters, lairs & spawns → Room-spell monster
+    summons*), so its damage falls anywhere in the combat round, in the hit wording the
+    round's own lines use (`You are seared by the flames for 46 damage!`). `TickEngine` took it
+    for a round seen on the wire: the round clock moved onto it and the cast slot came free,
+    and nine between-round casts in 70 s drew `You have already cast a spell this round!`, each
+    within a second or two of a flames line.
+    - **The rule** (`OffRoundDamageLines.IsOffRound`, handed to `TickEngine` by
+      `AppServices` through `SetOffRoundDamageProbe`), in order:
+      1. the line is a damage text of the spell on the room we stand in (`Rooms.Spell` of
+         `RoomTracker.State.CurrentRoom`; the spell's caster and victim texts): not a round;
+      2. otherwise, the line names nobody who dealt it (`OffRoundDamageLines.NobodyDealtIt`:
+         `You are …`, `You feel …`, `Your <part> is …`, as `DamageLineAttributor` reads it) and is
+         not the victim text of a spell some monster casts in an attack slot (`AttType-N` 2 →
+         `AttAcc-N`): not a round;
+      3. anything else is the round.
+    - **Why step 2 has its exception** *([OBSERVED] 2026-10-09, seeds and imported game data,
+      Paradigm 1.9.1 and Stock 1.11p)*: a few monster attack spells have a victim text with no
+      dealer in it, and those lines are the round. Nine on Paradigm and seven on Stock reach
+      the hit pattern: dark force (#225, Paradigm) and fist of death (#1159) `You are struck by
+      a dark force for %d damage!`, voodoo stab (#763) `You feel a stabbing pain for %d damage!`,
+      telekinesis (#542), molecular agitation (#543), acid tempest (#805, and #5005 on
+      Paradigm), sand breath (#538) and shadow breath (#1011) `Your soul is drained for %d
+      damage!`. Monster melee always names the monster.
+    - **Why step 1 comes first:** two damaging room spells are worded with a subject and read
+      like anyone's hit, `A magma explosion hits you for %d damage!` (#944, 5 rooms on Paradigm)
+      and `A chaotic storm assaults you for %d damage!` (#212, 7 rooms), and chaos storm is also
+      a monster's attack. Only the room tells the two apart.
+    - A monster's on-hit effect (`You are burned for 5 damage!`, an `AttHitSpell`, not an attack
+      slot) is left out by step 2 as well. It lands on the round, behind the hit that caused
+      it, and that hit marks the round.
+    - Before the probe is set, and in a room the client can't place, step 2's wording test is
+      all there is (without the exception until the probe is set).
+    - `TickTimingLog` records a line left out as a `damage` row with its offset from the last
+      round seen, except inside 250 ms of a round just seen (an on-hit effect).
+    - **Not recognised:** four Paradigm room spells that do damage have no damage text in the
+      message seed (freezing cold #5242, ocean drowning #5256, bog poison #5682, murky drown
+      #5687), so step 1 can't match them; if their lines name no dealer, step 2 still leaves
+      them out. `[NEEDS CONFIRMATION]` What do those four print?
+    - (The first version of this rule was step 2 without its exception; superseded 2026-10-09.
+      An earlier line here also listed `You take …` among the wordings: those never matched
+      the hit pattern and never reached the round clock.)
 
 ### Spell round (3s) and durations
 *Status: CONFIRMED (user); wall-clock length OBSERVED (report `paradigm-20260816-222917`; observed on Paradigm)*
@@ -1776,7 +1804,7 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - **Attack-last re-fire** → re-announce our current action after a party member's round commit, so ours lands last (a harmless re-posture for a single-target spell; never re-send a channeling room spell).
 
 ### Non-swing actions break combat (casting, equipping)
-*Status: CONFIRMED (user); equip rule CONFIRMED 2026-08-24 (user) · Realm: both (equip rule)*
+*Status: CONFIRMED (user); equip rule CONFIRMED 2026-08-24 (user); `rem` on Paradigm and the re-attack after a typed gear command CONFIRMED 2026-10-09 (user) · Realm: both (equip rule)*
 
 - **Casting a spell mid-fight emits `*Combat Off*`; the re-attack lands the same round.** The server emits `*Combat Off*` because a cast is a distinct action that interrupts the sustained weapon swing (see *Spells, buffs & conditions → Between-round cast slot vs the combat attack*). If the target is **still alive** after the cast, the desired behaviour is to **re-attack immediately** (as soon as the `*Combat Off*` lands), not wait for the next combat-round tick or a manual room re-parse. Confirmed by the user casting a Kai power (`swan`) on a live target: without a prompt re-attack the client idled a full round.
 - **This applies to a hand-typed cast just as much as an engine-issued between-round cast.** A spell is cast by typing its cast-code (`Spells.Short`) directly (see *Spells, buffs & conditions → Casting syntax — bare cast code, optional target name*) (`swan`, `swan rat`), with no `c` verb precursor, so the client recognises a manual cast by that cast-code on the wire.
@@ -1795,14 +1823,17 @@ How a fight runs on the wire: announcing and repeating attacks, what breaks comb
   - **`get` and `drop` don't touch a fight at all**, as the `get` bullet of this topic says. `search` (`You may not search while attacking!`), `close` and `lock` are refused during one; `hide` and `look` test for one and print no `*Combat Off*`.
   - `[NEEDS CONFIRMATION]` Walking out of a fight seems to print `*Combat Off*` at the next round tick and not at the move: `_move_user` has no call that ends the attack, and the round-tick check is the only path found (callees not all read). Does a timed Stock capture of a move out of a fight show `*Combat Off*` arriving with the next round?
   - **A player target leaving the room does not end the attack at the tick** (@0x44c0e6–0x44c10c): the attacker is only flagged, and the flag clears when the two share a room again. A queued spell then ends with `*Combat Off*` on the second round the target is absent (`_cast_user_target` @0x444b89–0x444bed); the weapon routine's own sites weren't traced.
-
+- **Taking gear off (`rem`) breaks combat on Paradigm as putting it on does** *([CONFIRMED] 2026-10-09, user)*. On Stock it is in the list in this topic (`_remove_armour`).
 - **A typed `eq` in a Paradigm fight prints `*Combat Off*` ahead of its own lines, and a cast made with the fight already stopped prints none** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-122342`; Realm: Paradigm))*: `[HP=471/MA=276]:Eq phoenix` → `*Combat Off*` → `You have removed rainbow stone.` → `You are now wearing phoenix feather.`, and a second later `grhe <party member>` drew `You cast greater healing on <party member>, healing 44 damage!` alone. So a cast's `*Combat Off*` only comes when there is a fight for it to stop, as the Stock list in this topic has it.
-- **Not attacking when the monster died, the character got no experience line** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-122342`; Realm: Paradigm), one kill)*: the party killed the monster five and a half seconds after that `*Combat Off*`, with no attack of ours sent in between; our screen showed its death line and no `You gain N experience.`. The kills before and after it, with our attack engaged and no damage of ours landing, each printed `You gain 6000 experience.`. Stock's rule is in *Kill detection and monster-kill message order*; whether Paradigm splits experience the same way is not recorded.
+- The fight so stopped cost the kill's experience: *Kill detection and monster-kill message order* (a party member who isn't attacking gets none).
+- **Client policy** *(user, 2026-10-09: "yes and yes")*: **a gear command typed mid-fight (`eq` / `wear` / `wield` / `rem`) is followed by a re-attack at once**, on the `*Combat Off*` it draws, as after a gear swap of the client's own.
 
 **Client use:**
 - The engine re-attacks on the `*Combat Off*` of a gear swap of its own via the same signal a cast arms (`CombatManager.NoteGearSwapInterrupt` → `NoteBetweenRoundCast`).
-- A `*Combat Off*` the client can't put down to a cast or a swap of its own (a typed `eq`, a stun) is answered on the next combat line it reads or the next round tick: `CombatManager.OnCombatLine` / `OnCombatTick` → `TryResumeEngage`. That resume is skipped for 1.5 s after an attack was sent (`ResumeAfterAttackGuard`), which is for a `*Combat Off*` the game printed before it had the fresh attack. It no longer applies once `*Combat Engaged*` has answered that attack and a `*Combat Off*` has followed (`_offEndedAnsweredAttack`): in report `paradigm-20261009-122342` an `eq` typed half a second after the attack stopped the fight 0.4 s before the round, every line of that round and its tick fell inside the guard, the heal cast a moment later drew no `*Combat Off*` to resume on, and the monster died a round later without being attacked. The program log says when such a `*Combat Off*` arrives and when a resume is skipped, and the bug report's *Combat weapon state* carries the last resume decision.
-- A typed `eq` is not recognised as it is sent, so the re-attack waits for that next line or tick and the round in between can pass without a swing.
+- **A typed gear command arms the same latch as it is sent** (report `paradigm-20261009-122342`). `OutboundGearObserver` reads the verb (`GearCommandVerbs`: `eq`…`equip`, `wea` / `wear`, `wield`, `rem`…`remove`, with an item named; the short forms are Stock's from *Wire, prompt & command output → Command words and abbreviations*, and one Paradigm doesn't take just arms a latch that lapses) and `CombatManager.NoteTypedGearCommand` arms it when Auto-Combat is on and something engageable is in the room.
+  - The `*Combat Off*` that follows within 3 s (`CastInterruptResumeWindow`) re-attacks the same target: at once in weapon mode, a re-announce in spell mode. Unlike a cast of the client's it keeps `ResumePacing` (one resume in 2.5 s; `ManualResumePacing` in spell mode), so three commands typed in a second are one re-attack and the last waits for the next round's lines.
+  - **Typed** means sent to the wire with no wrapped sender in the call: `EngineSendGate.SendingClientCommand` is true while an engine, a macro, a trigger, an event or the item menu sends, and `MainWindowViewModel.SendUserInput` hands the observer only the lines sent while it is false (and outside a loop's own command block). The Equipment Manager, an item cast and corpse recovery re-attack after their own swaps and are left alone. A gear command in a macro, trigger or event therefore gets the next-line resume of the bullet after this one, not the instant one.
+- A `*Combat Off*` the client can't put down to a cast or a gear command (a stun, an attack that stops after each strike) is answered on the next combat line it reads (`CombatManager.OnCombatLine` → `TryResumeEngage`, weapon or spell mode) or, in weapon mode only, the next round tick (`OnCombatTick`); in spell mode the tick doesn't resume. That resume is skipped for 1.5 s after an attack was sent (`ResumeAfterAttackGuard`), which is for a `*Combat Off*` the game printed before it had the fresh attack. It no longer applies once `*Combat Engaged*` has answered that attack and a `*Combat Off*` has followed (`_offEndedAnsweredAttack`), except within 2 s of a kill (`DeathInterruptWindow`), when that Off is most likely the kill's own. In report `paradigm-20261009-122342` an `eq` typed half a second after the attack stopped the fight 0.4 s before the round, every line of that round and its tick fell inside the guard, the heal cast a moment later drew no `*Combat Off*` to resume on, and the monster died a round later without being attacked. The program log says when such a `*Combat Off*` arrives (at most once in 12 s) and when a resume is skipped, and the bug report's *Combat weapon state* carries the last resume decision.
 
 ### `break` — stopping an announced attack
 *Status: CONFIRMED 2026-09-14 (user; report `stock-20260914-003246`) · Realm: both (no-effect reply differs by realm)*
@@ -2347,8 +2378,11 @@ Client-side automation policy for the Game Data → Monster overlay flags — no
   - Each counted player gets the same share (`_add_experience(player, share, 1)` @0x44ca86, @0x44caf2), whatever their level. A party member who isn't attacking isn't counted, and a player outside the party who is attacking is.
   - The killer and everyone targeting that monster then have their combat ended (`_kill_autocombat`, `_display_autocombat_broken` @0x44ca94–0x44caa2); a player counted for having no target keeps theirs.
   - A textblock's `addexp` is not split: *Quests → Quest experience — `addexp`*.
+- **Paradigm: a party member who isn't attacking gets no experience from a kill, as on Stock** *([CONFIRMED] 2026-10-09, user; [OBSERVED] 2026-10-09 (report `paradigm-20261009-122342`; Realm: Paradigm), one kill)*. In the capture our attack had been stopped five and a half seconds earlier (a typed `eq`: *Non-swing actions break combat (casting, equipping)*) and none was sent since; the party killed the monster, and our screen showed its death line and no `You gain N experience.`. The kills before and after it, with our attack engaged and no damage of ours landing, each printed `You gain 6000 experience.`. How Paradigm divides the experience among those who are attacking is not recorded.
 - **"The fight is over" = `*Combat Off*` AND an empty hostile roster** *([CONFIRMED] 2026-09-08, user)*. `*Combat Off*` is the message that marks us no longer engaged, **on Stock and Paradigm alike** *([CONFIRMED] 2026-09-28, user)*. It has three causes: the monster died (then a death line and an exp line come with it), we typed `break` (the monster is still alive), or a between-round spell interrupted our attack. (Those are the usual three; everything that prints it on Stock is listed in *Non-swing actions break combat (casting, equipping)*.) As above it also fires on every cast and once per strike for non-sustaining attacks, so on its own it says nothing about whether anything is still alive. The usable pair is that line **plus** a room re-display showing no engageable monster left.
 - **Death messages are arbitrary per-monster flavor** — no shared keyword (a scan of 1035 seed death lines: `…a tortured squeak`, `…to the ground`, `…without a sound`, `…a thousand pieces`, `…an agonized bellow`, `…in a heap`, most with no death word) and no distinctive colour (they render default/white). So a monster death **cannot be recognized by wording or colour generically** — the exp line is the generic signal, and our own targeting (`CombatManager.CurrentTarget`) names the mob.
+  - **The giant hellhound (#1250, Paradigm) dies with `The massive demonic beast stumbles and collapses!`** *([OBSERVED] 2026-10-09 (reports `paradigm-20261009-120757`, `paradigm-20261009-122342`; Realm: Paradigm))*: after every `<adjective> giant hellhound` kill in the two captures. The behemoth hellhound (#693) beside it dies with `The behemoth hellhound lets out a monstrous wail, then dies.`. Stock 1.11p has no monster #1250.
+  - **Client use:** the Paradigm message seed carries that line as a record linked to monster #1250 (`WitnessMessage`, user 2026-10-09), so `MessageCandidateWatcher` doesn't stage it when no experience line follows it (a kill made while not attacking). Nothing acts on the line.
 
 **Client use:**
 - `CombatStateTracker` combines `*Combat Off*` with the room observation: it clears the Combat gate only on that observation, and its idle-stall watchdog sends a bare CR to force a re-display when a final kill produced none.
@@ -3283,7 +3317,7 @@ How one damage spell cast against a monster is worked out.
 - **The between-round cycle runs on the same 5s tick whether or not you are in combat** — see *Timing & rounds → Combat round (5s) and the between-round cast cycle*.
 - **A between-round cast and the combat attack are independent slots** — see *Between-round cast slot vs the combat attack*.
 - **A second between-round spell the same round is rejected with `You have already cast a spell this round!`, and the spell you just sent does NOT fire** — success or failure of the first doesn't matter, the round's single between-round slot is spent.
-  - **The refusal is the only line the game prints for that cast: no `*Combat Off*` comes with it** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-120757`; Realm: Paradigm))*. Nine refusals in 70 s, seven of them with `*Combat Engaged*` standing (`[HP=414/MA=280]:grhe` → `You have already cast a spell this round!`, and nothing more until the round's lines four seconds later). So a refused cast is not followed by the `*Combat Off*` that `CombatManager.NoteBetweenRoundCast` arms a re-attack for.
+  - **The refusal is the only line the game prints for that cast: no `*Combat Off*` comes with it** *([OBSERVED] 2026-10-09 (report `paradigm-20261009-120757`; Realm: Paradigm))*. Nine refusals in 70 s, seven of them with `*Combat Engaged*` standing (`[HP=414/MA=280]:grhe` → `You have already cast a spell this round!`, and nothing more until the round's lines four seconds later). So a refused cast is not followed by the `*Combat Off*` that `CombatManager.NoteBetweenRoundCast` arms a re-attack for, and the refusal drops that latch (`CombatManager.DisarmCastResumeOnRefusal`): left armed for its 3 s, at 12:07:17 in that report it took the `*Combat Off*` of the engine's own re-sent attack for the cast's.
 - **This line never appears for combat spells** (lbol / mmis / deathtouch / fireball are 500–1000 energy — the round's main action, not between-round), so it is purely the between-round coordinator's signal.
 - **A between-round buff never delays the SAME round's real attack — a fresh engage must fire instantly right behind one** *(CONFIRMED, user 2026-09-16)*. Casting a 0-energy buff (`prfl`, `vlwa`, …) and then immediately attacking a monster that just arrived is legitimate the same round; there is no server-side wait.
 - **Client use:**

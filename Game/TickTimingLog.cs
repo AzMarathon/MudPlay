@@ -6,12 +6,12 @@ namespace MudPlay.Game;
 
 // A running record of when the game's periodic ticks were seen, to the millisecond:
 // combat rounds, every HP and mana gain, each change of posture, and each hit of
-// damage nobody dealt (a room's own spell). It exists so a realm's tick cycle can
-// be worked out from a capture — how far apart the gains come, how much each pays,
-// and where they fall against the combat round and against the moment the
-// character lay down. The Stock engine counts every one of
-// its passes off a single one-second tick (GAME_MECHANICS "The engine clock — one
-// fast tick drives every timer"); whether Paradigm does is what this is for.
+// damage that is no part of a round (a room's own spell). It exists so a realm's
+// tick cycle can be worked out from a capture — how far apart the gains come, how
+// much each pays, and where they fall against the combat round and against the
+// moment the character lay down. The Stock engine counts every one of its passes
+// off a single one-second tick (GAME_MECHANICS "The engine clock — one fast tick
+// drives every timer"); whether Paradigm does is what this is for.
 //
 // Every gain is kept, not only the ones RegenTracker credits to a cycle: a gain
 // inside its heal window is kept and marked, since dropping it would hide a tick
