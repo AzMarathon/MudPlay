@@ -4,7 +4,7 @@ using MudPlay.Services;
 namespace MudPlay.Game.Recovery;
 
 // Stock-only "spillover LOOK sweep": when a crowded Stock death overflows into
-// adjacent rooms, this peeks each exit of the death room (`look <dir>`) and reports
+// other rooms, this peeks each exit of the death room (`look <dir>`) and reports
 // which neighbours actually hold our still-missing items. It does NOT walk or grab
 // — DeathRecoveryManager drives the walk-collect-return off CONFIRMED room arrivals
 // through the normal trap-aware walker (so a trapped exit is disarmed en route or
@@ -12,6 +12,12 @@ namespace MudPlay.Game.Recovery;
 // on the walker's own "finished" event proved unreliable: a `look` peek can briefly
 // desync the position tracker, firing a premature arrival that grabbed in the wrong
 // room (report stock-20260825-105851).
+//
+// A peek costs no movement, so it is the first step of the wider sweep. It only
+// proves a room holds something: a look shows nothing through a closed door or a
+// hidden exit, and the engine spills through both, so a neighbour that shows nothing
+// is still walked to in its turn. The exits are looked through in the order they are
+// handed in, which is the engine's spill order (DeathSpillOrder.SpillExits).
 //
 // The peeked floor for each `look <dir>` arrives via GroundItemTracker (multi-line
 // stitched) → DeathRecoveryManager → OnPeekedNotice, correlated to the exit we're
@@ -28,16 +34,14 @@ public sealed class DeathGroundSweep
     private readonly LogService? _log;
 
     private bool _active;
-    private IReadOnlyDictionary<Direction, RoomKey> _neighbours =
-        new Dictionary<Direction, RoomKey>();
     private readonly HashSet<string> _want = new(StringComparer.OrdinalIgnoreCase);
     private Action<IReadOnlyList<RoomKey>>? _onComplete;
 
-    private readonly Queue<Direction> _lookQueue = new();
-    private Direction _currentLook;
+    private readonly Queue<(Direction Direction, RoomKey Target)> _lookQueue = new();
+    private (Direction Direction, RoomKey Target) _currentLook;
     private int _lookTicks;
-    // Exits (in enum order) whose peeked floor held at least one of our items.
-    private readonly List<Direction> _hits = new();
+    // Neighbours (in look order) whose peeked floor held at least one of our items.
+    private readonly List<RoomKey> _hits = new();
 
     public DeathGroundSweep(Action<string> send, LogService? log = null)
     {
@@ -48,21 +52,21 @@ public sealed class DeathGroundSweep
 
     public bool Active => _active;
 
-    // Begin peeking each exit for the names in want (normalized). onComplete fires
-    // once every exit has been looked at, carrying the neighbour room keys (in exit
-    // order) that hold our items — the caller walks to those and grabs. Returns false
-    // when there's nothing to sweep (no exits / nothing wanted).
+    // Begin peeking each exit, in the order given, for the names in want
+    // (normalized). onComplete fires once every exit has been looked at, carrying the
+    // neighbour room keys (in look order) that hold our items — the caller walks to
+    // those first. Returns false when there's nothing to sweep (no exits / nothing
+    // wanted).
     public bool Begin(
-        IReadOnlyDictionary<Direction, RoomKey> neighbours,
+        IReadOnlyList<(Direction Direction, RoomKey Target)> exits,
         IReadOnlyCollection<string> want,
         Action<IReadOnlyList<RoomKey>> onComplete)
     {
-        ArgumentNullException.ThrowIfNull(neighbours);
+        ArgumentNullException.ThrowIfNull(exits);
         ArgumentNullException.ThrowIfNull(want);
         ArgumentNullException.ThrowIfNull(onComplete);
-        if (_active || neighbours.Count == 0 || want.Count == 0) return false;
+        if (_active || exits.Count == 0 || want.Count == 0) return false;
 
-        _neighbours = neighbours;
         _want.Clear();
         foreach (string w in want)
         {
@@ -74,10 +78,7 @@ public sealed class DeathGroundSweep
         _onComplete = onComplete;
         _lookQueue.Clear();
         _hits.Clear();
-        for (int d = (int)Direction.N; d <= (int)Direction.D; d++)
-            if (neighbours.ContainsKey((Direction)d))
-                _lookQueue.Enqueue((Direction)d);
-        if (_lookQueue.Count == 0) return false;
+        foreach ((Direction Direction, RoomKey Target) exit in exits) _lookQueue.Enqueue(exit);
 
         _active = true;
         _log?.Info(LogCategory, $"stock-sweep: peeking {_lookQueue.Count} exit(s) for {_want.Count} missing item(s)");
@@ -85,17 +86,18 @@ public sealed class DeathGroundSweep
         return true;
     }
 
-    // The peeked floor for the exit we're currently looking at. Record the exit if it
-    // holds any of our still-missing items.
+    // The peeked floor for the exit we're currently looking at. Record the neighbour
+    // if it holds any of our still-missing items.
     public void OnPeekedNotice(IReadOnlyList<string> floorNames)
     {
-        if (!_active || floorNames.Count == 0 || _hits.Contains(_currentLook)) return;
+        if (!_active || floorNames.Count == 0 || _hits.Contains(_currentLook.Target)) return;
 
         bool ours = floorNames.Any(f => _want.Contains(ItemNameStore.Normalize(f)));
         if (!ours) return;
 
-        _hits.Add(_currentLook);
-        _log?.Info(LogCategory, $"stock-sweep: {_currentLook.ToLongName()} holds some of our item(s)");
+        _hits.Add(_currentLook.Target);
+        _log?.Info(LogCategory,
+            $"stock-sweep: {_currentLook.Direction.ToLongName()} ({_currentLook.Target.Map}/{_currentLook.Target.Room}) holds some of our item(s)");
     }
 
     // 1 s heartbeat — one look per tick so each renders before the next.
@@ -118,13 +120,13 @@ public sealed class DeathGroundSweep
     {
         _currentLook = _lookQueue.Dequeue();
         _lookTicks = LookSettleTicks;
-        _send($"look {_currentLook.ToLongName()}");
+        _send($"look {_currentLook.Direction.ToLongName()}");
     }
 
     private void Complete()
     {
         _active = false;
-        var hits = _hits.Where(_neighbours.ContainsKey).Select(d => _neighbours[d]).ToList();
+        List<RoomKey> hits = new(_hits);
         Action<IReadOnlyList<RoomKey>>? cb = _onComplete;
         _onComplete = null;
         _lookQueue.Clear();

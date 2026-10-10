@@ -24,9 +24,24 @@ public sealed class PvpFleeWalk : IDisposable
     private DetourResume _resume;
     private TimeSpan? _comeBackAfter;
     private int _run;
+    // The walk back from a flee is under way (a walk was what the flee interrupted).
+    private bool _comingBack;
+    private (RoomKey Room, DateTimeOffset At)? _walkEnded;
+
+    // How long after one of this engine's own walks arrives the arrival still counts
+    // as its: long enough for whoever asks at the next one-second heartbeat.
+    private static readonly TimeSpan OwnArrivalWindow = TimeSpan.FromSeconds(3);
 
     // True from the flee starting until the walker arrives, fails or is stopped.
     public bool IsActive { get; private set; }
+
+    // A flee, or the walk back from one, has just arrived in this room. By then
+    // nothing here reads as active, yet the arrival was this engine's doing and not a
+    // walk the user made: death recovery asks, so that a flee which happens to end in
+    // a death room isn't taken for the user coming to recover.
+    public bool WalkJustEndedAt(RoomKey room) =>
+        _walkEnded is { } ended && ended.Room.Equals(room)
+        && DateTimeOffset.UtcNow - ended.At <= OwnArrivalWindow;
 
     // startSprint turns Sprint Mode on for the walk; like any Sprint start it ends
     // by itself when the walk arrives.
@@ -75,11 +90,20 @@ public sealed class PvpFleeWalk : IDisposable
 
     private void OnWalkEvent(WalkEvent e)
     {
+        // No return after this: were the flag ever left set past its walk, a return
+        // here would swallow the next flee's own Finished below.
+        if (_comingBack && e.Kind is WalkEventKind.Finished or WalkEventKind.Failed or WalkEventKind.Stopped)
+        {
+            _comingBack = false;
+            if (e.Kind == WalkEventKind.Finished && e.Destination is { } back)
+                _walkEnded = (back, DateTimeOffset.UtcNow);
+        }
         if (!IsActive || e.Destination is not { } dest || !dest.Equals(_destination)) return;
         switch (e.Kind)
         {
             case WalkEventKind.Finished:
                 IsActive = false;
+                _walkEnded = (_destination, DateTimeOffset.UtcNow);
                 ComeBackLater();
                 break;
             case WalkEventKind.Failed:
@@ -109,6 +133,7 @@ public sealed class PvpFleeWalk : IDisposable
             if (DetourResume.Snapshot(_walker, _loops, _lair, includeWalk: true).Kind != DetourResumeKind.None)
                 return;
             _log?.Info(LogCategory, $"coming back from the flee: resuming the {resume.Kind}");
+            _comingBack = resume.Kind == DetourResumeKind.Walk;
             resume.Resume(_walker, _loops, _lair);
         });
     }

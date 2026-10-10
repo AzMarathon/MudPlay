@@ -1,10 +1,22 @@
 # Version history
 
-## 3.160.5
+## 3.161.1
 
 - A walk or loop held by a fight asks the game where you are before stepping on when the map lost its place during the fight (Paradigm: `rm`), instead of walking into a wall and standing there
 - A step sent while the map was unsure of its room and left unanswered for 10 seconds now asks too, instead of waiting for good
 - bug reports addressed: paradigm-20261009-082958
+
+## 3.161.0
+
+- Stock death recovery follows the game's spill order: up to five rooms out, behind doors and hidden exits
+- With items still missing, it searches the rooms walked before the death (never a stash room)
+- The sweep runs for Recover Now or your own walk-to; a loop's or Auto-Lair's arrival only looks next door
+- It walks to 12 rooms at most and returns; Stop and Pause reach it
+- It gives way to other engines, following and any other walk; silent during a rest, a pause or Auto-All off
+- Stock: loyal, major-cursed and "returned to its rightful place" items no longer waited for
+- Stock: a partly recovered pile keeps its count; an empty death-room floor no longer stalls recovery
+- Stop calls off a Recover Now that was still walking (both realms)
+- Bug report: the pile's missing items and the sweep's plan, state and blockers
 
 ## 3.160.4
 
