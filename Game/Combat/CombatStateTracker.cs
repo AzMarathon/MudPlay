@@ -436,6 +436,9 @@ public sealed class CombatStateTracker : IDisposable
     private Func<RoomKey?>? _currentRoom;
     private RoomKey? _gateRoom;
 
+    // For the bug report: where the gate was last held.
+    public RoomKey? GateRoom => _gateRoom;
+
     public void SetCurrentRoomProbe(Func<RoomKey?> currentRoom)
     {
         ArgumentNullException.ThrowIfNull(currentRoom);

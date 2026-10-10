@@ -710,6 +710,12 @@ public static class BugReportBuilder
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
         Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
+        // The room the Combat gate was last held in decides what a roster wiped clean
+        // means: still standing there, a room cleared; anywhere else, a fight walked
+        // out on, which halts the walker (the AbandonedCombat gate).
+        Kv(sb, "Combat gate",
+            $"{(svc.CombatTracker.HasEngageableHostiles ? "held" : "not held")}; last held in "
+            + (svc.CombatTracker.GateRoom?.ToString() ?? "(no room known)"));
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
         Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
