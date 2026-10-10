@@ -722,6 +722,41 @@ public sealed partial class CombatManager : IDisposable
     // the round boundary (OnCombatTick).
     private int _expGainsThisRound;
 
+    // This round's exp lines that arrived after the room was last read from the game:
+    // the kills the roster still lists. An "Also here:" read after a kill comes from
+    // the game after it, so that monster is already off the list, and counting its
+    // exp against the list a second time emptied a roster that held only the survivor
+    // (report paradigm-20261010-145330: 3 kills, a re-read showing 1, "cleared all 1").
+    // _rosterReadAt tells a fresh read from a re-issue of the same one.
+    private int _expGainsSinceRosterRead;
+    private DateTimeOffset _rosterReadAt = DateTimeOffset.MinValue;
+
+    // Whether the *Combat Off* being handled is a command's and not a kill's.
+    private readonly CommandOffProbe _offProbe;
+
+    // A kill made by our own room-attack spell, raised on its exp line with the exp
+    // gained and the kinds of monster the room listed (one of them is the dead one).
+    // Such a kill is counted here because nothing later can count it: on Paradigm a
+    // room spell's kill prints no *Combat Off* while anything in the room survives,
+    // so the exp + Off pairing MonsterDeathWatcher runs on never completes for it.
+    // Wired (AppServices) to MonsterDeathWatcher.NoteRoomSpellKill, which raises the
+    // death every other kill raises and spends the exp line, so the *Combat Off* the
+    // game does print (Stock after each kill, Paradigm after the last of a room)
+    // counts nothing twice.
+    //
+    // Raised before this class touches its own state for the kill, as the death
+    // subscribers need: the summon and drop holds have to be up before a cleared
+    // roster releases the walker.
+    public event Action<int?, IReadOnlyList<MonsterDeathIdentity>>? RoomSpellKill;
+
+    // When our room spell's own damage line was last read. An exp line is taken for
+    // that spell's kill only inside RoomSpellKillWindow of it: the kills of a round
+    // arrive in one burst behind the line that made them. That keeps the count to
+    // rounds our spell landed in, whatever else may print an exp line (GAME_MECHANICS
+    // doesn't record whether a kill elsewhere ever does).
+    private DateTimeOffset _roomSpellLandedAt = DateTimeOffset.MinValue;
+    private static readonly TimeSpan RoomSpellKillWindow = TimeSpan.FromSeconds(2);
+
     // The target a prompt exp-inferred kill just dropped, remembered so the kill's
     // *Combat Off* can still drop it from the live roster. The exp line lands BEFORE
     // *Combat Off* and nulls _currentTarget (so the round's alternate can't corpse-cast)
@@ -873,6 +908,7 @@ public sealed partial class CombatManager : IDisposable
         _readPartySettings = readPartySettings;
         _log = log;
 
+        _offProbe = new CommandOffProbe(router);
         _classifier.EntitiesObserved += OnEntitiesObserved;
         _announceSub  = router.Subscribe(KnownPatterns.PartyAttackAnnounce, OnAttackAnnounce);
         _castAnnounceSub = router.Subscribe(KnownPatterns.PartyCastAnnounce, OnCastAnnounce);
@@ -1565,6 +1601,12 @@ public sealed partial class CombatManager : IDisposable
             _arrivalHeldForMove = false;
             // The re-display a summon-on-death kill was waiting for (or a new room).
             _summonRescanArmed = false;
+        }
+
+        if (obs.Source == RoomObservationSource.AlsoHere && obs.At != _rosterReadAt)
+        {
+            _rosterReadAt = obs.At;
+            _expGainsSinceRosterRead = 0;
         }
 
         CombatSettings settings = _readSettings();
@@ -3346,6 +3388,7 @@ public sealed partial class CombatManager : IDisposable
         if (!physicalShape && !spellShape) return;
 
         DateTimeOffset now = _now();
+        if (roomSpell) _roomSpellLandedAt = now;
         bool grouped = now - _lastConfirmedAttackCastAt < ConfirmedCastGroupWindow
             && string.Equals(_lastConfirmedAttackCastTarget, target, StringComparison.OrdinalIgnoreCase);
         _lastConfirmedAttackCastAt = now;
@@ -4280,10 +4323,12 @@ public sealed partial class CombatManager : IDisposable
     // identical for every monster, so no per-monster death message is needed. Skip
     // when a specific death line already dropped this kill (avoid a double-drop of a
     // freshly re-picked target).
-    private void OnUserGainExperience(MatchResult _)
+    private void OnUserGainExperience(MatchResult match)
     {
         _lastExpGainAt = DateTimeOffset.Now;
         _expGainsThisRound++;
+        _expGainsSinceRosterRead++;
+        NoteRoomSpellKill(match);
         if (_currentTarget is not null
             && _attackSentSinceDeath
             && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
@@ -4314,6 +4359,83 @@ public sealed partial class CombatManager : IDisposable
             ForceAoeMultiKillReparse("kill under a room spell");
     }
 
+    // Count an exp line as a kill of our room spell (RoomSpellKill) when all of this
+    // holds, and leave it to its *Combat Off* otherwise, as before:
+    //   - a room attack of ours is running in this room (_roomChannelSpell);
+    //   - its damage line was read just ahead of the exp line (RoomSpellKillWindow),
+    //     so the exp belongs to a round the spell landed in;
+    //   - the room still lists a monster the exp can be: this round's exp lines since
+    //     the room was read don't outnumber the monsters it listed. An exp line past
+    //     that is some monster the roster never held, and is not counted here.
+    private void NoteRoomSpellKill(MatchResult exp)
+    {
+        if (RoomSpellKill is not { } raise) return;
+        if (_roomChannelSpell is not { } spell) return;
+        if (_now() - _roomSpellLandedAt >= RoomSpellKillWindow)
+        {
+            LeaveRoomSpellExp($"exp line under room spell '{spell}' with no damage line of the spell read ahead of it");
+            return;
+        }
+        if (_classifier.Current is not { } roster) return;
+
+        int listed = CountEngageable(roster);
+        if (_expGainsSinceRosterRead > listed)
+        {
+            LeaveRoomSpellExp(
+                $"exp line {_expGainsSinceRosterRead} under room spell '{spell}' with {listed} hostile(s) listed");
+            return;
+        }
+
+        // Every monster the room lists, not only the ones we would attack: the spell
+        // hits the room, and the dead one is whichever of them it killed.
+        List<MonsterDeathIdentity> kinds = new();
+        foreach (RoomEntity e in roster.Entities)
+        {
+            if (e.Kind != EntityKind.Monster) continue;
+            bool seen = false;
+            foreach (MonsterDeathIdentity k in kinds)
+                if (e.MonsterNumber is { } n ? k.Number == n
+                    : k.Number is null && string.Equals(k.Name, e.ResolvedName, StringComparison.OrdinalIgnoreCase))
+                {
+                    seen = true;
+                    break;
+                }
+            if (!seen) kinds.Add(new MonsterDeathIdentity(e.MonsterNumber, e.ResolvedName));
+        }
+
+        int? gained = exp.Groups.Count > 0 && int.TryParse(exp.Groups[0], out int amount) ? amount : null;
+        _roomSpellKillsCounted++;
+        _lastRoomSpellExp = (DateTimeOffset.Now,
+            $"counted: kill under room spell '{spell}' ({_expGainsSinceRosterRead} of {listed} listed)");
+        _log?.Combat(LogCategory,
+            $"kill under room spell '{spell}' — counted on its exp line ({_expGainsSinceRosterRead} of {listed} listed)");
+        raise(gained, kinds);
+
+        // Counted, so spent: this exp line no longer explains a *Combat Off* to come.
+        // The caller drops the target and re-reads the room for the kill; an Off
+        // inside ExpKillWindow of it would otherwise be taken for a second kill, of
+        // whatever survivor that re-read had just made the target.
+        _lastExpGainAt = DateTimeOffset.MinValue;
+    }
+
+    // An exp line that came while a room spell of ours ran and was not counted on the
+    // spot. It is no loss: the *Combat Off* after it counts it as every kill was
+    // counted before. Logged so a kill count that looks short can be traced.
+    private void LeaveRoomSpellExp(string what)
+    {
+        _lastRoomSpellExp = (DateTimeOffset.Now, $"left to its *Combat Off*: {what}");
+        _log?.Combat(LogCategory, $"{what} — not counted as a kill here; left to its *Combat Off*");
+    }
+
+    private int _roomSpellKillsCounted;
+    private (DateTimeOffset At, string Text)? _lastRoomSpellExp;
+
+    // Diagnostics for the bug report: how many kills were counted on their exp lines
+    // this session, and what became of the last exp line read under a room spell.
+    public string RoomSpellKillSummary => _lastRoomSpellExp is { } last
+        ? $"{_roomSpellKillsCounted} this session; last exp line {last.At:HH:mm:ss.fff} {last.Text}"
+        : "(no exp line read under a room spell this session)";
+
     // AoE room-wipe recovery: drop all combat state and force ONE debounced CR
     // re-parse so the next observation is the TRUE roster, re-picking from what's
     // actually left rather than a survivor the kills haven't cleared yet. Shared by
@@ -4340,13 +4462,22 @@ public sealed partial class CombatManager : IDisposable
         // the roster intact and the CR re-parse below still handles it; the CR also
         // re-asserts any hostile that arrived unlisted, exactly the idle-stall
         // watchdog's own optimistic-clear-plus-safety-probe pattern.
+        //
+        // Only the kills the roster still lists count (_expGainsSinceRosterRead): once
+        // the room has been read again, what it lists is what outlived them.
         int listed = _classifier.Current is { } cur ? CountEngageable(cur) : 0;
-        if (listed > 0 && _expGainsThisRound >= listed)
+        if (listed > 0 && _expGainsSinceRosterRead >= listed)
         {
             _log?.Combat(LogCategory,
-                $"AoE multi-kill ({_expGainsThisRound} exp) cleared all {listed} listed hostile(s) — "
+                $"AoE multi-kill ({_expGainsSinceRosterRead} exp) cleared all {listed} listed hostile(s) — "
                 + "dropping the stale roster so the combat gate releases without the idle-stall wait");
             _classifier.NoteRoomChanged();
+        }
+        else if (listed > 0 && _expGainsThisRound >= listed)
+        {
+            _log?.Combat(LogCategory,
+                $"AoE multi-kill: {_expGainsThisRound} exp this round, {_expGainsSinceRosterRead} since the room "
+                + $"was last read — the {listed} hostile(s) it lists outlived the rest, roster kept");
         }
 
         if (TrySendRoomRefresh(context))
@@ -4419,14 +4550,25 @@ public sealed partial class CombatManager : IDisposable
             // corpse; the death→re-observe re-picks the survivor. The no-between-
             // round-cast gate keeps a heal's Off — or a party share-exp landing
             // beside one — from being misread as a kill (that path resumes below).
-            if (_currentTarget is not null
+            bool expExplainsOff = _currentTarget is not null
                 && DateTimeOffset.Now - _lastExpGainAt < ExpKillWindow
                 && DateTimeOffset.Now - _betweenRoundCastAt >= CastInterruptResumeWindow
                 // ...and NO matched death line just handled this kill. If one did,
                 // it already dropped the corpse and re-picked the next survivor —
                 // this *Combat Off* is that kill's Off, so inferring a second kill
                 // here would drop the fresh target and re-attack it (double-fire).
-                && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow)
+                && DateTimeOffset.Now - _lastMatchedDeathAt >= DeathInterruptWindow;
+            // Nor is it a kill's when it answers a command (CommandOffProbe): the exp
+            // is then an earlier kill's, a room spell's that left this target standing,
+            // and the Off is the one our attack on that survivor prints ahead of its
+            // *Combat Engaged* (or a typed `break`). Dropping the target for it threw
+            // the fresh attack away (report paradigm-20261010-145330).
+            if (expExplainsOff && _offProbe.CommandAnswered is { } answered)
+            {
+                _log?.Combat(LogCategory,
+                    $"*Combat Off* answers '{answered}', not a kill — target={_currentTarget} kept");
+            }
+            else if (expExplainsOff)
             {
                 DropTargetForInferredKill(
                     "kill inferred from exp + *Combat Off* (no between-round cast) — " +
@@ -4963,6 +5105,7 @@ public sealed partial class CombatManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         if (_cast is not null) _cast.CastFailed -= OnCombatCastFailed;
+        _offProbe.Dispose();
         _classifier.EntitiesObserved -= OnEntitiesObserved;
         _announceSub.Dispose();
         _castAnnounceSub.Dispose();

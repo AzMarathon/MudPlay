@@ -715,6 +715,10 @@ public static class BugReportBuilder
         // off, and what came of it: a skip here beside a live target is a fight left
         // standing (report paradigm-20261009-122342).
         Kv(sb, "Last attack-resume decision", svc.Combat.LastResumeDecision ?? "(none this session)");
+        // A room spell's kills are counted on their exp lines; one left to its
+        // *Combat Off* says why (the spell's damage line unread, or more exp lines
+        // than the room listed).
+        Kv(sb, "Room-spell kills counted on their exp lines", svc.Combat.RoomSpellKillSummary);
         // True when Auto-Combat is off but a room hostile is blocking a needed rest
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).

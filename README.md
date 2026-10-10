@@ -1,19 +1,16 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.12**
-> - Roomba adds a room's hidden copies to its visible ones
-> - A hidden count is the highest any one search showed
-> - Item-location log written once per room
-> - Sort takes visible copies first, hidden ones after a search
-> - A stack smaller than recorded is re-read and what's there picked up
-> - Copies taken from a stack that ran out are still delivered
-> - A hidden stack the search missed is reported as not found
-> - Final lap rewrites each room's item-location entry
-> - A room changed after the sort is logged once
-> - After "You cannot carry that much!" the room's other pickups wait for the pack read
-> - Roomba's program log is one line per room
-> - Bug report shows Roomba's floor counts
+> **Version 3.167.15**
+> - A new attack's `*Combat Off*` is no longer read as a kill (an attack sent at the survivor of a room spell)
+> - The survivor stays the target, the room isn't taken for cleared and the loop doesn't walk on
+> - A buff cast right after that attack is followed by the attack again at once
+> - A typed `break` just after a kill isn't counted as another
+> - No lair-timer kill, kill count or kill sound for a kill that didn't happen
+> - A room read again after a room spell's kills is never emptied by them
+> - A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
+> - A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
+> - Program log notes a `*Combat Off*` that answers a command
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
