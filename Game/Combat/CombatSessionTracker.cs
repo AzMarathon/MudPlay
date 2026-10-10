@@ -100,6 +100,12 @@ public sealed class CombatSessionTracker : IDisposable
     // (if wanted) is the subscriber's concern.
     public event Action? Changed;
 
+    // Raised when the miss last counted is taken back because it was a spell's cast
+    // line, not a swing: the spell landed right after it, or the fight ended with no
+    // swing landed (a resisted cast). MonsterObservationTracker counts the same line
+    // against the monster being fought and takes it back on this.
+    public event Action? CastLineMissRetracted;
+
     public CombatSessionTracker(
         MessageRouter router,
         RoundDamageTracker rounds,
@@ -175,6 +181,7 @@ public sealed class CombatSessionTracker : IDisposable
         {
             _misses--;
             Spell(spell).Misses++;
+            CastLineMissRetracted?.Invoke();
             Changed?.Invoke();
         }
         _emoteMissCandidate = false;
@@ -324,7 +331,11 @@ public sealed class CombatSessionTracker : IDisposable
             // The cast's emote was just counted as a physical miss; a landed spell
             // means that "miss" was the emote — retract it so spell combat doesn't
             // inflate the miss count.
-            if (_emoteMissCandidate && _misses > 0) _misses--;
+            if (_emoteMissCandidate && _misses > 0)
+            {
+                _misses--;
+                CastLineMissRetracted?.Invoke();
+            }
             _emoteMissCandidate = false;
             _recognizedLine = line.Text;
             Changed?.Invoke();

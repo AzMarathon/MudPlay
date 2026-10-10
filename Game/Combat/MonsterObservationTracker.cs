@@ -48,6 +48,15 @@ public sealed class MonsterObservationTracker : IDisposable
     // private and the gate is only a few lines.
     private bool _engaged;
 
+    // The record the last miss line was counted on. A spell's cast line ("You
+    // scatter some ashes in a sweeping motion!") has the shape of a miss, and only
+    // what follows tells the two apart; CombatSessionTracker makes that call for
+    // the session figures, and RetractLastMiss takes the count back off this record
+    // when it does. Without it every cast was a weapon miss on the monster: a pure
+    // caster's hit rate read 0 of ten thousand swings it never made (report
+    // paradigm-20261010-145330).
+    private MonsterObservation? _lastMissOn;
+
     private bool _disposed;
 
     // Raised after any observation is recorded or cleared, so the Monster
@@ -99,6 +108,7 @@ public sealed class MonsterObservationTracker : IDisposable
     public void Clear()
     {
         _observations.Clear();
+        _lastMissOn = null;
         if (_profile?.Current is not null)
         {
             _profile.Current.MonsterObservations = null;
@@ -144,11 +154,26 @@ public sealed class MonsterObservationTracker : IDisposable
 
     private void OnUserMisses(MatchResult _)
     {
+        // Dropped even when this line isn't counted: a retraction that follows is
+        // about this line, never an earlier miss.
+        _lastMissOn = null;
         if (!_engaged) return;
         if (ResolveCurrentTargetNumber() is not { } number) return;
         MonsterObservation o = GetOrCreate(number);
         o.MissCount++;
+        _lastMissOn = o;
         Touch(o);
+    }
+
+    // The miss last counted was a spell's cast line (CombatSessionTracker
+    // .CastLineMissRetracted): take it back off the monster it was counted on.
+    public void RetractLastMiss()
+    {
+        MonsterObservation? o = _lastMissOn;
+        _lastMissOn = null;
+        if (o is not { MissCount: > 0 }) return;
+        o.MissCount--;
+        Changed?.Invoke();
     }
 
     private void OnPhysicalNoEffect(MatchResult _)
@@ -219,6 +244,7 @@ public sealed class MonsterObservationTracker : IDisposable
     private void OnProfileClosed()
     {
         _observations.Clear();
+        _lastMissOn = null;
         Changed?.Invoke();
     }
 
@@ -232,6 +258,7 @@ public sealed class MonsterObservationTracker : IDisposable
     private void Hydrate(CharacterProfile? profile)
     {
         _observations.Clear();
+        _lastMissOn = null;
         if (profile?.MonsterObservations is { } rows)
             foreach (MonsterObservation o in rows)
                 if (o.MonsterNumber > 0) _observations[o.MonsterNumber] = o;

@@ -548,6 +548,33 @@ public sealed class CombatSessionTrackerTests
         Assert.Equal(1, blast.Casts);
     }
 
+    // The per-monster record counts the same miss line; it is told when a miss
+    // turns out to have been a cast line, and only then.
+    [Fact]
+    public void CastLineMissRetracted_FiresForACastLine_NotForAWhiff()
+    {
+        using Harness h = new(
+            spellMatchers: new[] { ("blast", Matcher("You cast {s} at {target} for {damage} damage!")) });
+        int retracted = 0;
+        h.Tracker.CastLineMissRetracted += () => retracted++;
+
+        h.Feed("*Combat Engaged*");
+        h.Feed("You scatter some ashes in a sweeping motion!");
+        h.Feed("You cast blast at the kobold for 809 damage!");   // landed: the miss was the cast line
+        Assert.Equal(1, retracted);
+
+        h.Rounds.NoteOwnCast();
+        h.Feed("You scatter some ashes in a sweeping motion!");   // resisted: settled when the fight ends
+        h.Feed("*Combat Off*");
+        Assert.Equal(2, retracted);
+
+        h.Feed("*Combat Engaged*");
+        h.Feed("You punch acid slime for 8 damage!");
+        h.Feed("You punch acid slime!");                          // a real whiff
+        h.Feed("*Combat Off*");
+        Assert.Equal(2, retracted);
+    }
+
     [Fact]
     public void WeaponWhiff_AfterAHit_StaysPhysical_NotReattributed()
     {

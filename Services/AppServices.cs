@@ -6976,6 +6976,9 @@ public sealed class AppServices
         // monster instead of session-wide; persists on the loaded profile.
         MonsterObservations = new Game.Combat.MonsterObservationTracker(
             Router, RoomClassifier, () => Combat.CurrentTarget, Profile, log: Log);
+        // One judge of what was a swing: a miss the session figures take back as a
+        // spell's cast line comes off the monster's record too.
+        CombatSession.CastLineMissRetracted += () => MonsterObservations.RetractLastMiss();
         // Demand-driven auto-search (PR B). Posts a PathItem need when the
         // walker plans a route through an Item/Ticket exit whose item we
         // don't carry; resolves it when the item enters inventory. The
