@@ -1186,6 +1186,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             _log?.Info(LogCategory, "auto-recover: the corpse is on this floor after all — the pile is reopened");
             _activeRecovery = written;
             _armedAt = DateTimeOffset.UtcNow;
+            // Auto-All went off since the verdict: the record is put right, but
+            // the corpse is not asked for. It stands as an arrival made with
+            // Auto-All off does, open and unarmed, for Recover Now or the user's
+            // own `recover corpse`.
+            if (_isAutoEnabled?.Invoke() == false)
+            {
+                _log?.Info(LogCategory, "auto-recover: Auto-All is off — the corpse is not asked for (Recover Now does it)");
+                SetStatus(written, DeathRecoveryStatus.Partial,
+                    "The corpse was here after all. Auto-All is off, so it was not recovered: press Recover Now.");
+                return;
+            }
             SetStatus(written, DeathRecoveryStatus.Partial, "The corpse was here after all — recovering.");
             RecoverCorpse(there);
             return;
