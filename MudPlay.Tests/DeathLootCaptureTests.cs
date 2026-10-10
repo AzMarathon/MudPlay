@@ -89,7 +89,7 @@ public sealed class DeathLootCaptureTests
         (List<DeathItem> equipped, List<DeathItem> lost) = DeathLootCapture.FromSnapshot(snap);
 
         Assert.Single(equipped);
-        Assert.Equal(new[] { "ration", "torch", "3 black star key", "iron key" }, lost.Select(i => i.Name).ToArray());
+        Assert.Equal(new[] { "ration", "3 black star key", "iron key", "torch" }, lost.Select(i => i.Name).ToArray());
         Assert.All(lost, i => Assert.Null(i.Slot));   // nothing here is put back on
         Assert.Equal(new[] { "3 black star key", "iron key" },
             lost.Where(i => i.OnKeyRing).Select(i => i.Name).ToArray());
