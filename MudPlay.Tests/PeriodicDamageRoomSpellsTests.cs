@@ -289,6 +289,69 @@ public sealed class PeriodicDamageRoomSpellsTests : IDisposable
     }
 
     [Fact]
+    public void Tab_GameDataChangeUnderUnsavedTicks_KeepsThoseStillListed_AndNamesTheOnesItDropped()
+    {
+        string dir = Path.Combine(_root, "empty");
+        Directory.CreateDirectory(dir);
+        GameDataCache cache = new(_root);
+        Tab tab = new();
+        tab.Profile.LoadBlank();
+        using PeriodicDamageRoomSpellsSectionViewModel vm = new(tab.Profile, () => tab.Listed, () => tab.ActiveSet, _ => null, cache, tab.Log);
+        vm.Spells[0].BarsResting = false;   // magma heat, not saved
+        vm.Spells[1].BarsResting = true;    // fungus spell, not saved
+
+        tab.Listed.RemoveAt(1);             // the new set has no fungus spell
+        cache.SwitchSet("empty");
+
+        PeriodicDamageRoomSpellRowViewModel magma = Assert.Single(vm.Spells);
+        Assert.False(magma.BarsResting);    // the tick the user cleared is still cleared
+        Assert.True(vm.IsDirty);
+        Assert.Single(tab.Info, l => l == "Periodic Damage Room Spells: unsaved change(s) dropped for fungus spell (#1205) — the game data changed.");
+
+        vm.Apply();
+        Assert.Equal(new Dictionary<int, bool> { [526] = false }, tab.Stored());
+    }
+
+    [Fact]
+    public void Tab_ProfileLoadUnderUnsavedTicks_ReloadsForTheNewCharacter_AndNamesWhatItDropped()
+    {
+        // As every Settings section does: the edits were the old character's.
+        Tab tab = new();
+        tab.Profile.LoadBlank();
+        using PeriodicDamageRoomSpellsSectionViewModel vm = tab.Open();
+        vm.Spells[0].BarsResting = false;
+
+        tab.Profile.LoadBlank();
+
+        Assert.True(vm.Spells[0].BarsResting);
+        Assert.False(vm.IsDirty);
+        Assert.Single(tab.Info, l => l.StartsWith("Periodic Damage Room Spells: unsaved change(s) dropped for magma heat (#526)"));
+    }
+
+    [Fact]
+    public void Tab_ATimerSpell_SaysSoInComes_AndStartsTicked()
+    {
+        Tab tab = new();
+        tab.Listed.Add(new PeriodicDamageRoomSpell(
+            512, "holding breath",
+            new RoomSpellDamageReading(RoomSpellDamage.AfterATimer, 5, 20, false, 0, false, [], null)
+            {
+                Timed = [new RoomSpellDamageStage(513, 5, 20, 25), new RoomSpellDamageStage(514, 9999, 9999, 30)],
+            },
+            "gnomish fish-helm (worn)",
+            new[] { NewRoom(6, 1139, "Underwater Passage", 512) }));
+        tab.Profile.LoadBlank();
+        using PeriodicDamageRoomSpellsSectionViewModel vm = new(
+            tab.Profile, () => tab.Listed, () => tab.ActiveSet, _ => null, gameData: null, tab.Log,
+            spellName: n => n == 513 ? "drowning" : n == 514 ? "drowned to death" : null);
+
+        PeriodicDamageRoomSpellRowViewModel row = vm.Spells.Single(r => r.Number == 512);
+        Assert.True(row.BarsResting);
+        Assert.Equal("5–20", row.Damage);
+        Assert.Equal("on a timer: drowning 5–20 after 25 rounds; drowned to death 9999 after 30 rounds", row.How);
+    }
+
+    [Fact]
     public void Tab_PickedSpell_ListsItsRoomsByMapAndName_LargestFirst_AsLinks()
     {
         Tab tab = new();

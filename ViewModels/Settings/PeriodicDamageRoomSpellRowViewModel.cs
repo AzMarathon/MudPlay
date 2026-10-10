@@ -36,7 +36,8 @@ public sealed partial class PeriodicDamageRoomSpellRowViewModel : ObservableObje
     public bool IsChanged => BarsResting != BarsByDefault;
 
     public PeriodicDamageRoomSpellRowViewModel(
-        PeriodicDamageRoomSpell spell, bool barsResting, Func<int, string?> itemName, Action changed)
+        PeriodicDamageRoomSpell spell, bool barsResting, Func<int, string?> itemName, Func<int, string?>? spellName,
+        Action changed)
     {
         ArgumentNullException.ThrowIfNull(spell);
         ArgumentNullException.ThrowIfNull(itemName);
@@ -45,7 +46,7 @@ public sealed partial class PeriodicDamageRoomSpellRowViewModel : ObservableObje
         _changed = changed;
         NumberText = "#" + spell.Number.ToString(CultureInfo.InvariantCulture);
         Damage = RoomSpellDamageText.Damage(spell.Reading);
-        How = RoomSpellDamageText.How(spell.Reading, itemName);
+        How = RoomSpellDamageText.How(spell.Reading, itemName, spellName);
         Counters = spell.Counters.Length > 0 ? spell.Counters : "nothing in the game data";
         RoomCount = spell.Rooms.Count.ToString("N0", CultureInfo.InvariantCulture);
         BarsByDefault = RoomSpellDamageIndex.BarsRestingByDefault(spell.Reading.Kind);

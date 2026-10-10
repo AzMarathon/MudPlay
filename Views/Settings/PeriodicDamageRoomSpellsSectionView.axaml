@@ -66,7 +66,7 @@
                 <TextBlock Classes="Readout"
                            Text="Some rooms cast a spell of their own on whoever stands in them, about every six seconds: the volcano's heat, a swamp's poison, a river with no boat. Damage from it breaks a rest or a meditation. In a room whose spell is ticked here, no rest or meditate is started: healing spells go on as set, a walk or loop carries on, and the rest is taken in the next room that isn't barred. With the spell's counter in effect the room is rested in as normal."/>
                 <TextBlock Classes="Readout"
-                           Text="Ticked to start with: the spells that damage on every tick. Unticked: the ones that damage only on a roll or on a condition. The list comes from the loaded game data."/>
+                           Text="Ticked to start with: the spells that damage on every tick, or on a timer that ends in death. Unticked: the ones that damage only on a roll or on a condition. With a spell ticked, a character that cannot heal itself does not recover in those rooms; untick the spell to let it try to rest there. The list comes from the loaded game data."/>
             </StackPanel>
 
             <Grid Grid.Row="3" ColumnDefinitions="96,62,180,130,230,*,64" Margin="9,0,24,2">

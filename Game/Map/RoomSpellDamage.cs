@@ -18,9 +18,14 @@ public enum RoomSpellDamage
     // test. A rest there is broken now and then and still recovers.
     OnARoll,
 
+    // No cast of the spell damages, but it sets a timer running that ends in damage:
+    // holding breath lasts its rounds and then drowns. It kills when the timer is
+    // out, so it bars resting as the every-tick spells do.
+    AfterATimer,
+
     // The spell damages every time it is cast, unless a counter is held (a raft, a
     // buff, an item that negates the spell). Whether the character has the counter
-    // is RoomHazardIndex's to say. The one class that bars resting unless the user
-    // says otherwise (Settings → Periodic Damage Room Spells).
+    // is RoomHazardIndex's to say. With AfterATimer, the classes that bar resting
+    // unless the user says otherwise (Settings → Periodic Damage Room Spells).
     EveryTick,
 }

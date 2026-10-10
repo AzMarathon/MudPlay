@@ -2626,7 +2626,7 @@ public static class BugReportBuilder
         if (!svc.RoomSpellDamage.Readings.TryGetValue(here.Spell, out Game.Map.RoomSpellDamageReading? reading))
             return $"{spell}: no damage in the game data";
         string does = $"{spell}: {Game.Map.RoomSpellDamageText.Damage(reading)} damage, "
-            + Game.Map.RoomSpellDamageText.How(reading, svc.ItemNames.GetName);
+            + Game.Map.RoomSpellDamageText.How(reading, svc.ItemNames.GetName, svc.SpellCatalog.GetSpellNameByNumber);
         if (!svc.RoomSpellBarsResting(here.Spell))
             return $"{does}; not set to bar resting — rests as normal";
         if (svc.RoomSpellCounteredNow(here.Spell))

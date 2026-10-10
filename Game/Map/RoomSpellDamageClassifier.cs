@@ -16,6 +16,9 @@ namespace MudPlay.Game.Map;
 //     RoomHazardIndex already knows how to check for this character.
 //   - a roll (a `random` table that doesn't damage whatever is rolled, a
 //     `testskill`, an EndCast% under 100) makes the path OnARoll.
+//   - an EndCast from a spell that has a duration fires when that spell ends, so
+//     the damage behind it is AfterATimer: not what a cast does, and kept apart
+//     from it (freezing water's 1 to 4 a tick, and the drowning 25 rounds on).
 //   - any other condition on the character or the room (class, level, alignment,
 //     monsters present, a flag) makes it Conditional, roll or no roll: the client
 //     doesn't work those out, and a room that only burns the evil-aligned is no
@@ -51,28 +54,42 @@ public static class RoomSpellDamageClassifier
 
         RoomSpellDamage kind = hits.Max(static h => h.Kind);
         List<Hit> strongest = hits.Where(h => h.Kind == kind).ToList();
-        List<Hit> sized = strongest.Where(static h => h.Max > 0).ToList();
+        // The range is what lands first. An every-tick spell's is what its casts
+        // do; damage a timer brings later is told apart (Timed), or freezing water
+        // would read "1 to 9999" for the drowning its held breath ends in.
+        int soonest = strongest.Min(static h => h.AfterRounds);
+        List<Hit> sized = strongest.Where(h => h.AfterRounds == soonest && h.Max > 0).ToList();
         bool skillTest = strongest.Any(static h => h.SkillTest);
         // Bands of one table are apart from each other, so their shares add up.
-        int percent = kind == RoomSpellDamage.EveryTick || skillTest
+        int percent = kind is RoomSpellDamage.EveryTick or RoomSpellDamage.AfterATimer || skillTest
             ? 0
             : Math.Clamp((int)Math.Round(strongest.Sum(static h => h.Chance) * 100), 1, 100);
         return new RoomSpellDamageReading(
             kind,
             sized.Count == 0 ? 0 : sized.Min(static h => h.Min),
             sized.Count == 0 ? 0 : sized.Max(static h => h.Max),
-            strongest.Any(static h => h.Grows),
+            sized.Any(static h => h.Grows),
             percent,
             skillTest,
             strongest.Select(static h => string.Join(", ", h.Conditions))
                 .Where(static c => c.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-            walk.Gap);
+            walk.Gap)
+        {
+            Timed = hits.Where(static h => h.Kind == RoomSpellDamage.AfterATimer)
+                .OrderBy(static h => h.AfterRounds)
+                .Select(static h => new RoomSpellDamageStage(h.Spell, h.Min, h.Max, h.AfterRounds))
+                .Distinct()
+                .ToList(),
+        };
     }
 
     // One damage spell a path ends in. Chance is the share of casts that reach it
-    // past the table bands and EndCast% on the way (1 when there is none).
+    // past the table bands and EndCast% on the way (1 when there is none);
+    // AfterRounds the durations of the spells whose ending leads to it (0 for
+    // damage the cast itself does).
     private readonly record struct Hit(
-        RoomSpellDamage Kind, int Min, int Max, bool Grows, double Chance, bool SkillTest, string[] Conditions);
+        RoomSpellDamage Kind, int Spell, int Min, int Max, bool Grows, double Chance, bool SkillTest,
+        string[] Conditions, int AfterRounds = 0);
 
     private sealed class Walk(Func<int, SpellFormulaInput?> spellOf, Func<int, TBInfoEntry?> textblock)
     {
@@ -113,7 +130,7 @@ public static class RoomSpellDamageClassifier
                         && ((spell.MinInc != 0 && spell.MinIncLVLs != 0) || (spell.MaxInc != 0 && spell.MaxIncLVLs != 0));
                     hits.Add(new Hit(
                         conditions.Length > 0 ? RoomSpellDamage.Conditional : RoomSpellDamage.EveryTick,
-                        min, max, grows, 1, false, conditions));
+                        number, min, max, grows, 1, false, conditions));
                 }
                 else if (ability.Code == SpellTextBlock.AbilityCode)
                     hits.AddRange(Lines(
@@ -121,6 +138,9 @@ public static class RoomSpellDamageClassifier
                 else if (ability.Code == EndCastAbility && ability.Value > 0)
                 {
                     List<Hit> follow = Spell(ability.Value, conditions, depth + 1);
+                    // The follow-on is cast when this spell ends: for one with a
+                    // duration, that many rounds on (holding breath's 25).
+                    if (spell.Dur > 0) follow = Later(follow, spell.Dur);
                     hits.AddRange(endCastRolls ? Past(follow, endCastPercent / 100.0, skillTest: false) : follow);
                 }
             }
@@ -198,7 +218,7 @@ public static class RoomSpellDamageClassifier
                     if (Is(verb, "failspell") && absent > 0 && textblock(absent) is null)
                         hits.Add(new Hit(
                             conditions.Length > 0 ? RoomSpellDamage.Conditional : RoomSpellDamage.EveryTick,
-                            0, 0, false, 1, false, conditions));
+                            0, 0, 0, false, 1, false, conditions));
                 }
                 else if (Is(verb, "testskill"))
                     // `testskill <skill> [<modifier>] <failTextblock>`: the block runs on a miss.
@@ -238,15 +258,29 @@ public static class RoomSpellDamageClassifier
             return [];
         }
 
-        // Damage reached past a roll is no longer damage on every tick.
+        // Damage reached past a roll is no longer damage on every tick, or sure to
+        // come when a timer is out.
         private static List<Hit> Past(List<Hit> hits, double chance, bool skillTest)
         {
             for (int i = 0; i < hits.Count; i++)
                 hits[i] = hits[i] with
                 {
-                    Kind = hits[i].Kind == RoomSpellDamage.EveryTick ? RoomSpellDamage.OnARoll : hits[i].Kind,
+                    Kind = hits[i].Kind is RoomSpellDamage.EveryTick or RoomSpellDamage.AfterATimer
+                        ? RoomSpellDamage.OnARoll : hits[i].Kind,
                     Chance = hits[i].Chance * chance,
                     SkillTest = hits[i].SkillTest || skillTest,
+                };
+            return hits;
+        }
+
+        // Damage that waits for a spell to end is not damage the cast does.
+        private static List<Hit> Later(List<Hit> hits, int rounds)
+        {
+            for (int i = 0; i < hits.Count; i++)
+                hits[i] = hits[i] with
+                {
+                    Kind = hits[i].Kind == RoomSpellDamage.EveryTick ? RoomSpellDamage.AfterATimer : hits[i].Kind,
+                    AfterRounds = hits[i].AfterRounds + rounds,
                 };
             return hits;
         }

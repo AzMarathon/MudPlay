@@ -21,19 +21,26 @@ public static class RoomSpellDamageText
         return reading.GrowsWithLevel ? $"{range}, more with level" : range;
     }
 
-    // "every tick", "on a roll: 20% of ticks", "on a failed skill test", or the
-    // conditions the damage is behind. itemName resolves an item number in a
-    // condition; null leaves the number.
-    public static string How(RoomSpellDamageReading reading, Func<int, string?>? itemName = null)
+    // "every tick", "on a roll: 20% of ticks", "on a failed skill test", the stages
+    // of a timer, or the conditions the damage is behind. itemName resolves an item
+    // number in a condition and spellName the spell a timer ends in; null leaves
+    // the number.
+    public static string How(
+        RoomSpellDamageReading reading, Func<int, string?>? itemName = null, Func<int, string?>? spellName = null)
     {
         ArgumentNullException.ThrowIfNull(reading);
         string roll = reading.SkillTest ? "on a failed skill test"
             : reading.ChancePercent is > 0 and < 100 ? $"on a roll: {reading.ChancePercent}% of ticks"
             : string.Empty;
+        string timed = string.Join("; ", reading.Timed.Select(s => Stage(s, spellName)));
         switch (reading.Kind)
         {
             case RoomSpellDamage.EveryTick:
-                return "every tick";
+                // The tick damage is the Damage column's; what its timer ends in
+                // is said here, apart from it.
+                return timed.Length > 0 ? $"every tick; then {timed}" : "every tick";
+            case RoomSpellDamage.AfterATimer:
+                return $"on a timer: {timed}";
             case RoomSpellDamage.OnARoll:
                 return roll.Length > 0 ? roll : "on a roll";
             case RoomSpellDamage.Conditional:
@@ -46,6 +53,17 @@ public static class RoomSpellDamageText
             default:
                 return "no damage";
         }
+    }
+
+    // "drowning 5–20 after 25 rounds": the spell a timer ends in, what it does and
+    // when, counted from the room's cast.
+    private static string Stage(RoomSpellDamageStage stage, Func<int, string?>? spellName)
+    {
+        string name = spellName?.Invoke(stage.Spell) ?? $"spell {stage.Spell.ToString(CultureInfo.InvariantCulture)}";
+        string amount = stage.MaxDamage <= 0 ? string.Empty
+            : stage.MinDamage == stage.MaxDamage ? $" {stage.MaxDamage.ToString(CultureInfo.InvariantCulture)}"
+            : $" {stage.MinDamage.ToString(CultureInfo.InvariantCulture)}–{stage.MaxDamage.ToString(CultureInfo.InvariantCulture)}";
+        return $"{name}{amount} after {stage.AfterRounds.ToString(CultureInfo.InvariantCulture)} rounds";
     }
 
     private static string Conditions(string steps, Func<int, string?>? itemName) =>

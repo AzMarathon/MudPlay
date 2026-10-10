@@ -365,6 +365,78 @@ public sealed class RoomSpellDamageClassifierTests
         Assert.Equal("textblock 2654 missing", r.Gap);
     }
 
+    // ----- a timer that ends in damage --------------------------------------
+
+    // The drowning chain as the data has it: freezing water casts holding breath when
+    // it ends (at once: it has no duration), holding breath lasts 25 rounds and ends
+    // in drowning, drowning lasts 5 and ends in drowned to death.
+    private void DrowningChain()
+    {
+        Spell(511, 1, 4, (Damage, 0), (144, 0), (EndCast, 512), (DescMsg, 66));
+        _spells[512] = new SpellFormulaInput
+        {
+            Number = 512, Dur = 25,
+            Abilities = [new SpellAbility(DescMsg, 66), new SpellAbility(EndCast, 513), new SpellAbility(68, 200)],
+        };
+        _spells[513] = new SpellFormulaInput
+        {
+            Number = 513, MinBase = 5, MaxBase = 20, Dur = 5,
+            Abilities = [new SpellAbility(Damage, 0), new SpellAbility(EndCast, 514), new SpellAbility(DescMsg, 66)],
+        };
+        Spell(514, 9999, 9999, (Damage, 0));
+    }
+
+    private static string? DrowningName(int spell) => spell switch
+    {
+        513 => "drowning",
+        514 => "drowned to death",
+        _ => null,
+    };
+
+    [Fact]
+    public void Reading_TickDamageWithATimerBehindIt_KeepsTheTwoApart()
+    {
+        DrowningChain();
+
+        RoomSpellDamageReading r = Read(511);
+        Assert.Equal(RoomSpellDamage.EveryTick, r.Kind);
+        Assert.Equal("1–4", RoomSpellDamageText.Damage(r));   // not 1–9999
+        Assert.Equal(
+            new[] { new RoomSpellDamageStage(513, 5, 20, 25), new RoomSpellDamageStage(514, 9999, 9999, 30) },
+            r.Timed);
+        Assert.Equal(
+            "every tick; then drowning 5–20 after 25 rounds; drowned to death 9999 after 30 rounds",
+            RoomSpellDamageText.How(r, spellName: DrowningName));
+    }
+
+    [Fact]
+    public void Reading_NothingButATimer_IsOnATimer_AndStillBarsARestByDefault()
+    {
+        DrowningChain();
+
+        RoomSpellDamageReading r = Read(512);
+        Assert.Equal(RoomSpellDamage.AfterATimer, r.Kind);
+        Assert.Equal("5–20", RoomSpellDamageText.Damage(r));   // what lands first
+        Assert.Equal(0, r.ChancePercent);
+        Assert.Equal(
+            "on a timer: drowning 5–20 after 25 rounds; drowned to death 9999 after 30 rounds",
+            RoomSpellDamageText.How(r, spellName: DrowningName));
+        Assert.Equal("on a timer: spell 513 5–20 after 25 rounds; spell 514 9999 after 30 rounds", RoomSpellDamageText.How(r));
+        // It kills when the timer is out.
+        Assert.True(MudPlay.Services.RoomSpellDamageIndex.BarsRestingByDefault(r.Kind));
+        Assert.False(MudPlay.Services.RoomSpellDamageIndex.BarsRestingByDefault(RoomSpellDamage.OnARoll));
+    }
+
+    [Fact]
+    public void Reading_ATimerBehindARoll_IsOnARoll()
+    {
+        // Made up: the timer only starts half the time.
+        DrowningChain();
+        Spell(9032, 0, 0, (EndCast, 512), (164, 50));
+
+        Assert.Equal(RoomSpellDamage.OnARoll, Read(9032).Kind);
+    }
+
     [Fact]
     public void Reading_CheckspellNamingABlockTheSetLacks_IsNotTakenForDamage()
     {

@@ -38,11 +38,14 @@ public sealed class RoomSpellDamageIndex
         _log = log;
     }
 
-    // A rest is barred by default only where the damage comes with every cast: a
-    // rest in a room that hurts on a roll is broken now and then and still recovers
-    // (user, 2026-10-10: such rooms "only break resting if the damage roll is what
-    // is chosen"), and a condition may never be met by this character.
-    public static bool BarsRestingByDefault(RoomSpellDamage kind) => kind == RoomSpellDamage.EveryTick;
+    // A rest is barred by default where the damage comes with every cast, or is
+    // sure to come when a timer the cast started runs out (held breath ends in
+    // drowning, which kills). Not on a roll: a rest in such a room is broken now and
+    // then and still recovers (user, 2026-10-10: such rooms "only break resting if
+    // the damage roll is what is chosen"). Not on a condition: this character may
+    // never meet it.
+    public static bool BarsRestingByDefault(RoomSpellDamage kind) =>
+        kind is RoomSpellDamage.EveryTick or RoomSpellDamage.AfterATimer;
 
     // Pass Room.Spell. None for a spell no room carries or that does no damage.
     public RoomSpellDamage ClassOf(int spell) =>
@@ -98,7 +101,8 @@ public sealed class RoomSpellDamageIndex
         {
             int Count(RoomSpellDamage kind) => readings.Values.Count(r => r.Kind == kind);
             _log?.Info("RoomSpellDamageIndex",
-                $"Room spells in '{setName}' that damage: {Count(RoomSpellDamage.EveryTick)} on every tick (a rest is barred there unless "
+                $"Room spells in '{setName}' that damage: {Count(RoomSpellDamage.EveryTick)} on every tick and "
+                + $"{Count(RoomSpellDamage.AfterATimer)} on a timer (a rest is barred there unless "
                 + $"Settings → Periodic Damage Room Spells says otherwise), {Count(RoomSpellDamage.OnARoll)} on a roll, "
                 + $"{Count(RoomSpellDamage.Conditional)} on a condition.");
             // A gap is data the set lacks, so it is the same every load: said once here.

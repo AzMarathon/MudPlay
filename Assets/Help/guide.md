@@ -1064,7 +1064,7 @@ This is automatic and needs no toggle — it's the only thing that reaches throu
 
 **No resting in a room that hurts.** Some rooms damage you every six seconds for as long as you stand in them: the volcano's heat, a swamp's poison, a river without a raft, the frozen north without furs. Every hit breaks a rest or a meditation, so resting there recovers nothing. In such a room MudPlay does not rest or meditate, even below *rest if below*:
 
-- A walk, a loop or a followed leader **carries on**, and the rest starts in the **next room that isn't barred**. Nothing holds the walk in the damaging room, and a follower sends no `@wait` there: it keeps following and asks in the next room it can rest in.
+- A walk, a loop or a followed leader **carries on**, and the rest starts in the **next room that isn't barred**. Nothing holds the walk in the damaging room, and a follower sends no `@wait` there: it keeps following and asks in the next room it can rest in. A follower dragged into such a room with a `@wait` already out (the leader's wait ran out and it walked on) releases the leader with `@ok` and asks again in the next room that isn't barred.
 - **Healing goes on.** The *Heal (rest)* spell is normally cast only while resting; while a rest is owed in such a room it is cast standing instead, at the same threshold and mana floor. Your combat and emergency heals work as always. So a character with healing spells set up heals and moves on; one without them just moves on.
 - A character with nothing moving it **stands and heals**. It is not walked anywhere.
 - **With the room's counter in effect it is an ordinary room**, and you rest as normal. How the counter has to be had depends on how it works. An item that *negates* the room's spell (the phoenix feather or magma amulet in the volcano, the swamp boots, the fish-helm) protects only while it is **worn**. An item the room simply checks you have (a raft on the river, the rope and grapple in the ice cavern, the sunstone wristband in the desert) only has to be **held**: in the pack is enough, worn or not. A buff (the desert's waterskin) counts while you carry its source, since MudPlay keeps it raised in those rooms.
@@ -3756,7 +3756,7 @@ The mana floor for re-casting buffs is set on each buff now: **Buff Watchdog →
 ### Pre-rest / meditate command, Post-rest / meditate command
 
 **Default:** empty (both)
-**What it does:** Custom commands sent right before entering rest/meditate, and right after standing back up — e.g. checking your surroundings first, or re-arming something the moment you stand.
+**What it does:** Custom commands sent right before entering rest/meditate, and right after standing back up — e.g. checking your surroundings first, or re-arming something the moment you stand. The post-rest commands follow a rest that ran its course; a rest given up because the room began to bar it (see *No resting in a room that hurts* under Health) sends none.
 
 ---
 
@@ -4504,23 +4504,24 @@ Settings → Periodic Damage Room Spells. One list, saved for the loaded charact
 
 A *room spell* is a spell a room casts by itself on whoever stands in it, about every six seconds: the volcano's heat, a swamp's poison, a river with no boat. Damage from it breaks a rest or a meditation. What MudPlay does in a barred room is under **Health: rest, heal, flee** → *No resting in a room that hurts*: no rest or meditate is started, healing goes on, a walk or loop carries on, and the rest is taken in the next room that isn't barred.
 
-**With no profile loaded, or no game data, the tab is empty** and says which of the two it is waiting for. The list is read again whenever the game data set changes.
+**With no profile loaded, or no game data, the tab is empty** and says which of the two it is waiting for. The list is read again whenever the game data set changes; ticks you had changed and not yet saved are kept for the spells the new set still has, and the program log names any that had to be dropped. Loading another character reloads the tab for that character, as on every Settings tab, and the log names the unsaved ticks that went with the old one.
 
 ### Bars resting
 
-**Default:** ticked for a spell that damages on **every tick**; clear for one that damages only **on a roll** or **on a condition**
+**Default:** ticked for a spell that damages on **every tick** or **on a timer**; clear for one that damages only **on a roll** or **on a condition**
 **What it does:** Ticked, no rest or meditate is started in a room with that spell, unless its counter is in effect (see *Countered by*). Clear, the room is rested in like any other, whatever its spell does.
 
-**Why you might change it:** untick a spell whose damage is too small to matter to you (the frozen north's 1 to 4 a tick) if you would sooner rest through it. Tick a roll spell if its hits keep breaking your rests.
+**Why you might change it:** With a spell ticked, a character that cannot heal itself will not recover in those rooms at all: it neither rests nor heals there, and only gets its rest in the next room that isn't barred. Unticking the spell lets it try to rest there. The frozen north's *freezing cold* (1 to 4 a tick, on the most rooms of any spell) is the usual one to untick; a loop that lies wholly inside such rooms needs either heals, the counter, or the spell unticked. Tick a roll spell if its hits keep breaking your rests.
 
 **Important notes:** Only the spells you set away from their default are saved, so a later game-data update that reads a spell differently reaches every spell you never touched. A choice saved for a spell the loaded game data doesn't have (another realm's) is kept. A change is in effect from the next rest decision; the program log names each spell whose rule changed. **Reset to defaults** puts every box back.
 
 ### The columns
 
 - **Record** is the spell's number in the Spells table (Game Data Browser → Spells), and **Spell** its name there.
-- **Damage** is what one cast does, from the spell's record: a range (`30–60`), a single figure, or *not in the data* when the game data doesn't hold it (Paradigm's desert thirst). *More with level* marks a spell whose record also has a per-level step. Where a spell ends in a death timer the range reaches its `9999` (freezing water and holding breath lead to drowning).
+- **Damage** is what one cast does, from the spell's record: a range (`30–60`), a single figure, or *not in the data* when the game data doesn't hold it (Paradigm's desert thirst). *More with level* marks a spell whose record also has a per-level step. Damage that only comes when a timer runs out is not in this figure: it is said under *Comes*.
 - **Comes** is how the damage arrives:
-  - **every tick**: on every cast of the room's spell.
+  - **every tick**: on every cast of the room's spell. **every tick; then …** adds what a timer the spell starts ends in: *freezing water* does its 1 to 4 a tick, and its held breath ends in *drowning* after 25 rounds and *drowned to death* 5 rounds after that.
+  - **on a timer: …**: no cast does damage, but each starts a timer that ends in it, with the spell at each stage, what it does and how many rounds after the cast (*holding breath*: drowning after 25 rounds, drowned to death after 30). It starts ticked because the timer ends in death.
   - **on a roll: N% of ticks**: only when a roll comes up, with the share of casts that do damage.
   - **on a failed skill test**: only when you fail a skill check (the Great Pyramid's traps); there is no fixed share.
   - **only if …**: only for a character or room that meets a condition, named in a few words (*level 19 or under*, *no monster in the room*, *holding* an item). A condition MudPlay has no wording for is shown as the game data writes it, in `code`. When there are many alternatives the first three are named and the rest counted.
@@ -5279,7 +5280,7 @@ This section is a compact, technical lookup table for every setting documented a
 | Stop auto-sneaking while a carried item leaves under … % | `15` | 0–95 | `OtherSettings.SneakStandDownChance` | Models/Profile/OtherSettings.cs |
 | Hide items when discarding | false | bool | `HideWhenDiscarding` | Models/Profile/OtherSettings.cs |
 | Teleports: Allow automatic walks to use the following teleports | none | list of teleports | `TeleportSettings.AutomaticWalkTeleports` | Models/Profile/TeleportSettings.cs |
-| Periodic Damage Room Spells: Bars resting | ticked for every-tick spells, clear for roll / condition spells | bool per room spell (only changes are stored) | `PeriodicDamageRoomSpellSettings.BarsResting` | Models/Profile/PeriodicDamageRoomSpellSettings.cs |
+| Periodic Damage Room Spells: Bars resting | ticked for every-tick and timer spells, clear for roll / condition spells | bool per room spell (only changes are stored) | `PeriodicDamageRoomSpellSettings.BarsResting` | Models/Profile/PeriodicDamageRoomSpellSettings.cs |
 | Auto-request @comeback when left behind | true | bool | `AutoRequestComebackWhenLeftBehind` | Models/Profile/OtherSettings.cs |
 | Pyramid / Asylum solver enabled | true / true | bool (Global) | `GlobalSettings.PyramidSolverEnabled` / `AsylumSolverEnabled` | Models/Settings/GlobalSettings.cs |
 | Token routes: offer / min rooms saved | true / 50 | bool + 1–300 (Global, Paradigm) | `GlobalSettings.EnableTokenRoutes` / `TokenRouteMinRoomsShorter` | Models/Settings/GlobalSettings.cs |

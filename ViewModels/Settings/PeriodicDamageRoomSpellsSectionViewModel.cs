@@ -27,6 +27,7 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
     private readonly Func<IReadOnlyList<PeriodicDamageRoomSpell>> _spells;
     private readonly Func<string?> _activeSet;
     private readonly Func<int, string?> _itemName;
+    private readonly Func<int, string?>? _spellName;
     private readonly LogService? _log;
     private Control? _view;
     private bool _suppressDirty;
@@ -105,7 +106,8 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
             () => AppServices.Current.GameData.ActiveSet,
             AppServices.Current.ItemNames.GetName,
             AppServices.Current.GameData,
-            AppServices.Current.Log) { }
+            AppServices.Current.Log,
+            AppServices.Current.SpellCatalog.GetSpellNameByNumber) { }
 
     public PeriodicDamageRoomSpellsSectionViewModel(
         ProfileService profile,
@@ -113,7 +115,8 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         Func<string?> activeSet,
         Func<int, string?> itemName,
         GameDataCache? gameData = null,
-        LogService? log = null)
+        LogService? log = null,
+        Func<int, string?>? spellName = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(spells);
@@ -123,24 +126,40 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         _spells = spells;
         _activeSet = activeSet;
         _itemName = itemName;
+        _spellName = spellName;
         _log = log;
         _profile.ProfileLoaded += OnProfileChanged;
-        _profile.ProfileClosed += Reload;
-        void OnActiveSetChanged(string? _) => Reload();
+        _profile.ProfileClosed += OnProfileClosed;
+        void OnActiveSetChanged(string? _) => Reload(keepPending: true, "the game data changed");
         if (gameData is not null) gameData.ActiveSetChanged += OnActiveSetChanged;
         OnDispose(() =>
         {
             _profile.ProfileLoaded -= OnProfileChanged;
-            _profile.ProfileClosed -= Reload;
+            _profile.ProfileClosed -= OnProfileClosed;
             if (gameData is not null) gameData.ActiveSetChanged -= OnActiveSetChanged;
         });
-        Reload();
+        Reload(keepPending: false, why: null);
     }
 
-    private void OnProfileChanged(CharacterProfile _) => Reload();
+    // What the other sections do when their source changes under unsaved edits: a
+    // profile load or close reloads from the new character and the edits, which
+    // were the old one's, go; a game-data change rebuilds the list and keeps the
+    // edits it still has a row for (Auto-Light's light list). Either way an edit
+    // that is dropped is named in the program log, since a tick box gone back by
+    // itself is easy to miss.
+    private void OnProfileChanged(CharacterProfile _) => Reload(keepPending: false, "another profile was loaded");
 
-    private void Reload()
+    private void OnProfileClosed() => Reload(keepPending: false, "the profile was closed");
+
+    // why names the cause in the log line for dropped edits; null for a reload the
+    // user asked for (Cancel) or the first load, which drop nothing worth saying.
+    private void Reload(bool keepPending, string? why)
     {
+        List<(int Number, string Name, bool Bars)> pending = Spells
+            .Where(row => row.BarsResting != StoredOrDefault(row))
+            .Select(static row => (row.Number, row.Name, row.BarsResting))
+            .ToList();
+
         _suppressDirty = true;
         _stored = new Dictionary<int, bool>(ReadOrDefault(_profile.Current).BarsResting);
         int? picked = SelectedSpell?.Number;
@@ -154,20 +173,36 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
                 bool bars = _stored.TryGetValue(spell.Number, out bool chosen)
                     ? chosen
                     : RoomSpellDamageIndex.BarsRestingByDefault(spell.Reading.Kind);
-                Spells.Add(new PeriodicDamageRoomSpellRowViewModel(spell, bars, _itemName, OnRowChanged));
+                Spells.Add(new PeriodicDamageRoomSpellRowViewModel(spell, bars, _itemName, _spellName, OnRowChanged));
             }
         }
         _unlisted.Clear();
         foreach ((int number, bool bars) in _stored)
             if (!listed.Contains(number)) _unlisted[number] = bars;
+
+        List<string> dropped = new();
+        foreach ((int number, string name, bool bars) in pending)
+        {
+            if (keepPending && Spells.FirstOrDefault(r => r.Number == number) is { } kept) kept.BarsResting = bars;
+            else dropped.Add($"{name} (#{number})");
+        }
+
         SelectedSpell = Spells.FirstOrDefault(row => row.Number == picked);
         _suppressDirty = false;
-        ClearDirty();
+        _dirty = Spells.Any(row => row.BarsResting != StoredOrDefault(row));
+        OnPropertyChanged(nameof(IsDirty));
         UpdateSummary();
         OnPropertyChanged(nameof(HasProfile));
         OnPropertyChanged(nameof(HasSpells));
         OnPropertyChanged(nameof(EmptyReason));
+        if (dropped.Count > 0 && why is not null)
+            _log?.Info("Settings",
+                $"Periodic Damage Room Spells: unsaved change(s) dropped for {string.Join(", ", dropped)} — {why}.");
     }
+
+    // What the row's box is with nothing pending: the stored choice, else the default.
+    private bool StoredOrDefault(PeriodicDamageRoomSpellRowViewModel row) =>
+        _stored.TryGetValue(row.Number, out bool was) ? was : row.BarsByDefault;
 
     public static PeriodicDamageRoomSpellSettings ReadOrDefault(CharacterProfile? profile)
     {
@@ -198,8 +233,7 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
         List<string> changes = new();
         foreach (PeriodicDamageRoomSpellRowViewModel row in Spells)
         {
-            bool before = _stored.TryGetValue(row.Number, out bool was) ? was : row.BarsByDefault;
-            if (before != row.BarsResting)
+            if (StoredOrDefault(row) != row.BarsResting)
                 changes.Add($"{row.Name} ({row.NumberText}) {(row.BarsResting ? "now bars resting" : "no longer bars resting")}");
         }
 
@@ -215,7 +249,7 @@ public sealed partial class PeriodicDamageRoomSpellsSectionViewModel : SettingsS
                 $"Periodic Damage Room Spells: {string.Join("; ", changes)}. In effect from the next rest decision.");
     }
 
-    public override void Discard() => Reload();
+    public override void Discard() => Reload(keepPending: false, why: null);
 
     // Every box back to what its spell's class gives.
     [RelayCommand]
