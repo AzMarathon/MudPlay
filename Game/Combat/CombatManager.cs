@@ -4488,9 +4488,9 @@ public sealed partial class CombatManager : IDisposable
                     + $"spellResumeAlreadyFired={_betweenRoundCastAt == _lastSpellResumeForBetweenRoundCastAt}");
             // The Off nothing of ours explains: no cast in the window, no kill (that
             // would have dropped the target above). Nothing resumes on it here, so say
-            // what it is waiting for: OnCombatLine in either mode, OnCombatTick in
-            // weapon mode only. Not every time: an attack that stops itself after each
-            // strike (KAI pummel) prints this Off every round.
+            // what it is waiting for: OnCombatLine or OnCombatTick, weapon or spell.
+            // Not every time: an attack that stops itself after each strike (KAI
+            // pummel) prints this Off every round.
             else if (_offEndedAnsweredAttack
                 && Fighting()
                 && DateTimeOffset.Now - _unexplainedOffLoggedAt > UnexplainedOffLogSpacing
@@ -4501,8 +4501,7 @@ public sealed partial class CombatManager : IDisposable
                 _unexplainedOffLoggedAt = DateTimeOffset.Now;
                 _log?.Combat(LogCategory,
                     $"*Combat Off* with no cast of ours behind it and '{stillHere}' still in the room "
-                    + "(a typed command, a stun, an attack that stops after each strike) — waiting for the next combat line"
-                    + (_castingSpellTarget is null ? " or the round tick" : " (spell mode: the round tick doesn't resume)"));
+                    + "(a stun, an attack that stops after each strike) — re-attacking on the next combat line or round tick");
             }
 
             if (!suppressBetweenRoundResume
