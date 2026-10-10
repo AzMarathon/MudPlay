@@ -185,6 +185,17 @@ public sealed class RoomTracker
     // room confirms, so a loop-stop lands ahead of the graveyard's recovery-reroute.
     public event Action? PlayerDeathObserved;
 
+    // Fired from NoteUnwitnessedDeath: a death found out on the way back into the
+    // game, long after it happened. Its own event because most of what
+    // PlayerDeathObserved sets off is about the moment of dying (the room just
+    // left, the conditions and party of that moment, the respawn display still to
+    // come), and here that moment is past: the character already stands in the
+    // room the game put it in, and what the client holds about that room, its
+    // conditions and its pack was read after the death. Subscribers are the few
+    // things a death still owes then: stopping the movement engines, the self
+    // buffs it wiped, the recovery list.
+    public event Action? PlayerDeathInferred;
+
     // Fires when a MANUAL movement step is observed — a cardinal or text-exit command
     // the user typed that did NOT match a walker/loop echo claim (so the engine didn't
     // send it). Consumers pause navigation so the automation never fights a hand-driven
@@ -1283,30 +1294,17 @@ public sealed class RoomTracker
 
         if (_profile is not null)
         {
-            _profile.DeathHistory ??= new List<DeathRecord>();
-            var record = new DeathRecord(
-                when,
-                died is null ? null : new RoomRef(died.Key.Map, died.Key.Room),
-                livesRemaining,
-                messageText)
-            {
-                RecordNumber = _profile.DeathHistory.Count + 1,
-                RoomName = died?.Name,
-                Status = DeathRecoveryStatus.Active,
-            };
+            List<DeathItem>? equipped = null, lost = null;
+            CurrencyHoldings? coins = null;
             if (_inventorySnapshot is { } provider)
             {
                 InventorySnapshot snapshot = provider();
-                (List<DeathItem> equipped, List<DeathItem> lost) =
-                    DeathLootCapture.FromSnapshot(snapshot);
-                record.EquippedAtDeath = equipped;
-                record.LostItems = lost;
-                record.CoinsAtDeath = snapshot.Currency;
+                (equipped, lost) = DeathLootCapture.FromSnapshot(snapshot);
+                coins = snapshot.Currency;
             }
-            _profile.DeathHistory.Add(record);
-            _log?.Log(LogSeverity.Info, "RoomTracker",
-                $"Death recorded at {(died?.Key.ToString() ?? "(unknown room)")}; {livesRemaining} lives remaining; " +
-                $"deathpile worn={record.EquippedAtDeath?.Count ?? 0}, carried={record.LostItems?.Count ?? 0}.");
+            AppendDeathRecord(_profile, when,
+                died is null ? null : new RoomRef(died.Key.Map, died.Key.Room), died?.Name,
+                livesRemaining, messageText, equipped, lost, coins);
         }
 
         while (_pending.TryDequeue(out _)) { /* drain */ }
@@ -1322,6 +1320,50 @@ public sealed class RoomTracker
         // recovery state, so the later PendingRespawn → Confirmed(graveyard)
         // transition can't drive a recovery-reroute back out.
         PlayerDeathObserved?.Invoke();
+    }
+
+    // A death that was not seen: it happened after the link was gone, and was worked
+    // out on the way back in (a hang-up while dropped, on a board that kills for it).
+    // It gets the record a death line makes, from what was known when the character
+    // was last in the game, so the history, Death Recovery and everything else that
+    // reads the list treat it as any other death.
+    //
+    // Nothing about the position changes: the character is already in the room the
+    // game put it in and the map has read that room, so there is no respawn display
+    // to wait for. Hence PlayerDeathInferred, not PlayerDeathObserved.
+    // Returns the record made, or null with no profile to put it on.
+    public DeathRecord? NoteUnwitnessedDeath(Recovery.UnwitnessedDeath death)
+    {
+        ArgumentNullException.ThrowIfNull(death);
+        if (_profile is null) return null;
+        string? roomName = death.Room is { } room ? _graph.GetRoom(new RoomKey(room.Map, room.Room))?.Name : null;
+        DeathRecord record = AppendDeathRecord(_profile, death.At, death.Room, roomName,
+            death.LivesRemaining, death.Message, death.Equipped, death.Lost, death.Coins);
+        PlayerDeathInferred?.Invoke();
+        return record;
+    }
+
+    // The one place a death becomes a DeathRecord on the profile.
+    private DeathRecord AppendDeathRecord(
+        CharacterProfile profile, DateTimeOffset when, RoomRef? room, string? roomName,
+        int livesRemaining, string? messageText,
+        List<DeathItem>? equipped, List<DeathItem>? lost, CurrencyHoldings? coins)
+    {
+        profile.DeathHistory ??= new List<DeathRecord>();
+        DeathRecord record = new(when, room, livesRemaining, messageText)
+        {
+            RecordNumber = profile.DeathHistory.Count + 1,
+            RoomName = roomName,
+            Status = DeathRecoveryStatus.Active,
+            EquippedAtDeath = equipped,
+            LostItems = lost,
+            CoinsAtDeath = coins,
+        };
+        profile.DeathHistory.Add(record);
+        _log?.Log(LogSeverity.Info, "RoomTracker",
+            $"Death recorded at {(room is null ? "(unknown room)" : $"{room.Map}/{room.Room}")}; {livesRemaining} lives remaining; " +
+            $"deathpile worn={equipped?.Count ?? 0}, carried={lost?.Count ?? 0}.");
+        return record;
     }
 
     // A movement-refusal line was seen (e.g. "You are too paralyzed to move." /

@@ -212,7 +212,16 @@ public static class BugReportBuilder
               + $"on {heldList.Realm ?? "(no realm)"}, "
               + (heldList.Room is { } heldRoom ? $"room {heldRoom.Map}/{heldRoom.Room}" : "room not known")
               + (heldList.PenaltiesSpanned > 1 ? $", covering {heldList.PenaltiesSpanned} drops of the link" : "")
+              // What a death by the hang-up penalty is told by on the next entry.
+              + $"; HP {(heldList.Hp is { } heldHp ? $"{heldHp}" : "not known")}"
+              + $" of {(heldList.MaxHp is { } heldMax ? $"{heldMax}" : "not known")}"
+              + $", lives {(heldList.Lives is { } heldLives ? $"{heldLives}" : "not known")}"
+              + (heldList.PvpFight ? ", in a fight with a player" : heldList.InCombat ? ", in a fight with a monster" : ", in no fight")
+              + $", {heldList.Worn?.Count ?? 0} worn, {heldList.Coins?.TotalCoinCount ?? 0} coin(s)"
             : "(none)");
+        // Whether the last hang-up the penalty could have killed for was taken
+        // for a death, and on what.
+        Kv(sb, "Hang-up death check", svc.HangupItems.LastDeathCheck);
         Kv(sb, "PvP room", svc.PvpRoom.Describe()
             + (svc.PvpRoom.RoomAttackHeldBy() is { } heldBy ? $"; our room attacks held: {heldBy}" : "")
             + (svc.PvpLeaveRoomReason() is { } leave ? $"; walking on: {leave}" : ""));

@@ -11,7 +11,13 @@ namespace MudPlay.Models.Profile;
 // inventory has been read on that connection, so the last save before the link
 // drops, the game is left or the app closes is the one that stands. A death
 // clears it until the next inventory read: the record in memory still names
-// what went into the deathpile. Coins are not on it: the penalty takes items.
+// what went into the deathpile.
+//
+// It also carries what tells a death nobody saw from an ordinary reconnect: a
+// hang-up while dropped or low on HP, on a board that penalises it, can kill the
+// character after the link is gone (HP at the drop, the fight it was in, its
+// lives), and what a death record then needs that the item list alone doesn't
+// have (what was worn and in which slot, and the coins on hand).
 public sealed class HeldAtDisconnect
 {
     public DateTimeOffset At { get; set; }
@@ -29,5 +35,29 @@ public sealed class HeldAtDisconnect
     // check takes back is that count times this.
     public int PenaltiesSpanned { get; set; } = 1;
 
+    // Worn, carried, lit and key-ring items by name and count. Coins are not on
+    // it: the penalty takes items.
     public List<HeldItem> Items { get; set; } = new();
+
+    // HP and max HP as the statline last showed them, or null when they weren't
+    // known. At or below 0 the character was dropped.
+    public int? Hp { get; set; }
+    public int? MaxHp { get; set; }
+
+    // Lives as the client last knew them, or null.
+    public int? Lives { get; set; }
+
+    // A fight with a player was under way, or a player had just attacked.
+    public bool PvpFight { get; set; }
+
+    // In combat with a monster, or a hostile one in the room.
+    public bool InCombat { get; set; }
+
+    // The worn pieces among Items, each with its slot, so a death record made from
+    // this list can put them back on after the pile is recovered. null on a list
+    // written before this was kept.
+    public List<DeathItem>? Worn { get; set; }
+
+    // The coins on hand: a death takes them too.
+    public Game.Inventory.CurrencyHoldings? Coins { get; set; }
 }

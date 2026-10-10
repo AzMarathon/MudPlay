@@ -180,6 +180,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // before the graveyard room display floods scrollback and pushes the
         // fatal scene out of the "How did I Die?" window.
         _roomTracker.PlayerDeathObserved += OnDeathObserved;
+        _roomTracker.PlayerDeathInferred += OnDeathInferred;
     }
 
     private void OnPlayerDied(PlayerDiedEvent evt)
@@ -1431,6 +1432,15 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         CaptureDeathLog(last);
     }
 
+    // RoomTracker.PlayerDeathInferred: a death recorded after the fact. The grid
+    // gets its row and the held pieces go, as above. No backscroll is kept for it:
+    // by now the terminal shows a login, not how the character died.
+    private void OnDeathInferred()
+    {
+        _heldEquip.Clear();
+        OnPropertyChanged(nameof(Records));
+    }
+
     // Snapshot the transcript tail to a per-character death-log file and pin its
     // name on the record. No-op without a bound transcript provider or a named
     // profile (drafts / tests have nowhere to write). Best-effort: a capture
@@ -1503,6 +1513,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _deathWatcher.PlayerDied -= OnPlayerDied;
         _roomTracker.StateChanged -= OnRoomChanged;
         _roomTracker.PlayerDeathObserved -= OnDeathObserved;
+        _roomTracker.PlayerDeathInferred -= OnDeathInferred;
         if (_lines is not null) _lines.LineEmitted -= OnLine;
         _lines = null;
         if (_groundItems is not null) _groundItems.SurveyUpdated -= OnSurveyUpdated;

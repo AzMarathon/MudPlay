@@ -6,9 +6,9 @@ namespace MudPlay.Game.Health;
 // places that show it: the program log when a hang-up goes out, and the bug
 // report. The penalty is the board's own (GAME_MECHANICS
 // "Hang-up / lost carrier"); the client reports it, and after one looks for the
-// items it dropped (MaxItemsDropped). When it hangs up, and whether, is decided by
-// Disable Hangups, the health settings, the PvP actions and @panic, and nothing
-// here feeds back into any of them.
+// items it dropped (MaxItemsDropped) and for a death it caused (HpShareTop). When
+// it hangs up, and whether, is decided by Disable Hangups, the health settings,
+// the PvP actions and @panic, and nothing here feeds back into any of them.
 public static class HangupPenaltyNotice
 {
     public const string LogCategory = "Hangup";
@@ -38,6 +38,24 @@ public static class HangupPenaltyNotice
         if (realm is not { HangupPenaltyEnabled: true }) return 0;
         int pvp = Items(realm.HangupPvpItemsDropped);
         return realm.HangupPvePenaltyEnabled ? Math.Max(pvp, Items(realm.HangupPveItemsDropped)) : pvp;
+    }
+
+    // The largest share of max HP (percent) the realm's settings say that hang-up
+    // costs, or null when they don't penalise it: in a fight with a player the PvP
+    // side's, by the master switch; otherwise the monster side's, and only with
+    // that side ticked. The settings have no way to say what the board's own
+    // levels do (every hang-up, or only one while being attacked), so outside PvP
+    // the monster side stands for both and what is found on the way back in
+    // decides. Read by Game.Inventory.HangupItemRecheck to tell whether a hang-up
+    // can have been a death: a penalised one kills a dropped character whatever the
+    // share (0 included), and a standing one when the share takes its HP that low.
+    public static int? HpShareTop(RealmProfile? realm, bool pvp)
+    {
+        if (realm is not { HangupPenaltyEnabled: true }) return null;
+        if (pvp) return HpRange(realm.HangupPvpHpFromPercent, realm.HangupPvpHpToPercent).To;
+        return realm.HangupPvePenaltyEnabled
+            ? HpRange(realm.HangupPveHpFromPercent, realm.HangupPveHpToPercent).To
+            : null;
     }
 
     // The realm's penalties in one phrase, for the bug report.

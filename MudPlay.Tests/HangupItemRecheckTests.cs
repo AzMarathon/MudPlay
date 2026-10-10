@@ -216,6 +216,16 @@ public sealed class HangupItemRecheckTests
         public List<string[]> GearAsked { get; } = new();
         public string? GearSetApplied { get; set; } = "Default";
         public List<string> Notices { get; } = new();
+        // What the death question reads: the statline's HP, the client's lives,
+        // the fight, and the realm's largest HP share for each side (null: that
+        // side isn't penalised).
+        public (int Hp, int? MaxHp)? Vitals { get; set; }
+        public int? Lives { get; set; }
+        public bool PvpFight { get; set; }
+        public bool MonsterFight { get; set; }
+        public int? PvpShare { get; set; }
+        public int? PveShare { get; set; }
+        public List<MudPlay.Game.Recovery.UnwitnessedDeath> Deaths { get; } = new();
         public HangupItemRecheck Check { get; }
 
         public bool Held => Coordinator.IsGateAsserted(MovementCoordinator.HangupItemCheckGate);
@@ -239,9 +249,42 @@ public sealed class HangupItemRecheckTests
                 roomRedisplayFree: () => true,
                 collect: (name, count) => Collected.Add((name, count)),
                 reapplyGearSet: names => { GearAsked.Add(names.ToArray()); return GearSetApplied; },
-                notice: Notices.Add);
+                notice: Notices.Add,
+                vitals: () => Vitals,
+                lives: () => Lives,
+                pvpFight: () => PvpFight,
+                monsterFight: () => MonsterFight,
+                hpShareTop: pvp => pvp ? PvpShare : PveShare,
+                recordDeath: death =>
+                {
+                    Deaths.Add(death);
+                    Profile.DeathHistory ??= new List<DeathRecord>();
+                    DeathRecord record = new(death.At, death.Room, death.LivesRemaining, death.Message)
+                    {
+                        RecordNumber = Profile.DeathHistory.Count + 1,
+                    };
+                    Profile.DeathHistory.Add(record);
+                    return record;
+                });
             Check.SetWireSender(_ => { });
         }
+
+        // The list a save left when the link dropped with the character at this HP
+        // of 200, with 7 lives, in room 1/3.
+        public void StoredAt(int hp, InventorySnapshot before, int? lives = 7, bool pvp = false, RoomRef? room = null)
+        {
+            Stored(before, room);
+            HeldAtDisconnect list = Profile.HeldAtDisconnect!;
+            list.Hp = hp;
+            list.MaxHp = 200;
+            list.Lives = lives;
+            list.PvpFight = pvp;
+            list.Worn = DeathLootCapture.FromSnapshot(before).Equipped;
+            list.Coins = before.Currency;
+        }
+
+        // The login's `stat`, ahead of its `i`.
+        public void ReadLives(int lives) => Check.NoteLivesRead(lives);
 
         // The list a save left on disk before the link dropped, in room 1/3.
         public void Stored(InventorySnapshot before, RoomRef? room = null) =>
@@ -1214,5 +1257,344 @@ public sealed class HangupItemRecheckTests
         HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
         Assert.Equal("rope", Assert.Single(list.Items).Name);
         Assert.Equal(1, list.PenaltiesSpanned);
+    }
+
+    // ----- A hang-up the penalty killed for -----------------------------
+    //
+    // A board that penalises a hang-up kills a dropped character, and a standing
+    // one its HP share takes under the death threshold, after the link is gone. The
+    // same pass works that out first, from what the list says the character left
+    // with and what it has come back with.
+
+    private static readonly InventorySnapshot Geared =
+        Snap(worn: [("chainmail hauberk", "Torso")], carried: ["3 torch", "rope"]) with
+        {
+            Currency = new CurrencyHoldings(0, 0, 25, 0, 0, 2500),
+        };
+
+    // Back in the temple, full HP, a life down.
+    private static void ComeBackDead(Harness h, int? lives = 6, params string[] floor)
+    {
+        h.Room = new RoomKey(1, 1);
+        h.Check.NoteConnected();
+        h.ShowRoom(floor);
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        if (lives is { } read) h.ReadLives(read);
+    }
+
+    [Fact]
+    public void ADroppedHangUp_ThatCostALife_IsRecordedAsADeath_AndThePickupStandsDown()
+    {
+        Harness h = new() { PveShare = 50 };
+        h.StoredAt(-5, Geared);
+        DateTimeOffset dropped = h.Profile.HeldAtDisconnect!.At;
+
+        // Torches lie in the temple too: they are not ours to take as "dropped".
+        ComeBackDead(h, 6, "3 torch");
+        Assert.True(h.Held);
+        h.ReadInventory(Snap());
+
+        MudPlay.Game.Recovery.UnwitnessedDeath death = Assert.Single(h.Deaths);
+        Assert.Equal(new RoomRef(1, 3).Room, death.Room!.Room);
+        Assert.Equal(dropped, death.At);
+        Assert.Equal(6, death.LivesRemaining);
+        Assert.Equal(HangupItemRecheck.DeathMessage, death.Message);
+        DeathItem worn = Assert.Single(death.Equipped);
+        Assert.Equal(("chainmail hauberk", "Torso"), (worn.Name, worn.Slot));
+        Assert.Equal(new[] { "3 torch", "rope" }, death.Lost.Select(i => i.Name).ToArray());
+        Assert.Equal(25, death.Coins!.Value.Gold);
+
+        Assert.Empty(h.Collected);
+        Assert.Empty(h.Sent);
+        Assert.False(h.Held);
+        // One line, and not the pickup's "missing since you were last in the game".
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("died to the hang-up penalty", notice);
+        Assert.Contains("Recover Now", notice);
+        Assert.DoesNotContain("missing", notice);
+        Assert.Empty(h.Check.LastMissing);
+        Assert.Contains("died", h.Check.LastDeathCheck);
+        // The list is spent: what is held now replaces it, so it isn't judged twice.
+        Assert.Empty(h.Profile.HeldAtDisconnect!.Items);
+        Assert.Equal(200, h.Profile.HeldAtDisconnect.Hp);
+    }
+
+    // The share is taken off HP with no floor, so a standing character can die of
+    // it too. The realm's largest share says how low is low enough to look.
+    [Theory]
+    [InlineData(40, 50, true)]     // 50% of 200 is 100: enough to drop 40 HP
+    [InlineData(100, 50, true)]
+    [InlineData(101, 50, false)]   // more than the penalty takes at most
+    [InlineData(40, 0, false)]     // a side that takes no HP kills only the dropped
+    [InlineData(0, 0, true)]
+    public void AStandingCharacter_IsLookedAtOnlyWhenThePenaltyCouldDropIt(int hp, int share, bool looked)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = share };
+        h.StoredAt(hp, Geared);
+
+        ComeBackDead(h);
+        Assert.Equal(looked, h.Held);
+        h.ReadInventory(Snap());
+
+        Assert.Equal(looked ? 1 : 0, h.Deaths.Count);
+    }
+
+    // The side that applied: in a fight with a player the PvP figures, otherwise
+    // the monster side's and only when that side is ticked.
+    [Theory]
+    [InlineData(true, 50, null, true)]     // PvP fight, PvP side set
+    [InlineData(false, 50, null, false)]   // no PvP fight, and the monster side isn't ticked
+    [InlineData(false, 50, 25, true)]      // monster side ticked
+    [InlineData(true, null, null, false)]  // master switch off: nothing is penalised
+    public void TheSideOfThePenalty_FollowsTheFightTheCharacterLeftIn(bool pvpFight, int? pvpShare, int? pveShare, bool looked)
+    {
+        Harness h = new() { MaxItems = 0, PvpShare = pvpShare, PveShare = pveShare };
+        h.StoredAt(-5, Geared, pvp: pvpFight);
+
+        ComeBackDead(h);
+        h.ReadInventory(Snap());
+
+        Assert.Equal(looked ? 1 : 0, h.Deaths.Count);
+        if (!looked) Assert.Empty(h.Coordinator.History);
+    }
+
+    // A free room, or a level that didn't apply: the character comes back as it
+    // left. After a restart of the client no maximum has been seen yet (a dropped
+    // character's statline never shows one), and HP alone still says so.
+    [Theory]
+    [InlineData(200)]
+    [InlineData(null)]
+    public void StillDropped_IsNoDeath_AndNothingIsSaid(int? maxHpKnown)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.StoredAt(-5, Geared);
+
+        h.Check.NoteConnected();
+        h.ShowRoom();
+        h.Vitals = (-5, maxHpKnown);
+        h.Check.OnInGameChanged(true);
+        h.ReadLives(7);
+        h.ReadInventory(Geared);
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Notices);
+        Assert.False(h.Held);
+        Assert.Contains("no death", h.Check.LastDeathCheck);
+    }
+
+    // No life lost is no death, whatever HP reads; the item check then runs as ever.
+    [Fact]
+    public void LivesUnchanged_IsNoDeath_AndTheItemCheckGoesOn()
+    {
+        Harness h = new() { PveShare = 50 };
+        h.StoredAt(-5, Geared);
+
+        h.Check.NoteConnected();
+        h.ShowRoom("3 torch");
+        h.Vitals = (60, 200);
+        h.Check.OnInGameChanged(true);
+        h.ReadLives(7);
+        h.ReadInventory(Snap(worn: [("chainmail hauberk", "Torso")], carried: ["rope"]));
+
+        Assert.Empty(h.Deaths);
+        Assert.Equal([("torch", 3)], h.Collected);
+    }
+
+    // The lives are the surest sign, and only a `stat` gives them: an entry made by
+    // hand gets one asked for, and the answer decides.
+    [Fact]
+    public void WithNoStatReadOnThisConnection_OneIsAskedFor_AndItsLivesDecide()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.StoredAt(-5, Geared);
+
+        ComeBackDead(h, lives: null);
+        h.ReadInventory(Snap());
+
+        Assert.Equal(["stat\r"], h.Sent);
+        Assert.Empty(h.Deaths);
+        Assert.True(h.Held);
+        // A save made while it waits must not write over the list still to be judged.
+        h.Check.StampForSave(h.Profile);
+        Assert.Equal(-5, h.Profile.HeldAtDisconnect!.Hp);
+
+        h.ReadLives(6);
+
+        Assert.Equal(6, Assert.Single(h.Deaths).LivesRemaining);
+        Assert.False(h.Held);
+    }
+
+    // No answer to the `stat`: another room and an empty pack stand in for the lives.
+    [Fact]
+    public void WithNoLivesToCompare_AnotherRoomAndAnEmptyPackAreADeath()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.StoredAt(-5, Geared);
+
+        ComeBackDead(h, lives: null);
+        h.ReadInventory(Snap());
+        h.Heartbeats(3);
+
+        // One fewer than the list had, since none was read.
+        Assert.Equal(6, Assert.Single(h.Deaths).LivesRemaining);
+    }
+
+    // Auto-All off sends nothing, the `stat` included.
+    [Fact]
+    public void AutoAllOff_NoStatIsSent_AndItIsJudgedOnWhatThereIs()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, AutoAll = false };
+        h.StoredAt(-5, Geared);
+
+        ComeBackDead(h, lives: null);
+        h.ReadInventory(Snap());
+
+        Assert.Empty(h.Sent);
+        Assert.Single(h.Deaths);
+    }
+
+    // Short evidence records nothing, and says so once.
+    [Theory]
+    [InlineData(true)]    // in the room it left: nothing says it was moved
+    [InlineData(false)]   // the map isn't sure where it is
+    public void WhenItCantBeTold_NothingIsRecorded_AndOneNoticeSaysWhatWasSeen(bool sameRoom)
+    {
+        Harness h = new() { PveShare = 50, AutoAll = false };
+        h.StoredAt(-5, Geared, lives: null);
+
+        h.Room = sameRoom ? new RoomKey(1, 3) : null;
+        h.Check.NoteConnected();
+        h.ShowRoom("3 torch");
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.ReadInventory(Snap());
+
+        Assert.Empty(h.Deaths);
+        Assert.Null(h.Profile.DeathHistory);
+        Assert.Contains("can't be told", h.Notices[0]);
+        Assert.Contains("No death was recorded", h.Notices[0]);
+        Assert.Contains("can't tell", h.Check.LastDeathCheck);
+        Assert.False(h.Held);
+        Assert.Empty(h.Collected);
+        // Where it left the game the item check still has its say; elsewhere what is
+        // missing may be a pile, and nothing more is said about it.
+        Assert.Equal(sameRoom ? 2 : 1, h.Notices.Count);
+    }
+
+    // A death seen before the link dropped voids the list, so there is nothing to
+    // work out on the way back in and no second record.
+    [Fact]
+    public void ADeathSeenBeforeTheLinkDropped_IsNotRecordedAgain()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Vitals = (-30, 200), Lives = 7 };
+        h.ConnectAndEnter();
+        h.ReadInventory(Geared);
+        h.Check.StampForSave(h.Profile);
+        Assert.Equal(-30, h.Profile.HeldAtDisconnect!.Hp);
+
+        h.Check.OnPlayerDied();
+        h.Check.NoteLinkDropping();
+        h.Check.NoteDisconnected();
+        Assert.Null(h.Profile.HeldAtDisconnect);
+
+        ComeBackDead(h);
+        h.ReadInventory(Snap());
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Notices);
+    }
+
+    // A death line read on the way in, before the first prompt, has its own record:
+    // the list from before it says nothing more.
+    [Fact]
+    public void ADeathRecordedSinceTheListWasWritten_EndsThePassQuietly()
+    {
+        Harness h = new() { PveShare = 50 };
+        h.StoredAt(-5, Geared);
+        h.Profile.DeathHistory = [new DeathRecord(DateTimeOffset.Now, new RoomRef(1, 3), 6, "You have 6 lives left.")];
+
+        ComeBackDead(h, 6, "3 torch");
+        h.ReadInventory(Snap());
+
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Collected);
+        Assert.Empty(h.Notices);
+        Assert.False(h.Held);
+    }
+
+    // The list says what the character left the game with, the fight included, and
+    // is written before the drop tears the fight down.
+    [Fact]
+    public void TheList_CarriesHpLivesFightWornAndCoins_WrittenAsTheLinkGoesDown()
+    {
+        Harness h = new() { Vitals = (120, 200), Lives = 7 };
+        h.ConnectAndEnter();
+        h.ReadInventory(Geared);
+
+        h.Vitals = (-12, 200);
+        h.PvpFight = true;
+        h.MonsterFight = true;
+        h.Check.NoteLinkDropping();
+        // What the Disconnected handler clears next must not reach the list.
+        h.PvpFight = false;
+        h.MonsterFight = false;
+        h.Vitals = null;
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+
+        HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
+        Assert.Equal(-12, list.Hp);
+        Assert.Equal(200, list.MaxHp);
+        Assert.Equal(7, list.Lives);
+        Assert.True(list.PvpFight);
+        Assert.True(list.InCombat);
+        Assert.Equal("Torso", Assert.Single(list.Worn!).Slot);
+        Assert.Equal(25, list.Coins!.Value.Gold);
+    }
+
+    [Fact]
+    public void TheNewFields_RoundTrip_AndAListWithoutThemRaisesNoQuestion()
+    {
+        CharacterProfile profile = new()
+        {
+            HeldAtDisconnect = new HeldAtDisconnect
+            {
+                Realm = "Board/Main",
+                Items = [new HeldItem("torch", 3)],
+                Hp = -4,
+                MaxHp = 180,
+                Lives = 5,
+                PvpFight = true,
+                InCombat = true,
+                Worn = [new DeathItem("chainmail hauberk", "Torso")],
+                Coins = new CurrencyHoldings(1, 2, 3, 4, 5, 0),
+            },
+        };
+
+        HeldAtDisconnect back = JsonSerializer.Deserialize<CharacterProfile>(
+            JsonSerializer.Serialize(profile, JsonStore.Options), JsonStore.Options)!.HeldAtDisconnect!;
+
+        Assert.Equal(-4, back.Hp);
+        Assert.Equal(180, back.MaxHp);
+        Assert.Equal(5, back.Lives);
+        Assert.True(back.PvpFight && back.InCombat);
+        Assert.Equal("Torso", Assert.Single(back.Worn!).Slot);
+        Assert.Equal(4, back.Coins!.Value.Platinum);
+
+        // A list written before these were kept.
+        HeldAtDisconnect old = JsonSerializer.Deserialize<CharacterProfile>(
+            """{ "Name": "Ermias", "HeldAtDisconnect": { "Realm": "Board/Main", "Items": [ { "Name": "torch", "Count": 3 } ] } }""",
+            JsonStore.Options)!.HeldAtDisconnect!;
+        Assert.Null(old.Hp);
+        Assert.Null(old.Worn);
+        Assert.False(MudPlay.Game.Recovery.HangupDeath.Suspected(old.Hp, old.MaxHp, hpShareTop: 50));
+
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.Profile.HeldAtDisconnect = old;
+        ComeBackDead(h);
+        h.ReadInventory(Snap());
+        Assert.Empty(h.Deaths);
+        Assert.Empty(h.Coordinator.History);
     }
 }
