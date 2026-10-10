@@ -134,22 +134,24 @@ public sealed class AppServices
         if (!string.IsNullOrWhiteSpace(text)) _terminalNotice?.Invoke(text);
     }
 
-    // A walk, loop or Auto-Lair started by hand with the master switch off is
-    // refused up front, with a notice naming what could not start (user,
-    // 2026-10-09), where it used to plan and then sit frozen with nothing said.
-    // True when refused: the caller starts nothing. what is "Walk", "Loop" or
-    // "Auto-Lair". One already running when the switch goes off is not stopped
-    // here: it freezes on MovementCoordinator.AutoAllGate and resumes.
     // The hang-up carve-out as the engines read it (the character's own tier),
     // for the bug report.
     public bool AllowHangupInAllOffMode =>
         ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").AllowHangupInAllOffMode;
 
-    public bool RefuseStartForMasterSwitch(string what)
+    // A walk, loop or Auto-Lair started by hand with the master switch off is
+    // refused up front, with a notice naming what could not start (user,
+    // 2026-10-09), where it used to plan and then sit frozen with nothing said.
+    // True when refused: the caller starts nothing, and stops nothing for it
+    // either. what is "Walk", "Loop" or "Auto-Lair"; verb is "resume" for a
+    // paused run the user tries to carry on. One already running when the switch
+    // goes off is not stopped here: it freezes on MovementCoordinator.AutoAllGate
+    // and resumes.
+    public bool RefuseStartForMasterSwitch(string what, string verb = "start")
     {
-        if (!AutoModeController.Blocks("Hand-started navigation", what)) return false;
-        Log.Info("Navigation", $"{what} not started: the master switch is off.");
-        WriteTerminalNotice($"[{what} cannot start: the master switch (Auto-All) is off]");
+        if (!AutoModeController.Blocks("Hand-started navigation", $"{what} ({verb})")) return false;
+        Log.Info("Navigation", $"{what} cannot {verb}: the master switch is off.");
+        WriteTerminalNotice($"[{what} cannot {verb}: the master switch (Auto-All) is off]");
         return true;
     }
 
@@ -1432,6 +1434,13 @@ public sealed class AppServices
     // an armed auto-stash would hide the very coin we walked there to collect. So
     // the override is asymmetric — collection on, stashing off — for its duration.
     internal bool FundingErrandActive => _autoGetCashOverride == true;
+
+    // Whether coin is collected right now: the errand's override, else the Auto Get
+    // Cash toggle. The master switch outranks both. The override stays set while
+    // the switch is off, so a funding trip it froze collects again once it is on.
+    private bool CashCollectionOn() =>
+        !AutoModeController.KillSwitchEngaged
+        && (_autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash));
 
     // An errand engine is driving the walker for one of its own legs — a bank / stash
     // trip, a sell detour, a trainer or funding trip, a token route, a party pickup, a
@@ -6619,7 +6628,7 @@ public sealed class AppServices
             // An auto-train funding errand forces collection on regardless of the
             // toggle — the stash leg only searches, and it's this engine that takes
             // what the search reveals.
-            isEnabled: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
+            isEnabled: CashCollectionOn,
             // Shared Cash + Items timing toggle: defer ground / corpse / notice
             // cash until the room clears so a get between kills doesn't burn the
             // pre-attack round. hasEngageableHostiles reads CombatTracker, which
@@ -8599,7 +8608,7 @@ public sealed class AppServices
             limitCollection: copper => Cash.SetCollectLimit(copper),
             surveyedCopper: () => Cash.SurveyedCopperUnderLimit,
             collectSurveyed: copper => Cash.CollectSurveyed(copper),
-            autoGetCash: () => _autoGetCashOverride ?? ReadAutoModeFlag(d => d.AutoGetCash),
+            autoGetCash: CashCollectionOn,
             setAutoGetCash: on => _autoGetCashOverride = on ? true : null,
             log: Log,
             // Keep-on-hand is an amount of a chosen denomination; the router wants it
