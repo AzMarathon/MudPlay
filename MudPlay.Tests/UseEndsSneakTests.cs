@@ -50,6 +50,7 @@ public sealed class UseEndsSneakTests : IDisposable
         ["nexus spear"]          = Row(1, (43, 72), (114, 25), (43, 431)),
         ["salve"]                = Row(0, (18, 20)),
         ["odd charm"]            = Row(0, (43, 999)),
+        ["glowing token"]        = Row(10, (43, 72)),
     };
 
     // Spell Targets: 1 is cast with no target; 8 needs one named; 999 isn't on record.
@@ -78,7 +79,7 @@ public sealed class UseEndsSneakTests : IDisposable
     {
         "waterskin", "2 iron ration", "torch", "incense", "brass key", "scroll of shockshield",
         "scroll of warding", "serpent wand", "flame blade", "nexus spear", "salve", "odd charm",
-        "mystery box",
+        "mystery box", "glowing token",
     };
 
     [Theory]
@@ -293,6 +294,26 @@ public sealed class UseEndsSneakTests : IDisposable
         Assert.False(w.Stealth.InPlaceReSneakPendingForTests);
         w.Stealth.ReSneakInPlaceForTests();         // and were it to fire all the same
         Assert.Equal(new[] { "use waterskin", "sn" }, w.Wire);
+    }
+
+    // A token, or any item that teleports: the `use` is the move. The sneak is spent
+    // as it goes out, so the landing isn't read as a sneak that failed on the way in,
+    // and one `sn` takes it again there.
+    [Fact]
+    public void ItemTeleport_TheUseIsTheMove_LandingReSneaksOnce_AndIsNotALostEntry()
+    {
+        using World w = new() { EngineDriving = true };
+        w.Feed("Sneaking...");
+        int lostEntries = 0;
+        w.Stealth.SilentSneakLost += () => lostEntries++;
+
+        w.Stealth.RequestPreMoveStealth();          // the walker's hook, ahead of the step
+        w.Send("use glowing token");
+        w.Stealth.NoteRoomChanged();
+
+        Assert.Equal(new[] { "use glowing token", "sn" }, w.Wire);
+        Assert.Equal(0, lostEntries);
+        Assert.False(w.Stealth.TakeSneakBrokeOnEntry());
     }
 
     // ----- the approach hook --------------------------------------------

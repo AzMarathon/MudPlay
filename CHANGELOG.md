@@ -1,5 +1,10 @@
 # Version history
 
+## 3.165.1
+
+- Using, eating or drinking an item that casts a spell now counts as ending your sneak, so the next move re-sneaks
+- Sneak-ending commands and sent moves now drop a hide too
+
 ## 3.165.0
 
 - Auto-open opens a flagged container on arrival; it did nothing before
