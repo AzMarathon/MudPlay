@@ -1651,6 +1651,17 @@ public static class BugReportBuilder
                     + $"{svc.GhSweep.CarryHeadroomNow}");
         Kv(sb, "Roomba left too-heavy",
             svc.GhSweep.LeftInPlace.Count(f => f.Reason == GhLeftReason.TooHeavy).ToString());
+        // A room with no item cap can hold a floor list hundreds of stacks long, and
+        // a "client locks up in the vault" report turns on how long that list is and
+        // what reading it cost.
+        Kv(sb, "Floor of this room (last list read)",
+            $"{svc.GroundItems.Items.Count} stack(s), "
+            + $"{svc.GroundItems.Items.Sum(i => CountedCommand.SplitLeadingCount(i).Count)} item(s); "
+            + $"read in {svc.GroundItems.LastSurveyReadTime.TotalMilliseconds:F1} ms");
+        Kv(sb, "Roomba slowest floor read (this sweep or the last)",
+            svc.GhSweep.SlowestSurvey is { } slowest
+                ? $"{slowest.Room.Map}/{slowest.Room.Room}: {slowest.Stacks} stack(s), {slowest.Items} item(s); {slowest.StagesText}"
+                : "(none)");
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on
         // login" report needs to know whether the runner deferred the start
@@ -2000,6 +2011,7 @@ public static class BugReportBuilder
         Kv(sb, "Route card counts not yet taken by a walk", svc.CardCountSummary);
         // Why a member who never answers a count was or wasn't fetched a copy.
         Kv(sb, "Gate items handed to party members (remembered)", svc.PartyHandOvers.Summary);
+        Kv(sb, "Members par was asked about after a gate, reply not read yet", svc.PartyPathItemGate.PartyListCheckSummary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));
