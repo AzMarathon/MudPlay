@@ -4852,8 +4852,15 @@ public sealed class AppServices
         // again instead of skipping it on a stale _restInFlight.
         RoomTracker.StateChanged += t =>
         {
-            if (t.PreviousRoom is null || t.NewRoom is null) return;
             if (ReferenceEquals(t.PreviousRoom, t.NewRoom)) return;
+            if (t.PreviousRoom is null || t.NewRoom is null)
+            {
+                // Out of a placed room into one the map doesn't hold, or back: no
+                // move to report, but a rest put off for the old room's spell is no
+                // longer owed "here".
+                Health.NoteRoomPlacementChanged();
+                return;
+            }
             if (t.PreviousRoom.Key.Equals(t.NewRoom.Key)) return;
             Health.NoteRoomChanged(t.NewRoom.Key);
             // A move retries any party-buff targets we'd backed off as hidden.

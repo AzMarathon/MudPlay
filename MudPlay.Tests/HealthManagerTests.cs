@@ -5874,6 +5874,151 @@ public sealed class HealthManagerTests
         Assert.Null(h.Health.RestDeferredByRoomSpell);
     }
 
+    [Fact]
+    public void DamagingRoom_FollowerDraggedInWithAWaitOut_ReleasesIt_AndAsksAgainInTheNextRoom()
+    {
+        // The deficit starts in an ordinary room: gate up, @wait out, resting. The
+        // leader's wait window runs out and it walks on into the volcano with the
+        // follower in tow. "A follower keeps following" (user, 2026-10-10): no second
+        // @wait from inside the heat, and the one that is out is released.
+        using Harness h = new();
+        string? hurting = null;
+        int waits = 0, oks = 0;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => oks++,
+            isSelfPoisoned: () => false);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal((1, 0), (waits, oks));
+        int rests = h.SentLines.Count(l => l == "rest");
+        Assert.Equal(1, rests);
+
+        h.Clock += TimeSpan.FromMinutes(1);   // long past the re-ask interval
+        hurting = MagmaHeat;
+        h.Health.NoteRoomChanged();
+
+        Assert.Equal((1, 1), (waits, oks));
+        Assert.False(h.HealthGateHeld);
+        Assert.Equal(MagmaHeat, h.Health.RestDeferredByRoomSpell);
+        Assert.Single(info, l => l.Contains("releasing the leader with @ok"));
+
+        // Every prompt in the heat, and the next burning room, ask nothing more.
+        h.State.Hp = 28;
+        h.Health.Evaluate();
+        h.Clock += TimeSpan.FromMinutes(1);
+        h.Health.NoteRoomChanged();
+        Assert.Equal((1, 1), (waits, oks));
+        Assert.Equal(rests, h.SentLines.Count(l => l == "rest"));
+
+        // Out of it: the rest that was owed, and the @wait that goes with it.
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal((2, 1), (waits, oks));
+        Assert.Equal(rests + 1, h.SentLines.Count(l => l == "rest"));
+    }
+
+    [Fact]
+    public void DamagingRoom_BeginsToBarWhileAWaitIsOut_ReleasesTheLeader()
+    {
+        // No move at all: the feather comes off under a resting follower.
+        using Harness h = new();
+        string? hurting = null;
+        int waits = 0, oks = 0;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => oks++,
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Equal((1, 0), (waits, oks));
+
+        hurting = MagmaHeat;
+        h.Health.Evaluate();
+        h.Health.Evaluate();
+
+        Assert.Equal((1, 1), (waits, oks));   // released once, not on every prompt
+    }
+
+    [Fact]
+    public void DamagingRoom_LeftForARoomTheMapDoesNotHold_NothingStaysOwedHere()
+    {
+        // A move out of a placed room into an unplaced one is no NoteRoomChanged. The
+        // deferral has to end all the same, or the rest-time heal goes on being cast
+        // standing in an ordinary room.
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.True(h.Health.HpRestDeferredByRoomSpell);
+
+        hurting = null;   // an unplaced room bars nothing
+        h.Health.NoteRoomPlacementChanged();
+
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);
+        Assert.True(h.HealthGateHeld);
+        Assert.Contains("rest", h.SentLines);
+
+        // Placed again, in the heat: the rest under way is given up, and it is said
+        // for this room as for any new one.
+        hurting = MagmaHeat;
+        h.Health.NoteRoomPlacementChanged();
+        Assert.False(h.HealthGateHeld);
+        Assert.Equal(2, info.Count(l => l.Contains("not resting here; healing as set")));
+    }
+
+    [Fact]
+    public void DamagingRoom_PlacementChangeWithNothingOwed_DoesNothing()
+    {
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => null);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        int sent = h.SentLines.Count;
+
+        h.Health.NoteRoomPlacementChanged();   // the tracker lost its place mid-rest
+
+        Assert.True(h.HealthGateHeld);
+        Assert.Equal(sent, h.SentLines.Count);   // the rest under way isn't sent again
+    }
+
+    [Fact]
+    public void DamagingRoom_RestGivenUpWhenTheRoomStartsToBar_RunsNoPostRestCommands()
+    {
+        // Resting with the feather on; it comes off. Nothing was recovered, so the
+        // commands that follow a finished rest don't go out.
+        using Harness h = new(new HealthSettings { PostRestCommand = "look;exits" });
+        string? hurting = null;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Contains("rest", h.SentLines);
+
+        hurting = MagmaHeat;
+        h.Health.Evaluate();
+
+        Assert.False(h.HealthGateHeld);
+        Assert.DoesNotContain("look", h.SentLines);
+        Assert.DoesNotContain("exits", h.SentLines);
+
+        // The rest that does finish, in the next room, still runs them.
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        h.State.Hp = 96;
+        Assert.Contains("look", h.SentLines);
+        Assert.Contains("exits", h.SentLines);
+    }
+
     // ----- "do not rest in this room" (per-waypoint) -----------------
 
     [Fact]

@@ -1237,12 +1237,20 @@ public sealed class HealthManager : IDisposable
 
         // Auto-Rest switched off while a follower's @wait is out: the pools may never
         // reach rest-max now, so release the leader rather than hold it for a rest
-        // that isn't coming.
-        if (restOff && _partyWaitSignaled)
+        // that isn't coming. The same in a room whose spell bars resting, which the
+        // leader dragged us into or which began to hurt under us: the wait was asked
+        // for a rest that can't be taken here, and holding the leader in the heat for
+        // its whole wait window helps nobody. The follower keeps following (user,
+        // 2026-10-10) and asks again in the next room it can rest in.
+        if ((restOff || roomHurts is not null) && _partyWaitSignaled)
         {
             _partyWaitSignaled = false;
             _partyOkRestedSince = null;
             _partyOkHeldSince = null;
+            if (roomHurts is not null && _isPartyFollower?.Invoke() == true)
+                _log?.Info(LogCategory,
+                    $"a @wait is out, but this room's {roomHurts} does damage — releasing the leader with @ok; "
+                    + "asking again in the next room that doesn't hurt");
             _requestPartyOk?.Invoke();
         }
 
@@ -1719,9 +1727,21 @@ public sealed class HealthManager : IDisposable
         }
         else if (!shouldRest && _restInFlight)
         {
-            SendChained(s.PostRestCommand);
-            _log?.Combat(LogCategory,
-                $"recovered hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            // The post-rest chain is for a rest that ran its course. One given up
+            // because the room began to bar it (the counter came off, the spell was
+            // ticked) recovered nothing, and its commands would follow a rest that
+            // never finished. The stamp below still stands: a sit the game confirms
+            // late is this rest's tail either way.
+            if (roomHurts is null)
+            {
+                SendChained(s.PostRestCommand);
+                _log?.Combat(LogCategory,
+                    $"recovered hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
+            }
+            else
+                _log?.Combat(LogCategory,
+                    $"rest given up — this room's {roomHurts} does damage; no post-rest commands " +
+                    $"hp={_state.Hp}/{_state.MaxHp} ma={_state.Ma}/{_state.MaxMa}");
             _restInFlight = false;
             _recoveredAt = _now();
             _restConfirmedByPrompt = false;
@@ -2933,6 +2953,15 @@ public sealed class HealthManager : IDisposable
         _restResumeOwed = false;
         _roomSpellSkipLogged = false;
 
+        // Arrived, still holding a rest gate from the room just left, in a room whose
+        // spell bars resting: the leader's wait window ran out and it walked on into
+        // the heat with us in tow. Settle it now, before the re-ask below: the gate
+        // comes down, the wait that is out is released, and the rest is owed for the
+        // next room that doesn't bar it. Left to the next prompt, the re-ask went out
+        // first and parked the party in the damage with nobody resting.
+        if ((_hpGateAsserted || _maGateAsserted) && _roomSpellHurting?.Invoke() is not null)
+            Evaluate();
+
         // Moved while still below a rest floor as a follower: our own movement is held
         // by the recovery gate, so this is the leader walking on — it isn't (or no
         // longer is) waiting for us. Re-ask, rate-limited so a multi-room drag sends
@@ -2963,6 +2992,27 @@ public sealed class HealthManager : IDisposable
             _skipRestDeferredRecovery = false;
             Evaluate();
         }
+    }
+
+    // The room we stand in stopped being a placed one, or became one: the tracker
+    // lost its place leaving a room, or found it again. NoteRoomChanged is told only
+    // of a move between two placed rooms, so without this a rest put off for a room's
+    // spell stayed "owed here" after the room was left for one the map doesn't hold:
+    // the once-per-room log flag stood, and CastingDirector went on casting the
+    // rest-time heal standing, until some later HP change re-ran the check. The
+    // probe answers for the room as it is now (an unplaced room bars nothing), so
+    // asking again is all it takes. Not a move as far as the rest latch goes: the
+    // tracker can lose its place without the character leaving the room.
+    public void NoteRoomPlacementChanged()
+    {
+        _roomSpellSkipLogged = false;
+        if (_fleeEngine is not null) return;
+        // Found again in a room that bars resting while a rest gate is up counts too.
+        bool barredNow = (_hpGateAsserted || _maGateAsserted) && _roomSpellHurting?.Invoke() is not null;
+        if (!barredNow && !_skipRestDeferredRecovery && RestDeferredByRoomSpell is null && !_restOwedFromDamagingRoom)
+            return;
+        _skipRestDeferredRecovery = false;
+        Evaluate();
     }
 
     // Send the pre-/post-rest chain: one wire line per command, split by the same
