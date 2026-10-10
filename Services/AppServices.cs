@@ -2856,7 +2856,10 @@ public sealed class AppServices
         // RemoteCommands is constructed AFTER Chat / Party / Players are
         // ready (they're all dependencies). Handlers register later — the
         // engine is empty here; we just wire the plumbing.
-        Triggers = new TriggerEngine(Profile, Chat, Log, ProfileGameDataSet);
+        Triggers = new TriggerEngine(Profile, Chat, Log, ProfileGameDataSet)
+        {
+            BlockedByMasterSwitch = MasterSwitchOff("Triggers"),
+        };
         Aliases = new AliasEngine(Profile);
         Macros = new MacroStore(Profile);
         MacroDispatcher = new MacroDispatcher(Macros);
@@ -9245,7 +9248,11 @@ public sealed class AppServices
         // AutoLair target references against their managers'
         // collections.
         Events = new Game.Events.EventManager(
-            Profile, Loops, Lairs, LoopRunner, AutoLair, Walker, Log);
+            Profile, Loops, Lairs, LoopRunner, AutoLair, Walker, Log)
+        {
+            BlockedByMasterSwitch = what => AutoModeController.Blocks("Events", what),
+            IsMasterSwitchOff = () => AutoModeController.KillSwitchEngaged,
+        };
 
         // EventScheduler. Owns the AtTime ticker +
         // per-event Every-timers + connection-aware Logon / Re-log

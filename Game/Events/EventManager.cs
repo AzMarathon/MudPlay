@@ -253,6 +253,12 @@ public sealed class EventManager : IDisposable
         public RoomKey? WalkTarget;
     }
 
+    // The master switch. BlockedByMasterSwitch is asked with the event's name as
+    // it is about to fire (true = off; AutoModeController.Blocks counts the skip);
+    // IsMasterSwitchOff is the plain read the run's clock holds on.
+    public Func<string, bool>? BlockedByMasterSwitch { get; set; }
+    public Func<bool>? IsMasterSwitchOff { get; set; }
+
     private EventRun? _run;
     private Avalonia.Threading.DispatcherTimer? _ticker;
     // Set while this manager stops or starts an engine, so the Stopped / Started
@@ -283,6 +289,11 @@ public sealed class EventManager : IDisposable
         // worry about it and tests using the parameterless ctor (no
         // profile) keep firing.
         if (_profile?.Current?.EventsGloballyDisabled == true) return;
+        // Events are the user's own automation: with the master switch off this
+        // firing is skipped, not put off (user, 2026-10-09). Every trigger kind
+        // comes through here, so one check covers logon, timed, state and boss
+        // events alike.
+        if (BlockedByMasterSwitch?.Invoke($"event '{Label(e)}'") == true) return;
         Fired?.Invoke(e);
 
         if (e.ActionType == EventActionType.Command && e.ResolvedThen == EventThenType.Nothing)
@@ -686,6 +697,10 @@ public sealed class EventManager : IDisposable
     internal void Tick()
     {
         if (_run is not { } run) return;
+        // An event already running when the master switch goes off is held, as
+        // its walk or loop is: nothing here ends its action, so its Then (which
+        // starts an engine) waits for the switch to come back on.
+        if (IsMasterSwitchOff?.Invoke() == true) return;
         ScheduledEvent e = run.Event;
         TimeSpan elapsed = Now() - run.StartedAt;
         switch (e.ActionType)
