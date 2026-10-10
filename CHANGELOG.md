@@ -1,5 +1,15 @@
 # Version history
 
+## 3.165.7
+
+- A room wiped clean by a room spell no longer holds the walker 1–2 s as a fight walked out on
+- A prompt that just matched is no longer reported as one the statline can't read
+- Run-out buff timers of members who left the party are dropped
+- The engaged combat profile's configuration is logged when it changes, not on every engage
+- A spell cast no longer counts as a missed weapon swing in Monster Intel's observations
+- Lair timer log lines print local time
+- bug reports addressed: paradigm-20261010-145330
+
 ## 3.165.1
 
 - Conversation window: a picture emote no longer draws over the lines above and below it
