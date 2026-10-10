@@ -106,6 +106,7 @@ public sealed class RoundDamageTracker : IDisposable
     private Func<string, bool>? _isOwnRoomSpellLine;
     private Func<bool>? _ownSpellRepeating;
     private DateTimeOffset _lastOwnCastAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastOwnAttackCastAt = DateTimeOffset.MinValue;
     // The last hit that named both sides — a proc right after it is the hitter's.
     private (string Source, string Target, DateTimeOffset At, string Line)? _lastHit;
     // The room's monsters by the name on their lines → game-data number.
@@ -243,11 +244,18 @@ public sealed class RoundDamageTracker : IDisposable
     }
 
     // We sent a cast (engine or typed), so a caster's-eye spell line in the next few
-    // seconds may be ours.
-    public void NoteOwnCast() => _lastOwnCastAt = _now();
+    // seconds may be ours. attack is false for a cast that costs no round energy (a
+    // heal, a buff, a cure): it can't be what a missed swing really was.
+    public void NoteOwnCast(bool attack = true)
+    {
+        _lastOwnCastAt = _now();
+        if (attack) _lastOwnAttackCastAt = _lastOwnCastAt;
+    }
 
-    // We sent a cast recently enough that it may still be landing.
-    public bool CastLately => _now() - _lastOwnCastAt <= OwnCastWindow;
+    // We sent an attack spell recently enough that it may still be landing. A heal
+    // going out between rounds doesn't count: it made a weapon user's only swing of
+    // the round, a whiff, read as a resisted cast.
+    public bool AttackCastLately => _now() - _lastOwnAttackCastAt <= OwnCastWindow;
 
     private void OnLine(LineExtractor.EmittedLine line)
     {

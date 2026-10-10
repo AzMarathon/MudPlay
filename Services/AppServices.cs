@@ -4862,7 +4862,13 @@ public sealed class AppServices
         // TickEngine.CombatTickElapsed so the next round can cast.
         Cast = new Game.Spells.CastCoordinator(Router, Log);
         Tick.CombatTickElapsed += () => Cast.OnCombatTick(Tick.LastCombatTickWasPlaced);
-        Cast.CastSent += _ => RoundDamage.NoteOwnCast();
+        // The line is "<cast code>[ <target>]"; only a spell that costs round energy
+        // is an attack cast.
+        Cast.CastSent += line =>
+        {
+            int space = line.IndexOf(' ');
+            RoundDamage.NoteOwnCast(attack: CombatSpells.IsCombatSpell(space < 0 ? line : line[..space]));
+        };
 
         // ConditionTracker reads MessageStore +
         // line-side patterns to surface ActiveFlags. CastingDirector
@@ -5327,7 +5333,7 @@ public sealed class AppServices
             // A hand cast ends a sneak like an engine one, so it re-sneaks the same way.
             onManualCast: (c, target) =>
             {
-                RoundDamage.NoteOwnCast();
+                RoundDamage.NoteOwnCast(attack: CombatSpells.IsCombatSpell(c));
                 Combat.OnManualCastObserved(c, target);
                 CastDirector.NoteManualBuffCast(c, target);
                 Stealth.ReSneakAfterCast();

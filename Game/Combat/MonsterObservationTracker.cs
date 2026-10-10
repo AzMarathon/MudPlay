@@ -50,11 +50,12 @@ public sealed class MonsterObservationTracker : IDisposable
 
     // The record the last miss line was counted on. A spell's cast line ("You
     // scatter some ashes in a sweeping motion!") has the shape of a miss, and only
-    // what follows tells the two apart; CombatSessionTracker makes that call for
-    // the session figures, and RetractLastMiss takes the count back off this record
-    // when it does. Without it every cast was a weapon miss on the monster: a pure
+    // what follows tells the two apart: when one of our spells lands right after
+    // it, CombatSessionTracker takes the miss back and RetractLastMiss takes it off
+    // this record. Without it every cast was a weapon miss on the monster: a pure
     // caster's hit rate read 0 of ten thousand swings it never made (report
-    // paradigm-20261010-145330).
+    // paradigm-20261010-145330). A cast that doesn't land is still counted: nothing
+    // on the wire tells it from a whiff.
     private MonsterObservation? _lastMissOn;
 
     private bool _disposed;

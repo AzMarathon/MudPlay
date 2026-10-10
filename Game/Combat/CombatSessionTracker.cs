@@ -100,10 +100,15 @@ public sealed class CombatSessionTracker : IDisposable
     // (if wanted) is the subscriber's concern.
     public event Action? Changed;
 
-    // Raised when the miss last counted is taken back because it was a spell's cast
-    // line, not a swing: the spell landed right after it, or the fight ended with no
-    // swing landed (a resisted cast). MonsterObservationTracker counts the same line
-    // against the monster being fought and takes it back on this.
+    // Raised when the miss last counted is taken back because one of our spells
+    // landed right after it: that "miss" was the spell's cast line, not a swing.
+    // MonsterObservationTracker counts the same line against the monster being
+    // fought and takes it back on this.
+    //
+    // Not raised for the guess made when a fight ends (ResolvePendingSpellMiss).
+    // That one only moves a figure between two session totals; on a monster's saved
+    // record it took a weapon user's real whiff away whenever a cast had lately gone
+    // out. A cast that doesn't land therefore still reads as a missed swing there.
     public event Action? CastLineMissRetracted;
 
     public CombatSessionTracker(
@@ -170,18 +175,17 @@ public sealed class CombatSessionTracker : IDisposable
     }
 
     // A miss left un-retracted (no spell landed after it) in a combat with no
-    // physical swing, right after we cast, was a RESISTED cast, not a whiff — move it
-    // from the physical-miss bucket to the resist count of the spell we last landed,
-    // else our first configured attack spell.
+    // physical swing, right after we cast an attack spell, was a RESISTED cast, not a
+    // whiff — move it from the physical-miss bucket to the resist count of the spell
+    // we last landed, else our first configured attack spell.
     private void ResolvePendingSpellMiss()
     {
-        if (_emoteMissCandidate && !_physicalHitThisCombat && _rounds.CastLately
+        if (_emoteMissCandidate && !_physicalHitThisCombat && _rounds.AttackCastLately
             && (_lastSpell ?? (_spellMatchers.Count > 0 ? _spellMatchers[0].Name : null)) is { } spell
             && _misses > 0)
         {
             _misses--;
             Spell(spell).Misses++;
-            CastLineMissRetracted?.Invoke();
             Changed?.Invoke();
         }
         _emoteMissCandidate = false;
