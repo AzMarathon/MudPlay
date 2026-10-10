@@ -1796,10 +1796,14 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // starts.
     private string DescribeClosedRooms(RoomKey source, RoomKey destination, RoomKey first, int count, IRoomFilter filter)
     {
-        string rooms = $"{count} teleporting room(s), from {NameRoom(first)} on";
         if (filter.IsClosedToRoutes(destination) || !_bfs.IsCutOffByClosedRooms(source, destination, filter)
             || filter.CrossingTerms(first) is not { } terms)
-            return $"no route: the way there crosses {rooms}, and only typed moves go into those";
+            return $"no route: the way there crosses {count} teleporting room(s), from {NameRoom(first)} on, "
+                + "and only typed moves go into those";
+
+        // No count here: the crossing that would be made takes the fewest such rooms,
+        // which is not the way this probe came.
+        string rooms = $"the teleporting rooms from {NameRoom(first)} on";
 
         string items = string.Join(" or ", terms.Items.Select(id => _itemNameResolver?.Invoke(id) ?? $"item #{id}"));
         string asks = $"level {terms.MinLevel} and {items} in your pack";

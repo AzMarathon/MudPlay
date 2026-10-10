@@ -590,6 +590,9 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.Equal(new[] { 690, 691 }, lake.RequirementGroups.Single().OrderBy(i => i));
         Assert.False(lake.IsSurvivableDamage);   // a teleport is never "take the damage"
         Assert.True(lake.TeleportsCounterHolders);
+        // The level its `minlevel 50:checkitem …` lines set apart for a boat's
+        // holder: what the client's few crossings ask, with the boat.
+        Assert.Equal(50, lake.CounterHolderMinLevel);
     }
 
     // A holder's line counts only when it leads to a teleport: one that summons, or

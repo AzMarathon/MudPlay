@@ -2687,13 +2687,13 @@ public sealed class RouteChoicePlannerTests
                     Assert.Null(island);   // the White Forest case: it walks
                 else if (meetsTerms)
                     Assert.Equal(
-                        "no route: the only way there is across 1 teleporting room(s), from 1/2 (Lake) on, a crossing "
+                        "no route: the only way there is across the teleporting rooms from 1/2 (Lake) on, a crossing "
                         + "offered only on the route card of a walk you start yourself",
                         island);
                 else
                 {
                     Assert.StartsWith(
-                        "no route: the only way there is across 1 teleporting room(s), from 1/2 (Lake) on, which takes "
+                        "no route: the only way there is across the teleporting rooms from 1/2 (Lake) on, which takes "
                         + "level 50 and log raft or wooden skiff in your pack (missing: ", island);
                     Assert.Equal(filter.LevelProvider!() < 50, island!.Contains("missing: level 50"));
                     Assert.Equal(!filter.ItemCarriedProbe!(690), island.Contains("log raft or wooden skiff)"));
