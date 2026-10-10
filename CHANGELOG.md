@@ -1,10 +1,15 @@
 # Version history
 
-## 3.160.1
+## 3.160.2
 
 - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
 - Death Recovery gets the room, time and pile; loops and walks are stopped
 - The item pickup stands down for it, and nothing is recorded when it can't be told
+
+## 3.160.1
+
+- Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
+- In that mode the room tooltip and the Legend name the colours
 
 ## 3.160.0
 

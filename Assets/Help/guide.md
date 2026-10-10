@@ -555,6 +555,16 @@ The panel lists clickable links to everything attached to the room:
 
 The **Overlays ▾** button layers lairs, shops, spell rooms, **level gates** and a running loop's **loop lines** onto the map and toggles the **Legend** — which you can **drag anywhere on the map** (it remembers where you put it; toggle it off and back on and it snaps back into view if the window has since shrunk).
 
+The **Spells** chip under it cycles how **spell rooms** are painted — rooms that cast a spell on you while you stand in them: one flat purple → **by name** (a colour per spell; hover a room for the spell's name) → **by teleport** → off. **By teleport** colours each spell room by whether its spell moves you:
+
+- **Red** — the spell teleports you and you can't tell beforehand: either nothing stands in its way, or a random roll decides it (the desert's sandstorm, the open sea). A roll makes it red even when a condition applies as well.
+- **Yellow** — the spell teleports you only on a condition, with no luck in it: an item you carry or lack (the ice slide without a rope and grapple), your class, level or alignment, a quest you have or haven't done, or the room being empty of monsters. The map paints a spell the same for every character, so it doesn't work out whether the condition holds for yours.
+- **Green** — the spell has no teleport.
+
+A spell the game data doesn't let MudPlay read to the end stays the flat purple instead of being called green, and the program log names it when the game data loads.
+
+In that mode the hover tooltip's **Room Spell** line ends in *(teleports: always, or at random)*, *(teleports on a condition)*, *(no teleport)* or *(teleport unknown)*, and the Legend lists the colours in place of its one **Spell room** swatch. A spell's resist roll isn't counted as a roll. A spell room that is also a lair or a shop keeps its lair or shop colour while that overlay is on — switch it off to see the spell colour. With the **Lairs** chip on its heat-map, the lair colours run red through yellow to green as well, so the two overlays share a palette: a lair is never painted by its spell, and the tooltip tells which a room is (a lair's has a **Lair** line; the **Room Spell** line carries the teleport note). The chip's setting is saved per character.
+
 The **Legend** keys every room-cell marker the map draws: the amber-ringed **current room**, the blue-ringed **walk-to destination**, room fills (lair, shop/bank, spell, auto-lair, up/down/up+down exit rooms), and the overlay glyphs — **deathpile** skull, **boss** crown (with a red halt ring when it's a *stop-before* boss), **trainer** chevrons, **gang-house** robot, **avoid** (red X), **stash** (gold X), the amber **level-gate** wedge, and the fading green **@where** result.
 
 **Route lines** are colour-coded — walk-to **blue**, a running loop **green**, a loop you're previewing **red**, an Auto-Lair approach **orange** (these four are recolourable under Settings → General, so they're described here rather than pinned in the Legend).

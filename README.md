@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.1**
+> **Version 3.160.2**
 > - A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
 > - Death Recovery gets the room, time and pile; loops and walks are stopped
 > - The item pickup stands down for it, and nothing is recorded when it can't be told

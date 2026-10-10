@@ -429,7 +429,7 @@ public static class SpellEffectFormatter
 
     // The sibling EndCast% (Abil 164) chance on the same formula — the
     // percentage the EndCast chain fires. 0 when absent.
-    private static int EndCastPercent(in SpellFormulaInput formula)
+    internal static int EndCastPercent(in SpellFormulaInput formula)
     {
         foreach (SpellAbility a in formula.Abilities)
             if (a.Code == EndCastPercentCode) return a.Value;
