@@ -1950,6 +1950,12 @@ public sealed class AppServices
     // override so gear-set applies don't clobber the location item.
     public Game.Inventory.LocationEquipManager LocationEquip { get; private set; } = null!;
 
+    // Wears the carried item that negates a room's own spell (the phoenix feather
+    // against magma heat) before the character steps into the room and gives the
+    // slot back once no such room is near, through the same per-slot override the
+    // location rules use.
+    public Game.Inventory.RoomSpellCounterWear CounterWear { get; private set; } = null!;
+
     // Casting-spell profiles (Settings → Combat) — the named, quick-swap snapshots
     // of the Combat tab's spell slots. Owns the list, the active pointer, CRUD, and
     // the @profile / toolbar / chip swap, overlaying a profile's spells onto the
@@ -4077,6 +4083,7 @@ public sealed class AppServices
         // (same rule as level / wealth / class above).
         Movement.InventoryReadyProbe = () => Inventory.IsLoaded;
         Movement.ItemCarriedProbe = IsItemCarried;
+        Movement.NegatingItemUsableProbe = NegatingItemUsable;
         Movement.PartyShortOfItemProbe = IsPartyShortOfGateItem;
         Movement.StrengthProvider = () => Stats.HasParsed ? PlayerStats.Strength : (int?)null;
         Movement.PicklocksProvider = () => Stats.HasParsed ? PlayerStats.Picklocks : (int?)null;
@@ -6382,6 +6389,36 @@ public sealed class AppServices
         RoomTracker.StateChanged += t => LocationEquip.OnRoomChanged(t.NewRoom);
         Profile.ProfileLoaded += _ => LocationEquip.OnProfileSwapped();
 
+        // Room-spell counters: an item that negates a room's spell only works worn
+        // (GAME_MECHANICS "Room-spell hazard shape 1"), so it goes on before the
+        // step into such a room and the slot goes back to the gear sets afterwards.
+        // After the location rules on a room change, so a rule that wears the same
+        // piece has claimed it first and nothing is sent twice.
+        CounterWear = new Game.Inventory.RoomSpellCounterWear(
+            equipment: Equipment,
+            coordinator: MovementCoordinator,
+            enabled: () => ReadSection<Models.Profile.PeriodicDamageRoomSpellSettings>(
+                Profile.Current, Models.Profile.PeriodicDamageRoomSpellSettings.TabKey).WearCounterBeforeEntering,
+            roomOf: key => RoomGraph.GetRoom(key),
+            negatorsOf: spell => RoomHazards.HazardForSpell(spell)?.NegatingItems ?? Array.Empty<int>(),
+            describe: DescribeCounterItem,
+            isWorn: IsItemWorn,
+            isCarried: IsItemCarried,
+            wornIn: WornPieceIn,
+            spellName: SpellCatalog.GetSpellNameByNumber,
+            // A leader's drag moves a follower as an engine moves a walker.
+            beingMoved: () => MovementControl.IsActive || (PartyState.IsInParty && !PartyState.SelfIsLeader),
+            schedule: (delay, action) => ScheduleOnce(delay, action),
+            // A wear mid-fight draws *Combat Off*; the engine picks the fight up again.
+            gearCommandSent: () => Combat.NoteGearSwapInterrupt(),
+            log: Log);
+        RoomTracker.StateChanged += t =>
+        {
+            if (t.NewRoom is { } arrived && !Equals(arrived.Key, t.PreviousRoom?.Key))
+                CounterWear.OnArrived(arrived.Key);
+        };
+        Profile.ProfileLoaded += _ => CounterWear.Reset();
+
         // Combat profiles: a full-posture quick-swap. A switch overlays the profile's
         // spell/verb/room fields onto the live Combat section the engine re-reads each
         // round, writes the profile's whole Health section, and writes its weapons into
@@ -6501,7 +6538,9 @@ public sealed class AppServices
         PromptScanner.PromptObserved += _ => AlignmentCheck.OnPrompt();
         _equipWearOkSub = Router.Subscribe(Services.Patterns.KnownPatterns.UserEquipped, m =>
         {
-            if (m.Groups.Count > 0) Equipment.NoteEquipSucceeded(m.Groups[0]);
+            if (m.Groups.Count == 0) return;
+            Equipment.NoteEquipSucceeded(m.Groups[0]);
+            CounterWear.NoteWorn(m.Groups[0]);
         });
         // A refused wear / wield may be our alignment having moved: check it too.
         _equipWearFailSub = Router.Subscribe(
@@ -6509,6 +6548,7 @@ public sealed class AppServices
             {
                 LearnFromEvilOnlyRefusal(Equipment.NoteWearRefused());
                 AlignmentCheck.RequestVerify();
+                CounterWear.NoteWearRefused();
             });
         _equipWieldFailSub = Router.Subscribe(
             Services.Patterns.KnownPatterns.UserWieldFailed, _ =>
@@ -6520,7 +6560,11 @@ public sealed class AppServices
         // alignment: no learning, no alignment check.
         _equipCannotBeWornSub = Router.Subscribe(
             Services.Patterns.KnownPatterns.UserEquipCannotBeWorn,
-            m => Equipment.NoteCannotBeWorn(m.Groups.Count > 0 ? m.Groups[0] : null));
+            m =>
+            {
+                Equipment.NoteCannotBeWorn(m.Groups.Count > 0 ? m.Groups[0] : null);
+                CounterWear.NoteWearRefused();
+            });
         // A "no more room" block lasts only while every worn slot is taken.
         _wornPieceRemovedSubs = new[]
         {
@@ -7645,6 +7689,10 @@ public sealed class AppServices
         // move that skipped the ready check. Once per step either way.
         Walker.SetMoveReadyCheck(() =>
         {
+            // First of all: a counter for the next room's own spell goes on, and
+            // the step waits for it. A wear ends a sneak, so it has to be ahead of
+            // the `sn` below.
+            if (!CounterWear.ReadyToEnter(NextPlannedRoomForEquip(Walker.PeekNextPlannedDirection()))) return false;
             PreMoveGearOnce(ref _walkerPreMoveGearFor, Walker.PeekNextPlannedDirection());
             return Stealth.ReadyToMoveSneaking();
         });
@@ -8193,6 +8241,8 @@ public sealed class AppServices
             // A "rest up here" room holds the step until the rest is done.
             if (Health.HoldForRestHere()) return false;
             if (!LairDebuffHold.ReadyToEnter(LairEntryDebuffModeForNextStep())) return false;
+            // The next room's counter, ahead of the pre-move gear and the `sn`.
+            if (!CounterWear.ReadyToEnter(NextPlannedRoomForEquip(LoopRunner.PeekNextPlannedDirection()))) return false;
             PreMoveGearOnce(ref _loopPreMoveGearFor, LoopRunner.PeekNextPlannedDirection());
             return Stealth.ReadyToMoveSneaking();
         });
@@ -8458,6 +8508,9 @@ public sealed class AppServices
                 case Game.Map.MovementEngineState.Running: AutoEquip.OnMovementStarted(); break;
                 case Game.Map.MovementEngineState.Idle:    AutoEquip.OnMovementStopped(); break;
             }
+            // After the set revert above: a walk that ended clear of the rooms a
+            // worn counter is for gives its slot back to that set now.
+            if (!MovementControl.IsActive) CounterWear.OnMovementEnded(RoomTracker.State.CurrentRoom?.Key);
         };
         RoomTracker.StateChanged += t =>
         {
@@ -8510,6 +8563,15 @@ public sealed class AppServices
         //
         // Nobody pressed Pause, so the pause says what caused it: in the terminal, on
         // the Navigation window's hold chips, and in the bug report.
+        // A typed step into a room whose spell a carried item negates: the wear goes
+        // out here, ahead of the step's own bytes, as a typed step's `sn` does. Only
+        // a compass step names its room; any other move is countered on arrival.
+        RoomTracker.ManualMoveObserved += command =>
+        {
+            if (Game.Map.DirectionExtensions.TryFromToken(command, out Game.Map.Direction direction)
+                && NextPlannedRoomForEquip(direction) is { } next)
+                CounterWear.BeforeTypedStep(next);
+        };
         RoomTracker.ManualMoveObserved += command =>
         {
             if (!MovementControl.IsActive || MovementControl.IsUserPaused) return;
@@ -10062,6 +10124,7 @@ public sealed class AppServices
         AutoTrain.MasterSwitchOff = MasterSwitchOff("Auto-train");
         Cash.MasterSwitchOff = MasterSwitchOff("Bank and stash trips");
         LocationEquip.MasterSwitchOff = MasterSwitchOff("Location gear");
+        CounterWear.MasterSwitchOff = MasterSwitchOff("Room-spell counter");
         PathItemFloor.MasterSwitchOff = MasterSwitchOff("Route item pickup");
         ChestOpens.MasterSwitchOff = MasterSwitchOff("Chest open read");
         ChestOpens.RefuseOpen = name =>
@@ -10240,7 +10303,13 @@ public sealed class AppServices
         // raises the buff now; the per-item timer was never stamped by the skip, and
         // an own walk is left to its next approach hook.
         if (RoomTracker.State.CurrentRoom is { } hazardRoom)
+        {
             AutoHazardCounterProvisioner.OnArrivedInRoom(hazardRoom.Key);
+            // The same for a counter that has to be worn: put on if the room
+            // stood in needs it, given back if one worn before the switch went off
+            // is no longer needed here. Neither was done while it was off.
+            CounterWear.OnArrived(hazardRoom.Key);
+        }
         AilmentSync.ReevaluateWaits();
         PartyRest.ResyncAfterMasterSwitch();
         // A loop the last reconnect set aside, not restarted while the switch was
@@ -12284,6 +12353,42 @@ public sealed class AppServices
         return false;
     }
 
+    // A negating item is usable on a route when it is on, or when the client will
+    // put it on before the step (RoomSpellCounterWear.WillWear: the setting, the
+    // master switch, and whether this character can wear it). What a route is
+    // planned on and what the wear does are the same test.
+    private bool NegatingItemUsable(int itemId) => IsItemWorn(itemId) || CounterWear.WillWear(itemId);
+
+    // A room-spell counter as RoomSpellCounterWear weighs it, null for an item the
+    // game data has no wearable record of.
+    private Game.Inventory.RoomSpellCounterItem? DescribeCounterItem(int itemId) =>
+        ItemNames.GetName(itemId) is { Length: > 0 } name ? DescribeGear(itemId, name) : null;
+
+    // The piece worn in a slot now: what a counter going on there pushes out. For a
+    // paired slot (fingers, wrists) the first piece of the family.
+    private Game.Inventory.RoomSpellCounterItem? WornPieceIn(Models.Profile.EquipmentSlot slot)
+    {
+        foreach (Game.Inventory.EquippedItem e in Inventory.Snapshot.EquippedItems)
+            if (ResolveEquipItemSlot(e.Name) == slot)
+                return DescribeGear(ItemNames.FindByName(e.Name) ?? 0, e.Name);
+        return null;
+    }
+
+    private Game.Inventory.RoomSpellCounterItem? DescribeGear(int itemId, string name)
+    {
+        if (GameData.FindRowByName("Items", name) is not System.Text.Json.JsonElement row
+            || Game.Inventory.EquipmentSlotMap.SlotForItem(row) is not { } slot)
+            return null;
+        static int Int(System.Text.Json.JsonElement row, string field) =>
+            row.TryGetProperty(field, out System.Text.Json.JsonElement v) && v.TryGetInt32(out int n) ? n : 0;
+        // Before the stat screen is read the class and level aren't known, and an
+        // unknown build is not restricted (the rule the route gates follow): the
+        // game's own refusal settles it then.
+        bool canWear = !Stats.HasParsed || CanCharacterEquipItem(name);
+        return new Game.Inventory.RoomSpellCounterItem(
+            itemId, name, slot, Int(row, "ArmourClass"), Int(row, "DamageResist"), canWear);
+    }
+
     // Find the active set's Models.GameData.MessageRecord
     // for a spell — by Spells#N link first, then by name. Returns
     // null when the catalogue has no record for the spell.
@@ -13957,7 +14062,7 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(key)?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+            if (hazard.IsSatisfiedBy(IsItemCarried, NegatingItemUsable) && MovementFilter.HazardCounterProtects(hazard))
                 continue;                                         // player counters it → survives
             if (!hazard.IsSurvivableDamage) return false;         // an unprotected grave hazard
             sawUnprotected = true;
@@ -13979,7 +14084,7 @@ public sealed class AppServices
             int spell = RoomGraph.GetRoom(path[i])?.Spell ?? 0;
             if (spell <= 0) continue;
             if (RoomHazards.HazardForSpell(spell) is not { } hazard) continue;
-            if (hazard.IsSatisfiedBy(IsItemCarried) && MovementFilter.HazardCounterProtects(hazard))
+            if (hazard.IsSatisfiedBy(IsItemCarried, NegatingItemUsable) && MovementFilter.HazardCounterProtects(hazard))
                 continue;                                         // player survives it
             return i > 0 ? path[i - 1] : path[0];
         }

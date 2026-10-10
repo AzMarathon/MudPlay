@@ -430,14 +430,21 @@ public sealed class MovementFilter : IRoomFilter
         // carried changes that, so it doesn't wait for the inventory to be read.
         if (!HazardCounterProtects(hazard)) return true;
         if (!InventoryKnown || ItemCarriedProbe is not { } carries) return false;
-        if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries);
+        if (!_acquirableGateSuspended) return !hazard.IsSatisfiedBy(carries, NegatingItemUsableProbe);
         if (!_keepUncounteredHazards) return false;
 
         // Planning through gates with uncountered hazards kept: the room opens only
-        // when what is carried plus what the walk will obtain covers it.
+        // when what is carried plus what the walk will obtain covers it. An item
+        // the walk fetches is worn on the same terms as one already in the pack.
         IReadOnlyList<int> arranged = HazardProvisionProbe?.Invoke(exit.Target) ?? Array.Empty<int>();
-        return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id));
+        return !hazard.IsSatisfiedBy(id => carries(id) || arranged.Contains(id), NegatingItemUsableProbe);
     }
+
+    // Whether a carried item that negates a room's spell counts for a route: it
+    // works only while worn, so it counts when it is on or when the client will
+    // put it on before the step (Settings → Periodic Damage Room Spells, and not
+    // with the master switch off). Unset, every carried one counts.
+    public Func<int, bool>? NegatingItemUsableProbe { get; set; }
 
     // Whether holding the hazard's counter makes its rooms safe to route through.
     // Not on Crystal Lake, whose sea rooms teleport a boat's holder as well

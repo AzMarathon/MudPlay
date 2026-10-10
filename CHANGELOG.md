@@ -1,5 +1,16 @@
 # Version history
 
+## 3.168.0
+
+- A carried item that negates a room's spell is worn before you step in (phoenix feather, else magma amulet, against magma heat)
+- The step waits for the wear, three seconds at most
+- Typed steps get the wear ahead of them; a follower gets it on arrival
+- The usual piece, or the current set's, goes back once no such room is near
+- Routes no longer count a negating item you carry but won't have on
+- Settings → Periodic Damage Room Spells: a tick box for it, on by default
+- Off with the master switch
+- Bug report lists what was put on this way
+
 ## 3.167.0
 
 - Auto-All is a true master switch: off, nothing automatic acts

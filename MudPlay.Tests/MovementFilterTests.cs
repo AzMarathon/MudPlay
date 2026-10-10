@@ -1396,6 +1396,26 @@ public sealed class MovementFilterTests
         });
     }
 
+    // A negating item works only worn. Carried, it opens the room to a route when
+    // the client will put it on before the step, and not when that is switched off
+    // (the setting, the master switch) or the character can't wear it.
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void IsExitBlocked_Hazard_CarriedNegator_OpensTheRoomOnlyWhenItWillBeWorn(bool usable, bool blocked)
+    {
+        WithHazards(index =>
+        {
+            (_, MovementFilter filter) = NewPair();
+            filter.Hazards = index;
+            filter.RoomEntrySpellProbe = key => key == new RoomKey(1, 2) ? 700 : 0;
+            SetInventory(filter, 42);
+            filter.NegatingItemUsableProbe = id => id == 42 && usable;
+
+            Assert.Equal(blocked, filter.IsExitBlocked(PlainExitTo(new RoomKey(1, 2))));
+        });
+    }
+
     [Fact]
     public void IsExitBlocked_Hazard_BenignRoom_DoesNotBlock()
     {

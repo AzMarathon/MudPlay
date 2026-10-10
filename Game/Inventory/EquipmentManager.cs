@@ -79,7 +79,10 @@ public sealed class EquipmentManager
     // SKIPS these slots (BuildApplyCommands filters them) so a WhileMoving /
     // Bossing / rest trigger firing inside the area doesn't clobber the location
     // item. Released on area exit (ClearSlotOverride re-asserts the set's item).
-    private readonly HashSet<EquipmentSlot> _overriddenSlots = new();
+    // A slot can be held for more than one reason at once (a location rule and the
+    // room-spell counter both wanting the same piece on), so each slot keeps who
+    // holds it and goes back to the sets when the last of them lets go.
+    private readonly Dictionary<EquipmentSlot, HashSet<string>> _slotOwners = new();
 
     // ----- unwearable-slot blocks ----------------------------------------
     // A (set, slot) the live character can't wear the configured item in — either
@@ -419,13 +422,18 @@ public sealed class EquipmentManager
     // hold returns false and claims nothing (so the normal set item stays put).
     // Idempotent: re-owning an already-owned slot with the same worn item is a
     // no-op, which is what the per-room re-fire inside a same-named area wants.
-    public bool SetSlotOverride(string itemName)
+    //
+    // owner names who asked, for the log: a location rule, or the room-spell counter
+    // (RoomSpellCounterWear). urgent sends the wear through a sneak the guard is
+    // keeping: a counter left off costs the room's damage on every cast, which is
+    // worse than the sneak the wear ends.
+    public bool SetSlotOverride(string itemName, string owner = LocationOwner, bool urgent = false)
     {
         string name = itemName?.Trim() ?? "";
         if (name.Length == 0) return false;
         if (_resolveItemSlot?.Invoke(name) is not { } slot)
         {
-            _log?.Debug(LogCategory, $"location-equip: '{name}' is not wearable gear — ignored");
+            _log?.Debug(LogCategory, $"{owner}: '{name}' is not wearable gear — ignored");
             return false;
         }
 
@@ -436,64 +444,98 @@ public sealed class EquipmentManager
         bool carried = held is not null && held.Contains(name);
         if (!worn && !carried) return false;   // not available — don't own the slot
 
-        if (!worn && HoldGear($"override:{slot}", () => SetSlotOverride(name), $"location-equip wear of '{name}'"))
+        if (!worn && !urgent
+            && HoldGear($"override:{slot}:{owner}", () => SetSlotOverride(name, owner), $"{owner} wear of '{name}'"))
             return true;
-        bool newlyOwned = _overriddenSlots.Add(slot);
-        if (!worn)
+        if (!_slotOwners.TryGetValue(slot, out HashSet<string>? owners))
+            _slotOwners[slot] = owners = new HashSet<string>(StringComparer.Ordinal);
+        // Another owner's claim on the slot means its wear is already on the way (a
+        // location rule and the room-spell counter both wanting the feather in the
+        // volcano): the slot is shared, and the command isn't sent twice.
+        bool claimedByAnother = owners.Any(o => o != owner);
+        bool newlyOwned = owners.Add(owner);
+        if (!worn && !claimedByAnother)
         {
-            _log?.Info(LogCategory, $"location-equip: entering area — wearing '{name}' ({slot})");
+            _log?.Info(LogCategory, $"{Entering(owner)}wearing '{name}' ({slot})");
             _wire.Send($"{Verb(slot)} {name}");
         }
         else if (newlyOwned)
         {
-            _log?.Info(LogCategory, $"location-equip: '{name}' already worn — holding {slot}");
+            _log?.Info(LogCategory, worn
+                ? $"{owner}: '{name}' already worn — holding {slot}"
+                : $"{owner}: {slot} is already being dressed for another reason — holding it too");
         }
         return true;
     }
 
+    private const string LocationOwner = "location-equip";
+
+    // A location rule's lines say which edge of its area was crossed; another
+    // owner's own log line has already said why.
+    private static string Entering(string owner) =>
+        owner == LocationOwner ? "location-equip: entering area — " : $"{owner}: ";
+
+    private static string Leaving(string owner) =>
+        owner == LocationOwner ? "location-equip: exited area — " : $"{owner}: ";
+
     // Release the slot `itemName` fills and revert it to the active gear set's
     // item (re-asserted now, since set applies were skipping it while owned). If
-    // the current set leaves that slot bare, the location item is simply removed.
-    // No-op if the slot wasn't owned.
-    public void ClearSlotOverride(string itemName)
+    // the current set leaves that slot bare, the item is taken off, and otherwise,
+    // when given, goes on in its place: the piece the item displaced, for a
+    // character whose slot no set dresses. No-op if the slot wasn't owned.
+    public void ClearSlotOverride(string itemName, string owner = LocationOwner, string? otherwise = null)
     {
         string name = itemName?.Trim() ?? "";
         if (name.Length == 0) return;
         if (_resolveItemSlot?.Invoke(name) is not { } slot) return;
-        if (!_overriddenSlots.Contains(slot)) return;
+        if (!_slotOwners.TryGetValue(slot, out HashSet<string>? owners) || !owners.Contains(owner)) return;
         // Checked before the slot is released, so the redo still finds it owned.
-        if (HoldGear($"override:{slot}", () => ClearSlotOverride(name), $"location-equip revert of '{name}'")) return;
-        _overriddenSlots.Remove(slot);
+        if (HoldGear($"override:{slot}:{owner}", () => ClearSlotOverride(name, owner, otherwise), $"{owner} revert of '{name}'"))
+            return;
+        owners.Remove(owner);
+        // Still wanted by another owner: the slot stays as it is until that one lets go.
+        if (owners.Count > 0) return;
+        _slotOwners.Remove(slot);
 
-        // The location item is also what counters the hazard of the room we are in
-        // now (the rule's area ended, the lava didn't). The slot goes back to the
-        // gear sets, which hold it the same way until the hazard is behind us.
+        // The item is also what counters the hazard of the room we are in now (a
+        // rule's area ended, the lava didn't). The slot goes back to the gear sets,
+        // which hold it the same way until the hazard is behind us.
         if (_roomProtection?.Invoke() is { } protecting
             && protecting.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
             _log?.Info(LogCategory,
-                $"location-equip: exited area — '{name}' stays on, it protects you in this room");
+                $"{Leaving(owner)}'{name}' stays on, it protects you in this room");
             return;
         }
 
-        string? setItem = CurrentSetItemFor(slot);
+        string? setItem = CurrentSetItemFor(slot) ?? (string.IsNullOrWhiteSpace(otherwise) ? null : otherwise.Trim());
         if (!string.IsNullOrEmpty(setItem)
             && !string.Equals(setItem, name, StringComparison.OrdinalIgnoreCase))
         {
             _log?.Info(LogCategory,
-                $"location-equip: exited area — reverting {slot} to '{setItem}'");
+                $"{Leaving(owner)}reverting {slot} to '{setItem}'");
             _wire.Send($"{Verb(slot)} {setItem}");
         }
         else if (string.IsNullOrEmpty(setItem))
         {
-            _log?.Info(LogCategory, $"location-equip: exited area — removing '{name}' ({slot})");
+            _log?.Info(LogCategory, $"{Leaving(owner)}removing '{name}' ({slot})");
             _wire.Send($"rem {name}");
         }
     }
 
+    // Let go of the owner's claim on the slot `itemName` fills with nothing sent:
+    // the wear that claimed it was refused, or the item is no longer on.
+    public void DropSlotOverride(string itemName, string owner)
+    {
+        if (_resolveItemSlot?.Invoke(itemName?.Trim() ?? "") is not { } slot
+            || !_slotOwners.TryGetValue(slot, out HashSet<string>? owners)) return;
+        owners.Remove(owner);
+        if (owners.Count == 0) _slotOwners.Remove(slot);
+    }
+
     // Drop all location ownership without touching the wire — used on a profile
     // swap, where the new character's gear + rules are unrelated to the old.
-    public void ForgetSlotOverrides() => _overriddenSlots.Clear();
+    public void ForgetSlotOverrides() => _slotOwners.Clear();
 
     // The active gear set's configured item for a slot (null if no set is current
     // or the set doesn't dress that slot).
@@ -785,11 +827,11 @@ public sealed class EquipmentManager
     // the LocationEquipManager releases the slot and the set re-dresses it.
     private List<string> DropLocationOwnedSlots(EquipmentSet set, List<string> cmds)
     {
-        if (_overriddenSlots.Count == 0 || cmds.Count == 0) return cmds;
+        if (_slotOwners.Count == 0 || cmds.Count == 0) return cmds;
         var drop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (EquipmentSlotEntry e in set.Slots)
         {
-            if (!_overriddenSlots.Contains(e.Slot)) continue;
+            if (!_slotOwners.ContainsKey(e.Slot)) continue;
             string? name = e.ItemName?.Trim();
             if (!string.IsNullOrEmpty(name)) drop.Add($"{Verb(e.Slot)} {name}");
         }

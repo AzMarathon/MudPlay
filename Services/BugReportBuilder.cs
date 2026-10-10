@@ -723,6 +723,10 @@ public static class BugReportBuilder
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
         Kv(sb, "Room spells changed from the default (Periodic Damage Room Spells)", RoomSpellRestChoices(svc));
+        Kv(sb, "Wear a room-spell counter before stepping in (setting)",
+            ViewModels.Settings.PeriodicDamageRoomSpellsSectionViewModel.ReadOrDefault(svc.Profile.Current)
+                .WearCounterBeforeEntering ? "on" : "off");
+        Kv(sb, "Room-spell counters put on by the client", RoomSpellCountersWorn(svc));
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
         Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
@@ -2661,6 +2665,17 @@ public static class BugReportBuilder
         return svc.Health.RestDeferredByRoomSpell is not null
             ? $"{does}; bars resting: resting deferred (healing as set; the rest starts in the next room that isn't barred)"
             : $"{does}; bars resting: no rest would be started here (none is due)";
+    }
+
+    // What RoomSpellCounterWear has on and answers for: each item, the piece it
+    // took the place of and the spell it went on for, and a wear still unanswered.
+    private static string RoomSpellCountersWorn(AppServices svc)
+    {
+        List<string> parts = svc.CounterWear.OwnedSnapshot().Select(o =>
+            $"{o.Item} for {svc.SpellCatalog.GetSpellNameByNumber(o.Spell) ?? "room spell"} (#{o.Spell})"
+            + (o.Displaced is null ? ", slot was empty" : $", in place of {o.Displaced}")).ToList();
+        if (svc.CounterWear.PendingItem is { } pending) parts.Add($"wear of {pending} not answered yet");
+        return parts.Count == 0 ? "(none)" : string.Join("; ", parts);
     }
 
     // The room spells whose Bars resting box (Settings → Periodic Damage Room
