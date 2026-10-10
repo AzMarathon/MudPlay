@@ -933,6 +933,16 @@ public sealed partial class CombatManager : IDisposable
         _wireHeld = isHeld;
     }
 
+    // Whether a damage line is a room's own damage and not a fight's (the same probe
+    // CombatStateTracker and the round clock are given). Unset, every line counts.
+    private Func<string, bool>? _isNotCombatLine;
+
+    public void SetNotCombatLineProbe(Func<string, bool> isNotCombatLine)
+    {
+        ArgumentNullException.ThrowIfNull(isNotCombatLine);
+        _isNotCombatLine = isNotCombatLine;
+    }
+
     // The engine send gate's last hold cleared. An attack decided while it was up never
     // reached the wire, so re-decide the room now rather than waiting on the 5 s engage
     // check (report paradigm-20260930-085259: the train-stats screen's hold was still up
@@ -3220,9 +3230,13 @@ public sealed partial class CombatManager : IDisposable
     // Bare CR is preferred over `l` because the server's CR response is the
     // compact "where am I" payload — the Also Here list plus prompt without the
     // room description, exits block, and ground-item enumeration that `l` dumps.
-    private void OnCombatLine(MatchResult _)
+    private void OnCombatLine(MatchResult match)
     {
         if (!Fighting()) return;
+        // A room's own damage is nothing swinging at us: no re-attack to wake, no
+        // unseen monster to re-display the room for (CombatStateTracker's probe, the
+        // round clock's test).
+        if (_isNotCombatLine?.Invoke(match.Text) == true) return;
 
         // Resume-after-interrupt: a combat line arrived while our
         // auto-attack is off (we cast a buff/heal mid-round, got

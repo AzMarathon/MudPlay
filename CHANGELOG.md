@@ -1,5 +1,14 @@
 # Version history
 
+## 3.161.6
+
+- No rest or meditate is started in a room whose own spell damages you every tick (volcano heat, swamp poison, a river with no raft)
+- The walk carries on and the rest starts in the next room that doesn't hurt
+- *Heal (rest)* is cast standing while that rest is owed
+- With the room's counter worn or carried, resting is as normal
+- A room's own damage no longer puts you in combat, swaps gear, sends an Enter, or counts as a round in Round Totals
+- Bug report: a *Room spell and resting* line
+
 ## 3.161.5
 
 - A room's heat (*You are seared by the flames*) no longer counts as a combat round

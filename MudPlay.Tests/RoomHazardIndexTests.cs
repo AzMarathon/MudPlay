@@ -342,6 +342,39 @@ public sealed class RoomHazardIndexTests : IDisposable
         Assert.Equal(0, Assert.Single(h!.BuffCounters).LapseSpell);
     }
 
+    // "Countered now", the test behind resting in a hazard room: an item that negates
+    // the spell protects only on the body (the phoenix feather against magma heat,
+    // report paradigm-20261008-202210); a raft or a buff's source only has to be held.
+    [Fact]
+    public void NegatingItem_CountersOnlyWhileWorn()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(526),
+            """ [ { "Number": 526, "Abil-0": 1, "AbilVal-0": 0 } ] """,
+            """ [ { "Number": 487, "NegateSpell-0": 526 }, { "Number": 1000, "NegateSpell-0": 526 } ] """);
+
+        RoomHazardIndex.RoomHazard h = idx.HazardForSpell(526)!;
+        Assert.Equal(new[] { 487, 1000 }, h.WornCounters);
+        Assert.True(h.IsCounteredNow(worn: id => id == 1000, carried: _ => true));
+        Assert.False(h.IsCounteredNow(worn: _ => false, carried: id => id == 1000));   // in the pack: a route can count on it, the room still burns
+        Assert.True(h.IsSatisfiedBy(id => id == 1000));
+    }
+
+    [Fact]
+    public void HeldCounter_CountersWhileCarried()
+    {
+        RoomHazardIndex idx = NewIndex(
+            Room(753),
+            """ [ { "Number": 753, "Abil-0": 148, "AbilVal-0": 2750 }, { "Number": 754, "Abil-0": 1 } ] """,
+            """ [ { "Number": 690 } ] """,
+            """ [ { "Number": 2750, "Action": "failitem 690:message 2096:cast 754" } ] """);
+
+        RoomHazardIndex.RoomHazard h = idx.HazardForSpell(753)!;
+        Assert.Empty(h.WornCounters);
+        Assert.True(h.IsCounteredNow(worn: _ => false, carried: id => id == 690));
+        Assert.False(h.IsCounteredNow(worn: _ => false, carried: _ => false));
+    }
+
     [Fact]
     public void LayeredProtections_RequireOneFromEachGroup()
     {

@@ -54,6 +54,9 @@ public static class RoomSpellTeleportClassifier
         "checkskill", "flag", "test_tournament", "roomitem", "failroomitem", "clearitem",
     };
 
+    // RoomSpellDamageClassifier reads the same steps for what gates a room's damage.
+    internal static bool IsConditionStep(string verb) => ConditionVerbs.Contains(verb);
+
     // spellOf resolves a spell number to its record, textblock a TBInfo number to
     // its entry; either returns null for a number the set doesn't have. gap names
     // the first thing the walk couldn't read, or is null when it read everything;

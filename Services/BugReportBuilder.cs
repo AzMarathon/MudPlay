@@ -693,6 +693,9 @@ public static class BugReportBuilder
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
         Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
+        // No rest is started in a room whose own spell damages the character; a "why
+        // won't it rest" report turns on this line.
+        Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
         Kv(sb, "Clearing a see-hidden room (combat off)", svc.CombatTracker.SeeHiddenClearActive.ToString());
         Kv(sb, "Sneak broken by a see-hidden monster, not sneaking again yet", svc.CombatTracker.SneakBrokenBySeeHidden.ToString());
         Kv(sb, "Clearing after a failed sneak (combat off)", svc.CombatTracker.SneakFailClearActive.ToString());
@@ -2527,6 +2530,28 @@ public static class BugReportBuilder
 
     private static void Kv(StringBuilder sb, string key, string value)
         => sb.Append("- **").Append(key).Append("**: ").Append(value).Append('\n');
+
+    // The spell on the room we stand in, how the game data has it for damage, and
+    // what that is doing to the rest right now.
+    private static string RoomSpellRestLine(AppServices svc)
+    {
+        if (svc.RoomTracker.State.CurrentRoom is not { Spell: > 0 } here) return "(no room spell here, or the room isn't placed)";
+        string spell = $"{svc.SpellCatalog.GetSpellNameByNumber(here.Spell) ?? "room spell"} (#{here.Spell})";
+        switch (svc.RoomSpellDamage.ClassOf(here.Spell))
+        {
+            case Game.Map.RoomSpellDamage.None:
+                return $"{spell}: no damage in the game data";
+            case Game.Map.RoomSpellDamage.Conditional:
+                return $"{spell}: damages only on a condition the client doesn't check — rests as normal";
+            case Game.Map.RoomSpellDamage.OnARoll:
+                return $"{spell}: damages on a roll, not every tick — rests as normal";
+        }
+        if (svc.RoomSpellHurtingUs() is null)
+            return $"{spell}: damages on every tick, countered by what is worn or carried — rests as normal";
+        return svc.Health.RestDeferredByRoomSpell is not null
+            ? $"{spell}: in a damaging room: resting deferred (healing as set; the rest starts in the next room that doesn't hurt)"
+            : $"{spell}: in a damaging room: no rest would be started here (none is due)";
+    }
 
     // The item worn in a given inventory slot (e.g. "Weapon Hand"), or null when
     // that slot is empty / the loadout hasn't been parsed yet.

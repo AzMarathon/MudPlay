@@ -13,8 +13,16 @@ namespace MudPlay.Tests;
 // comes from the Monsters table (dark force, chaos storm and shadow breath here).
 public sealed class OffRoundDamageLinesTests
 {
-    private const int MagmaHeat = 526, MagmaExplosion = 944, ChaosStorm = 212;
+    internal const int MagmaHeat = 526, MagmaExplosion = 944, ChaosStorm = 212;
     private const int DarkForce = 225, ShadowBreath = 1011, BurnHits = 589;
+
+    // The rule as AppServices hands it to the round clock and the combat engines,
+    // for a character standing in a room with roomSpell (0: none, or not placed).
+    internal static Func<string, bool> ProbeIn(int roomSpell)
+    {
+        OffRoundDamageLines rule = Build();
+        return line => rule.IsOffRound(line, roomSpell);
+    }
 
     private static MessageRecord Record(int spell, string name, string caster, string target) => new(
         Id: $"T{spell}", Name: name, Flags: MessageFlags.None, RawFlagsHex: 0,

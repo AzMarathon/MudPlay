@@ -89,14 +89,33 @@ public sealed class RoomHazardIndex
         // never offered that — the crosser can only pass it with a counter in hand.
         public bool IsSurvivableDamage { get; }
 
+        // The counters that work by negating the spell (an item's NegateSpell list):
+        // the phoenix feather, the fish-helm, the swamp boots. One of these protects
+        // only while it is worn (GAME_MECHANICS "Room-spell hazard shape 1"); the
+        // others (a raft, a buff's source) only have to be carried.
+        public IReadOnlyList<int> WornCounters { get; }
+
         public RoomHazard(
             IReadOnlyList<IReadOnlyList<int>> groups,
             IReadOnlyList<BuffCounter>? buffCounters = null,
-            bool isSurvivableDamage = false)
+            bool isSurvivableDamage = false,
+            IReadOnlyList<int>? wornCounters = null)
         {
             RequirementGroups = groups;
             BuffCounters = buffCounters ?? Array.Empty<BuffCounter>();
             IsSurvivableDamage = isSurvivableDamage;
+            WornCounters = wornCounters ?? Array.Empty<int>();
+        }
+
+        // True when the hazard does nothing to this character as things stand: every
+        // group has a counter in effect, a negating item on the body or any other in
+        // the pack. Stricter than IsSatisfiedBy, which asks what a route can be
+        // planned on (a feather in the pack can be put on when the walk gets there).
+        public bool IsCounteredNow(Func<int, bool> worn, Func<int, bool> carried)
+        {
+            ArgumentNullException.ThrowIfNull(worn);
+            ArgumentNullException.ThrowIfNull(carried);
+            return RequirementGroups.All(g => g.Any(id => WornCounters.Contains(id) ? worn(id) : carried(id)));
         }
 
         // Every distinct protecting item across all groups — the set the route
@@ -240,9 +259,9 @@ public sealed class RoomHazardIndex
         List<BuffCounter> buffCounters = new();
 
         // Damage / death-timer path: any item negating any chain member protects.
+        List<int> negators = new();
         if (damaging)
         {
-            List<int> negators = new();
             foreach (int member in chain)
             {
                 if (!negatorsBySpell.TryGetValue(member, out List<int>? items)) continue;
@@ -264,7 +283,7 @@ public sealed class RoomHazardIndex
         if (!harmful || groups.Count == 0) return null;
 
         bool survivable = IsSurvivableHazardDamage(rootSpell, spellAbils, tbActions);
-        return new RoomHazard(groups, buffCounters, survivable);
+        return new RoomHazard(groups, buffCounters, survivable, negators);
     }
 
     // Classify a room-entry hazard's unprotected outcome as survivable damage or

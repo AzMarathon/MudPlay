@@ -4970,6 +4970,182 @@ public sealed class HealthManagerTests
         Assert.Contains("HP", hpAssert.Value.Reason);
     }
 
+    // ----- a room whose own spell does damage (user, 2026-10-09) -----
+    // "we should heal but not actively try to rest in a room like this": the game
+    // re-casts the room's spell every six seconds and each hit breaks the rest.
+
+    private const string MagmaHeat = "magma heat (#526)";
+
+    private static List<string> InfoLines(Harness h)
+    {
+        List<string> lines = new();
+        h.Log.EntryAdded += e => { if (e.Severity == LogSeverity.Info) lines.Add(e.Message); };
+        return lines;
+    }
+
+    [Fact]
+    public void DamagingRoom_RestDue_NoHoldNoRest_AndSaidOncePerRoom()
+    {
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+
+        h.SetPrompt(hp: 30, maxHp: 100, ma: 10, maxMa: 100);   // both under their rest triggers
+        h.Health.Evaluate();
+
+        Assert.False(h.HealthGateHeld);                         // movement isn't held: the walk carries on out
+        Assert.False(h.ManaGateHeld);
+        Assert.Empty(h.SentLines);                              // no rest, no meditate
+        Assert.Equal(MagmaHeat, h.Health.RestDeferredByRoomSpell);
+        Assert.True(h.Health.HpRestDeferredByRoomSpell);
+
+        // Standing idle while the room keeps hitting: every prompt asks again, and
+        // nothing is tried, broken and tried again.
+        for (int hp = 29; hp > 20; hp--)
+        {
+            h.State.Hp = hp;
+            h.Health.Evaluate();
+        }
+        Assert.Empty(h.SentLines);
+        Assert.Single(info, l => l.Contains("does damage — not resting here"));
+    }
+
+    [Fact]
+    public void DamagingRoom_TheRestStartsInTheNextRoomThatDoesNotHurt()
+    {
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.False(h.HealthGateHeld);
+
+        // Another damaging room: still nothing, and it says so for this room too.
+        h.Health.NoteRoomChanged();
+        Assert.False(h.HealthGateHeld);
+        Assert.Equal(2, info.Count(l => l.Contains("does damage — not resting here")));
+
+        // Out of the heat. Only the room changed; no prompt did.
+        hurting = null;
+        h.Health.NoteRoomChanged();
+
+        Assert.True(h.HealthGateHeld);
+        Assert.Contains("rest", h.SentLines);
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.Single(info, l => l.Contains("the rest put off in a damaging room starts here"));
+    }
+
+    [Fact]
+    public void DamagingRoom_HealedBackAboveTheTrigger_NothingIsOwed()
+    {
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        List<string> info = InfoLines(h);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+
+        h.State.Hp = 90;                                        // the heals kept up
+        h.Health.Evaluate();
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);
+
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        Assert.False(h.HealthGateHeld);
+        Assert.DoesNotContain(info, l => l.Contains("starts here"));
+    }
+
+    [Fact]
+    public void DamagingRoom_ReleasesARestAlreadyHeld()
+    {
+        // Resting in the volcano with the feather on; the feather comes off.
+        using Harness h = new();
+        string? hurting = null;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.True(h.HealthGateHeld);
+
+        hurting = MagmaHeat;
+        h.Health.Evaluate();
+        Assert.False(h.HealthGateHeld);
+    }
+
+    [Fact]
+    public void DamagingRoom_NoDowntimeRestEither()
+    {
+        // The leader lies down in the volcano: a follower above its own floor would
+        // top off beside it anywhere else.
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => { },
+            requestPartyOk: () => { },
+            isLeaderResting: () => true);
+        List<string> info = InfoLines(h);
+
+        h.SetPrompt(hp: 150, maxHp: 200);
+
+        Assert.Empty(h.SentLines);
+        Assert.Single(info, l => l.Contains("the leader is resting, but this room's magma heat (#526) does damage"));
+    }
+
+    [Fact]
+    public void DamagingRoom_WinsOverRestUpHere()
+    {
+        using Harness h = new();
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.RestHere = (true, true);
+        h.SetPrompt(hp: 80, maxHp: 100, ma: 80, maxMa: 100);
+
+        Assert.False(h.Health.HoldForRestHere());
+    }
+
+    [Fact]
+    public void DamagingRoom_FollowerSendsNoWait()
+    {
+        // No hold means no @wait: the follower goes on with the leader and asks in
+        // the next room that doesn't hurt.
+        using Harness h = new();
+        string? hurting = MagmaHeat;
+        int waits = 0;
+        h.Health.SetRoomSpellDamageProbe(() => hurting);
+        h.Health.SetPartyRoleSync(
+            isPartyFollower: () => true,
+            requestPartyWait: () => waits++,
+            requestPartyOk: () => { },
+            isSelfPoisoned: () => false);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+        Assert.Equal(0, waits);
+
+        hurting = null;
+        h.Health.NoteRoomChanged();
+        Assert.Equal(1, waits);
+    }
+
+    [Theory]
+    [InlineData(false, false)]   // Auto-Rest off
+    [InlineData(true, true)]     // Sprint mode / a loop's do-not-rest room
+    public void DamagingRoom_NoRestWasComingAnyway_NothingIsDeferred(bool restEnabled, bool skipRestHere)
+    {
+        // "Deferred for the room" turns the rest-time heal on while standing. With
+        // resting ruled out by the user's own settings there is no rest to stand in for.
+        using Harness h = new();
+        h.RestEnabled = restEnabled;
+        h.SkipRestHere = skipRestHere;
+        h.Health.SetRoomSpellDamageProbe(() => MagmaHeat);
+        h.SetPrompt(hp: 30, maxHp: 100);
+        h.Health.Evaluate();
+
+        Assert.Null(h.Health.RestDeferredByRoomSpell);
+        Assert.False(h.Health.HpRestDeferredByRoomSpell);
+    }
+
     // ----- "do not rest in this room" (per-waypoint) -----------------
 
     [Fact]

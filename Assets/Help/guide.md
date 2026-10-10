@@ -1035,6 +1035,18 @@ Healing and resting are two switches. **Auto-Heal** casts your heal and cure spe
 
 This is automatic and needs no toggle — it's the only thing that reaches through an off Auto-Combat, and only to escape the sit-there-and-die deadlock; a healthy character just walks past monsters as before.
 
+**No resting in a room that hurts.** Some rooms damage you every six seconds for as long as you stand in them: the volcano's heat, a swamp's poison, a river without a raft, the frozen north without furs. Every hit breaks a rest, so resting there recovers nothing. In such a room MudPlay does not rest or meditate, even below *rest if below*:
+
+- A walk, a loop or a followed leader **carries on**, and the rest starts in the **next room that doesn't hurt**. Nothing holds the walk in the damaging room, and a follower sends no `@wait` there.
+- **Healing goes on.** The *Heal (rest)* spell is normally cast only while resting; while a rest is owed in such a room it is cast standing instead, at the same threshold and mana floor. Your combat and emergency heals work as always.
+- A character with nothing moving it **stands and heals**. It is not walked anywhere.
+- **Wearing or carrying the room's counter makes it an ordinary room**: with the phoenix feather on in the volcano, or a raft in the pack on the river, you rest as normal. An item that negates the room's spell has to be *worn*.
+- A loop room flagged *rest up here* and a Rest-up event give way to it too.
+
+Only rooms that hurt on every tick count. A room that hurts on a roll now and then (the fungus caves, the Great Pyramid's traps), or only some characters (the white forest burns the evil-aligned), is rested in as before. The program log says once per room that a rest is being put off and why, and where it finally starts.
+
+**A room's own damage is not a fight.** A line such as *You are seared by the flames for 46 damage!* doesn't put you in combat, doesn't interrupt a rest in the client's bookkeeping, doesn't swap your gear to the fighting set, doesn't send the Enter that looks for an unseen attacker, and isn't a round in Round Totals.
+
 ## Casting priorities
 
 When more than one spell wants to fire, the caster follows the priority order on Settings → Spells — by default emergency heal, party heals, downed-ally rescue, self heals, curing, buffing, then debuffing — and won't cast if it would drop you below your mana floors. The one exception is **emergency heal**: it leads the order by default and ignores the mana floor entirely, spending whatever mana is left to save you (see Emergency heal, below).
@@ -1215,7 +1227,7 @@ Your gear lives in **six fixed sets**, each auto-equipped at a specific moment:
 
 You don't create sets, you fill them. Pick a set on the left, then either click **Update from live** (fills it from what you're wearing) or type items into the **Item** boxes on the slot grid — each box only suggests gear your character can actually wear in that slot, and a blank slot means *{no change}* (left as-is). Click **Enable** so automation may use the set, and **Equip Now** to wear the selected set at once. **Clear all** empties every slot of the selected set (weapons and alternates too), after a confirm — handy after copying a character. A ⚠ on a slot means the item picked there is one this character can't wear; it goes away as soon as the slot is emptied or re-picked, including by **Update from live** or **Clear all**.
 
-**Hazard protection is never swapped off.** Some rooms hurt you unless you are wearing their counter: the phoenix feather or magma amulet against magma heat in the volcano, for example. While you stand in such a room, or in a room next to one, a gear-set swap leaves that worn item alone. It doesn't remove it, and it doesn't wear the set's own piece over it; both slots of a ring or wrist pair are held if the counter is one of the pair. The rest of the set goes on as usual, and the Program Log says what was left on. The same goes for a Location rule that ends while you are still in the hazard. Once you are clear, the next set change dresses that slot normally. This only protects a counter you are already wearing: MudPlay does not put one on for you, so keep it in a set or a Location rule for the area.
+**Hazard protection is never swapped off.** Some rooms hurt you unless you are wearing their counter: the phoenix feather or magma amulet against magma heat in the volcano, for example. While you stand in such a room, or in a room next to one, a gear-set swap leaves that worn item alone. It doesn't remove it, and it doesn't wear the set's own piece over it; both slots of a ring or wrist pair are held if the counter is one of the pair. The rest of the set goes on as usual, and the Program Log says what was left on. The same goes for a Location rule that ends while you are still in the hazard. Once you are clear, the next set change dresses that slot normally. This only protects a counter you are already wearing: MudPlay does not put one on for you, so keep it in a set or a Location rule for the area. Without it on, MudPlay also won't rest in those rooms (see *No resting in a room that hurts* under Health).
 
 **Per-set behavior options.** Below the set list is a small options area that changes with the set you've selected. Select a **Pre-rest** set to see the **"Don't swap to default upon entering combat"** checkbox (per-character); select the **While Moving** set to see its **"Swap to default before entering lairs"** checkbox and its **"Also when moving by hand"** option with the seconds-without-a-move delay (both described above). Other sets show nothing there.
 
@@ -3594,12 +3606,12 @@ Only Default-set items you actually **have** (worn or carried) count — an item
 ### Rest if below (HP / MA)
 
 **Default:** HP 60%, Mana 30%
-**What it does:** The trigger for auto-resting. Once a pool drops to or below this, MudPlay pauses movement and starts resting the moment combat ends (never mid-fight).
+**What it does:** The trigger for auto-resting. Once a pool drops to or below this, MudPlay pauses movement and starts resting the moment combat ends (never mid-fight). Not in a room whose own damage would break the rest: there it carries on and rests in the next room that doesn't hurt (see *No resting in a room that hurts* under Health).
 
 ### Heal (rest)
 
 **Default:** 80%
-**What it does:** While actually resting, cast the Minor heal spell if HP is still below this — a way to speed along recovery rather than waiting on the passive rest tick alone.
+**What it does:** While actually resting, cast the Minor heal spell if HP is still below this — a way to speed along recovery rather than waiting on the passive rest tick alone. In a room whose own damage keeps a due rest from starting (see *No resting in a room that hurts* under Health), it is cast standing instead.
 
 ### Minor heal (combat) / Major heal (combat)
 
