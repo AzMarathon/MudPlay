@@ -9868,6 +9868,8 @@ public sealed class AppServices
 
         AutoModeController.DescribeInFlight = DescribeInFlightForMasterSwitch;
         AutoModeController.KillSwitchToggled += OnMasterSwitchChanged;
+        AutoModeController.ResetByProfileLoad += OnMasterSwitchResetByProfileLoad;
+        SneakGuard.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
     }
 
     // What the master switch is about to stop or hold, for its one log line.
@@ -9888,6 +9890,20 @@ public sealed class AppServices
         return parts.Count == 0 ? "Nothing was in flight." : "In flight: " + string.Join("; ", parts) + ".";
     }
 
+    // The room a post-fight collect was cancelled in as the master switch went
+    // off; null when none was.
+    private Game.Map.RoomKey? _collectOwedInRoom;
+
+    // A profile load cleared a switch that was off. Only the freeze and the parked
+    // holds are let go: the rest of the switch-on work re-runs engines and talks
+    // to the party, and this arrives in the middle of the load, with half the
+    // services still holding the last character's state.
+    private void OnMasterSwitchResetByProfileLoad()
+    {
+        _collectOwedInRoom = null;
+        MovementControl.ReleaseFromAutoAll();
+    }
+
     // The master switch changed. Off: freeze movement and park the holds, then
     // drop what would otherwise go on sending by itself. On: put back every hold
     // still owed and re-run the engines that derive one from current state, all
@@ -9901,22 +9917,37 @@ public sealed class AppServices
             // goes quiet.
             PartyRest.ReleaseForMasterSwitch();
             MovementControl.SuspendForAutoAll();
-            // Auto Sneak now reads off, so the sneak hold would lift and send
-            // everything it was keeping back.
-            SneakGuard.Reset();
-            // These keep sending on their own timers once started.
-            AllyDropped.Clear("master switch off");
-            PartyComeback.Cancel("master switch off");
+            // Each thing ended here is either held where it stands or put back
+            // when the switch comes on. Held: the sneak hold's queue (SneakGuard
+            // stops re-checking) and a comeback recovery (its walk freezes, its
+            // timers wait). Put back: a downed ally's rescue, whose aid and
+            // @health poll would go on by themselves, and a collect put off until
+            // the fight ends, which would go out when it does.
+            AllyDropped.HoldForMasterSwitch();
+            // A PvP fight is ended outright. An Enemy still in the room when the
+            // switch is back on draws the response afresh from the roster.
             if (PvpFight.IsActive) PvpFight.Stop("the master switch went off");
-            // A collect put off until the fight ends would go out when it does.
-            Cash.CancelDeferredCollect("master switch off");
-            AutoGetItems.CancelDeferredCollect("master switch off");
+            bool collectOwed = Cash.CancelDeferredCollect("master switch off");
+            collectOwed |= AutoGetItems.CancelDeferredCollect("master switch off");
+            _collectOwedInRoom = collectOwed ? RoomTracker.State.CurrentRoom?.Key : null;
             ReevaluateEnginesForMasterSwitch();
             return;
         }
 
         MovementControl.RestoreHoldsBeforeAutoAllRelease();
         ReevaluateEnginesForMasterSwitch();
+        AllyDropped.ResumeOwedRescues();
+        PartyComeback.SettleAfterMasterSwitch();
+        RemoteCommands.ReplayHeldComebacks();
+        // The collect cancelled on the way off: if we still stand in that room,
+        // show it once more, and the get engines take what is still on the floor.
+        if (_collectOwedInRoom is { } owedIn && RoomTracker.State.CurrentRoom?.Key == owedIn
+            && (ReadAutoModeFlag(d => d.AutoGetItems) || CashCollectionOn()))
+        {
+            Log.Info("AutoMode", "Master switch back on — showing the room again for the pickup it put off.");
+            _engineWireSend?.Invoke(new[] { (byte)'\r' });
+        }
+        _collectOwedInRoom = null;
         // A follower standing in a hazard room whose arrival was skipped while off
         // raises the buff now; the per-item timer was never stamped by the skip, and
         // an own walk is left to its next approach hook.

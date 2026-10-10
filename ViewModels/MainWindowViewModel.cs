@@ -930,6 +930,8 @@ public partial class MainWindowViewModel : ObservableObject
         AppServices.Current.Profile.ProfileLoaded += _ => ReconcileAutoModeToBase("profile load");
         AppServices.Current.AutoModeController.KillSwitchToggled += off =>
             Dispatcher.UIThread.Post(() => IsMasterSwitchOn = !off);
+        AppServices.Current.AutoModeController.ResetByProfileLoad += () =>
+            Dispatcher.UIThread.Post(() => IsMasterSwitchOn = true);
         AppServices.Current.Profile.ProfileLoaded += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileMutated += _ => SyncAutoEngineTogglesFromProfile();
         AppServices.Current.Profile.ProfileSaving  += _ => SyncAutoEngineTogglesFromProfile();
@@ -6406,11 +6408,28 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            // The Auto-All switch went on since: everything stays off, as asked.
+            // The master switch went off since: everything stays off, as asked. The
+            // switch remembered the toggles as the climb had left them, unticked,
+            // so the ones the climb owes back are handed to it and return when it
+            // is switched on, not as base modes and not never.
             if (AppServices.Current.AutoModeController.KillSwitchEngaged)
             {
+                AppServices.Current.AutoModeController.RememberForSwitchOn(new Models.Profile.AutoActionDefaults
+                {
+                    AutoCombat   = _climbTurnedOffCombat,
+                    AutoNuke     = _climbTurnedOffNuke,
+                    AutoHeal     = false,
+                    AutoRest     = _climbTurnedOffRest,
+                    AutoBless    = false,
+                    AutoLight    = _climbTurnedOffLight,
+                    AutoGetItems = _climbTurnedOffGetItems,
+                    AutoGetCash  = _climbTurnedOffGetCash,
+                    AutoSneak    = false,
+                    AutoHide     = _climbTurnedOffHide,
+                    AutoSearch   = _climbTurnedOffSearch,
+                });
                 AppServices.Current.Log.Info("AutoMode",
-                    "Pyramid run-through over with Auto-All engaged: the autos stay off.");
+                    "Pyramid run-through over with the master switch off: the autos stay off, and the ones the climb switched off come back with the switch.");
                 return;
             }
 

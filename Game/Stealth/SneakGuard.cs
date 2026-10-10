@@ -108,10 +108,17 @@ public sealed class SneakGuard
         return true;
     }
 
+    // The master switch (true = off).
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Re-check on every heartbeat and room change: announce a hold starting or
     // lifting, and on lifting flush the queue and raise Released.
     public void Poll()
     {
+        // With the master switch off Auto Sneak reads off, the hold would lift,
+        // and the lift would send everything held. Nothing is re-checked instead:
+        // the queue stays as it is and is dealt with once the switch is back on.
+        if (MasterSwitchOff?.Invoke() == true) return;
         SneakHold now = Current;
         if (now == _last) return;
         SneakHold was = _last;
@@ -131,9 +138,7 @@ public sealed class SneakGuard
         Released?.Invoke();
     }
 
-    // Drop anything queued — a new profile or a disconnect makes it stale, and so
-    // does the master switch going off: Auto Sneak then reads off, the hold would
-    // lift, and without this the lift would send everything held.
+    // Drop anything queued — a new profile or a disconnect makes it stale.
     public void Reset()
     {
         _queued.Clear();

@@ -142,18 +142,62 @@ public sealed class AutoModeControllerTests
         Assert.Empty(events);
     }
 
-    [Fact]
-    public void TurnOn_AfterAnOffWithEveryToggleOff_SwitchesOnTheBaseModes()
+    // "if i unticked every auto mode, then toggled off the master switch, then the
+    // master switch back on, only the master switch should come back on" (user,
+    // 2026-10-10): an off with nothing ticked remembers nothing ticked, and that is
+    // not the same as nothing being remembered.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TurnOn_AfterAnOffWithEveryToggleOff_OnlyTheSwitchComesBackOn(bool byButton)
     {
         ProfileService profile = BlankProfile();
         WriteAutoMode(profile, AllOff(), baseModes: Only(m => m.AutoHeal = true));
         AutoModeController controller = new(profile);
-        controller.TurnOff("test");
 
-        controller.TurnOn("test");
+        if (byButton) { controller.ToggleAll(); controller.ToggleAll(); }
+        else { controller.TurnOff("test"); controller.TurnOn("test"); }
 
         Assert.False(controller.KillSwitchEngaged);
-        Assert.True(ReadAutoMode(profile).AutoHeal);
+        Assert.True(ReadAutoMode(profile).SameAs(AllOff()));
+    }
+
+    // The pyramid climb unticks toggles for its first floors. An off / on during
+    // the climb gives back what was ticked then, never the base modes, and a
+    // climb that ends while the switch is off hands its toggles to the switch.
+    [Fact]
+    public void TurnOn_AcrossAClimbsUnticking_GivesBackWhatTheClimbOwes_NotBaseModes()
+    {
+        ProfileService profile = BlankProfile();
+        // Mid-climb: the climb has unticked Combat and Rest, Heal is still on.
+        WriteAutoMode(profile, Only(m => m.AutoHeal = true),
+            baseModes: Only(m => { m.AutoCombat = true; m.AutoRest = true; m.AutoNuke = true; }));
+        AutoModeController controller = new(profile);
+        controller.TurnOff("test");
+
+        // The climb ends while the switch is off.
+        controller.RememberForSwitchOn(Only(m => { m.AutoCombat = true; m.AutoRest = true; }));
+        controller.TurnOn("test");
+
+        AutoActionDefaults mode = ReadAutoMode(profile);
+        Assert.True(mode.AutoHeal);
+        Assert.True(mode.AutoCombat);
+        Assert.True(mode.AutoRest);
+        Assert.False(mode.AutoNuke);
+    }
+
+    [Fact]
+    public void RememberForSwitchOn_WithTheSwitchOn_DoesNothing()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, AllOff(), baseModes: AllOff());
+        AutoModeController controller = new(profile);
+
+        controller.RememberForSwitchOn(Only(m => m.AutoCombat = true));
+        controller.TurnOff("test");
+        controller.TurnOn("test");
+
+        Assert.False(ReadAutoMode(profile).AutoCombat);
     }
 
     [Fact]
@@ -286,12 +330,21 @@ public sealed class AutoModeControllerTests
         WriteAutoMode(profile, Only(m => m.AutoCombat = true));
         AutoModeController controller = new(profile);
         controller.ToggleAll();
-        List<bool> events = new();
-        controller.KillSwitchToggled += events.Add;
+        List<bool> switched = new();
+        controller.KillSwitchToggled += switched.Add;
+        int resets = 0;
+        controller.ResetByProfileLoad += () => resets++;
 
         controller.ResetSnapshot();
 
         Assert.False(controller.KillSwitchEngaged);
-        Assert.Equal(new[] { false }, events);
+        // Its own signal: the switch-on work (re-running engines, settling with the
+        // party) must not run in the middle of a profile load.
+        Assert.Equal(1, resets);
+        Assert.Empty(switched);
+
+        // And nothing is remembered: the next on falls back to base modes.
+        controller.ResetSnapshot();
+        Assert.Equal(1, resets);
     }
 }

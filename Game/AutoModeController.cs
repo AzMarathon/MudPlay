@@ -55,10 +55,15 @@ public sealed class AutoModeController
     private readonly object _skipLock = new();
     private readonly Dictionary<string, int> _skipped = new(StringComparer.Ordinal);
 
-    // Fires when the switch changes: true as it goes off, false as it comes back
-    // on. Also fired (false) by ResetSnapshot when a profile load clears a switch
-    // that was off, so nothing stays held with no switch left to release it.
+    // Fires when the switch is switched: true as it goes off, false as it comes
+    // back on.
     public event Action<bool>? KillSwitchToggled;
+
+    // Fires when a profile load clears a switch that was off (ResetSnapshot), so
+    // nothing stays frozen with no switch left to release it. Kept apart from
+    // KillSwitchToggled: that one's listeners re-run engines and settle with the
+    // party, which must not happen half-way through loading another character.
+    public event Action? ResetByProfileLoad;
 
     // Asked as the switch goes off: what was running that it stops or holds, for
     // the one log line that records the change. AppServices supplies it once the
@@ -124,7 +129,7 @@ public sealed class AutoModeController
         bool wasEngaged = _killEngaged;
         _snapshot = null;
         _killEngaged = false;
-        if (wasEngaged) KillSwitchToggled?.Invoke(false);
+        if (wasEngaged) ResetByProfileLoad?.Invoke();
     }
 
     // The button's press: off when on, on when off.
@@ -164,12 +169,15 @@ public sealed class AutoModeController
         KillSwitchToggled?.Invoke(true);
     }
 
-    // Switch on. Coming back from off, the remembered toggles return, along with
-    // any the user ticked by hand meanwhile. When that leaves nothing on (the
-    // switch went off with every toggle already off, or it was never off and the
-    // toggles are all off), the character's base modes are switched on instead, so
-    // an `@auto-all on` always starts the autos the user has set up (user,
-    // 2026-10-09). With the switch already on and a toggle on, nothing changes.
+    // Switch on. Coming back from off, exactly the toggles that were ticked when
+    // it went off return, along with any the user ticked by hand meanwhile. That
+    // can be none: "if i unticked every auto mode, then toggled off the master
+    // switch, then the master switch back on, only the master switch should come
+    // back on" (user, 2026-10-10). The character's base modes are switched on only
+    // when nothing is remembered at all: the switch was not off (as after a
+    // profile load) and no toggle is on, so an `@auto-all on` then starts the
+    // autos the user has set up (user, 2026-10-09). With the switch already on
+    // and a toggle on, nothing changes.
     public void TurnOn(string by = "user")
     {
         if (_profile.Current is not { } profile) return;
@@ -179,6 +187,7 @@ public sealed class AutoModeController
         bool wasEngaged = _killEngaged;
 
         bool changed = false;
+        string source = "remembered toggles";
         if (_snapshot is { } snap)
         {
             for (int i = 0; i < Wired.Length && i < snap.Length; i++)
@@ -188,13 +197,7 @@ public sealed class AutoModeController
                 changed = true;
             }
         }
-
-        bool anyOn = false;
-        foreach ((_, Func<AutoActionDefaults, bool> get, _) in Wired)
-            if (get(am)) { anyOn = true; break; }
-
-        string source = "remembered toggles";
-        if (!anyOn && general.AutoModeBase is { } baseModes)
+        else if (general.AutoModeBase is { } baseModes && !Wired.Any(w => w.Get(am)))
         {
             general.AutoMode = am = baseModes.Clone();
             changed = true;
@@ -221,6 +224,18 @@ public sealed class AutoModeController
         _log?.Log(LogSeverity.Info, LogCategory,
             $"Master switch ON ({by}). Toggles on ({source}): {on}. Skipped while off: {DescribeSkipped()}.");
         KillSwitchToggled?.Invoke(false);
+    }
+
+    // Something else had unticked these toggles for a while (the pyramid climb,
+    // for its first floors) and would be ticking them back now. With the switch
+    // off they stay unticked, and are remembered so they come back with it:
+    // otherwise an off / on across the end of a climb would lose them for good.
+    public void RememberForSwitchOn(AutoActionDefaults ticked)
+    {
+        ArgumentNullException.ThrowIfNull(ticked);
+        if (_snapshot is not { } snap) return;
+        for (int i = 0; i < Wired.Length && i < snap.Length; i++)
+            if (Wired[i].Get(ticked)) snap[i] = true;
     }
 
     // The Settings → General "re-enable on reconnect" boxes: switch each ticked

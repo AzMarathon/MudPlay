@@ -462,7 +462,13 @@ public sealed class RemoteCommandManager : IDisposable
             && !command.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
             && !IsRecordedWhileMasterSwitchOff(command)
             && SkippedForMasterSwitch(entry.Speaker, command))
+        {
+            // A stranded member asks once. Keep the latest ask from each, so it
+            // can be answered when the switch is back on (ReplayHeldComebacks).
+            if (command.Equals("@comeback", StringComparison.OrdinalIgnoreCase))
+                _heldComebacks[entry.Speaker] = entry;
             return;
+        }
 
         // @help is a pure query — describing a command isn't executing it — so it's
         // exempt from the suicide / reroll content guards below, which scan the args
@@ -621,6 +627,26 @@ public sealed class RemoteCommandManager : IDisposable
         _log?.Log(LogSeverity.Info, "RemoteCmd",
             $"Relaying {payload} back to {sender} on {channel} (&@ request).");
         SendLine(channel, sender, payload);
+    }
+
+    // The latest `@comeback` from each sender dropped for the master switch.
+    private readonly Dictionary<string, ChatLogEntry> _heldComebacks = new(StringComparer.OrdinalIgnoreCase);
+
+    // The master switch is back on: a member who asked to be come back for while
+    // it was off is still where they were left, and asks only once. Their ask is
+    // put through now, with every check a fresh one gets (the sender has to
+    // still be one we would go back for).
+    public void ReplayHeldComebacks()
+    {
+        if (_heldComebacks.Count == 0) return;
+        List<ChatLogEntry> held = _heldComebacks.Values.ToList();
+        _heldComebacks.Clear();
+        foreach (ChatLogEntry entry in held)
+        {
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Master switch back on — answering the {entry.Message} {entry.Speaker} sent while it was off.");
+            OnChatEntry(entry);
+        }
     }
 
     // `@wait` and `@ok` are not followed with the master switch off, but what a

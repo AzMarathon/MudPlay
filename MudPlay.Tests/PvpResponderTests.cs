@@ -39,6 +39,7 @@ public sealed class PvpResponderTests
 
         public bool MasterSwitchOff { get; set; }
         public List<string> SkippedForMasterSwitch { get; } = new();
+        public LogService ResponderLog { get; } = new();
 
         public bool HangUpWorks { get; set; } = true;
         public bool FleeRoomsWorks { get; set; } = true;
@@ -95,6 +96,7 @@ public sealed class PvpResponderTests
                 sendGang: Gang.Add,
                 roomName: () => "Town Square",
                 schedule: (delay, action) => Scheduled.Add((delay, action)),
+                log: ResponderLog,
                 now: () => Clock)
             {
                 IsMasterSwitchOff = () => MasterSwitchOff,
@@ -207,14 +209,23 @@ public sealed class PvpResponderTests
             Settings = new PvpSettings { Action = PvpAction.HangUp },
         };
         h.MarkEnemy("Bob");
+        int warnings = 0;
+        h.ResponderLog.EntryAdded += e => { if (e.Severity == LogSeverity.Warn) warnings++; };
         h.Feed("Also here: Bob.");
         Assert.Empty(h.Reports);
+
+        // A fight re-issues the room's list every round: the hang-up is asked for
+        // each time, but said to have been held once.
+        h.Feed("Also here: Bob.");
+        h.Feed("Also here: Bob.");
+        Assert.Equal(3, h.HangUps.Count);
+        Assert.Equal(1, warnings);
 
         h.MasterSwitchOff = false;
         h.HangUpWorks = true;
         h.Feed("Also here: Bob.");
 
-        Assert.Equal(2, h.HangUps.Count);
+        Assert.Equal(4, h.HangUps.Count);
         Assert.Contains("hanging up", Assert.Single(h.Reports));
     }
 

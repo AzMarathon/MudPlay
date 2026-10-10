@@ -138,6 +138,9 @@ public sealed class PvpResponder : IDisposable
     public Func<bool>? IsMasterSwitchOff { get; init; }
     public Action<string>? SkippedForMasterSwitch { get; init; }
 
+    // Players whose held hang-up has been logged since the switch went off.
+    private readonly HashSet<string> _heldWarned = new(StringComparer.OrdinalIgnoreCase);
+
     private void Respond(string given, bool attacked)
     {
         if (!_pvpEnabled() || _hangupPending) return;
@@ -160,13 +163,17 @@ public sealed class PvpResponder : IDisposable
         {
             if (action is PvpAction.HangUp or PvpAction.FleeThenHangUp)
             {
-                if (!HangUp(settings, why)) return;
+                // The room's list comes again every round of a fight. The hang-up
+                // is asked for each time (the option may have been ticked since),
+                // but said to have been held only once per player.
+                if (!HangUp(settings, why, warn: _heldWarned.Add(given))) return;
                 _answeredAt[given] = now;
                 Report($"{why}: hanging up (master switch off: no flee, no gang tell)");
             }
             else SkippedForMasterSwitch?.Invoke(why);
             return;
         }
+        _heldWarned.Clear();
         _answeredAt[given] = now;
 
         switch (action)
@@ -237,14 +244,14 @@ public sealed class PvpResponder : IDisposable
         return _fleeRooms(why, Math.Max(1, settings.RoomsToFlee), stayAway, onRoomsLanded);
     }
 
-    private bool HangUp(PvpSettings settings, string why)
+    private bool HangUp(PvpSettings settings, string why, bool warn = true)
     {
         _reconnect = settings.ReconnectAfterPvp
             ? (TimeSpan.FromMinutes(Math.Max(1, settings.ReconnectAfterPvpMinutes)), settings.ReconnectEntersRealm)
             : null;
         if (_hangUp(why)) return true;
         _reconnect = null;
-        _log?.Warn(LogCategory,
+        if (warn) _log?.Warn(LogCategory,
             $"{why}: the hang-up did not go out (hang-ups are disabled, the master switch is off without Allow hangup in all-off mode, or no exit command is set)");
         return false;
     }

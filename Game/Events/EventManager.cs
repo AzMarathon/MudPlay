@@ -248,7 +248,11 @@ public sealed class EventManager : IDisposable
         public ScheduledEvent Event { get; } = e;
         public EventResumePlan? Resume { get; } = resume;
         public int Depth { get; } = depth;
-        public DateTimeOffset StartedAt { get; } = startedAt;
+        // Moved forward by any time the run spent held by the master switch, so
+        // what is counted from it is time the event was actually running.
+        public DateTimeOffset StartedAt { get; set; } = startedAt;
+        // Since when the master switch has held this run; null while it runs.
+        public DateTimeOffset? HeldSince;
         public int Laps;
         public RoomKey? WalkTarget;
     }
@@ -699,8 +703,19 @@ public sealed class EventManager : IDisposable
         if (_run is not { } run) return;
         // An event already running when the master switch goes off is held, as
         // its walk or loop is: nothing here ends its action, so its Then (which
-        // starts an engine) waits for the switch to come back on.
-        if (IsMasterSwitchOff?.Invoke() == true) return;
+        // starts an engine) waits for the switch to come back on. Its clock is
+        // held too: a 30-second wait or a 20-minute loop gets the rest of its
+        // time afterwards, and does not end the moment the switch comes on.
+        if (IsMasterSwitchOff?.Invoke() == true)
+        {
+            run.HeldSince ??= Now();
+            return;
+        }
+        if (run.HeldSince is { } heldSince)
+        {
+            run.StartedAt += Now() - heldSince;
+            run.HeldSince = null;
+        }
         ScheduledEvent e = run.Event;
         TimeSpan elapsed = Now() - run.StartedAt;
         switch (e.ActionType)

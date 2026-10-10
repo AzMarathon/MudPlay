@@ -268,7 +268,14 @@ public sealed partial class AllyDroppedHandler : IDisposable
         // Raised whether or not the rescue is switched on: a listener only wants to
         // know one of ours went down.
         AllyDown?.Invoke(given);
-        if (!_isEnabled()) return;
+        if (!_isEnabled())
+        {
+            // Not rescued now, but not forgotten: if they are still down when the
+            // rescue is switched back on, it starts then (ResumeOwedRescues).
+            _owed[given] = name;
+            return;
+        }
+        _owed.Remove(given);
 
         // Deliberately NOT scoped to a party-heal loadout. `aid <name>` is a
         // universal command and, per the confirmed drop mechanics, aid alone
@@ -344,7 +351,38 @@ public sealed partial class AllyDroppedHandler : IDisposable
     {
         string given = GivenName(name);
         if (given.Length == 0) return;
+        _owed.Remove(given);
         Resolve(given, "ally left / died");
+    }
+
+    // Allies seen to drop whose rescue is owed: the drop came while the rescue
+    // was off, or the master switch ended a rescue under way. Given name → the
+    // name on the drop line. One comes off the list when they are seen to leave,
+    // die or rejoin the roster.
+    private readonly Dictionary<string, string> _owed = new(StringComparer.OrdinalIgnoreCase);
+
+    // The master switch is going off: end every rescue (its poll and aid would
+    // go on sending by themselves) but keep who was down.
+    public void HoldForMasterSwitch()
+    {
+        List<string> rescuing = _downed.Keys.ToList();
+        Clear("master switch off");
+        // Only this off-period's: a drop from an hour ago with Auto Heal unticked
+        // is not something to start aiding now.
+        _owed.Clear();
+        foreach (string given in rescuing) _owed[given] = given;
+    }
+
+    // The master switch is back on: start the rescue for everyone still owed
+    // one. A name that has left, died or rejoined meanwhile is off the list
+    // already; one who got up unseen costs an aid and a few @health asks before
+    // the rescue gives up.
+    public void ResumeOwedRescues()
+    {
+        List<string> names = _owed.Values.ToList();
+        _owed.Clear();
+        if (!_isEnabled()) return;
+        foreach (string name in names) HandleDropped(name);
     }
 
     // True when the dropped name is one of ours: a live roster member, a member
@@ -403,6 +441,7 @@ public sealed partial class AllyDroppedHandler : IDisposable
             if (item is not PartyMember m) continue;
             if (m.IsInvited) continue;
             if (string.IsNullOrEmpty(m.Name)) continue;
+            _owed.Remove(GivenName(m.Name));
             Resolve(GivenName(m.Name), "rejoined roster");
         }
     }
