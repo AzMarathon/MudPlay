@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.12**
+> **Version 3.161.13**
 > - Paradigm: the corpse is recovered on arriving in the death room, off that room's own display
 > - Paradigm: the next room's floor no longer marks a deathpile Missing; only the death room's display does
 > - Paradigm: Recover Now inside the room marks the pile Missing when its look shows no corpse

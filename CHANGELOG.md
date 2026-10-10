@@ -1,6 +1,6 @@
 # Version history
 
-## 3.161.12
+## 3.161.13
 
 - Paradigm: the corpse is recovered on arriving in the death room, off that room's own display
 - Paradigm: the next room's floor no longer marks a deathpile Missing; only the death room's display does
@@ -8,6 +8,12 @@
 - Gear handed back still counts for the latest death when its pile was marked Missing
 - A single spare of a worn item is recorded in the deathpile and recovered with it
 - The lit light and the keys are recorded in the deathpile and recovered with it; the light is not lit again
+
+## 3.161.8
+
+- Party window: a member's level is the one they state, no longer the level their exp could train to
+- MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
+- Party window: a member's exp line names the level their figure counts toward
 
 ## 3.161.7
 
