@@ -2082,6 +2082,14 @@ public sealed class HealthManagerTests
         public void PauseForRecovery(string reason) => PausedReason = reason;
         public void ResumeAfterRecovery(Game.Map.RoomKey k) => ResumedAtRoom = k;
         public void AbortFromRecoveryFailure(string _) { }
+
+        // Whether the resume after a flee said to carry on from where it landed.
+        public bool? CarriedOn { get; private set; }
+        public void ResumeAfterFlee(Game.Map.RoomKey k, bool carryOnFromHere = false)
+        {
+            CarriedOn = carryOnFromHere;
+            ResumedAtRoom = k;
+        }
     }
 
     private sealed class FleeHarness : IDisposable
@@ -2749,6 +2757,46 @@ public sealed class HealthManagerTests
         h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 52));
         Assert.Equal(2, h.Engine.SentBacktrackMoves.Count);
         Assert.Equal(new Game.Map.RoomKey(1, 52), h.Engine.ResumedAtRoom);
+    }
+
+    // Which runs tell the engine to carry on from where they landed (user,
+    // 2026-10-10): the ones that ran forward to get away from something. A
+    // hit-and-run or a failed backstab's run comes back for the monster, a player's
+    // is walked back after its stay-away, and nothing changes when running back.
+    [Theory]
+    [InlineData("monster", true, true)]
+    [InlineData("low-hp", true, true)]
+    [InlineData("hit-and-run", true, false)]
+    [InlineData("backstab", true, false)]
+    [InlineData("player", true, false)]
+    [InlineData("monster", false, false)]
+    [InlineData("low-hp", false, false)]
+    public void AfterARun_TheEngineIsToldWhetherToCarryOn(string run, bool forward, bool carriesOn)
+    {
+        using FleeHarness h = HitAndRunFlee();
+        h.Combat.RunDirection = forward ? Models.Profile.RunDirection.Forward : Models.Profile.RunDirection.Backward;
+        h.Engine!.PlannedForward.Add(Game.Map.Direction.E);
+
+        switch (run)
+        {
+            case "monster": h.Health.FleeFromMonster(FleeSight, () => true); break;
+            case "hit-and-run": h.Health.BackstabLanded(runNow: true); break;
+            case "backstab": h.Health.RunFromBackstabFailure(); break;
+            case "player": h.Health.FleeFromPlayer("Bob attacked us", rooms: 1, stayAway: TimeSpan.Zero); break;
+            default:
+                h.State.InCombat = true;
+                h.State.Hp = 30;                                     // under the 20% run trigger
+                break;
+        }
+        Assert.Single(h.Engine.SentBacktrackMoves);
+
+        h.HostileInRoom = false;
+        h.State.InCombat = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 51));       // landed
+        h.State.Hp = 200;                                            // and recovered
+
+        Assert.Equal(new Game.Map.RoomKey(1, 51), h.Engine.ResumedAtRoom);
+        Assert.Equal(carriesOn, h.Engine.CarriedOn);
     }
 
     // The run-if-below flee's own gate: with Auto-Heal and Auto-Rest both off the

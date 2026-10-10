@@ -497,15 +497,56 @@ public sealed class LoopRunner : IRecoverableEngine
 
     private bool _fleeHolding;
 
-    public void ResumeAfterFlee(RoomKey landedAt)
+    public void ResumeAfterFlee(RoomKey landedAt, bool carryOnFromHere = false)
     {
         _fleeHolding = false;
         _resumingAfterFlee = true;
+        // Set before the adoption: a run that did not stop ahead on the lap is
+        // still not walked back, it is re-planned from where it stopped.
+        _carryOnAfterFlee = carryOnFromHere;
+        if (carryOnFromHere) TakeStepsRunForwardAsWalked(landedAt);
         try { ResumeAfterRecovery(landedAt); }
-        finally { _resumingAfterFlee = false; }
+        finally
+        {
+            _resumingAfterFlee = false;
+            _carryOnAfterFlee = false;
+        }
     }
 
     private bool _resumingAfterFlee;
+    private bool _carryOnAfterFlee;
+
+    // A forward flee walked the lap's own next steps (PeekPlannedDirections). Take
+    // them as walked: the last becomes the step in flight with its move landed, so
+    // the resume advances past it and the lap goes on from the room the run stopped
+    // in (user, 2026-10-10), where walking back would only meet again what was run
+    // from. Nothing is adopted when that room is not ahead on this lap: the run was
+    // turned onto another exit, or ran over the lap's end.
+    private void TakeStepsRunForwardAsWalked(RoomKey landedAt)
+    {
+        if (_graph is null || State != LoopState.Paused || _circleStartRoom is not { } here) return;
+        for (int k = 0; k < _expandedSteps.Count; k++)
+        {
+            if (_expandedSteps[k] is not MoveLoopStep move)
+            {
+                // A flee sends moves only, so it cannot have crossed this step.
+                if (k >= _index) return;
+                continue;
+            }
+            if (_graph.GetRoom(here) is not { } room || !room.Exits.TryGetValue(move.Direction, out RoomExit exit)) return;
+            RoomKey from = here;
+            here = exit.Target;
+            if (k < _index || !here.Equals(landedAt)) continue;
+
+            _log?.Info("LoopRunner",
+                $"ResumeAfterFlee: the run went forward to {landedAt}, the room step {k + 1} leads to; carrying on from step {k + 2} (was at step {_index + 1})");
+            _index = k;
+            _stepInFlight = true;
+            _expectedMoveSource = from;
+            _expectedMoveTarget = landedAt;
+            return;
+        }
+    }
 
     // The room the loop stood in, with nothing in flight, when the recovery gate
     // took it to find out where we are (a resume with the tracker unsure). Null
@@ -604,7 +645,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // stopped. Re-planning restarted the loop at the nearest waypoint — for a
         // hit-and-run that walked away from the monster it had just backstabbed
         // instead of re-sneaking back in (report paradigm-20260929-221352).
-        if (_resumingAfterFlee && _expectedMoveTarget is { } fledFrom && StartFleeReturn(fledFrom, recoveredAnchor))
+        // Not after a forward run that is to carry on: it is re-planned from here.
+        if (_resumingAfterFlee && !_carryOnAfterFlee
+            && _expectedMoveTarget is { } fledFrom && StartFleeReturn(fledFrom, recoveredAnchor))
             return;
 
         // Desync: the gate recovered us to a real room that isn't the step's

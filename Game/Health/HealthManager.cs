@@ -804,6 +804,7 @@ public sealed class HealthManager : IDisposable
     // re-sneak (user, 2026-09-28).
     public bool IsGateFleeing => _fleeEngine is not null && _fleeFromGates;
     private bool _fleeFromGates;
+    private bool _fleeCarriesOn;   // the engine goes on from where this run lands (see TryFlee)
     private bool _deferredFleeFromGates;
 
     // The last confirmed room before the current one (RoomTracker history) — the
@@ -1340,8 +1341,9 @@ public sealed class HealthManager : IDisposable
                 _log?.Combat(LogCategory,
                     $"flee complete — resuming engine={_fleeEngine.Name} at {room} " +
                     $"(HP {_state.Hp}/{_state.MaxHp} > {hpRunTrigger}, MA {_state.Ma}/{_state.MaxMa} > {maRunTrigger})");
-                _fleeEngine.ResumeAfterFlee(room);
+                _fleeEngine.ResumeAfterFlee(room, _fleeCarriesOn);
                 _fleeEngine = null;
+                _fleeCarriesOn = false;
                 _refusedFleeMoves.Clear();
             }
         }
@@ -2216,6 +2218,12 @@ public sealed class HealthManager : IDisposable
         if (_fleeEngine is null) _refusedFleeMoves.Clear();   // a new run starts with every way out open
         _fleeEngine = engine;
         _fleeFromGates = fromGates;
+        // A run that went forward to get away from something (low HP or mana, a Flee
+        // monster) goes on from where it lands (user, 2026-10-10). A hit-and-run or a
+        // failed backstab's run comes back for the monster, and a player's is walked
+        // back after its stay-away, whichever way they ran.
+        _fleeCarriesOn = combat.RunDirection == Models.Profile.RunDirection.Forward
+            && (fromGates || stillWanted is not null);
         FleeStarted?.Invoke();
         _fleeQueue.Clear();
         foreach (Map.Direction d in steps) _fleeQueue.Enqueue(d);
@@ -2581,6 +2589,7 @@ public sealed class HealthManager : IDisposable
         _fleeLanded = false;
         _fleeFromRoom = null;
         _fleeFromGates = false;
+        _fleeCarriesOn = false;
         _fledThisCombat = false;
         _deferredFleeReason = null;
         _deferredFleeFromGates = false;

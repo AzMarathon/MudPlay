@@ -374,7 +374,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         PauseForRecovery(reason);
     }
 
-    public void ResumeAfterFlee(RoomKey landedAt)
+    // A walk re-plans to its destination from wherever the run landed, forward or
+    // back, so carryOnFromHere changes nothing here.
+    public void ResumeAfterFlee(RoomKey landedAt, bool carryOnFromHere = false)
     {
         _fleeHolding = false;
         ResumeAfterRecovery(landedAt);

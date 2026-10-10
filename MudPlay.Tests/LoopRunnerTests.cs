@@ -1433,6 +1433,42 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
     }
 
+    // A run that went forward along the lap and is to carry on (user, 2026-10-10):
+    // the steps it walked count as walked and the lap goes on from the room it
+    // stopped in. Walking back would only meet again what was run from.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]    // another gate is still up when the run lands
+    public void ForwardFleeResume_CarriesOnFromWhereTheRunLanded(bool gateStillUp)
+    {
+        Harness h = NewHarness(withWalker: true, wireRecovery: true);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(new Loop("ac", new[] { new RoomKey(1, 1), new RoomKey(1, 3) }));   // N, N, S, S
+        h.Tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.N, Direction.S }));
+        h.Drain();
+
+        h.Runner.PauseForFlee("a Flee monster");                     // seen in C as step 2 lands
+        h.Tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.S }));
+        Assert.Equal(new[] { Direction.S }, h.Runner.PeekPlannedDirections(1));
+        int sentBefore = h.Sent.Count;
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));                     // the run walked step 3 (S) itself
+        if (gateStillUp) h.Coordinator.AssertGate(MovementCoordinator.HealthRecoveryGate);
+        h.Runner.ResumeAfterFlee(new RoomKey(1, 2), carryOnFromHere: true);
+        h.Drain();
+        if (gateStillUp)
+        {
+            Assert.Equal(sentBefore, h.Sent.Count);
+            h.Coordinator.ClearGate(MovementCoordinator.HealthRecoveryGate);
+            h.Drain();
+        }
+
+        Assert.Equal(LoopState.Running, h.Runner.State);             // not Approaching: no walk back
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("s\r", Encoding.Latin1.GetString(h.Sent[^1]));  // step 4, B → A
+        Assert.DoesNotContain(h.Events, e => e.Kind == LoopEventKind.Failed);
+    }
+
     // A forward flee walks the loop's next steps. Asked in a room the loop came into
     // while paused (a fight there, or the flee itself pausing it as the move
     // confirms), the step that carried it in is still the one at the index: counted,
