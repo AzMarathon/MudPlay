@@ -23,6 +23,15 @@ public sealed class AutomaticWalkTeleportFilter : IRoomFilter
         _allowed = allowed;
     }
 
+    // The same rules with more teleports allowed: what a refused walk asks to find
+    // out which box on Settings → Teleports would open its route.
+    public AutomaticWalkTeleportFilter AlsoAllowing(IEnumerable<(RoomKey From, RoomKey To)> more)
+    {
+        HashSet<(RoomKey From, RoomKey To)> allowed = new(_allowed);
+        allowed.UnionWith(more);
+        return new AutomaticWalkTeleportFilter(_inner, allowed);
+    }
+
     public static bool IsTeleport(in RoomExit exit) =>
         exit.Hint == RoomExitHint.Teleport || exit.GatewayTeleport;
 

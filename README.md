@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.164.0**
+> **Version 3.166.0**
 > - New Settings tab **Periodic Damage Room Spells**: per room spell, whether it bars resting
 > - Each spell's record, damage, how it comes, what counters it, and its rooms as map links
 > - No rest or meditate in a barred room (by default: volcano heat, swamp poison, a river with no raft)
