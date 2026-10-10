@@ -147,9 +147,9 @@ public static class RoomSummonParser
             if (behindRoomItem.Count > 0)
                 leftOut?.Add(new RoomSummonLeftOut(threshold, behindRoomItem, NeedsRoomItem));
 
-            // A boss only one of which can be alive comes once per its regen however
-            // often the line is rolled, so every roll would be credited a kill that
-            // happens once. Lines with one are left out of estimates altogether
+            // There is never more than one of a one-at-a-time boss alive however many
+            // rooms roll its line, so crediting every roll would count kills that
+            // can't all happen. Lines with one are left out of estimates altogether
             // (user, 2026-10-09), the whole line with it.
             if (counted.Any(m => monster(m).OneAtATime))
             {
