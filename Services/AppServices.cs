@@ -6347,17 +6347,13 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ => CombatProfiles.EnsureSeeded();
         ProfileSwap = new Game.Remote.ProfileSwapHandler(RemoteCommands, CombatProfiles);
 
-        // Anchor each fight to the combat profile driving it: on the InCombat
-        // false→true edge, drop a Combat-channel line naming the active profile and
-        // its full config, so a combat-diagnostics log read pins which profile — and
-        // how it was configured — fought, without waiting for a swap. Gated on the
-        // Combat toggle (off in a normal session), so no per-engage noise; switches
-        // themselves already log at Info.
+        // Anchor each fight to the combat profile driving it, on the InCombat
+        // false→true edge, so a log read pins which profile fought and how it was
+        // configured without waiting for a swap.
         PlayerState.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName != nameof(Game.PlayerState.InCombat) || !PlayerState.InCombat) return;
-            if (Log.IsCombatEnabled && CombatProfiles.CurrentConfigLine() is { } cfg)
-                Log.Combat("CombatProfiles", "engaged — " + cfg);
+            if (e.PropertyName == nameof(Game.PlayerState.InCombat) && PlayerState.InCombat)
+                CombatProfiles.NoteCombatEngaged();
         };
 
         // Unwearable-slot blocks: keep the Equipment tab's block set in sync with

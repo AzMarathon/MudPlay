@@ -460,6 +460,60 @@ public sealed class CombatSpellProfileTests
         Assert.Equal(88, profile.CombatProfiles.Profiles[0].Health.RestMaxHp);
     }
 
+    // A caster's combat drops and re-engages on every cast: the full configuration
+    // is logged when it has changed, not on every engage (report
+    // paradigm-20261010-145330).
+    [Fact]
+    public void NoteCombatEngaged_LogsTheFullConfigurationOnlyWhenItChanges()
+    {
+        var profile = new CharacterProfile
+        {
+            CombatProfiles = new CombatProfileSettings
+            {
+                Profiles = { new CombatSpellProfile { Name = "Script" }, new CombatSpellProfile() },
+            },
+        };
+        profile.CombatProfiles.ActiveId = profile.CombatProfiles.Profiles[0].Id;
+        var log = new MudPlay.Services.LogService
+        {
+            Diagnostics = new MudPlay.Services.LogDiagnosticState { CombatDiagnostics = true },
+        };
+        var entries = new List<MudPlay.Services.LogEntry>();
+        log.EntryAdded += entries.Add;
+        var mgr = new CombatProfileManager(
+            profile: () => profile,
+            readCombat: () => new CombatSettings(),
+            writeCombat: _ => { },
+            readHealth: () => new HealthSettings(),
+            writeHealth: _ => { },
+            readSpells: () => new SpellsSettings(),
+            writeSpells: _ => { },
+            equipment: () => new EquipmentSettings(),
+            save: () => { },
+            log: log);
+        mgr.EnsureSeeded();
+        entries.Clear();
+
+        mgr.NoteCombatEngaged();
+        mgr.NoteCombatEngaged();
+        mgr.NoteCombatEngaged();
+
+        Assert.Equal(3, entries.Count);
+        Assert.Equal(MudPlay.Services.LogSeverity.Info, entries[0].Severity);
+        Assert.StartsWith("engaged — Combat profile 1 (Script): multi", entries[0].Message);
+        Assert.All(entries.GetRange(1, 2), e =>
+        {
+            Assert.Equal(MudPlay.Services.LogSeverity.Combat, e.Severity);
+            Assert.Equal("engaged — Combat profile 1 (Script), configured as last logged", e.Message);
+        });
+
+        profile.CombatProfiles.Profiles[0].NormalAttackSpell.SpellName = "nebo";
+        mgr.NoteCombatEngaged();
+
+        Assert.Equal(MudPlay.Services.LogSeverity.Info, entries[^1].Severity);
+        Assert.Contains("normal nebo", entries[^1].Message);
+    }
+
     [Fact]
     public void DescribeConfig_IncludesVerbs_Room_Weapons_AndHealth()
     {
