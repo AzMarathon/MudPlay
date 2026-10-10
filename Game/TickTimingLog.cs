@@ -63,17 +63,27 @@ public sealed class TickTimingLog : IDisposable
         Add(now, "round", $"{(seen ? "seen" : "projected")}  gap {gap}");
     }
 
-    // Damage on us that nobody dealt (a room's own spell, an effect paying out), which
-    // TickEngine leaves out of the round clock. Kept with its offset from the last
-    // round seen, since that offset is what shows which of the game's passes it rides.
+    // A damage line TickEngine left out of the round clock: a room's own spell, mostly.
+    // Kept with its offset from the last round seen, since that offset is what shows
+    // which of the game's passes it rides.
+    //
+    // A monster's on-hit effect is left out of the clock too, and comes with the hit
+    // that caused it: a line inside the round just seen is one of those, says nothing
+    // about any other pass, and would fill the record in a long fight. It gets no row.
+    // (A room spell that meets the round, once in half a minute, loses its row the same
+    // way: the next row's gap then spans two casts.)
     public void NoteDamageOffTheRound()
     {
         DateTimeOffset now = _clock();
+        if (_lastSeenRoundAt is { } seen && now - seen < WithTheRound) return;
         string gap = _lastOffRoundDamageAt is { } prev ? Seconds(now - prev) : "first";
         _lastOffRoundDamageAt = now;
-        string round = _lastSeenRoundAt is { } seen ? Seconds(now - seen) : "?";
-        Add(now, "damage", $"nobody dealt it, not a round  gap {gap}  round+{round}");
+        string round = _lastSeenRoundAt is { } last ? Seconds(now - last) : "?";
+        Add(now, "damage", $"off the round  gap {gap}  round+{round}");
     }
+
+    // TickEngine's own debounce for the lines of one round's burst.
+    private static readonly TimeSpan WithTheRound = TimeSpan.FromMilliseconds(250);
 
     private void OnPlayerStateChanged(object? sender, PropertyChangedEventArgs e)
     {

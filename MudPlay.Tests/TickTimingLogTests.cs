@@ -58,7 +58,7 @@ public sealed class TickTimingLogTests
     // Report paradigm-20261009-120757: the room's heat came every 6.05 s and showed
     // in the record as "round seen", which hid what it was.
     [Fact]
-    public void DamageNobodyDealt_IsRecordedAgainstTheLastSeenRound_AndIsNoRound()
+    public void DamageOffTheRound_IsRecordedAgainstTheLastSeenRound_AndIsNoRound()
     {
         Harness h = new();
         h.Log.NoteRound(seen: true);
@@ -69,9 +69,28 @@ public sealed class TickTimingLogTests
 
         string[] lines = h.Lines();
         Assert.Equal(3, lines.Length);
-        Assert.Contains("damage   nobody dealt it, not a round  gap first  round+0.977s", lines[1]);
-        Assert.Contains("damage   nobody dealt it, not a round  gap 6.043s  round+7.020s", lines[2]);
+        Assert.Contains("damage   off the round  gap first  round+0.977s", lines[1]);
+        Assert.Contains("damage   off the round  gap 6.043s  round+7.020s", lines[2]);
         Assert.Equal(TimeSpan.FromSeconds(7.02), h.Log.SinceLastSeenRound);
+    }
+
+    // An on-hit effect ("You are burned for 5 damage!") is left out of the round clock
+    // like a room's heat, but it comes with the hit that caused it. It is no other
+    // pass, and one a hit would fill the record.
+    [Fact]
+    public void DamageInsideTheRoundJustSeen_GetsNoRow()
+    {
+        Harness h = new();
+        h.Log.NoteRound(seen: true);
+        h.Advance(0.004);
+        h.Log.NoteDamageOffTheRound();
+        h.Advance(0.240);
+        h.Log.NoteDamageOffTheRound();
+        Assert.Single(h.Lines());
+
+        h.Advance(0.010);
+        h.Log.NoteDamageOffTheRound();
+        Assert.Contains("damage   off the round  gap first  round+0.254s", h.Lines()[1]);
     }
 
     [Fact]

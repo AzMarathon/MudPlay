@@ -26416,5 +26416,22 @@
     ],
     "ConfuseFumbleLine": "",
     "CastResponse": ""
+  },
+  {
+    "Id": "d02b7bdae8ff6c09",
+    "Name": "giant hellhound's death",
+    "Flags": "None",
+    "RawFlagsHex": 0,
+    "CasterMessage": "{null}",
+    "TargetMessage": "{null}",
+    "WitnessMessage": "The massive demonic beast stumbles and collapses!",
+    "AppliedMessage": "{null}",
+    "AppliedEndsWith": "{null}",
+    "Links": [
+      {
+        "Table": "Monsters",
+        "Number": 1250
+      }
+    ]
   }
 ]

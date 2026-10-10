@@ -3679,6 +3679,13 @@ public partial class MainWindowViewModel : ObservableObject
         // Attack observer — a manually-typed physical attack verb (a/aa/bash/smash/bs/…)
         // is a user override: the engine holds its own swing until the next round.
         if (typed) AppServices.Current.OutboundAttack.ObserveOutbound(data);
+        // Gear observer — a hand-typed eq / wear / wield / rem mid-fight arms a re-attack
+        // for the *Combat Off* it draws. The client's own gear commands come through
+        // here as well (the Equipment Manager, an item cast, corpse recovery), each with
+        // its own re-attack after the swap, so only a line no wrapped sender is
+        // sending counts as typed.
+        if (typed && !AppServices.Current.EngineGate.SendingClientCommand)
+            AppServices.Current.OutboundGear.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
         // command, not a paste.

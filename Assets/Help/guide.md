@@ -397,7 +397,7 @@ Click **Start estimating**, then **click the rooms** on the map to sketch the ci
 A small **Realm:** line under the headline notes which game-data realm is active — it never changes your kill rate, but it changes two things:
 
 - **How a lair respawns.** On **Stock** a lair room keeps one clock, restarted by every kill in it (its placed fixture's too), and the whole room comes back together **`Delay` to `Delay + 1` minutes after its last kill** — the estimate uses the middle of that window. Killing a room's fixture on every pass can hold its lair empty. On **Paradigm** each monster comes back on its own, **`(Delay − 1)` minutes + 30 s** after it was killed.
-- **How often a room's summon spell re-rolls** — Paradigm every combat round plus on entry; Stock on a slower 6-second medium tick plus on room change. A summon spell with a `nomonsters:` gate only fires while the room is empty, so it contributes a roll on a clear pass-through but nothing when you arrive to a full lair.
+- **How often a room's summon spell re-rolls** — on entry, then every 6 seconds while you stand there (about 6.05 s on Paradigm, measured; Stock's 6-second medium tick). It is the same timer a damaging room's heat or cold runs on, and it is a little slower than the 5-second combat round. A summon spell with a `nomonsters:` gate only fires while the room is empty, so it contributes a roll on a clear pass-through but nothing when you arrive to a full lair.
 
 Use it to compare two hunting circuits without walking either one.
 

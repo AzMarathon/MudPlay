@@ -178,10 +178,15 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         // fighting multiple mobs).
         _patternSubs.Add(router.Subscribe(KnownPatterns.UserHits, match =>
         {
-            if (IsDamageNobodyDealt(match.Text)) DamageOffTheRound?.Invoke();
+            if (_isOffRoundDamage(match.Text)) DamageOffTheRound?.Invoke();
             else RecordCombatTick();
         }));
-        _patternSubs.Add(router.Subscribe(KnownPatterns.MobHits,   _ => RecordCombatTick()));
+        // A line worded "The <thing> <verb> you for N damage!" matches the pattern
+        // above as well, which has already reported it if it is off the round.
+        _patternSubs.Add(router.Subscribe(KnownPatterns.MobHits, match =>
+        {
+            if (!_isOffRoundDamage(match.Text)) RecordCombatTick();
+        }));
         _patternSubs.Add(router.Subscribe(KnownPatterns.MobMisses, _ => RecordCombatTick()));
 
         _timer = new DispatcherTimer(DispatcherPriority.Background)
@@ -192,26 +197,29 @@ public sealed partial class TickEngine : ObservableObject, IDisposable
         _timer.Start();
     }
 
-    // Damage on us that no combatant dealt ("You are seared by the flames for 46
-    // damage!") is a room's own spell or an effect paying out, and the game runs
-    // those on its spell round, not the combat round (GAME_MECHANICS "Room-spell
-    // monster summons", the cadence bullets). The hit pattern matches the wording all
-    // the same, and read as a round it moved the round clock to wherever the line
-    // fell and handed the casting engines a new round one to four seconds into the
-    // old one: nine heals and buffs in 70 s drew `You have already cast a spell this
-    // round!`, each right behind a flames line (report paradigm-20261009-120757).
+    // Whether a damage line is no part of the combat round. A room's own spell is
+    // re-cast every second spell round (GAME_MECHANICS "Room-spell monster summons"),
+    // so its damage ("You are seared by the flames for 46 damage!") falls one to four
+    // seconds into the combat round in wording the hit pattern matches all the same.
+    // Read as a round it moved the round clock to wherever the line fell and handed
+    // the casting engines a new round inside the old one: nine heals and buffs in
+    // 70 s drew `You have already cast a spell this round!`, each right behind a
+    // flames line (report paradigm-20261009-120757).
     //
-    // A monster's on-hit effect is worded the same way ("You are burned for 5
-    // damage!") and does land on the round, but only behind the hit that caused it,
-    // which marks the round by itself. A round whose only line is worded this way is
-    // left to the projection.
-    private static bool IsDamageNobodyDealt(string line) =>
-        DamageLineAttributor.TryAttribute(line, Array.Empty<string>(), out DamageAttribution sides)
-        && sides.NoDealer
-        && sides.Target == DamageLineAttributor.Self;
+    // OffRoundDamageLines holds the rule. Until AppServices hands over the one built
+    // from the game data (SetOffRoundDamageProbe), the wording alone decides: damage
+    // on us with no dealer named is left out. That also leaves out the few monster
+    // attack spells worded that way, which the probe steps around.
+    private Func<string, bool> _isOffRoundDamage = OffRoundDamageLines.NobodyDealtIt;
 
-    // Raised for a damage line left out of the round clock (IsDamageNobodyDealt), so
-    // the tick timing record can show where it fell against the rounds.
+    public void SetOffRoundDamageProbe(Func<string, bool> isOffRoundDamage)
+    {
+        ArgumentNullException.ThrowIfNull(isOffRoundDamage);
+        _isOffRoundDamage = isOffRoundDamage;
+    }
+
+    // Raised for a damage line left out of the round clock, so the tick timing
+    // record can show where it fell against the rounds.
     public event Action? DamageOffTheRound;
 
     // Ensure the timer fallback has a combat-cycle anchor even when no generic
