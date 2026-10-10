@@ -1342,19 +1342,26 @@ public partial class MainWindowViewModel : ObservableObject
         // TerminalControl + ConversationWindow's input both call into the
         // dispatcher on KeyDown — without a sender bound, the call returns
         // false and the keystroke falls through to normal handling.
-        AppServices.Current.MacroDispatcher.SetSender(engineSend);
+        // What a macro, an event's Command action and a trigger's response send is a
+        // command the user set up, not one an engine decided: marked so, a gear
+        // command among them mid-fight gets the same re-attack a typed one does.
+        // (An alias expands a typed line and goes out as typed already; the Action
+        // menu's Equip entries apply a gear set through the Equipment Manager, which
+        // re-attacks after its own swap.)
+        Action<byte[]> userCommandSend = AppServices.Current.EngineGate.MarkUserCommands(engineSend);
+        AppServices.Current.MacroDispatcher.SetSender(userCommandSend);
 
         // Bind the same gate-wrapped wire path to the EventManager so
         // Command-action events route through SendUserInput like every
         // other engine.
-        AppServices.Current.Events.SetWireSender(engineSend);
+        AppServices.Current.Events.SetWireSender(userCommandSend);
 
         // Trigger engine subscribes to the LineExtractor for game-message
         // dispatch (chat + system-log subscriptions wired in its ctor) and
         // borrows the same wire sender so a fired trigger's Response goes
         // through the canonical SendUserInput path.
         AppServices.Current.Triggers.AttachLineExtractor(Lines);
-        AppServices.Current.Triggers.SetSender(engineSend);
+        AppServices.Current.Triggers.SetSender(userCommandSend);
 
         // Remote-command engine borrows the same wire-sender so a handler's
         // ctx.Reply(text) routes through SendUserInput exactly like a
@@ -3713,12 +3720,12 @@ public partial class MainWindowViewModel : ObservableObject
         // Attack observer — a manually-typed physical attack verb (a/aa/bash/smash/bs/…)
         // is a user override: the engine holds its own swing until the next round.
         if (typed) AppServices.Current.OutboundAttack.ObserveOutbound(data);
-        // Gear observer — a hand-typed eq / wear / wield / rem mid-fight arms a re-attack
-        // for the *Combat Off* it draws. The client's own gear commands come through
-        // here as well (the Equipment Manager, an item cast, corpse recovery), each with
-        // its own re-attack after the swap, so only a line no wrapped sender is
-        // sending counts as typed.
-        if (typed && !AppServices.Current.EngineGate.SendingClientCommand)
+        // Gear observer — the user's own eq / wear / wield / rem mid-fight arms a
+        // re-attack for the *Combat Off* it draws, typed or sent by a macro, trigger or
+        // event of theirs. An engine's gear commands come through here as well (the
+        // Equipment Manager, an item cast, corpse recovery), each with its own
+        // re-attack after the swap, and are left to it.
+        if (typed && AppServices.Current.EngineGate.SendingUsersOwnCommand)
             AppServices.Current.OutboundGear.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a

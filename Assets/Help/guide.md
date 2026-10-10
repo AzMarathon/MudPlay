@@ -211,7 +211,7 @@ Two things always sit above that choice: a **backstab opener** fires first when 
 
 A hand-cast **heal/buff/cure** (0 energy) is *not* an override — after it lands the engine resumes attacking right away, same as before.
 
-**Changing gear by hand mid-fight.** Putting a piece on or taking one off (`eq`, `wear`, `wield`, `rem`) makes the game stop your attack, the same as a cast does. Type one during a fight and the engine attacks again as soon as the game says the fight has stopped, as it does after a gear swap of its own. Several typed in a row get one re-attack, and the fight is picked up again with the next round if the last of them stopped it. This is for commands you type; a gear command inside a macro, trigger or event is answered on the next round's first line instead.
+**Changing gear by hand mid-fight.** Putting a piece on or taking one off (`eq`, `wear`, `wield`, `rem`) makes the game stop your attack, the same as a cast does. Type one during a fight and the engine attacks again as soon as the game says the fight has stopped, as it does after a gear swap of its own. Several in a row get one re-attack, and the fight is picked up again with the next round if the last of them stopped it. It is the same for a gear command of yours that the client sends for you: one in a macro, an alias, a trigger's response or an event's Command action. All of it needs Auto-Combat on; with it off nothing is re-attacked. (The Action menu's Equip entries swap a whole gear set through the Equipment Manager, which re-attacks after its own swap.)
 
 ## Fighting back (self-defense)
 

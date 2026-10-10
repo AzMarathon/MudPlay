@@ -3965,12 +3965,14 @@ public sealed partial class CombatManager : IDisposable
         NoteBetweenRoundCast();
     }
 
-    // A hand-typed `eq` / `wear` / `wield` / `rem` (routed by OutboundGearObserver)
+    // An `eq` / `wear` / `wield` / `rem` of the user's own (routed by
+    // OutboundGearObserver: typed, or sent by a macro, trigger or event of theirs)
     // stops a fight the same way, on both realms, and the fight is to be picked up
-    // again at once (user, 2026-10-09; GAME_MECHANICS "Non-swing actions break combat
-    // (casting, equipping)"). Arms the same latch a cast does, so the *Combat Off* the
-    // command draws re-attacks on the spot, and it lapses with the cast window when
-    // the command stops nothing (an item we don't have).
+    // again at once while Auto-Combat is on (user, 2026-10-09; GAME_MECHANICS
+    // "Non-swing actions break combat (casting, equipping)"). Arms the same latch a
+    // cast does, so the *Combat Off* the command draws re-attacks on the spot, and it
+    // lapses with the cast window when the command stops nothing (an item we don't
+    // have).
     //
     // Two differences from a cast of ours. It is marked manual, so in spell mode a
     // run of typed commands is rate-limited like a run of typed casts. And in weapon
@@ -3980,7 +3982,7 @@ public sealed partial class CombatManager : IDisposable
     {
         if (_disposed || !Fighting()) return;
         if (_classifier.Current is not { } live || !HasEngageable(live)) return;
-        _log?.Combat(LogCategory, $"typed '{command}' during a live fight — arming a re-attack for its *Combat Off*");
+        _log?.Combat(LogCategory, $"the user's '{command}' during a live fight — arming a re-attack for its *Combat Off*");
         NoteBetweenRoundCast(manual: true);
         _typedGearStamp = _betweenRoundCastAt;
     }
