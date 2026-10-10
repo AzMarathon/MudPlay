@@ -767,6 +767,33 @@ public sealed class RouteChoiceDialogViewModelTests
             vm.RequirementSummary);
     }
 
+    // A place only the lake reaches (Stock's White Forest) is walked to across the
+    // teleporting rooms, and its card, when another gate on the way puts one up,
+    // says how many rooms it crosses and which, with no room that "teleports you
+    // on" to reach: the place is an ordinary one.
+    [Fact]
+    public void CrossingToAPlaceOnlyTheLakeReaches_NamesTheRooms_AndNoRoomThatTeleportsOn()
+    {
+        string[] rooms = Enumerable.Range(1, 8).Select(n => $"Crystal Lake (17/{n})").ToArray();
+        var choice = SoleChoice(
+            new RouteRequirement(RouteRequirementKind.CarryItem, new[] { 5 }),
+            new RouteRequirement(RouteRequirementKind.HazardProtection, new[] { 690, 691 }) { NoProtection = true })
+            with { UnprotectedRoomNames = rooms };
+
+        var vm = new RouteChoiceDialogViewModel(
+            choice, "White Forest (17/1642)",
+            id => id switch { 5 => "a rope", 690 => "log raft", _ => "wooden skiff" },
+            hazardCounterSource: null, hazardSurvivable: false);
+
+        Assert.Equal(
+            "Requires a rope. Crosses 8 teleporting rooms: Crystal Lake (17/1), Crystal Lake (17/2), "
+            + "Crystal Lake (17/3), Crystal Lake (17/4), Crystal Lake (17/5), Crystal Lake (17/6) and 2 more. "
+            + "You have what the crossing asks (the level, and log raft or wooden skiff); each of those rooms can "
+            + "still move you, so the walk may be thrown off its route. Nothing is fetched.",
+            vm.RequirementSummary);
+        Assert.DoesNotContain("teleports you on", vm.RequirementSummary);
+    }
+
     // A MIXED route — a survivable hazard (raft) AND a hard gate past it (a door key)
     // — with no sourceable counter: base card "walk to the hazard and stop" + "cross
     // unprotected", and the heading names both the hazard and the gate.

@@ -2464,8 +2464,14 @@ public sealed class RouteChoicePlannerTests
 
     // meetsTerms: level 50 or over and a boat in the pack, both together, which is
     // what the few crossings the client makes ask (one case in the four).
-    private static void WithLake(string roomsJson, Action<BfsMapper, RoomGraphManager, MovementFilter, bool> body)
+    // commandTbInfo: one more TBInfo entry, for a fixture whose rooms carry a CMD
+    // (a teleport behind a command) beside the lake's own spell chains.
+    private static void WithLake(
+        string roomsJson, Action<BfsMapper, RoomGraphManager, MovementFilter, bool> body, string? commandTbInfo = null)
     {
+        string tbInfo = commandTbInfo is null
+            ? RoomHazardIndexTests.LakeTbInfoJson
+            : RoomHazardIndexTests.LakeTbInfoJson.Replace("[ {", $"[ {commandTbInfo}, {{");
         foreach (int level in new[] { 25, 58 })
             foreach (bool boat in new[] { false, true })
                 WithGraph(roomsJson.Replace("\"Spell\": 700", "\"Spell\": 1076"),
@@ -2483,7 +2489,7 @@ public sealed class RouteChoicePlannerTests
                         filter.LevelProvider = () => level;
                         filter.SpellTeleportsAtRandomProbe = spell => spell is 1076 or WealdSpell;
                     },
-                    tbInfoJson: RoomHazardIndexTests.LakeTbInfoJson);
+                    tbInfoJson: tbInfo);
     }
 
     // Report paradigm-20261009-123349: the walk had a free route round the lake and
@@ -2610,6 +2616,137 @@ public sealed class RouteChoicePlannerTests
             Assert.Equal(RouteRequirementKind.DoorKey, Assert.Single(choice!.Requirements).Kind);
             Assert.DoesNotContain(choice.GatedPath, filter.IsClosedToRoutes);
             Assert.Null(choice.UnprotectedRoomNames);
+        });
+    }
+
+    // The Isle of Bones is reached by a command or greet teleport on dry land (here
+    // from 1/11, behind a keyed door off the west shore), and the lake merely
+    // surrounds it. That teleport counts as a way in: the island is never crossed to,
+    // and the route is the land one, asking for the key. Take the teleport out of
+    // the map and the island is the lake's alone, crossed to on the terms.
+    [Fact]
+    public void IsleReachedByATeleportOnLand_IsNeverCrossedTo_ButIsOnceTheTeleportIsGone()
+    {
+        string withGatehouse = LakeCrossingJson
+            .Replace("\"N\": \"1/6\", \"S\": \"0\", \"E\": \"1/2\", \"W\": \"0\"",
+                     "\"N\": \"1/6\", \"S\": \"0\", \"E\": \"1/2\", \"W\": \"1/11 (Key: 7)\"")
+            .Replace("[\n", """
+                [
+                  { "Map Number": 1, "Room Number": 11, "Name": "Gatehouse", "Spell": 0, "CMD": 5,
+                    "N": "0", "S": "0", "E": "1/10 (Item: 5)", "W": "1/1", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+
+                """, StringComparison.Ordinal);
+        Assert.Contains("\"W\": \"1/11 (Key: 7)\"", withGatehouse);
+        Assert.Contains("\"Name\": \"Gatehouse\"", withGatehouse);
+        const string teleportTo10 = """{ "Number": 5, "Action": "go arch:teleport 10 1\n" }""";
+        RoomKey shore = new(1, 1), gatehouse = new(1, 11), island = new(1, 10);
+
+        WithLake(withGatehouse, (bfs, graph, filter, _) =>
+        {
+            Assert.Equal(RoomExitHint.Teleport, graph.GetRoom(gatehouse)!.Exits[Direction.E].Hint);
+            Assert.False(bfs.IsCutOffByClosedRooms(shore, island, filter));
+            Assert.Null(bfs.FindPath(shore, island, filter));
+            Assert.Null(bfs.FindCrossing(shore, island, filter));
+
+            RouteChoice? card = RouteChoicePlanner.Evaluate(bfs, filter, graph, shore, island);
+            Assert.NotNull(card);
+            Assert.Equal(new[] { shore, gatehouse, island }, card!.GatedPath);
+            Assert.Contains(card.Requirements, r => r.Kind == RouteRequirementKind.DoorKey && r.ItemIds.Contains(7));
+            Assert.DoesNotContain(card.GatedPath, filter.IsClosedToRoutes);
+            Assert.Null(card.UnprotectedRoomNames);
+        }, teleportTo10);
+
+        // The same map with no teleport out of the gatehouse: only the lake is left.
+        string withoutTeleport = withGatehouse
+            .Replace("\"E\": \"1/10 (Item: 5)\"", "\"E\": \"0\"")
+            .Replace("\"CMD\": 5", "\"CMD\": 0");
+        Assert.DoesNotContain("1/10 (Item: 5)", withoutTeleport);
+        Assert.DoesNotContain("\"CMD\": 5", withoutTeleport);
+        WithLake(withoutTeleport, (bfs, graph, filter, meetsTerms) =>
+        {
+            Assert.True(bfs.IsCutOffByClosedRooms(shore, island, filter));
+            IReadOnlyList<Direction>? there = bfs.FindPath(shore, island, filter);
+            if (!meetsTerms)
+            {
+                Assert.Null(there);
+                return;
+            }
+            Assert.Equal(
+                new[] { shore, new RoomKey(1, 2), island }, RouteChoicePlanner.BuildKeyPath(graph, shore, there!));
+        }, teleportTo10);
+    }
+
+    // The sole card for a place only the lake reaches, when another gate stands on
+    // the way to the lake (an item at the gatehouse door): the card names the rooms
+    // it crosses, as the card for the room that teleports on does.
+    [Fact]
+    public void PlaceOnlyTheLakeReaches_WithAnotherGateOnTheWay_NamesTheRoomsItCrosses()
+    {
+        string gated = LakeCrossingJson
+            .Replace("\"N\": \"1/6\", \"S\": \"0\", \"E\": \"1/2\", \"W\": \"0\"",
+                     "\"N\": \"1/6\", \"S\": \"0\", \"E\": \"1/2\", \"W\": \"1/12\"")
+            .Replace("[\n", """
+                [
+                  { "Map Number": 1, "Room Number": 12, "Name": "Gatehouse", "Spell": 0,
+                    "N": "0", "S": "0", "E": "1/1 (Item: 5)", "W": "0", "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+
+                """, StringComparison.Ordinal);
+        Assert.Contains("\"Name\": \"Gatehouse\"", gated);
+        WithLake(gated, (bfs, graph, filter, meetsTerms) =>
+        {
+            RoomKey from = new(1, 12), island = new(1, 10);
+            RouteChoice? card = RouteChoicePlanner.Evaluate(bfs, filter, graph, from, island);
+            if (!meetsTerms)
+            {
+                Assert.Null(card);
+                return;
+            }
+            Assert.NotNull(card);
+            Assert.False(card!.HasFreeRoute);
+            Assert.Contains(card.Requirements, r => r.NoProtection);
+            Assert.Contains(card.Requirements, r => !r.NoProtection);
+            Assert.Equal(new[] { "Lake (1/2)" }, card.UnprotectedRoomNames);
+        });
+    }
+
+    // The walk takes a place only the lake reaches across the lake, and says so once:
+    // how many teleporting rooms, which, and why it was allowed.
+    [Fact]
+    public void WalkAcrossTheLake_LogsTheCrossingOnce_AndAWalkRoundItLogsNothing()
+    {
+        WithLake(LakeCrossingJson, (bfs, graph, filter, meetsTerms) =>
+        {
+            List<LogEntry> lines = new();
+            LogService log = new();
+            log.EntryAdded += lines.Add;
+            AutoWalkManager Walker()
+            {
+                RoomTracker tracker = new(graph);
+                tracker.SetLocated(new RoomKey(1, 1));
+                AutoWalkManager walker = new(graph, bfs, tracker, new MovementCoordinator(), filter, log);
+                walker.SetItemNameResolver(id => id == 690 ? "log raft" : "wooden skiff");
+                walker.SetWireSender(_ => { });
+                return walker;
+            }
+
+            Assert.True(Walker().WalkTo(new RoomKey(1, 9)));   // round by the path
+            Assert.DoesNotContain(lines, l => l.Message.Contains("allowed because no other way", StringComparison.Ordinal));
+
+            bool walks = Walker().WalkTo(new RoomKey(1, 10));
+            Assert.Equal(meetsTerms, walks);
+            LogEntry[] said = lines.Where(l => l.Message.Contains("allowed because no other way", StringComparison.Ordinal)).ToArray();
+            if (!meetsTerms)
+            {
+                Assert.Empty(said);
+                return;
+            }
+            LogEntry line = Assert.Single(said);
+            Assert.Equal(LogSeverity.Info, line.Severity);
+            Assert.Equal("Walker", line.Source);
+            Assert.Equal(
+                "walk to 1/10: crosses 1 teleporting room(s), 1/2 to 1/2; allowed because no other way there exists "
+                + "and the character is level 50+ with log raft or wooden skiff in the pack",
+                line.Message);
         });
     }
 

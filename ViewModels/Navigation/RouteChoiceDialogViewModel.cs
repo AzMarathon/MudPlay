@@ -612,15 +612,17 @@ public sealed partial class RouteChoiceDialogViewModel
             string crosses = string.Empty;
             if (choice.Requirements.FirstOrDefault(r => r.NoProtection) is { } unprotected)
             {
-                // The one crossing a card offers: to the room that teleports on (to
-                // the Bloodwood Weald, on Paradigm's lake), for a crosser who already
-                // has what it asks. Said plainly, with what can still go wrong.
+                // A crossing of the teleporting rooms, for a crosser who already has
+                // what it asks. Said plainly, with what can still go wrong. The walk
+                // to the room that teleports on (to the Bloodwood Weald, on
+                // Paradigm's lake) names that room's spell; the rest of the
+                // crossings are the only way to a place the lake alone reaches.
                 int rooms = choice.UnprotectedRoomNames?.Count ?? 0;
                 string boat = string.Join(" or ", unprotected.ItemIds.Select(id => itemName(id) ?? $"item #{id}"));
                 string goal = string.IsNullOrEmpty(choice.CrossingGoalSpell)
-                    ? "the room that teleports you on"
-                    : $"the room whose spell ({choice.CrossingGoalSpell}) teleports you on";
-                crosses = $"Crosses {rooms} teleporting room{(rooms == 1 ? "" : "s")} to reach {goal}: "
+                    ? string.Empty
+                    : $" to reach the room whose spell ({choice.CrossingGoalSpell}) teleports you on";
+                crosses = $"Crosses {rooms} teleporting room{(rooms == 1 ? "" : "s")}{goal}: "
                     + $"{RouteChoicePlanner.ListAvoided(choice.UnprotectedRoomNames)}. "
                     + $"You have what the crossing asks (the level, and {boat}); each of those rooms can still "
                     + "move you, so the walk may be thrown off its route. Nothing is fetched.";

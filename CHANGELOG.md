@@ -2,15 +2,17 @@
 
 ## 3.161.19
 
-- Only moves you type go into Crystal Lake's teleport rooms: no walk, loop, Auto-Lair trip or errand is routed into them, with or without a boat, and no raft or skiff is offered, fetched or bought for the lake
-- A walk whose way there crosses them has no route and says why in one line
-- Stock: walks to White Forest are taken along the coast (fewest teleport rooms) at level 50 or over with a raft or skiff
-- Paradigm: a walk you start to the lake room that teleports to the Bloodwood Weald gets one card to cross, at level 50 or over with a raft or skiff
-- The Isle of Bones is never reached across the lake
-- The lake's rooms without the teleport are ordinary ground and need no raft
-- Standing in a teleport room, you are always planned out by the nearest way that leads on
-- A loop with a waypoint in a teleport room is refused at start, with the reason
-- A route whose only way there needs a key goes round the lake and asks for the key alone (the walk to the Hidden Study no longer crossed the lake or sent for a log raft)
+- Routes never enter Crystal Lake's teleport rooms, boat or not
+- No raft or skiff offered, fetched or bought for the lake
+- A walk the lake blocks says why in one line
+- Stock: White Forest reached along the coast at level 50+ with a boat
+- Paradigm: one card to cross to the Bloodwood Weald room
+- Lake crossings are named on the card and logged once
+- Isle of Bones never reached across the lake
+- The lake's spell-free rooms stay ordinary ground
+- Standing in a teleport room, you are planned out
+- A loop waypoint in a teleport room is refused at start
+- A key-only route goes round the lake and asks for the key alone
 - bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
 
 ## 3.161.16

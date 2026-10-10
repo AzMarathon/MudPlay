@@ -32,9 +32,9 @@ public sealed record RouteRequirement(RouteRequirementKind Kind, IReadOnlyList<i
     public bool Carried { get; init; }
 
     // True for a hazard no item makes safe to route through (Crystal Lake's sea
-    // rooms, which teleport a boat's holder too). It is on a route only on the one
-    // card that crosses such rooms (CrossingCard), which says so; nothing is ever
-    // fetched for it.
+    // rooms, which teleport a boat's holder too). It is on a route only for a
+    // crossing the client makes (CrossingCard, or a place only the lake reaches),
+    // and the card says so; nothing is ever fetched for it.
     public bool NoProtection { get; init; }
 }
 
@@ -167,14 +167,16 @@ public sealed record RouteChoice(
     IReadOnlyList<RoomKey>? BossWaitPath = null,
     // "pharaoh rastep's room (12/2250)", filled in by the caller for the cards.
     string? BossRoomLabel = null,
-    // For the one card that crosses rooms closed to routes (CrossingCard, the walk
-    // to the room that teleports on to the Bloodwood Weald): those rooms, named in
-    // the order the route meets them ("Crystal Lake (17/1448)"). Null on every other
-    // choice, so it also marks that card.
+    // On a card whose route enters rooms closed to routes (CrossingCard, the walk to
+    // the room that teleports on to the Bloodwood Weald; or a crossing the plain
+    // walk makes, with another gate on its way): those rooms, named in the order
+    // the route meets them ("Crystal Lake (17/1448)"). Null on a route that enters
+    // none.
     IReadOnlyList<string>? UnprotectedRoomNames = null,
-    // On that card: what the destination's room spell is called in the game data
-    // ("bloodwood weald temp"), filled in by the caller so the card can say where
-    // the room sends you.
+    // On the Weald card alone: what the destination's room spell is called in the
+    // game data ("bloodwood weald temp"), filled in by the caller so the card can
+    // say where the room sends you. Null on every other card, which is how the card
+    // knows the crossing is not to such a room.
     string? CrossingGoalSpell = null)
 {
     // No gate-free alternative — every path to the destination crosses a hazard,
@@ -296,12 +298,14 @@ public static class RouteChoicePlanner
             // offer the shortcut as an alternative rather than mislabelling its item as
             // required (report paradigm-20260913-100733).
             GateClassification gc = ClassifyGates(bfs, filter, graph, source, destination, gated);
+            IReadOnlyList<RoomKey> soleKeys = BuildKeyPath(graph, source, gc.CommittedPath);
             RouteChoice sole = new(
                 0, gc.CommittedPath.Count, gc.Requirements,
                 Array.Empty<RoomKey>(),
-                BuildKeyPath(graph, source, gc.CommittedPath))
+                soleKeys)
             {
                 ClosedGateItems = gc.ClosedGateItems.Count > 0 ? gc.ClosedGateItems : null,
+                UnprotectedRoomNames = ClosedRoomsOn(filter, graph, soleKeys),
             };
             if (gc.ShortcutPath is { } scp)
                 sole = sole with
@@ -332,10 +336,14 @@ public static class RouteChoicePlanner
             && reqs.Any(r => r.Kind != RouteRequirementKind.HazardProtection))
             return null;
 
+        IReadOnlyList<RoomKey> gatedKeys = BuildKeyPath(graph, source, gated);
         return new RouteChoice(
             free.Count, gated.Count, reqs,
             BuildKeyPath(graph, source, free),
-            BuildKeyPath(graph, source, gated));
+            gatedKeys)
+        {
+            UnprotectedRoomNames = ClosedRoomsOn(filter, graph, gatedKeys),
+        };
     }
 
     // A route that walks plainly but whose lever detour doesn't: an exit on it opens
@@ -395,7 +403,11 @@ public static class RouteChoicePlanner
         }
         if (reqs.Count == 0) return null;
 
-        return new RouteChoice(0, keys.Count - 1, reqs, Array.Empty<RoomKey>(), keys) { GatedWalk = walk };
+        return new RouteChoice(0, keys.Count - 1, reqs, Array.Empty<RoomKey>(), keys)
+        {
+            GatedWalk = walk,
+            UnprotectedRoomNames = ClosedRoomsOn(filter, graph, keys),
+        };
     }
 
     // Compares the shortest route (teleport hops allowed — BFS treats an item /
@@ -782,6 +794,13 @@ public static class RouteChoicePlanner
             if (filter.IsClosedToRoutes(keys[i])) rooms.Add(RoomLabel(graph, keys[i]));
         return rooms;
     }
+
+    // The rooms closed to routes that a card's route enters, for the card to name;
+    // null when it enters none. A crossing the plain walk makes (a place the map
+    // reaches only across the lake) can sit on a card for another gate on its way.
+    private static IReadOnlyList<string>? ClosedRoomsOn(
+        MovementFilter filter, RoomGraphManager graph, IReadOnlyList<RoomKey> keys) =>
+        UnprotectedOnPath(filter, graph, keys) is { Count: > 0 } rooms ? rooms : null;
 
     // "Black Wasteland (3/740), Black Wasteland (3/669) and 2 more" for a card or a
     // log line; empty when no names were recorded.

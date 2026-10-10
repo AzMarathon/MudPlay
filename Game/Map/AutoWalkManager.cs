@@ -1579,6 +1579,8 @@ public sealed class AutoWalkManager : IRecoverableEngine
             : $"{moveCount} step(s)";
         Raise(new WalkEvent(WalkEventKind.Started, detail, destination));
         NoteDoorsWalkedRound(source.Key, boatPlan is null && sysGotoPlan is null ? path : null);
+        if (boatPlan is null && sysGotoPlan is null && !_replanningInPlace && path is not null)
+            NoteLakeCrossing(source.Key, destination, path);
 
         // Announce the items this route demands so the demand-driven
         // auto-search can arm for anything we're not carrying, and the rooms it
@@ -1702,6 +1704,25 @@ public sealed class AutoWalkManager : IRecoverableEngine
         }
         foreach (string door in _doorsWalkedRound)
             _log?.Info("Walker", $"walk to {_destination}: going round {door}");
+    }
+
+    // A plain route that enters rooms closed to routes is BfsMapper.FindCrossing's:
+    // a place the map reaches no other way, crossed to by a crosser who meets the
+    // rooms' terms. Said once at plan time, since nothing else in the log tells that
+    // walk from one that went round. A walk that starts inside such a room is only
+    // being planned out of it, and the room that teleports on arrival is the route
+    // card's own crossing, which the pick already logged.
+    private void NoteLakeCrossing(RoomKey source, RoomKey destination, IReadOnlyList<Direction> path)
+    {
+        if (_log is null || Filter is not { } filter
+            || filter.IsClosedToRoutes(source) || filter.TeleportsOnArrival(destination)) return;
+        List<RoomKey> closed = ExpandRouteKeys(source, path).Skip(1).Where(filter.IsClosedToRoutes).ToList();
+        if (closed.Count == 0 || filter.CrossingTerms(closed[0]) is not { } terms) return;
+
+        string items = string.Join(" or ", terms.Items.Select(id => _itemNameResolver?.Invoke(id) ?? $"item #{id}"));
+        _log.Info("Walker",
+            $"walk to {destination}: crosses {closed.Count} teleporting room(s), {closed[0]} to {closed[^1]}; "
+            + $"allowed because no other way there exists and the character is level {terms.MinLevel}+ with {items} in the pack");
     }
 
     // Announce the freshly-planned route to any bound listener (the auto-light
@@ -2680,7 +2701,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         string door = $"the door {step.Direction.ToLongName()} from {here.Key} ({here.Name})";
         IRoomFilter roundIt = new AbandonedDoorsFilter(_filter, _abandonedDoors);
         IReadOnlyList<Direction>? round;
-        using (_activeThroughGates ? roundIt.SuspendAcquirableGates() : null)
+        // The rooms nothing makes safe stay closed, as they do for the re-plan this
+        // looks ahead to: a way round across them would be announced and not taken.
+        using (_activeThroughGates ? roundIt.SuspendAcquirableGatesButUnprotectableHazards() : null)
             round = _bfs.FindPath(here.Key, dest, roundIt, ignoreAvoids: _activeIgnoreAvoids);
         if (round is null)
         {
