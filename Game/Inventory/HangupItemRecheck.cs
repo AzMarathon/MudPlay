@@ -684,7 +684,8 @@ public sealed class HangupItemRecheck
     // hang-up over the older one. The older one is settled first, with what this
     // connection knows:
     //   - its hang-up is known not to have killed (it couldn't, or HP at the first
-    //     prompt after it says so: the character came back alive, if down). Then
+    //     prompt after it says so: the character came back alive, if down; never
+    //     when it came back with more HP than it left with). Then
     //     the lives and the name it carries are still current and go onto the new
     //     list, which a connection too short for a `stat` could not give. This is
     //     the commonest way the penalty kills: a hang-up that leaves the character
@@ -692,17 +693,34 @@ public sealed class HangupItemRecheck
     //     the first prompt. What it held goes on too when nothing can have changed
     //     it: no move was sent, and the realm's penalty takes no items.
     //   - its hang-up could have killed and was never judged. It is judged now
-    //     rather than dropped: a `stat` on this connection showing one life fewer
-    //     is a death by it, recorded here from the older list. When it can't be
-    //     told, that is said, since nothing will ask again.
+    //     rather than dropped: on Stock, a `stat` on this connection showing one
+    //     life fewer is a death by it, recorded here from the older list. Off Stock
+    //     that is told, not recorded. When it can't be told, that is said, since
+    //     nothing will ask again.
+    //   - a death seen since the older list was written has its own record, so the
+    //     older list answers nothing and carries nothing.
     private void SettleOlderList(HeldAtDisconnect? older)
     {
         _carryFrom = null;
         _carryItems = false;
         if (older is null) return;
+        // A death seen since the list was written has its own record and owns the
+        // life it cost: judging the list again would record that life twice, and the
+        // count it carries is out of date.
+        if (DeathSeenSince(older))
+        {
+            _deathBefore = null;
+            _log?.Info(LogCategory, "A death was recorded after the older list was written: the hang-up before this connection is let go unjudged.");
+            return;
+        }
         int? hpAtEntry = older.HpAtFirstEntrySince ?? _hpAtEntry;
         int? share = ShareTop(older);
-        if (older.CleanExit || Recovery.HangupDeath.RuledOut(older.Hp, older.MaxHp, share, hpAtEntry))
+        // HP cannot rise while out of the game except by a death (it sets HP to its
+        // maximum), so a character back with more HP than it left with may have been
+        // killed by a hang-up the client took to be harmless (no fight it knew of):
+        // its count is then one too high to carry.
+        bool cameBackHigher = older.Hp is { } leftHp && hpAtEntry is { } backHp && backHp > leftHp;
+        if (older.CleanExit || (!cameBackHigher && Recovery.HangupDeath.RuledOut(older.Hp, older.MaxHp, share, hpAtEntry)))
         {
             _carryFrom = older;
             _carryItems = !older.ItemsUnknown && !_moveSentSinceEntry && _maxItemsDropped() <= 0;
@@ -720,6 +738,16 @@ public sealed class HangupItemRecheck
         (Recovery.HangupDeathVerdict verdict, string why) = Recovery.HangupDeath.Judge(
             older.Hp, older.MaxHp, share, hpAtEntry, older.Lives, _livesReadThisLink,
             worn: null, loginLines, takenStillHeld: null);
+        // Without an inventory read the worn and still-held checks that tell a death
+        // by that hang-up from a life lost on another client (recovered, everything
+        // worn again) can't be made. On Stock the board's login lines still can; off
+        // Stock nothing does, so it is told instead.
+        if (verdict == Recovery.HangupDeathVerdict.Died && !stock)
+        {
+            verdict = Recovery.HangupDeathVerdict.Unsure;
+            why += ", but no inventory was read on this connection and this realm prints no login lines, so nothing separates "
+                + "a death by that hang-up from a life lost on another client";
+        }
         string seen = $"judged as the link dropped again with no inventory read: left the game {older.At.ToLocalTime():yyyy-MM-dd HH:mm:ss} "
             + $"at {RoomText(older.Room)} with HP {Shown(older.Hp)}, lives {Shown(older.Lives)}; since then HP {Shown(hpAtEntry)} at "
             + $"the first prompt, lives {Shown(_livesReadThisLink)} from a `stat`";

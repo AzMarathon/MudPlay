@@ -2475,6 +2475,115 @@ public sealed class HangupItemRecheckTests
         Assert.Null(h.Profile.HeldAtDisconnect!.Lives);
     }
 
+    // A death read on the way in, ahead of the first prompt, has its own record and
+    // owns the life. The link then drops low in a fight with no inventory read: the
+    // older list is let go, not judged, or the same life is recorded a second time.
+    [Fact]
+    public void AnOlderList_WhoseDeathWasWitnessed_IsLetGoUnjudged_NotRecordedTwice()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3));
+
+        h.Now = h.Now.AddMinutes(1);
+        h.Room = new RoomKey(1, 1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Profile.DeathHistory = [new DeathRecord(h.Now, new RoomRef(1, 3), 6, "You have 6 lives left.") { RecordNumber = 1 }];
+        h.Lives = 6;
+        h.Check.OnPlayerDied();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.ReadLives(6);
+        h.Vitals = (30, 200);
+        h.MonsterFight = true;
+        h.Now = h.Now.AddMinutes(3);
+        h.Check.NoteLinkDropping();
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+
+        Assert.Empty(h.Deaths);
+        Assert.Single(h.Profile.DeathHistory!);
+        Assert.Empty(h.Notices);
+    }
+
+    // Off Stock nothing but an inventory read separates a death by the hang-up from
+    // a life lost on another client (died, pile recovered, everything worn again),
+    // and none was read: the older list is told about, not recorded, at the stale
+    // room. On Stock the board's lines are still there to ask for; they were not
+    // printed here, so it is told as well.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AnOlderHangUp_JudgedWithNoInventoryRead_IsToldNotRecorded_WhereNothingElseSeparatesItFromAnotherClient(bool stock)
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50, Stock = stock };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: 80, new RoomKey(1, 3));
+
+        h.Now = h.Now.AddDays(4);
+        h.Room = new RoomKey(1, 700);
+        h.Check.NoteConnected();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.Lives = 6;
+        h.ReadLives(6);
+        h.Vitals = (30, 200);
+        h.MonsterFight = true;
+        h.Now = h.Now.AddMinutes(3);
+        h.Check.NoteLinkDropping();
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+
+        Assert.Empty(h.Deaths);
+        string notice = Assert.Single(h.Notices);
+        Assert.Contains("can no longer be told", notice);
+        Assert.Contains("another client", notice);
+    }
+
+    // The older hang-up read as harmless to the client (no fight it knew of), so its
+    // count of 7 looked safe to carry. The board killed for it (7 to 6) and the
+    // character came back at full HP, which HP cannot do out of the game except by
+    // a death. Carried, the count would be one too high and the next `stat` would
+    // read as no life lost. It is not carried, and no death is recorded at the
+    // second hang-up's room. The older hang-up is then judged by the client's own
+    // knowledge (not penalised without a fight), which records nothing.
+    [Fact]
+    public void ACharacterThatCameBackWithMoreHpThanItLeftWith_CarriesNoCount()
+    {
+        Harness h = new() { MaxItems = 0, PveShare = 50 };
+        h.PlayAndDrop(lives: 7, Geared, hpAtDrop: -5, new RoomKey(1, 3), fight: false);
+
+        h.Now = h.Now.AddMinutes(1);
+        h.Room = new RoomKey(1, 1);
+        h.Check.NoteConnected();
+        h.BoardSaysHungUp();
+        h.Check.NoteRoomDisplayed();
+        h.Vitals = (200, 200);
+        h.Check.OnInGameChanged(true);
+        h.Check.NoteMoveSent();
+        h.Room = new RoomKey(1, 9);
+        h.Check.OnRoomChanged();
+        h.Vitals = (30, 200);
+        h.MonsterFight = true;
+        h.Now = h.Now.AddMinutes(5);
+        h.Check.NoteLinkDropping();
+        h.Check.OnInGameChanged(false);
+        h.Check.NoteDisconnected();
+        h.MonsterFight = false;
+
+        HeldAtDisconnect list = h.Profile.HeldAtDisconnect!;
+        Assert.Equal(9, list.Room!.Room);
+        Assert.Null(list.Lives);
+
+        // That second hang-up cost HP only; the lives read now give nothing to
+        // compare with.
+        h.ComeBack(hp: 5, lives: 6, Snap(), room: new RoomKey(1, 9));
+        Assert.Empty(h.Deaths);
+    }
+
     // Paradigm: died on another client, the corpse recovered into the pack, nothing
     // put back on, and one torch burnt since. "Everything still held" missed it for
     // the one torch, and a death was recorded at the stale room with a pile of one
