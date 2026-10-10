@@ -321,6 +321,10 @@ public sealed class HangupItemRecheck
     public IReadOnlyList<(string Name, int Count)> LastMissing { get; private set; } = [];
     public IReadOnlyList<(string Name, int Count)> LastStillMissing { get; private set; } = [];
 
+    // A pass ran to an answer: nothing more will be picked up by it. True when a
+    // death by the hang-up is still to be judged on the next `stat` read.
+    public event Action<bool>? CheckFinished;
+
     // The last time a hang-up that could have killed was looked into: what was
     // seen, and what it was taken to mean.
     public string LastDeathCheck { get; private set; } = NoneYet;
@@ -1445,6 +1449,7 @@ public sealed class HangupItemRecheck
         End(outcome);
         // The list just compared is spent: what is held now replaces it.
         _saveProfile();
+        CheckFinished?.Invoke(_deathBefore is not null);
     }
 
     // The pass was cut short by the link or by another character being loaded.

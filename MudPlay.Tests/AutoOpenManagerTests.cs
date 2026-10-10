@@ -274,6 +274,48 @@ public sealed class AutoOpenManagerTests
         Assert.Equal(new[] { "small sack" }, h.Opened);
     }
 
+    // The hang-up check ends without picking the sack back up: nothing owes it an
+    // open on a return any more, so a copy that turns up later is judged as any other.
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(true, 1)]      // a death by the hang-up is still to be judged: kept for its pile
+    public void TheHangupCheckEnding_EndsTheOpensOwedForWhatItTook(bool deathStillToJudge, int stillOwedIfReturned)
+    {
+        Harness h = new() { GateOpen = false };
+        h.Items["small sack"] = (100, true);
+        h.Seed();
+        h.PickUp("small sack");
+        h.Open.OnEnteredGame();
+        h.Carried.Clear();                               // the entry read: the hang-up took it
+        h.Open.OnInventoryChanged();
+        h.Open.OnFullInventoryRead();
+        Assert.Equal(1, h.Open.OwedIfReturned);
+
+        h.Open.OnHangupCheckFinished(deathStillToJudge);
+
+        Assert.Equal(stillOwedIfReturned, h.Open.OwedIfReturned);
+    }
+
+    // A death worked out afterwards makes it that death's: the check ending first
+    // doesn't take it back.
+    [Fact]
+    public void ACopyTakenByAHangupThatKilled_IsStillOwedItsOpenAfterTheCheckEnds()
+    {
+        Harness h = new() { GateOpen = false };
+        h.Items["small sack"] = (100, true);
+        h.Seed();
+        h.PickUp("small sack");
+        h.Open.OnEnteredGame();
+        h.Carried.Clear();
+        h.Open.OnInventoryChanged();
+        h.Open.OnFullInventoryRead();
+        h.Open.OnUnwitnessedDeath(DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        h.Open.OnHangupCheckFinished(deathStillToJudge: false);
+
+        Assert.Equal(1, h.Open.OwedIfReturned);
+    }
+
     // One still in the pack at that read was not dropped: its open goes out then.
     [Fact]
     public void AnOpenOwedAcrossAReconnect_GoesOutOnceThePackIsRead()

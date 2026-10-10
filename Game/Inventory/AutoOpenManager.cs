@@ -44,7 +44,9 @@ namespace MudPlay.Game.Inventory;
 // death or the hang-up) is owed it again when it comes back (user, 2026-10-10),
 // through the same holds and only while still flagged. That memory is held here
 // and lasts a reconnect; it does not outlive the client, whose next start seeds
-// a new baseline from whatever is then in the pack.
+// a new baseline from whatever is then in the pack. It is spent when a copy of
+// that container is opened for any other reason, and what a hang-up took ends
+// with the hang-up check; a death's lasts as long as its pile is open.
 //
 // An open is tried once. A container still there afterwards (out of uses, or not
 // this character's to use) stays in the pack, and nothing owes it another.
@@ -88,6 +90,13 @@ public sealed class AutoOpenManager
     // item Number → opens that were owed for copies which then went out of the
     // pack at a death or to a hang-up penalty: owed again as copies come back.
     private readonly Dictionary<int, (ResolvedOpen Item, int Count)> _owedOut = new();
+    // item Number → how many of those entries went to a hang-up penalty. Those are
+    // tied to no record, so they end with the hang-up check; the death ones end
+    // with their pile.
+    private readonly Dictionary<int, int> _owedOutByHangup = new();
+    // item Number → copies the player opened (typed or from the window) whose
+    // departure from the pack has not been seen yet.
+    private readonly Dictionary<int, int> _openedByPlayer = new();
     // The game was entered and the pack not read since: what that read shows gone
     // went while the character was out of the game.
     private bool _awaitingEntryRead;
@@ -251,11 +260,44 @@ public sealed class AutoOpenManager
         if (_goneWhileOut.Count == 0) return;
         if (_lostAtDeath.Count == 0 || diedAt < _diedAt) _diedAt = diedAt;
         foreach ((int number, int count) in _goneWhileOut)
+        {
             _lostAtDeath[number] = _lostAtDeath.GetValueOrDefault(number) + count;
+            // Gone with a death, not only with a hang-up: it now lasts as long as the pile.
+            _owedOutByHangup.Remove(number);
+        }
         _goneWhileOut.Clear();
         _log?.Info(LogCategory,
             $"{AwaitedFromDeath} container(s) went with a death while out of the game: a copy that comes back "
             + "while that pile is being recovered is not a new one");
+    }
+
+    // HangupItemRecheck.CheckFinished: nothing more is coming back from the
+    // hang-up, so the opens owed for what it took are no longer owed on a return.
+    // Held while a death by the hang-up is still to be judged: that death's pile
+    // is what those copies would come back from (OnUnwitnessedDeath).
+    public void OnHangupCheckFinished(bool deathStillToJudge)
+    {
+        if (deathStillToJudge || _owedOutByHangup.Count == 0) return;
+        foreach ((int number, int count) in _owedOutByHangup)
+            if (_owedOut.TryGetValue(number, out (ResolvedOpen Item, int Count) away))
+            {
+                _log?.Info(LogCategory,
+                    $"the hang-up check is over — {Math.Min(count, away.Count)}x {away.Item.Name} not picked back up, no longer owed an open");
+                if (away.Count <= count) _owedOut.Remove(number);
+                else _owedOut[number] = (away.Item, away.Count - count);
+            }
+        _owedOutByHangup.Clear();
+    }
+
+    // ChestOpenTracker.PlayerOpened: a copy of this container was opened by hand.
+    // It is gone from the pack at the next read (Left), and an open owed for a
+    // copy that went out of it is spent: the copy that returns is not a new one
+    // to open a second time.
+    public void OnPlayerOpened(string name)
+    {
+        if (_resolve(name) is not { } item) return;
+        _openedByPlayer[item.Number] = _openedByPlayer.GetValueOrDefault(item.Number) + 1;
+        SpendOwedOut(item.Number, 1);
     }
 
     // Something that kept an owed open back may have cleared, or the engine may
@@ -311,6 +353,9 @@ public sealed class AutoOpenManager
     // ChestOpenTracker.OpenSettled: an open is over, ours or not.
     public void OnOpenSettled(ChestOpenTracker.OpenResult result)
     {
+        // The read after an open has been seen: a copy the player opened that is
+        // still in the pack stayed (out of uses), and is no open to be matched later.
+        _openedByPlayer.Clear();
         if (_opening is { } done)
         {
             _opening = null;
@@ -357,6 +402,8 @@ public sealed class AutoOpenManager
         _heldAtDeath = null;
         _lostAtDeath.Clear();
         _owedOut.Clear();
+        _owedOutByHangup.Clear();
+        _openedByPlayer.Clear();
         _awaitingEntryRead = false;
         _goneWhileOut.Clear();
         _heldFor = null;
@@ -381,12 +428,38 @@ public sealed class AutoOpenManager
         if (fresh <= 0 || off || !item.AutoOpen) return;
         for (int i = 0; i < fresh; i++) _owed.Add(item);
         _log?.Info(LogCategory, $"{fresh}x {item.Name} arrived — {_owed.Count} open(s) owed");
+        // A new copy being opened is the copy the entry was kept for, picked up by
+        // hand: left standing, it would open a later copy that was kept shut.
+        SpendOwedOut(item.Number, fresh);
     }
 
-    private void RememberOwedOut(ResolvedOpen item, int copies)
+    private void RememberOwedOut(ResolvedOpen item, int copies, bool byHangup = false)
     {
         _owedOut.TryGetValue(item.Number, out (ResolvedOpen Item, int Count) had);
         _owedOut[item.Number] = (item, had.Count + copies);
+        if (byHangup) _owedOutByHangup[item.Number] = _owedOutByHangup.GetValueOrDefault(item.Number) + copies;
+    }
+
+    // A copy of this container is being opened for a reason of its own, so the
+    // opens owed for copies that went out of the pack are owed that many fewer.
+    private void SpendOwedOut(int number, int copies)
+    {
+        if (!_owedOut.TryGetValue(number, out (ResolvedOpen Item, int Count) away)) return;
+        int spent = Math.Min(copies, away.Count);
+        if (spent == away.Count) _owedOut.Remove(number);
+        else _owedOut[number] = (away.Item, away.Count - spent);
+        TrimHangupCount(number);
+        _log?.Info(LogCategory,
+            $"{spent}x {away.Item.Name} opened for another reason — no longer owed an open if it returns");
+    }
+
+    // The hang-up share of an entry can't outgrow the entry.
+    private void TrimHangupCount(int number)
+    {
+        if (!_owedOutByHangup.TryGetValue(number, out int byHangup)) return;
+        int left = _owedOut.TryGetValue(number, out (ResolvedOpen Item, int Count) away) ? away.Count : 0;
+        if (left == 0) _owedOutByHangup.Remove(number);
+        else if (byHangup > left) _owedOutByHangup[number] = left;
     }
 
     // Up to `copies` returned copies of this container take back the opens they
@@ -398,6 +471,7 @@ public sealed class AutoOpenManager
         int reowed = Math.Min(copies, away.Count);
         if (reowed == away.Count) _owedOut.Remove(number);
         else _owedOut[number] = (away.Item, away.Count - reowed);
+        TrimHangupCount(number);
         for (int i = 0; i < reowed; i++) _owed.Add(away.Item);
         _log?.Info(LogCategory,
             $"{reowed}x {away.Item.Name} back in the pack and still owed an open — {_owed.Count} open(s) owed");
@@ -416,6 +490,7 @@ public sealed class AutoOpenManager
                 $"the deathpile is no longer being recovered — {AwaitedFromDeath} container(s) are no longer awaited from it");
             _lostAtDeath.Clear();
             _owedOut.Clear();
+            _owedOutByHangup.Clear();
             return 0;
         }
         int back = Math.Min(copies, _lostAtDeath.GetValueOrDefault(number));
@@ -427,7 +502,17 @@ public sealed class AutoOpenManager
 
     private void Left(int number, int copies)
     {
-        if (_awaitingEntryRead) _goneWhileOut[number] = _goneWhileOut.GetValueOrDefault(number) + copies;
+        // A copy the player opened went into that open, however the game was entered
+        // and whenever the pack was last read; only the rest went while out of the game.
+        int opened = 0;
+        if (_openedByPlayer.TryGetValue(number, out int pending))
+        {
+            opened = Math.Min(copies, pending);
+            if (opened == pending) _openedByPlayer.Remove(number);
+            else _openedByPlayer[number] = pending - opened;
+        }
+        if (_awaitingEntryRead && copies > opened)
+            _goneWhileOut[number] = _goneWhileOut.GetValueOrDefault(number) + copies - opened;
 
         // The first copy to go after our own open is the one it opened.
         if (_opening is { } opening && opening.Number == number && !_openingSeenGone)
@@ -450,11 +535,12 @@ public sealed class AutoOpenManager
         // Found gone at the first read of a stay in the game: it went while the
         // character was out of it, which is what a hang-up penalty does. If the
         // hang-up check picks it back up, it is still owed.
-        if (_awaitingEntryRead)
+        int wentOut = dropped - opened;
+        if (_awaitingEntryRead && wentOut > 0)
         {
-            RememberOwedOut(gone, dropped);
+            RememberOwedOut(gone, wentOut, byHangup: true);
             _log?.Info(LogCategory,
-                $"{dropped}x {gone.Name} left the pack while out of the game, unopened — owed again if picked back up");
+                $"{wentOut}x {gone.Name} left the pack while out of the game, unopened — owed again if picked back up");
         }
         else
             _log?.Info(LogCategory, $"{dropped}x {gone.Name} left the pack before being opened — no longer owed");

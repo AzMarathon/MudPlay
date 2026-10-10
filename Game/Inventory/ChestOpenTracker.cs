@@ -87,6 +87,9 @@ public sealed class ChestOpenTracker : IDisposable
     // first and may show the pack as it was before the open: diffed, such a reply
     // would end the open as having given nothing and the loot would never be listed.
     private int _readsAhead;
+    // A reply was passed over as one asked for before ours during this open. If the
+    // open then ends unread, the count of reads out was wrong.
+    private bool _passedOver;
     // Whether the after-read reached the wire (the send gate can drop it).
     private bool _afterReadOut;
     private bool _sendingAfterRead;
@@ -112,6 +115,10 @@ public sealed class ChestOpenTracker : IDisposable
     // An open is over and the tracker has moved on: what it gave, or that it
     // couldn't be read.
     public event Action<OpenResult>? OpenSettled;
+
+    // A container was opened by the player, typed in the terminal or from the
+    // window's Open button, not by the auto-open engine: its name as carried.
+    public event Action<string>? PlayerOpened;
 
     public ChestOpenTracker(
         InventoryManager inventory, ProfileService profile, OutboundOpenObserver typedOpen,
@@ -240,6 +247,7 @@ public sealed class ChestOpenTracker : IDisposable
             .Select(t => CountedCommand.SplitLeadingCount(t).Name)
             .Where(_isContainer);
         if (ChestOffloadPlanner.MatchContainer(target, containers) is not { } name) return;
+        PlayerOpened?.Invoke(name);
         switch (_step)
         {
             case Step.Idle:
@@ -302,6 +310,15 @@ public sealed class ChestOpenTracker : IDisposable
                 ? $"no inventory read came back in {ReadTimeoutMs / 1000}s"
                 : "the inventory read after it could not be sent") +
             " — what it gave is not listed");
+        // A reply taken for an earlier read's, and then ours never came: some read
+        // counted as out was never going to be answered. Left in, that entry would
+        // make every later open pass over its own reply as well.
+        if (_passedOver)
+        {
+            _passedOver = false;
+            _readsOut.Clear();
+            _log?.Info(LogCategory, "an inventory reply was passed over as an earlier read's and the open's own never came — the reads counted as out are forgotten");
+        }
         Continue(_inventory.Snapshot);
         _ending = false;
         OpenSettled?.Invoke(new OpenResult(Array.Empty<(string, int)>(), CurrencyHoldings.Empty, Read: false));
@@ -310,21 +327,33 @@ public sealed class ChestOpenTracker : IDisposable
     // An inventory read went out, ours or anyone's.
     private void OnInventoryRequested()
     {
+        PruneReadsOut();
         _readsOut.Enqueue(_now());
         if (_sendingAfterRead) _afterReadOut = true;
     }
 
-    private int ReadsStillOut()
+    // Pruned wherever the queue is touched: one read the game never answers would
+    // otherwise stay the newest entry for good and put the count one behind.
+    private void PruneReadsOut()
     {
         DateTimeOffset oldest = _now() - ReadGivenUpAfter;
         while (_readsOut.Count > 0 && _readsOut.Peek() < oldest) _readsOut.Dequeue();
+    }
+
+    private int ReadsStillOut()
+    {
+        PruneReadsOut();
         return _readsOut.Count;
     }
+
+    // The link dropped: replies to reads still out went with it.
+    public void NoteDisconnected() => _readsOut.Clear();
 
     private void SendOpen(InventorySnapshot before)
     {
         _beforeOverride = null;
         SendOwnOpen(_buttonTarget);
+        PlayerOpened?.Invoke(_buttonTarget);
         StartAfterRead(before);
     }
 
@@ -344,6 +373,7 @@ public sealed class ChestOpenTracker : IDisposable
             // Replies come in the order the reads were asked for, so every read
             // still out is answered before this one.
             _readsAhead = ReadsStillOut();
+            _passedOver = false;
             _afterReadOut = false;
             _sendingAfterRead = true;
             try { _send("i"); }
@@ -395,6 +425,7 @@ public sealed class ChestOpenTracker : IDisposable
     private void OnFullInventoryParsed()
     {
         // This reply answers the oldest read still out.
+        PruneReadsOut();
         bool answersARead = _readsOut.Count > 0;
         if (answersARead) _readsOut.Dequeue();
         if (_step == Step.AwaitingAfter && _afterReadSent && _afterRead is null)
@@ -403,6 +434,7 @@ public sealed class ChestOpenTracker : IDisposable
             if (_readsAhead > 0 && answersARead)
             {
                 _readsAhead--;
+                _passedOver = true;
                 _log?.Debug(LogCategory, "an inventory read asked for earlier came back first — still waiting for the one after the open");
             }
             // Taken as it parses: by the time the posted half runs, lines behind

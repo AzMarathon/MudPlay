@@ -30,6 +30,8 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
     private bool _deathpileOpen = true;
     // The send gate is up: an `i` sent now never reaches the wire.
     private bool _readsDropped;
+    // The tracker's clock, for how long a read has gone unanswered.
+    private DateTimeOffset _clock = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
 
     public AutoOpenChestOffloadTests()
     {
@@ -41,7 +43,8 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
             send: Send,
             schedule: (_, a) => _scheduled.Add(a),
             post: a => a(),
-            runicName: () => "runic");
+            runicName: () => "runic",
+            now: () => _clock);
         _engine = new AutoOpenManager(
             carriedItems: () => _inv.Snapshot.CarriedItems,
             resolve: name => IsChest(name)
@@ -58,6 +61,7 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
         _inv.Changed += _engine.OnInventoryChanged;
         _inv.FullInventoryParsed += _engine.OnFullInventoryRead;
         _tracker.OpenSettled += _engine.OnOpenSettled;
+        _tracker.PlayerOpened += _engine.OnPlayerOpened;
     }
 
     public void Dispose()
@@ -628,5 +632,146 @@ public sealed class AutoOpenChestOffloadTests : IDisposable
 
         Assert.Equal(new[] { "i", "open iron chest", "i", "open oak chest", "i" }, _sent);
         Assert.Equal(new[] { ("ruby", 1), ("opal", 1) }, Listed);
+    }
+
+    // An inventory read sent by another engine that the game never answers (its
+    // rate limiter dropped it, say). The first open to pass over its own reply as
+    // that read's ends unread; the count of reads out is then put right, so the
+    // chests after it are read and listed.
+    [Fact]
+    public void OneUnansweredRead_CostsOneOpenItsRead_NotEveryOpenAfter()
+    {
+        Inventory("torch", gold: 10);
+        _outbound.ObserveOutbound(Encoding.Latin1.GetBytes("i\r"));   // never answered
+        _clock += TimeSpan.FromSeconds(5);
+
+        Feed("You took oak chest.");
+        Feed("You took iron chest.");                // owed behind it
+        RunScheduled();                              // oak: its own `i` goes out
+        Inventory("torch, iron chest, ruby", gold: 15);   // the reply to that `i`, passed over
+        Assert.Empty(Listed);
+        _clock += TimeSpan.FromSeconds(3);
+        RunScheduled();                              // 3 s: oak ends unread, iron goes
+        Assert.Contains("not read", _engine.LastOpen);
+        Assert.Contains("open iron chest", _sent);
+
+        _clock += TimeSpan.FromSeconds(1);
+        RunScheduled();                              // iron: its own `i`
+        Inventory("torch, ruby, opal", gold: 20);
+        Assert.StartsWith("iron chest", _engine.LastOpen);
+        Assert.Equal(new[] { ("opal", 1) }, Listed);
+
+        // Ordinary traffic from other engines, each read answered in turn.
+        _clock += TimeSpan.FromSeconds(15);
+        _outbound.ObserveOutbound(Encoding.Latin1.GetBytes("i\r"));
+        Inventory("torch, ruby, opal", gold: 20);
+
+        Feed("You took steel chest.");
+        _clock += TimeSpan.FromSeconds(1);
+        RunScheduled();
+        Inventory("torch, ruby, opal, sapphire", gold: 30);
+        Assert.StartsWith("steel chest", _engine.LastOpen);
+        Assert.Equal(new[] { ("opal", 1), ("sapphire", 1) }, Listed);
+    }
+
+    // A read that is never answered is given up 20 s on, when another read is asked
+    // for or answered by anyone, not only when the tracker asks for its own: left,
+    // it would take the reply of the next read that is answered.
+    [Fact]
+    public void AnUnansweredRead_IsGivenUp_WhenAnotherEngineAsksForOneLater()
+    {
+        Inventory("torch", gold: 10);
+        _outbound.ObserveOutbound(Encoding.Latin1.GetBytes("i\r"));   // never answered
+        _clock += TimeSpan.FromSeconds(25);
+        _outbound.ObserveOutbound(Encoding.Latin1.GetBytes("i\r"));
+        Inventory("torch", gold: 10);                // answers that one
+        _clock += TimeSpan.FromSeconds(1);
+
+        Feed("You took oak chest.");
+        RunScheduled();
+        Inventory("torch, ruby", gold: 10);
+
+        Assert.Equal(new[] { ("ruby", 1) }, Listed);
+    }
+
+    // The link went with a read still out: its reply never comes, and the first
+    // open after the reconnect must not wait for it.
+    [Fact]
+    public void ReadsStillOut_WhenTheLinkDrops_AreNotCountedAfterIt()
+    {
+        Inventory("torch", gold: 10);
+        _outbound.ObserveOutbound(Encoding.Latin1.GetBytes("i\r"));
+        _tracker.NoteDisconnected();
+
+        Feed("You took oak chest.");
+        RunScheduled();
+        Inventory("torch, ruby", gold: 10);
+
+        Assert.Equal(new[] { ("ruby", 1) }, Listed);
+    }
+
+    // A chest owed an open, taken by a hang-up penalty and picked up again by hand,
+    // is opened as the new copy it is. The entry kept for its return is spent by
+    // that, so a later copy that was kept shut stays shut when a death gives it back.
+    [Fact]
+    public void AStaleOwedIfReturnedEntry_DoesNotOpenACopyThatWasKeptShut()
+    {
+        Inventory("torch", gold: 10);
+        _inCombat = true;
+        Feed("You took oak chest.");                 // owed, held for the fight
+        _engine.OnEnteredGame();                     // the link dropped and came back
+        _inCombat = false;
+        Inventory("torch", gold: 10);                // the hang-up penalty took it
+        Assert.Equal(1, _engine.OwedIfReturned);
+
+        Feed("You took oak chest.");                 // found and picked up by hand, later
+        RunScheduled();
+        Inventory("torch, ruby", gold: 10);
+        Assert.Equal(1, _sent.Count(s => s == "open oak chest"));
+        Assert.Equal(0, _engine.OwedIfReturned);
+
+        _enabled = false;
+        Feed("You took oak chest.");                 // arrives with Auto Get Items off: stays shut
+        _enabled = true;
+        _engine.Recheck();
+
+        _engine.OnPlayerDied();
+        Inventory("torch, ruby", gold: 0);           // the read after: it went with the pile
+        Feed("You took oak chest.");                 // recovered
+
+        Assert.Equal(1, _sent.Count(s => s == "open oak chest"));
+    }
+
+    // The same entry is spent when the player opens another copy of that container.
+    [Fact]
+    public void AnOwedIfReturnedEntry_IsSpentByAnOpenTheCharacterTypes()
+    {
+        Inventory("oak chest, torch", gold: 10);
+        _inCombat = true;
+        Feed("You took oak chest.");                 // owed (held for the fight)
+        _engine.OnPlayerDied();
+        Assert.Equal(1, _engine.OwedIfReturned);
+
+        _outbound.ObserveOutbound(Encoding.Latin1.GetBytes("open oak chest\r"));   // the one kept shut
+
+        Assert.Equal(0, _engine.OwedIfReturned);
+    }
+
+    // Before the first read of a stay in the game, a container the character opens
+    // by hand has gone into that open: it is not one a hang-up took.
+    [Fact]
+    public void BeforeTheEntryRead_AnOwedChestOpenedByHand_LeavesNothingOwedIfReturned()
+    {
+        Inventory("torch", gold: 10);
+        _inCombat = true;
+        Feed("You took oak chest.");                 // owed
+        _engine.OnEnteredGame();                     // entered by hand: no `i` of ours
+        _outbound.ObserveOutbound(Encoding.Latin1.GetBytes("open oak chest\r"));
+        RunScheduled();
+        Inventory("torch, ruby", gold: 10);          // the tracker's own read is the first one
+
+        Assert.Equal(0, _engine.OwedIfReturned);
+        Assert.Empty(_engine.Owed);
+        Assert.Equal(new[] { ("ruby", 1) }, Listed);
     }
 }

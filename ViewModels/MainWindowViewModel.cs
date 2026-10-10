@@ -3467,6 +3467,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // The replies to discards still on the wire went with the connection.
                 // Hides a full room refused stay held: the pack is as it was.
                 AppServices.Current.AutoDiscard.Reset("disconnected", keepHeld: true);
+                // Likewise the replies to inventory reads still out: counted, they
+                // would make the first open after the reconnect pass over its own.
+                AppServices.Current.ChestOpens.NoteDisconnected();
                 // Whoever was in the room is not known to be there when we are
                 // back: left standing, the roster is re-issued while offline (the
                 // Auto-Combat toggle, the PvP fight stopped above) and acted on.

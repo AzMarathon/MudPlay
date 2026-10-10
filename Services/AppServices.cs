@@ -6903,6 +6903,7 @@ public sealed class AppServices
         Inventory.Changed += AutoOpen.OnInventoryChanged;
         Inventory.FullInventoryParsed += AutoOpen.OnFullInventoryRead;
         ChestOpens.OpenSettled += AutoOpen.OnOpenSettled;
+        ChestOpens.PlayerOpened += AutoOpen.OnPlayerOpened;
         // Each of these may be what an owed open was waiting on.
         EngineGate.Released += AutoOpen.Recheck;
         SneakGuard.Released += AutoOpen.Recheck;
@@ -9479,6 +9480,9 @@ public sealed class AppServices
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
+        // The opens owed for what a hang-up took end with the check that would
+        // have picked it back up (AutoOpen is built far above).
+        HangupItems.CheckFinished += AutoOpen.OnHangupCheckFinished;
         Inventory.FullInventoryParsed += HangupItems.OnInventoryRead;
         Inventory.ItemTaken += HangupItems.OnItemTaken;
         GroundItems.SurveyUpdated += HangupItems.NoteFloorSurveyed;
