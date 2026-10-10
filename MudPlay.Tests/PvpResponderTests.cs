@@ -39,6 +39,7 @@ public sealed class PvpResponderTests
         public PvpSettings Settings { get; set; } = new();
         public DateTimeOffset Clock { get; set; } = new(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
 
+        public bool Follower { get; set; }
         public bool HangUpWorks { get; set; } = true;
         public bool FleeRoomsWorks { get; set; } = true;
         public bool FleeToWorks { get; set; } = true;
@@ -99,7 +100,8 @@ public sealed class PvpResponderTests
                 sendGang: Gang.Add,
                 roomName: () => "Town Square",
                 schedule: (delay, action) => Scheduled.Add((delay, action)),
-                now: () => Clock);
+                now: () => Clock,
+                isPartyFollower: () => Follower);
             Responder.Responded += Reports.Add;
 
             Players.RecordObservation("Bob", "Mage", null, null, null, null, null, DateTime.UtcNow);
@@ -583,6 +585,46 @@ public sealed class PvpResponderTests
         h.Feed("Bob moves to attack you!");
 
         Assert.Equal(expected, h.Gang.Count);
+    }
+
+    // A party follower never flees (user, 2026-10-10): neither to a Flee to room
+    // nor back along a walk or loop.
+    [Fact]
+    public void Flee_AsAPartyFollower_GoesNowhere_AndSaysWhy()
+    {
+        using Harness h = new()
+        {
+            Follower = true,
+            Settings = new PvpSettings { Action = PvpAction.Flee, FleeTo = new RoomRef(1, 200), RoomsToFlee = 4 },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Empty(h.RoomWalks);
+        Assert.Empty(h.RoomFlees);
+        Assert.Empty(h.HangUps);
+        Assert.Contains("a party follower never flees", Assert.Single(h.Reports));
+    }
+
+    // Flee then hang up, with the flee refused: the hang-up it was to end in
+    // comes at once, as when there is nowhere to run.
+    [Fact]
+    public void FleeThenHangUp_AsAPartyFollower_HangsUpAtOnce()
+    {
+        using Harness h = new()
+        {
+            Follower = true,
+            Settings = new PvpSettings { Action = PvpAction.FleeThenHangUp, FleeTo = new RoomRef(1, 200) },
+        };
+        h.MarkEnemy("Bob");
+
+        h.Feed("Also here: Bob.");
+
+        Assert.Empty(h.RoomWalks);
+        Assert.Empty(h.RoomFlees);
+        Assert.Single(h.HangUps);
+        Assert.Empty(h.Scheduled);
     }
 
     [Fact]

@@ -506,8 +506,9 @@ public sealed class HealthManager : IDisposable
     // run-if-below HP trigger fires AND we're a follower, Evaluate invokes this
     // instead of TryFlee — a follower must not run off alone (it breaks party
     // formation), so it broadcasts @heal and stays put while the party healer tops
-    // it up. Leader / solo still flee. Left null preserves the flee-for-everyone
-    // behavior. Typically wired to PartyRestSync.RequestHeal.
+    // it up. Leader / solo still flee. Left null, a follower's low HP is held
+    // with nothing asked: it still doesn't run (TryFlee). Typically wired to
+    // PartyRestSync.RequestHeal.
     public void SetPartyRoleSync(
         Func<bool> isPartyFollower,
         Action requestPartyWait,
@@ -1311,7 +1312,7 @@ public sealed class HealthManager : IDisposable
                 string reason = hpRun
                     ? $"HP {_state.Hp}/{_state.MaxHp} <= run-trigger={hpRunTrigger}"
                     : $"MA {_state.Ma}/{_state.MaxMa} <= run-trigger={maRunTrigger}";
-                bool fleeAsFollower = follower && _requestPartyHeal is not null;
+                bool fleeAsFollower = follower;
                 // Defer the flee one dispatch tick, then re-verify a live hostile
                 // before committing. The end-of-round prompt that dropped us into
                 // flee territory is parsed BEFORE the round's death line in the same
@@ -2103,11 +2104,16 @@ public sealed class HealthManager : IDisposable
         }
         if (follower)
         {
-            if (hpRun)
+            if (hpRun && _requestPartyHeal is { } requestHeal)
             {
                 _log?.Combat(LogCategory,
                     $"party follower low HP — requesting heal instead of fleeing ({reason})");
-                _requestPartyHeal!();
+                requestHeal();
+            }
+            else if (hpRun)
+            {
+                _log?.Combat(LogCategory,
+                    $"party follower low HP — holding (a follower never flees, and no party heal can be asked for) ({reason})");
             }
             else
             {
@@ -2192,6 +2198,16 @@ public sealed class HealthManager : IDisposable
         {
             _log?.Combat(LogCategory, $"already fleeing — {reason}");
             return true;
+        }
+
+        // A party follower never flees, whatever asked for the run (user,
+        // 2026-10-10): a run of its own walks it out of the party. Every flee comes
+        // through here: low HP or mana, hit and run, a failed backstab, a player, a
+        // Flee monster. A run already begun before we became a follower goes on.
+        if (_fleeEngine is null && _isPartyFollower?.Invoke() == true)
+        {
+            _log?.Combat(LogCategory, $"flee skipped (a party follower never flees) — {reason}");
+            return false;
         }
 
         Map.IRecoverableEngine? engine = _getActiveMovementEngine?.Invoke();
