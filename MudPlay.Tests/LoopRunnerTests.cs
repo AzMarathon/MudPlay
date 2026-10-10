@@ -48,21 +48,40 @@ public sealed class LoopRunnerTests : IDisposable
         public HashSet<RoomKey> Avoided { get; } = new();
         public bool IsAvoided(RoomKey key) => Avoided.Contains(key);
 
+        // Rooms no route enters (Crystal Lake's teleporting sea rooms). Empty by default.
+        public HashSet<RoomKey> ClosedToRoutes { get; } = new();
+        public bool IsClosedToRoutes(RoomKey room) => ClosedToRoutes.Contains(room);
+
         // Acquirable-gate model for the gate-aware resume test: an exit whose Target
         // is in GatedTargets is blocked UNLESS gates are suspended. Empty by default,
         // so existing tests stay fail-open.
         public HashSet<RoomKey> GatedTargets { get; } = new();
         private int _suspendDepth;
+        // A room closed to routes is shut to every search but one with every gate
+        // stood down; the suspension that keeps such rooms closed opens the gated
+        // exits only.
+        private int _everyGateDepth;
         public bool IsExitBlocked(in RoomExit exit)
-            => _suspendDepth == 0 && GatedTargets.Contains(exit.Target);
+            => (_suspendDepth == 0 && GatedTargets.Contains(exit.Target))
+               || (_everyGateDepth == 0 && ClosedToRoutes.Contains(exit.Target));
         public IDisposable SuspendAcquirableGates()
         {
             _suspendDepth++;
-            return new SuspendScope(this);
+            _everyGateDepth++;
+            return new SuspendScope(this, everyGate: true);
         }
-        private sealed class SuspendScope(TestAvoidFilter f) : IDisposable
+        public IDisposable SuspendAcquirableGatesButUnprotectableHazards()
         {
-            public void Dispose() => f._suspendDepth--;
+            _suspendDepth++;
+            return new SuspendScope(this, everyGate: false);
+        }
+        private sealed class SuspendScope(TestAvoidFilter f, bool everyGate) : IDisposable
+        {
+            public void Dispose()
+            {
+                f._suspendDepth--;
+                if (everyGate) f._everyGateDepth--;
+            }
         }
     }
 
@@ -161,6 +180,48 @@ public sealed class LoopRunnerTests : IDisposable
     // pair.
     private static Loop AbCycle() =>
         new("ab", new[] { new RoomKey(1, 1), new RoomKey(1, 2) });
+
+    // A loop with a waypoint in one of Crystal Lake's teleport rooms is not started
+    // with a leg missing: it is refused, by name, and nothing is sent. There is no
+    // boat exception (user, 2026-10-10: nobody loops those rooms).
+    [Fact]
+    public void Start_LoopWithAWaypointInARoomNoRouteEnters_IsRefusedWithTheReason()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Filter.ClosedToRoutes.Add(new RoomKey(1, 2));
+
+        Assert.NotNull(h.Runner.RefusalFor(AbCycle()));
+        Assert.False(h.Runner.Start(AbCycle()));
+
+        LoopEvent failed = Assert.Single(h.Events, e => e.Kind == LoopEventKind.Failed);
+        Assert.Contains("1 waypoint(s) in rooms that teleport at random", failed.Detail);
+        Assert.Contains("1/2 (B)", failed.Detail);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Empty(h.Sent);
+
+        // The same loop runs once the room is ordinary ground again.
+        h.Filter.ClosedToRoutes.Clear();
+        Assert.Null(h.Runner.RefusalFor(AbCycle()));
+        Assert.True(h.Runner.Start(AbCycle()));
+    }
+
+    // The probe for the nearest room of a loop falls back to rooms behind a gate the
+    // walk can open on the way, and never to rooms behind one closed to routes: the
+    // walk there would not cross it.
+    [Fact]
+    public void NearestRoomOf_IsNeverARoomBeyondOneClosedToRoutes()
+    {
+        Harness h = NewHarness();
+        Loop beyond = new("c", new[] { new RoomKey(1, 3), new RoomKey(1, 3) });
+
+        h.Filter.GatedTargets.Add(new RoomKey(1, 2));
+        Assert.Equal(new RoomKey(1, 3), h.Runner.NearestRoomOf(beyond, new RoomKey(1, 1)));
+
+        h.Filter.GatedTargets.Clear();
+        h.Filter.ClosedToRoutes.Add(new RoomKey(1, 2));
+        Assert.Null(h.Runner.NearestRoomOf(beyond, new RoomKey(1, 1)));
+    }
 
     [Fact]
     public void Start_EmptyLoop_ReturnsFalse()
@@ -1030,6 +1091,48 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal(LoopState.Running, h.Runner.State);
         Assert.Equal(2, h.Sent.Count);   // fresh Start() sent step 1 again
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
+    }
+
+    // The link dropped mid-loop and the hang-up penalty killed the character
+    // after it. The death is worked out at the login, which can be before the
+    // first prompt this runner counts: the loop set aside at the drop is not
+    // running then, so stopping the engines doesn't reach it. It must not start
+    // on that prompt and walk a stripped character out of the temple.
+    [Fact]
+    public void ADeathFoundOutAtTheLogin_DropsTheLoopSetAsideAtTheDisconnect()
+    {
+        Harness h = NewHarness();
+        h.Tracker.Hydrate(new MudPlay.Models.Profile.CharacterProfile());
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
+        int sent = h.Sent.Count;
+
+        h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
+            null, System.DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", null, null, null));
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal(sent, h.Sent.Count);
+    }
+
+    // One found out long after the login leaves a loop set aside alone: the
+    // character has played on since.
+    [Fact]
+    public void ADeathFoundOutLate_LeavesTheLoopSetAsideAlone()
+    {
+        Harness h = NewHarness();
+        h.Tracker.Hydrate(new MudPlay.Models.Profile.CharacterProfile());
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+
+        h.Tracker.NoteUnwitnessedDeath(new MudPlay.Game.Recovery.UnwitnessedDeath(
+            null, System.DateTimeOffset.UtcNow, 6, "Killed by the hang-up penalty.", null, null, null, AtEntry: false));
+
+        Assert.NotNull(h.Runner.PendingReconnectResumeForTests);
     }
 
     // Report paradigm-20260923-092317: the leader's link dropped mid-loop. Back in the

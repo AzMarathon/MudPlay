@@ -3383,6 +3383,21 @@ public partial class MainWindowViewModel : ObservableObject
                 // failed connect attempt fires Disconnected with
                 // wasConnected=false and must NOT arm this.
                 if (wasConnected) _hadDisconnectThisSession = true;
+                // Ahead of everything below that tears the fight down (the PvP
+                // fight, combat, the room's occupants): the list of what was held
+                // also says what fight the character left the game in.
+                // Guarded: ending a check clears a movement gate, whose subscribers run
+                // here and now, and a throw this early would skip the whole handler,
+                // the reconnect scheduling included.
+                if (wasConnected)
+                {
+                    try { AppServices.Current.HangupItems.NoteLinkDropping(); }
+                    catch (Exception ex)
+                    {
+                        AppServices.Current.Log.Warn(Game.Inventory.HangupItemRecheck.LogCategory,
+                            $"Couldn't note the link dropping ({ex.GetType().Name}: {ex.Message}).");
+                    }
+                }
                 // Snapshot the followers we were leading while PartyState is still
                 // intact — par reconciliation after the reconnect wipes the roster,
                 // so the leader-side reform must capture them now. Only on a real
@@ -3527,8 +3542,9 @@ public partial class MainWindowViewModel : ObservableObject
                 // The reconnect's splash and login menu ride the same line extractor.
                 AppServices.Current.MessageCandidateWatcher.NotifyLeftGame();
                 AppServices.Current.InGameCapture.NotifyDisconnected();
-                // After the line above: leaving the game is what saves the list of
-                // what was held, and that has to see a check still under way.
+                // The list of what was held was saved at the top of this handler,
+                // or by the line above when the link was never counted as up; only
+                // after that may a check still under way be dropped.
                 AppServices.Current.HangupItems.NoteDisconnected();
                 // A drop we didn't ask for plays the Disconnected sound, and arms the
                 // Reconnected one for when the link comes back.

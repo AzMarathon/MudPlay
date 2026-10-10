@@ -179,6 +179,27 @@ public sealed class CurrentRouteDetailsTests : IDisposable
     }
 
     [Fact]
+    public void Build_SaysNothingProtects_ForAHazardNoItemMakesSafe()
+    {
+        RoomGraphManager graph = NewGraph();
+        var route = new[] { new RoomKey(1, 1), new RoomKey(1, 2), new RoomKey(1, 3) };
+        var sea = new RouteStepWarning(
+            new RoomDetailLink("sea", null, new RelayCommand(() => { })),
+            Array.Empty<RoomDetailLink>(), noProtection: true);
+
+        IReadOnlyList<RouteDetailRow> rows = CurrentRouteDetails.Build(
+            graph, null, null, route, _ => null,
+            _ => Array.Empty<RoomDetailLink>(), _ => { },
+            k => k.Equals(new RoomKey(1, 2)) ? sea : null, ItemLink);
+
+        RouteStepWarning w = rows[1].Warning!;
+        Assert.True(w.NoProtection);
+        Assert.False(w.HasItems);
+        Assert.True(w.HasLabel);
+        Assert.Equal("— nothing protects from it", w.Label);
+    }
+
+    [Fact]
     public void Build_FlagsAnItemGatedExit()
     {
         RoomGraphManager graph = NewItemGateGraph();

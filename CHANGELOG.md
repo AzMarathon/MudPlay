@@ -1,6 +1,6 @@
 # Version history
 
-## 3.162.0
+## 3.163.0
 
 - A monster set to **Flee** is run from on sight, while a walk or loop is running
 - It is the Health tab's flee: the Combat tab's run distance and direction
@@ -11,6 +11,31 @@
 - A forward flee no longer starts with the step just walked
 - A flee ends when you die, disconnect or load another character
 - Two monsters ship set to Flee; set Neutral or Enemy to turn it off
+- A flee stops short of Crystal Lake's teleporting rooms
+
+## 3.162.3
+
+- Routes never enter Crystal Lake's teleport rooms, boat or not
+- No raft or skiff offered, fetched or bought for the lake
+- A walk the lake blocks says why in one line
+- Stock: White Forest reached along the coast at level 50+ with a boat
+- Paradigm: one card to cross to the Bloodwood Weald room
+- Lake crossings are named on the card and logged once
+- Isle of Bones never reached across the lake
+- The lake's spell-free rooms stay ordinary ground
+- Standing in a teleport room, you are planned out
+- A loop waypoint in a teleport room is refused at start
+- A key-only route goes round the lake and asks for the key alone
+- bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.162.0
+
+- A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
+- Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
+- A life lost on another client, or after a clean exit, is not recorded here
+- The item pickup stands down for it, and nothing is recorded when it can't be told
+- Lives are read again after a life is given back or a level trained
+- Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
 
 ## 3.161.16
 

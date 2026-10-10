@@ -836,6 +836,11 @@ public sealed class LoopRunner : IRecoverableEngine
         _postToUi = postToUi ?? (a => Dispatcher.UIThread.Post(a));
 
         _tracker.StateChanged += OnTrackerStateChanged;
+        // A death found out at the login (the hang-up penalty killed the character
+        // after the link was gone) stops the engines, but the loop set aside when
+        // the link dropped is not running yet: the first prompt would start it and
+        // walk a stripped character out of the temple.
+        _tracker.PlayerDeathInferred += ClearPendingReconnectResume;
         _tracker.CastCrossingStarted += OnCastCrossingStarted;
         _coordinator.PauseStateChanged += OnPauseChanged;
         if (_promptScanner is not null)
@@ -1000,6 +1005,20 @@ public sealed class LoopRunner : IRecoverableEngine
         return StartInternal(loop, isRecovery: false, gateFallback: true);
     }
 
+    // Why this loop can't be run at all, or null when it can: it has a waypoint in a
+    // room no route enters. Asked before the walk to the loop too, so nobody is
+    // walked to the lake to be told there.
+    public string? RefusalFor(Loop loop)
+    {
+        ArgumentNullException.ThrowIfNull(loop);
+        if (_filter is null) return null;
+        List<RoomKey> closed = loop.Waypoints.Select(w => w.Key).Where(_filter.IsClosedToRoutes).Distinct().ToList();
+        if (closed.Count == 0) return null;
+        string first = _graph?.GetRoom(closed[0])?.Name is { Length: > 0 } name ? $"{closed[0]} ({name})" : closed[0].ToString();
+        return $"loop '{loop.Name}' has {closed.Count} waypoint(s) in rooms that teleport at random and that nothing "
+            + $"protects from, {first} the first: no loop or automatic walk enters them";
+    }
+
     // The walk to the loop is the user's: set by a user Start and dropped the moment
     // the loop is reached (BeginCircle). The user asked to go to the loop, not for
     // what the run does afterwards, so a walk back to it after a detour or a flee is
@@ -1033,8 +1052,9 @@ public sealed class LoopRunner : IRecoverableEngine
 
         // The free way in first; failing that, through a gate the walk can open on
         // the way, as the runner's own start falls back.
+        // Never across a room closed to routes: the walk there wouldn't cross either.
         if (Nearest() is { } free) return free;
-        using (_filter?.SuspendAcquirableGates())
+        using (_filter?.SuspendAcquirableGatesButUnprotectableHazards())
             return Nearest();
     }
 
@@ -1137,6 +1157,17 @@ public sealed class LoopRunner : IRecoverableEngine
         // otherwise clear it) so the one-shot survives to BeginCircle.
         _suppressFirstWaypointEvent = suppressFirstWaypointEvent;
         _returningFromDetour = suppressFirstWaypointEvent;
+
+        // A waypoint in a room no route enters (Crystal Lake's teleporting sea
+        // rooms) can't be walked to, and a loop that stood in one would be thrown
+        // off it on most entries. Refused here, by name, rather than started with
+        // a leg missing.
+        if (RefusalFor(loop) is { } refusal)
+        {
+            _log?.Warn("LoopRunner", $"Start refused: {refusal}");
+            RaiseAfterReset(new LoopEvent(LoopEventKind.Failed, refusal));
+            return false;
+        }
 
         RoomKey? currentKey = _tracker.State.CurrentRoom?.Key;
 
@@ -1248,7 +1279,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (entryIndex.Count == 0) return false;
 
         IReadOnlyDictionary<RoomKey, int> steps;
-        using (IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null)
+        using (IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGatesButUnprotectableHazards() : null)
             steps = _bfs!.ComputeDistancesTo(from, entryIndex.Keys, _filter);
         RoomKey? best = null;
         foreach ((RoomKey room, int index) in entryIndex)
@@ -1326,8 +1357,9 @@ public sealed class LoopRunner : IRecoverableEngine
         // hazard) for the reachability probe so a waypoint reachable only by acquiring
         // something en route (e.g. the key to re-enter a walled city after a detour)
         // still counts as reachable; the approach walk then plans + acquires through
-        // them. Level / toll / class gates stay active regardless.
-        using IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGates() : null;
+        // them. Level / toll / class gates stay active regardless, and so do the
+        // rooms closed to routes, which that walk would not cross.
+        using IDisposable? gateScope = throughGates ? _filter?.SuspendAcquirableGatesButUnprotectableHazards() : null;
         RoomKey? best = null;
         int bestLen = int.MaxValue;
         foreach (LoopWaypoint w in waypoints)
@@ -2743,7 +2775,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // genuine Start() call — see NotifyDisconnected's rationale.
     private Loop? _pendingReconnectResume;
 
-    // Reset States: don't restart the loop on the next prompt after a reconnect.
+    // Reset States, and a death found out at the login: don't restart the loop on
+    // the next prompt after a reconnect.
     public void ClearPendingReconnectResume() => _pendingReconnectResume = null;
 
     // Torn down by a connection drop (wired from MainWindowViewModel's

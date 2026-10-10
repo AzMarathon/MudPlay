@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.162.0**
+> **Version 3.163.0**
 > - A monster set to **Flee** is run from on sight, while a walk or loop is running
 > - It is the Health tab's flee: the Combat tab's run distance and direction
 > - With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
@@ -11,6 +11,7 @@
 > - A forward flee no longer starts with the step just walked
 > - A flee ends when you die, disconnect or load another character
 > - Two monsters ship set to Flee; set Neutral or Enemy to turn it off
+> - A flee stops short of Crystal Lake's teleporting rooms
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
