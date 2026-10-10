@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace MudPlay.Terminal;
@@ -46,12 +48,14 @@ public sealed partial class LineExtractor
     // (the MessageRouter feed that drives ChatRouter); everything else stays off it.
     public event Action<EmittedLine>? ChatLineEmitted;
 
-    // Holds a fragment the terminal wrapped at the right margin, awaiting its
-    // continuation row(s). When set, the next completed row is stitched onto it
-    // so downstream consumers (chat / trigger / combat pattern matchers) see the
-    // whole logical line the server sent instead of an 80-column slice whose
-    // tail silently vanishes.
-    private EmittedLine? _pendingWrap;
+    // Holds the fragments the terminal wrapped at the right margin, awaiting the
+    // row that ends the line. That row is stitched onto them so downstream
+    // consumers (chat / trigger / combat pattern matchers) see the whole logical
+    // line the server sent instead of an 80-column slice whose tail silently
+    // vanishes. Kept apart until then: a search of a room with no item cap prints
+    // one line over a thousand rows, and joining row by row copied everything
+    // gathered so far for each of them.
+    private readonly List<EmittedLine> _pendingWrap = new();
 
     public LineExtractor(TerminalEmulator emulator)
     {
@@ -73,30 +77,39 @@ public sealed partial class LineExtractor
             // fragment untrimmed (a wrap that lands on a space must preserve it)
             // and hold it for the continuation. The prompt-split / emit below is
             // deferred until the whole line is reassembled.
-            EmittedLine fragment = BuildLine(row.Cells, row.Timestamp, isPromptLine: false, trimTrailingBlanks: false);
-            _pendingWrap = _pendingWrap is { } held ? Join(held, fragment) : fragment;
+            _pendingWrap.Add(BuildLine(row.Cells, row.Timestamp, isPromptLine: false, trimTrailingBlanks: false));
             return;
         }
 
         EmittedLine line = BuildLine(row.Cells, row.Timestamp, isPromptLine: false);
-        if (_pendingWrap is { } pending)
+        if (_pendingWrap.Count > 0)
         {
-            line = Join(pending, line);
-            _pendingWrap = null;
+            _pendingWrap.Add(line);
+            line = Join(_pendingWrap);
+            _pendingWrap.Clear();
         }
 
         EmitLine(line);
     }
 
-    // Concatenate a held wrap fragment with a following row, keeping the
-    // attribute array aligned to the joined text. Timestamp carries the
+    // Concatenate the held wrap fragments and the row that ended them, keeping
+    // the attribute array aligned to the joined text. Timestamp carries the first
     // fragment's (when the message started on the wire).
-    private static EmittedLine Join(EmittedLine head, EmittedLine tail)
+    private static EmittedLine Join(List<EmittedLine> rows)
     {
-        CellAttributes[] attrs = new CellAttributes[head.Attributes.Length + tail.Attributes.Length];
-        head.Attributes.CopyTo(attrs, 0);
-        tail.Attributes.CopyTo(attrs, head.Attributes.Length);
-        return head with { Text = head.Text + tail.Text, Attributes = attrs };
+        int length = 0;
+        foreach (EmittedLine row in rows) length += row.Text.Length;
+
+        StringBuilder text = new(length);
+        CellAttributes[] attrs = new CellAttributes[length];
+        int at = 0;
+        foreach (EmittedLine row in rows)
+        {
+            text.Append(row.Text);
+            row.Attributes.CopyTo(attrs, at);
+            at += row.Attributes.Length;
+        }
+        return rows[0] with { Text = text.ToString(), Attributes = attrs };
     }
 
     private void EmitLine(EmittedLine line)
@@ -141,13 +154,26 @@ public sealed partial class LineExtractor
     // the ~35 LineEmitted subscribers) means a new parser is chat-proof by default.
     private void Publish(EmittedLine line)
     {
+        long started = Stopwatch.GetTimestamp();
         if (!line.IsPromptLine && ChatLineDetector.IsChat(line.Text))
-        {
             ChatLineEmitted?.Invoke(line with { IsChat = true });
-            return;
-        }
-        LineEmitted?.Invoke(line);
+        else
+            LineEmitted?.Invoke(line);
+
+        TimeSpan took = Stopwatch.GetElapsedTime(started);
+        if (took >= SlowLineThreshold) SlowLine?.Invoke(line, took);
     }
+
+    // Every subscriber reads a line on the UI thread before the next one is looked
+    // at, so the time one line takes is time the whole client stands still. Past
+    // this much it is felt as a freeze.
+    public static readonly TimeSpan SlowLineThreshold = TimeSpan.FromMilliseconds(250);
+
+    // Fired after a line whose subscribers together took SlowLineThreshold or longer,
+    // with how long they took. A freeze a user reports is then named in the program
+    // log by the line that caused it (report paradigm-20261009-164508 took timing
+    // gaps between unrelated log entries to find).
+    public event Action<EmittedLine, TimeSpan>? SlowLine;
 
     // Leading status-line prompt — covers [HP=…]: in all the MajorMUD shapes
     // (with or without the MA/KAI suffix, with or without the parenthesised

@@ -5157,9 +5157,28 @@ Among protectable hazards, a further split governs whether the navigator may off
   2026-09-28, user)*. A reveal that misses a hidden item or player is normal, not a failed search.
 - **An empty search answers with `Your search revealed nothing.`**; a reveal surfaces the
   `You notice … here.` survey.
+- **Paradigm: a search's `You notice … here.` reply is one unbroken line, however long; the room
+  display's own floor list is broken into rows by the game** *([OBSERVED] 2026-10-09, report
+  `paradigm-20261009-164508`; Realm: Paradigm, Stock not recorded)*. A vault's display listed 340 stacks
+  over 86 rows, each ended by the game at a word boundary and none longer than 79 characters. The reply
+  to `sea` in the same room listed 116 stacks in about 2,200 characters with no line break; the terminal
+  wraps it at its own right margin, mid-word. A Paradigm room has no item cap (*Items, inventory &
+  equipment → Room item capacity: drop refusal*), so nothing bounds the reply's length.
+- **Paradigm: the reply lists what the search found, not the whole floor** *([OBSERVED] 2026-10-09,
+  report `paradigm-20261009-164508`; Realm: Paradigm, Stock not recorded)*. A room whose display showed
+  `34 rope and grapple`, `10 pulsating heart`, `scorpion tail` and 28 other stacks answered `sea` with
+  `You notice 2 wooden skiff, 2 rope and grapple, scorpion tail, pulsating heart, 10 black diamond here.`:
+  two stacks the display didn't show, and three it did, under smaller counts. Searches sent one after
+  another gave `8`, `9` or `10 black diamond`, and one left `pulsating heart` out.
+  - `[NEEDS CONFIRMATION]` Are the hidden copies in addition to the visible ones (34 visible + 2 hidden
+    rope and grapple = 36 in the room), or is the reply's count a recount of some of the visible stack?
 - (Targeted `sea <dir>` hidden-exit reveals are a separate path — see *Hidden exits — `sea <dir>` reveal
   wording*.)
 - **Client use:**
+  - `LineExtractor` joins the rows a long reply wraps over into one line, so every line reader is handed
+    the whole reply at once. `CasterMessageMatcher.LiteralRunsOccurInOrder` keeps the message templates'
+    regexes off a line they can't match (report `paradigm-20261009-164508`: the client stood still for
+    seconds on each reply).
   - Auto-search holds the `sea` past the fight and fires it **once** the room clears, then keeps the
     walker held briefly so the revealed `You notice … here.` survey lands and the get engines collect it
     **before** the loop sets up sneaking and steps on. One search per room; empty rooms (no fight)

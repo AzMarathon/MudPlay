@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.4**
-> - Gear sets, backstab armour, location gear and weapon swaps equip a piece the pack holds two or more of
-> - Combat no longer counts out an alternate weapon the pack holds two or more of
+> **Version 3.160.5**
+> - The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+> - Every line from the game is read faster (a slowdown that came in with 3.157.8)
+> - Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+> - The program log names any line that held the client up for a quarter of a second or more
+> - Bug report: how much is on the floor here and Roomba's slowest floor read
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

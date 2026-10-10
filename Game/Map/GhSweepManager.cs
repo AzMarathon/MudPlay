@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -288,6 +289,25 @@ public sealed class GhSweepManager : IDisposable
     // still names the room being left. Stage that list and attach it to the
     // transition's NewRoom in OnRoomChanged instead of shifting it backward.
     private List<string>? _pendingArrivalSurvey;
+    private TimeSpan _pendingArrivalReadTime;
+
+    // A floor of this many stacks is logged on arrival even when recon isn't
+    // searching. A Paradigm room has no item cap, and what a list that long cost
+    // to read is the first thing a report of a slow sweep needs.
+    private const int HugeFloorStacks = 100;
+
+    // How many hidden items a room's summary line names. A vault's full hidden
+    // list ran to 1,500 characters and was logged after each of ten searches.
+    private const int HiddenNamesLogged = 20;
+
+    // The floor reads taken since entering the room recon is standing in, kept for
+    // the one summary line the visit gets.
+    private int _surveysHere;
+    private GhSurveyTiming? _slowestSurveyHere;
+
+    // The floor read that took longest this sweep (or the last one, until the next
+    // starts). Surfaced for the bug report.
+    public GhSurveyTiming? SlowestSurvey { get; private set; }
 
     // Every graph room traversed by the expanded sweep circuit. Labels choose
     // destinations; they are not the list of source rooms worth inspecting.
@@ -540,6 +560,9 @@ public sealed class GhSweepManager : IDisposable
         _visibleByRoom.Clear();
         _hiddenByRoom.Clear();
         _pendingArrivalSurvey = null;
+        _surveysHere = 0;
+        _slowestSurveyHere = null;
+        SlowestSurvey = null;
         _sweepRooms.Clear();
         _pending.Clear();
         _movedSoFar.Clear();
@@ -1260,6 +1283,7 @@ public sealed class GhSweepManager : IDisposable
             || _tracker.State.Confidence == RoomConfidence.PendingRespawn)
         {
             _pendingArrivalSurvey = snapshot;
+            _pendingArrivalReadTime = _groundItems.LastSurveyReadTime;
             return;
         }
 
@@ -1267,8 +1291,8 @@ public sealed class GhSweepManager : IDisposable
             || _tracker.State.CurrentRoom is not { } current
             || !_sweepRooms.Contains(current.Key)) return;
 
+        long started = Stopwatch.GetTimestamp();
         GhSurveyMerger.Merge(_observedByRoom, current.Key, snapshot, _itemNames);
-        _itemLocations?.RecordRoom(current.Key, _observedByRoom[current.Key]);
         if (_reconSearchRoom is { } searchRoom && searchRoom.Equals(current.Key)
             && _reconSearchesSent > 0)
         {
@@ -1277,13 +1301,54 @@ public sealed class GhSweepManager : IDisposable
             // otherwise a plainly-visible item gets flagged RequiresSearch and Sorting
             // wastes a needless `sea` before grabbing it.
             GhSurveyMerger.MergeHiddenDelta(_hiddenByRoom, current.Key, snapshot, _visibleByRoom, _itemNames);
-            if (_hiddenByRoom.TryGetValue(current.Key, out List<string>? hiddenHere) && hiddenHere.Count > 0)
-                _log?.Info(LogCategory, $"recon revealed hidden at {current.Key}: {string.Join(", ", hiddenHere)}");
         }
         else
         {
             GhSurveyMerger.Merge(_visibleByRoom, current.Key, snapshot, _itemNames);
         }
+        TimeSpan merge = Stopwatch.GetElapsedTime(started);
+
+        NoteSurvey(current.Key, _groundItems.LastSurveyReadTime, merge, RecordItemLocations(current.Key));
+    }
+
+    // Writes the room's floor to the item-location log and says how long that took.
+    private TimeSpan RecordItemLocations(RoomKey room)
+    {
+        if (_itemLocations is null) return TimeSpan.Zero;
+        long started = Stopwatch.GetTimestamp();
+        _itemLocations.RecordRoom(room, _observedByRoom[room]);
+        return Stopwatch.GetElapsedTime(started);
+    }
+
+    private void NoteSurvey(RoomKey room, TimeSpan read, TimeSpan merge, TimeSpan itemLog)
+    {
+        _surveysHere++;
+
+        List<string> floor = _observedByRoom[room];
+        GhSurveyTiming timing = new(room, floor.Count, UnitCount(floor), read, merge, itemLog);
+        if (_slowestSurveyHere is null || timing.Total > _slowestSurveyHere.Total) _slowestSurveyHere = timing;
+        if (SlowestSurvey is null || timing.Total > SlowestSurvey.Total) SlowestSurvey = timing;
+    }
+
+    private static int UnitCount(IEnumerable<string> floor) =>
+        floor.Sum(item => CountedCommand.SplitLeadingCount(item).Count);
+
+    // One line for the room recon is leaving: how much is on its floor, how much of
+    // that only a search showed, and what the slowest floor read cost. The hidden
+    // items are named up to HiddenNamesLogged; the item-location log has them all.
+    private void LogRoomSurvey(RoomKey room)
+    {
+        if (_log is null || !_observedByRoom.TryGetValue(room, out List<string>? floor)) return;
+
+        StringBuilder line = new($"recon at {room}: {floor.Count} stack(s), {UnitCount(floor)} item(s) on the floor");
+        if (_hiddenByRoom.TryGetValue(room, out List<string>? hidden) && hidden.Count > 0)
+        {
+            line.Append($"; {hidden.Count} hidden: {string.Join(", ", hidden.Take(HiddenNamesLogged))}");
+            if (hidden.Count > HiddenNamesLogged) line.Append($" (+{hidden.Count - HiddenNamesLogged} more)");
+        }
+        if (_slowestSurveyHere is { } slowest)
+            line.Append($"; {_surveysHere} floor read(s), slowest: {slowest.StagesText}");
+        _log.Info(LogCategory, line.ToString());
     }
 
     // Called from AppServices' early RoomTracker.StateChanged wrapper — see the
@@ -1319,13 +1384,17 @@ public sealed class GhSweepManager : IDisposable
         }
 
         RoomKey here = t.NewRoom.Key;
+        _surveysHere = 0;
+        _slowestSurveyHere = null;
         if (_pendingArrivalSurvey is { } arrivalSurvey)
         {
             if (_sweepRooms.Contains(here))
             {
+                long started = Stopwatch.GetTimestamp();
                 GhSurveyMerger.Merge(_observedByRoom, here, arrivalSurvey, _itemNames);
                 GhSurveyMerger.Merge(_visibleByRoom, here, arrivalSurvey, _itemNames);
-                _itemLocations?.RecordRoom(here, _observedByRoom[here]);
+                TimeSpan merge = Stopwatch.GetElapsedTime(started);
+                NoteSurvey(here, _pendingArrivalReadTime, merge, RecordItemLocations(here));
             }
             _pendingArrivalSurvey = null;
         }
@@ -1343,6 +1412,8 @@ public sealed class GhSweepManager : IDisposable
             // visible floor — the room display already surfaced it via the survey —
             // and lets the loop walk on, so nothing hidden is ever tagged or sorted.
             if (_labels.SearchForHidden) BeginRoomSearches(here);
+            else if (_observedByRoom.TryGetValue(here, out List<string>? floor) && floor.Count >= HugeFloorStacks)
+                LogRoomSurvey(here);
             return;
         }
         // Final recon just refreshes each room's floor (the arrival survey above
@@ -1402,6 +1473,7 @@ public sealed class GhSweepManager : IDisposable
         }
 
         _reconSearchRoom = null;
+        LogRoomSurvey(room);
         ReleaseGate("recon searches complete");
     }
 
@@ -2384,9 +2456,7 @@ public sealed class GhSweepManager : IDisposable
         // populate _observedByRoom the same way InventoryOnly's single recon
         // does (see OnSurveyUpdated), so a Sort run is inherently also a full
         // inventory pass — this reports that instead of only the moved count.
-        int inventoried = _observedByRoom.Values
-            .SelectMany(items => items)
-            .Sum(item => CountedCommand.SplitLeadingCount(item).Count);
+        int inventoried = UnitCount(_observedByRoom.Values.SelectMany(items => items));
         if (Mode == SweepMode.InventoryOnly)
         {
             Send($"bg Roomba inventory complete - inventoried {inventoried} item(s). {timespan}.");

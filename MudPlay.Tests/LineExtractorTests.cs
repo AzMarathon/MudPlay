@@ -165,6 +165,47 @@ public sealed class LineExtractorTests
         Assert.Equal(body, emitted[0]);
     }
 
+    // A search of a room with no item cap is one line over a thousand rows. The
+    // text and the colour of every cell must come through the stitch whole.
+    [Fact]
+    public void ThousandRowWrap_JoinsTextAndAttributesWhole()
+    {
+        string floor = HugeFloor.Line(4000);
+        Assert.True(floor.Length > 80 * 800);
+
+        TerminalEmulator emulator = new(80, 25);
+        LineExtractor extractor = new(emulator);
+        List<LineExtractor.EmittedLine> emitted = new();
+        extractor.LineEmitted += emitted.Add;
+        // Cyan from the first character, as the game colours a floor list.
+        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("\u001b[0;36m" + floor + "\r\n"));
+
+        LineExtractor.EmittedLine line = Assert.Single(emitted);
+        Assert.Equal(floor, line.Text);
+        Assert.Equal(floor.Length, line.Attributes.Length);
+        Assert.All(line.Attributes, a => Assert.Equal(line.Attributes[0], a));
+        Assert.NotEqual(CellAttributes.Default, line.Attributes[0]);
+    }
+
+    [Fact]
+    public void ALineItsSubscribersDwellOn_IsReportedAsSlow()
+    {
+        TerminalEmulator emulator = new(80, 25);
+        LineExtractor extractor = new(emulator);
+        extractor.LineEmitted += l =>
+        {
+            if (l.Text == "slow") Thread.Sleep(LineExtractor.SlowLineThreshold + TimeSpan.FromMilliseconds(50));
+        };
+        List<(string Text, TimeSpan Took)> slow = new();
+        extractor.SlowLine += (l, took) => slow.Add((l.Text, took));
+
+        emulator.Feed(System.Text.Encoding.Latin1.GetBytes("slow\r\n"));
+
+        (string text, TimeSpan took) = Assert.Single(slow);
+        Assert.Equal("slow", text);
+        Assert.True(took >= LineExtractor.SlowLineThreshold);
+    }
+
     [Fact]
     public void HardLineBreaks_AreNotJoined()
     {
