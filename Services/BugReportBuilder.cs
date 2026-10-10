@@ -428,6 +428,8 @@ public static class BugReportBuilder
             Kv(sb, "Recoveries waiting their turn", string.Join(", ", queued));
         if (svc.PartyComeback.LeftAtLoopGates is { Count: > 0 } atGates)
             Kv(sb, "Left at an exit our loop goes through (not fetched)", string.Join(", ", atGates));
+        if (svc.PartyComeback.LeftOnTrainTrip is { Count: > 0 } onTrip)
+            Kv(sb, "Left on the train trip (fetched when it ends)", string.Join(", ", onTrip));
         Kv(sb, "Party train trip we set out on", svc.PartyTrain.TripWeSetOutOn ?? "(none)");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't

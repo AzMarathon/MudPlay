@@ -175,11 +175,13 @@ public sealed class PartyTrainCoordinator : IDisposable
         Func<bool> telepathsPending,
         Func<DateTimeOffset>? now = null,
         LogService? log = null,
-        Action<string>? expectComeback = null)
+        Action<string>? expectComeback = null,
+        Action? fetchLeftOnTrip = null)
     {
         ArgumentNullException.ThrowIfNull(party);
         ArgumentNullException.ThrowIfNull(trainer);
-        _expectComeback = expectComeback;
+        ArgumentNullException.ThrowIfNull(send);
+        _roll = new PartyTrainTripRoll(send, Speaks, ActiveMemberGivens, expectComeback, fetchLeftOnTrip, log);
         _party = party;
         _trainer = trainer;
         _expPerHour = expPerHour ?? throw new ArgumentNullException(nameof(expPerHour));
@@ -459,9 +461,8 @@ public sealed class PartyTrainCoordinator : IDisposable
         _tripLeader is not null && _now() <= _tripUntil
         && string.Equals(GivenName(leader), _tripLeader, StringComparison.OrdinalIgnoreCase);
 
-    // Leader side: told the name of each member a finished trip came back without,
-    // so their request to be fetched is taken as a party member's.
-    private readonly Action<string>? _expectComeback;
+    // Leader side: who set out on the trip in hand, and what is owed them at its end.
+    private readonly PartyTrainTripRoll _roll;
 
     private string? _tripLeader;
     private DateTimeOffset _tripUntil;
@@ -788,7 +789,6 @@ public sealed class PartyTrainCoordinator : IDisposable
         _tripRunning = true;
         _soloReform = [];   // this trip re-forms the party itself
         bool started = false;
-        List<string> announced = [];
         try
         {
             string self = SelfGiven();
@@ -853,15 +853,13 @@ public sealed class PartyTrainCoordinator : IDisposable
                 return;
             }
             started = true;
-            List<string> setOut = ActiveMemberGivens().ToList();
             _log?.Info(LogCategory,
                 $"Party train trip: training {string.Join(", ", trainees)} across {stops.Count} stop(s)"
                 + (bankRoom is { } br ? $", via the bank at {br.Map}/{br.Room}" : "") + ".");
-            // A member an exit turns away on the way (a trainer's room gated by level
-            // or class) would ask us back at once and stop the trip. Told a trip is
-            // on, it asks when the trip is over instead.
-            announced = setOut.Where(Speaks).ToList();
-            foreach (string name in announced) _send($"/{name} @ptrain trip on");
+            // Who sets out, and the word to their clients that a trip is on
+            // (PartyTrainTripRoll says why).
+            _roll.Open();
+            IReadOnlyList<string> setOut = _roll.SetOut;
 
             // Coin changes hands where we stand, before anyone walks.
             bool gave = false;
@@ -938,16 +936,6 @@ public sealed class PartyTrainCoordinator : IDisposable
 
             _trainer.EndPartyTrip("all stops done.");
             started = false;
-            // Whoever set out and isn't with us now was left on the way. Their
-            // request to be fetched comes when they hear the trip is over, and it is
-            // theirs to make however long the trip took.
-            List<string> missing = setOut.Except(ActiveMemberGivens(), StringComparer.OrdinalIgnoreCase).ToList();
-            if (missing.Count > 0)
-            {
-                _log?.Info(LogCategory,
-                    $"{string.Join(", ", missing)} set out and didn't reach the end of the trip — their @comeback is expected now the training is done.");
-                foreach (string name in missing) _expectComeback?.Invoke(name);
-            }
             // A member that trained left and rejoined, so it's asked afresh; one that
             // didn't keeps its ask record and only counts again once it pushes a
             // change — no retrying the same failed trip every cooldown.
@@ -961,12 +949,16 @@ public sealed class PartyTrainCoordinator : IDisposable
         finally
         {
             if (started) _trainer.EndPartyTrip("aborted.");
-            foreach (string name in announced) _send($"/{name} @ptrain trip off");
             _tripRunning = false;
             _cooldownUntil = _now() + TripCooldown;
             _walkTcs = null;
             _awaitingDone = null;
             _doneTcs = null;
+            // Last, with the engine put back and the trip no longer running: the
+            // members are told it is over, and whoever it left is gone back for.
+            // However the trip ended: one that couldn't reach its trainer has left
+            // people on the way just the same.
+            _roll.Close();
         }
     }
 

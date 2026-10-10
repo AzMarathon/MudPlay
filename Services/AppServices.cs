@@ -8685,9 +8685,27 @@ public sealed class AppServices
         // they'd sent @held (chip + full wait window).
         PartyComeback.LeftBehindRejoined = (given, ignoreOk) => PartyAilment?.NoteInferredHold(given, ignoreOk);
         PartyComeback.OkedWithin = PartyEssentials.OkedWithin;
-        // The exit a loop step just took, to tell a member it can't pass from one
-        // held or too heavy.
-        PartyComeback.RoomLookup = key => RoomGraph.GetRoom(key);
+        // A loop doesn't go back for a member an exit of its circuit turned away.
+        // What tells that from a hold: a wait or hold the member has out with us
+        // (or took back a moment ago), and what we hold of them against the exit's
+        // own conditions (the @level probe, their class and race from `who`, the
+        // last purse they reported, the items handed to them or counted).
+        PartyComeback.MemberSignalledHold = given =>
+            PartyEssentials.WaitingMembers.Contains(given)
+            || PartyEssentials.OkedWithin(given, TimeSpan.FromSeconds(5));
+        PartyComeback.MemberCanPass = (given, exit) =>
+        {
+            Models.GameData.PlayerRecord? known = Players.Find(given);
+            return Game.Remote.MemberGateJudge.CanPass(in exit, new Game.Remote.MemberGateJudge.Facts(
+                Level: known?.Level is > 0 and int level ? level : null,
+                ClassNumber: TableNumberByName("Classes", known?.Class),
+                RaceNumber: TableNumberByName("Races", known?.Race),
+                PurseCopper: PartyWealth.LastReading(given),
+                CopiesHeld: itemId => PartyHandOvers.CopiesRememberedFor(given, itemId)));
+        };
+        // During a party train trip nobody is gone back for; they are fetched at
+        // its end (PartyTrain is built further down, and read only when asked).
+        PartyComeback.TrainTripRunning = () => PartyTrain?.TripRunning == true;
         // A dropped member's reconnect hold (or their @wait) would park the walk to
         // pick them up — the leader never moves while they wait on it.
         PartyComeback.ReleaseHolds = (given, reason) =>
@@ -8934,7 +8952,9 @@ public sealed class AppServices
             log: Log,
             // A member a finished trip came back without asks to be fetched now;
             // that request is honoured as a party member's.
-            expectComeback: given => Party.ExpectComebackFrom(given));
+            expectComeback: given => Party.ExpectComebackFrom(given),
+            // And the ones we know we left on the way are gone back for.
+            fetchLeftOnTrip: () => PartyComeback.FetchLeftOnTrainTrip());
         Walker.Event += e => PartyTrain.OnWalkEvent(e.Kind);
         PartyTrainRemote = new Game.Remote.PartyTrainHandler(RemoteCommands, PartyTrain);
         PartyLevelProbe.ProgressObserved += PartyTrain.NoteLevelProgress;
@@ -11867,9 +11887,14 @@ public sealed class AppServices
 
     // The Monsters-table Number for a boss whose BossDef didn't carry one — resolved
     // by its game-data name. Null when the active set has no such monster.
-    private int? ResolveMonsterNumberByName(string name)
+    private int? ResolveMonsterNumberByName(string name) => TableNumberByName("Monsters", name);
+
+    // The Number of a game-data table's row, found by its name (a monster, a
+    // class, a race). Null when the active set has no such row.
+    private int? TableNumberByName(string table, string? name)
     {
-        if (GameData.FindRowByName("Monsters", name) is not System.Text.Json.JsonElement row) return null;
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        if (GameData.FindRowByName(table, name) is not System.Text.Json.JsonElement row) return null;
         return row.TryGetProperty("Number", out System.Text.Json.JsonElement el)
                && el.TryGetInt32(out int n) ? n : null;
     }

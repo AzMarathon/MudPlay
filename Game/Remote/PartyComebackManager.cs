@@ -47,8 +47,17 @@ namespace MudPlay.Game.Remote;
 // Everything runs on the UI thread — AutoWalkManager.Event,
 // PartyManager.MemberFollowConfirmed, PartyManager.MemberReturned, the router
 // telepath fan-out, and the follow timeout's DispatcherTimer all fire there, so
-// no marshalling is needed. Single-flight: a second recovery request while one is
-// in progress replies busy and is ignored.
+// no marshalling is needed. Single-flight: one member is fetched at a time, and
+// the others left behind with them wait their turn (QueueRecovery).
+//
+// Two cases where nobody is gone back for at once, both the user's rulings of
+// 2026-10-10:
+//   - A party train trip. Neither the game's drop line nor a member's @comeback
+//     stops the trip's walk; each member it leaves is kept with the room they
+//     were left in and fetched when the training is done (FetchLeftOnTrainTrip).
+//   - A loop whose own circuit goes through an exit that turned the member away.
+//     Their @comeback is refused and the loop carries on; the rule, and how the
+//     leader tells an exit's doing from a hold, is above LeftAtAGateOnOurLoop.
 public sealed class PartyComebackManager : IDisposable
 {
     private const string LogCategory = "Comeback";
@@ -250,6 +259,10 @@ public sealed class PartyComebackManager : IDisposable
         _party.MemberReturned += OnMemberReturned;
         // Path C trigger: a follower who couldn't move with us fell off the party.
         _party.MemberLeftBehind += OnMemberLeftBehind;
+        // What the loop's own steps cross, and who a `par` still lists as following:
+        // how a loop tells a member an exit of its circuit turned away.
+        _tracker.StateChanged += OnRoomChanged;
+        _party.ParReplyRead += OnParReplyRead;
         // Path B reply: the probed member's @where answer arrives as a telepath.
         _subs.Add(router.Subscribe(KnownPatterns.ConversationTelepathIn, OnTelepathIn));
 
@@ -289,6 +302,8 @@ public sealed class PartyComebackManager : IDisposable
         _party.MemberFollowConfirmed -= OnMemberFollowConfirmed;
         _party.MemberReturned -= OnMemberReturned;
         _party.MemberLeftBehind -= OnMemberLeftBehind;
+        _tracker.StateChanged -= OnRoomChanged;
+        _party.ParReplyRead -= OnParReplyRead;
         foreach (IDisposable sub in _subs) sub.Dispose();
         _subs.Clear();
         _followTimer.Stop();
@@ -304,6 +319,18 @@ public sealed class PartyComebackManager : IDisposable
         if (ctx.Args.Count > 0 && RoomKey.TryParseWire(ctx.Args[0], out RoomKey parsed))
             target = parsed;
         string given = GivenName(ctx.Sender);
+        if (TrainTripOn)
+        {
+            // The trip's own walk is not stopped for anyone (user, 2026-10-10:
+            // "train trips should be excluded"); they are fetched when the training
+            // is done, from the room they name. Said once, and only when denials are.
+            bool firstWord = _answeredOnTrip.Add(given);
+            NoteLeftOnTrip(given, target);
+            _log?.Info(LogCategory,
+                $"{given} asked to be fetched{(target is { } t ? $" from {t.Map}/{t.Room}" : "")} during the train trip — kept until the training is done");
+            if (firstWord && _engine.WarnOnDenial) ctx.Reply(TrainTripReply);
+            return;
+        }
         if (LeftAtAGateOnOurLoop(given, target) is { } from)
         {
             // Going back would only leave them at the same exit on the next lap
@@ -321,14 +348,101 @@ public sealed class PartyComebackManager : IDisposable
     // The answer to a member our loop left at an exit that doesn't let them through.
     public const string LoopGateRefusal = "I can't, my loop goes through an exit you can't pass";
 
-    // Room records by key, for reading the exit our last step went through.
-    // AppServices wires the room graph; without it no exit is known to be a gate.
-    public Func<RoomKey, Room?>? RoomLookup { get; set; }
+    // The answer to a member who asks to be fetched in the middle of a train trip.
+    public const string TrainTripReply = "I can't yet, I'm on a train trip. I'll come for you when the training is done";
+
+    // ----- a party train trip (nobody is fetched until it is over) ----------
+
+    // A party train trip is under way (PartyTrainCoordinator.TripRunning).
+    public Func<bool>? TrainTripRunning { get; set; }
+
+    private bool TrainTripOn => TrainTripRunning?.Invoke() == true;
+
+    // Who the trip in hand left on the way, oldest first, with the room each was
+    // left in: the room our step left when the game told us, or the room they
+    // named when they asked.
+    private readonly List<(string Given, RoomKey? Room)> _leftOnTrip = new();
+    // Who has been told, this trip, that they will be fetched after training.
+    private readonly HashSet<string> _answeredOnTrip = new(StringComparer.OrdinalIgnoreCase);
+
+    // For the bug report: the members a train trip has left on the way so far.
+    public IReadOnlyList<string> LeftOnTrainTrip => _leftOnTrip
+        .Select(l => l.Room is { } r ? $"{l.Given} at {r.Map}/{r.Room}" : $"{l.Given} (room not known)").ToList();
+
+    private void NoteLeftOnTrip(string given, RoomKey? room)
+    {
+        int at = _leftOnTrip.FindIndex(l => SameName(l.Given, given));
+        if (at < 0) _leftOnTrip.Add((given, room));
+        else if (room is not null) _leftOnTrip[at] = (given, room);
+    }
+
+    // The trip is over and the engine it paused is back. Everyone it left on the
+    // way is fetched now, in the order they were left, through the same pickup as
+    // any member left behind, whatever client they are on and however long ago it
+    // was (user, 2026-10-10: "the leader should realize that and pick them up when
+    // the training is done"). It runs with no walk or loop to go back to as well:
+    // the trip was ours, so the fetch is.
+    public void FetchLeftOnTrainTrip()
+    {
+        _answeredOnTrip.Clear();
+        if (_leftOnTrip.Count == 0) return;
+        List<(string Given, RoomKey? Room)> left = new(_leftOnTrip);
+        _leftOnTrip.Clear();
+        if (MasterOff)
+        {
+            _log?.Info(LogCategory,
+                $"the train trip left {string.Join(", ", left.Select(l => l.Given))} on the way, but the master switch is off — not going back for them.");
+            return;
+        }
+        foreach ((string given, RoomKey? room) in left)
+        {
+            _log?.Info(LogCategory,
+                $"the train trip left {given} {(room is { } r ? $"at {r.Map}/{r.Room}" : "on the way")} — going back for them now the training is done.");
+            BeginRecovery(given, room, TelepathReply(given), evenIdle: true);
+        }
+    }
+
+    // ----- a loop through an exit a member can't pass ------------------------
+    //
+    // A loop would leave such a member at the same exit every lap, so it doesn't go
+    // back for them and refuses their @comeback; a walk-to and Auto-Lair go back
+    // (user, 2026-10-10: "a gate the party member cannot pass"). The rule:
+    //   - Only an exit the loop's own circuit takes, crossed by a step of the loop.
+    //     A gate on the walk to the circuit, on a train trip's walk or crossed by
+    //     hand is not the loop's, and the member is gone back for.
+    //   - Only when the exit is what turned this member away. A member who told us
+    //     they are held or waiting (MemberSignalledHold) was stopped by that. One
+    //     the exit is known to admit (MemberCanPass true: level, class, race, purse
+    //     and item all known and met) was stopped by something else. Both are gone
+    //     back for.
+    //   - Where the leader can't tell, the gated step counts as the cause.
+
+    // The member has a hold or a wait out with us (@wait, @held), or took one back
+    // a moment ago: whatever stopped them, it wasn't the exit.
+    public Func<string, bool>? MemberSignalledHold { get; set; }
+
+    // Whether the exit would have let this member through, from what we hold of
+    // them (MemberGateJudge): true, false, or null when it can't be told.
+    public Func<string, RoomExit, bool?>? MemberCanPass { get; set; }
 
     // Followers the game told us it dropped right behind a loop step through an
-    // exit that admits only some: who, and the room that exit leads out of.
+    // exit of the circuit that turned them away: who, and the room it leads out of.
     private readonly Dictionary<string, (RoomKey From, DateTimeOffset At)> _gatedOnLoop =
         new(StringComparer.OrdinalIgnoreCase);
+
+    // Members the game told us it dropped behind a move of ours, until they follow
+    // again. For them the judgement was made on that line and stands.
+    private readonly HashSet<string> _dropLineSeen = new(StringComparer.OrdinalIgnoreCase);
+
+    // When each gated exit of the circuit was last crossed by a step of the loop,
+    // by the room it leaves, and the exit our latest step took if it was one.
+    private readonly Dictionary<RoomKey, (RoomExit Exit, DateTimeOffset At)> _loopGateCrossed = new();
+    private (RoomKey From, RoomExit Exit)? _lastStepGate;
+
+    // When each member was last known to be following: their join, or a `par`
+    // that listed them. Where the game tells a leader nothing of a drop, a gate
+    // crossed since then is the one that could have turned them away.
+    private readonly Dictionary<string, DateTimeOffset> _seenFollowingAt = new(StringComparer.OrdinalIgnoreCase);
 
     // For the bug report: the members our loop left at an exit they can't pass.
     public IReadOnlyList<string> LeftAtLoopGates =>
@@ -337,39 +451,64 @@ public sealed class PartyComebackManager : IDisposable
     private bool LoopIsTheEngine =>
         (_busy ? _resume.Kind : SnapshotRunningEngine().Kind) == ResumeKind.Loop;
 
-    // The room our last confirmed step left by an exit that admits only some, or
-    // null when it wasn't such an exit (or the map can't say).
-    private RoomKey? GateJustCrossed()
+    // Each room change: was it a step of the running loop through a gated exit of
+    // its own circuit?
+    private void OnRoomChanged(RoomTransition transition)
     {
-        IReadOnlyList<RoomKey> history = _tracker.GetHistory();
-        return history.Count >= 2 && IsGateBetween(history[1], history[0]) ? history[1] : null;
+        if (transition.NewRoom is not { } now || transition.PreviousRoom is not { } before || before.Key == now.Key)
+            return;
+        _lastStepGate = null;
+        if (_loopRunner.State is LoopState.Idle)
+        {
+            // Stopped for a pickup of ours, the loop is coming back: what it crossed
+            // stands. Stopped for good, it is forgotten.
+            if (!(_busy && _resume.Kind == ResumeKind.Loop)) _loopGateCrossed.Clear();
+            return;
+        }
+        if (_tracker.LastMoveWasManual) return;
+        foreach ((RoomKey from, RoomExit exit) in _loopRunner.CircuitExits())
+        {
+            if (from != before.Key || !exit.AdmitsOnlySome || (exit.Target != now.Key && exit.Landing != now.Key)) continue;
+            _lastStepGate = (from, exit);
+            _loopGateCrossed[from] = (exit, NowProvider());
+            return;
+        }
     }
 
-    private bool IsGateBetween(RoomKey from, RoomKey to)
+    private void OnParReplyRead()
     {
-        if (RoomLookup?.Invoke(from) is not { } room) return false;
-        foreach (RoomExit exit in room.Exits.Values)
-            if ((exit.Target == to || exit.Landing == to) && exit.AdmitsOnlySome) return true;
-        return false;
+        DateTimeOffset now = NowProvider();
+        foreach (PartyMember m in _party.State.Members)
+            if (!m.IsSelf && !m.IsInvited) _seenFollowingAt[GivenName(m.Name)] = now;
     }
+
+    private bool TurnedAwayBy(string given, RoomExit exit) =>
+        MemberSignalledHold?.Invoke(given) != true && MemberCanPass?.Invoke(given, exit) != true;
 
     // Whether this member's request is for a pickup at an exit our running loop
-    // goes through and they can't: the room to refuse them at. Known two ways. The
-    // game said it dropped them right behind our step through such an exit
-    // (OnMemberLeftBehind). Or, where the game tells a leader nothing, the room
-    // they name is one our path just left by such an exit.
+    // goes through and they can't: the room to refuse them at. Where the game told
+    // us of the drop, what was judged on that line stands. Where it tells a leader
+    // nothing, the loop's own crossings since the member was last seen following
+    // answer: the room they name, or with no room named the latest one.
     private RoomKey? LeftAtAGateOnOurLoop(string given, RoomKey? target)
     {
         if (!LoopIsTheEngine) return null;
+        if (_busy && SameName(given, _senderGiven)) return null;   // already going back for them
         if (_gatedOnLoop.TryGetValue(given, out var noted) && NowProvider() - noted.At <= ComebackWindow
             && (target is null || target == noted.From))
             return noted.From;
-        if (target is not { } named) return null;
-        IReadOnlyList<RoomKey> history = _tracker.GetHistory();
-        for (int i = 1; i < history.Count; i++)
-            if (history[i] == named) return IsGateBetween(named, history[i - 1]) ? named : null;
-        return null;
+        if (_dropLineSeen.Contains(given)) return null;
+        DateTimeOffset since = _seenFollowingAt.GetValueOrDefault(given, DateTimeOffset.MinValue);
+        if (target is { } named)
+            return _loopGateCrossed.TryGetValue(named, out var crossed) && crossed.At > since
+                && TurnedAwayBy(given, crossed.Exit) ? named : null;
+        (RoomKey From, RoomExit Exit, DateTimeOffset At)? latest = null;
+        foreach (KeyValuePair<RoomKey, (RoomExit Exit, DateTimeOffset At)> kv in _loopGateCrossed)
+            if (latest is not { } l || kv.Value.At > l.At) latest = (kv.Key, kv.Value.Exit, kv.Value.At);
+        return latest is { } last && last.At > since && TurnedAwayBy(given, last.Exit) ? last.From : null;
     }
+
+    private static bool SameName(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     // ----- @where probe (path B) -------------------------------------
 
@@ -509,15 +648,28 @@ public sealed class PartyComebackManager : IDisposable
             _log?.Info(LogCategory, $"{given} stopped following, but not behind a move of ours — not going back for them.");
             return;
         }
-        // A loop that goes through an exit this member can't pass would leave them
-        // there again every lap, so it carries on without them; a walk-to goes back
-        // (user, 2026-10-10). A member a loop leaves for any other reason (held, a
-        // weight) is gone back for as before.
-        if (LoopIsTheEngine && !_tracker.LastMoveWasManual && GateJustCrossed() is { } gateRoom)
+        // On a party train trip nobody is gone back for, and the trip's walk is not
+        // stopped: the room our step left is kept, and they are fetched when the
+        // training is done.
+        if (TrainTripOn)
         {
-            _gatedOnLoop[given] = (gateRoom, NowProvider());
+            IReadOnlyList<RoomKey> path = _tracker.GetHistory();
+            RoomKey? leftAt = path.Count >= 2 ? path[1] : null;
+            NoteLeftOnTrip(given, leftAt);
             _log?.Info(LogCategory,
-                $"{given} was turned away at the exit our loop took out of {gateRoom.Map}/{gateRoom.Room} — not going back; the loop would leave them there again.");
+                $"{given} was left behind {(leftAt is { } r ? $"at {r.Map}/{r.Room} " : "")}on the train trip — fetching them when the training is done.");
+            return;
+        }
+        _dropLineSeen.Add(given);
+        // A loop that goes through an exit this member can't pass would leave them
+        // there again every lap, so it carries on without them (the rule is above
+        // LeftAtAGateOnOurLoop). Held or too heavy on that same step, they are gone
+        // back for.
+        if (LoopIsTheEngine && !_tracker.LastMoveWasManual && _lastStepGate is { } gate && TurnedAwayBy(given, gate.Exit))
+        {
+            _gatedOnLoop[given] = (gate.From, NowProvider());
+            _log?.Info(LogCategory,
+                $"{given} was turned away at the exit our loop took out of {gate.From.Map}/{gate.From.Room} — not going back; the loop would leave them there again.");
             return;
         }
         // One step can leave several behind (an exit that turns away more than one
@@ -525,7 +677,7 @@ public sealed class PartyComebackManager : IDisposable
         if (_busy)
         {
             if (!string.Equals(given, _senderGiven, StringComparison.OrdinalIgnoreCase) && !_tracker.LastMoveWasManual)
-                QueueRecovery(given, null, TelepathReply(given));
+                QueueRecovery(given, null, TelepathReply(given), evenIdle: false);
             return;
         }
         if (SnapshotRunningEngine().Kind == ResumeKind.None)
@@ -559,7 +711,10 @@ public sealed class PartyComebackManager : IDisposable
 
     // Single funnel for both entry paths: gate on party-full + return-distance,
     // decline via @forget if we can't come, else snapshot / stop / walk.
-    private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply, ResumeTarget? carried = null)
+    // evenIdle: go although no walk, loop or Auto-Lair is running to be put back
+    // afterwards (the fetch that ends a train trip).
+    private void BeginRecovery(string senderGiven, RoomKey? target, Action<string> reply,
+        ResumeTarget? carried = null, bool evenIdle = false)
     {
         if (string.IsNullOrEmpty(senderGiven)) return;
         if (_busy)
@@ -585,7 +740,7 @@ public sealed class PartyComebackManager : IDisposable
             // away was answered and then never gone back for.
             if (!string.Equals(senderGiven, _senderGiven, StringComparison.OrdinalIgnoreCase))
             {
-                QueueRecovery(senderGiven, target, reply);
+                QueueRecovery(senderGiven, target, reply, evenIdle);
                 reply($"comeback already in progress — fetching {_senderGiven} first, then you");
                 return;
             }
@@ -641,7 +796,7 @@ public sealed class PartyComebackManager : IDisposable
         ResumeTarget resume = carried ?? SnapshotRunningEngine();
         if (resume.Kind == ResumeKind.None && TakeParkedResume(senderGiven) is { } parked)
             resume = parked;
-        if (resume.Kind == ResumeKind.None)
+        if (resume.Kind == ResumeKind.None && !evenIdle)
         {
             reply("I can't I'm idle");
             return;
@@ -714,6 +869,11 @@ public sealed class PartyComebackManager : IDisposable
         // reconnect doesn't keep telepathing @comeback at them.
         ForgetLeaderCallback?.Invoke(given);
         _pendingProbes.Remove(given);
+        // Waiting their turn, or kept for the end of a train trip: neither any more.
+        _queued.RemoveAll(q => SameName(q.Given, given));
+        _leftOnTrip.RemoveAll(l => SameName(l.Given, given));
+        _gatedOnLoop.Remove(given);
+        _dropLineSeen.Remove(given);
 
         if (wasRecovering)
         {
@@ -755,21 +915,21 @@ public sealed class PartyComebackManager : IDisposable
 
     // Members waiting for the recovery in flight to end, oldest first: who, the
     // room they named (none: backtrack) and how to answer them.
-    private readonly List<(string Given, RoomKey? Target, Action<string> Reply)> _queued = new();
+    private readonly List<(string Given, RoomKey? Target, Action<string> Reply, bool EvenIdle)> _queued = new();
 
     // For the bug report: who is waiting behind the recovery in flight.
     public IReadOnlyList<string> QueuedRecoveries => _queued.Select(q => q.Given).ToList();
 
-    private void QueueRecovery(string given, RoomKey? target, Action<string> reply)
+    private void QueueRecovery(string given, RoomKey? target, Action<string> reply, bool evenIdle)
     {
         int at = _queued.FindIndex(q => string.Equals(q.Given, given, StringComparison.OrdinalIgnoreCase));
         if (at >= 0)
         {
             // Asked again, perhaps with a room this time: the newer word stands.
-            _queued[at] = (given, target ?? _queued[at].Target, reply);
+            _queued[at] = (given, target ?? _queued[at].Target, reply, evenIdle || _queued[at].EvenIdle);
             return;
         }
-        _queued.Add((given, target, reply));
+        _queued.Add((given, target, reply, evenIdle));
         _log?.Info(LogCategory, $"{given} is left behind too — fetching them after {_senderGiven}");
     }
 
@@ -779,9 +939,9 @@ public sealed class PartyComebackManager : IDisposable
     {
         while (_queued.Count > 0)
         {
-            (string given, RoomKey? target, Action<string> reply) = _queued[0];
+            (string given, RoomKey? target, Action<string> reply, bool evenIdle) = _queued[0];
             _queued.RemoveAt(0);
-            BeginRecovery(given, target, reply, resume);
+            BeginRecovery(given, target, reply, resume, evenIdle);
             if (_busy) return true;
         }
         return false;
@@ -791,7 +951,7 @@ public sealed class PartyComebackManager : IDisposable
     {
         ResumeTarget r = _resume;
         GoIdle();
-        if (r.Kind != ResumeKind.None && StartNextQueued(r)) return;
+        if (StartNextQueued(r)) return;
         switch (r.Kind)
         {
             case ResumeKind.Lair:
@@ -816,7 +976,7 @@ public sealed class PartyComebackManager : IDisposable
         GoIdle();
         // Someone else is waiting: the search goes on for them, and the engine is
         // theirs to put back.
-        if (r.Kind != ResumeKind.None && StartNextQueued(r)) return;
+        if (StartNextQueued(r)) return;
         if (r.Kind != ResumeKind.None && !string.IsNullOrEmpty(gaveUpOn))
         {
             _parkedResume = (gaveUpOn, r, NowProvider());
@@ -844,7 +1004,11 @@ public sealed class PartyComebackManager : IDisposable
         _crFallbackTimer.Stop();
         _pendingProbes.Clear();
         _queued.Clear();
+        _leftOnTrip.Clear();
         _gatedOnLoop.Clear();
+        _dropLineSeen.Clear();
+        _loopGateCrossed.Clear();
+        _lastStepGate = null;
         GoIdle();
         if (had) _log?.Info(LogCategory, $"recovery state cleared ({reason})");
     }
@@ -1006,6 +1170,9 @@ public sealed class PartyComebackManager : IDisposable
         // Back with us before their turn came: nobody left to fetch.
         _queued.RemoveAll(q => string.Equals(q.Given, GivenName(name), StringComparison.OrdinalIgnoreCase));
         _gatedOnLoop.Remove(GivenName(name));
+        _dropLineSeen.Remove(GivenName(name));
+        _leftOnTrip.RemoveAll(l => SameName(l.Given, GivenName(name)));
+        _seenFollowingAt[GivenName(name)] = NowProvider();
 
         if (!_busy || _phase == ComebackPhase.Idle) return;
         if (!string.Equals(GivenName(name), _senderGiven, StringComparison.OrdinalIgnoreCase)) return;
