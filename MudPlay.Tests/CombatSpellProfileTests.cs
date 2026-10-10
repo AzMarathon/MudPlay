@@ -460,28 +460,34 @@ public sealed class CombatSpellProfileTests
         Assert.Equal(88, profile.CombatProfiles.Profiles[0].Health.RestMaxHp);
     }
 
-    // A caster's combat drops and re-engages on every cast: the full configuration
-    // is logged when it has changed, not on every engage (report
-    // paradigm-20261010-145330).
-    [Fact]
-    public void NoteCombatEngaged_LogsTheFullConfigurationOnlyWhenItChanges()
+    // A manager over a swappable character, with the log's entries collected. Each
+    // character carries the same two profiles, the first active.
+    private static (CombatProfileManager Mgr, List<MudPlay.Services.LogEntry> Entries,
+                    Func<CharacterProfile> Current, Action LoadAnotherCharacter)
+        EngageLogRig(bool combatDiagnostics)
     {
-        var profile = new CharacterProfile
+        static CharacterProfile Character()
         {
-            CombatProfiles = new CombatProfileSettings
+            CharacterProfile c = new()
             {
-                Profiles = { new CombatSpellProfile { Name = "Script" }, new CombatSpellProfile() },
-            },
-        };
-        profile.CombatProfiles.ActiveId = profile.CombatProfiles.Profiles[0].Id;
+                CombatProfiles = new CombatProfileSettings
+                {
+                    Profiles = { new CombatSpellProfile { Name = "Script" }, new CombatSpellProfile() },
+                },
+            };
+            c.CombatProfiles.ActiveId = c.CombatProfiles.Profiles[0].Id;
+            return c;
+        }
+
+        CharacterProfile current = Character();
         var log = new MudPlay.Services.LogService
         {
-            Diagnostics = new MudPlay.Services.LogDiagnosticState { CombatDiagnostics = true },
+            Diagnostics = new MudPlay.Services.LogDiagnosticState { CombatDiagnostics = combatDiagnostics },
         };
         var entries = new List<MudPlay.Services.LogEntry>();
         log.EntryAdded += entries.Add;
         var mgr = new CombatProfileManager(
-            profile: () => profile,
+            profile: () => current,
             readCombat: () => new CombatSettings(),
             writeCombat: _ => { },
             readHealth: () => new HealthSettings(),
@@ -493,6 +499,21 @@ public sealed class CombatSpellProfileTests
             log: log);
         mgr.EnsureSeeded();
         entries.Clear();
+        return (mgr, entries, () => current, () =>
+        {
+            current = Character();
+            mgr.OnProfileLoaded();
+            entries.Clear();
+        });
+    }
+
+    // A caster's combat drops and re-engages on every cast: the full configuration
+    // is logged when it has changed, not on every engage (report
+    // paradigm-20261010-145330).
+    [Fact]
+    public void NoteCombatEngaged_LogsTheFullConfigurationOnlyWhenItChanges()
+    {
+        var (mgr, entries, current, _) = EngageLogRig(combatDiagnostics: true);
 
         mgr.NoteCombatEngaged();
         mgr.NoteCombatEngaged();
@@ -507,11 +528,62 @@ public sealed class CombatSpellProfileTests
             Assert.Equal("engaged — Combat profile 1 (Script), configured as last logged", e.Message);
         });
 
-        profile.CombatProfiles.Profiles[0].NormalAttackSpell.SpellName = "nebo";
+        current().CombatProfiles!.Profiles[0].NormalAttackSpell.SpellName = "nebo";
         mgr.NoteCombatEngaged();
 
         Assert.Equal(MudPlay.Services.LogSeverity.Info, entries[^1].Severity);
         Assert.Contains("normal nebo", entries[^1].Message);
+    }
+
+    // The full line is Info: it is there with Combat diagnostics off, where the
+    // repeat writes nothing.
+    [Fact]
+    public void NoteCombatEngaged_ProfileSwitchedAndBack_IsLoggedInFullEachTime()
+    {
+        var (mgr, entries, current, _) = EngageLogRig(combatDiagnostics: false);
+        CombatProfileSettings store = current().CombatProfiles!;
+
+        mgr.NoteCombatEngaged();
+        store.ActiveId = store.Profiles[1].Id;
+        mgr.NoteCombatEngaged();
+        store.ActiveId = store.Profiles[0].Id;
+        mgr.NoteCombatEngaged();
+        mgr.NoteCombatEngaged();
+
+        Assert.Equal(3, entries.Count);
+        Assert.All(entries, e => Assert.Equal(MudPlay.Services.LogSeverity.Info, e.Severity));
+        Assert.StartsWith("engaged — Combat profile 2:", entries[1].Message);
+        Assert.StartsWith("engaged — Combat profile 1 (Script):", entries[2].Message);
+    }
+
+    // A knob that is not a spell slot: the health thresholds a profile carries.
+    [Fact]
+    public void NoteCombatEngaged_HealthThresholdEdited_IsLoggedInFull()
+    {
+        var (mgr, entries, current, _) = EngageLogRig(combatDiagnostics: false);
+
+        mgr.NoteCombatEngaged();
+        current().CombatProfiles!.Profiles[0].Health!.RestIfBelowHp += 7;
+        mgr.NoteCombatEngaged();
+
+        Assert.Equal(2, entries.Count);
+    }
+
+    // What was last logged was another character's: this one's first fight is
+    // logged in full though its profile reads the same.
+    [Fact]
+    public void NoteCombatEngaged_AnotherCharacterWithTheSameConfiguration_FirstFightIsLoggedInFull()
+    {
+        var (mgr, entries, _, loadAnotherCharacter) = EngageLogRig(combatDiagnostics: false);
+        mgr.NoteCombatEngaged();
+        Assert.Single(entries);
+
+        loadAnotherCharacter();
+        mgr.NoteCombatEngaged();
+
+        MudPlay.Services.LogEntry entry = Assert.Single(entries);
+        Assert.Equal(MudPlay.Services.LogSeverity.Info, entry.Severity);
+        Assert.StartsWith("engaged — Combat profile 1 (Script):", entry.Message);
     }
 
     [Fact]

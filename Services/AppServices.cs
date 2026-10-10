@@ -6344,7 +6344,7 @@ public sealed class AppServices
                 Profile.Save();
             });
         CombatProfiles.EnsureSeeded();
-        Profile.ProfileLoaded += _ => CombatProfiles.EnsureSeeded();
+        Profile.ProfileLoaded += _ => CombatProfiles.OnProfileLoaded();
         ProfileSwap = new Game.Remote.ProfileSwapHandler(RemoteCommands, CombatProfiles);
 
         // Anchor each fight to the combat profile driving it, on the InCombat
