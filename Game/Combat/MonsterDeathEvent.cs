@@ -27,8 +27,16 @@ public readonly record struct MonsterDeathIdentity(int? Number, string Name);
 // when no exp line was observed in the window. At is the wall-clock time the
 // event fired. IsFallback is true for the exp + Combat Off path, false when a
 // specific death pattern matched.
+//
+// RoomSpellRoster is set for a kill made under our own room-attack spell, raised on
+// its exp line (CombatManager.RoomSpellKill): the kinds of monster the room listed
+// when it died. One of them is the dead one; which isn't known until the room is
+// read again, and the engaged target says nothing, being only the monster the round
+// was anchored to. Null for every other death. A consumer that needs a name treats
+// such a death as unnamed unless the list holds a single kind.
 public readonly record struct MonsterDeathEvent(
     IReadOnlyList<MonsterDeathIdentity> Candidates,
     int? ExperienceGained,
     DateTimeOffset At,
-    bool IsFallback);
+    bool IsFallback,
+    IReadOnlyList<MonsterDeathIdentity>? RoomSpellRoster = null);
