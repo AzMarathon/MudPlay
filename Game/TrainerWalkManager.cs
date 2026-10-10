@@ -1499,8 +1499,8 @@ public sealed class TrainerWalkManager : IDisposable
 
     private void StopEngine()
     {
-        if (_autoLair.IsActive) _autoLair.Stop("trainer detour");
-        if (_loopRunner.State != LoopState.Idle) _loopRunner.Stop("trainer detour");
+        if (_autoLair.IsActive) _autoLair.Stop("trainer detour", willResume: true);
+        if (_loopRunner.State != LoopState.Idle) _loopRunner.Stop("trainer detour", willResume: true);
     }
 
     private void ResumeEngine(ResumeTarget resume)

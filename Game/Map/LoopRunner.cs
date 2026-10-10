@@ -1477,7 +1477,11 @@ public sealed class LoopRunner : IRecoverableEngine
         }
     }
 
-    public void Stop(string reason = "user stop")
+    // willResume: the caller stops the loop only to start it again itself (a bank or
+    // sell trip, a flee, a reconnect), which the Stopped event says so a listener
+    // can tell that from the loop being called off (an event run counting this
+    // loop's laps must outlast the one and end on the other).
+    public void Stop(string reason = "user stop", bool willResume = false)
     {
         if (State == LoopState.Idle) return;
         string? name = _loop?.Name;
@@ -1489,7 +1493,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (State == LoopState.Approaching) _walker?.Stop("loop stopped");
         Reset();
         EndReconnectReformHold("the loop was stopped");
-        Raise(new LoopEvent(LoopEventKind.Stopped, $"{name}: {reason}"));
+        Raise(new LoopEvent(LoopEventKind.Stopped, $"{name}: {reason}", willResume));
     }
 
     // Avoided-rooms list mutated mid-loop. Re-plan with the new filter so it
@@ -2652,7 +2656,7 @@ public sealed class LoopRunner : IRecoverableEngine
         if (State != LoopState.Idle)
         {
             _pendingReconnectResume = _loop;
-            Stop("disconnected — will resume on reconnect");
+            Stop("disconnected — will resume on reconnect", willResume: true);
         }
         // A reform hold belongs to the connection that just ended. Dropped after the
         // stop, which drops it too: lifting it first would let the held loop step.
@@ -3410,4 +3414,5 @@ public enum LoopEventKind
     Renamed = 9,
 }
 
-public readonly record struct LoopEvent(LoopEventKind Kind, string Detail);
+// WillResume is set on a Stopped whose caller restarts the loop itself afterwards.
+public readonly record struct LoopEvent(LoopEventKind Kind, string Detail, bool WillResume = false);

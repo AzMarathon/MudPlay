@@ -2036,7 +2036,9 @@ public sealed class AutoWalkManager : IRecoverableEngine
         return ExpandRouteKeys(from, path);
     }
 
-    public void Stop(string reason = "user stop")
+    // willResume: the caller stops the walk only to take it up again itself (a sell
+    // trip, a flee), which the Stopped event says (WalkEvent.WillResume).
+    public void Stop(string reason = "user stop", bool willResume = false)
     {
         if (State == WalkState.Idle)
         {
@@ -2045,7 +2047,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
             // the next leg hears of a stop only through this event, so it is raised
             // for the journey: without it the leg went out after the user's Stop.
             if (_journey is { } standing)
-                Raise(new WalkEvent(WalkEventKind.Stopped, reason, standing.Destination));
+                Raise(new WalkEvent(WalkEventKind.Stopped, reason, standing.Destination, WillResume: willResume));
             return;
         }
         RoomKey? dest = _destination;
@@ -2053,7 +2055,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // Free any party-reform gate this walk was holding so a stopped user
         // isn't pinned by an in-progress chime-teleport re-invite.
         _onPartySplitAbort?.Invoke();
-        Raise(new WalkEvent(WalkEventKind.Stopped, reason, dest));
+        Raise(new WalkEvent(WalkEventKind.Stopped, reason, dest, WillResume: willResume));
     }
 
     public void Pause() => _coordinator.AssertGate(MovementCoordinator.UserGate);
@@ -4285,4 +4287,7 @@ public enum WalkEventKind
 // before entering" and ended one room short of it: Destination is where the walk
 // ended, Requested the room that was asked for. A caller waiting on its own room
 // matches either.
-public readonly record struct WalkEvent(WalkEventKind Kind, string Detail, RoomKey? Destination, RoomKey? Requested = null);
+//
+// WillResume is set on a Stopped whose caller takes the walk up again itself.
+public readonly record struct WalkEvent(
+    WalkEventKind Kind, string Detail, RoomKey? Destination, RoomKey? Requested = null, bool WillResume = false);
