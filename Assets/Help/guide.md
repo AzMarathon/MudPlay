@@ -1040,6 +1040,7 @@ A member's chip clears on the first of:
 If a member drops, the party can auto-re-invite and reform on reconnect, and a member left behind can `@comeback` to rejoin the leader.
 
 - **A follower who reconnects** within the *If leading, accept @comeback for* time (default 2 minutes) telepaths `@comeback <map/room>` to their leader, so the leader walks straight to them. After a longer drop the party has moved on, and no `@comeback` goes out. MudPlay waits up to 5 seconds after re-entering for your room to be confirmed, since the game can put you back somewhere other than where you dropped. Only if it can't confirm your room does a bare `@comeback` go out, and the leader backtracks along their own path instead, up to its *Return distance* in rooms.
+- **A follower the leader moved on without** (held, too heavy, or turned away at an exit the party went through) asks the same way, once. When it asks and when it doesn't is under *Auto-request @comeback when left behind*.
 - **A leader** takes that `@comeback` for up to *If leading, accept @comeback for* minutes after the member dropped, even once they've re-entered the realm.
 - **If the leader is already backtracking** for that member and their `@comeback` names a room, the leader heads for that room instead.
 - **When a member drops, the leader holds in place** for their reconnect. That hold ends once the leader sets off to pick them up (or turns them down), so a leader waiting on a returning member still walks to them.
@@ -4546,7 +4547,27 @@ With more than one able member, the first to report the way clear moves you on, 
 ### Auto-request @comeback when left behind
 
 **Default:** On
-**What it does:** If you're a follower who gets stranded behind a moving leader, MudPlay automatically sends the `@comeback` request on your behalf.
+**What it does:** As a follower, if your leader moves on without you, MudPlay telepaths `@comeback <map/room>` to the leader on your behalf, once, so their client comes back for you. When it isn't sure which room you're in it sends a bare `@comeback`, and the leader backtracks the way they came.
+
+**When it asks:**
+
+- You were held, stunned, knocked down or too heavy to move when the leader stepped on. Your client's `@wait` for that goes first, then the `@comeback`.
+- An exit turned you away as the party went through it: a closed door, an item or key you don't carry, a toll you can't pay, a level, class, race or alignment gate, a room you aren't permitted in.
+- The leader was seen leaving the room and you weren't taken along.
+- Your own `par` shows the leader as `[Invited]`: you are still on the party's list but following nobody.
+
+**When it doesn't:**
+
+- The leader uninvited you or disbanded the party.
+- You left: you typed `leave` (or `follow` / `join`), or you moved by yourself (a keystroke, a macro, a relayed command). A move the game refused doesn't count as leaving.
+- You died or dropped, or the leader did.
+- A teleport split the party: a command the leader relayed with `@party` (`ring chime`, `go vortex`), or an exit that casts a spell on whoever walks it. The leader's client re-invites everyone where it lands.
+- You aren't following anyone (solo, or leading).
+- This setting is off, Auto-All is off, or the client can't send just then (the board's menu, a trainer screen).
+
+**One request per split.** After asking, your client asks nothing more until you are following again. The leader's client answers by telepath, and the answer is written to the program log. A leader with no walk, loop or Auto-Lair running answers `I can't I'm idle` and stays put: your character waits where it stands, and regrouping is up to the two of you. A leader who is too far, has a full party or can't find a path says so and sends `@forget`. Nothing here ever walks your own character anywhere.
+
+The program log (source `Comeback`) says what showed you were left behind each time a request goes out, and why each time one is held back. The bug report's Party section carries the last such incident and the leader's answer.
 
 ### Only auto-invite while navigation is running
 

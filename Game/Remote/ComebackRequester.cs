@@ -49,7 +49,7 @@ public sealed partial class ComebackRequester : IDisposable
     // left-behind. The follow move is made in the same tick as the leader's, so a
     // follow line or the "no longer following" line that names the cause is here
     // well inside it.
-    public static readonly TimeSpan SettleTime = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan SettleTime = TimeSpan.FromSeconds(2);
 
     // A refusal this soon after a move of our own answers that move, not a follow
     // move. The leader side reads its own moves over the same window.

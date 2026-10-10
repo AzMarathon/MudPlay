@@ -89,12 +89,12 @@ public sealed class OtherSettings
     // gate check runs whenever this character leads a party. See
     // Game.Remote.PartyLevelTracker (always-on: IsInParty && SelfIsLeader).
 
-    // Follower-side auto-@comeback. When true (default) and a movement-blocking
-    // condition (prevents-movement gamedata flag or over-encumbrance) leaves us
-    // behind as the party leader walks off, we automatically telepath @comeback
-    // <room> to the leader so their party-recovery walk picks us up. When false,
-    // the left-behind is still detected but no request is sent — the player
-    // handles it manually. Defaults on: the request is a single telepath that
+    // Follower-side auto-@comeback. When true (default) and the party leader
+    // moves on without us (a hold, too much weight, an exit that turned us away),
+    // we telepath @comeback <room> to the leader once so their party-recovery
+    // walk picks us up; ComebackRequester has the triggers and the splits it
+    // never asks for. When false, the left-behind is still detected but no request
+    // is sent — the player handles it manually. Defaults on: the request is a single telepath that
     // moves nothing on our side, so being stranded silently is strictly the
     // worse outcome. Char-tier setting; surfaced in Settings → Other.
     public bool AutoRequestComebackWhenLeftBehind { get; set; } = true;

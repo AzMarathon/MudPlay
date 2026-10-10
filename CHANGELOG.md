@@ -1,5 +1,13 @@
 # Version history
 
+## 3.163.1
+
+- A follower left behind at an exit (door, item, toll, level or class gate) now sends `@comeback`
+- Also when the leader is seen leaving without it, or its own `par` shows the leader `[Invited]`
+- No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a party teleport
+- One request per split; the leader's answer is logged; nothing is sent with Auto-All off
+- The bug report shows the last left-behind incident
+
 ## 3.163.0
 
 - A monster set to **Flee** is run from on sight, while a walk or loop is running

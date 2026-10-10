@@ -1,17 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.163.0**
-> - A monster set to **Flee** is run from on sight, while a walk or loop is running
-> - It is the Health tab's flee: the Combat tab's run distance and direction
-> - With no run coming (idle, paused, no way out, a follower) it is fought back if it attacks
-> - Go backwards if running unticked: the run goes on past it, and a loop carries on from there
-> - Ticked: a monster on your route is run from on every return
-> - A low-HP or low-mana flee set to run forwards now carries a loop on too, instead of returning to the fight room
-> - A forward flee no longer starts with the step just walked
-> - A flee ends when you die, disconnect or load another character
-> - Two monsters ship set to Flee; set Neutral or Enemy to turn it off
-> - A flee stops short of Crystal Lake's teleporting rooms
+> **Version 3.163.1**
+> - A follower left behind at an exit (door, item, toll, level or class gate) now sends `@comeback`
+> - Also when the leader is seen leaving without it, or its own `par` shows the leader `[Invited]`
+> - No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a party teleport
+> - One request per split; the leader's answer is logged; nothing is sent with Auto-All off
+> - The bug report shows the last left-behind incident
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
