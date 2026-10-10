@@ -3767,6 +3767,15 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
   - The estimator encodes the 6s value as `StockMediumTickSeconds`.
   - **On Stock the cast on entering is conditional** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` room-entry helper @0x416ae6, test @0x416b61–0x416b9b; Realm: Stock)*. The helper casts the destination's room spell on the mover only when the destination has room flag `0x20` (one of the flags the sysop dump doesn't name: *Monster roaming and following*) and its spell number differs from that of the room being left. It runs before the mover's room fields change, so its lines come ahead of the arrival lines and the new room's display. The tick cast (`_medium_update_character` @0x4228a2) has no such test. This narrows "plus on room change" for Stock: walking between two rooms with the same spell, or into a room without the flag, casts nothing on entry by this helper.
 - **The summon lives in a TextBlock, not an `Abil 12` slot.** The room spell carries a **`TextBlock` ability (`Abil == 148`)** whose `AbilVal` is a **TBInfo `Number`**. The TBInfo `Action` string is the roll table — so a room-summon is *not* found by scanning `Abil == 12` (that's the death-summon path).
+  - **Six summon room spells keep that number in `MinBase` / `MaxBase`, with `AbilVal` 0** *([OBSERVED] 2026-10-09, game data: `data-v1.11p`, `data-Paradigm-1.9.1`)*, the encoding in *Movement & navigation → Room-spell hazard shape 2 — TextBlock action guarded by `failitem <itemNum>`*. Rooms are given Stock / Paradigm, "—" where the set doesn't place the spell:
+    - `graveyard` (1126, 110 / 110 rooms) → TBInfo 9471 `random 9515`;
+    - `bone dock` (1152, 1 / 1) → 9655 `roomitem 1807:random 9656`;
+    - `strange rift` (5169, — / 2) → 7008 `roomitem 3538:random 7009`;
+    - `manaspring` (5468, — / 13) → 9889 `random 9890`;
+    - `farnholme portal` (5676, — / 1) → 5636 `roomitem 3775:nomonsters:random 5637`;
+    - `talgarn portal` (5686, — / 1) → 5686 `roomitem 3786:nomonsters:random 5687`.
+    - The item each `roomitem` names is placed in every room that carries the spell (`Rooms.Placed`).
+  - **Where both are filled in, `AbilVal` names the block** *(same source)*: Paradigm's `Dino trigger 2` (5082) has `AbilVal` 3357 (`roomitem 3390:nomonsters:random 3356`, its own table) and `MinBase` / `MaxBase` 9655, which is `bone dock`'s block. `nether` 1–3 (5449–5451) and `Dino trigger` (5081) carry the same number in all three.
 - **`nomonsters:` gate.** A leading `nomonsters:` condition means the spell **only fires when the room holds no monsters** — so it can't stack summons: kill what's there, and the next tick may summon one.
 - **d100 roll table with cumulative bands.** Each `Action` line is `<cumulativeThreshold>:<act>[:<act>…]`; a line's probability is `(threshold − prevThreshold) / topThreshold` (top is usually 100). A line whose actions include **`summon <monsterNumber>`** summons that monster (from the Monsters table, normal exp). Other actions (`addevil`, `message N`) are misses.
 - **Worked example — "crypt summon 2" (`Rooms.Spell 5248`, e.g. room `13/3573`):** `Abil-0 = 148`, `AbilVal-0 = 3411`.
@@ -3778,6 +3787,7 @@ Distinct from a monster's death-summon: a **room itself** can summon monsters vi
   - **Gated spell (`nomonsters:`)** — only summons while the room is empty, so a pass-through visit credits **1** fire when the room was empty on arrival and **0** when you arrive to a full lair; combat length adds no fires.
   - Summon mobs are never *killed* by the estimator (a room-attached spell never kills NPCs, and no feedback is modeled) — `RoundsPerMob` (the clear-rate knob) stays realm-agnostic and the user sets it directly.
 - **Client use:**
+  - `RouteExpResolver` finds each placed room spell's block through `SpellTextBlock` (either encoding), the reader `RoomHazardIndex` and `RoomSpellTeleportClassifier` share, and hands the table `RoomSummonParser` reads to the Exp/Hr estimate (`Resolve`) and the loop simulator (`ResolveSimLap`). Until 2026-10-09 it read `AbilVal` alone, so the six `MinBase` spells above (111 Stock rooms, 128 Paradigm) were credited no summon. It logs the summoning spells of a set once, the first time one is asked for.
   - Lives in `LoopExpSimulator.SummonFires`.
   - `LoopSimulator` rolls the table on entry, then every combat round on Paradigm or every 6 s on Stock while present (`nomonsters:` only in an empty room); a summon that would take the room past the realm's monster cap in *Death-summon cascades* is dropped.
 
@@ -4891,6 +4901,7 @@ How moves, bonks, dark/blind rooms, light, stealth, doors, gates, teleports, fer
 
 **Client use:**
 - `RoomHazardIndex.WalkSpellChain` now falls back to `MinBase`/`MaxBase` when the Abil-148 `AbilVal` is 0 — before that fix every one of these hazards was invisible to the router, so no protection was ever offered (the ice-cavern route picker never surfaced).
+- `SpellTextBlock` holds that fallback for every reader of a room spell's block: `RoomHazardIndex`, `RoomSpellTeleportClassifier` and `RouteExpResolver` (*Monsters, lairs & spawns → Room-spell monster summons*).
 
 ### Room-spell hazard shape 3 — buff check (`checkspell` / `failspell`): the desert waterskin
 *Status: CONFIRMED (user; `failspell` 2026-07-28, report `paradigm-20260728-201619`; sunstone possession 2026-08-27, report `paradigm-20260827-112011`) · Realm: differs (Paradigm `failspell`, stock `checkspell`)*

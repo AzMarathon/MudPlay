@@ -1,5 +1,9 @@
 # Version history
 
+## 3.160.2
+
+- Exp/Hr estimator and loop simulator: room-spell summons now counted in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+
 ## 3.160.1
 
 - Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport

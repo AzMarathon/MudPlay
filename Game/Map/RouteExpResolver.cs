@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using MudPlay.Game.Spells;
 using MudPlay.Services;
 
 namespace MudPlay.Game.Map;
@@ -23,6 +25,7 @@ public sealed class RouteExpResolver : IDisposable
     private readonly BfsMapper _bfs;
     private readonly LairTimerStore _timers;
     private readonly GameDataCache _cache;
+    private readonly LogService? _log;
 
     private Dictionary<int, MonsterInfo>? _monsters;        // monster Number -> resolved info
     private Dictionary<int, List<int>>? _summonSpells;     // spell Number -> summoned monster ids
@@ -30,15 +33,11 @@ public sealed class RouteExpResolver : IDisposable
     private Dictionary<int, (int TextBlock, string Name)>? _spellTextBlocks; // spell Number -> its TextBlock action + name
     private Dictionary<int, string>? _tbActions;           // TBInfo Number -> raw Action string
     private Dictionary<int, RoomSummon?>? _roomSummons;    // room-entry spell Number -> resolved summon (null cached)
-    private Dictionary<int, RoomSummonTable?>? _summonTables; // room-entry spell Number -> its summon roll table (null cached)
+    private Dictionary<int, RoomSummonTable?>? _summonTables; // placed room-entry spell Number -> its summon roll table (null = summons nothing)
 
     // Abil slot value 12 marks a "summon monster" ability; AbilVal holds the summoned
     // monster Number. A monster's DeathSpell fires this spell on death.
     private const int SummonAbility = 12;
-
-    // Abil slot value 148 is a "TextBlock" ability; on a room-entry spell its AbilVal
-    // points at a TBInfo roll table that can summon monsters (see RoomSummonParser).
-    private const int TextBlockAbility = 148;
 
     // Per-monster facts the estimator needs. Exp is the true value EXP × ExpMulti
     // (bosses store the un-multiplied EXP with a separate multiplier). A boss —
@@ -47,7 +46,8 @@ public sealed class RouteExpResolver : IDisposable
     // DeathSpell is the spell fired when it dies (0 = none) — the summon-cascade root.
     private readonly record struct MonsterInfo(int Exp, bool IsBoss, int RegenHours, string Name, int DeathSpell);
 
-    public RouteExpResolver(RoomGraphManager graph, BfsMapper bfs, LairTimerStore timers, GameDataCache cache)
+    public RouteExpResolver(
+        RoomGraphManager graph, BfsMapper bfs, LairTimerStore timers, GameDataCache cache, LogService? log = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(bfs);
@@ -57,6 +57,7 @@ public sealed class RouteExpResolver : IDisposable
         _bfs = bfs;
         _timers = timers;
         _cache = cache;
+        _log = log;
         _cache.ActiveSetChanged += OnSetChanged;
     }
 
@@ -167,7 +168,7 @@ public sealed class RouteExpResolver : IDisposable
     public IReadOnlyList<int>? DeathSummonsOf(int monsterNumber) => SummonsOf(monsterNumber);
 
     // The monster-summoning entry spell in a room, or null. A room's Spell that carries
-    // a TextBlock ability (148) whose roll table summons monsters yields expected exp
+    // a TextBlock ability whose roll table summons monsters yields expected exp
     // per visit — folded into the estimate on top of any placed lair. Memoised per
     // spell (null cached too) so a repeated room-spell resolves once per set.
     private RoomSummon? SummonForRoom(RoomKey key)
@@ -185,26 +186,51 @@ public sealed class RouteExpResolver : IDisposable
     }
 
     // The d100 summon table behind a room-entry spell, or null when the spell
-    // summons nothing worth exp. Memoised per spell (null cached too).
-    private RoomSummonTable? SummonTableForSpell(int spell)
+    // summons nothing worth exp.
+    private RoomSummonTable? SummonTableForSpell(int spell) =>
+        SummonTables().TryGetValue(spell, out RoomSummonTable? table) ? table : null;
+
+    // Every placed room spell's summon table. Read together the first time one is
+    // asked for after a set change, not spell by spell as rooms come up, so the log
+    // can say once which rooms the estimate credits a summon to.
+    private Dictionary<int, RoomSummonTable?> SummonTables()
     {
-        var cache = _summonTables ??= new Dictionary<int, RoomSummonTable?>();
-        if (cache.TryGetValue(spell, out RoomSummonTable? cached)) return cached;
-        RoomSummonTable? table = null;
-        if (SpellTextBlocks().TryGetValue(spell, out (int TextBlock, string Name) tb))
+        if (_summonTables is not null) return _summonTables;
+        var roomsBySpell = new SortedDictionary<int, int>();
+        foreach (Room room in _graph.Rooms)
+            if (room.Spell > 0) roomsBySpell[room.Spell] = roomsBySpell.GetValueOrDefault(room.Spell) + 1;
+
+        var tables = new Dictionary<int, RoomSummonTable?>();
+        var summoning = new List<string>();
+        int rooms = 0;
+        foreach ((int spell, int count) in roomsBySpell)
         {
-            table = RoomSummonParser.Resolve(
+            if (!SpellTextBlocks().TryGetValue(spell, out (int TextBlock, string Name) tb))
+            {
+                tables[spell] = null;
+                continue;
+            }
+            RoomSummonTable? table = RoomSummonParser.Resolve(
                 tb.TextBlock,
                 n => TbActions().TryGetValue(n, out string? a) ? a : null,
                 id => (Math.Max(0, Monster(id).Exp), Monster(id).Name));
             if (table is not { ExpPerRoll: > 0 }) table = null;
+            tables[spell] = table;
+            if (table is null) continue;
+            rooms += count;
+            summoning.Add(string.Create(CultureInfo.InvariantCulture,
+                $"{spell} {tb.Name} (textblock {tb.TextBlock}, {count} room(s), {table.ExpPerRoll:0} exp a roll, {table.SummonChance * 100:0.#}% summon{(table.NoMonstersGate ? ", empty room only" : "")})"));
         }
-        cache[spell] = table;
-        return table;
+
+        if (roomsBySpell.Count > 0)
+            _log?.Info("RouteExpResolver",
+                $"Room-spell summons in '{_cache.ActiveSet}': {summoning.Count} of {roomsBySpell.Count} placed room spell(s) summon monsters, "
+                + $"over {rooms} room(s){(summoning.Count > 0 ? ": " + string.Join("; ", summoning) : string.Empty)}.");
+        return _summonTables = tables;
     }
 
-    // Spell Number -> (its first TextBlock-ability TBInfo number, spell Name), for the
-    // spells that carry an Abil==148 slot. Only these can be summon room-spells.
+    // Spell Number -> (the TBInfo number its TextBlock ability names, spell Name), for
+    // the spells that have one. Only these can be summon room-spells.
     private Dictionary<int, (int TextBlock, string Name)> SpellTextBlocks()
     {
         if (_spellTextBlocks is not null) return _spellTextBlocks;
@@ -213,16 +239,13 @@ public sealed class RouteExpResolver : IDisposable
         {
             foreach (JsonElement row in doc.RootElement.EnumerateArray())
             {
-                if (!row.TryGetProperty("Number", out JsonElement n) || !n.TryGetInt32(out int id)) continue;
-                for (int i = 0; row.TryGetProperty($"Abil-{i}", out JsonElement ab); i++)
-                {
-                    if (!ab.TryGetInt32(out int abv) || abv != TextBlockAbility) continue;
-                    if (!row.TryGetProperty($"AbilVal-{i}", out JsonElement av) || !av.TryGetInt32(out int tb) || tb <= 0) continue;
-                    string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
-                        ? nm.GetString()?.Trim() ?? string.Empty : string.Empty;
-                    map[id] = (tb, name);
-                    break;   // first TextBlock ability wins
-                }
+                if (row.ValueKind != JsonValueKind.Object) continue;
+                SpellFormulaInput spell = SpellFormulaReader.Read(row);
+                int tb = SpellTextBlock.First(spell);
+                if (spell.Number <= 0 || tb <= 0) continue;
+                string name = row.TryGetProperty("Name", out JsonElement nm) && nm.ValueKind == JsonValueKind.String
+                    ? nm.GetString()?.Trim() ?? string.Empty : string.Empty;
+                map[spell.Number] = (tb, name);
             }
         }
         return _spellTextBlocks = map;
