@@ -7,6 +7,7 @@
 - No rest or meditate in a barred room (by default: volcano heat, swamp poison, a river with no raft)
 - The walk carries on and the rest starts in the next room that isn't barred
 - *Heal (rest)* is cast standing while that rest is owed
+- A follower dragged into a barred room releases its `@wait` and asks again outside it
 - With the room's counter in effect, resting is as normal: a negating item worn, a raft or the sunstone wristband just held
 - A room's own damage no longer puts you in combat, swaps gear, sends an Enter or counts in Round Totals
 - A gear command from a macro, alias, trigger or event mid-fight re-attacks at once
