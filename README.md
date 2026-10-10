@@ -1,15 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.5**
-> - A room's heat (*You are seared by the flames*) no longer counts as a combat round
-> - No more heals or buffs sent mid-round into `You have already cast a spell this round!`
-> - A fight stopped just after an attack is re-attacked on the next round line
-> - A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
-> - A refused cast no longer leaves a re-attack armed
-> - Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
-> - The giant hellhound's death line is recognised
-> - Program log and bug report show re-attack decisions
+> **Version 3.161.6**
+> - The client no longer stands still reading a very long line: a search in a room holding hundreds of items froze it for seconds each time
+> - Every line from the game is read faster (a slowdown that came in with 3.157.8)
+> - Roomba logs one line per room searched, with counts, in place of the full hidden list after every search
+> - The program log warns when one line held the client up for a quarter of a second or more, with its length and how long it took
+> - Bug report: how much is on the floor here and Roomba's slowest floor read
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
