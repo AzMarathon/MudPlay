@@ -2,20 +2,13 @@
 
 <!-- current-version:start -->
 > **Version 3.166.0**
-> - Auto-All is a true master switch: off, nothing automatic acts (engines, remote commands, triggers, events, polls, position fixes, holds, party signals, trips)
-> - Only the Auto-All switch counts as "all autos off"; unticking the toggles one by one does not
-> - `@auto-all` is the one remote command followed while it is off, by chat or the local API; the others are ignored with no reply
-> - `@auto-all off` engages the switch even with every toggle already off
-> - Switching it on gives back exactly what was ticked when it went off; base modes only when nothing is remembered
-> - A walk, loop or Auto-Lair started or resumed by hand with the switch off is refused with a terminal notice
-> - Going off, a `@wait` already sent is released with `@ok`; coming on, holds, a downed ally's rescue and a pending `@comeback` are picked up again
-> - Low-HP hang-up now needs Auto-Rest on (it used to run under Auto-Heal alone too)
-> - "Allow hangup in all-off mode" now means the master switch: off, it lets every automatic hang-up through (low HP, `@panic`, PvP, Hangup monster)
-> - Nightly-cleanup log-off does not start while the switch is off
-> - Re-enable on reconnect no longer turns autos back on over a switch that is off
-> - Main-menu auto-entry works with the switch off, like the rest of login
-> - Events: one that fires while the switch is off is skipped; one already waiting or running is held, clocks stopped
-> - A chest opened by hand while the switch is off draws no inventory read and no loot line
+> - Auto-All is a true master switch: off, nothing automatic acts
+> - `@auto-all` is the only remote command followed while it is off
+> - Switching it on gives back what was ticked when it went off
+> - A walk, loop or Auto-Lair started with it off is refused, with a notice
+> - Low-HP hang-up now needs Auto-Rest on
+> - "Allow hangup in all-off mode" follows the master switch
+> - Events held more than 5 minutes by it: you pick which still run
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

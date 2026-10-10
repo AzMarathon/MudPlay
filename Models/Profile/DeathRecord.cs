@@ -64,8 +64,9 @@ public sealed class DeathRecord
     public List<DeathItem>? EquippedAtDeath { get; set; }
 
     // Carried-but-unworn items lost into the deathpile, captured from the
-    // inventory tracker's last-known snapshot. null under the same conditions as
-    // EquippedAtDeath.
+    // inventory tracker's last-known snapshot: the pack's entries, the light that
+    // was lit and the key ring's entries, counts kept. null under the same
+    // conditions as EquippedAtDeath.
     public List<DeathItem>? LostItems { get; set; }
 
     // Pile item names not yet confirmed picked up during recovery — the subset of
@@ -74,6 +75,13 @@ public sealed class DeathRecord
     // WHY a record is still Partial (a name that never matched a pickup — e.g. a
     // wording quirk). null / empty once everything has been seen recovered.
     public List<string>? UnrecoveredItems { get; set; }
+
+    // A party member's hand-back has struck an item off UnrecoveredItems. Such a
+    // list is a count kept item by item, so it is not rebuilt from the full loot
+    // when the death room is entered again, and a room shown without the corpse
+    // (the member has it) does not write the pile off. Cleared once the pile is
+    // Recovered; false on records written before it existed.
+    public bool HandedBack { get; set; }
 
     // Stock only. Items the game said were gone for good at this death (`Your <item>
     // has returned to its rightful place.`): nothing to look for, so recovery leaves
