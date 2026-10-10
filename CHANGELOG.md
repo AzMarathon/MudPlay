@@ -1,12 +1,31 @@
 # Version history
 
+## 3.161.14
+
+- Auto-discard counts copies, not pack entries: an item with Min. to keep of 1 or more is now discarded down to that amount (it never was before)
+- Worn copies count toward Min. to keep and are never the copy discarded
+- A flagged light is discarded lit or not; the lit one counts as a pack copy
+- A discard waiting to be sent is checked again before it goes, and taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+- An inventory read landing before a pile's answers no longer has the pile sent twice
+
+## 3.161.9
+
+- Exp/Hr estimator and loop simulator: room-spell summons now read in the graveyard, bone dock, strange rift, manaspring and the farnholme / talgarn portals
+- One-at-a-time bosses with a regen wait a room spell summons are no longer counted: lowers estimates through the Ancient Fortress (Angelic Hunter)
+- A summon that needs an item in the room (the graveyard's Death Shrieker) isn't counted
+- Every monster a summon roll brings is counted, and an empty-room-only summon line only in an empty room
+- Program log lists the summoning room spells and each summon left out
+
+## 3.161.8
+
+- Party window: a member's level is the one they state, no longer the level their exp could train to
+- MegaMUD `@level` replies that count past the next level (`Needed: N (L60)  Will level in: +2 in 2-3 days`) are now read
+- Party window: a member's exp line names the level their figure counts toward
+
 ## 3.161.7
 
-- Auto-discard counts copies, not pack entries
-- An item with Min. to keep of 1 or more was never auto-discarded before; now it is, down to that amount
-- Worn copies and the lit light count toward Min. to keep and are never the copy discarded
-- A pile goes in one drop N on Paradigm, one per copy (paced) on Stock
-- A pile still waiting is taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
 
 ## 3.161.6
 

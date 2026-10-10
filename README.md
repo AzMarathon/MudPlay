@@ -1,12 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.7**
-> - Auto-discard counts copies, not pack entries
-> - An item with Min. to keep of 1 or more was never auto-discarded before; now it is, down to that amount
-> - Worn copies and the lit light count toward Min. to keep and are never the copy discarded
-> - A pile goes in one drop N on Paradigm, one per copy (paced) on Stock
-> - A pile still waiting is taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+> **Version 3.161.14**
+> - Auto-discard counts copies, not pack entries: an item with Min. to keep of 1 or more is now discarded down to that amount (it never was before)
+> - Worn copies count toward Min. to keep and are never the copy discarded
+> - A flagged light is discarded lit or not; the lit one counts as a pack copy
+> - A discard waiting to be sent is checked again before it goes, and taken back on a Roomba sweep, the switch going off, an unticked flag or a raised keep
+> - An inventory read landing before a pile's answers no longer has the pile sent twice
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

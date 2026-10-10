@@ -38,11 +38,14 @@ public sealed class PartyHandOverMemory
     // has said that member was handed that item.
     private static readonly TimeSpan ConfirmWithin = TimeSpan.FromSeconds(30);
 
-    private sealed record Awaited(int ItemId, string ItemName, string Recipient, object? Trip, DateTimeOffset SentAt);
+    private sealed record Awaited(
+        int ItemId, string ItemName, string Recipient, bool Silent, object? Trip, DateTimeOffset SentAt);
 
     // Trip is the journey a limited-use item was handed over on; null for an item
-    // that is kept, whose hand-over stands until the party changes.
-    private sealed record Remembered(string ItemName, int Copies, object? Trip);
+    // that is kept, whose hand-over stands until the party changes. Silent says
+    // the member's last word on the item was no answer at all, so that they hold
+    // it rests on the hand-over alone.
+    private sealed record Remembered(string ItemName, int Copies, object? Trip, bool Silent);
 
     private readonly Func<int, bool> _hasLimitedUses;
     private readonly Func<object?> _journey;
@@ -70,7 +73,8 @@ public sealed class PartyHandOverMemory
     }
 
     // The leader's own `give <item> to <member>` went out for a gate.
-    public void NoteGiveSent(int itemId, string itemName, string recipient)
+    // recipientSilent says the member didn't answer the count that led to it.
+    public void NoteGiveSent(int itemId, string itemName, string recipient, bool recipientSilent)
     {
         if (itemId <= 0 || string.IsNullOrWhiteSpace(itemName) || string.IsNullOrWhiteSpace(recipient)) return;
         object? trip = _journey();
@@ -79,7 +83,7 @@ public sealed class PartyHandOverMemory
         lock (_gate)
         {
             lapsed = TakeLapsed(now);
-            _awaited.Add(new Awaited(itemId, itemName, recipient, trip, now));
+            _awaited.Add(new Awaited(itemId, itemName, recipient, recipientSilent, trip, now));
         }
         LogLapsed(lapsed);
     }
@@ -128,7 +132,9 @@ public sealed class PartyHandOverMemory
             int before = items.TryGetValue(sent.ItemId, out Remembered? known) && ReferenceEquals(known.Trip, trip)
                 ? known.Copies : 0;
             total = before + copies;
-            items[sent.ItemId] = new Remembered(sent.ItemName, total, trip);
+            // A member credited at the count is not among its unanswered, and is
+            // silent all the same.
+            items[sent.ItemId] = new Remembered(sent.ItemName, total, trip, sent.Silent || known is { Silent: true });
         }
         _log?.Info(LogCategory,
             $"path item {sent.ItemId} ('{sent.ItemName}'): the game confirmed the hand-over to {sent.Recipient} — "
@@ -162,9 +168,11 @@ public sealed class PartyHandOverMemory
             lapsed = TakeLapsed(now);
             foreach (KeyValuePair<string, int> answer in counted.CountsByMember)
             {
-                if (Find(answer.Key, id) is not { } known || known.Copies == answer.Value) continue;
-                if (answer.Value > 0) _byMember[answer.Key][id] = known with { Copies = answer.Value };
+                if (Find(answer.Key, id) is not { } known) continue;
+                if (answer.Value > 0)
+                    _byMember[answer.Key][id] = known with { Copies = answer.Value, Silent = false };
                 else Forget(answer.Key, id);
+                if (known.Copies == answer.Value) continue;
                 (notes ??= new()).Add(
                     $"path item {id} ('{known.ItemName}'): {answer.Key} answers {answer.Value} — "
                     + $"taken at their word over the {known.Copies} handed over earlier");
@@ -182,6 +190,7 @@ public sealed class PartyHandOverMemory
                 }
                 int credit = Math.Min(known.Copies, quota);
                 (credited ??= new(StringComparer.OrdinalIgnoreCase))[silent] = credit;
+                if (!known.Silent) _byMember[silent][id] = known with { Silent = true };
                 if (!noteCredits) continue;
                 (notes ??= new()).Add(
                     $"path item {id} ('{known.ItemName}'): {silent} didn't answer — credited with the {credit} "
@@ -225,6 +234,22 @@ public sealed class PartyHandOverMemory
             $"path item {itemId}: an exit that needs it was crossed, and it has a limited number of uses — "
             + $"its hand-over to {string.Join(", ", spent)} is no longer remembered");
         return true;
+    }
+
+    // The members taken to hold this item on the strength of a hand-over alone:
+    // they never answered a count of it. A gate they were refused at is not
+    // something the leader is always told about, so they are the ones worth
+    // checking the party list for once the leader has crossed.
+    public IReadOnlyList<string> SilentHoldersOf(int itemId)
+    {
+        lock (_gate)
+        {
+            List<string>? silent = null;
+            foreach (KeyValuePair<string, Dictionary<int, Remembered>> kv in _byMember)
+                if (kv.Value.TryGetValue(itemId, out Remembered? known) && known.Silent)
+                    (silent ??= new()).Add(kv.Key);
+            return silent is null ? Array.Empty<string>() : silent;
+        }
     }
 
     // A walk ended. A limited-use hand-over made on a trip that is now over would
