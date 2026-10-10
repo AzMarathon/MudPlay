@@ -407,6 +407,12 @@ public static class BugReportBuilder
         Kv(sb, "Reconnect rejoin leader", svc.PartyRejoin.RememberedLeader ?? "(none remembered)");
         if (svc.PartyRejoin.WaitingForRoomToRejoin is { } waitLeader)
             Kv(sb, "Reconnect rejoin — waiting on our room", $"@comeback to {waitLeader} once our room confirms");
+        // The last time the party went on without us: what showed it, whether a
+        // @comeback went out or why none did, and the leader's answer. A "my
+        // follower never asked me back" report is answered here.
+        Kv(sb, "Last left-behind incident", svc.ComebackRequest.LastIncidentSummary);
+        if (svc.ComebackRequest.PendingCheckFor is { } pendingLeader)
+            Kv(sb, "Left-behind check pending", $"judging whether {pendingLeader} left without us");
         // Leader-side reconnect reform state — the followers we snapshotted at the
         // last drop and will wait for on reconnect. A "leader sprinted off / didn't
         // wait after a nightly-cleanup reconnect" report hinges on whether they

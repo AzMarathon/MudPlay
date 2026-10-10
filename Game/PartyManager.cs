@@ -44,6 +44,10 @@ public sealed partial class PartyManager : IDisposable
     private ParState _parState = ParState.Idle;
     // Names observed in the current par block; used to skip duplicates.
     private readonly HashSet<string> _parBlockNames = new(StringComparer.OrdinalIgnoreCase);
+    // The leader we believed we followed when this par block opened. Taken at the
+    // header because an [Invited] row for another member, read first, already
+    // flips us to leading.
+    private string? _parFollowedLeader;
 
     // ----- disconnect grace window + auto-invite -------
     // Disconnected members keyed by name → moment we last saw them drop.
@@ -181,6 +185,13 @@ public sealed partial class PartyManager : IDisposable
     // lead (see OnLeftBehind) — PartyComebackManager rides it to backtrack and
     // re-invite them. Gated on AutoInviteEnabled at the raise site.
     public event Action<string>? MemberLeftBehind;
+
+    // Fires with the leader's given name when our own `par` lists the leader we
+    // believed we followed as [Invited]: we are still on the list but follow
+    // nobody, which is how the game leaves a follower whose follow move it refused
+    // without a word (GAME_MECHANICS "A follower who can't move is left behind").
+    // Raised before the row is applied to the roster.
+    public event Action<string>? LeaderListedAsInvited;
 
     // Fires on a leader-side reconnect reform with the given names of the followers we
     // were leading when we dropped. A leader disconnect DISSOLVES the party, and the
@@ -798,6 +809,9 @@ public sealed partial class PartyManager : IDisposable
         if (_parState == ParState.ReadingRows) ReconcileMissingFromPar();
         _parState = ParState.ReadingRows;
         _parBlockNames.Clear();
+        _parFollowedLeader = State.IsInParty && !State.SelfIsLeader && State.LeaderName is { Length: > 0 } leader
+            ? GivenNameOf(leader)
+            : null;
     }
 
     // ----- disconnect / death / reconnect ---------------
@@ -1272,6 +1286,12 @@ public sealed partial class PartyManager : IDisposable
                 ? invited.Groups["class"].Value.Trim()
                 : string.Empty;
             _parBlockNames.Add(inviteeName);
+            if (_parFollowedLeader is { } followed
+                && GivenNameOf(inviteeName).Equals(followed, StringComparison.OrdinalIgnoreCase))
+            {
+                _parFollowedLeader = null;
+                LeaderListedAsInvited?.Invoke(followed);
+            }
             PartyMember row = AddOrTouchMember(inviteeName, isInvited: true);
             if (inviteeClass.Length > 0) row.Class = inviteeClass;
             // Sending an invite implies leadership-in-the-making —

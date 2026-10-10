@@ -574,7 +574,14 @@ public sealed class PartyEssentialHandlers : IDisposable
         };
         byte[] bytes = Encoding.Latin1.GetBytes(local + "\r");
         _wireSender(bytes);
+        PartyDirectiveRelayed?.Invoke();
     }
+
+    // A leader's `@party <command>` was just put on our wire. A leader takes the
+    // party across a party-splitting teleport this way, so a follow that ends
+    // right after one is that split and the leader regroups on landing
+    // (ComebackRequester reads it).
+    public event Action? PartyDirectiveRelayed;
 
     // ----- Lives / invite / join -----------------------------------------
 

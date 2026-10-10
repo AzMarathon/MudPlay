@@ -598,9 +598,8 @@ public sealed class AppServices
     public Game.Remote.PathReplyTracker PathReply { get; private set; } = null!;
     public Game.Remote.LeaderBossTravelProbe LeaderBossTravel { get; private set; } = null!;
 
-    // Follower-side @comeback sender. Detects being left
-    // behind (a movement-failure line just before "You are no longer
-    // following X.") and telepaths @comeback to the leader.
+    // Follower-side @comeback sender: telepaths @comeback to the leader once
+    // when the party walks off without us.
     // Game.Remote.ComebackRequester.Enabled is pushed from
     // Settings → Other.
     public Game.Remote.ComebackRequester ComebackRequest { get; private set; } = null!;
@@ -9234,13 +9233,24 @@ public sealed class AppServices
                 TokenRoute.OnRoomChanged(t.NewRoom?.Key);
         };
 
-        // Follower-side @comeback. Watches for a movement-failure
-        // line (prevents-movement flag / over-encumbered) immediately
-        // before "You are no longer following X." — the signature of being
-        // left behind — and telepaths @comeback to the leader. Enabled is
-        // pushed from Settings → Other by ApplyOtherFromActiveProfile.
+        // Follower-side @comeback: one telepath to the leader when the party walks
+        // off without us (the triggers and what is never one are on the class).
+        // Enabled is pushed from Settings → Other by ApplyOtherFromActiveProfile.
+        // Under the master switch like the reconnect sender below: with Auto-All
+        // off nothing is sent.
         ComebackRequest = new Game.Remote.ComebackRequester(Router, RoomTracker, Log,
-            isMovementPrevented: () => Conditions.IsMovementPrevented);
+            isMovementPrevented: () => Conditions.IsMovementPrevented,
+            party: PartyState,
+            isAutoEnabled: () => !AutoModeController.KillSwitchEngaged,
+            isSelfDown: () => PlayerState.IsMortallyWounded,
+            sendBlocked: () => InGameCapture.AtBoardMenu ? "we are at the board's menu"
+                : EngineGate.IsLocked ? "the client's sends are held (a trainer screen or a password prompt)"
+                : null);
+        // A refusal right after a move of our own answers that move, not a follow move.
+        OutboundMovement.MoveSent += () => ComebackRequest.NoteOwnMoveSent();
+        // A follow that ends behind a relayed party command is the leader's teleport split.
+        PartyEssentials.PartyDirectiveRelayed += () => ComebackRequest.NotePartyRelay();
+        Party.LeaderListedAsInvited += leader => ComebackRequest.NoteLeaderListedAsInvited(leader);
 
         // Follower-side reconnect auto-rejoin. Mirrors live follower membership
         // into the profile (crash-survivable) and, on the first in-game prompt
