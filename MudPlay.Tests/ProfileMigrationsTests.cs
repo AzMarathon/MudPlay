@@ -349,4 +349,103 @@ public sealed class ProfileMigrationsTests
         // A profile made at this version starts with ticks that already count the new way.
         Assert.False(new CharacterProfile().QuestTicksPredateKillSteps);
     }
+
+    // ----- v10: monster observations saved with spell casts counted as missed swings -----
+
+    private static MonsterObservation SavedObservation(int number, int hits, int misses) => new()
+    {
+        MonsterNumber = number,
+        HitCount = hits,
+        HitDamageMin = hits > 0 ? 8 : 0,
+        HitDamageMax = hits > 0 ? 128 : 0,
+        HitDamageSum = hits * 50L,
+        MissCount = misses,
+        PhysicalNoEffectCount = 2,
+        SpellNoEffectCount = 3,
+        FirstObservedAt = new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero),
+        LastObservedAt = new DateTimeOffset(2026, 10, 9, 18, 30, 0, TimeSpan.Zero),
+    };
+
+    private static CharacterProfile Reloaded(CharacterProfile profile) =>
+        JsonSerializer.Deserialize<CharacterProfile>(
+            JsonSerializer.Serialize(profile, JsonStore.Options), JsonStore.Options)!;
+
+    [Fact]
+    public void SavedWeaponSwingTallies_AreResetOnce_AndNothingElseOnTheRecord()
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 9,
+            MonsterObservations = new List<MonsterObservation>
+            {
+                SavedObservation(2624, hits: 0, misses: 10275),
+                SavedObservation(879, hits: 4, misses: 10),
+                SavedObservation(2799, hits: 0, misses: 0),   // nothing to reset
+            },
+        };
+        LogService log = new();
+
+        Assert.True(ProfileMigrations.Apply(profile, log));
+
+        Assert.Equal(10, profile.SchemaVersion);
+        Assert.All(profile.MonsterObservations, o =>
+        {
+            Assert.Equal(0, o.HitCount);
+            Assert.Equal(0, o.HitDamageMin);
+            Assert.Equal(0, o.HitDamageMax);
+            Assert.Equal(0, o.HitDamageSum);
+            Assert.Equal(0, o.MissCount);
+            Assert.Equal(0, o.SwingCount);
+            Assert.Equal(2, o.PhysicalNoEffectCount);
+            Assert.Equal(3, o.SpellNoEffectCount);
+            Assert.Equal(new DateTimeOffset(2026, 9, 1, 12, 0, 0, TimeSpan.Zero), o.FirstObservedAt);
+            Assert.Equal(new DateTimeOffset(2026, 10, 9, 18, 30, 0, TimeSpan.Zero), o.LastObservedAt);
+        });
+        Assert.Equal(new[] { 2624, 879, 2799 }, profile.MonsterObservations.Select(o => o.MonsterNumber));
+        LogEntry line = Assert.Single(log.Snapshot(), e => e.Source == "ProfileMigrations");
+        Assert.Equal(LogSeverity.Info, line.Severity);
+        Assert.Contains("reset on 2 record(s)", line.Message);
+    }
+
+    [Fact]
+    public void TalliesRecordedAfterTheReset_SurviveAReload()
+    {
+        CharacterProfile profile = new()
+        {
+            SchemaVersion = 9,
+            MonsterObservations = new List<MonsterObservation> { SavedObservation(2624, hits: 0, misses: 10275) },
+        };
+        Assert.True(ProfileMigrations.Apply(profile));
+
+        // Swings made under the new version, on the old record and on a new one.
+        profile.MonsterObservations[0].HitCount = 3;
+        profile.MonsterObservations[0].HitDamageSum = 90;
+        profile.MonsterObservations[0].MissCount = 1;
+        profile.MonsterObservations.Add(SavedObservation(879, hits: 4, misses: 10));
+
+        CharacterProfile reloaded = Reloaded(profile);
+        LogService log = new();
+
+        Assert.False(ProfileMigrations.Apply(reloaded, log));   // already at v10: never again
+
+        Assert.Equal(3, reloaded.MonsterObservations![0].HitCount);
+        Assert.Equal(90, reloaded.MonsterObservations[0].HitDamageSum);
+        Assert.Equal(1, reloaded.MonsterObservations[0].MissCount);
+        Assert.Equal(4, reloaded.MonsterObservations[1].HitCount);
+        Assert.Equal(10, reloaded.MonsterObservations[1].MissCount);
+        Assert.DoesNotContain(log.Snapshot(), e => e.Source == "ProfileMigrations");
+    }
+
+    [Fact]
+    public void ProfileWithNoObservations_MovesToTheNewVersionQuietly()
+    {
+        CharacterProfile profile = new() { SchemaVersion = 9 };
+        LogService log = new();
+
+        Assert.True(ProfileMigrations.Apply(profile, log));
+
+        Assert.Equal(CharacterProfile.CurrentSchemaVersion, profile.SchemaVersion);
+        Assert.Null(profile.MonsterObservations);
+        Assert.DoesNotContain(log.Snapshot(), e => e.Source == "ProfileMigrations");
+    }
 }

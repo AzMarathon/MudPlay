@@ -732,6 +732,12 @@ public static class BugReportBuilder
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
         Kv(sb, "Engaging to clear a rest-blocker", svc.Health.ForceClearForRest.ToString());
+        // The room the Combat gate was last held in decides what a roster wiped clean
+        // means: still standing there, a room cleared; anywhere else, a fight walked
+        // out on, which halts the walker (the AbandonedCombat gate).
+        Kv(sb, "Combat gate",
+            $"{(svc.CombatTracker.HasEngageableHostiles ? "held" : "not held")}; last held in "
+            + (svc.CombatTracker.GateRoom?.ToString() ?? "(no room known)"));
         // No rest is started in a room whose own spell damages the character; a "why
         // won't it rest" report turns on this line.
         Kv(sb, "Room spell and resting", RoomSpellRestLine(svc));
@@ -852,7 +858,7 @@ public static class BugReportBuilder
         List<Models.Profile.MonsterObservation> rows = svc.MonsterObservations.Snapshot()
             .OrderByDescending(o => o.LastObservedAt).ToList();
 
-        sb.Append("Combat outcomes THIS character has observed per monster — landed-hit damage, hit rate, and confirmed physical/spell no-effect discoveries (")
+        sb.Append("Combat outcomes THIS character has observed per monster — its WEAPON swings (landed damage, and swings landed of swings made; a spell is not a swing), and confirmed physical/spell no-effect discoveries (")
           .Append(rows.Count).Append(")\n\n");
         if (rows.Count == 0) { sb.Append("_(none)_\n"); return sb.ToString(); }
 
@@ -862,11 +868,11 @@ public static class BugReportBuilder
             List<string> parts = new();
             if (o.HitCount > 0)
                 parts.Add($"hits {o.HitCount} (dmg {o.HitDamageMin}-{o.HitDamageMax}, avg {o.AvgHitDamage:0.#})");
-            if (o.SwingCount > 0)
-                parts.Add($"hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount})");
+            parts.Add(o.SwingCount > 0
+                ? $"weapon hit-rate {o.HitRatePercent:0}% ({o.HitCount}/{o.SwingCount} swings)"
+                : "no weapon swings");
             if (o.PhysicalNoEffectCount > 0) parts.Add($"physical-no-effect x{o.PhysicalNoEffectCount}");
             if (o.SpellNoEffectCount > 0) parts.Add($"spell-no-effect x{o.SpellNoEffectCount}");
-            if (parts.Count == 0) parts.Add("(no outcomes recorded)");
 
             sb.Append("- #").Append(o.MonsterNumber).Append(' ').Append(name)
               .Append(" — ").Append(string.Join(", ", parts)).Append('\n');
@@ -1716,13 +1722,32 @@ public static class BugReportBuilder
         // A room with no item cap can hold a floor list hundreds of stacks long, and
         // a "client locks up in the vault" report turns on how long that list is and
         // what reading it cost.
+        // The last list is a room display's (the visible floor) or a search reply's
+        // (the hidden stacks that search found), never both.
         Kv(sb, "Floor of this room (last list read)",
             $"{svc.GroundItems.Items.Count} stack(s), "
             + $"{svc.GroundItems.Items.Sum(i => CountedCommand.SplitLeadingCount(i).Count)} item(s); "
+            + $"from {svc.GroundItems.LastSurveySource}; "
             + $"read in {svc.GroundItems.LastSurveyReadTime.TotalMilliseconds:F1} ms");
+        // A "Roomba miscounted this room" report turns on the two counts it adds.
+        Kv(sb, "Roomba record of this room (on display / hidden)",
+            svc.RoomTracker.State.CurrentRoom?.Key is { } sweepRoom
+                && svc.GhSweep.FloorLedgerAt(sweepRoom) is var ledger
+                && ledger.VisibleStacks + ledger.HiddenStacks > 0
+                ? $"{ledger.VisibleItems} item(s) in {ledger.VisibleStacks} stack(s) / "
+                  + $"{ledger.HiddenItems} item(s) in {ledger.HiddenStacks} stack(s)"
+                : "(none)");
+        Kv(sb, "Roomba rooms not as the sort left them (final lap)",
+            svc.GhSweep.RoomsChangedAfterSort is { Count: > 0 } changed
+                ? string.Join(", ", changed.Select(r => $"{r.Map}/{r.Room}"))
+                : "(none)");
         Kv(sb, "Roomba slowest floor read (this sweep or the last)",
             svc.GhSweep.SlowestSurvey is { } slowest
-                ? $"{slowest.Room.Map}/{slowest.Room.Room}: {slowest.Stacks} stack(s), {slowest.Items} item(s); {slowest.StagesText}"
+                ? $"{slowest.Room.Map}/{slowest.Room.Room}: {slowest.Items} item(s) of {slowest.Stacks} kind(s); {slowest.StagesText}"
+                : "(none)");
+        Kv(sb, "Roomba slowest item-location log write (this sweep or the last)",
+            svc.GhSweep.SlowestItemLogWrite is { } write
+                ? $"{write.Room.Map}/{write.Room.Room}: {write.Took.TotalMilliseconds:F1} ms"
                 : "(none)");
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on

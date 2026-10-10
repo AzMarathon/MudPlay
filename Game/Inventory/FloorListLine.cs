@@ -10,6 +10,18 @@ public static class FloorListLine
     private const string Prefix = "You notice ";
     private const string Suffix = " here.";
 
+    // A row that begins the sentence, finished on it or not.
+    public static bool Opens(string row) => row.StartsWith(Prefix, StringComparison.Ordinal);
+
+    // True for a room search as the game echoes it: `sea` through `search` with
+    // nothing after it (GAME_MECHANICS "Command words and abbreviations"; `se` is
+    // southeast, and a search with a direction looks for a hidden exit).
+    public static bool IsRoomSearch(string command)
+    {
+        string word = command.Trim();
+        return word.Length >= 3 && "search".StartsWith(word, StringComparison.OrdinalIgnoreCase);
+    }
+
     // A row that opens a floor list still to be finished on later rows. A row ending in
     // a colon heads some other list, and one ending in a full stop is whole already.
     public static bool OpensWrappedList(string row) =>

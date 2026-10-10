@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.7**
+> **Version 3.168.0**
 > - A follower left behind sends `@comeback`: a follow that failed at an exit, or the leader seen leaving without it
 > - On Stock also when its own `par` shows the leader `[Invited]`
 > - No `@comeback` after an uninvite, a typed `leave`, a move of your own, a death or a teleport split

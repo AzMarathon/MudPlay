@@ -422,6 +422,118 @@ public sealed class CombatStateTrackerTests
     }
 
     [Fact]
+    public void RosterEmptiedInPlaceWhileGated_DoesNotFireAbandonment()
+    {
+        // A room spell's kills cover every hostile listed, and the roster is dropped
+        // where we stand, on the same wipe a move raises. Nobody left the room
+        // (report paradigm-20261010-145330).
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        RoomKey? room = new RoomKey(14, 8647);
+        h.Tracker.SetCurrentRoomProbe(() => room);
+
+        h.Feed("Also here: giant rat, giant rat.");
+        Assert.True(h.CombatGateHeld);
+
+        bool fired = false;
+        h.Tracker.EngagedTargetAbandoned += _ => fired = true;
+
+        h.Classifier.NoteRoomChanged();
+
+        Assert.False(fired);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void RoomChangeWhileGated_WithRoomProbe_StillFiresAbandonment()
+    {
+        // The real case: a move already sent lands us in another room with the
+        // hostile left alive behind us.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        RoomKey? room = new RoomKey(14, 8647);
+        h.Tracker.SetCurrentRoomProbe(() => room);
+
+        h.Feed("Also here: giant rat.");
+        Assert.True(h.CombatGateHeld);
+
+        bool fired = false;
+        h.Tracker.EngagedTargetAbandoned += _ => fired = true;
+
+        room = new RoomKey(14, 8656);
+        h.Classifier.NoteRoomChanged();
+
+        Assert.True(fired);
+        Assert.False(h.CombatGateHeld);
+    }
+
+    [Fact]
+    public void GateHeldBeforeTheMoveConfirmed_ThenEmptiedInPlace_DoesNotFireAbandonment()
+    {
+        // A new room's "Also here:" holds the gate while the tracker still names the
+        // room we left; the roster re-emitted on the confirm is what places the fight.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        RoomKey? room = new RoomKey(14, 8638);
+        h.Tracker.SetCurrentRoomProbe(() => room);
+
+        h.Feed("Also here: giant rat.");          // seen before the exits line confirms the move
+        room = new RoomKey(14, 8647);
+        h.Feed("Also here: giant rat.");          // the confirmed room's roster, re-emitted
+        Assert.True(h.CombatGateHeld);
+
+        bool fired = false;
+        h.Tracker.EngagedTargetAbandoned += _ => fired = true;
+
+        h.Classifier.NoteRoomChanged();
+
+        Assert.False(fired);
+    }
+
+    [Fact]
+    public void PursuerFollowedUsIn_ThenEmptiedInPlace_DoesNotFireAbandonment()
+    {
+        // A pursuer kept across our move raises no observation in the new room; its
+        // next swing at us is what says the fight is here.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        RoomKey? room = new RoomKey(14, 8638);
+        h.Tracker.SetCurrentRoomProbe(() => room);
+
+        h.Feed("Also here: giant rat.");
+        room = new RoomKey(14, 8647);             // we moved, and it came with us
+        h.Feed("The giant rat bites you for 3 damage!");
+
+        bool fired = false;
+        h.Tracker.EngagedTargetAbandoned += _ => fired = true;
+
+        h.Classifier.NoteRoomChanged();
+
+        Assert.False(fired);
+    }
+
+    [Fact]
+    public void WipeWithNoRoomKnown_StillFiresAbandonment()
+    {
+        // Our own death takes the tracker's room away before the roster is wiped:
+        // with nowhere to compare, the wipe reads as leaving the fight, as it did.
+        using Harness h = new();
+        h.AddMonster(1, "giant rat", killable: true);
+        RoomKey? room = new RoomKey(14, 8647);
+        h.Tracker.SetCurrentRoomProbe(() => room);
+
+        h.Feed("Also here: giant rat.");
+
+        bool fired = false;
+        h.Tracker.EngagedTargetAbandoned += _ => fired = true;
+
+        room = null;
+        h.Classifier.NoteRoomChanged();
+
+        Assert.True(fired);
+    }
+
+    [Fact]
     public void DeathClearWhileGated_DoesNotFireAbandonment()
     {
         // Killing the last hostile empties the room via a Death observation —
