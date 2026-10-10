@@ -45,7 +45,9 @@ namespace MudPlay.Game.Events;
 // of their own while it waits or rests — ends without its Then and empties the
 // queue: the user said stop. So do a death and Reset States. A dropped connection
 // empties the queue and leaves the run to the engines' own reconnect rules, no
-// longer holding later events back.
+// longer holding later events back. A walk frozen on a movement gate (the user's
+// Pause, Auto-All off) is neither: the run is held with it, the queue waits, and
+// MaxQueueWait is what keeps a long freeze from piling events up.
 //
 // Saved-target reconciliation: subscribes to LoopManager.LoopsChanged +
 // LairManager.SetupsChanged. On either, walks every event whose ActionType is

@@ -4619,6 +4619,7 @@ Events run one at a time, each from start to finish. An event that fires while a
 - **Stopping the running event empties the queue.** Stop its walk (or take over, as above) and the waiting events are dropped with it. So does dying and **Reset States**. A lost connection drops the waiting events too; Logon and Re-log events fire afresh when you are back in.
 - **Your own walk or loop** is not an event: an event that fires over it takes over at once, as always, and goes back to it if its Then says so.
 - **Pause** holds an event's walk like any other, and the loop it goes back to stays paused until you resume.
+- **Auto-All off** freezes an event's walk where it stands, like any other walk. The event stays the running one, the events behind it keep waiting (up to the 30 minutes), and it carries on when Auto-All is back on. A loop an event goes back to while Auto-All is off starts only then.
 
 The Program Log names each event as it is queued, started, finished, skipped, dropped or abandoned, and a bug report lists the running event, the ones waiting and what the last Then came to.
 

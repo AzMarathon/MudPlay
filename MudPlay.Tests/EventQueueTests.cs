@@ -523,16 +523,48 @@ public sealed class EventQueueTests : IDisposable
         Assert.Contains(MovementCoordinator.UserGate, h.Coordinator.AssertedGates);
     }
 
+    // The master switch off freezes every engine on its own gate. An event's walk
+    // caught by it is held, not abandoned: the run stays the running one, sends
+    // nothing, the event behind it waits (and is dropped at the wait limit like any
+    // other), and the walk goes on when the switch is back.
+    [Fact]
+    public void AutoAllOff_HoldsTheRunAndTheQueue_UntilItIsBackOn()
+    {
+        using Harness h = NewHarness();
+        DateTimeOffset now = new(2026, 10, 9, 18, 0, 0, TimeSpan.Zero);
+        h.Events.Now = () => now;
+        h.Tracker.SetLocated(A);
+        h.Coordinator.AssertGate(MovementCoordinator.AutoAllGate, "test");
+
+        h.Events.Fire(Add(h, WalkTo("one", C, EventThenType.Nothing)));
+        h.Events.Fire(Add(h, WalkTo("two", B, EventThenType.Nothing)));
+        for (int i = 0; i < 5; i++)
+        {
+            now += TimeSpan.FromSeconds(1);
+            h.Events.Tick();
+        }
+
+        Assert.Empty(h.Sent);
+        Assert.Contains("'one' WalkTo", h.Events.RunSummary);
+        Assert.Contains("'two'", h.Events.QueueSummary);
+
+        h.Coordinator.ClearGate(MovementCoordinator.AutoAllGate, "test");
+
+        Assert.Equal("n", Assert.Single(h.Sent));
+        Assert.Contains("'one' WalkTo", h.Events.RunSummary);
+        Assert.Contains("'two'", h.Events.QueueSummary);
+    }
+
     // ----- The way back refused (paradigm-20261009-220128) ---------------------
 
     // The report's shape: the loop's rooms can be left on foot but only entered by a
     // room command, which is a teleport to the route search.
     //
-    //   7/131 Hidden Study --N-- 7/132 Dusty Stair --E (one way)--> 1/21 City Entrance
+    //   7/131 Study --N-- 7/132 Dusty Stair --E (one way)--> 1/21 City Entrance
     //   1/21 --W-- 1/10 Library --SW (CMD 100 teleport)--> 7/131
     private const string StudyGraphJson = """
         [
-          { "Map Number": 7, "Room Number": 131, "Name": "Hidden Study",
+          { "Map Number": 7, "Room Number": 131, "Name": "Study",
             "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
             "N": "7/132", "S": "0", "E": "0", "W": "0",
             "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
@@ -588,7 +620,7 @@ public sealed class EventQueueTests : IDisposable
         Assert.Equal(LoopState.Idle, h.Runner.State);
         string notice = Assert.Single(h.Notices);
         Assert.Contains("Event 'Second boss' finished, but loop 'Farm' didn't get going", notice);
-        Assert.Contains("the teleport from 1/10 (Library) to 7/131 (Hidden Study)", notice);
+        Assert.Contains("the teleport from 1/10 (Library) to 7/131 (Study)", notice);
         Assert.Contains("Settings → Teleports", notice);
         Assert.Contains("failed", h.Events.LastThenSummary);
         Assert.Contains(h.EventLog, l => l.Contains("didn't get going"));
