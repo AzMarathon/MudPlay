@@ -1,15 +1,14 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.5**
-> - A room's heat (*You are seared by the flames*) no longer counts as a combat round
-> - No more heals or buffs sent mid-round into `You have already cast a spell this round!`
-> - A fight stopped just after an attack is re-attacked on the next round line
-> - A typed `eq` / `wear` / `wield` / `rem` mid-fight re-attacks at once
-> - A refused cast no longer leaves a re-attack armed
-> - Exp/Hr and the loop simulator: Paradigm room spells roll every 6.05 s, not every round
-> - The giant hellhound's death line is recognised
-> - Program log and bug report show re-attack decisions
+> **Version 3.162.0**
+> - Auto-open (Game Data → Items) now opens a flagged container when one arrives in your pack; until this version it did nothing
+> - What it gives goes on the Chest Offload list, and is said to the room only if that box is ticked
+> - It opens one at a time, after a fight or a kept sneak, and never with Auto Get Items or Auto-All off, during a Roomba sweep, or for a container got back after a death
+> - Chest Offload: loot picked up while a chest is being read is no longer listed as the chest's
+> - Chest Offload: an item given away comes off the list; the last item leaving clears the coin tally and the saved list
+> - Chest Offload: a typed `open <direction>` is no longer taken for a container
+> - Bug report shows the auto-open engine's state
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
