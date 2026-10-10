@@ -64,8 +64,9 @@ public sealed class DeathRecord
     public List<DeathItem>? EquippedAtDeath { get; set; }
 
     // Carried-but-unworn items lost into the deathpile, captured from the
-    // inventory tracker's last-known snapshot. null under the same conditions as
-    // EquippedAtDeath.
+    // inventory tracker's last-known snapshot: the pack's entries, the light that
+    // was lit and the key ring's entries, counts kept. null under the same
+    // conditions as EquippedAtDeath.
     public List<DeathItem>? LostItems { get; set; }
 
     // Pile item names not yet confirmed picked up during recovery — the subset of

@@ -1328,7 +1328,8 @@ public sealed class RoomTracker
             _profile.DeathHistory.Add(record);
             _log?.Log(LogSeverity.Info, "RoomTracker",
                 $"Death recorded at {(died?.Key.ToString() ?? "(unknown room)")}; {livesRemaining} lives remaining; " +
-                $"deathpile worn={record.EquippedAtDeath?.Count ?? 0}, carried={record.LostItems?.Count ?? 0}.");
+                $"deathpile worn={record.EquippedAtDeath?.Count ?? 0}, " +
+                $"lost (pack, lit light, keys)={record.LostItems?.Count ?? 0}.");
         }
 
         while (_pending.TryDequeue(out _)) { /* drain */ }

@@ -372,6 +372,106 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Equal(DeathRecoveryStatus.Missing, w.H.Latest.Status);
     }
 
+    // ----- the lit light and the keys ------------------------------------
+
+    // Dies at the gates wearing a longsword, a torch lit and two kinds of key on
+    // the ring; nothing in the pack.
+    private static void DieWithALightAndKeys(GraphHarness h)
+    {
+        h.EnterGates();
+        h.Snapshot = SnapWith(new[] { new EquippedItem("longsword", "Weapon Hand") }, Array.Empty<string>())
+            with
+            {
+                ReadiedLight = new ReadiedLight("torch", 12),
+                Keys = new[] { "2 black star key", "iron key" },
+            };
+        h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
+        h.Sent.Clear();
+    }
+
+    [Fact]
+    public void Stock_LitLightAndKeys_AreGotBack_AndTheLightIsNotLitAgain()
+    {
+        using GraphHarness h = new() { Paradigm = false };
+        DieWithALightAndKeys(h);
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+        Assert.Equal(new[] { "torch", "2 black star key", "iron key" },
+            h.Latest.LostItems!.Select(i => i.Name).ToArray());
+
+        h.FeedSurvey("a longsword, a torch, 2 black star key, and an iron key");
+        h.EnterGates();
+        Assert.Equal(new[] { "longsword", "torch", "black star key", "black star key", "iron key" },
+            h.Latest.UnrecoveredItems);
+        Assert.Equal(2, h.Sent.Count(s => s == "get black star key"));
+        Assert.Contains("get torch", h.Sent);
+        Assert.Contains("get iron key", h.Sent);
+
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You took longsword.");
+        h.Recovery.FeedTestLine("You took torch.");
+        h.Recovery.FeedTestLine("You took black star key.");
+        h.Recovery.FeedTestLine("You took black star key.");
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);   // a key is still out
+        h.Recovery.FeedTestLine("You took iron key.");
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Equal(new[] { "eq longsword" }, h.Sent.ToArray());     // no `use torch`
+    }
+
+    [Fact]
+    public void Stock_AKeyOnTheRing_IsWaitedFor_EvenIfItsItemStaysWithTheCharacter()
+    {
+        // The engine's loyal / cursed test is made on the pack only. A pack item
+        // that stays is not waited for; a key of a name that "stays" still drops.
+        using GraphHarness h = new() { Paradigm = false };
+        h.Stays.Add("iron key");
+        h.Stays.Add("signet ring");
+        h.EnterGates();
+        h.Snapshot = SnapWith(Array.Empty<EquippedItem>(), new[] { "signet ring", "ration" })
+            with { Keys = new[] { "iron key" } };
+        h.Tracker.NoteDeath(2, "You now have 2 lives remaining.");
+        h.Sent.Clear();
+        h.Recovery.AutoRecover = true;
+
+        h.FeedSurvey("a ration and an iron key");
+        h.EnterGates();
+
+        Assert.Equal(new[] { "ration", "iron key" }, h.Latest.UnrecoveredItems);
+        Assert.Contains("get iron key", h.Sent);
+        Assert.DoesNotContain("get signet ring", h.Sent);
+    }
+
+    [Fact]
+    public void Paradigm_CorpseRecovered_CountsTheLightAndTheKeys_AndWearsOnlyTheGear()
+    {
+        using GraphHarness h = new();
+        DieWithALightAndKeys(h);
+        h.Recovery.AutoRecover = true;
+        h.Recovery.AutoEquip = true;
+        h.FeedSurvey("corpse of Ermias");
+        h.EnterGates();
+
+        h.Sent.Clear();
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+        Assert.Contains("5 item(s)", h.Latest.RecoveryMessage);
+        Assert.Equal(new[] { "eq longsword" }, h.Sent.ToArray());
+    }
+
+    [Fact]
+    public void HandedBack_AKeyFromThePile_IsStruckOff()
+    {
+        using GraphHarness h = new();
+        DieWithALightAndKeys(h);
+
+        h.Recovery.OnItemReceived("iron key", "Nineteen");
+
+        Assert.DoesNotContain("iron key", h.Latest.UnrecoveredItems!);
+        Assert.Equal(2, h.Latest.UnrecoveredItems!.Count(n => n == "black star key"));
+    }
+
     // ----- a spare of something worn -------------------------------------
 
     [Fact]

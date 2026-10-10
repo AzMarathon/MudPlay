@@ -971,7 +971,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (IsStock && record.Status == DeathRecoveryStatus.Partial
             && record.UnrecoveredItems is { Count: > 0 } counted)
         {
-            DropWhatStays(counted);
+            DropWhatStays(counted, record);
             pile = counted;
         }
         record.UnrecoveredItems = pile.Count > 0 ? pile : null;   // corpse contents, for the detail panel
@@ -2094,7 +2094,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // What no floor will ever show comes off a Stock pile list as it is built.
         // Left on, either kind keeps the pile at Partial for good and sends the spill
         // sweep out after nothing.
-        DropWhatStays(names);
+        DropWhatStays(names, record);
         if (record.ReturnedItems is { } returned)
         {
             // `has returned to its rightful place`: gone for good, a unit per line.
@@ -2109,10 +2109,31 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         return names;
     }
 
-    // An item that stayed on the character through the death (DeathPileRules).
-    private void DropWhatStays(List<string> names)
+    // An item that stayed on the character through the death (DeathPileRules) comes
+    // off the list. A key on the ring never stays, whatever abilities its item
+    // carries: the Stock engine makes the loyal / cursed test on the pack only
+    // (GAME_MECHANICS "Death threshold & consequences"). So of a name that stays,
+    // as many units are kept as the ring held copies of it.
+    private void DropWhatStays(List<string> names, DeathRecord record)
     {
-        if (_staysOnDeath is { } stays) names.RemoveAll(n => stays(n));
+        if (_staysOnDeath is not { } stays) return;
+        var onRing = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (record.LostItems is { } lost)
+            foreach (DeathItem key in lost)
+            {
+                if (!key.OnKeyRing || string.IsNullOrWhiteSpace(key.Name)) continue;
+                (int count, string bare) = CountedCommand.SplitLeadingCount(key.Name.Trim());
+                string norm = ItemNameStore.Normalize(bare);
+                onRing[norm] = onRing.GetValueOrDefault(norm) + Math.Max(1, count);
+            }
+        names.RemoveAll(n =>
+        {
+            if (!stays(n)) return false;
+            string norm = ItemNameStore.Normalize(n);
+            if (onRing.GetValueOrDefault(norm) <= 0) return true;
+            onRing[norm]--;
+            return false;
+        });
     }
 
     // Expand a captured stack ("15 torch") into per-unit bare names ("torch" ×15).

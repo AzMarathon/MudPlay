@@ -350,6 +350,14 @@ public static class BugReportBuilder
         // three, plus what this death said was gone and the trail it kept.
         if (lastDeath is not null)
         {
+            // What the record took the pile to be: lost holds the pack, the light
+            // read as lit and the key ring, and the light is only as current as the
+            // last inventory read.
+            Kv(sb, "Latest deathpile as recorded",
+                $"worn {lastDeath.EquippedAtDeath?.Count ?? 0}, lost {lastDeath.LostItems?.Count ?? 0} entries"
+                + (lastDeath.LostItems is { } lostEntries && lostEntries.Exists(i => i.OnKeyRing)
+                    ? $" (keys: {string.Join(", ", lostEntries.Where(i => i.OnKeyRing).Select(i => i.Name))})"
+                    : " (no keys)"));
             Kv(sb, "Latest deathpile still missing",
                 lastDeath.UnrecoveredItems is { Count: > 0 } missing ? string.Join(", ", missing) : "(nothing)");
             if (lastDeath.ReturnedItems is { Count: > 0 } returned)

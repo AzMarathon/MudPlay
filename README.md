@@ -1,12 +1,13 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.11**
+> **Version 3.161.12**
 > - Paradigm: the corpse is recovered on arriving in the death room, off that room's own display
 > - Paradigm: the next room's floor no longer marks a deathpile Missing; only the death room's display does
 > - Paradigm: Recover Now inside the room marks the pile Missing when its look shows no corpse
 > - Gear handed back still counts for the latest death when its pile was marked Missing
 > - A single spare of a worn item is recorded in the deathpile and recovered with it
+> - The lit light and the keys are recorded in the deathpile and recovered with it; the light is not lit again
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

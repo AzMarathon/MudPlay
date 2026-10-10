@@ -74,6 +74,38 @@ public sealed class DeathLootCaptureTests
     }
 
     [Fact]
+    public void TheLitLight_AndTheKeys_AreLostWithThePack()
+    {
+        // The inventory read lists both apart from the pack; both drop at a death.
+        InventorySnapshot snap = Snap(
+            new[] { new EquippedItem("longsword", "Weapon Hand") },
+            new[] { "ration" })
+            with
+            {
+                ReadiedLight = new ReadiedLight("torch", 12),
+                Keys = new[] { "3 black star key", "iron key" },
+            };
+
+        (List<DeathItem> equipped, List<DeathItem> lost) = DeathLootCapture.FromSnapshot(snap);
+
+        Assert.Single(equipped);
+        Assert.Equal(new[] { "ration", "torch", "3 black star key", "iron key" }, lost.Select(i => i.Name).ToArray());
+        Assert.All(lost, i => Assert.Null(i.Slot));   // nothing here is put back on
+        Assert.Equal(new[] { "3 black star key", "iron key" },
+            lost.Where(i => i.OnKeyRing).Select(i => i.Name).ToArray());
+    }
+
+    [Fact]
+    public void NoLightLit_AndNoKeys_AddsNothing()
+    {
+        InventorySnapshot snap = Snap(Array.Empty<EquippedItem>(), new[] { "torch" });
+
+        (_, List<DeathItem> lost) = DeathLootCapture.FromSnapshot(snap);
+
+        Assert.Equal(new[] { "torch" }, lost.Select(i => i.Name).ToArray());
+    }
+
+    [Fact]
     public void EmptySnapshot_ReturnsEmptyButNonNullLists()
     {
         (List<DeathItem> equipped, List<DeathItem> lost) =
