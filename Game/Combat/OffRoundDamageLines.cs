@@ -88,11 +88,16 @@ public sealed partial class OffRoundDamageLines
     }
 
     // roomSpell: Rooms.Spell of the room we stand in, 0 when it has none or the room
-    // isn't known.
-    public bool IsOffRound(string? line, int roomSpell)
+    // isn't known. castByAMonsterHere: whether a monster now in the room casts that
+    // spell as its attack. Then the room's line and the monster's hit are the same
+    // text (a high druid's chaos storm in a chaos storm room) and can't be told
+    // apart, so rule 1 stands aside: a fight's hit left off the round costs more
+    // than a room's cast taken for one, and rule 2 still keeps a line that names a
+    // dealer on the round.
+    public bool IsOffRound(string? line, int roomSpell, Func<int, bool>? castByAMonsterHere = null)
     {
         if (string.IsNullOrEmpty(line)) return false;
-        if (roomSpell > 0)
+        if (roomSpell > 0 && castByAMonsterHere?.Invoke(roomSpell) != true)
             foreach (CasterMessageMatcher text in DamageTextsOf(roomSpell))
                 if (text.TryMatchDamage(line, out _)) return true;
         if (!NobodyDealtIt(line)) return false;

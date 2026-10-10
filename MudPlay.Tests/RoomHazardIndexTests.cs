@@ -368,7 +368,6 @@ public sealed class RoomHazardIndexTests : IDisposable
             """);
 
         RoomHazardIndex.RoomHazard h = idx.HazardForSpell(526)!;
-        Assert.Equal(new[] { 487, 1000 }, h.WornCounters);
         Assert.True(h.IsCounteredNow(worn: id => id == 1000, carried: _ => true));
         Assert.False(h.IsCounteredNow(worn: _ => false, carried: id => id == 1000));
         Assert.True(h.IsSatisfiedBy(id => id == 1000));   // a route can still be planned on it
@@ -403,7 +402,6 @@ public sealed class RoomHazardIndexTests : IDisposable
             """);
 
         RoomHazardIndex.RoomHazard h = idx.HazardForSpell(683)!;
-        Assert.Empty(h.WornCounters);
         Assert.True(h.IsCounteredNow(worn: _ => false, carried: id => id == 1180));
         Assert.True(h.IsCounteredNow(worn: id => id == 1180, carried: id => id == 1180));   // a worn item is held too
         Assert.False(h.IsCounteredNow(worn: _ => false, carried: _ => false));
@@ -422,7 +420,6 @@ public sealed class RoomHazardIndexTests : IDisposable
             """ [ { "Number": 2750, "Action": "failitem 690:failitem 691:message 2096:cast 754" } ] """);
 
         RoomHazardIndex.RoomHazard h = idx.HazardForSpell(753)!;
-        Assert.Empty(h.WornCounters);
         Assert.True(h.IsCounteredNow(worn: _ => false, carried: id => id == 690));
         Assert.False(h.IsCounteredNow(worn: _ => false, carried: _ => false));
         Assert.Equal("log raft or wooden skiff (held)", h.DescribeCounters(Name));

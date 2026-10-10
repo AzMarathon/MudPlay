@@ -89,16 +89,6 @@ public sealed class RoomHazardIndex
         // never offered that — the crosser can only pass it with a counter in hand.
         public bool IsSurvivableDamage { get; }
 
-        // The requirement group whose items work by negating the spell (an item's
-        // NegateSpell list): the phoenix feather, the fish-helm, the swamp boots.
-        // Empty when no item negates it. The game asks that list of what is worn and
-        // of nothing else, so one of these protects on the body and not from the
-        // pack. Every other group is an item the room's textblock looks for among
-        // everything held (`failitem`: a raft, the sunstone wristband, worn or not)
-        // or a buff's source. GAME_MECHANICS "Room-spell hazard shape 1 — direct
-        // damage, negated by an item's `NegateSpell-N`".
-        public IReadOnlyList<int> WornCounters { get; }
-
         // True when the room teleports whoever holds its `failitem` item as well:
         // the textblock gives a holder a `checkitem` line of their own, and that
         // line leads to a teleport too. Crystal Lake's three sea spells are the
@@ -129,20 +119,28 @@ public sealed class RoomHazardIndex
             TeleportsCounterHolders = teleportsCounterHolders;
             CounterHolderMinLevel = counterHolderMinLevel;
             _negateGroup = negateGroup;
-            WornCounters = negateGroup >= 0 && negateGroup < groups.Count ? groups[negateGroup] : Array.Empty<int>();
         }
 
-        // Which of RequirementGroups is the NegateSpell group, -1 when none is.
+        // Which of RequirementGroups holds the items that work by negating the spell
+        // (an item's NegateSpell list: the phoenix feather, the fish-helm, the swamp
+        // boots), -1 when none does. The game asks that list of what is worn and of
+        // nothing else, so one of these protects on the body and not from the pack.
+        // Every other group is an item the room's textblock looks for among
+        // everything held (`failitem`: a raft, the sunstone wristband, worn or not)
+        // or a buff's source. GAME_MECHANICS "Room-spell hazard shape 1 — direct
+        // damage, negated by an item's `NegateSpell-N`".
         private readonly int _negateGroup;
 
         // True when the hazard does nothing to this character as things stand: the
         // negate group has an item on the body, and every other group one that is
         // held, worn or not. Asked group by group, since the two are different checks
         // in the game: an item that is in both has to be worn for the one and only
-        // held for the other. Stricter than IsSatisfiedBy, which asks what a route can
-        // be planned on (a feather in the pack can be put on when the walk gets
-        // there). A buff's source item counts while carried: the hazard provisioner
-        // keeps that buff raised in these rooms, and a lapse is not read here.
+        // held for the other. Stricter than IsSatisfiedBy, which asks only whether a
+        // counter is carried. Route planning goes by that looser test today and no
+        // engine puts a carried counter on, so a route can cross a room this says
+        // still hurts. A buff's source item counts while carried: the hazard
+        // provisioner keeps that buff raised in these rooms, and a lapse is not read
+        // here.
         public bool IsCounteredNow(Func<int, bool> worn, Func<int, bool> carried)
         {
             ArgumentNullException.ThrowIfNull(worn);

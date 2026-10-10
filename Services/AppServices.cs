@@ -11880,7 +11880,12 @@ public sealed class AppServices
     // out, not a hit in a fight (OffRoundDamageLines). The one test the round clock,
     // the in-combat flag, the combat engine and Round Totals are all given.
     public bool IsRoomOrEffectDamage(string line) =>
-        OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0);
+        OffRoundDamage().IsOffRound(line, RoomTracker.State.CurrentRoom?.Spell ?? 0, MonsterHereCasts);
+
+    // Whether a monster in the room we stand in casts the spell in an attack slot.
+    private bool MonsterHereCasts(int spell) =>
+        RoomClassifier.Current is { } here
+        && here.Entities.Any(e => e.MonsterNumber is { } number && MonsterCatalog.Get(number)?.CastLevelFor(spell) > 0);
 
     // The spell on the room we stand in, when it keeps a rest from starting: it is
     // set to bar resting (Settings → Periodic Damage Room Spells; by default the

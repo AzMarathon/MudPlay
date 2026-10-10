@@ -89,6 +89,20 @@ public sealed class OffRoundDamageLinesTests
         Assert.False(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", MagmaHeat));
     }
 
+    // With a monster in the room that casts the room's own spell as its attack, the
+    // two can't be told apart: the line is the round. A line no dealer is named in
+    // (magma heat) is the room's whoever stands there.
+    [Fact]
+    public void SameTextFromARoomAndFromAMonsterStandingInIt_IsTheRound()
+    {
+        OffRoundDamageLines lines = Build();
+        static bool DruidHere(int spell) => spell == ChaosStorm;
+
+        Assert.False(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", ChaosStorm, DruidHere));
+        Assert.True(lines.IsOffRound("A chaotic storm assaults you for 30 damage!", ChaosStorm, _ => false));
+        Assert.True(lines.IsOffRound("You are seared by the flames for 46 damage!", MagmaHeat, DruidHere));
+    }
+
     // An on-hit effect isn't an attack slot's spell: it stays out, and the hit ahead
     // of it is the round.
     [Fact]
