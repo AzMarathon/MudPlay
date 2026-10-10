@@ -1,18 +1,8 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.162.3**
-> - Routes never enter Crystal Lake's teleport rooms, boat or not
-> - No raft or skiff offered, fetched or bought for the lake
-> - A walk the lake blocks says why in one line
-> - Stock: White Forest reached along the coast at level 50+ with a boat
-> - Paradigm: one card to cross to the Bloodwood Weald room
-> - Lake crossings are named on the card and logged once
-> - Isle of Bones never reached across the lake
-> - The lake's spell-free rooms stay ordinary ground
-> - Standing in a teleport room, you are planned out
-> - A loop waypoint in a teleport room is refused at start
-> - A key-only route goes round the lake and asks for the key alone
+> **Version 3.162.4**
+> - Hang-up death check: on Paradigm anything still worn rules a death out, as on Stock
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

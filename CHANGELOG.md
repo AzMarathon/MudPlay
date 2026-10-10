@@ -1,5 +1,9 @@
 # Version history
 
+## 3.162.4
+
+- Hang-up death check: on Paradigm anything still worn rules a death out, as on Stock
+
 ## 3.162.3
 
 - Routes never enter Crystal Lake's teleport rooms, boat or not
