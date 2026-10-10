@@ -204,6 +204,100 @@ public sealed class WirePromptScannerTests
         Assert.Equal(PlayerPosition.Resting, seen[0].Position);
     }
 
+    // The prompt as the wire carries it: colour codes inside, the flag after the
+    // colon, and the echo of the next command glued on.
+    [Theory]
+    [InlineData("]: (Meditating) wear fiery crown\r", PlayerPosition.Meditating)]
+    [InlineData("]: (Resting) wear fiery crown\r", PlayerPosition.Resting)]
+    [InlineData("]: (Meditating) ", PlayerPosition.Meditating)]
+    [InlineData("]: (Resting) ", PlayerPosition.Resting)]
+    [InlineData("]:isto\r", PlayerPosition.Standing)]
+    public void RestingFlag_TrailingForm_WithTheEchoGluedOn(string tail, PlayerPosition expected)
+    {
+        WirePromptScanner s = new();
+        var seen = Collect(s);
+        int unmatched = 0;
+        s.PromptShapeUnmatched += _ => unmatched++;
+
+        s.Append(B("\u001b[79D\u001b[K\u001b[0;37m[HP=\u001b[0;37m749\u001b[0;37m/MA=\u001b[0;37m608\u001b[0;37m" + tail));
+
+        PromptObservation prompt = Assert.Single(seen);
+        Assert.Equal(expected, prompt.Position);
+        Assert.Equal(749, prompt.Hp);
+        Assert.Equal(608, prompt.Mana);
+        Assert.Equal(0, unmatched);
+    }
+
+    // A handler that answers the prompt with a burst of commands (the prompt that
+    // ends a rest starts a gear swap) reaches NoteCommandSent while the matched
+    // text is still in the buffer (report paradigm-20261010-145330).
+    [Theory]
+    [InlineData("Meditating")]
+    [InlineData("Resting")]
+    public void CommandsSentFromAPromptHandler_AreNotReportedAsAnUnreadPrompt(string flag)
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+        s.PromptObserved += p =>
+        {
+            if (p.Mana != 608) return;
+            for (int i = 0; i < 12; i++) s.NoteCommandSent();
+        };
+
+        s.Append(B($"\u001b[79D\u001b[K[HP=749/MA=254]: ({flag}) \u001b[79D\u001b[K[HP=749/MA=608]: ({flag}) "));
+        Assert.Empty(unmatched);
+
+        s.NoteCommandSent();                // and one more once the read is done
+        s.NoteCommandSent();
+        Assert.Empty(unmatched);
+    }
+
+    // The guard covers the burst only: a prompt the statline truly can't read is
+    // still reported at the commands that follow.
+    [Fact]
+    public void GenuineUnreadPromptAfterAHandlerBurst_IsStillReported()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+        bool burst = true;
+        s.PromptObserved += _ =>
+        {
+            if (!burst) return;
+            for (int i = 0; i < 5; i++) s.NoteCommandSent();
+        };
+
+        s.Append(B("\u001b[79D\u001b[K[HP=749/MA=608]: (Meditating) "));
+        Assert.Empty(unmatched);
+        burst = false;
+
+        s.NoteCommandSent();
+        s.Append(B("\r\nwear fiery crown\r\nHits 749 Mana 608 > "));   // a prompt with no brackets
+        s.NoteCommandSent();
+
+        Assert.Equal(new[] { "Hits 749 Mana 608 >" }, unmatched);
+    }
+
+    // A handler that throws must not leave the scanner deaf to the cursor's row.
+    [Fact]
+    public void PromptHandlerThrows_TheGuardIsReleased()
+    {
+        WirePromptScanner s = new();
+        List<string> unmatched = new();
+        s.PromptShapeUnmatched += unmatched.Add;
+        bool boom = true;
+        s.PromptObserved += _ => { if (boom) throw new InvalidOperationException("x"); };
+
+        Assert.Throws<InvalidOperationException>(() => s.Append(B("\u001b[79D\u001b[K[HP=749/MA=608]:")));
+        boom = false;
+        s.Reset();
+        s.Append(B("\r\nHits 749 Mana 608 > "));
+        s.NoteCommandSent();
+
+        Assert.Single(unmatched);
+    }
+
     [Fact]
     public void HpOnlyPrompt_HasNoManaType()
     {

@@ -10,12 +10,18 @@ namespace MudPlay.Game.Combat;
 // name — in cast order, empty slots omitted.
 public static class CombatSpellProfileReport
 {
-    public static string Describe(CombatSpellProfile profile, int number)
+    // "Combat profile 2", or "Combat profile 2 (Fire)" when it has a name.
+    public static string Label(CombatSpellProfile profile, int number)
     {
         ArgumentNullException.ThrowIfNull(profile);
-        string label = string.IsNullOrWhiteSpace(profile.Name)
+        return string.IsNullOrWhiteSpace(profile.Name)
             ? $"Combat profile {number}"
             : $"Combat profile {number} ({profile.Name.Trim()})";
+    }
+
+    public static string Describe(CombatSpellProfile profile, int number)
+    {
+        string label = Label(profile, number);
 
         var parts = new List<string>();
         Add(parts, "multi", profile.MultiAttackSpell);
@@ -37,16 +43,13 @@ public static class CombatSpellProfileReport
     }
 
     // Full-config one-liner: every slot (empty shown as —) with its gates, plus
-    // the profile-level knobs. Feeds the program log (switch Debug line, combat-
-    // engage Combat line) and the bug report, so "how it's configured" is captured
-    // without opening Settings. Cast codes only, never full spell names — same rule
-    // as Describe.
+    // the profile-level knobs. Feeds the program log (switch Debug line, the
+    // engage line when the configuration has changed) and the bug report, so "how
+    // it's configured" is captured without opening Settings. Cast codes only, never
+    // full spell names — same rule as Describe.
     public static string DescribeConfig(CombatSpellProfile profile, int number)
     {
-        ArgumentNullException.ThrowIfNull(profile);
-        string label = string.IsNullOrWhiteSpace(profile.Name)
-            ? $"Combat profile {number}"
-            : $"Combat profile {number} ({profile.Name.Trim()})";
+        string label = Label(profile, number);
 
         // MinEnemies is honoured only on the two room-wide rows; the engine ignores
         // it on the four single-target rows, so don't report it there.

@@ -130,6 +130,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         FireSearchSettle(sweep);
         Assert.Equal("s", sent[^1]);
 
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         Assert.Equal("sea", sent[^1]);
@@ -303,6 +305,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(1));
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
@@ -401,6 +405,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
         FireSearchSettle(sweep);
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         FireSearchSettle(sweep);
@@ -509,6 +515,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
         FireSearchSettle(sweep);
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         FireSearchSettle(sweep);
@@ -637,6 +645,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(1));
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer, a mace, a club here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
@@ -769,6 +779,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(1));
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
@@ -887,6 +899,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(1));
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
@@ -993,6 +1007,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(1));
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
@@ -1031,6 +1047,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice a war hammer here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice a war hammer here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
@@ -1134,6 +1151,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice an adamantite hauberk here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice an adamantite hauberk here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
@@ -1169,6 +1187,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice an adamantite hauberk here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice an adamantite hauberk here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
 
@@ -1196,6 +1215,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice a war hammer here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice a war hammer here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
@@ -1234,6 +1254,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice a war hammer here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice a war hammer here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
@@ -1265,6 +1286,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice a war hammer here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice a war hammer here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
@@ -1296,6 +1318,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice a war hammer here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice a war hammer here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         h.Observe("C", Direction.N, Direction.S);
@@ -1326,6 +1349,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice 2 war hammer here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice 2 war hammer here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
@@ -1374,6 +1398,7 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         h.Feed("You notice 2 war hammer here.");
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("B", Direction.S);
+        h.Feed("You notice 2 war hammer here.");   // listed again on the way back
         h.Observe("C", Direction.N, Direction.S);
         h.Observe("A", Direction.N);
         Assert.Equal(GhSweepManager.SweepPhase.Sorting, h.Sweep.Phase);
@@ -1533,6 +1558,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
             DateTimeOffset.UtcNow.AddSeconds(1));
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),
@@ -1800,6 +1827,8 @@ public sealed class GhSweepManagerIntegrationTests : IDisposable
         FeedRouter(router, "You notice a chain shirt here.");
         tracker.NoteRoomObserved(new RoomObservation("B", new HashSet<Direction> { Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(2));
+        // The game lists a room's floor on every entry, the way back included.
+        FeedRouter(router, "You notice a war hammer here.");
         tracker.NoteRoomObserved(new RoomObservation("C", new HashSet<Direction> { Direction.N, Direction.S }),
             DateTimeOffset.UtcNow.AddSeconds(3));
         tracker.NoteRoomObserved(new RoomObservation("A", new HashSet<Direction> { Direction.N }),

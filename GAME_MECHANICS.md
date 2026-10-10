@@ -4206,10 +4206,15 @@ How a live monster changes rooms on its own. Offsets are in-memory offsets: acti
 - **cleanup 2** (#692; textblock 2520, messages 1969–1972): `A heated wind howls through the passageway, kicking up sand and dust.`, `Beast-like screams echo unnervingly throughout the passageways.`, `The clicking sound of scrabbling claws can be heard from down the passage.`, `Eerie lights dance about further down the passageway.` The same block's other bands are trap rolls (`testskill traps 20 …:message 2090`, `You avoid a trap, using your expertise in knowledge of traps!`), which are not flavor.
 - **cleanup 3** (#700; textblock 2528, message 2083): `Doors on this level creak and thump!`, printed as the spell works the level's doors by `remoteaction`.
 - **Silvermere, the temple and the darkwood forest** (#918, #925, #915) are the same kind; their wordings are in the message seeds.
+- **Paradigm's farm fields** *([OBSERVED] 2026-10-10, game data `data-Paradigm-1.9.1` and report `paradigm-20261010-145330`; Realm: Paradigm — Stock has none of these spells)*: nine room spells, `farm 1`–`farm 8` (#5610, #5613, #5615, #5616, #5662, #5663, #5664, #5665) and `farm` (#5721), each ability 148 → a textblock that rolls `random <block>`. For the eight numbered ones that block does nothing on 90% of the rolls (50% for `farm 7`) and rolls a second table on the rest, whose bands are `message <N>`, some with a `summon`.
+  - **`farm 8`** (#5665; 64 `Smoldering Fields` rooms and 2 `Smoldering Fields, Cart Path`, map 14): textblock 5619 `random 5620` → 5620 (`90:addevil 0`, `100:random 5621`) → 5621: `70:addevil 0`, `75:message 9732`, `80:message 9733`, `85:message 9734`, `90:message 9735:summon 2721`, `95:message 9735:summon 2721`, `100:message 9725`. So three casts in a hundred print a line, and one in a hundred brings a wandering cadaver (2721).
+  - **One wording seen:** `You can barely make out a figure lurching in the haze.`, in plain white, right after the room display of 14/8647 on the way in. No monster appeared with it. Which of the five message rows it is was not determined: Paradigm's message table isn't available. Row 9725 is shared with `farm 5` (5611, where it carries `summon 2721`), `farm 6` (5614) and `farm 7` (5618).
+  - **Not yet captured** *(user, 2026-10-10: "we have to wait until we capture them")*: the other four wordings of `farm 8`'s table (it has five message rows: 9732, 9733, 9734, 9735, 9725), and every wording of the other eight farm spells (messages 9353, 9355, 9356, 9485–9488, 9490, 9493, 9498–9504, 9723–9731 and 9983 across their tables). Nothing is recorded for them and none is guessed; their lines are still staged as unrecognized until seen.
 - **A hordeling's death prints `The hordeling screeches violently!`** beside its death spell's `The hordeling explodes in a spray of venom!` (venom explosion #427, the hordeling's `DeathSpell`). The screech is the third text of message row 1185, the row that holds the hordeling's own `rips` attack lines *([OBSERVED] 2026-10-08, Stock message table; seen once on Paradigm at a hordeling's death)*. The user reads it as a spell line (2026-10-08); which spell or event prints it was not traced, so it is kept on the death spell's record.
 
 **Client use:**
 - Both message seeds carry each set as the room spell's `WitnessMessage`, one wording per line, and the screech on venom explosion's record, so `MessageCandidateWatcher` no longer stages them. Nothing acts on the lines.
+- The Paradigm message seed carries `farm 8`'s one captured wording the same way (record `63acecdce9a4fa4d`, linked to spell 5665; user-approved 2026-10-10, report `paradigm-20261010-145330`).
 
 ### Monster movement lines
 
@@ -5542,15 +5547,17 @@ Among protectable hazards, a further split governs whether the navigator may off
     and no line break at all; the terminal wraps it at its right margin, mid-word.
   - A Paradigm room has no item cap (*Items, inventory & equipment → Room item capacity: drop
     refusal*), so nothing bounds either one's length.
-- **Paradigm: the reply lists what the search found, not the whole floor** *([OBSERVED] 2026-10-09,
-  report `paradigm-20261009-164508`; Realm: Paradigm, Stock not recorded)*. The vault's replies held
-  111–120 stacks where its display held 341. A room whose display showed
+- **The reply lists the hidden stacks the search found, not the whole floor** *([OBSERVED] 2026-10-09,
+  report `paradigm-20261009-164508`, Paradigm; the mechanism [OBSERVED] 2026-10-10 from the Stock DLL and
+  [CONFIRMED] 2026-10-10 by the user for Paradigm, both in *Items, inventory & equipment → Hiding items in
+  a room (stashing)*; Realm: both)*. The vault's replies held 111–120 stacks where its display held 341.
+  A room whose display showed
   `34 rope and grapple`, `10 pulsating heart`, `scorpion tail` and 28 other stacks answered `sea` with
   `You notice 2 wooden skiff, 2 rope and grapple, scorpion tail, pulsating heart, 10 black diamond here.`:
   two stacks the display didn't show, and three it did, under smaller counts. Searches sent one after
   another gave `8`, `9` or `10 black diamond`, and one left `pulsating heart` out.
-  - `[NEEDS CONFIRMATION]` Are the hidden copies in addition to the visible ones (34 visible + 2 hidden
-    rope and grapple = 36 in the room), or is the reply's count a recount of some of the visible stack?
+  - The hidden copies are in addition to the visible ones: 34 visible + 2 hidden rope and grapple is 36
+    in the room. (This was an open question here on 2026-10-09; settled 2026-10-10.)
 - (Targeted `sea <dir>` hidden-exit reveals are a separate path — see *Hidden exits — `sea <dir>` reveal
   wording*.)
 - **Client use:**
@@ -5558,6 +5565,8 @@ Among protectable hazards, a further split governs whether the navigator may off
     handed the whole reply at once, and a display's 79-column rows together with the row after them.
     `CasterMessageMatcher.LiteralRunsOccurInOrder` keeps the message templates' regexes off a line they
     can't match (report `paradigm-20261009-164508`: the client stood still for seconds on each reply).
+  - What the client does with a reply's counts is in *Items, inventory & equipment → Hiding items in a
+    room (stashing)*.
   - Auto-search holds the `sea` past the fight and fires it **once** the room clears, then keeps the
     walker held briefly so the revealed `You notice … here.` survey lands and the get engines collect it
     **before** the loop sets up sneaking and steps on. One search per room; empty rooms (no fight)
@@ -6568,6 +6577,33 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - **`You don't see <echo> here.`**: the item isn't on the floor (gone: decayed, or another player took it).
   - `<echo>` is whatever text followed `get`, echoed back verbatim, so it can be a bare word rather than the item's full name.
   - Examples: `get rod` → `You don't see rod here.`; `get warhorn` → `You don't see warhorn here.`
+  - **Paradigm: a counted `get` for more than is there is refused outright and takes nothing**
+    *([CONFIRMED] 2026-10-10, user, live test; Realm: Paradigm)*. With the room display showing
+    `5 blackwood longbow`, `get 10 blackwood long` answered `You don't see 10 blackwood long here.`: the
+    count and the name as typed are echoed back, and none of the five was taken. So the line does not
+    always mean the item is gone; after a counted `get` it can mean the stack is smaller than asked for.
+    Stock has no counted `get` (*Item batching: Paradigm counted commands vs Stock one-per-command*): a
+    stack there is taken one `get` a copy, and the copies that are there are taken before the first
+    refusal.
+  - **Client use:** `GhSweepManager.OnGetRefusedAsNotHere`. The echo is matched to the pickup by name
+    with the count read past (`SameItem`). On Paradigm the room is read once more for its refused
+    pickups, after the rest of the room's batch: one `l` for every refused stack in plain sight, one
+    `sea` for every refused hidden one (`RecountFrom`, `SettleRefused`). Each is then asked again for
+    what that read lists of it; a second refusal, or a read that doesn't list the item, leaves it.
+    Because the game serves a `get` from the copies in plain sight first, the queued pickup of a hidden
+    stack of the same item is taken out of the batch when the visible stack is refused
+    (`HoldHiddenTwinsOf`) and sent after the resized visible pickup. On Stock the copies already taken
+    when a stack runs out go on as a carried move of their own (`KeepWhatWasTaken`) and only the rest is
+    left. A hidden stack left this way is recorded as not found by the search
+    (`GhLeftReason.NotFoundBySearch`), not as gone.
+  - **Client policy:** a hidden pickup cut down to what its second search showed takes the copies that
+    weren't shown off the room's hidden record as well, so the item-location log doesn't keep copies of
+    a stack the game refused to hand over in full. A search lists only the share it finds, so a larger
+    stack can still hold copies the log no longer shows until the next sweep reads the room.
+  - Known gaps: on a statline that puts text after the prompt, a search's reply is of unknown source
+    and settles a look still waiting in the same room, so a refused visible stack can be resized from
+    hidden copies. An arrival is any room change the tracker reports, so one made with no room display
+    (a re-anchor) reads as an empty floor.
 - **`Syntax: GET {Amount} {Currency}`**: the game misparsed the item name as a **currency** get.
   - Observed for some multi-word names, e.g. `get silk cape`, and for gem/stone names like `piece of amber`.
   - No item name is echoed, and retrying the same name can't help.
@@ -6579,6 +6615,7 @@ A `get <item>` that can't succeed replies with one of these shapes:
   - Unlike the two shapes above, the item is NOT gone. It's a transient block that clears once weight is shed.
   - No item name is echoed.
   - Confirmed by screenshot: `get 20 torch` succeeds twice, then a third `get 20 tor` while overloaded → `You cannot carry that much!`.
+  - **Client use:** `GhSweepManager.HandleCapacityRefusal`. The room's outstanding pickups stay queued for a later visit, the ones not yet sent are taken off the command queue with a second read queued behind them (`ClearCommandQueue`), and the pack is read again (`i`) before the re-plan. A pickup that was still waiting on its second read (*`get` failure responses*, Client use) is owed one on the next visit (`ForgetRefusedPickups`).
   - **Stock: the same line also means "no free slot"** *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_add_item_to_inventory` @0x41b19e (weight) and @0x41b292–0x41b2bb (slots); Realm: Stock, Paradigm not recorded)*. It prints when the item would take the weight above the max (exactly the max is allowed), and also when all 100 pack slots are in use or, for a key, the key ring is full (50 at most). The line doesn't say which. The weight side is in *The `i` listing and carried weight*.
   - **In play the line means encumbrance** *([CONFIRMED] 2026-10-09, user: "means that we do not have available encumbrance to pick up an item... there isnt a limit on how many different items we can hold.. or how many total items of 1 item we can hold... unless that exceeds our encumbrance")*. The engine's slot test above is a second cause on paper; the user has not met it, so the client treats the line as a weight refusal only.
 - **Stock: `A strange force stops you from getting this item.`** is a second refusal from the same routine *([OBSERVED] 2026-10-09, Stock 1.11p `wccmmud.dll` `_add_item_to_inventory` @0x41b15f; Realm: Stock, Paradigm not recorded)*. It prints when the engine's `_add_logical_to_user` test refuses the item; what that test checks wasn't traced. A `buy` goes through the same routine and can print either line (*Money, banks & shops → Buy / sell result lines*).
@@ -6636,9 +6673,104 @@ A `get <item>` that can't succeed replies with one of these shapes:
 - **A room `search` finds each stashed item on its own roll** *([OBSERVED] 2026-09-30, `wccmmud.dll`
   1.11p `_display_items_in_room` in its search mode; Stock only)*: 1–100 under the searcher's
   **Perception − 10**. A plain room display never rolls, so walking in shows nothing.
+- **Stock: what a search reads, what its reply lists, and what finding a stack changes** *([OBSERVED]
+  2026-10-10, Stock 1.11p `wccmmud.dll` `_cmd_search` @0x454fc9, `_display_items_in_room` @0x4363a9,
+  `_remove_item_from_room` @0x41d1ff, `_clear_search_flags` @0x41758e)*:
+  - **A room keeps its visible items and its hidden ones as two separate sets of stacks.** The visible
+    set is 17 slots at room +0x470 with a per-slot word of extra copies at +0x574; the hidden set is 15
+    slots at +0x4d8 with its extra-copies words at +0x596. A slot holds one item and 1 + that word
+    copies. (The caps are in *Room item capacity: drop refusal*.)
+  - **A bare `search` runs the room's item list in search mode** (`_display_items_in_room(user, 0, 1, 1)`
+    @0x455082), then tells the room `<Name> is searching the area.` (@0x455099–0x4550c3).
+  - **Search mode walks the hidden set only** (@0x4365e8–0x436824). A slot whose item has 0 at item
+    +0x39e is passed over (@0x436618–0x436623). That word reads as the item's Gettable flag:
+    `_remove_item_from_room` takes a name-matched item at once when it is non-zero, and otherwise goes on
+    to test a flag in the user table (@0x41d272–0x41d290). Each other slot gets its own
+    1–100 roll (@0x436629), and is found when the roll is under Perception − 10 (@0x436635–0x436644).
+  - **The reply names the found hidden stacks, and nothing of the visible floor.** A found slot is added
+    to the reply at 1 + its extra-copies word, slots holding the same item added together
+    (@0x436796–0x4367fb); the line is `You notice `, the hidden coins, then each found item, led by its
+    count when that is over 1 (`%d `, @0x43686e–0x43688c), then ` here.` (@0x436bbd). The branch that
+    prints the visible set (@0x4368b7–0x436bad) is the one search mode jumps past (@0x4368b2). So an item
+    with copies in both sets shows in the room display under its visible count and in the reply under its
+    hidden one, and the room holds the two added.
+  - **Hidden coins are listed without a roll** (the five counts at room +0x548…+0x558, each printed when
+    it is over 0, @0x436444–0x4365da), which is why a search always turns up stashed coins.
+  - **A found stack does not move to the visible set.** Finding it sets its slot's bit in a mask on the
+    room (+0x568, @0x43664a–0x43677f), flags the searcher (player +0x6f4 bit 0x10, @0x436782) and adds one
+    to a count of finds on the room (+0x605, @0x436790). `_remove_item_from_room`, which `get` takes
+    through, tries the visible slots first (@0x41d239–0x41d305) and then a hidden slot only when its bit
+    is set (@0x41d446–0x41d44f); it takes one copy off the slot's extra-copies word, or empties the slot
+    and clears its bit (@0x41d46b–0x41d4a2). A room display never reads the hidden slots, so a found
+    stack is still not in the next room display.
+  - **Every search rolls every hidden slot again.** The loop does not read the mask (@0x4365ea–0x436644),
+    so a later search can name the same copies again, name fewer, or name others; bits are only ever
+    added by it.
+  - **The mask is dropped as the finders go.** `_clear_search_flags` clears a flagged searcher's flag,
+    takes one off the room's count of finds and zeroes the mask when the count reaches 0
+    (@0x4175a8–0x4175d1). It is called when the searcher moves (`_move_user` @0x4179ab, @0x417f58), hangs
+    up (@0x408e5f), dies (`_check_kill_user` @0x419abe) or suicides (@0x46ea59), and from
+    `_fast_update_character` (@0x423185). The count goes up once for each slot found and down once for
+    each finder leaving, so as the code reads, a searcher who found two or more slots leaves the mask set;
+    a room load zeroes both (`_preload_and_generate_buffers` @0x4304f2–0x430513). Not seen in play.
+  - The whole list, in either mode, is printed between `_btutsw(user, 0x4f)` (@0x436422) and
+    `_btutsw(user, 0)` (@0x436c33). 0x4f is 79, the row length of a game-broken room display
+    (*Movement & navigation → Room-wide search during and after combat*); the call itself is the BBS
+    library's and was not followed.
+- **Paradigm reveals items the same way** *([CONFIRMED] 2026-10-10, user: "search reveals items the same
+  way as it does on stock")*.
+  - What follows from that statement and the Stock reading above, taken together, not confirmed apart
+    from them: report `paradigm-20261009-164508` has a room displaying `34 rope and grapple` that answered
+    `sea` with `2 rope and grapple`. Read the Stock way those are 2 hidden copies beside 34 visible ones,
+    36 in the room.
+- **Paradigm: a stack once found stays gettable** *([CONFIRMED] 2026-10-10, user: "yes" to "do the stacks
+  found by several searches in a row all stay gettable, and do they stay gettable after leaving the room
+  and coming back?"; Realm: Paradigm)*. The realms differ here: on Stock the found mask is dropped as the
+  searchers leave (the `_clear_search_flags` bullet above, `[OBSERVED]`, Stock), so a hidden stack has to
+  be found again on the visit that picks it up.
+- **Client policy** (user, 2026-10-10: "we should record the highest number seen for each item on each
+  search.. not every search is going to reveal the same items or the same count"): over the searches of
+  one room, an item's hidden count is the highest any one reply showed for it. Never the last reply's,
+  and never the replies added up. A room display rolls nothing, so the count in plain sight is the
+  latest display's, not the highest seen.
 - Coin stashes: see *Money, banks & shops → Hiding coin in a room (stashing)*.
 
 **Client use:**
+- **Telling a search reply from a room display.** The two lists read alike, so
+  `GroundItemTracker.LastSurveySource` (`FloorSurveySource`) names a source only on proof. The echo of
+  `sea`…`search` with nothing after it, directly ahead of the list (`MessageRouter.CommandEchoedBeforeLine`,
+  `FloorListLine.IsRoomSearch`), proves a search reply. A room's name ahead of the list, with no prompt
+  or exits line between, proves a room display. A list with neither is unknown: a line landing between a
+  search's echo and its reply, or a statline that puts text of its own after the prompt, takes the echo
+  away without making the list a display.
+- **Roomba adds a room's hidden stacks to its visible ones** (`GhSweepManager`, `GhSurveyMerger`; user
+  rulings 2026-10-10). Recon keeps two records per room: the stacks its latest display showed
+  (`GhSurveyMerger.Replace`; a display with no floor list is an empty floor, on every pass through the
+  room), and the stacks its search replies named, each at the highest count any one
+  reply showed (`GhSurveyMerger.Merge`). A list of unknown source read with no search of Roomba's own
+  out is not shown to be the whole floor, so it only adds to the visible record. Their sum (`GhSurveyMerger.Total`) is what the room holds: the
+  item-location log, the room's shown inventory and the inventoried total read it. The item-location log
+  is written once per room, when its searches end.
+- **Roomba queues a visible stack and a hidden stack of the same item as two moves**
+  (`GhSweepManager.BuildSortQueue`): the visible one needs no search, the hidden one is searched for
+  first. Because the game takes from the visible stack before a found hidden one, the hidden move is not
+  sent while a visible copy of the item still lies in that room (`FittingGetsAt`, `PickupsOnOffer`), and
+  a `You took` is credited to the visible move first (`ResolveConfirm`).
+- **Roomba searches before every hidden pickup, on both realms.** Paradigm keeps a found stack gettable,
+  so its sort could skip the search for a stack recon found; that saving isn't built.
+- **Roomba's final lap doesn't search, so it rereads only the visible set** (`GhSweepManager`
+  `CarryRecordsIntoFinalLap`, `NoteFinalLapRead`, `WriteRoomsTheFinalLapMissed`; **Client policy**, user
+  2026-10-10). Each room's visible record is rebuilt from the lap's displays, a display with no floor
+  list being an empty floor. The hidden record stands as recon left it, less the copies the sort took
+  out of hidden stacks. A room whose display differs from what the sort should have left (recon's visible
+  record, kept in step with every copy the game confirmed taken or dropped, `GhFloorCounts`) is logged
+  once and written to the item-location log as it is; nothing is re-sorted. A room recon never read is
+  written as seen and compared with nothing; a room recon read that the lap didn't show again is written
+  from the sort's own account.
+- **A list Roomba can't place** (source unknown, read while a search of its own is out in that room) is
+  most likely the search's reply, but adds nothing to a stack the display showed: the higher of the two
+  counts stands, and only a name the display never showed is taken as hidden
+  (`GhSurveyMerger.MergeUnattributed`). A redisplay misread as a reply would otherwise double the room.
 - `@hide-all [full|coins|keys]` and the Hide All / Hide Everything / Hide Coins / Hide Keys actions
   (`InventoryActionHandler.HideAll`) run the Drop All sweeps with `hide`, always naming the item or coin
   — never a bare `hide`, which would hide the character instead.

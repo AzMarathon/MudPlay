@@ -129,7 +129,7 @@ public sealed class LairTimerStore : IDisposable
         if (_tracker.State.Confidence != RoomConfidence.Confirmed) return;
         if (_tracker.State.CurrentRoom is not { HasLair: true } room) return;
         lock (_arrivalLock) _lastKilled[room.Key] = at;
-        _log?.Debug("LairTimerStore", $"kill in {room.Key} ('{room.Name}') at {at:HH:mm:ss.fff}.");
+        _log?.Debug("LairTimerStore", $"kill in {room.Key} ('{room.Name}') at {LogTime(at)}.");
     }
 
     // Longest default respawn (seconds) across every lair room in the active
@@ -205,8 +205,16 @@ public sealed class LairTimerStore : IDisposable
         lock (_arrivalLock) _lastEntered[room.Key] = now;
         // Debug-only: arrivals are noisy in normal play. Scheduler
         // emits Info-level "lair entered" on its own surface.
-        _log?.Debug("LairTimerStore", $"entered {room.Key} ('{room.Name}') at {now:HH:mm:ss.fff}.");
+        _log?.Debug("LairTimerStore", $"entered {room.Key} ('{room.Name}') at {LogTime(now)}.");
     }
+
+    // The anchors are instants, stamped with whatever offset their source carries
+    // (an entry in UTC, a kill in the death watcher's local time), and every
+    // comparison is by instant. Only the text needs a zone: the log's own
+    // timestamps are local, and an entry printed four hours from the kill beside it
+    // read as a clock fault (report paradigm-20261010-145330).
+    public static string LogTime(DateTimeOffset at)
+        => at.ToLocalTime().ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
 
     private int? ComputeDefaultRespawnSeconds(RoomKey key)
     {

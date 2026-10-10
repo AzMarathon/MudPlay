@@ -185,6 +185,45 @@ public sealed class MonsterObservationTrackerTests
         Assert.Equal(50d, o.HitRatePercent);
     }
 
+    // A spell's cast line has the shape of a miss. Counted as one, a pure caster's
+    // record read 0 landed of thousands of swings it never made (report
+    // paradigm-20261010-145330).
+    [Fact]
+    public void CastLine_CountedAsAMiss_IsTakenBackWhenRetracted()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        h.CurrentTarget = "giant rat";
+        h.Feed("*Combat Engaged*");
+
+        h.Feed("You scatter some ashes in a sweeping motion!");
+        Assert.Equal(1, h.Tracker.For(1)!.MissCount);
+
+        h.Tracker.RetractLastMiss();
+        Assert.Equal(0, h.Tracker.For(1)!.SwingCount);
+
+        h.Tracker.RetractLastMiss();                    // nothing left to take back
+        Assert.Equal(0, h.Tracker.For(1)!.MissCount);
+    }
+
+    [Fact]
+    public void Retraction_NeverReachesBackPastALaterUncountedLine()
+    {
+        using Harness h = new();
+        h.AddMonster(1, "giant rat");
+        h.Feed("Also here: giant rat.");
+        h.CurrentTarget = "giant rat";
+        h.Feed("*Combat Engaged*");
+        h.Feed("You swing at giant rat, but miss!");    // a real whiff, counted
+
+        h.CurrentTarget = null;
+        h.Feed("You scatter some ashes in a sweeping motion!");   // not counted: no target
+        h.Tracker.RetractLastMiss();                    // about the cast line, not the whiff
+
+        Assert.Equal(1, h.Tracker.For(1)!.MissCount);
+    }
+
     [Fact]
     public void WeaponNoEffect_AttributesToCurrentTarget()
     {

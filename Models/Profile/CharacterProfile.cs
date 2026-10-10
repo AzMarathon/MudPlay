@@ -14,7 +14,7 @@ public sealed class CharacterProfile
 {
     // The schema version a freshly-authored (fully-migrated) profile carries.
     // Bump in lockstep with a new Services.ProfileMigrations step.
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     // JSON schema version (see GlobalSettings.SchemaVersion for the contract).
     // A fresh profile is authored at CurrentSchemaVersion so it never triggers a
