@@ -389,6 +389,7 @@ public sealed class MovementController : IDisposable
         Stopping?.Invoke();
         if (_autoLair.IsActive) _autoLair.Stop("user stop from toolbar");
         if (_loops.State != LoopState.Idle) _loops.Stop("user stop from toolbar");
+        _loops.DropResumeHeldForMasterSwitch("user stop from toolbar");
         // Idle too: a journey can stand between two of its legs with no walk running
         // (waiting at a giver for the hand-over), and Stop is the end of it.
         _walker.Stop("user stop from toolbar");

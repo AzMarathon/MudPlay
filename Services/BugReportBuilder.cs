@@ -1599,7 +1599,9 @@ public static class BugReportBuilder
         // game, held until the party reform has seen the room when one is pending: a
         // "walked off without the party after a relog" report needs which it was.
         Kv(sb, "Loop restart after reconnect", svc.LoopRunner.PendingReconnectResumeName is { } pendingLoop
-            ? $"'{pendingLoop}' — on the next in-game prompt"
+            ? svc.LoopRunner.ReconnectResumeHeldForMasterSwitch
+                ? $"'{pendingLoop}' — when the master switch is back on"
+                : $"'{pendingLoop}' — on the next in-game prompt"
             : svc.LoopRunner.ReconnectResumeHeldForReform
                 ? "restarted — held until the party reform has seen the room"
                 : "(none pending)");
@@ -2373,6 +2375,8 @@ public static class BugReportBuilder
             Kv(sb, "Skipped because the master switch is off", svc.AutoModeController.DescribeSkipped());
             IReadOnlyCollection<string> parked = svc.MovementCoordinator.ParkedGates;
             Kv(sb, "Holds owed but not asserted", parked.Count == 0 ? "(none)" : string.Join(", ", parked.OrderBy(g => g)));
+            IReadOnlyCollection<string> comebacks = svc.RemoteCommands.HeldComebackSenders;
+            Kv(sb, "@comeback kept to answer at switch-on", comebacks.Count == 0 ? "(none)" : string.Join(", ", comebacks));
             Kv(sb, "Allow hangup in all-off mode",
                 svc.AllowHangupInAllOffMode ? "ticked — automatic hang-ups still fire" : "not ticked — nothing hangs up on its own");
         }

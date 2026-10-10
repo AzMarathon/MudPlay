@@ -25,6 +25,7 @@ public sealed class MasterSwitchRemoteCommandTests
         public AutoModeRemoteHandler Handler { get; }
         public AutoModeController Controller { get; }
         public ProfileService Profile { get; }
+        public PartyState Party { get; } = new();
         public List<string> Invoked { get; } = new();
 
         public Setup()
@@ -32,7 +33,7 @@ public sealed class MasterSwitchRemoteCommandTests
             MessageRouter router = new();
             DefaultPatterns.Seed(router);
             ChatRouter chat = new(router);
-            PartyState party = new();
+            PartyState party = Party;
             party.Members.Add(new PartyMember { Name = Sender });
             PlayerDatabase players = new();
             players.RecordObservation(Sender, null, null, null, null, null, null, Now);
@@ -226,5 +227,96 @@ public sealed class MasterSwitchRemoteCommandTests
 
         Assert.False(s.Controller.KillSwitchEngaged);
         Assert.Single(s.Engine.LastSentForTests);
+    }
+
+    // ----- A @comeback kept for the switch --------------------------------
+
+    private static void SwitchBackOn(Setup s)
+    {
+        s.Controller.TurnOn("test");
+        s.Engine.ReplayHeldComebacks();
+    }
+
+    // A stranded member asks once, so their ask is kept and answered when the
+    // switch is back on.
+    [Fact]
+    public void ComebackFromAMemberWhileOff_IsAnsweredAtSwitchOn()
+    {
+        using Setup s = new();
+        s.Controller.TurnOff("test");
+        s.Engine.DispatchForTests(Telepath("@comeback"));
+        Assert.Empty(s.Invoked);
+
+        SwitchBackOn(s);
+
+        Assert.Equal(new[] { "@comeback" }, s.Invoked);
+    }
+
+    // Kept only from a sender who would be gone back for: a stranger's ask kept
+    // and put through at switch-on drew the "not allowed" reply the off state is
+    // there never to give.
+    [Fact]
+    public void ComebackFromAStrangerWhileOff_IsNotKept_AndNeverAnswered()
+    {
+        using Setup s = new();
+        s.Controller.TurnOff("test");
+        s.Engine.DispatchForTests(new ChatLogEntry(Now, ChatChannel.TelepathIncoming, "Stranger", "@comeback",
+            "Stranger telepaths: @comeback"));
+
+        Assert.Empty(s.Engine.HeldComebackSenders);
+        SwitchBackOn(s);
+
+        Assert.Empty(s.Invoked);
+        Assert.Empty(s.Engine.LastSentForTests);
+    }
+
+    [Fact]
+    public void KeptComeback_DroppedWhenTheSenderLeavesTheParty()
+    {
+        using Setup s = new();
+        s.Controller.TurnOff("test");
+        s.Engine.DispatchForTests(Telepath("@comeback"));
+
+        s.Party.Members.Clear();
+        SwitchBackOn(s);
+
+        Assert.Empty(s.Invoked);
+        Assert.Empty(s.Engine.LastSentForTests);
+    }
+
+    // A profile load and a dropped connection both end the stay the ask was made
+    // in; it must not be answered at some later switch-on.
+    [Theory]
+    [InlineData("another profile was loaded")]
+    [InlineData("disconnected")]
+    public void KeptComeback_DroppedByAProfileLoadOrADisconnect(string why)
+    {
+        using Setup s = new();
+        s.Controller.TurnOff("test");
+        s.Engine.DispatchForTests(Telepath("@comeback"));
+
+        s.Engine.DropHeldComebacks(why);
+        SwitchBackOn(s);
+
+        Assert.Empty(s.Invoked);
+        Assert.Empty(s.Engine.LastSentForTests);
+    }
+
+    // Older than "If leading, accept @comeback for": the party has moved on.
+    [Fact]
+    public void KeptComeback_DroppedOnceOlderThanTheComebackWindow()
+    {
+        using Setup s = new();
+        DateTimeOffset now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
+        s.Engine.Now = () => now;
+        s.Engine.ComebackWindow = TimeSpan.FromMinutes(2);
+        s.Controller.TurnOff("test");
+        s.Engine.DispatchForTests(Telepath("@comeback"));
+
+        now += TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(1);
+        SwitchBackOn(s);
+
+        Assert.Empty(s.Invoked);
+        Assert.Empty(s.Engine.LastSentForTests);
     }
 }

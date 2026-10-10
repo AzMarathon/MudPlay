@@ -162,6 +162,63 @@ public sealed class AutoModeControllerTests
         Assert.True(ReadAutoMode(profile).SameAs(AllOff()));
     }
 
+    // The same ruling against the base-modes settle. A Stop, a walk-to's arrival
+    // or a loop restarted by a reconnect used to settle the toggles into the base
+    // modes under the switch, and switch-on, which keeps what was ticked
+    // meanwhile, then brought the base autos on.
+    [Theory]
+    [InlineData("stopped by the user")]
+    [InlineData("loop start")]
+    [InlineData("walk-to end")]
+    public void ReconcileToBase_SwitchOff_TicksNothing_SoOnlyTheSwitchComesBackOn(string reason)
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, AllOff(), baseModes: Only(m => { m.AutoCombat = true; m.AutoHeal = true; }));
+        AutoModeController controller = new(profile);
+        controller.TurnOff("test");
+
+        Assert.Null(controller.ReconcileToBase(reason));
+        Assert.True(ReadAutoMode(profile).SameAs(AllOff()));
+
+        controller.TurnOn("test");
+
+        Assert.True(ReadAutoMode(profile).SameAs(AllOff()));
+        Assert.Equal(1, controller.SkippedSinceOff["Base-modes reset"]);
+    }
+
+    // A character with no base modes yet adopts its live toggles as the base the
+    // first time. Not under the switch: live is all-off then, and the base would
+    // be saved as "nothing".
+    [Fact]
+    public void ReconcileToBase_SwitchOff_DoesNotAdoptTheSwitchedOffTogglesAsTheBase()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+        controller.TurnOff("test");
+
+        Assert.Null(controller.ReconcileToBase("stopped by the user"));
+
+        GeneralSettings general =
+            JsonSerializer.Deserialize<GeneralSettings>(profile.Current!.Settings!["General"].GetRawText())!;
+        Assert.Null(general.AutoModeBase);
+    }
+
+    [Fact]
+    public void ReconcileToBase_SwitchOn_SettlesTheTogglesIntoTheBase()
+    {
+        ProfileService profile = BlankProfile();
+        WriteAutoMode(profile, AllOff(), baseModes: Only(m => m.AutoCombat = true));
+        AutoModeController controller = new(profile);
+
+        AutoModeReconcileResult? result = controller.ReconcileToBase("loop start");
+
+        Assert.True(result is { LiveChanged: true });
+        Assert.True(ReadAutoMode(profile).AutoCombat);
+        // Settled already: nothing to do the second time.
+        Assert.Null(controller.ReconcileToBase("loop start"));
+    }
+
     // The pyramid climb unticks toggles for its first floors. An off / on during
     // the climb gives back what was ticked then, never the base modes, and a
     // climb that ends while the switch is off hands its toggles to the switch.

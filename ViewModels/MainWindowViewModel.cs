@@ -3409,6 +3409,9 @@ public partial class MainWindowViewModel : ObservableObject
                 if (wasConnected) AppServices.Current.PartyReform.NoteDisconnected();
                 // The follower's reconnect @comeback is skipped after too long a drop.
                 if (wasConnected) AppServices.Current.PartyRejoin.NoteDisconnected();
+                // A member's @comeback kept for the master switch names a place
+                // from the stay that just ended.
+                AppServices.Current.RemoteCommands.DropHeldComebacks("disconnected");
                 // Cancel any pending stable-window reset — this drop
                 // happened before the 30s threshold, so the connect
                 // didn't earn a counter reset.
@@ -6703,19 +6706,10 @@ public partial class MainWindowViewModel : ObservableObject
     private void ReconcileAutoModeToBase(string reason)
     {
         if (AppServices.Current.Profile.Current is not { } profile) return;
-        Models.Profile.GeneralSettings dto = ReadGeneralFromProfile(profile);
-
-        Models.Profile.AutoModeReconcileResult result =
-            Models.Profile.AutoActionDefaults.ReconcileToBase(dto.AutoModeBase, dto.AutoMode);
-        if (!result.BaseSeeded && !result.LiveChanged) return;   // already settled — nothing to write
-
-        bool combatWas = dto.AutoMode.AutoCombat;
-        dto.AutoModeBase = result.Base;
-        dto.AutoMode = result.Live;
-        profile.Settings ??= new();
-        profile.Settings["General"] =
-            System.Text.Json.JsonSerializer.SerializeToElement(dto);
-        AppServices.Current.Profile.Save();
+        bool combatWas = ReadGeneralFromProfile(profile).AutoMode.AutoCombat;
+        // The switch decides and writes: with it off nothing is settled, and
+        // already settled writes nothing.
+        if (AppServices.Current.AutoModeController.ReconcileToBase(reason) is not { } result) return;
 
         if (result.LiveChanged)
         {

@@ -271,6 +271,30 @@ public sealed class AutoModeController
         return true;
     }
 
+    // Settle the live toggles into the character's base modes: at a profile load,
+    // the start of a loop or Auto-Lair circuit, a walk-to's arrival and a Stop.
+    // Not with the master switch off. The toggles are all off then because the
+    // user switched everything off, so settling would tick the base modes under
+    // the switch, and switch-on, which keeps whatever was ticked meanwhile, would
+    // bring them on: against "only the master switch should come back on" and a
+    // reconnect respecting what the user set (user, 2026-10-10). What the settle
+    // would have done is not owed afterwards; the switch's own remembered toggles
+    // are what come back. Null when it held back or nothing needed settling.
+    public AutoModeReconcileResult? ReconcileToBase(string reason)
+    {
+        if (Blocks("Base-modes reset", reason)) return null;
+        if (_profile.Current is not { } profile) return null;
+
+        GeneralSettings general = ReadGeneral(profile);
+        AutoModeReconcileResult result = AutoActionDefaults.ReconcileToBase(general.AutoModeBase, general.AutoMode);
+        if (!result.BaseSeeded && !result.LiveChanged) return null;
+
+        general.AutoModeBase = result.Base;
+        general.AutoMode = result.Live;
+        WriteGeneral(profile, general);
+        return result;
+    }
+
     // "Remote commands 3, Triggers 12" — the skip counters as one phrase.
     public string DescribeSkipped()
     {

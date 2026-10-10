@@ -8192,6 +8192,11 @@ public sealed class AppServices
         LoopRunner.Event += e =>
         {
             if (e.Kind != Game.Map.LoopEventKind.ReachedFirstWaypoint) return;
+            // No loop starts by itself with the master switch off, but one frozen
+            // on it can still be restarted under it (an avoid-list edit re-routes
+            // by Stop + Start): that must not swap gear, wipe the session's stats
+            // or telepath @reset to the party.
+            if (AutoModeController.Blocks("Loop start reset")) return;
             // A loop actually beginning is one of the moments the Default gear set
             // may auto-equip (we're moving out under normal combat gear). Auto-Lair
             // start does the same via AutoLair.ActiveChanged below.
@@ -10024,6 +10029,7 @@ public sealed class AppServices
         PvpFight.MasterSwitchOff = MasterSwitchOff("PvP response");
 
         MovementControl.RefuseResume = () => RefuseStartForMasterSwitch("Run", "resume");
+        LoopRunner.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
 
         AutoModeController.DescribeInFlight = DescribeInFlightForMasterSwitch;
         AutoModeController.KillSwitchToggled += OnMasterSwitchChanged;
@@ -10037,6 +10043,7 @@ public sealed class AppServices
         Profile.ProfileLoaded += _ =>
         {
             if (_masterSwitchSettleOwed) OnMasterSwitchResetByProfileLoad();
+            RemoteCommands.DropHeldComebacks("another profile was loaded");
         };
         SneakGuard.MasterSwitchOff = () => AutoModeController.KillSwitchEngaged;
     }
@@ -10071,6 +10078,7 @@ public sealed class AppServices
     {
         _collectOwedInRoom = null;
         _masterSwitchSettleOwed = false;
+        LoopRunner.DropResumeHeldForMasterSwitch("another profile was loaded");
         MovementControl.ReleaseFromAutoAll();
     }
 
@@ -10151,6 +10159,9 @@ public sealed class AppServices
             AutoHazardCounterProvisioner.OnArrivedInRoom(hazardRoom.Key);
         AilmentSync.ReevaluateWaits();
         PartyRest.ResyncAfterMasterSwitch();
+        // A loop the last reconnect set aside, not restarted while the switch was
+        // off. Behind the freeze still, so its first step waits for the holds.
+        LoopRunner.ResumeAfterMasterSwitch();
         MovementControl.ReleaseFromAutoAll();
         DeathRecovery.OnAutoAllRestored();
         // Last, with movement free again: an event's Then that landed meanwhile
@@ -14210,6 +14221,7 @@ public sealed class AppServices
         Party.ComebackWindow = window;
         PartyComeback.ComebackWindow = window;
         PartyRejoin.ComebackWindow = window;
+        RemoteCommands.ComebackWindow = window;
     }
 
     public void ApplyPartyFromActiveProfile()
