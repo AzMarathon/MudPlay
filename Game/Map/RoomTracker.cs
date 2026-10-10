@@ -1200,18 +1200,20 @@ public sealed class RoomTracker
         State.OpenDoorDirections = observation.OpenDoorDirections;
         State.ClosedDoorDirections = observation.ClosedDoorDirections;
 
-        VerifyCastLanding(observation, when);
-
-        bool afterDrop = _connectionLostMidMove;
-        _connectionLostMidMove = false;
-        // Unsure of the room already: there is no in-flight move to settle, only dead
-        // ones to forget before the display is judged.
-        if (afterDrop && State.Confidence != RoomConfidence.Pending)
-            while (_pending.TryDequeue(out _)) { /* drain */ }
-
+        // From here on a room the tracker settles on is the one this display shows:
+        // a booked landing it corrects, as much as the reconcile that follows.
         _reconcilingDisplay = true;
         try
         {
+            VerifyCastLanding(observation, when);
+
+            bool afterDrop = _connectionLostMidMove;
+            _connectionLostMidMove = false;
+            // Unsure of the room already: there is no in-flight move to settle, only
+            // dead ones to forget before the display is judged.
+            if (afterDrop && State.Confidence != RoomConfidence.Pending)
+                while (_pending.TryDequeue(out _)) { /* drain */ }
+
             switch (State.Confidence)
             {
                 case RoomConfidence.Unknown:
@@ -2794,11 +2796,13 @@ internal readonly record struct HistoryEntry(RoomKey Room, DateTimeOffset Confir
 // transition).
 //
 // Displayed is true when a room display decided the transition and NewRoom is the
-// room that display showed. It is false for every other way the tracker settles on
-// a room: a dark or blind move, a manual locate, a profile's saved room, a
-// reconnect, a landing booked ahead of its own display. A consumer that reads what
-// a room's display did or didn't show (death recovery: "no corpse on this floor")
-// needs to know the room was shown at all.
+// room that display showed: an arrival, a re-display of the room we stand in (raised
+// with both rooms the same), the first display after a reconnect, a booked landing
+// its own display corrects. It is false for every other way the tracker settles on
+// a room: a dark or blind move, a manual locate, a profile's saved room, a move the
+// game refused, a landing booked ahead of its own display. A consumer that reads
+// what a room's display did or didn't show (death recovery: "no corpse on this
+// floor") needs to know the room was shown at all.
 public readonly record struct RoomTransition(
     RoomConfidence PreviousConfidence,
     RoomConfidence NewConfidence,

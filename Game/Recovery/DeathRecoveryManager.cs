@@ -229,9 +229,23 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // slow one would be read as an empty floor, and its late survey as the first
     // neighbour's.
     private bool _settleOwed;
+    // The `look` a Recover Now sent from inside the death room has not been answered
+    // by a display of that room yet (DeathRoomShownAgain).
     private bool _lookExitsOwed;
-    private DateTimeOffset _lookSentAt;
     private DateTimeOffset _lastSurveyAt;
+    // A floor line has been read since the last exits line: it belongs to the room
+    // display now printing.
+    private bool _floorSinceExits;
+    // The pile marked Missing on this visit to its room: a floor that shows the
+    // corpse after all, before we leave, takes the verdict back.
+    private DeathRecord? _missingThisVisit;
+    // When each pile was marked Missing, this session. A hand-back can reopen one
+    // only for a while after (MissingHandBackWindow). Not saved: after a restart a
+    // Missing pile is past reopening by a gift.
+    private readonly Dictionary<DeathRecord, DateTimeOffset> _markedMissingAt = new();
+    private Func<string, bool>? _isPartyMember;
+    private Func<string, bool>? _isKeyItem;
+    internal Func<DateTimeOffset> NowProvider { get; set; } = () => DateTimeOffset.UtcNow;
 
     // Heartbeats (1 s) of quiet after the death-room `get` burst before it counts
     // as settled and the sweep can start on the leftovers.
@@ -266,11 +280,13 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // The lines of one death arrive together; the window only keeps a line from
     // some other moment off this death's record.
     private static readonly TimeSpan ReturnedLineWindow = TimeSpan.FromSeconds(30);
-    // How long an exits line can be the answer to the `look` Recover Now sent from
-    // inside the death room. Not a stand-in for a reply (a slower one concludes
-    // nothing and the grab stays armed): it keeps a look that got no exits line, in
-    // the dark, from being answered by some much later display.
-    private static readonly TimeSpan LookAnswerWindow = TimeSpan.FromSeconds(10);
+    // How long after a pile was marked Missing a party member's gift of one of its
+    // items still counts as the pile being handed back. The case is a corpse a
+    // party member picked up before we reached the room: they hand the gear over
+    // when the party is back together, minutes later. Half an hour covers a slow
+    // regroup; past it a like-named gift is just a gift, and must not reopen a pile
+    // looted long ago and put its "worn" piece on.
+    internal static readonly TimeSpan MissingHandBackWindow = TimeSpan.FromMinutes(30);
 
     public DeathRecoveryManager(
         DeathLineWatcher deathWatcher,
@@ -397,10 +413,22 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
 
     // Whether the named item stays on the character through a death
     // (DeathPileRules.StaysWithCharacter, read from the item's game data).
-    public void SetStaysOnDeathProbe(Func<string, bool> staysOnDeath)
+    //   isKeyItem — the named item is a key by its game data. The game keeps a key
+    //               on the key ring, which the stays rule never reaches, wherever
+    //               the client happened to file it.
+    public void SetStaysOnDeathProbe(Func<string, bool> staysOnDeath, Func<string, bool>? isKeyItem = null)
     {
         ArgumentNullException.ThrowIfNull(staysOnDeath);
         _staysOnDeath = staysOnDeath;
+        _isKeyItem = isKeyItem;
+    }
+
+    // Whether the named player is in our party right now (given name). A gift from
+    // anyone else never reopens a pile marked Missing.
+    public void SetPartyMemberProbe(Func<string, bool> isPartyMember)
+    {
+        ArgumentNullException.ThrowIfNull(isPartyMember);
+        _isPartyMember = isPartyMember;
     }
 
     // Bind the gate-wrapped wire sender so auto-recover can send get / wear /
@@ -575,6 +603,34 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         }
     }
 
+    // Where the death-room pickup stands, for a bug report: a "Recover Now did
+    // nothing" or "marked Missing with the corpse there" report turns on whether a
+    // grab was armed and waiting for a display, and whether a Missing could still be
+    // taken back or reopened.
+    public string DeathRoomGrabState
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (_activeRecovery is { } active)
+                parts.Add($"recovering the pile at {active.RoomKeyText}: "
+                    + (_grabOnSurvey
+                        ? "grab armed, waiting for a display of the room"
+                            + (_lookExitsOwed ? " (Recover Now's look not answered yet)" : "")
+                        : "grab spent"));
+            else parts.Add("no pile being recovered");
+            if (_pendingRecoverNow is { } asked)
+                parts.Add($"Recover Now pending for {asked.RoomKeyText}{(_recoverNowWalking ? " (walking)" : "")}");
+            if (_missingThisVisit is { } written)
+                parts.Add($"marked {written.RoomKeyText} Missing on this visit (a corpse shown here takes it back)");
+            foreach ((DeathRecord pile, DateTimeOffset at) in _markedMissingAt)
+                if (pile.Status == DeathRecoveryStatus.Missing)
+                    parts.Add($"{pile.RoomKeyText} marked Missing {(NowProvider() - at).TotalMinutes:0} min ago "
+                        + $"(a party member's hand-back reopens it for {MissingHandBackWindow.TotalMinutes:0} min)");
+            return string.Join("; ", parts);
+        }
+    }
+
     // What would keep a sweep the user asked for from starting or going on right now,
     // for a bug report: a "Recover Now only grabbed the room" report turns on these.
     public string SpillSweepBlockers
@@ -714,10 +770,14 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             BeginRecovery(record, autoGrab: true, deliberate: true, arrivedByWalk: false);
             // Already standing here, so no room-change survey is coming — re-look
             // to re-render the "You notice" list, which fires SurveyUpdated and
-            // drives the grab. The look's exits line settles an empty floor, which
-            // prints no survey at all.
+            // drives the grab. An empty floor prints no survey at all: that is
+            // settled when the tracker confirms the look's display as this room's
+            // (DeathRoomShownAgain), however long the reply takes.
             _lookExitsOwed = true;
-            _lookSentAt = DateTimeOffset.UtcNow;
+            if (_roomTracker.IsInDarkRoom || _roomTracker.EnteredBlind)
+                _log?.Info(LogCategory,
+                    "recover-now: the room is dark or was entered blind — the look will show nothing, and nothing is "
+                    + "concluded until the room has been seen");
             Send("look");
             return true;
         }
@@ -783,6 +843,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (_activeRecovery is { Room: { } ar }
             && (room is null || ar.Map != room.Key.Map || ar.Room != room.Key.Room))
         {
+            // Stock's grab is left armed on purpose after an empty floor has settled.
+            if (_grabOnSurvey && !IsStock)
+                _log?.Info(LogCategory, "recovery: left the death room with the grab still armed — no display of it was read, so nothing was concluded");
             _activeRecovery = null;
             _grabOnSurvey = false;
             _stockRecovering = false;
@@ -791,6 +854,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             _classifyOwed = false;
             _lookExitsOwed = false;
         }
+        if (_missingThisVisit is { Room: { } gone }
+            && (room is null || gone.Map != room.Key.Map || gone.Room != room.Key.Room))
+            _missingThisVisit = null;
 
         // Left the room our paced re-equip pieces belong to (rare — the
         // CorpseRecovery gate holds the walker while pieces are pending, so this is
@@ -803,6 +869,12 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (room is null || t.NewConfidence != RoomConfidence.Confirmed) return;
 
         DeathRecord? rec = FindRecoverableAt(room.Key);
+        // A pile marked Missing is not come back to on its own, but Recover Now on
+        // one is the user asking for the room to be looked at again: its arrival is
+        // judged like any other, off the room's own display.
+        if (rec is null && _pendingRecoverNow is { Status: DeathRecoveryStatus.Missing, Room: { } asked } again
+            && asked.Map == room.Key.Map && asked.Room == room.Key.Room)
+            rec = again;
         if (rec is not null && !ReferenceEquals(_activeRecovery, rec))
         {
             bool force = ReferenceEquals(_pendingRecoverNow, rec);
@@ -822,12 +894,16 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             // a walk-in the arrival's survey has already been read, or the floor is
             // empty and none was printed. That is only known when the room was
             // displayed on a real arrival: not in the dark or blind (confirmed with
-            // no display at all), and not when the room merely confirmed in place (a
-            // typed-ahead move that bounced: the floor list was emptied when the step
-            // landed). Then nothing is concluded and the grab stays armed, as it
-            // always did, for the next display of the room.
-            bool arrivedSeeing = (t.PreviousRoom is null || !t.PreviousRoom.Key.Equals(room.Key))
-                && !_roomTracker.IsInDarkRoom && !_roomTracker.EnteredBlind;
+            // no display at all), not when the tracker settled on the room some other
+            // way (a manual locate, a saved room at load), and not when the room
+            // merely confirmed in place (a typed-ahead move that bounced: the floor
+            // list was emptied when the step landed). Then nothing is concluded and
+            // the grab stays armed, as it always did, for the next display of the
+            // room.
+            bool arrivedSeeing = (t.PreviousRoom is null || !t.PreviousRoom.Key.Equals(room.Key)) && t.Displayed;
+            if (_grabOnSurvey && ReferenceEquals(_activeRecovery, rec) && !arrivedSeeing)
+                _log?.Info(LogCategory,
+                    "recovery: in the death room without a display of it to read — armed for its next display");
             if (IsStock && _grabOnSurvey && ReferenceEquals(_activeRecovery, rec) && arrivedSeeing)
             {
                 if (FloorWasJustRead() && ReferenceEquals(floorAlreadyAskedFor, rec))
@@ -845,7 +921,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
                 else _settleOwed = true;
             }
             else if (!IsStock && _grabOnSurvey && ReferenceEquals(_activeRecovery, rec) && arrivedSeeing)
-                CorpseOnArrival(rec, t.Displayed);
+                CorpseOnArrival(rec);
             return;
         }
 
@@ -853,6 +929,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // since it was armed has bounced): whatever went out has been answered, so a
         // survey from here on is this room's.
         if (rec is not null && _grabOnSurvey) _armedAt = DateTimeOffset.UtcNow;
+
+        // And when it was a display of the room that confirmed it, that display has
+        // just ended with the grab still armed: it showed nothing to take.
+        if (rec is not null && ReferenceEquals(_activeRecovery, rec) && _grabOnSurvey && t.Displayed)
+            DeathRoomShownAgain(rec);
 
         // This room holds no deathpile of ours — but if it's adjacent to one, an
         // auto-recover pass-through grabs our overflow here in-stride (Stock only),
@@ -955,6 +1036,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private void BeginRecovery(DeathRecord record, bool autoGrab, bool deliberate, bool arrivedByWalk)
     {
         _activeRecovery = record;
+        _missingThisVisit = null;
         _grabOnSurvey = false;
         _stockRecovering = false;
         _settleOwed = false;
@@ -1032,6 +1114,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     private void OnSurveyUpdated()
     {
         _lastSurveyAt = DateTimeOffset.UtcNow;
+        _floorSinceExits = true;
         // Spillover sweep LOOK phase: each `look <dir>` re-parses the PEEKED room's
         // floor into GroundItemTracker (it doesn't skip look-direction peeks), and
         // its Items are already multi-line-stitched — so hand those to the sweep for
@@ -1084,31 +1167,63 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             }
         }
 
+        // A corpse seen after all, on the visit that said it was gone: the display
+        // that verdict came off was not this room's (a re-display of the room just
+        // left can be taken for the arrival where the two rooms read alike), or the
+        // corpse has been put back. The pile is reopened and recovered.
+        if (_activeRecovery is null && _missingThisVisit is { } written
+            && ArmedSurveyIsTheDeathRooms(written) && FindOurCorpse() is { } there)
+        {
+            _missingThisVisit = null;
+            _log?.Info(LogCategory, "auto-recover: the corpse is on this floor after all — the pile is reopened");
+            _activeRecovery = written;
+            _armedAt = DateTimeOffset.UtcNow;
+            SetStatus(written, DeathRecoveryStatus.Partial, "The corpse was here after all — recovering.");
+            RecoverCorpse(there);
+            return;
+        }
+
         if (_activeRecovery is not { } record || !_grabOnSurvey) return;
         // Only the death room's own floor. Some other room's, taken for it, sent
         // Stock gets for items that weren't there and, on Paradigm, wrote the pile
         // off as Missing because the next room along showed no corpse.
         if (!ArmedSurveyIsTheDeathRooms(record))
         {
-            _log?.Debug(LogCategory, "armed grab: a floor was read that isn't provably the death room's — left armed");
+            _log?.Info(LogCategory,
+                $"armed grab: a floor was read that can't be taken for the death room's ({WhyNotTheDeathRooms(record)}) — left armed");
             return;
         }
-        if (IsStock) TryGroundRecover(record);
-        else TryCorpseRecover(record);
+        if (IsStock)
+        {
+            TryGroundRecover(record);
+            return;
+        }
+        // Paradigm. The corpse on the floor just read is recovered at once: the
+        // command names a corpse the game has just shown here, whichever room this
+        // turns out to be. A floor without it says nothing yet. The line prints
+        // before the exits line that tells which room the display was of, and the
+        // character may have been moved with no move sent (a teleport, fear, the
+        // room it stands in at login): the verdict waits for that line
+        // (DeathRoomShownAgain), or is never given if the room is another.
+        if (FindOurCorpse() is { } corpse) RecoverCorpse(corpse);
+        else
+            _log?.Info(LogCategory,
+                "armed grab: a floor without the corpse was read — waiting for its exits line to say which room it was");
     }
 
-    // Paradigm deathpile = one "corpse of <given-name>" object. If our corpse is in
-    // the survey, send ONE `recover corpse <name>` (own corpse needs no password,
-    // and naming it disambiguates when several corpses share the room). If it
-    // isn't there, the pile is gone — mark Missing so we neither retry nor spam.
-    // The caller has made sure the floor list is the death room's.
-    private void TryCorpseRecover(DeathRecord record)
+    // Which part of ArmedSurveyIsTheDeathRooms failed, for the log.
+    private string WhyNotTheDeathRooms(DeathRecord record)
     {
-        string? corpse = FindOurCorpse();
-        if (corpse is null) MarkCorpseMissing(record, "it is not on the floor the room showed");
-        else RecoverCorpse(corpse);
+        if (_roomTracker.State.CurrentRoom?.Key is not { } at || record.Room is not { } died
+            || at.Map != died.Map || at.Room != died.Room)
+            return "the map has us in another room";
+        if (_roomTracker.State.Confidence == RoomConfidence.Pending) return "a move is on the wire";
+        if (_roomTracker.LastMoveSentAt is { } moved && moved > _armedAt) return "a move went out since the grab was armed";
+        return "a look through an exit is waiting for its answer";
     }
 
+    // One `recover corpse <name>` for the corpse the floor just showed (our own
+    // needs no password, and naming it disambiguates when several share the room).
     private void RecoverCorpse(string corpse)
     {
         _grabOnSurvey = false;   // one shot per arming — never loop
@@ -1117,6 +1232,10 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         Send($"recover corpse {corpse}");
     }
 
+    // The pile is gone (looted, decayed): marked Missing so we neither retry nor
+    // spam. Only ever said off a display the tracker has confirmed as the death
+    // room's. The record is remembered for the rest of the visit: a floor that
+    // shows the corpse after all takes the verdict back (OnSurveyUpdated).
     private void MarkCorpseMissing(DeathRecord record, string why)
     {
         _grabOnSurvey = false;
@@ -1125,31 +1244,57 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         // The note says which display the verdict came off: a report of a pile
         // wrongly written off turns on that.
         SetStatus(record, DeathRecoveryStatus.Missing, $"Corpse was not in the room ({why}) — pile appears lost.");
+        _markedMissingAt[record] = NowProvider();
+        _missingThisVisit = record;
         _activeRecovery = null;
     }
 
-    // A Paradigm walk-in. The arrival's own display has just been read: the floor
-    // line prints before the exits line that confirms the room (GAME_MECHANICS "Room
-    // display parsing — the room title is positional, not just bright cyan"), and an
-    // empty floor prints none. So the corpse is recovered, or found gone, off this
-    // display, with no later one to wait for. Arming for "the next survey" instead
-    // took the floor of whatever room was walked into next for this one.
-    //
-    // Missing is only said of a room that was shown (displayed). Settled on some
-    // other way (a saved room at load, a manual locate, a reconnect), nothing was
-    // read here and the grab stays armed for the room's next display.
-    private void CorpseOnArrival(DeathRecord record, bool displayed)
+    // A Paradigm walk-in the room was displayed for. The arrival's own display has
+    // just been read: the floor line prints before the exits line that confirms the
+    // room (GAME_MECHANICS "Room display parsing — the room title is positional, not
+    // just bright cyan"), and an empty floor prints none. So the corpse is
+    // recovered, or found gone, off this display, with no later one to wait for.
+    // Arming for "the next survey" instead took the floor of whatever room was
+    // walked into next for this one.
+    private void CorpseOnArrival(DeathRecord record)
     {
-        if (FloorWasJustRead() && FindOurCorpse() is { } corpse)
+        if (FloorWasJustRead() && FindOurCorpse() is { } corpse) RecoverCorpse(corpse);
+        else
+            MarkCorpseMissing(record, FloorWasJustRead()
+                ? "it is not on the floor shown on arriving" : "the room was shown on arriving with nothing on its floor");
+    }
+
+    // A display of the death room has ended (its exits line confirmed the room we
+    // already stood in) with the grab still armed. It is the first display read
+    // here since the grab was armed: after a dark or blind arrival, a manual locate,
+    // a saved room at load, or the `look` a Recover Now sent from inside the room.
+    //
+    // Paradigm: a corpse on its floor would have been asked for at the floor line,
+    // so there is none, and the pile is gone. This is the only place an armed grab
+    // says so: the raw exits line can be some other display's (a `look <dir>` the
+    // tracker has already set aside by the time recovery reads the line), and the
+    // floor line comes before the room is known.
+    // Stock: only the look a Recover Now sent settles here (nothing of ours on the
+    // floor), and the grab stays armed for a search's reveal.
+    private void DeathRoomShownAgain(DeathRecord record)
+    {
+        bool lookOwed = _lookExitsOwed;
+        _lookExitsOwed = false;
+        if (IsStock)
+        {
+            if (!lookOwed) return;
+            _log?.Info(LogCategory, "stock-recover: the look showed no floor of ours — nothing is on it");
+            _settleOwed = true;
+            return;
+        }
+        // Passed over at its floor line (not provably this room's then), and now it is.
+        if (_floorSinceExits && FindOurCorpse() is { } corpse)
         {
             RecoverCorpse(corpse);
             return;
         }
-        if (displayed)
-            MarkCorpseMissing(record, FloorWasJustRead()
-                ? "it is not on the floor shown on arriving" : "the room was shown on arriving with nothing on its floor");
-        else
-            _log?.Info(LogCategory, "auto-recover: in the death room without a display of it to read — armed for the next one");
+        MarkCorpseMissing(record, _floorSinceExits
+            ? "it is not on the floor the room showed" : "the room was shown with nothing on its floor");
     }
 
     // Stock deathpile = loose items on the floor. `get <name>` each pile item
@@ -2115,7 +2260,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // off the list. A key on the ring never stays, whatever abilities its item
     // carries: the Stock engine makes the loyal / cursed test on the pack only
     // (GAME_MECHANICS "Death threshold & consequences"). So of a name that stays,
-    // as many units are kept as the ring held copies of it.
+    // as many units are kept as the ring held copies of it. A key is on the game's
+    // ring whether the client listed it there or, not having been told it was a
+    // key, in the pack: an unworn entry that is a key by its item data counts too.
     private void DropWhatStays(List<string> names, DeathRecord record)
     {
         if (_staysOnDeath is not { } stays) return;
@@ -2123,8 +2270,9 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         if (record.LostItems is { } lost)
             foreach (DeathItem key in lost)
             {
-                if (!key.OnKeyRing || string.IsNullOrWhiteSpace(key.Name)) continue;
+                if (string.IsNullOrWhiteSpace(key.Name)) continue;
                 (int count, string bare) = CountedCommand.SplitLeadingCount(key.Name.Trim());
+                if (!key.OnKeyRing && _isKeyItem?.Invoke(bare) != true) continue;
                 string norm = ItemNameStore.Normalize(bare);
                 onRing[norm] = onRing.GetValueOrDefault(norm) + Math.Max(1, count);
             }
@@ -2179,31 +2327,15 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             return;
         }
 
-        // The exits line of the `look` a Recover Now sent from inside the death room:
-        // the display is over, and a grab still armed means it printed no floor.
-        // Only if that display was the death room's (the test an armed survey gets):
-        // with a move sent since, it is some other room's, and nothing is concluded.
-        // Nor when the look went unanswered (a dark room prints no exits line) and
-        // this is some later display's line, or the room is still dark; nor when a
-        // floor was read since the look and passed over (it wasn't provably this
-        // room's then, and "no floor" can't be said of a display that had one).
-        // On Stock the grab stays armed either way, for a later display of the room;
-        // on Paradigm a floor with nothing on it has no corpse, and the pile is gone.
-        if (_lookExitsOwed && line.Text.StartsWith("Obvious exits:", StringComparison.Ordinal))
+        // An exits line ends a room display, whichever room it was of (a `look <dir>`
+        // included): a floor line read before it belongs to a display that is over.
+        // Nothing is concluded from this line itself. What a display of the death
+        // room showed is settled when the tracker confirms it was the death room's
+        // (DeathRoomShownAgain), which it does on this same line before recovery
+        // reads it: the room parser is subscribed first.
+        if (line.Text.StartsWith("Obvious exits:", StringComparison.Ordinal))
         {
-            _lookExitsOwed = false;
-            bool ours = DateTimeOffset.UtcNow - _lookSentAt <= LookAnswerWindow
-                && _lastSurveyAt < _lookSentAt
-                && !_roomTracker.IsInDarkRoom && !_roomTracker.EnteredBlind;
-            if (ours && _grabOnSurvey && _activeRecovery is { } looked && ArmedSurveyIsTheDeathRooms(looked))
-            {
-                if (IsStock)
-                {
-                    _log?.Info(LogCategory, "stock-recover: the look showed no floor — nothing is on it");
-                    _settleOwed = true;
-                }
-                else MarkCorpseMissing(looked, "the look showed nothing on the floor");
-            }
+            _floorSinceExits = false;
             return;
         }
 
@@ -2652,6 +2784,8 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _stockRecovering = false;
         _stockSweepPending = false;
         _returnedLines.Clear();
+        _missingThisVisit = null;
+        _markedMissingAt.Clear();
     }
 
     // Abandon a running spill sweep where it stands: no walk is started, nothing more
@@ -2682,27 +2816,38 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
         _clearRecoveryGate?.Invoke();
     }
 
-    // Another player gave us an item. If it belongs to an open deathpile (Active /
-    // Partial), strike it off; the heartbeat settles the pile once the burst of
-    // "X just gave you …" lines goes quiet.
+    // Another player gave us an item. It is struck off the most recent deathpile
+    // that still lists it as not returned, newest first; the heartbeat settles the
+    // pile once the burst of "X just gave you …" lines goes quiet. A later death
+    // that dropped nothing lists nothing, so it doesn't stand between a hand-back
+    // and the pile it belongs to.
+    //
+    // An Active or Partial pile takes the item from anyone. A pile marked Missing
+    // is closed, with one exception: a corpse gone from the death room is just what
+    // it looks like when a party member has picked it up to hand the gear back. So
+    // a Missing pile takes it only from someone in our party now, and only for
+    // MissingHandBackWindow after it was marked. Any other gift of a like-named
+    // item is a gift.
     public void OnItemReceived(string itemName, string giver)
     {
         if (string.IsNullOrWhiteSpace(itemName)) return;
         string got = ItemNameStore.Normalize(itemName);
-        IReadOnlyList<DeathRecord> records = Records;
-        DeathRecord? latest = records.Count > 0 ? records[^1] : null;
-        foreach (DeathRecord rec in records.Reverse())   // newest pile first
+        foreach (DeathRecord rec in Records.Reverse())   // newest pile first
         {
             if (rec.Status is DeathRecoveryStatus.Recovered) continue;
-            // A pile written off as Missing is closed, except the latest death's:
-            // a corpse gone from the death room is just what it looks like when a
-            // party member has picked it up to hand the gear back.
-            if (rec.Status is DeathRecoveryStatus.Missing && !ReferenceEquals(rec, latest)) continue;
-            rec.UnrecoveredItems ??= PileNames(rec);
-            int idx = rec.UnrecoveredItems.FindIndex(n =>
+            List<string> listed = rec.UnrecoveredItems ?? PileNames(rec);
+            int idx = listed.FindIndex(n =>
                 string.Equals(ItemNameStore.Normalize(n), got, StringComparison.OrdinalIgnoreCase));
             if (idx < 0) continue;
+            if (rec.Status is DeathRecoveryStatus.Missing && MissingPileStaysClosedTo(rec, giver) is { } why)
+            {
+                _log?.Info(LogCategory,
+                    $"hand-back: '{itemName}' from {giver} is on the {rec.RoomKeyText} deathpile, which is marked Missing — "
+                    + $"not reopened ({why})");
+                continue;
+            }
 
+            rec.UnrecoveredItems = listed;
             rec.UnrecoveredItems.RemoveAt(idx);
             _handedBack = rec;
             _handedBackBy = giver;
@@ -2712,6 +2857,19 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
                 + $"({rec.UnrecoveredItems.Count} item(s) still out)");
             return;
         }
+    }
+
+    // Why a gift doesn't reopen this Missing pile, or null when it does.
+    private string? MissingPileStaysClosedTo(DeathRecord pile, string giver)
+    {
+        if (!_markedMissingAt.TryGetValue(pile, out DateTimeOffset markedAt))
+            return "it was marked Missing before this session";
+        TimeSpan ago = NowProvider() - markedAt;
+        if (ago > MissingHandBackWindow)
+            return $"it was marked Missing {ago.TotalMinutes:0} min ago, past the {MissingHandBackWindow.TotalMinutes:0} min a hand-back is expected in";
+        if (_isPartyMember?.Invoke(giver) != true)
+            return $"{giver} is not in our party";
+        return null;
     }
 
     // The hand-back burst went quiet: finalise the pile (all back, or only coins left)

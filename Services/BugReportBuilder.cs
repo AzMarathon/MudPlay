@@ -361,9 +361,9 @@ public static class BugReportBuilder
         // three, plus what this death said was gone and the trail it kept.
         if (lastDeath is not null)
         {
-            // What the record took the pile to be: lost holds the pack, the light
-            // read as lit and the key ring, and the light is only as current as the
-            // last inventory read.
+            // What the record took the pile to be: lost holds the pack, the key ring
+            // and the light that was lit. A "pile that never completes" report
+            // turns on whether an entry here was really held.
             Kv(sb, "Latest deathpile as recorded",
                 $"worn {lastDeath.EquippedAtDeath?.Count ?? 0}, lost {lastDeath.LostItems?.Count ?? 0} entries"
                 + (lastDeath.LostItems is { } lostEntries && lostEntries.Exists(i => i.OnKeyRing)
@@ -377,6 +377,7 @@ public static class BugReportBuilder
                 Kv(sb, "Latest death: rooms walked up to it (newest first)",
                     string.Join(", ", trail.Select(r => $"{r.Map}/{r.Room}")));
         }
+        Kv(sb, "Death-room pickup", svc.DeathRecovery.DeathRoomGrabState);
         Kv(sb, "Stock spill sweep", svc.DeathRecovery.SpillSweepState);
         Kv(sb, "Stock spill sweep held back right now by", svc.DeathRecovery.SpillSweepBlockers);
         if (svc.DeathRecovery.SpillSweepPlan is { Length: > 0 } plan)

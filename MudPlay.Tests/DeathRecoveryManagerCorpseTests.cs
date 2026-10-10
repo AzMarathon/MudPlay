@@ -150,6 +150,9 @@ public sealed partial class DeathRecoveryManagerTests
         h.Tracker.NoteDarkRoomEntered();
 
         h.FeedSurvey("a lantern");
+        // The floor line alone says nothing yet: which room it was of is only
+        // known at the exits line.
+        Assert.Equal(DeathRecoveryStatus.Partial, h.Latest.Status);
         h.EnterGates();
 
         Assert.Empty(h.Sent);
@@ -270,16 +273,25 @@ public sealed partial class DeathRecoveryManagerTests
 
     // ----- handed back after the corpse was found gone --------------------
 
+    // Dies at the gates, walks back in and finds the room bare: the pile is Missing.
+    private static GraphHarness CorpseGoneOnArrival()
+    {
+        GraphHarness h = DiedAtTheGates();
+        h.Recovery.AutoEquip = true;
+        h.Tracker.NoteMoveSentByObserver(Direction.S);
+        h.EnterGates();
+        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
+        h.Sent.Clear();
+        return h;
+    }
+
     [Fact]
     public void Paradigm_CorpseGoneOnArrival_ThenHandedBackByAPartyMember_IsStillCounted()
     {
         // The leader picked the corpse up; the follower walks into the death room,
         // finds no corpse (Missing), and is then handed the gear.
-        using GraphHarness h = DiedAtTheGates();
-        h.Recovery.AutoEquip = true;
-        h.Tracker.NoteMoveSentByObserver(Direction.S);
-        h.EnterGates();
-        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
+        using GraphHarness h = CorpseGoneOnArrival();
+        h.Party.Add("Nineteen");
 
         h.Recovery.OnItemReceived("rusty dagger", "Nineteen");
         h.Recovery.OnItemReceived("torch", "Nineteen");
@@ -290,20 +302,63 @@ public sealed partial class DeathRecoveryManagerTests
     }
 
     [Fact]
-    public void AnOlderMissingPile_IsNotReopenedByAGift()
+    public void HandBack_AfterALaterDeathThatDroppedNothing_GoesToThePileThatListsTheItem()
     {
-        using GraphHarness h = DiedAtTheGates();
-        h.Tracker.NoteMoveSentByObserver(Direction.S);
-        h.EnterGates();
-        DeathRecord old = h.Latest;
-        Assert.Equal(DeathRecoveryStatus.Missing, old.Status);
+        // The party-wipe case: the first pile is Missing (the leader has the
+        // corpse), the follower dies again with nothing on, and then the first
+        // pile's gear is handed over. The later death lists nothing, so it doesn't
+        // stand in the way.
+        using GraphHarness h = CorpseGoneOnArrival();
+        h.Party.Add("Leader");
+        DeathRecord first = h.Latest;
 
-        Die(h, Array.Empty<EquippedItem>(), new[] { "rope" });   // a later death
-        h.Recovery.OnItemReceived("torch", "Nineteen");          // on the old pile only
+        Die(h, Array.Empty<EquippedItem>(), Array.Empty<string>());
+        h.Recovery.OnItemReceived("rusty dagger", "Leader");
+        h.Recovery.OnItemReceived("torch", "Leader");
         h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
 
-        Assert.Equal(DeathRecoveryStatus.Missing, old.Status);
-        Assert.Equal(new[] { "rusty dagger", "torch" }, old.UnrecoveredItems);
+        Assert.Equal(DeathRecoveryStatus.Recovered, first.Status);
+        Assert.Contains("eq rusty dagger", h.Sent);
+        Assert.NotSame(first, h.Latest);
+        Assert.Null(h.Latest.UnrecoveredItems);            // the later death's record is untouched
+    }
+
+    [Fact]
+    public void AGift_FromSomeoneNotInTheParty_DoesNotReopenAMissingPile()
+    {
+        using GraphHarness h = CorpseGoneOnArrival();
+
+        h.Recovery.OnItemReceived("rusty dagger", "Somebody");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
+        Assert.Equal(new[] { "rusty dagger", "torch" }, h.Latest.UnrecoveredItems);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void AGift_LongAfterThePileWasMarkedMissing_DoesNotReopenIt_EvenFromTheParty()
+    {
+        using GraphHarness h = CorpseGoneOnArrival();
+        h.Party.Add("Nineteen");
+        DateTimeOffset marked = DateTimeOffset.UtcNow;
+        h.Recovery.NowProvider = () => marked + DeathRecoveryManager.MissingHandBackWindow + TimeSpan.FromMinutes(1);
+
+        h.Recovery.OnItemReceived("rusty dagger", "Nineteen");
+        h.Heartbeat(); h.Heartbeat(); h.Heartbeat();
+
+        Assert.Equal(DeathRecoveryStatus.Missing, h.Latest.Status);
+        Assert.Empty(h.Sent);
+    }
+
+    [Fact]
+    public void AnOpenPile_TakesAHandBackFromAnyone_AsBefore()
+    {
+        using GraphHarness h = DiedAtTheGates();   // Active, never visited
+
+        h.Recovery.OnItemReceived("torch", "Somebody");
+
+        Assert.Equal(new[] { "rusty dagger" }, h.Latest.UnrecoveredItems);
     }
 
     // ----- over the real walker ------------------------------------------
@@ -396,12 +451,12 @@ public sealed partial class DeathRecoveryManagerTests
         DieWithALightAndKeys(h);
         h.Recovery.AutoRecover = true;
         h.Recovery.AutoEquip = true;
-        Assert.Equal(new[] { "torch", "2 black star key", "iron key" },
+        Assert.Equal(new[] { "2 black star key", "iron key", "torch" },
             h.Latest.LostItems!.Select(i => i.Name).ToArray());
 
         h.FeedSurvey("a longsword, a torch, 2 black star key, and an iron key");
         h.EnterGates();
-        Assert.Equal(new[] { "longsword", "torch", "black star key", "black star key", "iron key" },
+        Assert.Equal(new[] { "longsword", "black star key", "black star key", "iron key", "torch" },
             h.Latest.UnrecoveredItems);
         Assert.Equal(2, h.Sent.Count(s => s == "get black star key"));
         Assert.Contains("get torch", h.Sent);
