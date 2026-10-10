@@ -729,6 +729,193 @@ public sealed class AutoWalkManagerTests : IDisposable
         Assert.Equal(WalkState.Paused, h.Walker.State);
     }
 
+    // A Flee monster and a real HealthManager over a real walk. A walk the user has
+    // paused is idle (user, 2026-10-10): no run. One a fight is holding is running:
+    // the run goes out, and forwards it is the walk's own next step.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void FleeFromMonster_AWalkTheUserPaused_IsIdle_OneHeldByAFightRuns(bool userPaused)
+    {
+        Harness h = NewHarness();
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 1, BreakBeforeFleeing = false,
+        };
+        using MudPlay.Game.Health.HealthManager health = new(
+            new MudPlay.Game.PlayerState(), h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Walker.State != WalkState.Idle ? h.Walker : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        health.IsNavigationPausedByUser = () => h.Coordinator.IsGateAsserted(MovementCoordinator.UserGate);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));                           // N, N; the first is in flight
+
+        h.Coordinator.AssertGate(userPaused ? MovementCoordinator.UserGate : MovementCoordinator.CombatGate);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 2));
+        int sentBefore = h.Sent.Count;
+
+        MudPlay.Game.Health.FleeOutcome outcome = health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true);
+
+        if (userPaused)
+        {
+            Assert.Equal(MudPlay.Game.Health.FleeOutcome.Paused, outcome);
+            Assert.Equal(sentBefore, h.Sent.Count);
+            Assert.False(health.IsFleeing);
+            // No flee took the walk over: lifting the pause sends its next step.
+            h.Walker.Resume();
+            Assert.Equal(WalkState.Walking, h.Walker.State);
+            Assert.Equal(sentBefore + 1, h.Sent.Count);
+            return;
+        }
+
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started, outcome);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));   // B → C, the way the walk goes
+    }
+
+    // A walk lives through a drop of the line. One a flee had paused when the line
+    // dropped is handed back at the first game prompt of the next stay: the run is
+    // over at once, nothing is sent offline, and then the walk goes on.
+    [Fact]
+    public void AFleeCutByADisconnect_ThePausedWalkGoesOnAfterTheReconnect()
+    {
+        Harness h = NewHarness();
+        MudPlay.Models.Profile.CombatSettings combat = new()
+        {
+            RunDirection = MudPlay.Models.Profile.RunDirection.Forward, RunDistance = 1, BreakBeforeFleeing = false,
+        };
+        MudPlay.Game.PlayerState state = new();
+        using MudPlay.Game.Health.HealthManager health = new(
+            state, h.Coordinator,
+            readSettings: () => new MudPlay.Models.Profile.HealthSettings(),
+            isEnabled: () => true,
+            readHangupCommand: null,
+            getActiveMovementEngine: () => h.Walker.State != WalkState.Idle ? h.Walker : null,
+            getLastSentDirection: null,
+            readCombatSettings: () => combat,
+            readGeneralSettings: null,
+            hasEngageableHostiles: null);
+        state.MaxHp = 200;
+        state.Hp = 200;
+        state.HasPromptData = true;                                   // and it stays set through a disconnect
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        health.NoteRoomChanged(new RoomKey(1, 2));
+        Assert.Equal(MudPlay.Game.Health.FleeOutcome.Started,
+            health.FleeFromMonster("ogre (#7) is here, relationship Flee", () => true));
+        h.Coordinator.ClearGate(MovementCoordinator.CombatGate);
+        Assert.Equal(WalkState.Paused, h.Walker.State);               // held by the flee
+        int sentBefore = h.Sent.Count;
+
+        health.EndFlee("disconnected", handBackLiveEngine: true);    // the line drops mid-run
+
+        Assert.False(health.IsFleeInFlight);
+        health.Evaluate();
+        Assert.Equal(WalkState.Paused, h.Walker.State);               // nothing resumes offline
+        Assert.Equal(sentBefore, h.Sent.Count);
+
+        h.Tracker.SetLocated(new RoomKey(1, 2));                      // back in the game, same room
+        health.NoteInGamePrompt();
+
+        Assert.Equal(WalkState.Walking, h.Walker.State);
+        Assert.Equal(sentBefore + 1, h.Sent.Count);
+        Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[^1]));   // on to C
+    }
+
+    // A forward flee walks the walk's next steps. Asked in a room the walk came into
+    // while paused (a fight there, or the flee itself pausing it as the move
+    // confirms), the step that carried it in is still the one at the index: counted,
+    // it sent the flee off with the direction just walked.
+    [Theory]
+    [InlineData(true)]    // paused by a gate before the move landed
+    [InlineData(false)]   // paused by the flee before the walker saw the arrival
+    public void ForwardPeek_InARoomEnteredWhilePaused_LeavesOutTheStepJustWalked(bool pausedByAGate)
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));                           // N, N; the first is in flight
+
+        if (pausedByAGate) h.Coordinator.AssertGate(MovementCoordinator.CombatGate);
+        else h.Walker.PauseForFlee("a Flee monster");
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 2), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(WalkState.Paused, h.Walker.State);
+        Assert.Equal(new[] { Direction.N }, h.Walker.PeekPlannedDirections(2));   // only B → C is left
+    }
+
+    // 1/1 ──N── 1/2 ──N── 1/3 ──N── 1/4
+    private const string FourRoomLineJson = """
+        [
+          { "Map Number": 1, "Room Number": 1, "Name": "A",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/2", "S": "0", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 2, "Name": "B",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/3", "S": "1/1", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 3, "Name": "C",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "1/4", "S": "1/2", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" },
+          { "Map Number": 1, "Room Number": 4, "Name": "D",
+            "Light": 0, "Shop": 0, "Lair": "", "Delay": 0,
+            "N": "0", "S": "1/3", "E": "0", "W": "0",
+            "NE": "0", "NW": "0", "SE": "0", "SW": "0", "U": "0", "D": "0" }
+        ]
+        """;
+
+    // A later leg of the same run: the earlier leg walked a step of the path the
+    // index knows nothing of, and the walk no longer stands where its paused step
+    // landed. Peeked from the index, the leg was planned two rooms behind itself.
+    [Fact]
+    public void ForwardPeek_ForALaterLegOfARun_StartsAfterTheStepsItHasWalked()
+    {
+        Harness h = NewHarness(FourRoomLineJson);
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 4));                           // N, N, N; the first is in flight
+        h.Walker.PauseForFlee("low HP");
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+        Assert.Equal(new[] { Direction.N, Direction.N }, h.Walker.PeekPlannedDirections(3));   // leg 1: B → C → D
+
+        h.Walker.SendBacktrackMove(Direction.N);
+        h.Tracker.NoteRoomObserved(new RoomObservation("C",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new RoomKey(1, 3), h.Tracker.State.CurrentRoom?.Key);
+        Assert.Equal(new[] { Direction.N }, h.Walker.PeekPlannedDirections(3));                // leg 2: only C → D is left
+    }
+
+    // The other ordering: the walker saw the arrival, advanced and sent the next
+    // step. That step has not landed, so it is still the one ahead.
+    [Fact]
+    public void ForwardPeek_WithTheNextStepInFlight_StartsWithThatStep()
+    {
+        Harness h = NewHarness();
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Walker.WalkTo(new RoomKey(1, 3));
+        Assert.Equal(new[] { Direction.N, Direction.N }, h.Walker.PeekPlannedDirections(2));
+
+        h.Tracker.NoteRoomObserved(new RoomObservation("B",
+            new HashSet<Direction> { Direction.N, Direction.S }));
+
+        Assert.Equal(new[] { Direction.N }, h.Walker.PeekPlannedDirections(2));
+    }
+
     [Fact]
     public void CoordinatorResume_AfterPause_ResumesWalk()
     {

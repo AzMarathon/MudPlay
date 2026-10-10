@@ -2722,15 +2722,14 @@ public sealed class HangupItemRecheckTests
         Assert.Empty(kept.Deaths);
     }
 
-    // On Stock a death takes every piece off the body. On Paradigm that is known
-    // of a loyal piece only (it is back in the pack); whether a cursed piece that
-    // stays with the character comes off there is not, so worn it says nothing
-    // either way, while any other worn piece still says "no death".
+    // A death takes every piece off the body on Stock, a cursed one that stays
+    // with the character included. Paradigm is treated the same way (the user's
+    // ruling), so anything worn at the first inventory read is no death there too.
     [Theory]
-    [InlineData(true, "cursed collar", false)]    // Stock: anything worn is no death
-    [InlineData(false, "cursed collar", true)]    // Paradigm: a piece that stays, worn, proves nothing
-    [InlineData(false, "plain helm", false)]      // Paradigm: a piece a death takes, worn, is no death
-    public void AWornPieceThatStaysThroughADeath_SaysNothingOnParadigm(bool stock, string wornNow, bool died)
+    [InlineData(true, "cursed collar")]     // Stock
+    [InlineData(false, "cursed collar")]    // Paradigm: a piece that stays, worn, is no death
+    [InlineData(false, "plain helm")]       // Paradigm: a piece a death takes, worn, is no death
+    public void AWornPieceThatStaysThroughADeath_VetoesADeathOnEitherRealm(bool stock, string wornNow)
     {
         Harness h = new() { MaxItems = 0, PveShare = 50, Stock = stock };
         h.Stays.Add("cursed collar");
@@ -2738,8 +2737,8 @@ public sealed class HangupItemRecheckTests
 
         h.ComeBack(hp: 200, lives: 6, Snap(worn: [(wornNow, "Neck")]));
 
-        Assert.Equal(died ? 1 : 0, h.Deaths.Count);
-        if (!died) Assert.Contains("still worn", h.Notices[^1]);
+        Assert.Empty(h.Deaths);
+        Assert.Contains("still worn", h.Notices[^1]);
     }
 
     // A chat line shaped like the exit's takes the client "out of the game" until

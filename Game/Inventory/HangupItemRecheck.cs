@@ -1021,12 +1021,9 @@ public sealed class HangupItemRecheck
         // is this connection, unless an earlier one came and went without judging
         // the list and left what it saw on it.
         int? hpAtEntry = before.HpAtFirstEntrySince ?? _hpAtEntry;
-        // Stock unequips everything at a death. On Paradigm that is known of a
-        // loyal piece only (it is back in the pack), so there a worn piece that
-        // stays with the character says nothing, and any other worn piece does.
-        bool? worn = _firstInventory is null ? null
-            : stock ? held.EquippedItems.Count > 0
-            : held.EquippedItems.Any(e => !StaysOnDeath(e.Name));
+        // A death unequips everything. Stock's engine does so for a cursed piece too;
+        // Paradigm isn't known to, and is treated the same way by the user's ruling.
+        bool? worn = _firstInventory is null ? null : held.EquippedItems.Count > 0;
         // Stock only: no other board is known to print these lines.
         bool? loginLines = stock ? _loginLines || before.LoginLinesSeenSince : null;
         List<(string Name, int Count)> gone = HangupItemPlan.Missing(before.Items, held);
