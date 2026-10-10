@@ -2519,14 +2519,15 @@ public sealed class CombatManagerSpellsTests
     }
 
     // A Flee monster is kept out of the fight, self-defense included, whatever the
-    // Hangup watch is doing.
+    // Hangup watch is doing: the watcher never says a Flee monster's answer is not
+    // coming.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void SelfDefense_FleeMonsterAttacksUs_NotEngaged(bool hangupWatchOff)
     {
         using Harness h = new();
-        h.Combat.SetHangupWatchOffProbe(() => hangupWatchOff);
+        h.Combat.SetNoAnswerComingProbe(rel => rel == MonsterRelationship.Hangup && hangupWatchOff);
         h.AddMonster(1, "fierce dragon");
         h.SetOverlay(1, relationship: MonsterRelationship.Flee);
 
@@ -2544,7 +2545,8 @@ public sealed class CombatManagerSpellsTests
     public void SelfDefense_HangupMonsterAttacksUs_NotEngagedWhileTheWatchIsOn(bool? hangupWatchOff)
     {
         using Harness h = new();
-        if (hangupWatchOff is { } off) h.Combat.SetHangupWatchOffProbe(() => off);
+        if (hangupWatchOff is { } off)
+            h.Combat.SetNoAnswerComingProbe(rel => rel == MonsterRelationship.Hangup && off);
         h.AddMonster(1, "fierce dragon");
         h.SetOverlay(1, relationship: MonsterRelationship.Hangup);
 
@@ -2561,7 +2563,7 @@ public sealed class CombatManagerSpellsTests
     public void SelfDefense_HangupMonsterAttacksUs_FoughtBackWhileTheWatchIsOff()
     {
         using Harness h = new();
-        h.Combat.SetHangupWatchOffProbe(() => true);
+        h.Combat.SetNoAnswerComingProbe(rel => rel == MonsterRelationship.Hangup);
         h.AddMonster(1, "fierce dragon");
         h.SetOverlay(1, relationship: MonsterRelationship.Hangup);
 

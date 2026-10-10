@@ -838,6 +838,7 @@ public sealed class HealthManager : IDisposable
     // A flee is moving and hasn't landed yet — combat holds its engages meanwhile.
     public bool IsFleeInFlight => (_fleeEngine is not null && !_fleeLanded) || _deferredFleeReason is not null;
     private string? _deferredFleeReason;
+    private Func<bool>? _deferredFleeStillWanted;   // the held flee's own landing check (see TryFlee)
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -1264,7 +1265,15 @@ public sealed class HealthManager : IDisposable
         {
             _deferredFleeReason = null;
             bool stuckFromGates = _deferredFleeFromGates;
-            _post(() => TryFlee(stuckReason, stuckFromGates));
+            Func<bool>? stuckStillWanted = _deferredFleeStillWanted;
+            _deferredFleeStillWanted = null;
+            _post(() =>
+            {
+                if (stuckStillWanted?.Invoke() == false)
+                    _log?.Combat(LogCategory, $"held flee dropped — what it ran from has gone ({stuckReason})");
+                else
+                    TryFlee(stuckReason, stuckFromGates, stuckStillWanted);
+            });
         }
 
         if (!_state.InCombat)
@@ -1983,7 +1992,7 @@ public sealed class HealthManager : IDisposable
     }
 
     // A monster whose Game Data relationship is Hangup is in the room
-    // (MonsterHangupWatcher). It takes the escape our own low-HP trigger takes, at
+    // (MonsterRelationshipWatcher). It takes the escape our own low-HP trigger takes, at
     // any HP: the sight is the trigger. The two switches that stop the low-HP
     // trigger stop this the same way, the wimpy jump included: Disable Hangups,
     // and the all-off rule (user, 2026-10-09: with the autos off and Allow hangup
@@ -1993,6 +2002,35 @@ public sealed class HealthManager : IDisposable
         if (_readGeneralSettings?.Invoke() is { DisableHangups: true }) return EscapeOutcome.HangupsDisabled;
         if (HangupHeldByAllOff()) return EscapeOutcome.AllOff;
         return ExecuteEscape(_readSettings(), reason, allowCarrierDrop: true, pvpResponse: false);
+    }
+
+    // A monster whose Game Data relationship is Flee is in the room
+    // (MonsterRelationshipWatcher; user, 2026-10-09: "yes" to seeing one running
+    // the character away "through the existing flee settings"). It is the retreat
+    // the run-if-below triggers make, at any HP: the sight is the trigger. What
+    // stops that flee stops this one: the engine being off (Auto-Heal and
+    // Auto-Rest both off), a character that is down, a party follower, and no walk
+    // or loop to retreat along. The master switch is the watcher's to ask, ahead
+    // of this. Nothing goes out in a run's place: no hang-up (the Health tab has
+    // no flee that ends in one), and no @heal, which asks for HP.
+    //
+    // stillHere is asked when the run had to wait for a move in flight to land.
+    // That move may have carried us out of the monster's room, and "back" from
+    // where it landed would lead to it.
+    public FleeOutcome FleeFromMonster(string reason, Func<bool> stillHere)
+    {
+        ArgumentNullException.ThrowIfNull(stillHere);
+        if (!_isEnabled()) return FleeOutcome.EngineOff;
+        // The game refuses every move at 0 HP or below, and a flee that can never
+        // land would hold the engine for good.
+        if (_state.HasPromptData && _state.Hp <= 0) return FleeOutcome.Down;
+        if (EscapeJustWentOut(out _)) return FleeOutcome.Escaping;
+        // Before the follower rule: a flee already under way is the answer for
+        // whoever started it. It also leaves a held run's own landing check alone.
+        if (IsFleeInFlight) return FleeOutcome.AlreadyRunning;
+        if (_isPartyFollower?.Invoke() == true) return FleeOutcome.Follower;
+        if (_getActiveMovementEngine?.Invoke() is null) return FleeOutcome.NoEngine;
+        return TryFlee(reason, stillWanted: stillHere) ? FleeOutcome.Started : FleeOutcome.NoRoute;
     }
 
     // The PvP response's flee: the retreat a low-HP run makes, but `rooms` long, and
@@ -2118,7 +2156,12 @@ public sealed class HealthManager : IDisposable
     // engine, queues the full flee route, optionally sends `break`, and dispatches
     // the first step; the remaining steps advance one per NoteRoomChanged. Returns
     // whether a flee started (or is held for the move in flight to land).
-    private bool TryFlee(string reason, bool fromGates = false)
+    //
+    // stillWanted replaces the landing check of a held flee. Left out, the run is
+    // from a fight and is dropped when no hostile is where the move landed; a run
+    // from something that is not counted a hostile (a Flee monster) says for
+    // itself whether it is still there.
+    private bool TryFlee(string reason, bool fromGates = false, Func<bool>? stillWanted = null)
     {
         // One retreat at a time: a second one started mid-flight plans from a room we
         // haven't confirmed leaving and sends its own move on top.
@@ -2145,6 +2188,7 @@ public sealed class HealthManager : IDisposable
         {
             _deferredFleeReason = reason;
             _deferredFleeFromGates = fromGates;
+            _deferredFleeStillWanted = stillWanted;
             _log?.Combat(LogCategory, $"flee waits for the move in flight to land — {reason}");
             return true;
         }
@@ -2540,6 +2584,7 @@ public sealed class HealthManager : IDisposable
         _fledThisCombat = false;
         _deferredFleeReason = null;
         _deferredFleeFromGates = false;
+        _deferredFleeStillWanted = null;
         ClearPlayerFlee();
         _post(Evaluate);
     }
@@ -2593,18 +2638,23 @@ public sealed class HealthManager : IDisposable
         if (_deferredFleeReason is { } heldReason && _fleeEngine is null)
         {
             _deferredFleeReason = null;
+            Func<bool>? stillWanted = _deferredFleeStillWanted;
+            _deferredFleeStillWanted = null;
             // The move in flight may have carried us OUT of the fight (the loop's step
             // leaving the room as a monster walked in) — then there's nothing here to
             // run from, and "back" would lead straight to it (report
             // paradigm-20260927-011659: a held run sent us back down into the kobold).
-            if (_hasHostileInRoom?.Invoke() == false)
+            // A run from a monster that is not counted a hostile asks after it instead.
+            if (stillWanted is not null ? !stillWanted() : _hasHostileInRoom?.Invoke() == false)
             {
-                _log?.Combat(LogCategory, $"held flee dropped — no hostile where the move landed ({heldReason})");
+                _log?.Combat(LogCategory, stillWanted is not null
+                    ? $"held flee dropped — what it ran from is not where the move landed ({heldReason})"
+                    : $"held flee dropped — no hostile where the move landed ({heldReason})");
                 ClearPlayerFlee();
             }
             else
             {
-                TryFlee(heldReason, _deferredFleeFromGates);
+                TryFlee(heldReason, _deferredFleeFromGates, stillWanted);
                 startedHeldFlee = _fleeEngine is not null;
             }
         }

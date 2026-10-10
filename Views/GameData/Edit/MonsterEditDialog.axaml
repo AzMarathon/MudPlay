@@ -191,7 +191,7 @@
                                     <TextBlock Classes="GroupHeader" Text="Fighting it"/>
                                     <Grid ColumnDefinitions="Auto,*,Auto,*" ColumnSpacing="8">
                                         <TextBlock Grid.Column="0" Classes="FieldLabel" Text="Relationship"
-                                                   ToolTip.Tip="Enemy — kill on sight. Neutral — only if it attacks first (or Combat → attack all monsters is on). Friend — never attack. Flee — never attack or fight back (no run is started). Hangup — hang up as soon as it is seen in the room; with the toolbar's Disable hangups on it is left alone unless it attacks."/>
+                                                   ToolTip.Tip="Enemy — kill on sight. Neutral — only if it attacks first (or Combat → attack all monsters is on). Friend — never attack. Flee — never attack or fight back, and run from it as soon as it is seen in the room (the Combat tab's run distance and direction; needs a walk or loop running, and Auto-Heal or Auto-Rest on). Hangup — hang up as soon as it is seen in the room; with the toolbar's Disable hangups on it is left alone unless it attacks."/>
                                         <ComboBox  Grid.Column="1"
                                                    ItemsSource="{Binding AvailableRelationships}"
                                                    SelectedItem="{Binding Relationship, Mode=TwoWay}"

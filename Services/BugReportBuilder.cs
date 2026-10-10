@@ -221,9 +221,11 @@ public static class BugReportBuilder
         Kv(sb, "PvP fight", $"{svc.PvpFight.Describe()}; last: {svc.PvpFight.LastReport}");
         // The last monster with the Hangup relationship seen in the room, where,
         // and what came of it; then the minute's hold after a reconnect, which
-        // explains one that was seen and not hung up on.
-        Kv(sb, "Hangup-relationship monster", svc.MonsterHangup.LastSighting);
-        Kv(sb, "Hangup watch hold", svc.MonsterHangup.DescribeHold());
+        // explains one that was seen and not hung up on. The same for the last
+        // Flee monster: whether a run was started, or why none was.
+        Kv(sb, "Hangup-relationship monster", svc.MonsterWatch.LastHangupSighting);
+        Kv(sb, "Hangup watch hold", svc.MonsterWatch.DescribeHold());
+        Kv(sb, "Flee-relationship monster", svc.MonsterWatch.LastFleeSighting);
         Kv(sb, "PvP attacks on us", svc.PvpAttacks.Recent.Count == 0
             ? "(none this session)"
             : string.Join("; ", svc.PvpAttacks.Recent.Select(a =>

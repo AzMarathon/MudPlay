@@ -1,9 +1,12 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.160.1**
-> - Navigation map: the Spells overlay can colour spell rooms by teleport: red = teleports outright or at random, yellow = only on a condition, green = no teleport
-> - In that mode the room tooltip and the Legend name the colours
+> **Version 3.160.2**
+> - A monster set to **Flee** (Game Data → the monster's record → Fighting it) is now run from as soon as it is seen in the room, while a walk or loop is running
+> - It is the Health tab's flee: the Combat tab's run distance and direction, and the walk or loop carries on afterwards
+> - The gigantic black ooze and the huge gruesome creation ship set to Flee; set a monster to Neutral or Enemy to turn it off
+> - Nothing runs with Auto-All off, or with Auto-Heal and Auto-Rest both off; a Hangup monster or a PvP enemy in the room is answered first
+> - A monster still standing on your route is met and run from again on every return
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

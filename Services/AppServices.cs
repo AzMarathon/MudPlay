@@ -1188,8 +1188,9 @@ public sealed class AppServices
     // unknown-entity click-to-fix dialog.
     public Game.Combat.RoomEntityClassifier RoomClassifier { get; private set; } = null!;
 
-    // Hangs up when a monster whose relationship is Hangup is on the room roster.
-    public Game.Combat.MonsterHangupWatcher MonsterHangup { get; private set; } = null!;
+    // Answers a monster on the room roster whose relationship is Hangup (a hang-up)
+    // or Flee (a run).
+    public Game.Combat.MonsterRelationshipWatcher MonsterWatch { get; private set; } = null!;
 
     // Auto-greets newly-seen non-party players (Settings → Talk
     // "Greet players when first met"). Subscribes to
@@ -4121,14 +4122,16 @@ public sealed class AppServices
             log: Log);
         GameData.ActiveSetChanged += _ => PvpRoom.ResetClassCache();
         // Built ahead of the combat tracker and engine, like PvpRoom: a monster whose
-        // relationship is Hangup is answered before their handlers can start a fight
-        // in the room. Health, the PvP services and InGameCapture are built further
-        // down, so they are reached through lambdas; a method group would be read
-        // here, while they are still null.
-        MonsterHangup = new Game.Combat.MonsterHangupWatcher(
+        // relationship is Hangup or Flee is answered before their handlers can start
+        // a fight in the room. Health, the PvP services and InGameCapture are built
+        // further down, so they are reached through lambdas; a method group would be
+        // read here, while they are still null.
+        MonsterWatch = new Game.Combat.MonsterRelationshipWatcher(
             RoomClassifier,
             resolveOverlay: ResolveMonsterOverlay,
             hangUp: reason => Health.HangUpForMonster(reason),
+            flee: (reason, stillHere) => Health.FleeFromMonster(reason, stillHere),
+            masterSwitchOff: () => AutoModeController.KillSwitchEngaged,
             hangupsDisabled: () =>
                 ReadSection<Models.Profile.GeneralSettings>(Profile.Current, "General").DisableHangups,
             // The fight's end re-issues the roster (PvpFight.ActiveChanged, below),
@@ -4148,10 +4151,10 @@ public sealed class AppServices
         // The minute's hold after a hang-up from here starts at the first game
         // prompt once the character is back, and belongs to the character that
         // hung up.
-        PromptScanner.PromptObserved += _ => MonsterHangup.NoteInGamePrompt();
-        Profile.ProfileLoaded += _ => MonsterHangup.Reset();
-        Profile.ProfileClosed += () => MonsterHangup.Reset();
-        MonsterHangup.HoldNotice += text => WriteTerminalNotice($"[{text}]");
+        PromptScanner.PromptObserved += _ => MonsterWatch.NoteInGamePrompt();
+        Profile.ProfileLoaded += _ => MonsterWatch.Reset();
+        Profile.ProfileClosed += () => MonsterWatch.Reset();
+        MonsterWatch.HoldNotice += text => WriteTerminalNotice($"[{text}]");
         // Another player's room attack shows as a line, not a room observation, so
         // nothing re-asks the combat gate on its own. Posted: the line is still being
         // dispatched, and the re-check can send a break.
@@ -5387,8 +5390,8 @@ public sealed class AppServices
             && LoopRunner.State == Game.Map.LoopState.Idle
             && !AutoLair.IsActive);
         // A Hangup-relationship monster is fought back only while no hang-up will
-        // come for it.
-        Combat.SetHangupWatchOffProbe(() => MonsterHangup.WatchIsOff);
+        // come for it; a Flee one never is.
+        Combat.SetNoAnswerComingProbe(relationship => MonsterWatch.NoAnswerComing(relationship));
         // A fresh hide re-arms the surprise round for the stationary hidden opener:
         // when the FSM latches Hidden, re-open so a monster that wanders in is a
         // genuine backstab target again (no gear swap — equipping would break hide).
@@ -5831,9 +5834,9 @@ public sealed class AppServices
             {
                 EngineGate.Release(BoardMenuHold);
                 // The room is displayed ahead of the first prompt on the way back
-                // in: a Hangup monster read off it while still "at the menu" is
-                // answered now.
-                MonsterHangup.NoteBackInGame();
+                // in: a Hangup or Flee monster read off it while still "at the
+                // menu" is answered now.
+                MonsterWatch.NoteBackInGame();
                 return;
             }
             EngineGate.Hold(BoardMenuHold);

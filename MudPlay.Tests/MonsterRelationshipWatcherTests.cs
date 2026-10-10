@@ -11,10 +11,12 @@ using Xunit;
 
 namespace MudPlay.Tests;
 
-// MonsterHangupWatcher: a monster whose relationship is Hangup, on the room
+// MonsterRelationshipWatcher: a monster whose relationship is Hangup, on the room
 // roster, is answered with the health settings' hang-up, once per sighting, and
-// the watch is off for a minute after a reconnect that follows such a hang-up.
-public sealed class MonsterHangupWatcherTests
+// the watch is off for a minute after a reconnect that follows such a hang-up. One
+// whose relationship is Flee is answered with the health settings' flee, once per
+// sighting, and a Hangup monster on the same roster outranks it.
+public sealed class MonsterRelationshipWatcherTests
 {
     private const int Ogre = 7;
     private const int Rat = 8;
@@ -27,7 +29,7 @@ public sealed class MonsterHangupWatcherTests
         public LogService Log { get; } = new();
         public RoomEntityClassifier Classifier { get; }
         public RoomEntryWatcher Arrivals { get; }
-        public MonsterHangupWatcher Watcher { get; }
+        public MonsterRelationshipWatcher Watcher { get; }
 
         public Dictionary<int, MonsterRelationship> Relationships { get; } = new();
         public bool OverlayUnreadable { get; set; }
@@ -41,20 +43,38 @@ public sealed class MonsterHangupWatcherTests
         public EscapeOutcome Outcome { get; set; } = EscapeOutcome.Jumped;
         public List<string> HangUps { get; } = new();
 
+        // What HealthManager.FleeFromMonster answers, and the question each run was
+        // handed to ask when it has to wait for a move to land.
+        public FleeOutcome FleeOutcome { get; set; } = FleeOutcome.Started;
+        public List<string> Flees { get; } = new();
+        public Func<bool>? StillHere { get; private set; }
+
+        // Auto-All has switched every auto off.
+        public bool MasterSwitchOff { get; set; }
+
         public DateTimeOffset Clock { get; set; } = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero);
         public List<Action> Scheduled { get; } = new();
         public List<string> Notices { get; } = new();
         public int HoldChanges { get; private set; }
         public List<LogEntry> Logged { get; } = new();
 
-        public Harness(Func<string, EscapeOutcome>? hangUp = null)
+        public Harness(
+            Func<string, EscapeOutcome>? hangUp = null,
+            Func<string, Func<bool>, FleeOutcome>? flee = null)
         {
             DefaultPatterns.Seed(Router);
             Classifier = new RoomEntityClassifier(Router, Monsters, new PlayerDatabase(), Log);
-            Watcher = new MonsterHangupWatcher(
+            Watcher = new MonsterRelationshipWatcher(
                 Classifier,
                 resolveOverlay: ResolveOverlay,
                 hangUp: hangUp ?? (reason => { HangUps.Add(reason); return Outcome; }),
+                flee: flee ?? ((reason, stillHere) =>
+                {
+                    Flees.Add(reason);
+                    StillHere = stillHere;
+                    return FleeOutcome;
+                }),
+                masterSwitchOff: () => MasterSwitchOff,
                 hangupsDisabled: () => HangupsDisabled,
                 pvpHandles: _ => PvpFightActive,
                 atBoardMenu: () => AtBoardMenu,
@@ -110,11 +130,15 @@ public sealed class MonsterHangupWatcherTests
         }
 
         public IEnumerable<string> InfoLines =>
-            Logged.Where(e => e.Source == MonsterHangupWatcher.LogCategory && e.Severity == LogSeverity.Info)
+            Logged.Where(e => e.Source == MonsterRelationshipWatcher.HangupLogCategory && e.Severity == LogSeverity.Info)
                   .Select(e => e.Message);
 
         public IEnumerable<string> WarnLines =>
-            Logged.Where(e => e.Source == MonsterHangupWatcher.LogCategory && e.Severity == LogSeverity.Warn)
+            Logged.Where(e => e.Source == MonsterRelationshipWatcher.HangupLogCategory && e.Severity == LogSeverity.Warn)
+                  .Select(e => e.Message);
+
+        public IEnumerable<string> FleeLines =>
+            Logged.Where(e => e.Source == MonsterRelationshipWatcher.FleeLogCategory && e.Severity == LogSeverity.Info)
                   .Select(e => e.Message);
 
         public void Dispose()
@@ -139,7 +163,7 @@ public sealed class MonsterHangupWatcherTests
         string line = Assert.Single(h.InfoLines);
         Assert.Contains("ogre (#7) seen in Town Square (1/5)", line);
         Assert.Contains("hung up", line);
-        Assert.Contains("ogre (#7) seen in Town Square (1/5)", h.Watcher.LastSighting);
+        Assert.Contains("ogre (#7) seen in Town Square (1/5)", h.Watcher.LastHangupSighting);
     }
 
     [Fact]
@@ -184,7 +208,7 @@ public sealed class MonsterHangupWatcherTests
     [InlineData(MonsterRelationship.Neutral)]
     [InlineData(MonsterRelationship.Friend)]
     [InlineData(MonsterRelationship.Flee)]
-    public void EveryOtherRelationship_DrawsNothing(MonsterRelationship relationship)
+    public void EveryOtherRelationship_DrawsNoHangUp(MonsterRelationship relationship)
     {
         using Harness h = new();
         h.Relationships[Ogre] = relationship;
@@ -193,7 +217,7 @@ public sealed class MonsterHangupWatcherTests
 
         Assert.Empty(h.HangUps);
         Assert.Empty(h.InfoLines);
-        Assert.Equal("(none this session)", h.Watcher.LastSighting);
+        Assert.Equal("(none this session)", h.Watcher.LastHangupSighting);
     }
 
     // The relationship belongs to a monster record. A name on the roster that
@@ -328,7 +352,7 @@ public sealed class MonsterHangupWatcherTests
         h.Classifier.ReemitCurrent();
 
         Assert.Single(h.HangUps);
-        Assert.Contains("did not go out", h.Watcher.LastSighting);
+        Assert.Contains("did not go out", h.Watcher.LastHangupSighting);
         Assert.Single(h.WarnLines);
     }
 
@@ -694,7 +718,7 @@ public sealed class MonsterHangupWatcherTests
 
         Assert.Null(h.Watcher.HoldText);
         Assert.Equal("none", h.Watcher.DescribeHold());
-        Assert.Equal("(none this session)", h.Watcher.LastSighting);
+        Assert.Equal("(none this session)", h.Watcher.LastHangupSighting);
         Assert.Equal(minuteRunning ? changes + 1 : changes, h.HoldChanges);
 
         // The old minute's timer has nothing left to do, and the next prompt
@@ -725,7 +749,7 @@ public sealed class MonsterHangupWatcherTests
         string line = Assert.Single(h.InfoLines);
         Assert.Contains("ogre (#7) seen in Town Square (1/5)", line);
         Assert.Contains(why, line);
-        Assert.Contains(why, h.Watcher.LastSighting);
+        Assert.Contains(why, h.Watcher.LastHangupSighting);
 
         h.HangUps.Clear();
         h.Outcome = EscapeOutcome.HungUp;
@@ -767,7 +791,7 @@ public sealed class MonsterHangupWatcherTests
 
         Assert.Empty(h.HangUps);
         Assert.Contains("the PvP actions come first", Assert.Single(h.InfoLines));
-        Assert.False(h.Watcher.WatchIsOff);
+        Assert.False(h.Watcher.HangupWatchIsOff);
 
         h.PvpFightActive = false;
         h.Classifier.ReemitCurrent();
@@ -781,19 +805,19 @@ public sealed class MonsterHangupWatcherTests
     public void WatchIsOff_WithDisableHangups_AndForTheMinuteAfterAReconnect()
     {
         using Harness h = new();
-        Assert.False(h.Watcher.WatchIsOff);
+        Assert.False(h.Watcher.HangupWatchIsOff);
 
         h.HangupsDisabled = true;
-        Assert.True(h.Watcher.WatchIsOff);
+        Assert.True(h.Watcher.HangupWatchIsOff);
         h.HangupsDisabled = false;
 
         h.HangUpAndDrop();
-        Assert.True(h.Watcher.WatchIsOff);      // from the drop, through the login
+        Assert.True(h.Watcher.HangupWatchIsOff);      // from the drop, through the login
         h.Watcher.NoteInGamePrompt();
         h.Tick(59);
-        Assert.True(h.Watcher.WatchIsOff);
+        Assert.True(h.Watcher.HangupWatchIsOff);
         h.Tick();
-        Assert.False(h.Watcher.WatchIsOff);
+        Assert.False(h.Watcher.HangupWatchIsOff);
     }
 
     // Nothing automatic responds in all-off mode, and the menu is not the game:
@@ -809,7 +833,7 @@ public sealed class MonsterHangupWatcherTests
         h.Feed("Also here: ogre.");
 
         Assert.Single(h.InfoLines);
-        Assert.False(h.Watcher.WatchIsOff);
+        Assert.False(h.Watcher.HangupWatchIsOff);
     }
 
     // The whole path through HealthManager: the exit command, the carrier drop and
@@ -859,5 +883,403 @@ public sealed class MonsterHangupWatcherTests
         Assert.Equal(expected, penaltyAsked.Count);
         Assert.DoesNotContain(true, penaltyAsked);
         Assert.Equal(expected == 1, signal.PeekForTests().DisconnectExpected);
+    }
+
+    // ----- a Flee monster: what is seen ----------------------------------
+
+    [Fact]
+    public void FleeMonsterOnTheRoomDisplay_StartsARun_AndSaysWhichAndWhere()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: giant rat, ogre.");
+
+        Assert.Equal("ogre (#7) is here, relationship Flee", Assert.Single(h.Flees));
+        string line = Assert.Single(h.FleeLines);
+        Assert.Contains("ogre (#7) seen in Town Square (1/5)", line);
+        Assert.Contains("running", line);
+        Assert.Contains("ogre (#7) seen in Town Square (1/5)", h.Watcher.LastFleeSighting);
+        // It is not a hang-up, and is not logged or reported as one.
+        Assert.Empty(h.HangUps);
+        Assert.Empty(h.InfoLines);
+        Assert.Equal("(none this session)", h.Watcher.LastHangupSighting);
+    }
+
+    [Fact]
+    public void FleeMonster_AnArrivalLineThatNamesIt_StartsARun()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Feed("Also here: giant rat.");
+        Assert.Empty(h.Flees);
+
+        h.Feed("An ogre stomps into the room from southeast.");
+
+        Assert.Single(h.Flees);
+    }
+
+    [Theory]
+    [InlineData(MonsterRelationship.Enemy)]
+    [InlineData(MonsterRelationship.Neutral)]
+    [InlineData(MonsterRelationship.Friend)]
+    public void EnemyNeutralAndFriend_StartNoRun(MonsterRelationship relationship)
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = relationship;
+
+        h.Feed("Also here: ogre, giant rat.");
+
+        Assert.Empty(h.Flees);
+        Assert.Empty(h.FleeLines);
+        Assert.Equal("(none this session)", h.Watcher.LastFleeSighting);
+    }
+
+    // ----- a Flee monster: once per sighting -----------------------------
+
+    [Fact]
+    public void OneRunPerRoomDisplay_WhateverReissuesItsRoster()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: giant rat, ogre.");
+        h.Classifier.ReemitCurrent();
+        h.Feed("A giant rat scurries into the room from north.");
+        h.Classifier.RemoveDeadEntity("giant rat");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.Flees);
+        Assert.Single(h.FleeLines);
+
+        // The same room displayed again, as it is when a walk comes back to it.
+        h.Feed("Also here: ogre.");
+        Assert.Equal(2, h.Flees.Count);
+    }
+
+    [Fact]
+    public void AFleeMonsterThatWasNotThereWhenAnswered_IsRunFrom()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Relationships[Troll] = MonsterRelationship.Flee;
+        h.Feed("Also here: ogre.");
+
+        h.Feed("A troll lumbers into the room from north.");
+
+        Assert.Equal(2, h.Flees.Count);
+        Assert.StartsWith("troll (#9)", h.Flees[1]);
+    }
+
+    // ----- a Flee monster: Hangup outranks it ----------------------------
+
+    [Fact]
+    public void WithAHangupMonsterOnTheSameRoster_TheHangUpIsTheAnswer_AndNoRunStarts()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HungUp };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: troll, ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.HangUps);
+        Assert.Empty(h.Flees);
+        string line = Assert.Single(h.FleeLines);
+        Assert.Contains("troll (#9) seen in Town Square (1/5)", line);
+        Assert.Contains("a Hangup monster is here as well", line);
+    }
+
+    // No hang-up is coming (Disable Hangups on): the Flee monster beside the
+    // Hangup one is still there to be run from.
+    [Fact]
+    public void WithNoHangUpComing_TheFleeMonsterIsRunFrom()
+    {
+        using Harness h = new() { Outcome = EscapeOutcome.HangupsDisabled, HangupsDisabled = true };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+        h.Relationships[Troll] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: troll, ogre.");
+
+        Assert.Equal("troll (#9) is here, relationship Flee", Assert.Single(h.Flees));
+    }
+
+    // ----- a Flee monster: what stops the run ----------------------------
+
+    // All autos off is the master switch off, and with it off nothing automatic
+    // fires at all (user, 2026-10-09). The flee is not even asked for: an auto
+    // turned back on by hand would otherwise let it through. The sighting stays
+    // open, so the first roster after the switch is back on is answered.
+    [Fact]
+    public void MasterSwitchOff_NoRunIsAskedFor_UntilItIsBackOn()
+    {
+        using Harness h = new() { MasterSwitchOff = true };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+        h.Feed("A giant rat scurries into the room from north.");
+
+        Assert.Empty(h.Flees);
+        string line = Assert.Single(h.FleeLines);
+        Assert.Contains("Auto-All is off", line);
+        Assert.Contains("Auto-All is off", h.Watcher.LastFleeSighting);
+
+        h.MasterSwitchOff = false;
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.Flees);
+        Assert.Contains("running", h.FleeLines.Last());
+    }
+
+    // The master switch is asked for the run only: a Hangup monster's answer is the
+    // health settings' hang-up, with its own all-off rule.
+    [Fact]
+    public void MasterSwitchOff_DoesNotHoldAHangupMonstersHangUp()
+    {
+        using Harness h = new() { MasterSwitchOff = true, Outcome = EscapeOutcome.HungUp };
+        h.Relationships[Ogre] = MonsterRelationship.Hangup;
+
+        h.Feed("Also here: ogre.");
+
+        Assert.Single(h.HangUps);
+    }
+
+    // The run-if-below flee's own gate: with Auto-Heal and Auto-Rest both off the
+    // health engine runs no flee. The sighting stays open, so the first roster
+    // after one is turned on is answered.
+    [Fact]
+    public void HealthEngineOff_SaidOncePerSighting_AndRunFromOnceAnAutoIsOn()
+    {
+        using Harness h = new() { FleeOutcome = FleeOutcome.EngineOff };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+        h.Feed("A giant rat scurries into the room from north.");
+
+        string line = Assert.Single(h.FleeLines);
+        Assert.Contains("Auto-Heal and Auto-Rest are both off", line);
+        Assert.Contains("Auto-Heal and Auto-Rest are both off", h.Watcher.LastFleeSighting);
+
+        h.FleeOutcome = FleeOutcome.Started;
+        h.Classifier.ReemitCurrent();
+
+        Assert.Contains("running", h.FleeLines.Last());
+        h.Flees.Clear();
+        h.Classifier.ReemitCurrent();
+        Assert.Empty(h.Flees);
+    }
+
+    // No run could start. It is said, and not asked for again inside the sighting:
+    // a walk started beside the monster is not turned round by the next roster.
+    [Theory]
+    [InlineData(FleeOutcome.NoEngine, "no walk or loop is running")]
+    [InlineData(FleeOutcome.NoRoute, "no way out of the room could be found")]
+    [InlineData(FleeOutcome.Follower, "a follower does not run off alone")]
+    [InlineData(FleeOutcome.Down, "the character is down")]
+    public void ARunThatCouldNotStart_IsSaid_AndNotTriedAgainThisSighting(FleeOutcome outcome, string why)
+    {
+        using Harness h = new() { FleeOutcome = outcome };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.FleeOutcome = FleeOutcome.Started;
+        h.Classifier.ReemitCurrent();
+        h.Feed("A giant rat scurries into the room from north.");
+
+        Assert.Single(h.Flees);
+        string line = Assert.Single(h.FleeLines);
+        Assert.Contains("ogre (#7) seen in Town Square (1/5)", line);
+        Assert.Contains(why, line);
+        // Nothing was sent in the run's place.
+        Assert.Empty(h.HangUps);
+
+        h.Feed("Also here: ogre.");
+        Assert.Equal(2, h.Flees.Count);
+    }
+
+    [Theory]
+    [InlineData(FleeOutcome.AlreadyRunning, "a flee was already under way")]
+    [InlineData(FleeOutcome.Escaping, "a hang-up or wimpy jump had just gone out")]
+    public void AnEscapeAlreadyUnderWay_AnswersTheFleeSighting(FleeOutcome outcome, string why)
+    {
+        using Harness h = new() { FleeOutcome = outcome };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.Flees);
+        Assert.Contains(why, Assert.Single(h.FleeLines));
+    }
+
+    [Fact]
+    public void AtTheBoardsMenu_NoRunIsAskedFor_UntilBackInTheGame()
+    {
+        using Harness h = new() { AtBoardMenu = true };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Empty(h.Flees);
+        Assert.Contains("board's menu", Assert.Single(h.FleeLines));
+
+        h.AtBoardMenu = false;
+        h.Watcher.NoteBackInGame();
+
+        Assert.Single(h.Flees);
+    }
+
+    // The PvP actions win (user, 2026-10-09), for a Flee monster as for a Hangup one.
+    [Fact]
+    public void DuringAFightWithAPlayer_NoRunIsAskedFor_UntilItEnds()
+    {
+        using Harness h = new() { PvpFightActive = true };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+
+        Assert.Empty(h.Flees);
+        Assert.Contains("the PvP actions come first", Assert.Single(h.FleeLines));
+
+        h.PvpFightActive = false;
+        h.Classifier.ReemitCurrent();
+
+        Assert.Single(h.Flees);
+    }
+
+    // A run that waits for a move to land asks, when it has, whether a Flee monster
+    // is on the roster of the room it landed in.
+    [Fact]
+    public void TheRunIsHandedAWayToAskWhetherAFleeMonsterIsStillThere()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Feed("Also here: ogre, giant rat.");
+        Assert.True(h.StillHere!());
+
+        h.Feed("Also here: giant rat.");
+        Assert.False(h.StillHere!());
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.NoteGameLeft();
+        Assert.False(h.StillHere!());
+    }
+
+    // Self-defence asks this of the two relationships it leaves out of the fight.
+    // A Flee monster is not fought back, run or no run.
+    [Theory]
+    [InlineData(FleeOutcome.Started)]
+    [InlineData(FleeOutcome.NoEngine)]
+    [InlineData(FleeOutcome.EngineOff)]
+    public void AFleeMonster_IsNeverSaidToHaveNoAnswerComing(FleeOutcome outcome)
+    {
+        using Harness h = new() { FleeOutcome = outcome, HangupsDisabled = true };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+
+        Assert.False(h.Watcher.NoAnswerComing(MonsterRelationship.Flee));
+        Assert.True(h.Watcher.NoAnswerComing(MonsterRelationship.Hangup));
+    }
+
+    [Fact]
+    public void AnotherCharacter_HasNoLastFleeSighting_AndIsAnsweredAfresh()
+    {
+        using Harness h = new();
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+        h.Feed("Also here: ogre.");
+
+        h.Watcher.Reset();
+
+        Assert.Equal("(none this session)", h.Watcher.LastFleeSighting);
+        h.Classifier.ReemitCurrent();
+        Assert.Equal(2, h.Flees.Count);
+    }
+
+    // ----- a Flee monster: the whole path through HealthManager ----------
+
+    private sealed class RecordingEngine : IRecoverableEngine
+    {
+        public string Name => "FakeLoop";
+        public RoomKey? JourneyOrigin { get; set; }
+        public List<Direction> Moves { get; } = new();
+        public string? PausedFor { get; private set; }
+        public RoomKey? ResumedAt { get; private set; }
+
+        public Direction? PeekNextPlannedDirection() => null;
+        public IReadOnlyList<Direction> PeekPlannedDirections(int count) => Array.Empty<Direction>();
+        public void SendBacktrackMove(Direction direction) => Moves.Add(direction);
+        public void PauseForRecovery(string reason) => PausedFor = reason;
+        public void ResumeAfterRecovery(RoomKey recoveredAnchor) => ResumedAt = recoveredAnchor;
+        public void AbortFromRecoveryFailure(string detail) { }
+    }
+
+    // The sight sends what the health settings' own flee sends: `break` when a fight
+    // is on, then the Combat tab's run distance back along the loop, one move per
+    // room, and the loop picked up again where the run lands. No exit command.
+    [Theory]
+    [InlineData(true, false, false, null)]                               // an Auto on, a loop running
+    [InlineData(false, false, false, "Auto-Heal and Auto-Rest are both off")]
+    [InlineData(true, true, false, "a follower does not run off alone")]
+    [InlineData(true, false, true, "Auto-All is off")]                   // an auto turned back on by hand
+    public void SightGoesThroughTheHealthFlee(bool healthEngineOn, bool follower, bool masterSwitchOff, string? whyNot)
+    {
+        LogService log = new();
+        List<string> wire = new();
+        RecordingEngine loop = new() { JourneyOrigin = new RoomKey(1, 1) };
+        CombatSettings combat = new() { RunDistance = 2, RunDirection = RunDirection.Backward, BreakBeforeFleeing = true };
+        PlayerState state = new();
+        using HealthManager health = new(
+            state, new MovementCoordinator(log),
+            readSettings: () => new HealthSettings(),
+            isEnabled: () => healthEngineOn,
+            readHangupCommand: () => "=x",
+            getActiveMovementEngine: () => loop,
+            getLastSentDirection: () => Direction.N,
+            readCombatSettings: () => combat,
+            readGeneralSettings: () => new GeneralSettings(),
+            hasEngageableHostiles: () => false,
+            log: log,
+            hasHostileInRoom: () => false,
+            findReversePath: (_, _) => new[] { Direction.S, Direction.W, Direction.U });
+        health.SetWireSender(bytes => wire.Add(System.Text.Encoding.Latin1.GetString(bytes).TrimEnd('\r')));
+        health.IsServerEngaged = () => true;
+        health.SetPartyRoleSync(isPartyFollower: () => follower, requestPartyWait: () => { }, requestPartyOk: () => { });
+        state.MaxHp = 200;
+        state.Hp = 200;
+        state.HasPromptData = true;
+        health.NoteRoomChanged(new RoomKey(1, 5));
+        using Harness h = new(flee: health.FleeFromMonster) { MasterSwitchOff = masterSwitchOff };
+        h.Relationships[Ogre] = MonsterRelationship.Flee;
+
+        h.Feed("Also here: ogre.");
+        h.Classifier.ReemitCurrent();
+
+        if (whyNot is not null)
+        {
+            Assert.Empty(loop.Moves);
+            Assert.Null(loop.PausedFor);
+            Assert.Empty(wire);
+            Assert.Contains(whyNot, Assert.Single(h.FleeLines));
+            return;
+        }
+
+        Assert.Equal(new[] { "break" }, wire);
+        Assert.Equal(new[] { Direction.S }, loop.Moves);
+        Assert.Contains("ogre (#7) is here, relationship Flee", loop.PausedFor);
+        Assert.Contains("running", Assert.Single(h.FleeLines));
+
+        health.NoteRoomChanged(new RoomKey(1, 4));
+        Assert.Equal(new[] { Direction.S, Direction.W }, loop.Moves);
+        Assert.Null(loop.ResumedAt);
+
+        health.NoteRoomChanged(new RoomKey(1, 3));
+        Assert.Equal(2, loop.Moves.Count);
+        Assert.Equal(new RoomKey(1, 3), loop.ResumedAt);
+        Assert.DoesNotContain("=x", wire);
     }
 }
