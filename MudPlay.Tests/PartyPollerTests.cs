@@ -85,6 +85,56 @@ public sealed class PartyPollerTests
         // No assertion — test passes by not throwing.
     }
 
+    // ===== a `par` asked for to check who is in the party =====
+
+    // It is a question about the roster, not a health read: auto-heal off and
+    // every poll trigger unticked don't hold it.
+    [Fact]
+    public void RequestPar_GoesOut_WithAutoHealOffAndNoTriggerTicked()
+    {
+        var (poller, _, state, _, _, wire) = Setup();
+        state.Members.Add(new PartyMember { Name = "Forged" });
+        state.IsInParty = true;
+        poller.IsParPollEnabled = () => false;
+        poller.IsAutomationEnabled = () => true;
+        poller.ApplyParSettings(new PartySettings { ParPollOnTimer = false });
+        wire.Clear();
+
+        Assert.True(poller.RequestPar("a gate was crossed"));
+
+        Assert.Equal("par\r", Encoding.Latin1.GetString(Assert.Single(wire)));
+    }
+
+    [Fact]
+    public void RequestPar_MasterSwitchOff_SendsNothing()
+    {
+        var (poller, _, state, _, _, wire) = Setup();
+        state.Members.Add(new PartyMember { Name = "Forged" });
+        state.IsInParty = true;
+        poller.IsParPollEnabled = () => true;
+        poller.IsAutomationEnabled = () => false;
+        wire.Clear();
+
+        Assert.False(poller.RequestPar("a gate was crossed"));
+
+        Assert.Empty(wire);
+    }
+
+    [Fact]
+    public void RequestPar_SoloOrDisconnected_SendsNothing()
+    {
+        var (poller, _, state, _, _, wire) = Setup();
+        Assert.False(poller.RequestPar("a gate was crossed"));   // no party
+
+        state.Members.Add(new PartyMember { Name = "Forged" });
+        state.IsInParty = true;
+        wire.Clear();
+        poller.NotifyDisconnected();
+        Assert.False(poller.RequestPar("a gate was crossed"));
+
+        Assert.Empty(wire);
+    }
+
     [Fact]
     public void ParPoll_GateReturnsFalse_SendsNothing()
     {

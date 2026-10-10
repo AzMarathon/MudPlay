@@ -20,7 +20,8 @@ namespace MudPlay.Game;
 //      for every member. Settings → Party picks what sends it, any mix or none: a
 //      DispatcherTimer ticking at ParCadence (5 s default), a combat round we
 //      fought in closing (or, ticked in, one we only witnessed), and a round
-//      whose totals carry unknown damage.
+//      whose totals carry unknown damage. Apart from those, RequestPar sends one
+//      for a caller that needs to know who is still in the party.
 //
 // Reply-format match: the on-join replies come back as
 // "X telepaths: HP 690/720, MA 200/300 (Resting)" — i.e. the other party
@@ -76,6 +77,12 @@ public sealed partial class PartyPoller : IDisposable
     // may put `par` on the wire. Null = ungated (test / pre-wire default),
     // matching the historical always-on behaviour.
     public Func<bool>? IsParPollEnabled { get; set; }
+
+    // Live gate for a `par` a caller asks for to learn who is in the party
+    // (RequestPar). That is not a health read, so it doesn't ride the auto-heal
+    // toggle: only the master switch stops it, as it stops everything automatic.
+    // Null = ungated (test / pre-wire default).
+    public Func<bool>? IsAutomationEnabled { get; set; }
 
     // Live gate — true while the character is parked in the full-screen trainer
     // stats menu. Both timer cadences here (par poll + @health nag) fire on a
@@ -487,7 +494,7 @@ public sealed partial class PartyPoller : IDisposable
 
     private void OnParTimer()
     {
-        if (ParOnTimer) SendPar();
+        if (ParOnTimer) SendPar(healthRead: true);
     }
 
     // A round's ledger closed (RoundDamageTracker.RoundComplete). One `par` per
@@ -506,24 +513,42 @@ public sealed partial class PartyPoller : IDisposable
             why = $"round {round.FightRound} had unknown damage (dealt {round.UnknownDealt}, taken {round.UnknownTaken})";
         else
             return;
-        if (!SendPar()) return;
+        if (!SendPar(healthRead: true)) return;
         _log?.Debug(LogSource, $"par sent: {why}.");
-        // The timer counts from the latest `par`, so the two together don't send a
-        // pair back to back; with rounds coming faster than the cadence it stays quiet.
-        if (_timer is { IsEnabled: true })
-        {
-            _timer.Stop();
-            _timer.Start();
-        }
+        RestartTimerCountdown();
     }
 
-    private bool SendPar()
+    // One `par` now, for a caller that needs to know who is still in the party
+    // rather than how hurt they are. It goes out with the health triggers all
+    // unticked and with auto-heal off, and is held back by everything else that
+    // holds the poll: no party, a disconnect, the trainer menu, the master switch.
+    // False when it wasn't sent.
+    public bool RequestPar(string why)
+    {
+        if (!SendPar(healthRead: false)) return false;
+        _log?.Debug(LogSource, $"par sent: {why}.");
+        RestartTimerCountdown();
+        return true;
+    }
+
+    // The timer counts from the latest `par`, so a `par` sent for another reason
+    // isn't followed by the timer's own back to back; with rounds coming faster
+    // than the cadence it stays quiet.
+    private void RestartTimerCountdown()
+    {
+        if (_timer is not { IsEnabled: true }) return;
+        _timer.Stop();
+        _timer.Start();
+    }
+
+    private bool SendPar(bool healthRead)
     {
         if (_wireSender is null) return false;
         if (_suspended) return false;
         if (!_state.IsInParty) return false;
         if (InTrainerMenu) return false;
-        if (IsParPollEnabled is { } gate && !gate()) return false;
+        Func<bool>? gate = healthRead ? IsParPollEnabled : IsAutomationEnabled;
+        if (gate is not null && !gate()) return false;
         _wireSender(Encoding.Latin1.GetBytes("par\r"));
         return true;
     }

@@ -1,12 +1,17 @@
 # Version history
 
-## 3.161.8
+## 3.161.11
 
 - Paradigm: the corpse is recovered on arriving in the death room, off that room's own display
 - Paradigm: the next room's floor no longer marks a deathpile Missing; only the death room's display does
 - Paradigm: Recover Now inside the room marks the pile Missing when its look shows no corpse
 - Gear handed back still counts for the latest death when its pile was marked Missing
 - A single spare of a worn item is recorded in the deathpile and recovered with it
+
+## 3.161.7
+
+- Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+- A member `par` no longer lists as following loses that credit, so the next trip fetches for them
 
 ## 3.161.6
 
