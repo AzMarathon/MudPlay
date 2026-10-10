@@ -890,13 +890,15 @@ public sealed class CashManager : IDisposable
     // for. Shared by the room-change path and the reconnect resume: a disconnect
     // mid-defer strands the hold (no self-heal, and the reconnect re-display doesn't
     // reliably flush it), leaving the walker paused until it's dropped.
-    public void CancelDeferredCollect(string reason)
+    // True when a collect was in fact pending.
+    public bool CancelDeferredCollect(string reason)
     {
         _resurveyReleaseTimer?.Stop();
-        if (!_cashPendingAfterCombat) return;
+        if (!_cashPendingAfterCombat) return false;
         _cashPendingAfterCombat = false;
         _log?.Debug(LogCategory, $"{reason} — dropping pending post-combat collect");
         _gate?.NoteDeferredCleared();
+        return true;
     }
 
     // Combat's done and cash is waiting: re-display the room and collect from what's
@@ -1384,6 +1386,10 @@ public sealed class CashManager : IDisposable
         _autoDepositRetryNotBefore = default;
     }
 
+    // The master switch (true = off): off, no bank / stash trip is asked for.
+    // Coin collection itself rides the Auto Get Cash probe, which reads it too.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void CheckAutoDeposit()
     {
         CashSettings settings = _readSettings();
@@ -1435,6 +1441,10 @@ public sealed class CashManager : IDisposable
                     + $"(wealth={wealthValue} gate={wealthThreshold})");
                 return;
             }
+
+            // Before the latch, so the trip is still owed: the first inventory
+            // change after the master switch is back on fires it.
+            if (MasterSwitchOff?.Invoke() == true) return;
 
             _autoDepositFiredThisCrossing = true;
             _log?.Info(LogCategory,

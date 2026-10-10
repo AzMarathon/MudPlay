@@ -299,6 +299,14 @@ public sealed class PartyRejoinCoordinator : IDisposable
 
     private void SendComeback(string leader)
     {
+        // Asked again here: the send can come seconds after the prompt that
+        // armed it (the wait for our room), and the master switch may have gone
+        // off in between.
+        if (!_isAutoEnabled())
+        {
+            _log?.Info(LogCategory, $"Auto-responses off — not asking {leader} to come back.");
+            return;
+        }
         // A bare @comeback makes the leader backtrack their own trail to find us.
         string payload = FreshRoom() is { } room ? $"@comeback {room.Key}" : "@comeback";
         _wire.Send($"/{leader} {payload}");

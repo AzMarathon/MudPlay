@@ -629,6 +629,11 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // trail rooms marked. Empty when no sweep has run this session.
     public string SpillSweepPlan => _sweepStops.Count == 0 ? "" : DescribeStops(0);
 
+    // The automatic grab on walking into the death room, or past a pile: the
+    // setting, and the master switch being on. Recover Now forces it and is not
+    // read through here.
+    private bool AutoGrabAllowed => AutoRecover && _isAutoEnabled?.Invoke() != false;
+
     // Auto-grab a deathpile's lost items (ignoring per-item auto-get policy) when
     // re-entering the death room. Persisted per-character. The grab itself is
     // inert until inventory tracking records lost items; the preference is stored
@@ -863,7 +868,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             // Now's, or their own walk-to with nothing else driving) earns all of it;
             // one another engine made earns the peek and its neighbours only.
             bool walkedHere = WalkedToDeathRoom(rec);
-            BeginRecovery(rec, autoGrab: AutoRecover || force, deliberate: force || walkedHere,
+            BeginRecovery(rec, autoGrab: AutoGrabAllowed || force, deliberate: force || walkedHere,
                 arrivedByWalk: !force && walkedHere);
             // A room prints its floor before the exits line that confirms the move
             // (GAME_MECHANICS "Hiding coin in a room (stashing)", Client use), so on
@@ -935,7 +940,7 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
     // confirmed) is not asked for a second time, only counted.
     private void TryArmSpillover(Room room, bool arrived, DeathRecord? floorAlreadyAskedFor)
     {
-        if (!AutoRecover || _isParadigm?.Invoke() == true) return;
+        if (!AutoGrabAllowed || _isParadigm?.Invoke() == true) return;
         if (!arrived && _spilloverRecovering) return;
         if (FindPileAdjacentTo(room) is not { } dp) return;
         _spilloverPile = dp;
@@ -1156,6 +1161,17 @@ public sealed partial class DeathRecoveryManager : ObservableObject, IDisposable
             _log?.Info(LogCategory, "auto-recover: the corpse is on this floor after all — the pile is reopened");
             _activeRecovery = written;
             _armedAt = DateTimeOffset.UtcNow;
+            // Auto-All went off since the verdict: the record is put right, but
+            // the corpse is not asked for. It stands as an arrival made with
+            // Auto-All off does, open and unarmed, for Recover Now or the user's
+            // own `recover corpse`.
+            if (_isAutoEnabled?.Invoke() == false)
+            {
+                _log?.Info(LogCategory, "auto-recover: Auto-All is off — the corpse is not asked for (Recover Now does it)");
+                SetStatus(written, DeathRecoveryStatus.Partial,
+                    "The corpse was here after all. Auto-All is off, so it was not recovered: press Recover Now.");
+                return;
+            }
             SetStatus(written, DeathRecoveryStatus.Partial, "The corpse was here after all — recovering.");
             RecoverCorpse(there);
             return;

@@ -55,10 +55,15 @@ public sealed class AlignmentGearCheck
     // The game says our alignment moved: check it, sets or no sets.
     public void RequestVerify() => _verifyPending = true;
 
+    // The master switch (true = off): off, the check stays pending and goes out
+    // at the first prompt after the switch is back on.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Every prompt: send what's pending once the gap has passed.
     public void OnPrompt()
     {
         if (!_checkPending && !_verifyPending) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         DateTimeOffset now = _now();
         if (now - _lastSent < Gap) return;
         bool verify = _verifyPending;

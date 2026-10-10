@@ -28,6 +28,11 @@ public sealed class HealthManagerTests
         // The Auto-Rest switch on its own; the engine switch above stays on.
         public bool RestEnabled { get; set; } = true;
 
+        // The master switch. Off, both probes above read false, as the app's do,
+        // and each hang-up it holds back is noted here.
+        public bool MasterSwitchOff { get; set; }
+        public List<string?> HeldByMasterSwitch { get; } = new();
+
         /// <summary>Char-tier General settings. Default instance has
         /// AllowHangupInAllOffMode=false, so the all-off carve-out stays
         /// dormant unless a test opts in.</summary>
@@ -155,7 +160,7 @@ public sealed class HealthManagerTests
             Coordinator = new MovementCoordinator(Log);
             Health = new HealthManager(State, Coordinator,
                 readSettings: () => Settings,
-                isEnabled: () => AutoHealRestEnabled,
+                isEnabled: () => AutoHealRestEnabled && !MasterSwitchOff,
                 readHangupCommand: () => HangupCommand ?? string.Empty,
                 getActiveMovementEngine: null,
                 getLastSentDirection: null,
@@ -178,7 +183,8 @@ public sealed class HealthManagerTests
                 isStealthed: () => Stealthed,
                 isSolo: () => Solo,
                 onRecovered: () => ShadowRestResumeCount++);
-            Health.SetRestEnabledGate(() => RestEnabled);
+            Health.SetRestEnabledGate(() => RestEnabled && !MasterSwitchOff);
+            Health.SetMasterSwitch(() => MasterSwitchOff, what => HeldByMasterSwitch.Add(what));
             Health.SetDoNotRestSelector(() => SkipRestHere);
             Health.SetRestHereSelector(() => RestHere);
             Health.SetEquipmentApplyingProbe(() => EquipmentApplying);
@@ -342,12 +348,16 @@ public sealed class HealthManagerTests
     }
 
     [Fact]
-    public void RestOff_EmergencyHangupStillFires()
+    public void RestOff_NoLowHpHangup_UntilAutoRestIsBackOn()
     {
-        // Healing by spell alone still hangs up at the hang threshold: only the
-        // resting is switched off, not the engine.
+        // The low-HP hang-up sits behind Auto-Rest (user, 2026-10-09): healing by
+        // spell alone no longer carries it.
         using Harness h = new() { RestEnabled = false };
         h.SetPrompt(hp: 5, maxHp: 200);
+        Assert.DoesNotContain("=x", h.SentLines);
+
+        h.RestEnabled = true;
+        h.Health.Evaluate();
         Assert.Equal(1, h.SentLines.Count(l => l == "=x"));
     }
 
@@ -4284,8 +4294,8 @@ public sealed class HealthManagerTests
         Assert.Equal(0, asked);
     }
 
-    // The all-off rule the low-HP hang-up follows (user, 2026-10-09): with the
-    // autos off nothing responds unless Allow hangup in all-off mode is ticked.
+    // The master-switch rule (user, 2026-10-09): with the switch off nothing
+    // responds unless Allow hangup in all-off mode is ticked.
     [Theory]
     [InlineData(false, EscapeOutcome.AllOff)]
     [InlineData(true, EscapeOutcome.HungUp)]
@@ -4296,7 +4306,7 @@ public sealed class HealthManagerTests
             SysGotoWimpyInsteadOfHanging = true,
             SysGotoWimpyLocation = "wimpy-room",
         };
-        using Harness h = new(s) { AutoHealRestEnabled = false };
+        using Harness h = new(s) { MasterSwitchOff = true };
         h.General.AllowHangupInAllOffMode = allowed;
         h.SetPrompt(hp: 200, maxHp: 200);
 
@@ -4312,7 +4322,7 @@ public sealed class HealthManagerTests
     [Fact]
     public void HangUpForMonster_DisableHangups_OutranksAllowHangupInAllOffMode()
     {
-        using Harness h = new() { AutoHealRestEnabled = false };
+        using Harness h = new() { MasterSwitchOff = true };
         h.General.AllowHangupInAllOffMode = true;
         h.General.DisableHangups = true;
         h.SetPrompt(hp: 200, maxHp: 200);
@@ -4905,9 +4915,9 @@ public sealed class HealthManagerTests
     public void Hangup_DroppedInAllOffMode_StillHangs()
     {
         // The all-off carve-out honours the bleeding-out window too, so an AFK
-        // character that dropped with every engine off still gets its escape.
+        // character that dropped with the master switch off still gets its escape.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings { AllowHangupInAllOffMode = true };
         h.SetPrompt(hp: -10, maxHp: 200);
 
@@ -4919,9 +4929,9 @@ public sealed class HealthManagerTests
     [Fact]
     public void AllOff_HangupAllowed_HpBelowTrigger_StillHangs()
     {
-        // Engine disabled but the opt-in keeps the emergency hangup live.
+        // Master switch off but the opt-in keeps the emergency hangup live.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings { AllowHangupInAllOffMode = true };
         h.SetPrompt(hp: 5, maxHp: 200);   // 2.5% — below default 5% hang threshold
 
@@ -4931,15 +4941,130 @@ public sealed class HealthManagerTests
     [Fact]
     public void AllOff_HangupNotAllowed_HpBelowTrigger_NoHang()
     {
-        // Engine disabled and carve-out off (default) — fully dormant.
+        // Master switch off and carve-out off (default) — fully dormant.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         // h.General left at default (AllowHangupInAllOffMode = false)
         h.State.MaxHp = 200;
         h.State.HasPromptData = true;
         h.State.Hp = 5;
 
         Assert.DoesNotContain("=x", h.SentLines);
+        Assert.NotEmpty(h.HeldByMasterSwitch);
+    }
+
+    // The hang-up matrix (user, 2026-10-09). Master switch off: every automatic
+    // hang-up fires only with Allow hangup in all-off mode. Master switch on: the
+    // low-HP hang-up sits behind Auto-Rest (Auto-Heal alone no longer carries it)
+    // and the others need no toggle. Disable Hangups stops them all.
+    public static IEnumerable<object[]> HangupMatrix()
+    {
+        foreach (bool masterOff in new[] { false, true })
+        foreach (bool allow in new[] { false, true })
+        foreach (bool disabled in new[] { false, true })
+        foreach (bool rest in new[] { false, true })
+            yield return new object[] { masterOff, allow, disabled, rest };
+    }
+
+    private static Harness MatrixHarness(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        Harness h = new() { MasterSwitchOff = masterOff, RestEnabled = rest };
+        h.General = new Models.Profile.GeneralSettings
+        {
+            AllowHangupInAllOffMode = allow,
+            DisableHangups = disabled,
+        };
+        return h;
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_LowHp(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 5, maxHp: 200);
+
+        bool expected = !disabled && (masterOff ? allow : rest);
+        Assert.Equal(expected, h.SentLines.Contains("=x"));
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_ReceivedPanic(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.RespondToReceivedPanic("Tank");
+
+        bool expected = !disabled && (!masterOff || allow);
+        Assert.Equal(expected, acted);
+        Assert.Equal(expected, h.SentLines.Contains("=x"));
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_Pvp(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        bool acted = h.Health.HangUpForPvp("Raider is here");
+
+        bool expected = !disabled && (!masterOff || allow);
+        Assert.Equal(expected, acted);
+        Assert.Equal(expected, h.SentLines.Contains("=x"));
+    }
+
+    [Theory]
+    [MemberData(nameof(HangupMatrix))]
+    public void HangupMatrix_HangupMonster(bool masterOff, bool allow, bool disabled, bool rest)
+    {
+        using Harness h = MatrixHarness(masterOff, allow, disabled, rest);
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        EscapeOutcome outcome = h.Health.HangUpForMonster("ogre (#7) is here, relationship Hangup");
+
+        EscapeOutcome expected = disabled ? EscapeOutcome.HangupsDisabled
+            : masterOff && !allow ? EscapeOutcome.AllOff
+            : EscapeOutcome.HungUp;
+        Assert.Equal(expected, outcome);
+        Assert.Equal(expected == EscapeOutcome.HungUp, h.SentLines.Contains("=x"));
+    }
+
+    // With the master switch off and no opt-in, a received @panic or a PvP
+    // hang-up takes no wimpy jump either: nothing of ours responds.
+    [Fact]
+    public void MasterSwitchOff_NoOptIn_NoWimpyJumpForPanicOrPvp()
+    {
+        HealthSettings s = new()
+        {
+            SysGotoWimpyInsteadOfHanging = true,
+            SysGotoWimpyLocation = "wimpy-room",
+        };
+        using Harness h = new(s) { WimpyFireResult = true, MasterSwitchOff = true };
+        h.SetPrompt(hp: 200, maxHp: 200);
+
+        Assert.False(h.Health.RespondToReceivedPanic("Tank"));
+        Assert.False(h.Health.HangUpForPvp("Raider is here"));
+
+        Assert.Null(h.WimpyFiredWith);
+        Assert.Equal(2, h.HeldByMasterSwitch.Count);
+    }
+
+    // A held low-HP hang-up is not latched: it goes out as soon as the switch
+    // that held it allows.
+    [Fact]
+    public void LowHpHangup_HeldByMasterSwitch_FiresWhenSwitchedBackOn()
+    {
+        using Harness h = new() { MasterSwitchOff = true };
+        h.SetPrompt(hp: 5, maxHp: 200);
+        Assert.DoesNotContain("=x", h.SentLines);
+
+        h.MasterSwitchOff = false;
+        h.Health.Evaluate();
+
+        Assert.Contains("=x", h.SentLines);
     }
 
     [Fact]
@@ -4947,7 +5072,7 @@ public sealed class HealthManagerTests
     {
         // Carve-out on but HP healthy — no spurious hangup.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings { AllowHangupInAllOffMode = true };
         h.SetPrompt(hp: 50, maxHp: 200);   // 25% — above 5% hang threshold
 
@@ -4974,10 +5099,10 @@ public sealed class HealthManagerTests
     public void DisableHangups_OverridesAllowHangupInAllOffMode()
     {
         // Both the all-off carve-out AND the master kill-switch are set —
-        // DisableHangups wins, so an all-engines-off character at lethal
-        // HP still won't auto-disconnect.
+        // DisableHangups wins, so a character with the master switch off at
+        // lethal HP still won't auto-disconnect.
         using Harness h = new();
-        h.AutoHealRestEnabled = false;
+        h.MasterSwitchOff = true;
         h.General = new Models.Profile.GeneralSettings
         {
             AllowHangupInAllOffMode = true,

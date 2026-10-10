@@ -35,6 +35,7 @@ public sealed class PartyRestSync : IDisposable
         ArgumentNullException.ThrowIfNull(party);
         _party  = party;
         _log    = log;
+        _party.PropertyChanged += OnPartyChanged;
     }
 
     // The reasons holding the wait. An @ok goes out only when this empties, so one
@@ -101,12 +102,71 @@ public sealed class PartyRestSync : IDisposable
     {
         bool wasEmpty = _waitReasons.Count == 0;
         bool added = _waitReasons.Add(reason);
+        string? why = note ?? DefaultNote(reason);
+        _notes[reason] = why;
         if (!resend && (!added || !wasEmpty)) return;
         if (!CanSignal()) return;
-        string? why = note ?? DefaultNote(reason);
         Telepath(_party.LeaderName!, why is null ? "@wait" : $"@wait {why}");
+        _leaderHolds = true;
         _log?.Info(LogCategory, $"sent @wait for {reason}" + (why is null ? "" : $" {why}"));
     }
+
+    // The master switch (true = off). Off, no hold is telepathed: no @wait and no
+    // @heal (user, 2026-10-09: "no holds should be sent"). The reasons are still
+    // tracked, so ResyncAfterMasterSwitch can ask again afterwards.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
+    // The leader was last told @wait and has not been told @ok since. Forgotten
+    // with the party or its leader: an @ok owed to one leader is not owed to the
+    // next.
+    private bool _leaderHolds;
+
+    // The note each held reason was asked with, so a wait asked again later still
+    // names its reason.
+    private readonly Dictionary<WaitReason, string?> _notes = new();
+
+    // The master switch is going off. A wait this client asked for is released
+    // first: a release is not a hold, and a leader left waiting on a client that
+    // has gone quiet would stand there for good when its own wait limit is 0. The
+    // reasons stay tracked. After this nothing more is sent until the switch is
+    // back on.
+    public void ReleaseForMasterSwitch()
+    {
+        if (!_leaderHolds) return;
+        _leaderHolds = false;
+        if (!InPartyBehindALeader()) return;
+        Telepath(_party.LeaderName!, "@ok");
+        _log?.Info(LogCategory,
+            $"master switch off — sent @ok to release our wait ({string.Join(", ", _waitReasons)}); nothing more is sent while it is off");
+    }
+
+    // The master switch came back on. A reason still held was either released as
+    // the switch went off or arose while it was off and was never sent: ask once,
+    // with that reason's own note. Nothing is sent when the leader has already
+    // been asked since (the health engine re-asks for itself, with the pool's
+    // note, as it is re-run), or when the only reason held has no note to give.
+    public void ResyncAfterMasterSwitch()
+    {
+        if (_leaderHolds || _waitReasons.Count == 0 || !CanSignal()) return;
+        foreach (WaitReason reason in _waitReasons)
+        {
+            if (!_notes.TryGetValue(reason, out string? why) || why is null) continue;
+            Telepath(_party.LeaderName!, $"@wait {why}");
+            _leaderHolds = true;
+            _log?.Info(LogCategory, $"master switch back on — sent @wait {why}, still held by {string.Join(", ", _waitReasons)}");
+            return;
+        }
+    }
+
+    private void OnPartyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PartyState.IsInParty) or nameof(PartyState.LeaderName)
+            or nameof(PartyState.SelfIsLeader))
+            _leaderHolds = false;
+    }
+
+    // A new character: nothing of the last one's is owed to anyone.
+    public void ForgetLeaderHold() => _leaderHolds = false;
 
     // Engine-callable entry point — clear a wait reason and telepath @ok to the
     // party leader only on the non-empty→0 transition (the LAST reason
@@ -122,6 +182,7 @@ public sealed class PartyRestSync : IDisposable
     public void RequestOk(WaitReason reason)
     {
         if (!_waitReasons.Remove(reason)) return;
+        _notes.Remove(reason);
         if (_waitReasons.Count > 0)
         {
             _log?.Info(LogCategory,
@@ -130,6 +191,7 @@ public sealed class PartyRestSync : IDisposable
         }
         if (!CanSignal()) return;
         Telepath(_party.LeaderName!, "@ok");
+        _leaderHolds = false;
         _log?.Info(LogCategory, $"last wait reason ({reason}) cleared — sent @ok");
     }
 
@@ -148,6 +210,7 @@ public sealed class PartyRestSync : IDisposable
         if (!_party.IsInParty) return;
         if (_party.SelfIsLeader) return;
         if (_wireSender is null) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
         _wireSender(Encoding.Latin1.GetBytes("bg @heal\r"));   // gang speak verb is `bg`
     }
 
@@ -155,15 +218,13 @@ public sealed class PartyRestSync : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _party.PropertyChanged -= OnPartyChanged;
     }
 
-    private bool CanSignal()
-    {
-        if (!_party.IsInParty) return false;
-        if (_party.SelfIsLeader) return false;
-        if (string.IsNullOrEmpty(_party.LeaderName)) return false;
-        return true;
-    }
+    private bool CanSignal() => MasterSwitchOff?.Invoke() != true && InPartyBehindALeader();
+
+    private bool InPartyBehindALeader() =>
+        _party.IsInParty && !_party.SelfIsLeader && !string.IsNullOrEmpty(_party.LeaderName);
 
     private void Telepath(string recipient, string body)
     {

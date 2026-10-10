@@ -229,11 +229,17 @@ public sealed class PartyTrainCoordinator : IDisposable
 
     // ----- periodic tick ----------------------------------------------------
 
+    // The master switch (true = off): off, the periodic asks, status lines and
+    // trip starts wait. The timer keeps re-arming, so they pick up when it is
+    // back on. A trip already under way is not cut short here.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void Tick()
     {
         if (_disposed) return;
         try
         {
+            if (MasterSwitchOff?.Invoke() == true) return;
             MemberTick();
             LeaderTick();
         }

@@ -1093,6 +1093,85 @@ public sealed class LoopRunnerTests : IDisposable
         Assert.Equal("n\r", Encoding.Latin1.GetString(h.Sent[1]));
     }
 
+    // With the master switch off the restart is an engine starting by itself.
+    // Restarted under the switch it raised its start events (the session reset
+    // and the party's @reset, the base-modes settle that ticked the user's
+    // toggles back on) though it could not move. It waits for the switch.
+    [Fact]
+    public void FirstPromptAfterDisconnect_MasterSwitchOff_LoopWaitsForTheSwitch()
+    {
+        Harness h = NewHarness();
+        bool off = true;
+        h.Runner.MasterSwitchOff = () => off;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+        h.Events.Clear();
+        int sent = h.Sent.Count;
+
+        h.Runner.FirePromptObservedForTests();
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Empty(h.Events);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+        Assert.Equal(sent, h.Sent.Count);
+        Assert.True(h.Runner.ReconnectResumeHeldForMasterSwitch);
+        Assert.Equal("ab", h.Runner.PendingReconnectResumeForTests!.Name);
+
+        off = false;
+        h.Runner.ResumeAfterMasterSwitch();
+
+        Assert.Null(h.Runner.PendingReconnectResumeForTests);
+        Assert.Contains(h.Events, e => e.Kind == LoopEventKind.Started);
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
+    // The user's Stop, or another character loaded, calls the held restart off.
+    [Fact]
+    public void RestartHeldForTheMasterSwitch_IsDroppedWhenCalledOff()
+    {
+        Harness h = NewHarness();
+        bool off = true;
+        h.Runner.MasterSwitchOff = () => off;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+        h.Runner.FirePromptObservedForTests();
+        h.Events.Clear();
+
+        h.Runner.DropResumeHeldForMasterSwitch("user stop from toolbar");
+        off = false;
+        h.Runner.ResumeAfterMasterSwitch();
+        h.Runner.FirePromptObservedForTests();
+
+        Assert.Empty(h.Events);
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+    }
+
+    // Switched back on while still offline: nothing starts then (there is no
+    // prompt to start it on), and the next stay's first prompt restarts the loop
+    // as any reconnect does.
+    [Fact]
+    public void RestartHeldForTheMasterSwitch_AnotherDropThenSwitchOn_RestartsOnTheNextFirstPrompt()
+    {
+        Harness h = NewHarness();
+        bool off = true;
+        h.Runner.MasterSwitchOff = () => off;
+        h.Tracker.SetLocated(new RoomKey(1, 1));
+        h.Runner.Start(AbCycle());
+        h.Runner.NotifyDisconnected();
+        h.Runner.FirePromptObservedForTests();
+        h.Runner.NotifyDisconnected();
+        h.Events.Clear();
+
+        off = false;
+        h.Runner.ResumeAfterMasterSwitch();
+        Assert.Equal(LoopState.Idle, h.Runner.State);
+
+        h.Runner.FirePromptObservedForTests();
+        Assert.Equal(LoopState.Running, h.Runner.State);
+    }
+
     // The link dropped mid-loop and the hang-up penalty killed the character
     // after it. The death is worked out at the login, which can be before the
     // first prompt this runner counts: the loop set aside at the drop is not

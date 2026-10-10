@@ -117,6 +117,9 @@ public sealed class LevelUpAnnouncer : IDisposable
         _haveBaseline = true;
     }
 
+    // The master switch (true = off): off, nothing is announced.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnExperienceGained(long newTotal)
     {
         int highest = HighestTrainable(_stats.Level, _stats.Exp, _stats.Class, _stats.Race);
@@ -132,6 +135,9 @@ public sealed class LevelUpAnnouncer : IDisposable
         }
 
         if (highest <= _announcedThrough) return;
+        // Before the high-water mark moves, so a level reached with the master
+        // switch off is announced at the first gain after it is back on.
+        if (MasterSwitchOff?.Invoke() == true) return;
 
         AutoTrainerSettings s = ReadSettings();
         if (s.AnnounceLevelUps && _wire.IsBound)

@@ -1226,6 +1226,27 @@ public sealed class AutoDiscardManagerTests
         Assert.Equal(new[] { "hide moonstone" }, h.SentText);
     }
 
+    // A held hide's retry answers to neither the engine's switch nor the item's
+    // flag, since a by-hand hide never did. It is still the client's own doing,
+    // so the master switch stops it, and it goes out once the switch is back on.
+    [Fact]
+    public void HeldHide_WaitsOutTheMasterSwitch()
+    {
+        using Harness h = HidingMoonstones(1);
+        h.Discard.EmitDiscard(_ => { }, "moonstone", 1);
+        h.Feed("There is no room to hide moonstone here.");
+
+        bool off = true;
+        h.Discard.MasterSwitchOff = () => off;
+        h.Discard.OnRoomEntered(RoomB);
+        Assert.Empty(h.Sent);
+        Assert.Equal(1, h.Discard.HeldFor("moonstone"));
+
+        off = false;
+        h.Discard.RecheckHeldHides();
+        Assert.Equal(new[] { "hide moonstone" }, h.SentText);
+    }
+
     [Fact]
     public void HeldHides_GoOutThroughThePacer_WhenOneIsBound()
     {

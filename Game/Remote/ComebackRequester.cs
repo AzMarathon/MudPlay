@@ -78,7 +78,6 @@ public sealed partial class ComebackRequester : IDisposable
     private readonly PartyState? _party;
     private readonly LogService? _log;
     private readonly Func<bool>? _isMovementPrevented;
-    private readonly Func<bool> _isAutoEnabled;
     private readonly Func<bool>? _isSelfDown;
     private readonly Func<string?>? _sendBlocked;
     private readonly Func<string, bool>? _inTrainTrip;
@@ -138,6 +137,10 @@ public sealed partial class ComebackRequester : IDisposable
     // left-behind is still detected and logged, but no @comeback is sent.
     public bool Enabled { get; set; } = true;
 
+    // The master switch (true = off). Off, no @comeback is sent; one that was due
+    // is held back and goes out when the switch is back on, while still fresh.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // How long a request that couldn't be sent stays worth sending: the Party
     // tab's "If leading, accept @comeback for", past which a leader has moved on.
     public TimeSpan RetryWindow { get; set; } = TimeSpan.FromMinutes(2);
@@ -186,14 +189,13 @@ public sealed partial class ComebackRequester : IDisposable
 
     // isMovementPrevented: a movement-blocking affliction (knockdown / held / stun)
     // is active right now. party: read only, to know whom we believe we follow.
-    // isAutoEnabled: false while the master switch is off, when nothing automatic
-    // is sent. isSelfDown: we are at 0 HP or below. sendBlocked: why an engine send
+    // isSelfDown: we are at 0 HP or below. sendBlocked: why an engine send
     // would be dropped right now (a held send gate, the board menu), or null.
     // inTrainTrip: that leader has a party train trip under way that we set out on.
     public ComebackRequester(MessageRouter router, RoomTracker tracker, LogService? log = null,
         Func<bool>? isMovementPrevented = null, PartyState? party = null,
-        Func<bool>? isAutoEnabled = null, Func<bool>? isSelfDown = null,
-        Func<string?>? sendBlocked = null, Func<string, bool>? inTrainTrip = null)
+        Func<bool>? isSelfDown = null, Func<string?>? sendBlocked = null,
+        Func<string, bool>? inTrainTrip = null)
     {
         ArgumentNullException.ThrowIfNull(router);
         ArgumentNullException.ThrowIfNull(tracker);
@@ -201,7 +203,6 @@ public sealed partial class ComebackRequester : IDisposable
         _party = party;
         _log = log;
         _isMovementPrevented = isMovementPrevented;
-        _isAutoEnabled = isAutoEnabled ?? (static () => true);
         _isSelfDown = isSelfDown;
         _sendBlocked = sendBlocked;
         _inTrainTrip = inTrainTrip;
@@ -655,7 +656,7 @@ public sealed partial class ComebackRequester : IDisposable
     // 2026-10-10).
     private string? CannotSendNow(string leader)
     {
-        if (!_isAutoEnabled()) return "the master switch is off";
+        if (MasterSwitchOff?.Invoke() == true) return "the master switch is off";
         if (_sendBlocked?.Invoke() is { Length: > 0 } blocked) return blocked;
         return _inTrainTrip?.Invoke(leader) == true
             ? $"{leader}'s party train trip is under way, and they are asked when the training is done"

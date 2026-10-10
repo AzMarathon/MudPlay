@@ -225,6 +225,14 @@ public sealed class TriggerEngine
         }
     }
 
+    // The master switch: true means it is off and a matched trigger must not
+    // fire (AutoModeController.Blocks counts it). Triggers are the user's own
+    // automation, so with the switch off their activation is skipped whole: no
+    // capture, no response, no sound (user, 2026-10-09). The skip is logged here,
+    // under this engine's own source, because a line logged by anyone else is fed
+    // back in to the System-log triggers and one matching it would loop.
+    public Func<bool>? BlockedByMasterSwitch { get; set; }
+
     private void TryFire(Trigger t, string text)
     {
         Regex? regex = GetOrCompile(t);
@@ -232,6 +240,12 @@ public sealed class TriggerEngine
 
         Match m = regex.Match(text);
         if (!m.Success) return;
+
+        if (BlockedByMasterSwitch?.Invoke() == true)
+        {
+            _log?.Log(LogSeverity.Debug, LogSource, $"'{t.Name}' matched but not fired — master switch off");
+            return;
+        }
 
         // Push captures into the trigger-wildcard store. A Literal pattern emits
         // only the whole-match group plus named captures (no unnamed groups), so

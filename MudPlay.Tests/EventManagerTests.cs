@@ -204,6 +204,28 @@ public sealed class EventManagerTests
         Assert.Equal("abil 145\r", Encoding.Latin1.GetString(sent[2]));
     }
 
+    // Events are the user's own automation: with the master switch off a firing
+    // is skipped (user, 2026-10-09); on, it runs as before.
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(false, 1)]
+    public void Fire_FollowsTheMasterSwitch(bool switchOff, int expectedSends)
+    {
+        EventManager mgr = new();
+        List<byte[]> sent = new();
+        mgr.SetWireSender(sent.Add);
+        List<string> skipped = new();
+        mgr.BlockedByMasterSwitch = what => { if (switchOff) skipped.Add(what); return switchOff; };
+        int fired = 0;
+        mgr.Fired += _ => fired++;
+
+        mgr.Fire(new ScheduledEvent { Name = "stat", ActionType = EventActionType.Command, CommandText = "stat" });
+
+        Assert.Equal(expectedSends, sent.Count);
+        Assert.Equal(expectedSends, fired);
+        Assert.Equal(switchOff ? 1 : 0, skipped.Count);
+    }
+
     [Fact]
     public void Fire_DisabledEvent_DoesNothing()
     {

@@ -88,6 +88,34 @@ public sealed class RemoteCommandLocalInvokeTests
         Assert.False(ran);
     }
 
+    // "no remote command except @auto-all on or off should work, if the master
+    // switch is off": the rule is about the command, so the local route follows it.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void MasterSwitch_IsHonoured_AndAutoAllStillRuns(bool switchOff)
+    {
+        RemoteCommandManager engine = Setup();
+        List<string> ran = [];
+        engine.RegisterHandler("@ping", PlayerRemoteControls.QueryVersion, _ => ran.Add("@ping"));
+        engine.RegisterHandler(RemoteCommandManager.MasterSwitchCommand, PlayerRemoteControls.AlterSettings,
+            _ => ran.Add(RemoteCommandManager.MasterSwitchCommand));
+        List<string> skipped = [];
+        engine.BlockedByMasterSwitch = what => { if (switchOff) skipped.Add(what); return switchOff; };
+
+        var ping = engine.TryInvokeLocal("@ping", null, _ => { });
+        var autoAll = engine.TryInvokeLocal("@auto-all", new[] { "on" }, _ => { });
+
+        Assert.Equal(switchOff
+            ? RemoteCommandManager.LocalInvokeResult.MasterSwitchOff
+            : RemoteCommandManager.LocalInvokeResult.Ok, ping);
+        Assert.Equal(RemoteCommandManager.LocalInvokeResult.Ok, autoAll);
+        Assert.Equal(switchOff
+            ? new[] { RemoteCommandManager.MasterSwitchCommand }
+            : new[] { "@ping", RemoteCommandManager.MasterSwitchCommand }, ran);
+        Assert.Equal(switchOff ? 1 : 0, skipped.Count);
+    }
+
     [Fact]
     public void HardBlock_AppliesLocallyToo()
     {

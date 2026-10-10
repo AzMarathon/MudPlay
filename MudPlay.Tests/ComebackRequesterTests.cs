@@ -112,7 +112,6 @@ public sealed class ComebackRequesterTests : IDisposable
         ComebackRequester requester = new(router, tracker,
             isMovementPrevented: isMovementPrevented,
             party: party,
-            isAutoEnabled: () => h!.MasterSwitchOn,
             isSelfDown: () => h!.SelfDown,
             sendBlocked: () => h!.SendBlocked,
             inTrainTrip: _ => h!.InTrainTrip);
@@ -124,6 +123,7 @@ public sealed class ComebackRequesterTests : IDisposable
             Requester = requester,
         };
         requester.NowProvider = () => h.Now;
+        requester.MasterSwitchOff = () => !h.MasterSwitchOn;
         requester.SetWireSender(b => h.Wire.Add(Encoding.Latin1.GetString(b).TrimEnd('\r')));
         return h;
     }

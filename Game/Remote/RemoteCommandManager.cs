@@ -94,6 +94,21 @@ public sealed class RemoteCommandManager : IDisposable
     // sneak"), so it goes back by telepath instead (user, 2026-09-28).
     public Func<bool>? StealthedProvider { get; set; }
 
+    // The master switch. Asked with a description of the command; true means the
+    // switch is off and the command must not be obeyed (AutoModeController.Blocks
+    // counts and logs the skip). With it off no remote command is followed except
+    // MasterSwitchCommand, which is how a party member switches it back on (user,
+    // 2026-10-09). A skipped command gets no reply at all, WarnOnDenial or not:
+    // like a hard-block, an answer would let any caller probe whether we are
+    // unattended.
+    public Func<string, bool>? BlockedByMasterSwitch { get; set; }
+
+    public const string MasterSwitchCommand = "@auto-all";
+
+    // Senders already told about (in the log) since the switch went off, so the
+    // Info line is written once each and a chatty party can't flood it.
+    private readonly HashSet<string> _masterOffNoticed = new(StringComparer.OrdinalIgnoreCase);
+
     // ----- Settings.Talk-driven knobs --------------------------------------
     // Pushed by TalkSectionViewModel.ApplyToServices on Apply / on profile
     // load. Defaults match the TalkSettings DTO defaults — anything not yet
@@ -173,6 +188,7 @@ public sealed class RemoteCommandManager : IDisposable
         _players = players;
         _log = log;
         _chat.EntryClassified += OnChatEntry;
+        _party.Members.CollectionChanged += OnPartyMembersChanged;
     }
 
     // Bind a callback that sends raw bytes to the wire. Same shape as
@@ -270,6 +286,9 @@ public sealed class RemoteCommandManager : IDisposable
         // A command that only means something coming from another player over
         // telepath / gangpath (@dupe), so it can't be driven locally.
         PathChannelOnly,
+        // The master switch is off: no remote command but MasterSwitchCommand is
+        // followed, by this route as by chat.
+        MasterSwitchOff,
     }
 
     // Run a registered @-command from the LOCAL machine rather than from a chat
@@ -316,6 +335,14 @@ public sealed class RemoteCommandManager : IDisposable
                 return LocalInvokeResult.UnknownCommand;
             argv = Prepend(suffix, argv);
         }
+
+        // The rule is about remote commands, not about who sends them ("no remote
+        // command except @auto-all on or off should work"; user, 2026-10-09), so
+        // it holds here too. Unlike chat, the caller is told why: it already has
+        // the machine, so there is nothing to keep from it.
+        if (!normalised.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
+            && SkippedForMasterSwitch(LocalSenderName, normalised))
+            return LocalInvokeResult.MasterSwitchOff;
 
         // Sender is a literal rather than a player name: handlers use it for reply
         // addressing and logging, and naming the origin keeps a locally-driven
@@ -375,6 +402,7 @@ public sealed class RemoteCommandManager : IDisposable
         if (_disposed) return;
         _disposed = true;
         _chat.EntryClassified -= OnChatEntry;
+        _party.Members.CollectionChanged -= OnPartyMembersChanged;
     }
 
     // ----- Engine pipeline ------------------------------------------------
@@ -433,6 +461,28 @@ public sealed class RemoteCommandManager : IDisposable
         // their owning subsystem — swallow silently so they never reach the
         // unknown-command denial path and bounce a reply at the sender.
         if (_ignored.Contains(command)) return;
+
+        // Ahead of every block and denial below, so nothing here answers while
+        // the switch is off. Only a command this client knows: ordinary chat that
+        // starts with '@' is not a command we declined.
+        bool known = _handlers.ContainsKey(command) || TryMatchPrefixHandler(command, out _, out _);
+        if (known
+            && !command.Equals(MasterSwitchCommand, StringComparison.OrdinalIgnoreCase)
+            && !IsRecordedWhileMasterSwitchOff(command)
+            && SkippedForMasterSwitch(entry.Speaker, command))
+        {
+            // A stranded member asks once. Keep the latest ask from each, so it
+            // can be answered when the switch is back on (ReplayHeldComebacks).
+            // Only from a sender we would go back for now: an ask kept from
+            // anyone else would be answered with a denial when the switch came
+            // on, the reply the off state exists not to give.
+            if (command.Equals("@comeback", StringComparison.OrdinalIgnoreCase)
+                && _handlers.TryGetValue(command, out Registration comeback)
+                && IsAuthorised(entry.Speaker, comeback.RequiredCategory, command))
+                _heldComebacks[entry.Speaker] =
+                    new HeldComeback(entry.Speaker, entry, Now(), IsActivePartyMember(entry.Speaker));
+            return;
+        }
 
         // @help is a pure query — describing a command isn't executing it — so it's
         // exempt from the suicide / reroll content guards below, which scan the args
@@ -521,6 +571,11 @@ public sealed class RemoteCommandManager : IDisposable
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
                 $"Denied {command} from {entry.Speaker} (lacks {registration.RequiredCategory}).");
+            // Only the commands let through with the master switch off reach here
+            // then, and they must not be the ones that answer a stranger: no
+            // denial either.
+            if (BlockedByMasterSwitch?.Invoke($"{command} from {entry.Speaker} (not granted)") == true)
+                return;
             SendDenialReply(channel.Value, entry.Speaker);
             return;
         }
@@ -572,6 +627,9 @@ public sealed class RemoteCommandManager : IDisposable
                 $"Ignoring relay-back of unknown command {command} from {sender} (no reply).");
             return;
         }
+        // A relay-back makes us send, so it is a remote command like any other:
+        // `&@auto-all` included, which asks us to switch the SENDER, not ourselves.
+        if (SkippedForMasterSwitch(sender, "&" + command)) return;
         if (!IsAuthorised(sender, RelayBackCategory, RelayBackPrefix))
         {
             _log?.Log(LogSeverity.Debug, "RemoteCmd",
@@ -583,6 +641,105 @@ public sealed class RemoteCommandManager : IDisposable
         _log?.Log(LogSeverity.Info, "RemoteCmd",
             $"Relaying {payload} back to {sender} on {channel} (&@ request).");
         SendLine(channel, sender, payload);
+    }
+
+    // A `@comeback` dropped for the master switch. FromMember: the sender was in
+    // the party when they asked (not a member who had already dropped out of it).
+    private readonly record struct HeldComeback(string Sender, ChatLogEntry Entry, DateTimeOffset At, bool FromMember);
+
+    // The latest one from each sender.
+    private readonly Dictionary<string, HeldComeback> _heldComebacks = new(StringComparer.OrdinalIgnoreCase);
+
+    // "If leading, accept @comeback for" (Settings → Party): an ask kept longer
+    // than this is about a place the party has long left.
+    public TimeSpan ComebackWindow { get; set; } = TimeSpan.FromMinutes(2);
+
+    // Clock seam for tests.
+    public Func<DateTimeOffset> Now { get; set; } = () => DateTimeOffset.UtcNow;
+
+    // For the bug report: whose ask is kept.
+    public IReadOnlyCollection<string> HeldComebackSenders => _heldComebacks.Keys.ToList();
+
+    // The asks kept for the master switch belong to the stay, the character and
+    // the party they were made in: a profile load or a dropped connection ends
+    // all three.
+    public void DropHeldComebacks(string why)
+    {
+        if (_heldComebacks.Count == 0) return;
+        _log?.Log(LogSeverity.Info, "RemoteCmd",
+            $"Dropping the @comeback kept from {string.Join(", ", _heldComebacks.Keys)} for the master switch — {why}.");
+        _heldComebacks.Clear();
+    }
+
+    // A member who asked and has since left the party is not gone back for.
+    private void OnPartyMembersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (_heldComebacks.Count == 0) return;
+        foreach (string speaker in _heldComebacks.Keys.ToList())
+        {
+            if (!_heldComebacks[speaker].FromMember || IsActivePartyMember(speaker)) continue;
+            _heldComebacks.Remove(speaker);
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Dropping the @comeback kept from {speaker} for the master switch — they left the party.");
+        }
+    }
+
+    // The master switch is back on: a member who asked to be come back for while
+    // it was off is still where they were left, and asks only once. Their ask is
+    // put through now, if it is still fresh and still from someone we would go
+    // back for; one that is not is dropped without a reply.
+    public void ReplayHeldComebacks()
+    {
+        if (_heldComebacks.Count == 0) return;
+        List<HeldComeback> held = _heldComebacks.Values.ToList();
+        _heldComebacks.Clear();
+        _handlers.TryGetValue("@comeback", out Registration comeback);
+        foreach ((string sender, ChatLogEntry entry, DateTimeOffset at, _) in held)
+        {
+            TimeSpan age = Now() - at;
+            if (age > ComebackWindow)
+            {
+                _log?.Log(LogSeverity.Info, "RemoteCmd",
+                    $"Master switch back on — the {entry.Message} from {sender} is {age.TotalMinutes:0.#} min old, past the {ComebackWindow.TotalMinutes:0} min @comeback window: dropped, no reply.");
+                continue;
+            }
+            if (!IsAuthorised(sender, comeback.RequiredCategory, "@comeback"))
+            {
+                _log?.Log(LogSeverity.Info, "RemoteCmd",
+                    $"Master switch back on — {sender} is no longer one we go back for: their {entry.Message} is dropped, no reply.");
+                continue;
+            }
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Master switch back on — answering the {entry.Message} {sender} sent while it was off.");
+            OnChatEntry(entry);
+        }
+    }
+
+    // `@wait` and `@ok` are not followed with the master switch off, but what a
+    // follower last said is still taken down: their handlers only update who is
+    // waiting, answer nothing, and the hold that set would raise is parked. If
+    // they were dropped, a leader switching back on would walk off from a
+    // follower who had asked to wait, or stand out the whole wait limit for one
+    // who had since said `@ok`.
+    private static bool IsRecordedWhileMasterSwitchOff(string command) =>
+        command.Equals("@wait", StringComparison.OrdinalIgnoreCase)
+        || command.Equals("@ok", StringComparison.OrdinalIgnoreCase);
+
+    // True when the master switch is off and this command is therefore dropped,
+    // silently. The first one from each sender is logged at Info; the rest only
+    // at Debug, by the switch itself.
+    private bool SkippedForMasterSwitch(string sender, string command)
+    {
+        if (BlockedByMasterSwitch is not { } blocked) return false;
+        if (!blocked($"{command} from {sender}"))
+        {
+            _masterOffNoticed.Clear();
+            return false;
+        }
+        if (_masterOffNoticed.Add(sender))
+            _log?.Log(LogSeverity.Info, "RemoteCmd",
+                $"Ignoring {command} from {sender}: the master switch is off, so no remote command is followed except {MasterSwitchCommand} (no reply sent; further commands from {sender} are logged at Debug).");
+        return true;
     }
 
     // The relay-back marker and the grant it needs (see HandleRelayBack).

@@ -151,8 +151,13 @@ public sealed class TrapDelegationManager : System.IDisposable
 
     // ----- Race capture on join -------------------------------------------
 
+    // The master switch (true = off): off, a joining member is not looked at for
+    // its race. Delegation itself is asked for only by a walk, which is frozen.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     private void OnMemberJoined(string name)
     {
+        if (MasterSwitchOff?.Invoke() == true) return;
         // Class already settles capability → no race probe needed (race: null
         // scopes the shared check to the class gate alone).
         PartyMember? m = _party.State.Members

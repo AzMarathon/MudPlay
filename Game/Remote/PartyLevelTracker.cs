@@ -101,6 +101,9 @@ public sealed class PartyLevelTracker
         return PartyLevelBounds.Compute(_selfLevel(), estimates);
     }
 
+    // The master switch (true = off): off, no @level round-trip is started.
+    public Func<bool>? MasterSwitchOff { get; set; }
+
     // Route-scoped freshness poll: fire an @level round when a member we'd gate
     // on is unknown (no exact level yet) or their exact reading isn't from the
     // current local day. Called at walk-start via MovementFilter.WarmForRoute —
@@ -111,6 +114,7 @@ public sealed class PartyLevelTracker
     public void WarmStaleLevels()
     {
         if (!_party.IsInParty || !_party.SelfIsLeader) return;
+        if (MasterSwitchOff?.Invoke() == true) return;
 
         DateTime now = _clock();
         if (now - _lastStaleProbeAt < WarmDebounce) return;
