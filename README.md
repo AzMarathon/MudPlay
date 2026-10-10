@@ -1,16 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.167.15**
-> - A new attack's `*Combat Off*` is no longer read as a kill (an attack sent at the survivor of a room spell)
-> - The survivor stays the target, the room isn't taken for cleared and the loop doesn't walk on
-> - A buff cast right after that attack is followed by the attack again at once
-> - A typed `break` just after a kill isn't counted as another
-> - No lair-timer kill, kill count or kill sound for a kill that didn't happen
-> - A room read again after a room spell's kills is never emptied by them
-> - A room spell's kills count one each as they happen (session kills, lair timer, drop re-look, summon re-scan)
-> - A command's `*Combat Off*` is recognised with a prompt or other lines between it and the echo
-> - Program log notes a `*Combat Off*` that answers a command
+> **Version 3.167.17**
+> - An item whose use, eat or drink casts a spell ends the sneak; the next move re-sneaks
+> - Sneak-ending commands and a sent direction drop a hide too
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->

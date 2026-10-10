@@ -456,7 +456,9 @@ public sealed class AutoLightProvisioner
     }
 
     // SneakGuard.Holds — `rem` and a cast end a sneak (GAME_MECHANICS "What ends a
-    // sneak"); `use` doesn't. Held light changes simply re-evaluate on the next room.
+    // sneak"). Lighting with `use` doesn't: it ends one only when the item casts a
+    // spell, and a light carries an illumination ability, not a spell, so `use
+    // <light>` is never held. Held light changes simply re-evaluate on the next room.
     private Func<bool>? _sneakKept;
 
     public void SetSneakKeptProbe(Func<bool> sneakKept) => _sneakKept = sneakKept;

@@ -208,4 +208,26 @@ public sealed class EngineSendGateTests
 
         Assert.Empty(wire);
     }
+
+    // The gate is the one place a client command is reported from: once after the
+    // send, and once more for a replay, which is the send that actually runs. While
+    // the raw sender has the bytes, SendingClientCommand tells it the line is the
+    // gate's to report.
+    [Fact]
+    public void ClientCommand_IsReportedOncePerSend_AndAgainForItsReplay()
+    {
+        EngineSendGate gate = new();
+        List<string> reported = new();
+        gate.SetSneakHooks(takeForLater: _ => false, sent: reported.Add);
+        List<bool> sendingAsClient = new();
+
+        gate.WrapEngineSender(_ => sendingAsClient.Add(gate.SendingClientCommand))(
+            System.Text.Encoding.Latin1.GetBytes("use waterskin\r"));
+        Assert.Equal(new[] { "use waterskin" }, reported);
+
+        gate.ReplayLastClientCommand();
+        Assert.Equal(new[] { "use waterskin", "use waterskin" }, reported);
+        Assert.Equal(new[] { true, true }, sendingAsClient);
+        Assert.False(gate.SendingClientCommand);
+    }
 }
