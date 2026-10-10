@@ -734,6 +734,11 @@ public sealed class LoopRunner : IRecoverableEngine
         _postToUi = postToUi ?? (a => Dispatcher.UIThread.Post(a));
 
         _tracker.StateChanged += OnTrackerStateChanged;
+        // A death found out at the login (the hang-up penalty killed the character
+        // after the link was gone) stops the engines, but the loop set aside when
+        // the link dropped is not running yet: the first prompt would start it and
+        // walk a stripped character out of the temple.
+        _tracker.PlayerDeathInferred += ClearPendingReconnectResume;
         _tracker.CastCrossingStarted += OnCastCrossingStarted;
         _coordinator.PauseStateChanged += OnPauseChanged;
         if (_promptScanner is not null)
@@ -2659,7 +2664,8 @@ public sealed class LoopRunner : IRecoverableEngine
     // genuine Start() call — see NotifyDisconnected's rationale.
     private Loop? _pendingReconnectResume;
 
-    // Reset States: don't restart the loop on the next prompt after a reconnect.
+    // Reset States, and a death found out at the login: don't restart the loop on
+    // the next prompt after a reconnect.
     public void ClearPendingReconnectResume() => _pendingReconnectResume = null;
 
     // Torn down by a connection drop (wired from MainWindowViewModel's

@@ -9372,9 +9372,61 @@ public sealed class AppServices
             // a held name of one item meet however the floor words it.
             itemKey: name => ItemNames.FindByName(name) is int number ? $"#{number}" : ItemNameStore.Normalize(name),
             post: run => Avalonia.Threading.Dispatcher.UIThread.Post(run),
-            log: Log);
+            log: Log,
+            // What tells a hang-up the penalty could have killed for from an ordinary
+            // reconnect, and a death from either. HP is the statline's; the maximum
+            // is a `stat` read's or the highest HP seen, and 0 until there is one (a
+            // character still dropped after a restart has shown none).
+            vitals: () => PlayerState.HasPromptData
+                ? (PlayerState.Hp, PlayerState.MaxHp > 0 ? PlayerState.MaxHp : null)
+                : null,
+            lives: () => PlayerStats.Lives > 0 ? PlayerStats.Lives : null,
+            // A player's attack counts for a while after it: the fight engine may
+            // not be fighting back (its response can be to do nothing, or to hang up).
+            pvpFight: () => PvpFight.IsActive
+                || PvpAttacks.Recent.Any(a => DateTimeOffset.Now - a.At < HangupPvpAttackWindow),
+            monsterFight: () => PlayerState.InCombat || CombatTracker.HasHostileMonster,
+            hpShareTop: (pvp, inFight) =>
+                Game.Health.HangupPenaltyNotice.HpShareTop(ResolveActiveRealm()?.Realm, pvp, inFight),
+            stockRealm: () => GameData.ActiveRealm == Game.RealmType.Stock,
+            recordDeath: RoomTracker.NoteUnwitnessedDeath,
+            staysOnDeath: EveryItemOfThisNameStaysOnDeath);
         Profile.ProfileSaving += HangupItems.StampForSave;
         Profile.ProfileLoaded += _ => HangupItems.OnProfileLoaded();
+        // The lives a `stat` on this connection gave: the count carried over a
+        // reconnect is the one from before the link dropped.
+        Stats.ScreenParsed += screen =>
+        {
+            // The name is on the same row of the screen as the lives.
+            if (Stats.LastCaptureReadLives) HangupItems.NoteLivesRead(screen.Lives, screen.Name);
+        };
+        // Stock's word, on the way in, that the last exit was a hang-up it didn't
+        // let go free. Without it a life lost isn't taken as lost to that hang-up.
+        Router.Subscribe(Services.Patterns.KnownPatterns.HangupLoginNotice, _ => HangupItems.NoteHangupLoginLine());
+        // Two things change the game's lives count with no screen telling the
+        // client: a life asked back after a death, and a level trained (which
+        // gives lives). The count the list carries must not be the stale one.
+        SysopGodLife.LifeRequested += () => HangupItems.NoteLivesChangedUnread("a life was asked back");
+        Router.Subscribe(Services.Patterns.KnownPatterns.TrainAttainLevel,
+            _ => HangupItems.NoteLivesChangedUnread("a level was trained"));
+        Router.Subscribe(Services.Patterns.KnownPatterns.TrainAttainNextLevel,
+            _ => HangupItems.NoteLivesChangedUnread("a level was trained"));
+        // A death the check works out after the fact (RoomTracker.NoteUnwitnessedDeath)
+        // reaches only the handlers that still make sense minutes later, in the room
+        // the character woke in: the engine stop (PlayerDeathMovementHalt), Death
+        // Recovery's grid, the default task (DefaultTaskRunner) and these two. The
+        // life is as spent as in a death that was seen, whenever it is found out;
+        // it is asked for under the master switch like everything else this check
+        // sends: a `stat` the user types can bring the verdict, and with the switch
+        // off nothing automatic goes out.
+        RoomTracker.UnwitnessedDeathRecorded += () =>
+        {
+            if (!AutoModeController.KillSwitchEngaged) SysopGodLife.OnDeath();
+        };
+        // The buff timers were only frozen when the link dropped. Cleared for a
+        // death found at the login only: one found later would wipe the timers of
+        // buffs cast since.
+        RoomTracker.PlayerDeathInferred += () => CastDirector.ClearSelfBuffTracking();
         // The event the other engines take a death of our own from (both wordings).
         RoomTracker.PlayerDeathObserved += HangupItems.OnPlayerDied;
         InGameCapture.InGameChanged += HangupItems.OnInGameChanged;
@@ -10276,6 +10328,11 @@ public sealed class AppServices
                 inCombat: PlayerState.InCombat) is { } line)
             Log.Info(Game.Health.HangupPenaltyNotice.LogCategory, line);
     }
+
+    // How long after a player's attack a dropped link still counts as a hang-up in
+    // a fight with a player, for the list HangupItemRecheck writes. A client-side
+    // window: what the board itself counts as PvP combat isn't known to it.
+    private static readonly TimeSpan HangupPvpAttackWindow = TimeSpan.FromSeconds(30);
 
     // Live read of Sprint Mode from the char-tier General section — the same
     // store the toolbar toggle writes. Wired into HealthManager's rest-skip

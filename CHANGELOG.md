@@ -1,6 +1,6 @@
 # Version history
 
-## 3.161.19
+## 3.162.3
 
 - Routes never enter Crystal Lake's teleport rooms, boat or not
 - No raft or skiff offered, fetched or bought for the lake
@@ -14,6 +14,15 @@
 - A loop waypoint in a teleport room is refused at start
 - A key-only route goes round the lake and asks for the key alone
 - bug reports addressed: paradigm-20261009-123349, paradigm-20261009-135049, paradigm-20261009-135314
+
+## 3.162.0
+
+- A death by the hang-up penalty (dropped or low on HP when the link went down) is recognised on re-entering the game and recorded
+- Only on a life lost: Death Recovery gets the room, time and pile; loops, walks and a waiting default task are stopped
+- A life lost on another client, or after a clean exit, is not recorded here
+- The item pickup stands down for it, and nothing is recorded when it can't be told
+- Lives are read again after a life is given back or a level trained
+- Settings → BBS: a box for boards that penalise every hang-up, not only one made in a fight
 
 ## 3.161.16
 

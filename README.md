@@ -1,7 +1,7 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.19**
+> **Version 3.162.3**
 > - Routes never enter Crystal Lake's teleport rooms, boat or not
 > - No raft or skiff offered, fetched or bought for the lake
 > - A walk the lake blocks says why in one line

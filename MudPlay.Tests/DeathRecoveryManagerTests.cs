@@ -214,6 +214,43 @@ public sealed partial class DeathRecoveryManagerTests
         Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
     }
 
+    // A death worked out after the fact (a hang-up penalty that killed, found on
+    // the next entry) is a record like any other: the grid hears of it, and the
+    // pile is recovered when its room is walked into. Nothing is sent for it where
+    // the character woke.
+    [Fact]
+    public void ADeathWorkedOutAfterTheFact_ShowsInTheGrid_AndRecoversLikeAnyOther()
+    {
+        using GraphHarness h = new();
+        h.Tracker.NoteRoomObserved(new RoomObservation("North Square", new HashSet<Direction> { Direction.S }));
+        int gridRefreshes = 0;
+        h.Recovery.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(DeathRecoveryManager.Records)) gridRefreshes++;
+        };
+
+        h.Tracker.NoteUnwitnessedDeath(new UnwitnessedDeath(
+            new RoomRef(1, 1), DateTimeOffset.UtcNow.AddMinutes(-3), LivesRemaining: 6,
+            "Killed by the hang-up penalty (not seen: worked out on entering the game).",
+            Equipped: [new DeathItem("rusty dagger", "Weapon Hand")],
+            Lost: [new DeathItem("torch")],
+            Coins: null));
+
+        Assert.True(gridRefreshes > 0);
+        DeathRecord record = Assert.Single(h.Recovery.Records);
+        Assert.Equal(DeathRecoveryStatus.Active, record.Status);
+        Assert.Equal("Town Gates", record.RoomName);
+        Assert.Empty(h.Sent);
+
+        h.Recovery.AutoRecover = true;
+        h.EnterGates();
+        h.FeedSurvey("corpse of Ermias");
+
+        Assert.Contains("recover corpse Ermias", h.Sent);
+        h.Recovery.FeedTestLine("You have recovered the corpse of Ermias.");
+        Assert.Equal(DeathRecoveryStatus.Recovered, h.Latest.Status);
+    }
+
     [Fact]
     public void CorpseMatch_UsesLiveName_NotStaleProfileName()
     {
