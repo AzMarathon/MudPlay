@@ -191,6 +191,18 @@ public sealed class AutoWalkManager : IRecoverableEngine
     // no party-split abort. The re-plan still surfaces Retrying → Started/Failed.
     private bool _replanningInPlace;
 
+    // The ask TryReplanOrFail has out with the game (rm, sys st) for where we are;
+    // null when none is. While it is out nothing is in flight and the walk waits
+    // for the answer: a resume must neither send from the room in doubt nor ask
+    // again (each ask spends a re-plan, and two gates flapping inside one round
+    // trip failed the walk). Reset drops it, which is what makes a late answer to
+    // a stopped or superseded walk a no-op.
+    private object? _locateAsk;
+
+    // The stall watchdog's one extra wait for the step in flight, taken when its
+    // ask didn't go out (the resolver's throttle may only have been in the way).
+    private bool _stallWatchdogRearmed;
+
     public IReadOnlyList<byte[]> LastSentForTests => _sentForTests;
     private readonly List<byte[]> _sentForTests = new();
 
@@ -2152,12 +2164,45 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // re-arm the watchdog. The recovery gate resyncs (rm on Paradigm, footprint
         // backtrack on stock) and then advances or reroutes from ground truth.
         if (State != WalkState.Walking || !_stepInFlight) return;
-        if (_tracker.State.Confidence != RoomConfidence.Pending) return;
+        if (_tracker.State.Confidence == RoomConfidence.Pending)
+        {
+            _log?.Warn("Walker",
+                $"step {_index + 1} in-flight stall: move Pending, unconfirmed for {StallWatchdogInterval.TotalSeconds:F0}s — escalating to recovery");
+            _recovery?.NoteEngineStalled(
+                $"walk step {_index + 1} in-flight stall (move interrupted, never confirmed)");
+            return;
+        }
+
+        // A move sent while the tracker was Suspect arms no Pending, so when the
+        // game refuses it nothing changes that anyone is listening for, and the
+        // branch above never sees it (report paradigm-20261009-082958: the walk
+        // stood at the wall until the player typed `rm`). Ask the game where we
+        // are and re-plan from the answer. Only that: with nobody to ask this
+        // leaves everything as it was rather than hand a stock realm's walk to
+        // the reverse-walk on the strength of a timer.
+        if (!IsPlainMoveSentFromSuspect()) return;
         _log?.Warn("Walker",
-            $"step {_index + 1} in-flight stall: move Pending, unconfirmed for {StallWatchdogInterval.TotalSeconds:F0}s — escalating to recovery");
-        _recovery?.NoteEngineStalled(
-            $"walk step {_index + 1} in-flight stall (move interrupted, never confirmed)");
+            $"step {_index + 1} in-flight stall: sent with the tracker Suspect, nothing for {StallWatchdogInterval.TotalSeconds:F0}s — asking the game where we are");
+        if (TryReplanOrFail(RoomConfidence.Suspect, "and the step went unanswered", onlyIfAsked: true)) return;
+        if (_stallWatchdogRearmed)
+        {
+            _log?.Info("Walker", $"step {_index + 1}: still couldn't ask the game where we are; leaving the step in flight");
+            return;
+        }
+        _stallWatchdogRearmed = true;
+        ArmStallWatchdog($"step {_index + 1}: couldn't ask the game where we are, one more wait");
     }
+
+    // The step in flight is a bare move (no boat, jump, greet, door, winch, trap or
+    // hidden-exit wait owns it, each of which churns the tracker on its own and has
+    // its own clock), the tracker is Suspect, and the recovery gate isn't already
+    // dealing with it.
+    private bool IsPlainMoveSentFromSuspect() =>
+        _tracker.State.Confidence == RoomConfidence.Suspect
+        && _path is { } path && _index < path.Count && path[_index] is MoveStep
+        && !(_awaitingBoatArrival || _awaitingSysGotoArrival || _awaitingGreetTeleport
+             || _awaitingDoorOpen || _awaitingWinch || _awaitingTrapDisarm || _awaitingHiddenReveal)
+        && _recovery is { AwaitingAuthoritativeResync: false, CurrentTier: not TierLevel.Tier3 };
 
     // Test seam — pretend the in-flight stall watchdog just elapsed.
     internal void FireStallWatchdogForTests() => OnStallWatchdogElapsed();
@@ -2196,6 +2241,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // names (and the route beyond is planned from).
         _expectedAfterCurrentMove = exit.Landing;
         _stepInFlight = true;
+        _stallWatchdogRearmed = false;
         ArmStallWatchdog($"step {_index + 1} sent ({step.Direction})");
 
         // Predictive room provisioning: light a carried light if the room we're
@@ -2962,7 +3008,17 @@ public sealed class AutoWalkManager : IRecoverableEngine
         TryReplanOrFail(RoomConfidence.Confirmed);
     }
 
-    private void TryReplanOrFail(RoomConfidence newConfidence)
+    // Returns false only for an onlyIfAsked caller whose ask didn't go out.
+    //
+    // when words the moment for the Retrying / Failed text ("mid-step", "while
+    // paused"), read after "tracker entered <confidence>".
+    //
+    // onlyIfAsked is for a caller that has a way of its own to carry on: a re-plan
+    // from the room the tracker already holds would only spend a slot and send the
+    // same step, so it is worth doing only when the game can be asked where we are.
+    // With nobody to ask, or no re-plan left to spend on asking, nothing is counted,
+    // changed or failed.
+    private bool TryReplanOrFail(RoomConfidence newConfidence, string when = "mid-step", bool onlyIfAsked = false)
     {
         // A block landing while the character is Confused is the movement-fumble
         // mechanic (GAME_MECHANICS: "You fumble in confusion!" / "You convulse
@@ -2986,18 +3042,22 @@ public sealed class AutoWalkManager : IRecoverableEngine
             || _destination is not { } dest
             || _tracker.State.CurrentRoom is not { } here)
         {
+            if (onlyIfAsked) return false;
             Raise(new WalkEvent(WalkEventKind.Failed,
-                $"tracker entered {newConfidence} mid-step; walker can't continue",
+                $"tracker entered {newConfidence} {when}; walker can't continue",
                 _destination));
             Reset();
-            return;
+            return true;
         }
 
+        int replansBefore = _replanCount;
+        bool inFlightBefore = _stepInFlight;
         if (!confused) _replanCount++;
         _stepInFlight = false;
-        Raise(new WalkEvent(WalkEventKind.Retrying,
-            $"tracker entered {newConfidence} mid-step; re-planning from {here.Key} (attempt {_replanCount}/{MaxReplansPerWalk})",
-            _destination));
+        WalkEvent retrying = new(WalkEventKind.Retrying,
+            $"tracker entered {newConfidence} {when}; re-planning from {here.Key} (attempt {_replanCount}/{MaxReplansPerWalk})",
+            _destination);
+        if (!onlyIfAsked) Raise(retrying);
 
         // Lean on Paradigm's authoritative rm before trusting the tracker's belief
         // and replanning from it — a mid-step desync is exactly what a name-
@@ -3010,15 +3070,43 @@ public sealed class AutoWalkManager : IRecoverableEngine
         // step's arrival by OnTrackerStateChanged — it's a clean no-op there,
         // leaving DoReplan as the only thing that actually replans. Stock realms /
         // no rm reply fall through to exactly the prior behavior.
+        //
+        // The ask is marked before it goes out, as an answer can come back inside
+        // the call.
+        object ask = new();
+        _locateAsk = ask;
         if (_recovery?.TryResyncOnce?.Invoke(
-                $"walker desync mid-step (tracker {newConfidence})",
-                _ => DoReplan(),
-                DoReplan) == true)
+                $"walker desync {when} (tracker {newConfidence})",
+                _ => OnLocateAnswered(),
+                OnLocateAnswered) == true)
         {
-            return;
+            if (onlyIfAsked) Raise(retrying);
+            _log?.Info("Walker",
+                $"step {_index + 1}: tracker {newConfidence} {when} (holding {here.Key}); asked the game where we are, re-planning from its answer");
+            return true;
+        }
+
+        _locateAsk = null;
+        if (onlyIfAsked)
+        {
+            _replanCount = replansBefore;
+            _stepInFlight = inFlightBefore;
+            return false;
         }
 
         DoReplan();
+        return true;
+
+        // The answer belongs to the walk that asked. A stop, or another walk begun
+        // since, drops the ask (Reset): re-planning then would set a stopped walker
+        // walking again, or turn a new walk back to the old destination. A pause
+        // keeps it, and the re-plan then starts paused.
+        void OnLocateAnswered()
+        {
+            if (!ReferenceEquals(_locateAsk, ask)) return;
+            _locateAsk = null;
+            DoReplan();
+        }
 
         void DoReplan()
         {
@@ -3763,9 +3851,40 @@ public sealed class AutoWalkManager : IRecoverableEngine
                 return;
             }
 
+            // A re-plan is waiting on the game's answer to where we are, and another
+            // gate came and went inside that round trip (a sneak settling right
+            // behind combat clearing does it within a tenth of a second). The
+            // answer re-plans the walk; anything done here would send from the room
+            // in doubt, or ask again and spend a second re-plan on the same doubt.
+            if (_locateAsk is not null)
+            {
+                _log?.Info("Walker",
+                    $"resume: already asking the game where we are; step {_index + 1} waits for the answer");
+                return;
+            }
+
             bool hadStepInFlight = _stepInFlight;
             _stepInFlight = false;
             _awaitingPromptForCommand = false;
+
+            // The tracker lost its place while we were paused: a room display that
+            // wasn't the room it held arrived mid-pause, and OnTrackerStateChanged
+            // (gated on State == Walking) never passed that on. The next step is
+            // planned from a room we may not be standing in, and sending it can't
+            // even fail cleanly: a move sent from Suspect arms no Pending, so the
+            // game's refusal changes nothing the walker reads (report
+            // paradigm-20261009-082958: a move into a wall after a fight, then
+            // nothing until the player typed `rm`). Where the game can be asked
+            // where we are, ask first and re-plan from the answer. Where it can't,
+            // a re-plan would start from this same room and send this same step,
+            // so the resume carries on below as it always has.
+            if (_tracker.State.Confidence == RoomConfidence.Suspect)
+            {
+                if (TryReplanOrFail(RoomConfidence.Suspect, "while paused", onlyIfAsked: true)) return;
+                _log?.Info("Walker",
+                    $"resume: the tracker went Suspect while paused (holding {_tracker.State.CurrentRoom?.Key.ToString() ?? "(no room)"}) "
+                    + $"and the game couldn't be asked where we are; carrying on with step {_index + 1}");
+            }
 
             // While paused, OnTrackerStateChanged bailed on every room
             // arrival (it gates on State == Walking), so _index didn't
@@ -3953,6 +4072,7 @@ public sealed class AutoWalkManager : IRecoverableEngine
         _activeArmAcquisition = true;
         _retryCount = 0;
         _replanCount = 0;
+        _locateAsk = null;
         // Drop any AbandonedCombat hold this walk was carrying so a stopped /
         // completed walk never strands the gate asserted (the auto-release only
         // fires on a Combat-gate transition, which may not come once we're Idle).

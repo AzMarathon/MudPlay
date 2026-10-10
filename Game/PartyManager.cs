@@ -189,6 +189,11 @@ public sealed partial class PartyManager : IDisposable
     // it observes them present in the room. Gated on AutoInviteEnabled at the raise site.
     public event Action<IReadOnlyList<string>>? LeaderReconnectReformInvites;
 
+    // A `par` reply was read to its end and the roster squared with it: the rows
+    // it listed, or the game's word that there is no party. For a consumer that
+    // asked `par` a question and must not act before the answer is in.
+    public event Action? ParReplyRead;
+
     // Board-specific disconnect line support. The provider returns the active
     // BBS's raw DisconnectPattern (literal {name}/* syntax, empty/null when the
     // board uses only the standard lines); the resolver maps a captured presence
@@ -699,7 +704,11 @@ public sealed partial class PartyManager : IDisposable
         _parState = ParState.Idle;
         _parBlockNames.Clear();
 
-        if (IsAlreadySolo()) return;
+        if (IsAlreadySolo())
+        {
+            ParReplyRead?.Invoke();
+            return;
+        }
         // If WE were the leader, snapshot every other-member name into
         // the grace-window map before clearing. Covers the "BBS only
         // emits account-name logoff" failure mode where we never get a
@@ -725,6 +734,7 @@ public sealed partial class PartyManager : IDisposable
             }
         }
         ResetPartyMembership();
+        ParReplyRead?.Invoke();
     }
 
     // Wipe the tracked party to the solo state. Shared by the dissolve handler and
@@ -1404,8 +1414,11 @@ public sealed partial class PartyManager : IDisposable
     private void EndParBlock()
     {
         _parState = ParState.Idle;
+        // A block with no rows was cut short or misread, and answers nothing.
+        bool read = _parBlockNames.Count > 0;
         ReconcileMissingFromPar();
         _parBlockNames.Clear();
+        if (read) ParReplyRead?.Invoke();
     }
 
     // Ensure self is represented in PartyState.Members with the leader marker

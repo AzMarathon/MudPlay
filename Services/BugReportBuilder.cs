@@ -685,6 +685,10 @@ public static class BugReportBuilder
         // While true a confusion fumble re-sends no attack: the game answered the
         // last one with *Combat Engaged* and is repeating it itself.
         Kv(sb, "Engaged since last attack", svc.Combat.EngagedSinceLastAttack.ToString());
+        // The last time a combat line or round tick asked to re-attack with combat
+        // off, and what came of it: a skip here beside a live target is a fight left
+        // standing (report paradigm-20261009-122342).
+        Kv(sb, "Last attack-resume decision", svc.Combat.LastResumeDecision ?? "(none this session)");
         // True when Auto-Combat is off but a room hostile is blocking a needed rest
         // (HP still above the flee trigger) — the engine is force-engaging to clear it
         // so recovery can proceed (report paradigm-20260901-093301).
@@ -1647,6 +1651,17 @@ public static class BugReportBuilder
                     + $"{svc.GhSweep.CarryHeadroomNow}");
         Kv(sb, "Roomba left too-heavy",
             svc.GhSweep.LeftInPlace.Count(f => f.Reason == GhLeftReason.TooHeavy).ToString());
+        // A room with no item cap can hold a floor list hundreds of stacks long, and
+        // a "client locks up in the vault" report turns on how long that list is and
+        // what reading it cost.
+        Kv(sb, "Floor of this room (last list read)",
+            $"{svc.GroundItems.Items.Count} stack(s), "
+            + $"{svc.GroundItems.Items.Sum(i => CountedCommand.SplitLeadingCount(i).Count)} item(s); "
+            + $"read in {svc.GroundItems.LastSurveyReadTime.TotalMilliseconds:F1} ms");
+        Kv(sb, "Roomba slowest floor read (this sweep or the last)",
+            svc.GhSweep.SlowestSurvey is { } slowest
+                ? $"{slowest.Room.Map}/{slowest.Room.Room}: {slowest.Stacks} stack(s), {slowest.Items} item(s); {slowest.StagesText}"
+                : "(none)");
 
         // Default-task startup state — a "my loop / Auto-Lair didn't start on
         // login" report needs to know whether the runner deferred the start
@@ -1980,6 +1995,7 @@ public static class BugReportBuilder
         Kv(sb, "Route card counts not yet taken by a walk", svc.CardCountSummary);
         // Why a member who never answers a count was or wasn't fetched a copy.
         Kv(sb, "Gate items handed to party members (remembered)", svc.PartyHandOvers.Summary);
+        Kv(sb, "Members par was asked about after a gate, reply not read yet", svc.PartyPathItemGate.PartyListCheckSummary);
         Kv(sb, "Give detour active", svc.PathItemGiveRouter.DetourActive.ToString());
         Kv(sb, "Give asked for and not handed over this walk",
             svc.PathItemGiveRouter.Declined.Count == 0 ? "(none)" : string.Join(", ", svc.PathItemGiveRouter.Declined));

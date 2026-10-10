@@ -1075,6 +1075,7 @@ public partial class MainWindowViewModel : ObservableObject
         // lanes, and itself confines chat lines to the conversation.* patterns.
         Lines.LineEmitted     += line => AppServices.Current.Router.Dispatch(line);
         Lines.ChatLineEmitted += line => AppServices.Current.Router.Dispatch(line);
+        Lines.SlowLine        += LogSlowLine;
 
         // Reactive hazard-buff re-raise: a lapse-damage prompt (the desert's
         // "you need water, soon!") mid-walk fires one `use` to re-raise, and a
@@ -2173,6 +2174,9 @@ public partial class MainWindowViewModel : ObservableObject
     private void OnGhSweepCompleted(Game.Map.GhSweepReport report)
         => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             WriteTerminalStatus("[Ganghouse roomba complete]", TerminalStatusKind.Notice));
+
+    private static void LogSlowLine(LineExtractor.EmittedLine line, TimeSpan took)
+        => AppServices.Current.Log.Warn("Lines", LineExtractor.SlowLineNotice(line, took));
 
     // The login sequence sends stat / exp / inventory (and the user's who, etc.) right
     // after entering the realm. Wait for that to finish rendering, then dump the quests
@@ -3714,6 +3718,13 @@ public partial class MainWindowViewModel : ObservableObject
         // Attack observer — a manually-typed physical attack verb (a/aa/bash/smash/bs/…)
         // is a user override: the engine holds its own swing until the next round.
         if (typed) AppServices.Current.OutboundAttack.ObserveOutbound(data);
+        // Gear observer — a hand-typed eq / wear / wield / rem mid-fight arms a re-attack
+        // for the *Combat Off* it draws. The client's own gear commands come through
+        // here as well (the Equipment Manager, an item cast, corpse recovery), each with
+        // its own re-attack after the swap, so only a line no wrapped sender is
+        // sending counts as typed.
+        if (typed && !AppServices.Current.EngineGate.SendingClientCommand)
+            AppServices.Current.OutboundGear.ObserveOutbound(data);
         // Sneak — a typed command that ends a sneak (search, gear, a door…) marks it
         // broken, the same as an engine send through the gate. Short lines only: a
         // command, not a paste.

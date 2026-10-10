@@ -1,9 +1,9 @@
 # MudPlay
 
 <!-- current-version:start -->
-> **Version 3.161.1**
-> - Party item gates: a member who never answers the `@have` count is no longer fetched another copy on every trip
-> - A copy you handed them and the game confirmed is remembered until the party changes
+> **Version 3.161.7**
+> - Party item gates: after crossing, one `par` checks a member credited with a copy from memory
+> - A member `par` no longer lists as following loses that credit, so the next trip fetches for them
 >
 > See the [version history](CHANGELOG.md) for the full changelog.
 <!-- current-version:end -->
