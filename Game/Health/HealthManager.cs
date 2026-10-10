@@ -820,6 +820,11 @@ public sealed class HealthManager : IDisposable
     // own way out steers around. Null in tests (every room reads safe).
     public Func<Map.RoomKey, (bool Boss, int LairMax)>? RoomRisk { get; set; }
 
+    // Whether routes keep out of a room (MovementFilter.IsClosedToRoutes: Crystal Lake's
+    // teleporting rooms). A flee builds its own retreat, so the filter that keeps routes
+    // out would not reach it. Null in tests (no room is closed).
+    public Func<Map.RoomKey, bool>? IsClosedToRoutes { get; set; }
+
     // True while a move is sent but its landing isn't confirmed (RoomTracker Pending).
     // A flee started then is held until the room confirms (see TryFlee).
     public Func<bool>? IsMovePending { get; set; }
@@ -2374,7 +2379,35 @@ public sealed class HealthManager : IDisposable
                 + $"move; retreating {blocked} room(s) instead of {steps.Count}.");
             steps.RemoveRange(blocked, steps.Count - blocked);
         }
+
+        // A flee is no route, so the filter that keeps routes out of Crystal Lake's
+        // teleporting rooms does not reach it: stop short of the first one. The room
+        // we stand in is no concern, only the steps into one.
+        if (CutAtClosedRoom(steps) && steps.Count == 0
+            && combat.RunDirection == Models.Profile.RunDirection.Backward
+            && _lastKnownRoom is { } cutAt && AwayFromThePlan(engine, cutAt, lastLegFrom) is { } open)
+            steps.Add(open);
         return steps;
+    }
+
+    // Drops the first step that leads into a room closed to routes, and every step after
+    // it. A step whose target the graph cannot tell is left alone.
+    private bool CutAtClosedRoom(List<Map.Direction> steps)
+    {
+        if (IsClosedToRoutes is not { } closed || _lastKnownRoom is not { } here) return false;
+        for (int i = 0; i < steps.Count; i++)
+        {
+            if (RoomExits?.Invoke(here) is not { } exits || !exits.TryGetValue(steps[i], out Map.RoomKey target)) return false;
+            if (closed(target))
+            {
+                _log?.Combat(LogCategory,
+                    $"flee route cut at step {i + 1} — {steps[i]} leads into {target}, a room routes keep out of; retreating {i} room(s) instead of {steps.Count}");
+                steps.RemoveRange(i, steps.Count - i);
+                return true;
+            }
+            here = target;
+        }
+        return false;
     }
 
     private bool ExitLeadsTo(Map.RoomKey from, Map.Direction direction, Map.RoomKey to) =>
@@ -2391,7 +2424,8 @@ public sealed class HealthManager : IDisposable
         Map.Direction? opposite = Reverse(ahead);
         return exits
             .Where(e => e.Key.IsCardinal() && e.Key != ahead && !(avoid is { } a && e.Value.Equals(a))
-                && !_refusedFleeMoves.Contains((at, e.Key)))
+                && !_refusedFleeMoves.Contains((at, e.Key))
+                && IsClosedToRoutes?.Invoke(e.Value) != true)
             .Select(e => (Dir: e.Key, Risk: RoomRisk?.Invoke(e.Value) ?? (false, 0)))
             .OrderBy(e => e.Risk.Boss)
             .ThenBy(e => e.Risk.LairMax)
@@ -2407,7 +2441,8 @@ public sealed class HealthManager : IDisposable
         if (AwayFromThePlan(engine, at, avoid: null) is { } away) return away;
         return engine.PlannedDirectionFrom(at) is { } ahead && ahead.IsCardinal()
             && !_refusedFleeMoves.Contains((at, ahead))
-            && RoomExits?.Invoke(at) is { } exits && exits.ContainsKey(ahead)
+            && RoomExits?.Invoke(at) is { } exits && exits.TryGetValue(ahead, out Map.RoomKey aheadRoom)
+            && IsClosedToRoutes?.Invoke(aheadRoom) != true
                 ? ahead : null;
     }
 

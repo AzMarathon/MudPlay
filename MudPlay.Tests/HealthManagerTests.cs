@@ -2506,6 +2506,137 @@ public sealed class HealthManagerTests
             h.Engine!.SentBacktrackMoves);
     }
 
+    // Crystal Lake's teleporting rooms are closed to every route; a flee builds its own
+    // retreat, so it is told which rooms they are. WalkStartFlee's map: 8 - 9 - 10 - 11,
+    // with 12 north of 10.
+    [Fact]
+    public void Flee_Backward_StopsShortOfARoomClosedToRoutes()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Combat.RunDistance = 2;
+        h.Health.IsClosedToRoutes = k => k.Room == 10;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 8));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        Assert.Equal(new[] { Game.Map.Direction.E }, h.Engine!.SentBacktrackMoves);   // 9, and not on into 10
+
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        Assert.Single(h.Engine.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Backward_TrailBackClosed_TakesAnotherOpenExit()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 10;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Equal(new[] { Game.Map.Direction.W }, h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_AWayOutLeadingIntoAClosedRoom_IsNeverTheAwayFromThePlanPick()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 9;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 10));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        // West, opposite the plan, would be the pick but for 9; north is open.
+        Assert.Equal(new[] { Game.Map.Direction.N }, h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Backward_EveryWayClosed_StartsNoRun()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 10;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 11));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Empty(h.Engine!.SentBacktrackMoves);
+        Assert.False(h.Health.IsFleeInFlight);
+    }
+
+    [Fact]
+    public void Flee_Forward_StopsShortOfARoomClosedToRoutes()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Forward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 3;
+        h.Engine!.PlannedForward.AddRange(new[]
+        {
+            Game.Map.Direction.E, Game.Map.Direction.E, Game.Map.Direction.E,
+        });
+        h.Health.RoomExits = k => k.Room < 4
+            ? new Dictionary<Game.Map.Direction, Game.Map.RoomKey>
+                { [Game.Map.Direction.E] = new Game.Map.RoomKey(1, k.Room + 1) }
+            : null;
+        h.Health.IsClosedToRoutes = k => k.Room == 3;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 1));
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+        Assert.Single(h.Engine.SentBacktrackMoves);
+
+        h.HostileInRoom = false;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 2));
+        Assert.Single(h.Engine.SentBacktrackMoves);   // 1 → 2, and not on into 3
+    }
+
+    [Fact]
+    public void Flee_Forward_NextRoomClosed_StartsNoRun()
+    {
+        using FleeHarness h = new();
+        h.Combat.RunDirection = Models.Profile.RunDirection.Forward;
+        h.Combat.BreakBeforeFleeing = false;
+        h.Combat.RunDistance = 2;
+        h.Engine!.PlannedForward.Add(Game.Map.Direction.E);
+        h.Health.RoomExits = k => new Dictionary<Game.Map.Direction, Game.Map.RoomKey>
+            { [Game.Map.Direction.E] = new Game.Map.RoomKey(1, k.Room + 1) };
+        h.Health.IsClosedToRoutes = k => k.Room == 2;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 1));
+        h.State.MaxHp = 200;
+        h.State.InCombat = true;
+        h.State.HasPromptData = true;
+        h.State.Hp = 30;
+
+        Assert.Empty(h.Engine.SentBacktrackMoves);
+    }
+
+    // Standing in a closed room already, the first step out is the character's to take.
+    [Fact]
+    public void Flee_FromInsideAClosedRoom_StillLeaves()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Health.IsClosedToRoutes = k => k.Room == 9;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+
+        Assert.Equal(new[] { Game.Map.Direction.E }, h.Engine!.SentBacktrackMoves);
+    }
+
+    [Fact]
+    public void Flee_Backward_WithoutTheProbe_RunsEveryRoomBack()
+    {
+        using FleeHarness h = WalkStartFlee();
+        h.Combat.RunDistance = 2;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 8));
+        h.State.InCombat = true;
+        h.State.Hp = 30;
+        h.Health.NoteRoomChanged(new Game.Map.RoomKey(1, 9));
+
+        Assert.Equal(new[] { Game.Map.Direction.E, Game.Map.Direction.E }, h.Engine!.SentBacktrackMoves);
+    }
+
     private static FleeHarness HitAndRunFlee()
     {
         FleeHarness h = new();

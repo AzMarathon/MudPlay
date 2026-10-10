@@ -3393,6 +3393,8 @@ Backward heads for where your loop or walk started. If you're already standing t
 
 A flee sends one move per room. A **text exit** on the way (a trail you leave with `go path`, say) is crossed with its own command; anything else that isn't a plain compass move makes the flee **stop short**: a lever or door step, or a teleport hop (the way in and out of somewhere like the Negative Power Plane). It retreats as far as the ordinary moves go and re-checks there rather than trying to cross it mid-fight — and if the very first step out is a teleport, it doesn't run at all and your other low-HP reactions take over. The program log names the step that cut the retreat short.
 
+**A flee never steps into a room routes keep out of.** Crystal Lake's teleporting rooms are shut to every walk and loop, and a flee keeps out of them too: it stops short of one, or takes another way out when its first step would lead into one. A flee that starts inside such a room still leaves it.
+
 ### Break combat before running
 
 **Default:** On

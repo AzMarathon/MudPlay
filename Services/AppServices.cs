@@ -4716,6 +4716,7 @@ public sealed class AppServices
         Health.RoomExits = key => RoomGraph.GetRoom(key)?.Exits.ToDictionary(e => e.Key, e => e.Value.Target);
         Health.RoomRisk = key => (IsBossRoomLive(key),
             Game.Map.RoomTooltipBuilder.TryParseLairMax(RoomGraph.GetRoom(key)?.RawLairTag, out int lairMax) ? lairMax : 0);
+        Health.IsClosedToRoutes = Movement.IsClosedToRoutes;
 
         // Late-wire the classifier's flee probe now that Health exists (it's
         // built after RoomClassifier). While fleeing, a monster that pursues us
